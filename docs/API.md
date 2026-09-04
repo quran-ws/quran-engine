@@ -1,0 +1,194 @@
+# QVP engine API
+
+One engine, one contract. The C ABI in `crates/qvp-ffi/include/qvp.h` is the source of
+truth; every wrapper (`web/qvp.js`, Kotlin, Dart, React Native, Swift) exposes the same
+names in the platform's own casing, so this page documents once and applies everywhere.
+Examples are JavaScript; read `page.hitTestEx(...)` as `page.hitTestEx(...)` in Dart,
+`page.hitTestEx(...)` in Kotlin, `qvp_hit_test_ex(...)` in C.
+
+**Conventions**
+
+- **Colours** are `0xRRGGBBAA`. Alpha 0 means *hidden* in a style and *leave alone* in a theme.
+  Wrappers also accept `'#rgb'`, `'#rrggbb'`, `'#rrggbbaa'`.
+- **Page units** are the printed page's viewBox space (345 × 550 for this mushaf, y down).
+  Anything named `…View` is in *viewport pixels through the current layout*.
+- **Handles.** Every mutating style/highlight call returns a handle; removing the handle
+  undoes exactly that call and nothing else. There is a `clear`, but you never need it.
+- **Targets** resolve to a word list: `'page'`, `'2:255'` (ayah), `'2:255:3'` (word),
+  `'2:255-257'`, `'line:7'`, `'surah:2'`, a word index, an array of word indices, or a
+  `T.*` constructor.
+- **Selectors** say what a style rule applies to, from a whole page down to *the second
+  diacritic of one word*: `Sel.page()`, `Sel.word(i)`, `Sel.ayah(s,a)`, `Sel.line(n)`,
+  `Sel.wordBody(i)`, `Sel.wordMarks(i)`, `Sel.wordMark(i, nth)`, `Sel.wordMarkNamed(i, 'fatha', nth)`,
+  `Sel.wordPath(i, nth)`, `Sel.path(p)`, `Sel.mark('shadda')`, `Sel.category('haraka')`,
+  `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.deco('ayah-marker')`, `Sel.decoIdx(d)`.
+- **The engine decides, the host draws.** Hit-testing, layout, styling, highlight bands,
+  masks and search are engine calls. A wrapper only marshals and paints what it is told.
+- **Data is separate from code.** Pages (`NNN.qvp`), the atlas (`atlas.qva`) and the
+  optional text sidecars (`NNN.words.json`) are assets your app loads; no package bundles them.
+
+## Loading
+
+```js
+const engine = await QvpEngine.init(wasmBytes);           // native: QvpEngine(library path)
+const page   = engine.loadPage(await fetchBytes('pages/042.qvp'));
+const atlas  = engine.loadAtlas(await fetchBytes('pages/atlas.qva'));   // optional
+page.attachWords(await fetchJson('pages/042.words.json'));               // optional forms
+page.free(); atlas.free();
+```
+
+`page.width/height/page/nLines/nAyahs/nWords/nPaths/nDecos`, `page.naturalPitch`.
+
+## Words, ayahs, lines, decorations
+
+| | |
+|---|---|
+| `page.words[i]` | `{idx, sura, ayah, word, line, lineIdx, ayahIdx, x0,y0,x1,y1, text, firstPath, nPaths}` |
+| `page.ayahs[i]` | one **fragment** per printed line: `{sura, ayah, part, parts, flags, rub, firstWord, nWords, markerDeco, bbox}` |
+| `page.lines[i]` | `{lineNo, isHeader, firstWord, nWords, bbox, bandY0, bandY1, centre}` |
+| `page.decos[i]` | `{kind, sura, ayah, line, bbox, text, firstPath, nPaths}` — ayah markers, surah banners, basmalah, hizb rosettes, sajdah signs |
+| `page.findWord(s,a,w)` | index or −1 |
+| `page.resolve(target)` | word indices in reading order |
+| `page.wordForm(i, form)` | `'uthmani' \| 'imlaei' \| 'qpc' \| 'rasm' \| 'search'` (derived forms need the sidecar; `hasForm(form)`) |
+| `page.pathKind/Mark/Family/Category(p)`, `pathWord(p)`, `pathLine(p)`, `pathNthMark(p)` | per-path facts from the geometry table |
+
+An ayah is several fragments. `resolve('2:255')` gives all its words on the page;
+`ayahWordCount(s,a)` returns `{count, complete}` — `complete` is false when the ayah
+continues on another page.
+
+## Metadata (no database needed)
+
+`surahs()` → `{number, arabic, latin, english, place, ayahCount, hasBanner, hasBasmalah}`;
+`divisions()` → juz/hizb/nisf/rubʿ that **start** on the page; `rosettes()` (drawn hizb
+marks); `sajdahs()`; `markers()` → real ayah medallions with centre/radius and the
+ornament/numeral path indices (swap or restyle them); `ayahKeys()`; `wordLabel(i)`,
+`ayahLabel(i)` for screen readers.
+
+## Text and search
+
+```js
+page.text('2:255')                                   // with the mushaf's own line breaks
+page.text('page', {form: 'search', wordSep: ' '})
+page.search('الرحمان', {mode: 'includes'})            // [{word, wid, text, index, loose}]
+page.citation([12, 13, 14])                           // "2:255" / "2:255-257" / "2:286, 3:1"
+engine.strip(s); engine.fold(s); engine.normalize(s); engine.looseKey(s)
+```
+
+Search normalises both sides (strip marks + fold) and, when the strict pass finds
+nothing, retries with the loose key so a typed `الرحمان` finds the printed `الرحمن`.
+Modes: `includes`, `exact`, `prefix`. Without a sidecar it searches stripped uthmani.
+
+## Hit testing
+
+```js
+page.hitTestViewEx(vx, vy, {maxDistance: 6, gapBias: 0.6})
+// → {word, path, deco, line, distance, exact, wid, aid} | null
+```
+
+Exact outline first, then **nearest with direction**: the point is resolved to a line
+by its pitch band, then to a word, with a gap between two words split 60/40 towards the
+preceding (right-hand) word — trailing ink is drawn *into* the following gap in this
+print. `hitBoxes()` returns the same partition as boxes (no dead zones on a line);
+`lineBands()` the pitch bands. `hitTest`/`hitTestView` are the exact-only variants.
+
+## Layout
+
+```js
+const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRight,
+                       lineSpacing: 1.0, lineGap: 0, fillHeight: false, nominalLines: 15});
+// L = {scale, ox, oy, contentW, contentH, pitch, lineDy[], slots[]}
+```
+
+Horizontal placement is as printed; each line moves by `lineDy[line]`. `lineSpacing`
+multiplies the printed pitch, `lineGap` adds leading in page units, `fillHeight` spreads
+the 15-line grid over the padded viewport (pages 1–2 stay centred). Pure helpers:
+`engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` and `wastedFraction(...)`.
+`wordBoxView(i)` gives a word's box in viewport px for scroll-into-view.
+
+## Styles
+
+```js
+const h = page.style(Sel.wordMark(w, 1), '#1a73e8', {ms: 200});     // the 2nd diacritic only
+page.styleTarget('2:255', '#0a7d32', {layer: LAYER.HIGHLIGHT});
+page.hide(Sel.kind('mark'));                                          // reading view without tashkeel
+page.theme({ink: '#e8e4dc', diacritics: '#7fb0e8', dots: '#ff8a80', marker: '#b8860b', ms: 300});
+page.restyle(h, '#ff0000', 100); page.unstyle(h); page.setDefaultInk('#231f20');
+```
+
+Rules live in **layers** (`LAYER.BASE 0`, `THEME 10`, `HIGHLIGHT 50`, `SELECTION 60`,
+`TOP 100`, or any integer). Resolution per path: highest layer wins, then the most
+specific selector, then the newest rule. Every rule carries a `ms` transition; colours
+fade on the engine clock. Precedence around rules: masked words are hidden above
+everything; the greyed-page reveal sits below rules and above the default ink.
+
+## Clock and display list
+
+```js
+function frame(now) {
+  const moving = page.tick(now);          // advance fades and band slides
+  renderer.draw(page, view, dpr);         // bands → base ink → styled ink → mask boxes
+  if (moving) requestAnimationFrame(frame);
+}
+```
+
+`paint()` is the full display list (a colour per path); `styled()` lists only the
+paths that differ from the default ink, which is what the cached-base-layer renderer
+repaints. `highlightBoxes()` and `maskBoxes()` are viewport-px rectangles.
+
+## Highlights
+
+```js
+const h = page.highlight('2:255', {mode: 'both', ink: '#0a7d32', band: '#0a7d3224',
+                                   height: 'pitch', padX: 1.2, radius: 1.5, seam: 0.25, ms: 250});
+page.rehighlight(h, '2:256');      // the band slides to the new words, ink cross-fades
+page.restyleHighlight(h, {...});   // recolour in place
+page.unhighlight(h);               // fades out, then disappears
+```
+
+`mode` is `ink`, `band` or `both`. A band is **one path per highlight** covering every
+printed line the words occupy, with a `seam` overlap so a six-line ayah reads as one
+shape and not six stripes; height is the line pitch or the words' ink. Use one handle
+and `rehighlight` for word-by-word following.
+
+## Selection
+
+`select(anchor, focus)` snaps to whole words; `selection()`, `selectionText(form, withCitation)`.
+Draw the band with a highlight in `LAYER.SELECTION`; see `web/app.js` for drag-to-select.
+
+## Memorisation
+
+```js
+page.mask('2:255', 'hide' | 'block' | 'blur'); page.revealNext(1); page.hideBack(1);
+page.revealWord(i); page.revealAll(); page.hideAll(); page.unmask(); page.maskHidden()
+const steps = page.revealStart({lit: 2, byAyah: false, grey: '#c9c4b8', ink: '#231f20', markers: true, ms: 150});
+page.revealGoto(at); page.revealStop();
+```
+
+`hide` keeps the page's shape (ink alpha 0). `block`/`blur` keep the ink and hand the
+host `maskBoxes()` to draw over. The greyed-page reveal lights a window of `lit` steps
+ending at `at`; a medallion lights with the ayah it closes.
+
+## Recitation
+
+`reciteMap(s, a, nSegments)` returns the words to pair with `nSegments` timings, or
+`null` when the counts disagree — then follow the ayah whole rather than drift.
+Drive the highlight with `rehighlight(h, T.word(i))`.
+
+## Crop and export
+
+`cropBox(target, {pad, keepMarkers})`; `cropSvg(target, {pad, keepMarkers, background})`
+returns a standalone SVG string with the current colours (masks, themes and highlights'
+ink applied). The medallion is kept only when the whole ayah is inside the crop.
+
+## Atlas (cross-page)
+
+`atlas.pageOf(s,a)`, `pageRange(page)`, `surah(n)`, `surahs()`, `pageOfSurah(n)`,
+`juz(n)/hizb(n)/rub(n)` → `{sura, ayah, page}`, `juzAt(s,a)`, `divisionAt(kind, s, a)`,
+`pagesOfJuz(n)`, `findSurah('cow' | 'البقرة' | '2')`.
+
+## C ABI notes
+
+Struct layouts, enums and every function signature are in `qvp.h`. Arrays are
+returned through `(out, cap)` and the call returns the total count; strings through
+`QvpStr {ptr, len}` valid until the next string-returning call on the same thread.
+`qvp_alloc/qvp_dealloc` exist for hosts without `malloc` (wasm).
