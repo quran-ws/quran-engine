@@ -26,7 +26,7 @@ pub use qvp_format::atlas::Atlas;
 pub use selection::Selection;
 pub use style::{Handle, Paint, Selector, StyleEngine, Theme, LAYER_BASE, LAYER_HIGHLIGHT, LAYER_SELECTION, LAYER_THEME, LAYER_TOP};
 pub use target::Target;
-pub use text::{fold, loose_key, normalize_query, strip_marks, Form, Match, SearchMode, SearchOptions};
+pub use text::{fold, loose_key, normalize_query, parse_words_sidecar, strip_marks, Form, Match, SearchMode, SearchOptions, WordForms};
 
 use qvp_format::*;
 use std::collections::HashMap;
@@ -276,6 +276,17 @@ impl Page {
 
     pub fn data(&self) -> &PageData {
         &self.data
+    }
+    pub(crate) fn data_mut(&mut self) -> &mut PageData {
+        &mut self.data
+    }
+    /// Intern a string into the page's string table.
+    pub(crate) fn intern(&mut self, s: &str) -> u16 {
+        if let Some(i) = self.data.strings.iter().position(|x| x == s) {
+            return i as u16;
+        }
+        self.data.strings.push(s.to_owned());
+        (self.data.strings.len() - 1) as u16
     }
     pub fn geometry(&self) -> &Geometry {
         &self.geom

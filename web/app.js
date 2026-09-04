@@ -1,265 +1,375 @@
 (async function () {
   'use strict';
-  const { QvpEngine, CanvasRenderer, KIND, FAMILY, DECO, css, rgba } = window.QVP;
+  const { QvpEngine, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECO, LAYER, css, rgba } = window.QVP;
   const $ = id => document.getElementById(id);
 
-  // ── data source: embedded (single-file build) or fetch (dev server) ──
+  // ── data source: embedded (single-file build) or fetch (dev server) — the SDK ships no data ──
   const EMB = window.QVP_EMBED || null;
   const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
   const pad = n => String(n).padStart(3, '0');
   const src = {
     wasm: async () => EMB ? b64(EMB.wasm) : new Uint8Array(await (await fetch('qvp_ffi.wasm')).arrayBuffer()),
+    atlas: async () => { if (EMB) return EMB.atlas ? b64(EMB.atlas) : null; try { const r = await fetch('pages/atlas.qva'); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } },
     pages: EMB ? Object.keys(EMB.pages).map(Number).sort((a, b) => a - b) : Array.from({ length: 604 }, (_, i) => i + 1),
     page: async n => EMB ? b64(EMB.pages[pad(n)]) : new Uint8Array(await (await fetch(`pages/${pad(n)}.qvp`)).arrayBuffer()),
-    words: async n => EMB ? (EMB.words[pad(n)] || {}) : (await fetch(`pages/${pad(n)}.words.json`)).json(),
   };
 
   const t0 = performance.now();
   const wasmBytes = await src.wasm();
   const engine = await QvpEngine.init(wasmBytes);
   const wasmMs = performance.now() - t0;
+  let atlas = null;
+  try { const ab = await src.atlas(); if (ab) atlas = engine.loadAtlas(ab); } catch (e) { console.warn('no atlas', e); }
 
   const canvas = $('cv'), stage = $('stage'), paper = $('paper');
   const renderer = new CanvasRenderer(canvas);
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
 
-  const state = {
-    page: null, words: {}, bytes: 0, loadMs: 0, n: src.pages[0],
+  const S = {
+    page: null, bytes: 0, loadMs: 0, n: src.pages[0],
     view: { scale: 1, ox: 0, oy: 0 },
-    sel: { word: -1, ayah: null, path: -1, pathColors: new Map() },
-    hover: -1, tajweed: false, hideMarks: false, markers: false, playing: false, playIdx: 0,
-    ink: 0x231f20ff, theme: 'light', lastHitUs: 0,
-    layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
+    selWord: -1, selAyah: null, hlSel: 0, hlAyah: 0, hlSearch: 0, hlPlay: 0, pathHandles: new Map(),
+    hover: -1, theme: 'light', themeHandle: 0, tajweedHandle: 0, hideHandle: 0, markersHandle: 0,
+    playing: false, playIdx: 0, lastHitUs: 0, animating: false,
+    layout: { lineSpacing: 1, lineGap: 0, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
+    hlMode: 'both', hlMs: 250, revealOn: false,
   };
-  const PALETTE = {
-    [FAMILY.DIACRITIC]: '#1a73e8', [FAMILY.TANWEEN]: '#8e24aa', [FAMILY.DOTS]: '#c62828',
-    [FAMILY.WAQF]: '#0a7d32', [FAMILY.SIFR]: '#ef6c00', [FAMILY.SAJDAH]: '#6d4c41',
-  };
-  const SEL_COLOR = '#1a73e8', AYAH_COLOR = '#0a7d32', PLAY_COLOR = '#d81b60', GOLD = '#b8860b';
+  const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
+  const PALETTE = { [CATEGORY.HARAKA]: '#1a73e8', [CATEGORY.TANWEEN]: '#8e24aa', [CATEGORY.LETTER_DOT]: '#c62828', [CATEGORY.WAQF]: '#0a7d32', [CATEGORY.DABT]: '#ef6c00', [CATEGORY.ORTHOGRAPHIC]: '#00838f', [CATEGORY.STANDALONE]: '#6d4c41' };
 
-  // ── styling: everything goes through the engine's style state ──
-  function applyStyles() {
-    const p = state.page; if (!p) return;
-    p.styleClear();
-    p.styleDefault(state.ink);
-    if (state.tajweed) for (const f in PALETTE) p.styleFamily(+f, rgba(PALETTE[f]));
-    if (state.hideMarks) p.styleKind(KIND.MARK, 0);
-    if (state.markers) { p.styleDeco(DECO.AYAH_MARKER, rgba(GOLD)); }
-    if (state.sel.ayah) p.styleAyah(state.sel.ayah[0], state.sel.ayah[1], rgba(AYAH_COLOR));
-    if (state.sel.word >= 0) { const w = p.words[state.sel.word]; p.styleWord(w.sura, w.ayah, w.word, rgba(SEL_COLOR)); }
-    for (const [pi, col] of state.sel.pathColors) p.stylePath(pi, rgba(col));
-    if (state.playing && state.playIdx < p.nWords) { const w = p.words[state.playIdx]; p.styleWord(w.sura, w.ayah, w.word, rgba(PLAY_COLOR)); }
-    draw();
+  // ── rendering loop: draw on demand, keep drawing while the engine animates ──
+  let raf = 0;
+  function draw() { if (!raf) raf = requestAnimationFrame(frame); }
+  function frame(now) {
+    raf = 0;
+    const p = S.page; if (!p) return;
+    S.animating = p.tick(now);
+    const v = S.view, L = p.currentLayout;
+    paper.style.left = v.ox + 'px'; paper.style.top = v.oy + 'px';
+    paper.style.width = (L ? L.contentW : p.width) * v.scale + 'px'; paper.style.height = (L ? L.contentH : p.height) * v.scale + 'px';
+    renderer.draw(p, v, dpr);
+    // hover: a cheap UI overlay, not engine state
+    if (S.hover >= 0 && S.hover !== S.selWord) {
+      const c = renderer.ctx, w = p.words[S.hover];
+      const [s, tx, ty] = renderer.lineTransform(p, v, w.lineIdx, dpr);
+      c.setTransform(s, 0, 0, s, tx, ty); c.globalCompositeOperation = 'destination-over';
+      c.fillStyle = getComputedStyle(document.body).getPropertyValue('--hover'); c.beginPath(); c.roundRect(w.x0 - 1.2, w.y0 - 1.2, w.x1 - w.x0 + 2.4, w.y1 - w.y0 + 2.4, 1.5); c.fill();
+      c.globalCompositeOperation = 'source-over';
+    }
+    hud();
+    if (S.animating) draw();
   }
 
-  // ── view / drawing ──
+  // ── view: engine layout + pan/zoom on top ──
+  function relayout() {
+    const p = S.page; if (!p) return null;
+    const r = stage.getBoundingClientRect(), ls = S.layout;
+    const maxW = Math.min(r.width, r.height * p.width / p.height * 1.15);
+    return p.layout({ viewportW: maxW, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, lineGap: ls.lineGap, fillHeight: ls.fillHeight, nominalLines: 15 });
+  }
+  function fit(redraw = true) {
+    const L = relayout(); if (!L) return;
+    const r = stage.getBoundingClientRect();
+    const s = Math.min(1, r.height / L.contentH);
+    S.view = { scale: s, ox: (r.width - L.contentW * s) / 2, oy: (r.height - L.contentH * s) / 2 };
+    renderer.baseKey = '';
+    if (redraw) draw();
+  }
   function resize() {
     const r = stage.getBoundingClientRect();
     canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
     canvas.style.width = r.width + 'px'; canvas.style.height = r.height + 'px';
-    fit(false); draw();
+    fit();
   }
-  function relayout() {
-    const p = state.page; if (!p) return null;
-    const r = stage.getBoundingClientRect(), ls = state.layout;
-    // page width fills the stage width (minus side padding); height follows the layout mode
-    const maxW = Math.min(r.width, r.height * p.width / p.height * 1.15);
-    const L = p.layout({ viewportW: maxW, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide,
-      lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, nominalLines: 15 });
-    L.contentW = maxW;
-    return L;
-  }
-  function fit(redraw = true) {
-    const p = state.page; if (!p) return;
-    const L = relayout(); if (!L) return;
-    const r = stage.getBoundingClientRect();
-    const s = Math.min(1, r.height / L.contentH);
-    state.view = { scale: s, ox: (r.width - L.contentW * s) / 2, oy: (r.height - L.contentH * s) / 2 };
-    renderer.baseKey = '';
-    if (redraw) draw();
-  }
-  /** stage CSS px → engine viewport px (the layout's coordinate space) */
-  function toView(cx, cy) { const v = state.view; return [(cx - v.ox) / v.scale, (cy - v.oy) / v.scale]; }
-  let raf = 0;
-  function draw() { if (!raf) raf = requestAnimationFrame(drawNow); }
-  function drawNow() {
-    raf = 0;
-    const p = state.page; if (!p) return;
-    const v = state.view, L = p.currentLayout;
-    paper.style.left = v.ox + 'px'; paper.style.top = v.oy + 'px';
-    paper.style.width = (L ? L.contentW : p.width) * v.scale + 'px'; paper.style.height = (L ? L.contentH : p.height) * v.scale + 'px';
-    renderer.draw(p, v, state.ink, dpr);
-    // cheap UI overlays that do not touch the engine: hover + selection backgrounds
-    const c = renderer.ctx;
-    c.globalCompositeOperation = 'destination-over';
-    const lineOf = w => (w.line !== undefined ? p.lines.findIndex(l => l.lineNo === w.line) : -1);
-    const box = (w, fill, line) => { const [s, tx, ty] = renderer.lineTransform(p, v, line, dpr); c.setTransform(s, 0, 0, s, tx, ty); c.fillStyle = fill; const pd = 1.2; c.beginPath(); c.roundRect(w.x0 - pd, w.y0 - pd, w.x1 - w.x0 + 2 * pd, w.y1 - w.y0 + 2 * pd, 1.5); c.fill(); };
-    if (state.hover >= 0 && state.hover !== state.sel.word) { const w = p.words[state.hover]; box(w, getComputedStyle(document.body).getPropertyValue('--hover'), lineOf(w)); }
-    if (state.sel.word >= 0) { const w = p.words[state.sel.word]; box(w, getComputedStyle(document.body).getPropertyValue('--sel'), lineOf(w)); }
-    if (state.sel.ayah) for (const a of p.ayahs) if (a.sura === state.sel.ayah[0] && a.ayah === state.sel.ayah[1]) { const w0 = p.words[a.firstWord]; box(a, 'rgba(10,125,50,.08)', w0 ? lineOf(w0) : 0); }
-    c.globalCompositeOperation = 'source-over';
-    hud();
-  }
-  function hud() {
-    const p = state.page, s = renderer.stats;
-    $('hud').textContent =
-      `wasm engine   ${(wasmBytes.length / 1024).toFixed(0)} KB, init ${wasmMs.toFixed(1)} ms\n` +
-      `page ${pad(state.n)}      ${(state.bytes / 1024).toFixed(0)} KB, load+decode ${state.loadMs.toFixed(2)} ms\n` +
-      `content       ${p.nWords} words · ${p.nPaths} paths · ${p.nAyahs} ayah parts · ${p.nLines} lines\n` +
-      `base layer    ${s.basePaths} paths in ${s.baseMs.toFixed(2)} ms (cached)\n` +
-      `overlay       ${s.overlayPaths} styled paths in ${s.overlayMs.toFixed(2)} ms\n` +
-      `hit-test      ${state.lastHitUs.toFixed(1)} µs (wasm)\n` +
-      `layout        ${state.layout.fillHeight ? 'fill height' : 'spacing ×' + state.layout.lineSpacing} · pad ${state.layout.padTop}/${state.layout.padBottom} · pitch ${(p.currentLayout ? p.currentLayout.pitch : 0).toFixed(1)} u\n` +
-      `zoom          ${(state.view.scale * (p.currentLayout ? p.currentLayout.scale : 1) * dpr).toFixed(2)}× device px per unit`;
-  }
+  const toView = (cx, cy) => [(cx - S.view.ox) / S.view.scale, (cy - S.view.oy) / S.view.scale];
 
   // ── page loading ──
   async function loadPage(n) {
-    n = Math.max(src.pages[0], Math.min(src.pages[src.pages.length - 1], n));
     if (!src.pages.includes(n)) n = src.pages.reduce((a, b) => Math.abs(b - n) < Math.abs(a - n) ? b : a);
     const bytes = await src.page(n);
     const t = performance.now();
-    const page = engine.loadPage(bytes);
-    page.buildPaths();
-    state.loadMs = performance.now() - t;
-    if (state.page) state.page.free();
-    state.page = page; state.n = n; state.bytes = bytes.length;
-    state.words = await src.words(n).catch(() => ({}));
-    state.sel = { word: -1, ayah: null, path: -1, pathColors: new Map() }; state.hover = -1; state.playIdx = 0;
+    const page = engine.loadPage(bytes); page.buildPaths();
+    S.loadMs = performance.now() - t;
+    if (S.page) S.page.free();
+    S.page = page; S.n = n; S.bytes = bytes.length;
+    S.selWord = -1; S.selAyah = null; S.hover = -1; S.playIdx = 0; S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.pathHandles.clear(); S.revealOn = false;
+    S.themeHandle = S.tajweedHandle = S.hideHandle = S.markersHandle = 0;
     $('pageNo').value = n;
+    applyTheme(); applyToggles();
     renderer.baseKey = '';
     fit(false);
-    applyStyles();
-    showSelection();
+    showSelection(); showMeta(); runSearch();
+    draw();
+  }
+  function showMeta() {
+    const p = S.page, su = p.surahs(), dv = p.divisions();
+    const parts = [];
+    for (const s of su) parts.push(`${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`);
+    let t = `surahs: ${parts.join(', ')}`;
+    if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.kind} ${d.n} at ${d.sura}:${d.ayah}`).join(', ')}`;
+    if (atlas) { const j = atlas.juzAt(p.words[0].sura, p.words[0].ayah); if (j) t += `\njuz ${j} · pages ${atlas.pagesOfJuz(j).join('–')}`; }
+    t += `\nayahs: ${p.ayahKeys().map(([s, a]) => `${s}:${a}`).join(' ')}`;
+    $('meta').textContent = t;
   }
 
   // ── selection panel ──
   function showSelection() {
-    const p = state.page, w = state.sel.word >= 0 ? p.words[state.sel.word] : null;
-    const info = $('selInfo'), chips = $('selPaths');
-    info.innerHTML = ''; chips.innerHTML = '';
+    const p = S.page, w = S.selWord >= 0 ? p.words[S.selWord] : null;
+    const info = $('selInfo'), chips = $('selPaths'); info.innerHTML = ''; chips.innerHTML = ''; $('cropPreview').hidden = true;
+    const sel = p.selection();
+    if (sel.length > 1) {
+      $('selWord').textContent = p.text(T.words(sel));
+      info.innerHTML = `<b>selection</b><span>${sel.length} words · ${p.citation(sel)}</span><b>search form</b><span class="v">${p.text(T.words(sel), { form: 'search' })}</span>`;
+      return;
+    }
     if (!w) {
-      $('selWord').textContent = state.sel.ayah ? `آية ${state.sel.ayah[1]} · سورة ${state.sel.ayah[0]}` : '—';
-      if (state.sel.ayah) {
-        const words = p.words.filter(x => x.sura === state.sel.ayah[0] && x.ayah === state.sel.ayah[1]).map(x => x.text).join(' ');
-        $('selWord').textContent = words;
-        info.innerHTML = `<b>ayah</b><span>${state.sel.ayah[0]}:${state.sel.ayah[1]}</span><b>words on page</b><span>${p.words.filter(x => x.sura === state.sel.ayah[0] && x.ayah === state.sel.ayah[1]).length}</span>`;
-      }
+      if (S.selAyah) {
+        const [s, a] = S.selAyah, ws = p.resolve(T.ayah(s, a)), { count, complete } = p.ayahWordCount(s, a);
+        $('selWord').textContent = p.text(T.ayah(s, a));
+        info.innerHTML = `<b>ayah</b><span>${s}:${a} · ${count} words${complete ? '' : ' (continues on another page)'}</span><b>label</b><span>${p.ayahLabel(p.words[ws[0]].ayahIdx)}</span>`;
+      } else { $('selWord').textContent = '—'; }
       return;
     }
     $('selWord').textContent = w.text;
-    const wid = `${w.sura}:${w.ayah}:${w.word}`, t = state.words[wid] || {};
-    const rows = [['wid', wid], ['line', w.line], ['imlaei', t.imlaei], ['qpc', t.qpc], ['rasm', t.rasm], ['search', t.search],
-      ['bbox', `${w.x0.toFixed(1)}, ${w.y0.toFixed(1)} → ${w.x1.toFixed(1)}, ${w.y1.toFixed(1)}`], ['paths', w.nPaths]];
+    const rows = [['wid', p.wid(w.idx)], ['line', w.line], ['imlaei', p.wordForm(w.idx, 'imlaei')], ['qpc', p.wordForm(w.idx, 'qpc')], ['rasm', p.wordForm(w.idx, 'rasm')], ['search', p.wordForm(w.idx, 'search')], ['label', p.wordLabel(w.idx)], ['paths', w.nPaths]];
     for (const [k, v] of rows) if (v !== undefined && v !== '') info.insertAdjacentHTML('beforeend', `<b>${k}</b><span class="${/imlaei|qpc|rasm|search/.test(k) ? 'v' : ''}">${v}</span>`);
     for (let i = w.firstPath; i < w.firstPath + w.nPaths; i++) {
-      const kind = p.pathKind(i), mark = p.pathMark(i);
-      const label = kind === KIND.MARK ? engine.markName(mark) : engine.kindName(kind);
+      const kind = p.pathKind(i), mark = p.pathMark(i), nth = p.pathNthMark(i);
+      const label = kind === KIND.MARK ? `${engine.markName(mark)} #${nth}` : engine.kindName(kind);
       const el = document.createElement('span');
-      el.className = 'chip' + (state.sel.pathColors.has(i) ? ' on' : '') + (i === state.sel.path ? ' hit' : '');
-      el.textContent = `#${i - w.firstPath} ${label}`;
-      el.title = `path ${i}`;
-      el.onclick = () => { const m = state.sel.pathColors; m.has(i) ? m.delete(i) : m.set(i, '#ef6c00'); applyStyles(); showSelection(); };
+      el.className = 'chip' + (S.pathHandles.has(i) ? ' on' : '');
+      el.textContent = label; el.title = `engine path ${i} · ${engine.categoryName(p.pathCategory(i)) || 'body'}`;
+      el.onclick = () => {
+        if (S.pathHandles.has(i)) { p.unstyle(S.pathHandles.get(i)); S.pathHandles.delete(i); }
+        else S.pathHandles.set(i, kind === KIND.MARK && nth >= 0 ? p.style(Sel.wordMark(w.idx, nth), '#ef6c00', { ms: 200, layer: LAYER.TOP }) : p.style(Sel.path(i), '#ef6c00', { ms: 200, layer: LAYER.TOP }));
+        el.classList.toggle('on'); draw();
+      };
       chips.appendChild(el);
     }
   }
+  function selectWord(i) {
+    const p = S.page;
+    S.selAyah = null; p.clearSelection();
+    if (S.hlAyah) { p.unhighlight(S.hlAyah); S.hlAyah = 0; }
+    for (const h of S.pathHandles.values()) p.unstyle(h); S.pathHandles.clear();
+    if (i < 0 || i === S.selWord) { S.selWord = -1; if (S.hlSel) { p.unhighlight(S.hlSel); S.hlSel = 0; } }
+    else {
+      S.selWord = i;
+      const st = { mode: S.hlMode, ink: '#1a73e8', band: rgba('#1a73e8', 0.18), radius: 1.5, ms: S.hlMs, layer: LAYER.SELECTION };
+      if (S.hlSel) p.rehighlight(S.hlSel, T.word(i)); else S.hlSel = p.highlight(T.word(i), st);
+    }
+    showSelection(); draw();
+  }
+  function selectAyah(s, a) {
+    const p = S.page;
+    if (S.hlSel) { p.unhighlight(S.hlSel); S.hlSel = 0; } S.selWord = -1; p.clearSelection();
+    S.selAyah = [s, a];
+    const st = { mode: S.hlMode, ink: '#0a7d32', band: rgba('#0a7d32', 0.14), radius: 1.5, ms: S.hlMs, layer: LAYER.SELECTION };
+    if (S.hlAyah) p.rehighlight(S.hlAyah, T.ayah(s, a)); else S.hlAyah = p.highlight(T.ayah(s, a), st);
+    showSelection(); draw();
+  }
 
-  // ── interaction ──
-  let drag = null, pinch = null, moved = false;
+  // ── search ──
+  function runSearch() {
+    const p = S.page, q = $('q').value.trim(), box = $('results'); box.innerHTML = '';
+    if (S.hlSearch) { p.unhighlight(S.hlSearch); S.hlSearch = 0; }
+    if (!q) { draw(); return; }
+    const m = p.search(q, { mode: $('qmode').value });
+    if (m.length) S.hlSearch = p.highlight(T.words(m.map(x => x.word)), { mode: 'both', ink: '#c62828', band: rgba('#c62828', 0.12), height: 'ink', padY: 1, radius: 1, ms: S.hlMs });
+    box.innerHTML = m.length ? m.map(x => `<div data-w="${x.word}">${x.text} <span class="hint">${x.wid}${x.loose ? ' ~' : ''}</span></div>`).join('') : `<div class="hint">no match on this page${atlas ? ' — try the goto box for surah names' : ''}</div>`;
+    box.querySelectorAll('[data-w]').forEach(el => el.onclick = () => selectWord(+el.dataset.w));
+    draw();
+  }
+  $('q').oninput = runSearch; $('qmode').onchange = runSearch;
+
+  // ── goto: ayah key / surah name / juz ──
+  $('goto').onchange = async e => {
+    const v = e.target.value.trim(); if (!v || !atlas) return;
+    let m;
+    if ((m = /^(\d+):(\d+)/.exec(v))) { const pg = atlas.pageOf(+m[1], +m[2]); if (pg) { await loadPage(pg); const ws = S.page.resolve(T.ayah(+m[1], +m[2])); if (ws.length) selectAyah(+m[1], +m[2]); } return; }
+    if ((m = /^juz\s*(\d+)/i.exec(v))) { const j = atlas.juz(+m[1]); if (j) await loadPage(j.page); return; }
+    const su = atlas.findSurah(v); if (su.length) await loadPage(su[0].page);
+  };
+
+  // ── pointer: tap, drag-select, pan, pinch ──
+  let drag = null, pinch = null, moved = false, selecting = null;
   const pts = new Map();
   stage.addEventListener('pointerdown', e => {
     try { stage.setPointerCapture(e.pointerId); } catch (_) {}
     pts.set(e.pointerId, [e.clientX, e.clientY]); moved = false;
-    if (pts.size === 1) drag = { x: e.clientX, y: e.clientY, ox: state.view.ox, oy: state.view.oy };
-    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: state.view.scale, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, ox: state.view.ox, oy: state.view.oy }; drag = null; }
+    const r = stage.getBoundingClientRect(), [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
+    const h = S.page.hitTestViewEx(x, y, { maxDistance: 6 });
+    if (pts.size === 1) {
+      drag = { x: e.clientX, y: e.clientY, ox: S.view.ox, oy: S.view.oy };
+      selecting = h && h.word >= 0 && (e.shiftKey || e.pointerType !== 'touch') ? { anchor: h.word, active: false } : null;
+    }
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: S.view.scale, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, ox: S.view.ox, oy: S.view.oy }; drag = null; selecting = null; }
   });
   stage.addEventListener('pointermove', e => {
     const r = stage.getBoundingClientRect();
     if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
     if (pinch && pts.size === 2) {
       const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      const k = Math.max(0.2, Math.min(40, pinch.scale * d / pinch.d)) / pinch.scale;
-      const cx = pinch.cx - r.left, cy = pinch.cy - r.top;
-      state.view = { scale: pinch.scale * k, ox: cx - (cx - pinch.ox) * k, oy: cy - (cy - pinch.oy) * k }; moved = true; draw(); return;
+      const k = Math.max(0.2, Math.min(40, pinch.scale * d / pinch.d)) / pinch.scale, cx = pinch.cx - r.left, cy = pinch.cy - r.top;
+      S.view = { scale: pinch.scale * k, ox: cx - (cx - pinch.ox) * k, oy: cy - (cy - pinch.oy) * k }; moved = true; draw(); return;
+    }
+    const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
+    if (drag && selecting) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!selecting.active && Math.hypot(dx, dy) > 4) { selecting.active = true; stage.classList.add('selecting'); if (S.hlSel) { S.page.unhighlight(S.hlSel); S.hlSel = 0; } S.selWord = -1; S.selAyah = null; if (S.hlAyah) { S.page.unhighlight(S.hlAyah); S.hlAyah = 0; } }
+      if (selecting.active) {
+        const h = S.page.hitTestViewEx(x, y, {});
+        if (h && h.word >= 0) {
+          S.page.select(selecting.anchor, h.word);
+          const ws = S.page.selection();
+          if (S.hlSel) S.page.rehighlight(S.hlSel, T.words(ws)); else S.hlSel = S.page.highlight(T.words(ws), { mode: 'band', band: rgba('#2d6fd6', 0.25), padX: 0.6, ms: 0, layer: LAYER.SELECTION });
+          moved = true; draw();
+        }
+        return;
+      }
     }
     if (drag) {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); state.view.ox = drag.ox + dx; state.view.oy = drag.oy + dy; draw(); }
+      if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); S.view.ox = drag.ox + dx; S.view.oy = drag.oy + dy; draw(); }
       return;
     }
-    const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
-    const t = performance.now(); const h = state.page.hitTestView(x, y); state.lastHitUs = (performance.now() - t) * 1000;
+    const t = performance.now(); const h = S.page.hitTestViewEx(x, y, { maxDistance: 4 }); S.lastHitUs = (performance.now() - t) * 1000;
     const hw = h ? h.word : -1;
-    if (hw !== state.hover) { state.hover = hw; stage.style.cursor = hw >= 0 || (h && h.deco >= 0) ? 'pointer' : 'grab'; draw(); }
+    if (hw !== S.hover) { S.hover = hw; stage.style.cursor = hw >= 0 || (h && h.deco >= 0) ? 'pointer' : 'grab'; draw(); }
   });
   const up = e => {
     pts.delete(e.pointerId);
     if (pts.size < 2) pinch = null;
     if (pts.size === 0) {
-      stage.classList.remove('dragging');
+      stage.classList.remove('dragging'); stage.classList.remove('selecting');
+      if (selecting && selecting.active) { showSelection(); selecting = null; drag = null; return; }
       if (drag && !moved) {
         const r = stage.getBoundingClientRect(); const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
-        const t = performance.now(); const h = state.page.hitTestView(x, y); state.lastHitUs = (performance.now() - t) * 1000;
-        if (h && h.word >= 0) { state.sel.word = state.sel.word === h.word ? -1 : h.word; state.sel.ayah = null; state.sel.path = h.path; state.sel.pathColors.clear(); }
-        else if (h && h.deco >= 0) { const d = state.page.decos[h.deco]; if (d.ayah) { state.sel.ayah = [d.sura, d.ayah]; state.sel.word = -1; } }
-        else { state.sel.word = -1; state.sel.ayah = null; state.sel.pathColors.clear(); }
-        applyStyles(); showSelection();
+        const t = performance.now(); const h = S.page.hitTestViewEx(x, y, { maxDistance: 6 }); S.lastHitUs = (performance.now() - t) * 1000;
+        if (h && h.word >= 0) selectWord(h.word);
+        else if (h && h.deco >= 0) { const d = S.page.decos[h.deco]; if (d.ayah) selectAyah(d.sura, d.ayah); }
+        else selectWord(-1);
       }
-      drag = null;
+      drag = null; selecting = null;
     }
   };
   stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
   stage.addEventListener('lostpointercapture', e => pts.delete(e.pointerId));
   stage.addEventListener('wheel', e => {
     e.preventDefault(); const r = stage.getBoundingClientRect();
-    const k = Math.exp(-e.deltaY * 0.0015); const v = state.view; const cx = e.clientX - r.left, cy = e.clientY - r.top;
-    const ns = Math.max(0.2, Math.min(40, v.scale * k)); const kk = ns / v.scale;
-    state.view = { scale: ns, ox: cx - (cx - v.ox) * kk, oy: cy - (cy - v.oy) * kk }; draw();
+    const k = Math.exp(-e.deltaY * 0.0015), v = S.view, cx = e.clientX - r.left, cy = e.clientY - r.top;
+    const ns = Math.max(0.2, Math.min(40, v.scale * k)), kk = ns / v.scale;
+    S.view = { scale: ns, ox: cx - (cx - v.ox) * kk, oy: cy - (cy - v.oy) * kk }; draw();
   }, { passive: false });
   stage.addEventListener('dblclick', () => fit());
 
-  // ── controls ──
-  const toggle = (id, key) => $(id).onclick = () => { state[key] = !state[key]; $(id).classList.toggle('on', state[key]); applyStyles(); };
-  toggle('tajweed', 'tajweed'); toggle('hideMarks', 'hideMarks'); toggle('markers', 'markers');
-  $('clear').onclick = () => { state.tajweed = state.hideMarks = state.markers = false; for (const id of ['tajweed', 'hideMarks', 'markers']) $(id).classList.remove('on'); state.sel = { word: -1, ayah: null, path: -1, pathColors: new Map() }; stopPlay(); applyStyles(); showSelection(); };
-  $('ink').oninput = e => { state.ink = rgba(e.target.value); applyStyles(); };
-  $('theme').onchange = e => setTheme(e.target.value);
-  function setTheme(t) {
-    state.theme = t; document.body.setAttribute('data-qvp-theme', t);
-    const ink = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' }[t];
-    $('ink').value = ink; state.ink = rgba(ink); applyStyles();
+  // ── copy / crop ──
+  $('copy').onclick = async () => {
+    const p = S.page; let text;
+    if (p.selection().length) text = p.selectionText('uthmani', true);
+    else if (S.selAyah) text = `${p.text(T.ayah(...S.selAyah))} (${S.selAyah[0]}:${S.selAyah[1]})`;
+    else if (S.selWord >= 0) text = `${p.words[S.selWord].text} (${p.citation([S.selWord])})`;
+    else return;
+    try { await navigator.clipboard.writeText(text); $('copied').textContent = 'copied'; } catch { $('copied').textContent = text; }
+    setTimeout(() => $('copied').textContent = '', 1500);
+  };
+  $('cropBtn').onclick = () => {
+    const p = S.page, sel = p.selection();
+    const target = sel.length ? T.words(sel) : S.selAyah ? T.ayah(...S.selAyah) : S.selWord >= 0 ? T.word(S.selWord) : null;
+    if (!target) return;
+    const svg = p.cropSvg(target, { pad: 3, keepMarkers: true, background: getComputedStyle(document.body).getPropertyValue('--paper').trim() });
+    const img = $('cropPreview'); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); img.hidden = false;
+  };
+
+  // ── highlights options / follow words ──
+  $('hlMode').onchange = e => { S.hlMode = e.target.value; if (S.selWord >= 0) { const i = S.selWord; S.selWord = -1; selectWord(i); } };
+  $('hlMs').oninput = e => { S.hlMs = +e.target.value; $('hlMsVal').textContent = S.hlMs + ' ms'; };
+  let timer = 0;
+  function stopPlay() { S.playing = false; clearInterval(timer); timer = 0; $('play').classList.remove('on'); $('play').textContent = '▶ Follow words'; if (S.hlPlay) { S.page.unhighlight(S.hlPlay); S.hlPlay = 0; } draw(); }
+  $('play').onclick = () => {
+    if (S.playing) { stopPlay(); return; }
+    S.playing = true; $('play').classList.add('on'); $('play').textContent = '■ Stop';
+    S.playIdx = S.selWord >= 0 ? S.selWord : 0;
+    const st = { mode: S.hlMode, ink: '#d81b60', band: rgba('#d81b60', 0.14), radius: 1.5, ms: S.hlMs };
+    S.hlPlay = S.page.highlight(T.word(S.playIdx), st);
+    timer = setInterval(async () => {
+      S.playIdx++;
+      if (S.playIdx >= S.page.nWords) { const next = src.pages[src.pages.indexOf(S.n) + 1]; if (next) { await loadPage(next); S.playing = true; $('play').classList.add('on'); $('play').textContent = '■ Stop'; S.playIdx = 0; S.hlPlay = S.page.highlight(T.word(0), st); } else stopPlay(); return; }
+      S.page.rehighlight(S.hlPlay, T.word(S.playIdx)); draw();
+    }, 320);
+    draw();
+  };
+
+  // ── styling toggles (each is one engine handle) ──
+  function applyToggles() {
+    const p = S.page;
+    if (S.tajweedHandle) { p.unstyle(S.tajweedHandle); S.tajweedHandle = 0; }
+    if ($('tajweed').classList.contains('on')) S.tajweedHandle = p.theme({ marks: {}, ms: 200, ...Object.fromEntries([]) , diacritics: PALETTE[CATEGORY.HARAKA], dots: PALETTE[CATEGORY.LETTER_DOT], waqf: PALETTE[CATEGORY.WAQF], sifr: PALETTE[CATEGORY.DABT] });
+    if (S.hideHandle) { p.unstyle(S.hideHandle); S.hideHandle = 0; }
+    if ($('hideMarks').classList.contains('on')) S.hideHandle = p.hide(Sel.kind(KIND.MARK));
+    if (S.markersHandle) { p.unstyle(S.markersHandle); S.markersHandle = 0; }
+    if ($('markers').classList.contains('on')) S.markersHandle = p.style(Sel.deco(DECO.AYAH_MARKER), '#b8860b', { ms: 300, layer: LAYER.THEME + 1 });
+    draw();
   }
-  $('prev').onclick = () => loadPage(state.n - 1);
-  $('next').onclick = () => loadPage(state.n + 1);
+  for (const id of ['tajweed', 'hideMarks', 'markers']) $(id).onclick = () => { $(id).classList.toggle('on'); applyToggles(); };
+  $('clear').onclick = () => { for (const id of ['tajweed', 'hideMarks', 'markers']) $(id).classList.remove('on'); S.page.clearStyles(); S.page.clearHighlights(); S.page.unmask(); S.page.revealStop(); S.page.clearSelection(); S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.themeHandle = S.tajweedHandle = S.hideHandle = S.markersHandle = 0; S.pathHandles.clear(); S.selWord = -1; S.selAyah = null; S.revealOn = false; $('revealMode').classList.remove('on'); $('revealPos').disabled = true; $('q').value = ''; $('results').innerHTML = ''; stopPlay(); applyTheme(); showSelection(); draw(); };
+  function applyTheme() {
+    const p = S.page; if (!p) return;
+    document.body.setAttribute('data-qvp-theme', S.theme);
+    p.setDefaultInk($('ink').value);
+    renderer.baseKey = ''; draw();
+  }
+  $('ink').oninput = applyTheme;
+  $('theme').onchange = e => { S.theme = e.target.value; $('ink').value = INK[S.theme]; applyTheme(); };
+  $('legend').innerHTML = Object.entries(PALETTE).slice(0, 5).map(([c, col]) => `<span class="hint"><i class="sw" style="background:${col}"></i>${engine.categoryName(+c)}</span>`).join('');
+
+  // ── memorisation ──
+  $('maskAyah').onclick = () => { const p = S.page; const t = S.selAyah ? T.ayah(...S.selAyah) : S.selWord >= 0 ? T.ayah(p.words[S.selWord].sura, p.words[S.selWord].ayah) : T.page(); p.maskOptions({ blockColor: getComputedStyle(document.body).getPropertyValue('--line').trim() }); p.mask(t, $('maskMode').value); draw(); };
+  $('revealNext').onclick = () => { S.page.revealNext(1); draw(); };
+  $('hideBack').onclick = () => { S.page.hideBack(1); draw(); };
+  $('unmask').onclick = () => { S.page.unmask(); draw(); };
+  $('revealMode').onclick = () => {
+    const p = S.page; S.revealOn = !S.revealOn; $('revealMode').classList.toggle('on', S.revealOn);
+    if (S.revealOn) { const steps = p.revealStart({ lit: 2, grey: S.theme === 'dark' ? '#4a4f57' : '#c9c4b8', ink: $('ink').value, ms: 150 }); const r = $('revealPos'); r.max = steps - 1; r.value = -1; r.disabled = false; $('revealVal').textContent = `−/${steps}`; }
+    else { p.revealStop(); $('revealPos').disabled = true; $('revealVal').textContent = ''; }
+    draw();
+  };
+  $('revealPos').oninput = e => { S.page.revealGoto(+e.target.value); $('revealVal').textContent = `${+e.target.value + 1}/${S.page.revealSteps()}`; draw(); };
+
+  // ── layout ──
+  const relayoutUI = () => { $('spacingVal').textContent = '×' + S.layout.lineSpacing.toFixed(2); fit(); };
+  $('spacing').oninput = e => { S.layout.lineSpacing = +e.target.value; S.layout.lineGap = 0; S.layout.fillHeight = false; $('fillH').classList.remove('on'); relayoutUI(); };
+  $('fillH').onclick = () => { S.layout.fillHeight = !S.layout.fillHeight; $('fillH').classList.toggle('on', S.layout.fillHeight); relayoutUI(); };
+  $('fitGap').onclick = () => { const p = S.page, r = stage.getBoundingClientRect(); S.layout.fillHeight = false; $('fillH').classList.remove('on'); S.layout.lineSpacing = 1; $('spacing').value = 1; S.layout.lineGap = engine.gapToFill(p.width, p.height, p.nLines, r.width - 2 * S.layout.padSide, r.height - S.layout.padTop - S.layout.padBottom, 0); relayoutUI(); };
+  $('padTop').oninput = e => { S.layout.padTop = +e.target.value; $('padTopVal').textContent = e.target.value; relayoutUI(); };
+  $('padBottom').oninput = e => { S.layout.padBottom = +e.target.value; $('padBottomVal').textContent = e.target.value; relayoutUI(); };
+
+  // ── navigation ──
+  $('prev').onclick = () => loadPage(src.pages[Math.max(0, src.pages.indexOf(S.n) - 1)]);
+  $('next').onclick = () => loadPage(src.pages[Math.min(src.pages.length - 1, src.pages.indexOf(S.n) + 1)]);
   $('pageNo').onchange = e => loadPage(+e.target.value);
   $('fit').onclick = () => fit();
   $('pageMax').textContent = src.pages[src.pages.length - 1];
-  if (EMB) $('pageNo').title = 'This build embeds pages: ' + src.pages.join(', ');
-  window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') loadPage(state.n + 1); if (e.key === 'ArrowRight') loadPage(state.n - 1); });
-  let timer = 0;
-  function stopPlay() { state.playing = false; clearInterval(timer); timer = 0; $('play').classList.remove('on'); $('play').textContent = '▶ Play words'; }
-  $('play').onclick = () => {
-    if (state.playing) { stopPlay(); applyStyles(); return; }
-    state.playing = true; $('play').classList.add('on'); $('play').textContent = '■ Stop';
-    state.playIdx = state.sel.word >= 0 ? state.sel.word : 0;
-    timer = setInterval(async () => {
-      state.playIdx++;
-      if (state.playIdx >= state.page.nWords) { const next = src.pages[src.pages.indexOf(state.n) + 1]; if (next) { await loadPage(next); state.playing = true; $('play').classList.add('on'); $('play').textContent = '■ Stop'; } else stopPlay(); }
-      applyStyles();
-    }, 320);
-    applyStyles();
-  };
-  const relayoutUI = () => { $('spacingVal').textContent = '×' + state.layout.lineSpacing.toFixed(2); fit(); };
-  $('spacing').oninput = e => { state.layout.lineSpacing = +e.target.value; state.layout.fillHeight = false; $('fillH').classList.remove('on'); relayoutUI(); };
-  $('fillH').onclick = () => { state.layout.fillHeight = !state.layout.fillHeight; $('fillH').classList.toggle('on', state.layout.fillHeight); relayoutUI(); };
-  $('padTop').oninput = e => { state.layout.padTop = +e.target.value; $('padTopVal').textContent = e.target.value; relayoutUI(); };
-  $('padBottom').oninput = e => { state.layout.padBottom = +e.target.value; $('padBottomVal').textContent = e.target.value; relayoutUI(); };
-  $('legend').innerHTML = Object.entries(PALETTE).map(([f, c]) => `<span class="hint"><i class="sw" style="background:${c}"></i>${engine.familyName(+f)}</span>`).join('');
+  window.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if (e.key === 'ArrowLeft') $('next').click(); if (e.key === 'ArrowRight') $('prev').click(); });
 
-  window.__qvp = { state, engine, renderer, loadPage, fit, applyStyles };
-  window.addEventListener('resize', resize);
+  function hud() {
+    const p = S.page, s = renderer.stats, L = p.currentLayout;
+    $('hud').textContent =
+      `wasm engine   ${(wasmBytes.length / 1024).toFixed(0)} KB, init ${wasmMs.toFixed(1)} ms${atlas ? ' · atlas loaded' : ''}\n` +
+      `page ${pad(S.n)}      ${(S.bytes / 1024).toFixed(0)} KB, load+decode ${S.loadMs.toFixed(2)} ms\n` +
+      `content       ${p.nWords} words · ${p.nPaths} paths · ${p.nAyahs} ayah parts · ${p.nLines} lines\n` +
+      `base layer    ${s.basePaths} paths in ${s.baseMs.toFixed(2)} ms (cached)\n` +
+      `overlay       ${s.overlayPaths} styled paths + ${s.bands} band boxes in ${s.overlayMs.toFixed(2)} ms\n` +
+      `hit-test      ${S.lastHitUs.toFixed(1)} µs (gap-aware, wasm)\n` +
+      `styles        ${p.styleHandles().length} handles · ${p.highlightHandles().length} highlights${S.animating ? ' · animating' : ''}\n` +
+      `layout        ${S.layout.fillHeight ? 'fill height' : S.layout.lineGap ? 'gap +' + S.layout.lineGap.toFixed(1) + ' u' : 'spacing ×' + S.layout.lineSpacing.toFixed(2)} · pitch ${(L ? L.pitch : 0).toFixed(1)} u · pad ${S.layout.padTop}/${S.layout.padBottom}\n` +
+      `zoom          ${(S.view.scale * (L ? L.scale : 1) * dpr).toFixed(2)}× device px per unit`;
+  }
+
+  window.__qvp = { S, engine, atlas, renderer, loadPage, fit, selectWord, selectAyah, draw };
   const prefersDark = document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-  if (prefersDark) { $('theme').value = 'dark'; state.theme = 'dark'; document.body.setAttribute('data-qvp-theme', 'dark'); $('ink').value = '#e8e4dc'; state.ink = rgba('#e8e4dc'); }
+  if (prefersDark) { S.theme = 'dark'; $('theme').value = 'dark'; $('ink').value = INK.dark; }
+  window.addEventListener('resize', resize);
   await loadPage(src.pages[0]);
   resize();
   const q = new URLSearchParams(location.search).get('p'); if (q) loadPage(+q);

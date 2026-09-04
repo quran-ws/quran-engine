@@ -113,6 +113,8 @@ void     qvp_text_target(const QvpPage*, const QvpTarget*, uint8_t form, const u
 uint32_t qvp_search(const QvpPage*, const uint8_t* query, uint32_t query_len, uint8_t form, uint8_t mode, uint32_t normalize, uint32_t loose, uint32_t limit /* 0 = all */, QvpMatch* out, uint32_t cap);
 void     qvp_arabic(uint8_t kind /* 0 strip 1 fold 2 normalize 3 loose */, const uint8_t* s, uint32_t len, QvpStr* out);
 void     qvp_citation(const QvpPage*, const uint32_t* words, uint32_t n, QvpStr* out);   /* "2:255-257, 3:1" */
+int32_t  qvp_attach_words(QvpPage*, const uint8_t* json, uint32_t len);   /* sidecar {"s:a:w": {"imlaei","qpc","rasm","search"}} → words updated, -1 = bad JSON */
+uint32_t qvp_has_form(const QvpPage*, uint8_t form);
 
 /* hit testing --------------------------------------------------------------------------- */
 int      qvp_hit_test(const QvpPage*, float x, float y, QvpHit* out);                          /* exact outline, page units */

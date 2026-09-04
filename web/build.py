@@ -27,6 +27,8 @@ else:
     pages = pages_arg(sys.argv[2] if len(sys.argv) > 2 else '1-21,440-445,582,604')
     wasm = base64.b64encode(open(os.path.join(web, 'qvp_ffi.wasm'), 'rb').read()).decode()
     emb = {'wasm': wasm, 'pages': {}, 'words': {}}
+    ap = os.path.join(web, 'pages', 'atlas.qva')
+    if os.path.exists(ap): emb['atlas'] = base64.b64encode(open(ap, 'rb').read()).decode()
     for n in pages:
         k = f'{n:03d}'
         emb['pages'][k] = base64.b64encode(open(os.path.join(web, 'pages', k + '.qvp'), 'rb').read()).decode()
