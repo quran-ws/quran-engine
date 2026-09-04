@@ -4,60 +4,8 @@ use std::fmt::Write;
 
 const INK: &str = "#231f20";
 
-fn fmt_num(v: i32, quant: u16, out: &mut String) {
-    // exact decimal for quantised value, trimmed
-    let q = quant as i32;
-    let neg = v < 0;
-    let a = v.abs();
-    let (ip, fp) = (a / q, a % q);
-    if neg {
-        out.push('-');
-    }
-    write!(out, "{ip}").unwrap();
-    if fp != 0 {
-        let digits = (quant as f64).log10().ceil() as usize;
-        let s = format!("{fp:0digits$}");
-        let s = s.trim_end_matches('0');
-        out.push('.');
-        out.push_str(s);
-    }
-}
-
 pub fn path_d(cmds: &[Cmd], quant: u16) -> String {
-    let mut d = String::new();
-    let pt = |d: &mut String, x: i32, y: i32| {
-        fmt_num(x, quant, d);
-        d.push(' ');
-        fmt_num(y, quant, d);
-    };
-    for c in cmds {
-        match *c {
-            Cmd::MoveTo(x, y) => {
-                d.push('M');
-                pt(&mut d, x, y);
-            }
-            Cmd::LineTo(x, y) => {
-                d.push('L');
-                pt(&mut d, x, y);
-            }
-            Cmd::QuadTo(x1, y1, x, y) => {
-                d.push('Q');
-                pt(&mut d, x1, y1);
-                d.push(' ');
-                pt(&mut d, x, y);
-            }
-            Cmd::CubicTo(x1, y1, x2, y2, x, y) => {
-                d.push('C');
-                pt(&mut d, x1, y1);
-                d.push(' ');
-                pt(&mut d, x2, y2);
-                d.push(' ');
-                pt(&mut d, x, y);
-            }
-            Cmd::Close => d.push('Z'),
-        }
-    }
-    d
+    svg_path_d(cmds, quant)
 }
 
 fn write_path(p: &PageData, i: usize, out: &mut String) -> Result<(), Error> {

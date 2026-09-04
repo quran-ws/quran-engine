@@ -1,4 +1,5 @@
 pub mod affine;
+pub mod atlas;
 pub mod qvp2svg;
 pub mod svg2qvp;
 

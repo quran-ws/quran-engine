@@ -211,6 +211,12 @@ impl<'a> Ctx<'a> {
         if n.has_attribute("data-nisf-start") {
             flags |= AF_NISF_START;
         }
+        let num = |a: &str| n.attribute(a).and_then(|s| s.parse::<u16>().ok());
+        let rub: u16 = num("data-rub-start")
+            .or_else(|| num("data-nisf-start").map(|x| (x - 1) * 2 + 1))
+            .or_else(|| num("data-hizb-start").map(|x| (x - 1) * 4 + 1))
+            .or_else(|| num("data-juz-start").map(|x| (x - 1) * 8 + 1))
+            .unwrap_or(0);
         let first_word = self.page.words.len() as u16;
         let ayah_idx = self.page.ayahs.len() as u16;
         // marker id is resolved after decos are all known
@@ -218,7 +224,7 @@ impl<'a> Ctx<'a> {
             Some(id) => self.intern(id) | 0x8000, // temp: string ref flagged
             None => NONE_U16,
         };
-        self.page.ayahs.push(AyahRec { sura, ayah, part, parts, flags, first_word, n_words: 0, marker_deco, bbox: IBox::EMPTY });
+        self.page.ayahs.push(AyahRec { sura, ayah, part, parts, flags, first_word, n_words: 0, marker_deco, rub, bbox: IBox::EMPTY });
         self.ayah_children(n, tf, line_idx, ayah_idx, sura, ayah)?;
         let n_words = self.page.words.len() as u16 - first_word;
         let mut bb = IBox::EMPTY;
@@ -257,6 +263,11 @@ impl<'a> Ctx<'a> {
             search: n.attribute("data-search").unwrap_or("").to_owned(),
         });
         let text = if uthmani.is_empty() { NONE_U16 } else { self.intern(uthmani) };
+        let form = |cx: &mut Self, a: &str| -> u16 { match n.attribute(a) { Some(v) if !v.is_empty() => cx.intern(v), _ => NONE_U16 } };
+        let imlaei = form(self, "data-imlaei");
+        let qpc = form(self, "data-qpc");
+        let rasm = form(self, "data-rasm");
+        let search = form(self, "data-search");
         let mut raws = Vec::new();
         for c in n.children().filter(|c| c.is_element()) {
             let ctf = self.node_tf(c, tf)?;
@@ -266,7 +277,7 @@ impl<'a> Ctx<'a> {
             }
         }
         let (first_path, n_paths, bbox) = self.push_paths(raws);
-        self.page.words.push(WordRec { sura, ayah, word, line_idx, ayah_idx, text, first_path, n_paths, bbox });
+        self.page.words.push(WordRec { sura, ayah, word, line_idx, ayah_idx, text, imlaei, qpc, rasm, search, first_path, n_paths, bbox });
         Ok(())
     }
 
@@ -277,7 +288,17 @@ impl<'a> Ctx<'a> {
             .or_else(|| n.attribute("data-sid").and_then(|s| s.parse().ok()).map(|s| (s, 0)))
             .unwrap_or((0, 0));
         let text = match kind {
-            DecoKind::SurahName | DecoKind::Basmalah => n.attribute("data-surah-name-ar").map(|s| self.intern(s)),
+            DecoKind::SurahName | DecoKind::Basmalah => {
+                let s = format!(
+                    "{}|{}|{}|{}|{}",
+                    n.attribute("data-surah-name-ar").unwrap_or(""),
+                    n.attribute("data-surah-name-latin").unwrap_or(""),
+                    n.attribute("data-surah-name-en").unwrap_or(""),
+                    n.attribute("data-revelation-place").unwrap_or(""),
+                    n.attribute("data-ayah-count").unwrap_or("")
+                );
+                Some(self.intern(&s))
+            }
             DecoKind::HizbMark => {
                 let s = format!(
                     "juz={};hizb={};rub={};nisf={}",

@@ -38,8 +38,8 @@ fn main() {
     }
     println!("paint (no styles): {:?} per full display list", t.elapsed() / 100);
 
-    page.style.set(Selector::Family(qvp_format::Family::Diacritic), 0x1a73e8ff);
-    page.style.set(Selector::Ayah(first_sura, first_ayah), 0x0a7d32ff);
+    page.style(Selector::Family(qvp_format::Family::Diacritic), Paint::new(0x1a73e8ff));
+    page.style(Selector::Ayah(first_sura, first_ayah), Paint::new(0x0a7d32ff));
     let t = Instant::now();
     for _ in 0..100 {
         let _ = page.paint();
@@ -50,4 +50,26 @@ fn main() {
         let _ = page.styled();
     }
     println!("styled() overlay list: {:?}", t.elapsed() / 100);
+    let t = Instant::now();
+    let m = page.search("الله", &SearchOptions::default());
+    println!("search 'الله': {} matches in {:?}", m.len(), t.elapsed());
+    let t = Instant::now();
+    let hb = page.hit_boxes(0.6);
+    println!("hit boxes: {} in {:?}", hb.len(), t.elapsed());
+    let t = Instant::now();
+    for _ in 0..100 {
+        let _ = page.hit_test_ex(100.0, 300.0, &HitOptions::default());
+    }
+    println!("gap-aware hit-test: {:?}", t.elapsed() / 100);
+    let sura = page.data().words[0].sura;
+    let ayah = page.data().words[0].ayah;
+    let t = Instant::now();
+    let h = page.highlight(&Target::Ayah(sura, ayah), HighlightStyle { mode: HighlightMode::Both, transition_ms: 200, ..Default::default() });
+    page.tick(100.0);
+    let b = page.highlight_boxes_view();
+    println!("highlight ayah {sura}:{ayah}: {} band boxes, tick+boxes {:?}", b.len(), t.elapsed());
+    page.unhighlight(h);
+    println!("surahs: {:?}", page.surahs().iter().map(|s| (s.number, s.latin.clone(), s.has_banner)).collect::<Vec<_>>());
+    println!("divisions: {:?}", page.divisions().iter().map(|d| (d.kind, d.n, d.sura, d.ayah)).collect::<Vec<_>>());
+    println!("markers: {}", page.markers().len());
 }

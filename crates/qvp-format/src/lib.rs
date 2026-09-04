@@ -11,6 +11,8 @@
 //! ```
 #![forbid(unsafe_code)]
 
+pub mod atlas;
+
 use std::fmt;
 
 pub const MAGIC: &[u8; 4] = b"QVP1";
@@ -19,7 +21,7 @@ pub const DEFAULT_QUANT: u16 = 100;
 pub const HEADER_LEN: usize = 80;
 pub const LINE_LEN: usize = 24;
 pub const AYAH_LEN: usize = 32;
-pub const WORD_LEN: usize = 36;
+pub const WORD_LEN: usize = 44;
 pub const PATH_LEN: usize = 36;
 pub const DECO_LEN: usize = 32;
 pub const GLYPH_LEN: usize = 28;
@@ -306,6 +308,9 @@ pub struct AyahRec {
     pub n_words: u16,
     /// Index into decos, or NONE_U16.
     pub marker_deco: u16,
+    /// Rubʿ number (1..240) that starts at this ayah when any AF_*_START flag is
+    /// set, else 0. juz = (rub-1)/8+1, hizb = (rub-1)/4+1, nisf = (rub-1)/2+1.
+    pub rub: u16,
     pub bbox: IBox,
 }
 
@@ -318,6 +323,11 @@ pub struct WordRec {
     pub ayah_idx: u16,
     /// Index into strings (uthmani text) or NONE_U16.
     pub text: u16,
+    /// Other text forms (imlaei, qpc, rasm, search): string index or NONE_U16.
+    pub imlaei: u16,
+    pub qpc: u16,
+    pub rasm: u16,
+    pub search: u16,
     pub first_path: u32,
     pub n_paths: u16,
     pub bbox: IBox,
@@ -632,7 +642,7 @@ pub fn encode(p: &PageData) -> Vec<u8> {
         w.u16(a.marker_deco);
         w.u8(a.flags);
         w.u8(0);
-        w.u16(0);
+        w.u16(a.rub);
         w.bbox(&a.bbox);
     }
     let off_words = w.0.len();
@@ -643,6 +653,10 @@ pub fn encode(p: &PageData) -> Vec<u8> {
         w.u16(x.line_idx);
         w.u16(x.ayah_idx);
         w.u16(x.text);
+        w.u16(x.imlaei);
+        w.u16(x.qpc);
+        w.u16(x.rasm);
+        w.u16(x.search);
         w.u32(x.first_path);
         w.u16(x.n_paths);
         w.u16(0);
@@ -819,9 +833,9 @@ pub fn decode(bytes: &[u8]) -> Result<PageData, Error> {
         let marker_deco = r.u16();
         let flags = r.u8();
         r.u8();
-        r.u16();
+        let rub = r.u16();
         let bbox = r.bbox();
-        ayahs.push(AyahRec { sura, ayah, part, parts, flags, first_word, n_words, marker_deco, bbox });
+        ayahs.push(AyahRec { sura, ayah, part, parts, flags, first_word, n_words, marker_deco, rub, bbox });
     }
     r.pos = off_words;
     r.need(n_words * WORD_LEN, "words")?;
@@ -833,11 +847,15 @@ pub fn decode(bytes: &[u8]) -> Result<PageData, Error> {
         let line_idx = r.u16();
         let ayah_idx = r.u16();
         let text = r.u16();
+        let imlaei = r.u16();
+        let qpc = r.u16();
+        let rasm = r.u16();
+        let search = r.u16();
         let first_path = r.u32();
         let n_paths = r.u16();
         r.u16();
         let bbox = r.bbox();
-        words.push(WordRec { sura, ayah, word, line_idx, ayah_idx, text, first_path, n_paths, bbox });
+        words.push(WordRec { sura, ayah, word, line_idx, ayah_idx, text, imlaei, qpc, rasm, search, first_path, n_paths, bbox });
     }
     r.pos = off_paths;
     r.need(n_paths * PATH_LEN, "paths")?;
@@ -914,8 +932,10 @@ pub fn decode(bytes: &[u8]) -> Result<PageData, Error> {
         if (w.first_path as usize) + (w.n_paths as usize) > paths.len() {
             return Err(Error::Corrupt("word path range"));
         }
-        if w.text != NONE_U16 && w.text as usize >= strings.len() {
-            return Err(Error::Corrupt("word text ref"));
+        for t in [w.text, w.imlaei, w.qpc, w.rasm, w.search] {
+            if t != NONE_U16 && t as usize >= strings.len() {
+                return Err(Error::Corrupt("word text ref"));
+            }
         }
         if w.line_idx as usize >= lines.len() || w.ayah_idx as usize >= ayahs.len() {
             return Err(Error::Corrupt("word line/ayah ref"));
@@ -1007,6 +1027,121 @@ impl PageData {
     }
 }
 
+/// Format quantised commands as an SVG `d` string (exact decimals, trimmed).
+pub fn svg_path_d(cmds: &[Cmd], quant: u16) -> String {
+    use std::fmt::Write;
+    fn num(v: i32, quant: u16, out: &mut String) {
+        let q = quant as i32;
+        let a = v.abs();
+        if v < 0 {
+            out.push('-');
+        }
+        write!(out, "{}", a / q).unwrap();
+        let fp = a % q;
+        if fp != 0 {
+            let digits = (quant as f64).log10().ceil() as usize;
+            let s = format!("{fp:0digits$}");
+            out.push('.');
+            out.push_str(s.trim_end_matches('0'));
+        }
+    }
+    let mut d = String::new();
+    let pt = |d: &mut String, x: i32, y: i32| {
+        num(x, quant, d);
+        d.push(' ');
+        num(y, quant, d);
+    };
+    for c in cmds {
+        match *c {
+            Cmd::MoveTo(x, y) => {
+                d.push('M');
+                pt(&mut d, x, y);
+            }
+            Cmd::LineTo(x, y) => {
+                d.push('L');
+                pt(&mut d, x, y);
+            }
+            Cmd::QuadTo(x1, y1, x, y) => {
+                d.push('Q');
+                pt(&mut d, x1, y1);
+                d.push(' ');
+                pt(&mut d, x, y);
+            }
+            Cmd::CubicTo(x1, y1, x2, y2, x, y) => {
+                d.push('C');
+                pt(&mut d, x1, y1);
+                d.push(' ');
+                pt(&mut d, x2, y2);
+                d.push(' ');
+                pt(&mut d, x, y);
+            }
+            Cmd::Close => d.push('Z'),
+        }
+    }
+    d
+}
+
+/// Mark taxonomy category (mark-taxonomy v2 of the exporter).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum Category {
+    None = 0,
+    Haraka = 1,
+    Tanween = 2,
+    LetterDot = 3,
+    Orthographic = 4,
+    Dabt = 5,
+    Waqf = 6,
+    ReadingSign = 7,
+    Standalone = 8,
+}
+
+impl Category {
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::Haraka,
+            2 => Self::Tanween,
+            3 => Self::LetterDot,
+            4 => Self::Orthographic,
+            5 => Self::Dabt,
+            6 => Self::Waqf,
+            7 => Self::ReadingSign,
+            8 => Self::Standalone,
+            _ => Self::None,
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "",
+            Self::Haraka => "haraka",
+            Self::Tanween => "tanween",
+            Self::LetterDot => "letter-dot",
+            Self::Orthographic => "orthographic",
+            Self::Dabt => "dabt",
+            Self::Waqf => "waqf",
+            Self::ReadingSign => "reading-sign",
+            Self::Standalone => "standalone",
+        }
+    }
+}
+
+impl Mark {
+    pub fn category(self) -> Category {
+        use Mark::*;
+        match self {
+            Fatha | Kasra | Damma | Sukun | Shadda => Category::Haraka,
+            Fathatan | Kasratan | Dammatan => Category::Tanween,
+            Dot | TwoDots | ThreeDots => Category::LetterDot,
+            Hamza | Wasla | SmallAlef | Maddah | SmallWaw | SmallYa | SmallNoon => Category::Orthographic,
+            SifrMustadir | SifrMustatil | MeemIqlab => Category::Dabt,
+            WaqfJaiz | WaslAwla | WaqfAwla | WaqfLazim | Muanaqah => Category::Waqf,
+            Saktah | SeenReading | Imalah | Ishmam | Tashil => Category::ReadingSign,
+            SajdahSign | SajdahLine | Sajdah | Hizb => Category::Standalone,
+            None | Unknown => Category::None,
+        }
+    }
+}
+
 /// Bbox of a command list (control points included).
 pub fn cmds_bbox(cmds: &[Cmd]) -> IBox {
     let mut bb = IBox::EMPTY;
@@ -1068,8 +1203,8 @@ mod tests {
         let p = PageData {
             header: Header { version: VERSION, quant: 100, page: 7, flags: 0, width: 345.0, height: 550.0 },
             lines: vec![LineRec { line_no: 1, first_word: 0, n_words: 1, bbox: bb }],
-            ayahs: vec![AyahRec { sura: 2, ayah: 3, part: 1, parts: 1, flags: AF_RUB_START, first_word: 0, n_words: 1, marker_deco: 0, bbox: bb }],
-            words: vec![WordRec { sura: 2, ayah: 3, word: 1, line_idx: 0, ayah_idx: 0, text: 0, first_path: 0, n_paths: 1, bbox: bb }],
+            ayahs: vec![AyahRec { sura: 2, ayah: 3, part: 1, parts: 1, flags: AF_RUB_START, first_word: 0, n_words: 1, marker_deco: 0, rub: 5, bbox: bb }],
+            words: vec![WordRec { sura: 2, ayah: 3, word: 1, line_idx: 0, ayah_idx: 0, text: 0, imlaei: NONE_U16, qpc: NONE_U16, rasm: NONE_U16, search: 0, first_path: 0, n_paths: 1, bbox: bb }],
             paths: vec![
                 PathRec { kind: PathKind::Body, mark: Mark::None, family: Family::None, flags: PF_EVENODD, ox: 500, oy: 600, op_off: 0, op_len: ops.len() as u32, bbox: bb },
                 PathRec { kind: PathKind::AyahOrnament, mark: Mark::None, family: Family::None, flags: 0, ox: 500, oy: 600, op_off: 0, op_len: ops.len() as u32, bbox: bb },

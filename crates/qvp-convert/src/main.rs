@@ -10,7 +10,14 @@ fn usage() -> ! {
     std::process::exit(2)
 }
 
-fn one(svg_path: &Path, out: &Path, json: Option<&Path>) -> Result<(usize, usize, Vec<String>), String> {
+struct Done {
+    svg_len: usize,
+    qvp_len: usize,
+    warnings: Vec<String>,
+    page: qvp_format::PageData,
+}
+
+fn one(svg_path: &Path, out: &Path, json: Option<&Path>) -> Result<Done, String> {
     let svg = fs::read_to_string(svg_path).map_err(|e| format!("{}: {e}", svg_path.display()))?;
     let c = convert(&svg).map_err(|e| format!("{}: {e}", svg_path.display()))?;
     let bytes = qvp_format::encode(&c.page);
@@ -18,7 +25,7 @@ fn one(svg_path: &Path, out: &Path, json: Option<&Path>) -> Result<(usize, usize
     if let Some(j) = json {
         fs::write(j, words_json(&c.words_text)).map_err(|e| e.to_string())?;
     }
-    Ok((svg.len(), bytes.len(), c.report.warnings))
+    Ok(Done { svg_len: svg.len(), qvp_len: bytes.len(), warnings: c.report.warnings, page: c.page })
 }
 
 fn main() {
@@ -30,11 +37,11 @@ fn main() {
         "svg2qvp" if args.len() >= 4 => {
             let json = args.get(4).map(PathBuf::from);
             match one(Path::new(&args[2]), Path::new(&args[3]), json.as_deref()) {
-                Ok((a, b, w)) => {
-                    for x in w {
+                Ok(d) => {
+                    for x in d.warnings {
                         eprintln!("warn: {x}");
                     }
-                    println!("{} → {} bytes ({:.1}x smaller)", a, b, a as f64 / b as f64);
+                    println!("{} → {} bytes ({:.1}x smaller)", d.svg_len, d.qvp_len, d.svg_len as f64 / d.qvp_len as f64);
                 }
                 Err(e) => {
                     eprintln!("error: {e}");
@@ -76,18 +83,20 @@ fn main() {
                 .collect();
             let (mut svg_total, mut qvp_total, mut n, mut errs, mut warns) = (0usize, 0usize, 0usize, 0usize, 0usize);
             let (mut min, mut max) = (usize::MAX, 0usize);
+            let mut atlas = qvp_convert::atlas::Builder::default();
             for (stem, r) in results {
                 match r {
-                    Ok((a, b, w)) => {
+                    Ok(d) => {
                         n += 1;
-                        svg_total += a;
-                        qvp_total += b;
-                        min = min.min(b);
-                        max = max.max(b);
-                        for x in w {
+                        svg_total += d.svg_len;
+                        qvp_total += d.qvp_len;
+                        min = min.min(d.qvp_len);
+                        max = max.max(d.qvp_len);
+                        for x in d.warnings {
                             warns += 1;
                             eprintln!("warn: page {stem}: {x}");
                         }
+                        atlas.add_page(&d.page);
                     }
                     Err(e) => {
                         errs += 1;
@@ -95,6 +104,10 @@ fn main() {
                     }
                 }
             }
+            let atlas = atlas.build();
+            fs::write(out_dir.join("atlas.qva"), atlas.encode()).expect("write atlas");
+            fs::write(out_dir.join("atlas.json"), atlas.to_json()).expect("write atlas json");
+            println!("atlas: {} pages, {} surahs, {} rub boundaries → atlas.qva / atlas.json", atlas.pages.len(), atlas.surahs.len(), atlas.rubs.len());
             println!(
                 "pages={n} errors={errs} warnings={warns}\nsvg total {:.1} MB → qvp total {:.2} MB ({:.1}x)\nper page: min {} B, avg {} B, max {} B",
                 svg_total as f64 / 1e6,
