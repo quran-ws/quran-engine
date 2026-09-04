@@ -1,0 +1,9 @@
+pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
+plugins { id("com.facebook.react.settings") }
+extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
+rootProject.name = 'QvpExample'
+include ':app'
+includeBuild('../node_modules/@react-native/gradle-plugin')
+// The Kotlin QVP library (JNI over qvp.h) as a Gradle project; @quranpedia/qvp-react-native depends on `project(":qvp")`.
+include ':qvp'
+project(':qvp').projectDir = file('../../../android/qvp')

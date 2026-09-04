@@ -36,9 +36,10 @@ pages/*.svg ──qvp-convert──▶ NNN.qvp · atlas.qva · NNN.words.json (d
 | `crates/qvp-core` | the engine (see `docs/API.md`) |
 | `crates/qvp-ffi` | C ABI: `include/qvp.h`, native + wasm builds, ABI smoke test |
 | `web/` | reference wrapper `qvp.js`, Canvas2D renderer, demo app, single-file build |
-| `packages/android` | Kotlin library (JNI over `qvp.h`) + demo app |
-| `packages/flutter` | Dart FFI plugin + example app |
-| `packages/react-native` | native view module + example app |
+| `packages/android` | Kotlin library (JNI over `qvp.h`) + demo app — built and verified on the emulator |
+| `packages/flutter` | Dart FFI plugin + example app — 13 FFI tests, verified on the emulator |
+| `packages/react-native` | `@quranpedia/qvp-react-native` (declarative props over the Kotlin library) + example — verified on the emulator |
+| `packages/ios` | Swift package + demo — not yet built (needs a Mac; see `docs/MACOS.md` for the prompt) |
 | `docs/` | `API.md`, design spec, `UPSTREAM-DATA-ISSUES.md` (for the exporter team), `MACOS.md` |
 | `scripts/` | `build-engine-android.sh` |
 

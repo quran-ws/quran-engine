@@ -1,0 +1,53 @@
+// @quranpedia/qvp-react-native — Android module. Thin: marshalling + handle reconciliation over the Kotlin
+// library `net.quranpedia.qvp` (packages/android/qvp), which is JNI over crates/qvp-ffi/include/qvp.h.
+//
+// Linking the Kotlin library, two ways:
+//   1. (preferred) the app's settings.gradle includes it as a Gradle project:
+//        include(":qvp"); project(":qvp").projectDir = file("<repo>/packages/android/qvp")
+//      and this module depends on `project(":qvp")`.
+//   2. otherwise this module compiles the library's Kotlin + JNI sources straight from `qvpAndroidDir`
+//      (gradle property; default: ../../../android/qvp inside the monorepo). Same code, one AAR.
+buildscript {
+    if (project == rootProject) {
+        repositories { google(); mavenCentral() }
+        dependencies {
+            classpath("com.android.tools.build:gradle:8.7.3")
+            classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")
+        }
+    }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+
+def safeExtGet(prop, fallback) { rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback }
+def qvpProject = findProject(":qvp")
+def qvpDir = file(rootProject.findProperty("qvpAndroidDir") ?: "$projectDir/../../../android/qvp")
+
+android {
+    namespace "net.quranpedia.qvp.rn"
+    compileSdk safeExtGet("compileSdkVersion", 35)
+    defaultConfig {
+        minSdkVersion safeExtGet("minSdkVersion", 24)
+        if (qvpProject == null) {
+            externalNativeBuild { cmake { arguments "-DANDROID_STL=none" } }
+            ndk { abiFilters "arm64-v8a", "x86_64", "armeabi-v7a" }
+        }
+    }
+    if (qvpProject == null) {
+        ndkVersion safeExtGet("ndkVersion", "27.2.12479018")
+        externalNativeBuild { cmake { path file("$qvpDir/src/main/cpp/CMakeLists.txt"); version "3.22.1" } }
+        sourceSets { main { kotlin.srcDirs += "$qvpDir/src/main/kotlin"; java.srcDirs += "$qvpDir/src/main/kotlin" } }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildFeatures { buildConfig false }
+}
+kotlin { compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 } }
+
+repositories { google(); mavenCentral() }
+
+dependencies {
+    // version pinned by the React Native Gradle Plugin of the consuming app
+    implementation "com.facebook.react:react-android"
+    if (qvpProject != null) implementation project(":qvp")
+}

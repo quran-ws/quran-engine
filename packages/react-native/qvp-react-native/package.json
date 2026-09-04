@@ -1,0 +1,38 @@
+{
+  "name": "@quranpedia/qvp-react-native",
+  "version": "0.1.0",
+  "description": "React Native wrapper for the QVP vector mushaf engine (Android; iOS TODO). Thin marshalling over the Kotlin library, which is JNI over qvp.h.",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "react-native": "src/index.tsx",
+  "source": "src/index.tsx",
+  "files": [
+    "src",
+    "android/build.gradle",
+    "android/src",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "keywords": [
+    "react-native",
+    "quran",
+    "mushaf",
+    "qvp",
+    "vector"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "react": "19.2.3",
+    "react-native": "0.87.1",
+    "typescript": "^5.8.0"
+  }
+}
