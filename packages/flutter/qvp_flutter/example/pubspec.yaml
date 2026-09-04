@@ -1,0 +1,25 @@
+name: qvp_flutter_example
+description: "Mushaf Vector Reader — demo of the qvp_flutter plugin (QVP engine over dart:ffi)."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  qvp_flutter:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  # Page data is bundled with the EXAMPLE only (the plugin ships no data):
+  # dist/pages 001–021, 440–445, 582, 604 (.qvp + .words.json) and atlas.qva.
+  assets:
+    - assets/pages/

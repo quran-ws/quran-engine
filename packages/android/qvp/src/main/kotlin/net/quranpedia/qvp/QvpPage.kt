@@ -2,35 +2,27 @@ package net.quranpedia.qvp
 
 import android.graphics.Path
 
-/** Selector kinds for [QvpPage.style]. */
-object QvpSel { const val PATH = 0; const val WORD = 1; const val AYAH = 2; const val LINE = 3; const val MARK = 4; const val FAMILY = 5; const val KIND = 6; const val DECO = 7 }
-object QvpKind { const val BODY = 0; const val MARK = 1; const val AYAH_NUMBER = 2; const val AYAH_ORNAMENT = 3; const val HEADER_INK = 4; const val OTHER = 255 }
-object QvpFamily { const val NONE = 0; const val DIACRITIC = 1; const val TANWEEN = 2; const val DOTS = 3; const val WAQF = 4; const val SIFR = 5; const val SAJDAH = 6; const val READING_SIGN = 7 }
-object QvpDeco { const val AYAH_MARKER = 0; const val SURAH_NAME = 1; const val BASMALAH = 2; const val HIZB_MARK = 3; const val SAJDAH_MARK = 4 }
-
-data class QvpWord(val idx: Int, val sura: Int, val ayah: Int, val word: Int, val line: Int, val ayahIdx: Int,
-                   val x0: Float, val y0: Float, val x1: Float, val y1: Float, val text: String, val firstPath: Int, val nPaths: Int)
-data class QvpAyah(val idx: Int, val sura: Int, val ayah: Int, val part: Int, val parts: Int, val flags: Int, val firstWord: Int, val nWords: Int,
-                   val markerDeco: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
-data class QvpLine(val idx: Int, val lineNo: Int, val firstWord: Int, val nWords: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
-data class QvpDecoration(val idx: Int, val kind: Int, val sura: Int, val ayah: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
-                         val text: String, val firstPath: Int, val nPaths: Int)
-/** Indices are -1 when absent. */
-data class QvpHit(val word: Int, val path: Int, val deco: Int)
-
-/** All lengths in viewport px. lineSpacing multiplies the printed pitch; fillHeight spreads the nominal grid. */
-data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop: Float = 0f, val padBottom: Float = 0f,
-                         val padLeft: Float = 0f, val padRight: Float = 0f, val lineSpacing: Float = 1f,
-                         val fillHeight: Boolean = false, val nominalLines: Int = 15)
-/** Page → viewport: vx = ox + x*scale ; vy = oy + (y + lineDy[line])*scale. */
-class QvpLayout(val scale: Float, val ox: Float, val oy: Float, val contentH: Float, val pitch: Float,
-                val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray) {
-    var contentW: Float = 0f
+/** Engine-wide helpers (names, Arabic text tools, layout maths). */
+object QvpEngine {
+    fun version() = QvpNative.version()
+    fun markName(m: Int) = QvpNative.markName(m)
+    fun familyName(f: Int) = QvpNative.familyName(f)
+    fun kindName(k: Int) = QvpNative.kindName(k)
+    fun categoryName(c: Int) = QvpNative.categoryName(c)
+    fun markFromName(name: String) = QvpNative.markFromName(name)
+    fun markCategory(m: Int) = QvpNative.markCategory(m)
+    fun strip(s: String) = QvpNative.arabic(0, s)
+    fun fold(s: String) = QvpNative.arabic(1, s)
+    fun normalize(s: String) = QvpNative.arabic(2, s)
+    fun looseKey(s: String) = QvpNative.arabic(3, s)
+    fun gapToFill(pageW: Float, pageH: Float, lines: Int, viewW: Float, viewH: Float, max: Float = 0f) = QvpNative.gapToFill(pageW, pageH, lines, viewW, viewH, max)
+    fun wastedFraction(pageW: Float, pageH: Float, viewW: Float, viewH: Float) = QvpNative.wastedFraction(pageW, pageH, viewW, viewH)
 }
 
 /**
- * One loaded page. Geometry is copied out of the engine once; hit-testing, layout and
- * styling stay inside the engine. Call [close] when done.
+ * One loaded page. Geometry is copied out of the engine once; everything that decides
+ * (hit-testing, layout, styles, highlights, masks, search) stays inside the engine.
+ * Mirrors web/qvp.js — see docs/API.md. Call [close] when done.
  */
 class QvpPage(bytes: ByteArray) : AutoCloseable {
     private var h: Long = QvpNative.pageLoad(bytes)
@@ -39,23 +31,26 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     val width: Float; val height: Float; val pageNo: Int
     val nLines: Int; val nAyahs: Int; val nWords: Int; val nPaths: Int; val nDecos: Int
     val ops: ByteArray; val pts: FloatArray
-    /** stride 8 per path: opStart, opCount, ptStart, ptCount, flags, word, line, reserved */
+    /** stride 8 per path: opStart, opCount, ptStart, ptCount, flags, word, line, extra */
     val table: IntArray
     val words: List<QvpWord>; val ayahs: List<QvpAyah>; val lines: List<QvpLine>; val decos: List<QvpDecoration>
+    val naturalPitch: Float
     var currentLayout: QvpLayout? = null; private set
+    var defaultInk: Int = 0x231f20ff.toInt(); private set
     private var paths: Array<Path>? = null
 
     init {
         val i = QvpNative.pageInfo(h)
-        width = i[0]; height = i[1]; pageNo = i[2].toInt(); nLines = i[3].toInt(); nAyahs = i[4].toInt()
-        nWords = i[5].toInt(); nPaths = i[6].toInt(); nDecos = i[7].toInt()
+        width = i[0]; height = i[1]; pageNo = i[2].toInt(); nLines = i[3].toInt(); nAyahs = i[4].toInt(); nWords = i[5].toInt(); nPaths = i[6].toInt(); nDecos = i[7].toInt()
         ops = QvpNative.geomOps(h); pts = QvpNative.geomPts(h); table = QvpNative.geomTable(h)
-        words = List(nWords) { k -> val v = QvpNative.wordInfo(h, k)!!; QvpWord(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4].toInt(), v[5], v[6], v[7], v[8], QvpNative.wordText(h, k) ?: "", v[9].toInt(), v[10].toInt()) }
-        ayahs = List(nAyahs) { k -> val v = QvpNative.ayahInfo(h, k)!!; QvpAyah(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4].toInt(), v[5].toInt(), v[6].toInt(), v[7].toInt(), v[8], v[9], v[10], v[11]) }
-        lines = List(nLines) { k -> val v = QvpNative.lineInfo(h, k)!!; QvpLine(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3], v[4], v[5], v[6]) }
-        decos = List(nDecos) { k -> val v = QvpNative.decoInfo(h, k)!!; QvpDecoration(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3], v[4], v[5], v[6], QvpNative.decoText(h, k) ?: "", v[7].toInt(), v[8].toInt()) }
+        words = List(nWords) { k -> val v = QvpNative.wordInfo(h, k)!!; QvpWord(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4].toInt(), v[5].toInt(), v[6], v[7], v[8], v[9], QvpNative.wordText(h, k) ?: "", v[10].toInt(), v[11].toInt()) }
+        ayahs = List(nAyahs) { k -> val v = QvpNative.ayahInfo(h, k)!!; QvpAyah(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4].toInt(), v[5].toInt(), v[6].toInt(), v[7].toInt(), v[8].toInt(), v[9], v[10], v[11], v[12]) }
+        lines = List(nLines) { k -> val v = QvpNative.lineInfo(h, k)!!; QvpLine(k, v[0].toInt(), v[1] > 0.5f, v[2].toInt(), v[3].toInt(), v[4], v[5], v[6], v[7], v[8], v[9], v[10]) }
+        decos = List(nDecos) { k -> val v = QvpNative.decoInfo(h, k)!!; QvpDecoration(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4], v[5], v[6], v[7], QvpNative.decoText(h, k) ?: "", v[8].toInt(), v[9].toInt()) }
+        naturalPitch = QvpNative.naturalPitch(h)
     }
 
+    // ── geometry ──
     fun pathFlags(i: Int) = table[i * 8 + 4]
     fun pathKind(i: Int) = pathFlags(i) and 0xff
     fun pathMark(i: Int) = (pathFlags(i) shr 8) and 0xff
@@ -63,14 +58,15 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun pathEvenOdd(i: Int) = ((pathFlags(i) ushr 24) and 1) == 1
     fun pathWord(i: Int) = table[i * 8 + 5]
     fun pathLine(i: Int) = table[i * 8 + 6]
-
+    fun pathCategory(i: Int) = table[i * 8 + 7] and 0xff
+    fun pathNthInWord(i: Int) = (table[i * 8 + 7] shr 8) and 0xff
+    fun pathNthMark(i: Int) = ((table[i * 8 + 7] shr 16) and 0xff).let { if (it == 0xff) -1 else it }
     /** android.graphics.Path per engine path, in page units, built once. */
     fun buildPaths(): Array<Path> {
         paths?.let { return it }
         val out = Array(nPaths) { Path() }
         for (i in 0 until nPaths) {
-            val p = out[i]
-            var o = table[i * 8]; val oe = o + table[i * 8 + 1]; var k = table[i * 8 + 2]
+            val p = out[i]; var o = table[i * 8]; val oe = o + table[i * 8 + 1]; var k = table[i * 8 + 2]
             while (o < oe) {
                 when (ops[o].toInt()) {
                     0 -> { p.moveTo(pts[k], pts[k + 1]); k += 2 }
@@ -83,51 +79,156 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
             }
             p.fillType = if (pathEvenOdd(i)) Path.FillType.EVEN_ODD else Path.FillType.WINDING
         }
-        paths = out
-        return out
+        paths = out; return out
     }
 
-    fun hitTest(x: Float, y: Float): QvpHit? = QvpNative.hitTest(h, x, y)?.let { QvpHit(it[0], it[1], it[2]) }
-    /** Viewport px through [currentLayout]. */
-    fun hitTestView(vx: Float, vy: Float): QvpHit? = QvpNative.hitTestView(h, vx, vy)?.let { QvpHit(it[0], it[1], it[2]) }
+    // ── words / text ──
+    fun wid(i: Int) = words[i].wid
+    fun wordForm(i: Int, form: Form = Form.UTHMANI): String = QvpNative.wordForm(h, i, form.id) ?: ""
     fun findWord(sura: Int, ayah: Int, word: Int): Int = QvpNative.findWord(h, sura, ayah, word)
-
-    fun layout(spec: QvpLayoutSpec): QvpLayout {
-        val v = QvpNative.layout(h, spec.viewportW, spec.viewportH, spec.padTop, spec.padBottom, spec.padLeft, spec.padRight, spec.lineSpacing, spec.fillHeight, spec.nominalLines)
-        val n = v[5].toInt()
-        val l = QvpLayout(v[0], v[1], v[2], v[3], v[4], FloatArray(n) { v[6 + it * 3] }, FloatArray(n) { v[7 + it * 3] }, FloatArray(n) { v[8 + it * 3] })
-        l.contentW = spec.viewportW
-        currentLayout = l
-        return l
+    fun target(s: String) = Target.parse(s, this)
+    fun resolve(t: Target): IntArray = QvpNative.resolve(h, t.arr)
+    fun resolve(s: String) = resolve(target(s))
+    fun text(t: Target, form: Form = Form.UTHMANI, wordSep: String = " ", lineSep: String = "\n"): String = QvpNative.textTarget(h, t.arr, form.id, wordSep, lineSep)
+    fun text(s: String, form: Form = Form.UTHMANI, wordSep: String = " ", lineSep: String = "\n") = text(target(s), form, wordSep, lineSep)
+    fun search(query: String, form: Form = Form.SEARCH, mode: SearchMode = SearchMode.INCLUDES, normalize: Boolean = true, loose: Boolean = true, limit: Int = 0): List<QvpMatch> {
+        val v = QvpNative.search(h, query, form.id, mode.id, normalize, loose, limit)
+        return List(v.size / 3) { k -> val w = v[k * 3]; QvpMatch(w, v[k * 3 + 1], v[k * 3 + 2] != 0, wid(w), words[w].text) }
     }
+    fun citation(ws: IntArray): String = QvpNative.citation(h, ws)
+    /** attach a words sidecar ({"s:a:w": {"imlaei","qpc","rasm","search"}}); returns words updated, -1 on bad JSON */
+    fun attachWords(json: ByteArray): Int = QvpNative.attachWords(h, json)
+    fun attachWords(json: String) = attachWords(json.toByteArray())
+    fun hasForm(form: Form) = QvpNative.hasForm(h, form.id)
 
-    /** rgba is 0xRRGGBBAA; alpha 0 hides. */
-    fun style(sel: Int, a: Int, b: Int, c: Int, rgba: Int, on: Boolean = true) { QvpNative.style(h, sel, a, b, c, rgba, on) }
-    fun styleWord(s: Int, a: Int, w: Int, rgba: Int, on: Boolean = true) = style(QvpSel.WORD, s, a, w, rgba, on)
-    fun styleAyah(s: Int, a: Int, rgba: Int, on: Boolean = true) = style(QvpSel.AYAH, s, a, 0, rgba, on)
-    fun styleLine(n: Int, rgba: Int, on: Boolean = true) = style(QvpSel.LINE, n, 0, 0, rgba, on)
-    fun styleMark(m: Int, rgba: Int, on: Boolean = true) = style(QvpSel.MARK, m, 0, 0, rgba, on)
-    fun styleFamily(f: Int, rgba: Int, on: Boolean = true) = style(QvpSel.FAMILY, f, 0, 0, rgba, on)
-    fun styleKind(k: Int, rgba: Int, on: Boolean = true) = style(QvpSel.KIND, k, 0, 0, rgba, on)
-    fun styleDeco(k: Int, rgba: Int, on: Boolean = true) = style(QvpSel.DECO, k, 0, 0, rgba, on)
-    fun stylePath(i: Int, rgba: Int, on: Boolean = true) = style(QvpSel.PATH, i, 0, 0, rgba, on)
-    fun styleClear() = QvpNative.styleClear(h)
-    fun styleDefault(rgba: Int) = QvpNative.styleDefault(h, rgba)
-    /** Full display list: 0xRRGGBBAA per path. */
+    // ── metadata ──
+    fun surahs(): List<QvpSurah> = List(QvpNative.surahsCount(h)) { i -> val n = QvpNative.surahNums(h, i)!!; val s = QvpNative.surahNames(h, i)!!
+        QvpSurah(n[0].toInt(), n[1].toInt(), n[2] > 0.5f, n[3] > 0.5f, when (n[4].toInt()) { 0 -> "makkah"; 1 -> "madinah"; else -> "" }, n[5].toInt(), s[0], s[1], s[2]) }
+    fun divisions(): List<QvpDivision> { val v = QvpNative.divisions(h); return List(v.size / 6) { k -> QvpDivision(Division.entries[v[k * 6]], v[k * 6 + 2], v[k * 6 + 3], v[k * 6 + 4], v[k * 6 + 1], v[k * 6 + 5]) } }
+    fun markers(): List<QvpMarker> { val v = QvpNative.markers(h); return List(v.size / 9) { k -> val o = k * 9; QvpMarker(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3].toInt(), v[o + 4], v[o + 5], v[o + 6], v[o + 7].toInt(), v[o + 8].toInt()) } }
+    fun markerOf(sura: Int, ayah: Int) = markers().firstOrNull { it.sura == sura && it.ayah == ayah }
+    fun rosettes(): List<QvpRosette> { val v = QvpNative.rosettes(h); return List(v.size / 8) { k -> val o = k * 8; QvpRosette(v[o], v[o + 1], v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7]) } }
+    fun sajdahs(): List<QvpSajdah> { val v = QvpNative.sajdahs(h); return List(v.size / 4) { k -> QvpSajdah(v[k * 4], v[k * 4 + 1], v[k * 4 + 2], v[k * 4 + 3]) } }
+    fun ayahKeys(): List<Pair<Int, Int>> = QvpNative.ayahKeys(h).map { (it ushr 16) to (it and 0xffff) }
+    /** (count on this page, whole ayah is here) */
+    fun ayahWordCount(sura: Int, ayah: Int): Pair<Int, Boolean> { val v = QvpNative.ayahWordCount(h, sura, ayah); return v[0] to (v[1] != 0) }
+    /** words for n recitation segments, or null when the counts disagree (follow the ayah whole) */
+    fun reciteMap(sura: Int, ayah: Int, nSegments: Int): IntArray? = QvpNative.reciteMap(h, sura, ayah, nSegments)
+    fun wordLabel(i: Int) = QvpNative.wordLabel(h, i)
+    fun ayahLabel(i: Int) = QvpNative.ayahLabel(h, i)
+
+    // ── hit testing ──
+    private fun hit(v: IntArray?) = v?.let { QvpHit(it[0], it[1], it[2]) }
+    private fun hitEx(v: FloatArray?) = v?.let { QvpHitEx(it[0].toInt(), it[1].toInt(), it[2].toInt(), it[3].toInt(), it[4], it[5] > 0.5f) }
+    fun hitTest(x: Float, y: Float) = hit(QvpNative.hitTest(h, x, y))
+    fun hitTestView(vx: Float, vy: Float) = hit(QvpNative.hitTestView(h, vx, vy))
+    /** gap-aware: every point on a printed line resolves to the word the reader meant */
+    fun hitTestEx(x: Float, y: Float, o: QvpHitOptions = QvpHitOptions()) = hitEx(QvpNative.hitTestEx(h, x, y, o.maxDistance, o.gapBias, o.exactFirst))
+    fun hitTestViewEx(vx: Float, vy: Float, o: QvpHitOptions = QvpHitOptions()) = hitEx(QvpNative.hitTestViewEx(h, vx, vy, o.maxDistance, o.gapBias, o.exactFirst))
+    fun lineBands(): List<QvpLineBand> { val v = QvpNative.lineBands(h); return List(v.size / 7) { k -> val o = k * 7; QvpLineBand(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6]) } }
+    fun hitBoxes(gapBias: Float = 0.6f): List<QvpHitBox> { val v = QvpNative.hitBoxes(h, gapBias); return List(v.size / 10) { k -> val o = k * 10; QvpHitBox(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9]) } }
+
+    // ── layout ──
+    fun layout(spec: QvpLayoutSpec): QvpLayout {
+        val v = QvpNative.layout(h, floatArrayOf(spec.viewportW, spec.viewportH, spec.padTop, spec.padBottom, spec.padLeft, spec.padRight, spec.lineSpacing, spec.lineGap, if (spec.fillHeight) 1f else 0f, spec.nominalLines.toFloat()))
+        val n = v[6].toInt()
+        return QvpLayout(v[0], v[1], v[2], v[3], v[4], v[5], FloatArray(n) { v[7 + it * 3] }, FloatArray(n) { v[8 + it * 3] }, FloatArray(n) { v[9 + it * 3] }).also { currentLayout = it }
+    }
+    fun wordBoxView(i: Int): FloatArray? = QvpNative.wordBoxView(h, i)
+
+    // ── styles (handles undo exactly) ──
+    fun style(sel: Selector, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAdd(h, layer, sel.arr, rgba, transitionMs)
+    fun styleTarget(t: Target, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAddTarget(h, layer, t.arr, rgba, transitionMs)
+    fun unstyle(handle: Int) = QvpNative.styleRemove(h, handle)
+    fun restyle(handle: Int, rgba: Int, transitionMs: Int = 0) = QvpNative.styleRepaint(h, handle, rgba, transitionMs)
+    fun hide(sel: Selector): Int = QvpNative.hide(h, sel.arr)
+    fun clearStyles() = QvpNative.styleClear(h)
+    fun clearLayer(layer: Int) = QvpNative.styleClearLayer(h, layer)
+    fun setDefaultInk(rgba: Int) { defaultInk = rgba; QvpNative.styleDefault(h, rgba) }
+    fun theme(t: QvpTheme): Int {
+        val z = { c: Int? -> c ?: 0 }
+        val base = intArrayOf(z(t.ink), z(t.diacritics), z(t.dots), z(t.waqf), z(t.sifr), z(t.marker), z(t.numeral), z(t.headers), t.transitionMs)
+        val marks = t.marks.flatMap { (m, c) -> listOf(markId(m), c) }.toIntArray()
+        return QvpNative.theme(h, base + marks)
+    }
+    fun styleHandles(): IntArray = QvpNative.styleHandles(h)
+
+    // ── clock & display list ──
+    /** advance animations; true while something is still moving */
+    fun tick(nowMs: Double): Boolean = QvpNative.tick(h, nowMs)
     fun paint(): IntArray = QvpNative.paint(h)
-    /** Overlay list: flat pairs [pathIdx, rgba, ...]. */
+    /** flat pairs [pathIdx, rgba, ...] for paths ≠ default ink */
     fun styled(): IntArray = QvpNative.styled(h)
+    fun colorOf(path: Int) = QvpNative.colorOf(h, path)
+
+    // ── highlights ──
+    fun highlight(t: Target, style: QvpHighlightStyle = QvpHighlightStyle()): Int = QvpNative.highlight(h, t.arr, style.ints(), style.floats())
+    fun highlight(s: String, style: QvpHighlightStyle = QvpHighlightStyle()) = highlight(target(s), style)
+    fun rehighlight(handle: Int, t: Target) = QvpNative.rehighlight(h, handle, t.arr)
+    fun restyleHighlight(handle: Int, style: QvpHighlightStyle) = QvpNative.restyleHighlight(h, handle, style.ints(), style.floats())
+    fun unhighlight(handle: Int) = QvpNative.unhighlight(h, handle)
+    fun clearHighlights() = QvpNative.clearHighlights(h)
+    fun highlightHandles(): IntArray = QvpNative.highlightHandles(h)
+    fun highlightWords(handle: Int): IntArray = QvpNative.highlightWords(h, handle)
+    private fun boxes(v: IntArray): List<QvpBox> = List(v.size / 8) { k -> val o = k * 8; QvpBox(v[o], v[o + 1], Float.fromBits(v[o + 2]), Float.fromBits(v[o + 3]), Float.fromBits(v[o + 4]), Float.fromBits(v[o + 5]), v[o + 6], Float.fromBits(v[o + 7])) }
+    /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
+    fun highlightBoxes(): List<QvpBox> = boxes(QvpNative.highlightBoxes(h))
+    fun bandBoxes(ws: IntArray, height: BandHeight = BandHeight.PITCH, padX: Float = 1.2f, padY: Float = 0f) = boxes(QvpNative.bandBoxes(h, ws, height.id, padX, padY))
+
+    // ── selection ──
+    fun select(anchor: Int, focus: Int = anchor) = QvpNative.select(h, anchor, focus)
+    fun clearSelection() = QvpNative.select(h, -1, -1)
+    fun selection(): IntArray = QvpNative.selection(h)
+    fun selectionText(form: Form = Form.UTHMANI, citation: Boolean = false) = QvpNative.selectionText(h, form.id, citation)
+
+    // ── memorisation ──
+    fun mask(t: Target, mode: MaskMode = MaskMode.HIDE) = QvpNative.mask(h, t.arr, mode.id)
+    fun maskFrom(wi: Int, mode: MaskMode = MaskMode.HIDE) = QvpNative.maskFrom(h, wi, mode.id)
+    fun maskOptions(blockColor: Int = 0xd9d4c8ff.toInt(), padX: Float = 0.6f, padY: Float = 0.6f, radius: Float = 0.8f, reverse: Boolean = false) = QvpNative.maskOptions(h, blockColor, padX, padY, radius, reverse)
+    fun revealNext(n: Int = 1) = QvpNative.revealNext(h, n)
+    fun hideBack(n: Int = 1) = QvpNative.hideBack(h, n)
+    fun revealWord(wi: Int) = QvpNative.revealWord(h, wi)
+    fun hideWord(wi: Int) = QvpNative.hideWord(h, wi)
+    fun revealAll() = QvpNative.revealAll(h)
+    fun hideAll() = QvpNative.hideAll(h)
+    fun unmask() = QvpNative.unmask(h)
+    fun maskHidden(): IntArray = QvpNative.maskHidden(h)
+    fun maskWords(): IntArray = QvpNative.maskWords(h)
+    fun maskBoxes(): List<QvpBox> = boxes(QvpNative.maskBoxes(h))
+    /** greyed page with a lit window; returns steps */
+    fun revealStart(lit: Int = 1, byAyah: Boolean = false, grey: Int = 0xc9c4b8ff.toInt(), ink: Int = 0x231f20ff.toInt(), markers: Boolean = true, transitionMs: Int = 0) = QvpNative.revealStart(h, lit, byAyah, grey, ink, markers, transitionMs)
+    fun revealGoto(at: Long) = QvpNative.revealGoto(h, at)
+    fun revealAt(): Long? = QvpNative.revealAt(h).let { if (it == -2L) null else it }
+    fun revealSteps() = QvpNative.revealSteps(h)
+    fun revealStepOf(wi: Int) = QvpNative.revealStepOf(h, wi)
+    fun revealStop() = QvpNative.revealStop(h)
+
+    // ── crop ──
+    fun cropBox(t: Target, pad: Float = 2f, keepMarkers: Boolean = true): QvpCropBox? = QvpNative.cropBox(h, t.arr, pad, keepMarkers)?.let { QvpCropBox(it[0], it[1], it[2], it[3], it[4].toInt(), it[5].toInt()) }
+    /** standalone SVG with the current colours; background alpha 0 = transparent */
+    fun cropSvg(t: Target, pad: Float = 2f, keepMarkers: Boolean = true, background: Int = 0): String? = QvpNative.cropSvg(h, t.arr, pad, keepMarkers, background)
 
     override fun close() { if (h != 0L) { QvpNative.pageFree(h); h = 0 } }
+}
 
-    companion object {
-        fun markName(m: Int) = QvpNative.markName(m)
-        fun familyName(f: Int) = QvpNative.familyName(f)
-        fun kindName(k: Int) = QvpNative.kindName(k)
-        fun engineVersion() = QvpNative.version()
-        /** 0xRRGGBBAA → Android ARGB. */
-        fun argb(rgba: Int): Int = (rgba shl 24) or (rgba ushr 8)
-        /** Android ARGB → 0xRRGGBBAA. */
-        fun rgba(argb: Int): Int = (argb shl 8) or (argb ushr 24)
-    }
+/** Cross-page lookup from atlas.qva. */
+class QvpAtlas(bytes: ByteArray) : AutoCloseable {
+    private var h: Long = QvpNative.atlasLoad(bytes)
+    init { require(h != 0L) { "qvp_atlas_load failed" } }
+    private fun surah(v: Array<String>?) = v?.let { QvpAtlasSurah(it[0].toInt(), it[1].toInt(), it[2].toInt(), when (it[3]) { "0" -> "makkah"; "1" -> "madinah"; else -> "" }, it[4], it[5], it[6]) }
+    fun pageOf(sura: Int, ayah: Int): Int? = QvpNative.atlasPageOf(h, sura, ayah).let { if (it < 0) null else it }
+    fun pageRange(page: Int): Pair<Pair<Int, Int>, Pair<Int, Int>>? = QvpNative.atlasPageRange(h, page)?.let { (it[0] to it[1]) to (it[2] to it[3]) }
+    fun pages() = QvpNative.atlasPages(h)
+    fun surah(n: Int) = surah(QvpNative.atlasSurah(h, n))
+    fun surahs(): List<QvpAtlasSurah> = List(QvpNative.atlasSurahs(h)) { surah(QvpNative.atlasSurahAt(h, it))!! }
+    fun pageOfSurah(n: Int) = surah(n)?.page
+    fun division(kind: Division, n: Int): QvpAtlasRub? = QvpNative.atlasDivision(h, kind.id, n)?.let { QvpAtlasRub(it[0], it[1], it[2], it[3]) }
+    fun juz(n: Int) = division(Division.JUZ, n)
+    fun hizb(n: Int) = division(Division.HIZB, n)
+    fun rub(n: Int) = division(Division.RUB, n)
+    fun divisionAt(kind: Division, sura: Int, ayah: Int): Int? = QvpNative.atlasDivisionAt(h, kind.id, sura, ayah).let { if (it < 0) null else it }
+    fun juzAt(sura: Int, ayah: Int) = divisionAt(Division.JUZ, sura, ayah)
+    fun pagesOfJuz(n: Int): Pair<Int, Int>? = QvpNative.atlasPagesOfJuz(h, n)?.let { it[0] to it[1] }
+    fun findSurah(text: String): List<QvpAtlasSurah> = QvpNative.atlasFindSurah(h, text).toList().mapNotNull { n -> surah(n) }
+    override fun close() { if (h != 0L) { QvpNative.atlasFree(h); h = 0 } }
 }
