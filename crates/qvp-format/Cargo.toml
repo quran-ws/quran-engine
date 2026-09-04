@@ -1,0 +1,8 @@
+[package]
+name = "qvp-format"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "QVP binary page format: types, encoder, decoder"
+
+[dependencies]

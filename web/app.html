@@ -1,0 +1,78 @@
+<meta charset="utf-8">
+<title>Mushaf Vector Reader</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<style>
+  :root { --bg:#f6f1e7; --paper:#fffdf7; --ink:#231f20; --fg:#1f1b16; --muted:#6b6257; --panel:#fff; --line:#e6ded0; --accent:#0a7d32; --accent2:#1a73e8; --sel:rgba(26,115,232,.16); --hover:rgba(10,125,50,.12); }
+  [data-qvp-theme="dark"] { --bg:#15171b; --paper:#1e2126; --ink:#e8e4dc; --fg:#e8e4dc; --muted:#9a948b; --panel:#1b1e23; --line:#2c3138; --sel:rgba(120,170,255,.22); --hover:rgba(80,200,120,.18); }
+  [data-qvp-theme="sepia"] { --bg:#e9dcc3; --paper:#f3e7cf; --ink:#3b2a14; --fg:#3b2a14; --muted:#7a6a52; --panel:#f8efdd; --line:#d9c9a8; }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden }
+  header { display:flex; align-items:center; gap:12px; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap }
+  header h1 { font-size:15px; margin:0; font-weight:650; letter-spacing:.2px }
+  header .sub { color:var(--muted); font-size:12px }
+  .nav { display:flex; align-items:center; gap:6px; margin-inline-start:auto }
+  button, select, input[type=number] { font:inherit; color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:5px 10px; cursor:pointer }
+  button:hover { border-color:var(--muted) }
+  button.on { background:var(--accent); color:#fff; border-color:var(--accent) }
+  input[type=number] { width:64px; text-align:center }
+  main { flex:1; display:grid; grid-template-columns:1fr 340px; min-height:0 }
+  #stage { position:relative; overflow:hidden; touch-action:none; cursor:grab }
+  #stage.dragging { cursor:grabbing }
+  canvas { display:block; position:absolute; inset:0 }
+  #paper { position:absolute; background:var(--paper); box-shadow:0 8px 30px rgba(0,0,0,.12); border-radius:4px; pointer-events:none }
+  aside { border-inline-start:1px solid var(--line); background:var(--panel); overflow:auto; padding:12px 14px; display:flex; flex-direction:column; gap:12px }
+  section h2 { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:0 0 6px }
+  .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center }
+  .ar { font-size:30px; line-height:1.6; direction:rtl; text-align:right; font-family:"Amiri","KFGQPC Uthmanic Script HAFS","Scheherazade New","Noto Naskh Arabic",serif }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; font-size:13px }
+  .kv b { color:var(--muted); font-weight:500 }
+  .kv .v { direction:rtl; text-align:right; font-family:"Amiri","Scheherazade New","Noto Naskh Arabic",serif; font-size:16px }
+  .paths { display:flex; flex-wrap:wrap; gap:4px }
+  .chip { font-size:11px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; cursor:pointer; user-select:none }
+  .chip.on { background:var(--accent2); color:#fff; border-color:var(--accent2) }
+  .hud { font:11px/1.6 'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace; color:var(--muted); white-space:pre }
+  .hint { color:var(--muted); font-size:12px }
+  .sw { width:14px; height:14px; border-radius:3px; display:inline-block; vertical-align:-2px; margin-inline-end:4px }
+  @media (max-width: 800px) { main { grid-template-columns:1fr; grid-template-rows:1fr 260px } aside { border-inline-start:0; border-top:1px solid var(--line) } }
+</style>
+<header>
+  <div><h1>Mushaf Vector Reader</h1><div class="sub">QVP engine · Rust core in wasm · host Canvas2D renderer · lossless from source SVG</div></div>
+  <div class="nav">
+    <button id="prev" title="Previous page">◀</button>
+    <input id="pageNo" type="number" min="1" max="604" value="1">
+    <span class="sub">/ <span id="pageMax">604</span></span>
+    <button id="next" title="Next page">▶</button>
+    <button id="fit" title="Fit page">Fit</button>
+  </div>
+</header>
+<main>
+  <div id="stage"><div id="paper"></div><canvas id="cv"></canvas></div>
+  <aside>
+    <section>
+      <h2>Selection</h2>
+      <div id="selWord" class="ar">—</div>
+      <div id="selInfo" class="kv"></div>
+      <div id="selPaths" class="paths"></div>
+      <div class="hint">Tap a word to select it. Tap an ayah marker to select the whole ayah. Tap a chip to recolour that single path. Drag to pan, wheel/pinch to zoom.</div>
+    </section>
+    <section>
+      <h2>Live styling (engine style state)</h2>
+      <div class="row">
+        <button id="tajweed">Mark colours</button>
+        <button id="hideMarks">Hide marks</button>
+        <button id="markers">Gold markers</button>
+        <button id="play">▶ Play words</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label>Theme <select id="theme"><option value="light">Light</option><option value="sepia">Sepia</option><option value="dark">Dark</option></select></label>
+        <label>Ink <input id="ink" type="color" value="#231f20"></label>
+        <button id="clear">Clear styles</button>
+      </div>
+      <div class="row" style="margin-top:6px" id="legend"></div>
+    </section>
+    <section>
+      <h2>Engine</h2>
+      <div id="hud" class="hud">loading…</div>
+    </section>
+  </aside>
+</main>

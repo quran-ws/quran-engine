@@ -1,0 +1,12 @@
+target/
+dist/
+pages/*.gz
+pages/*.br
+web/pages/
+node_modules/
+web/index.html
+web/qvp_ffi.wasm
+.playwright-mcp/
+*.png
+# source pages are the exporter output, not code: keep them out of git history
+pages/

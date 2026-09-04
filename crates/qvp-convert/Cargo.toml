@@ -1,0 +1,17 @@
+[package]
+name = "qvp-convert"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SVG <-> QVP converter and identity test gate"
+
+[dependencies]
+qvp-format = { path = "../qvp-format" }
+roxmltree = "0.20"
+svgtypes = "0.15"
+rayon = "1.10"
+
+[dev-dependencies]
+resvg = "0.45"
+tiny-skia = "0.11"
+usvg = "0.45"
