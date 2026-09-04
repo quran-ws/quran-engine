@@ -346,6 +346,8 @@ pub struct DecoRec {
     pub text: u16,
     pub first_path: u32,
     pub n_paths: u16,
+    /// Line the decoration sits in (surah header, basmalah, hizb mark), or NONE_U16.
+    pub line: u16,
     pub bbox: IBox,
 }
 
@@ -667,7 +669,7 @@ pub fn encode(p: &PageData) -> Vec<u8> {
         w.u16(d.text);
         w.u32(d.first_path);
         w.u16(d.n_paths);
-        w.u16(0);
+        w.u16(d.line);
         w.bbox(&d.bbox);
     }
     let off_glyphs = w.0.len();
@@ -866,9 +868,9 @@ pub fn decode(bytes: &[u8]) -> Result<PageData, Error> {
         let text = r.u16();
         let first_path = r.u32();
         let n_paths = r.u16();
-        r.u16();
+        let line = r.u16();
         let bbox = r.bbox();
-        decos.push(DecoRec { kind, sura, ayah, text, first_path, n_paths, bbox });
+        decos.push(DecoRec { kind, sura, ayah, text, first_path, n_paths, line, bbox });
     }
     r.pos = off_glyphs;
     r.need(n_glyphs * GLYPH_LEN, "glyphs")?;
@@ -1072,7 +1074,7 @@ mod tests {
                 PathRec { kind: PathKind::Body, mark: Mark::None, family: Family::None, flags: PF_EVENODD, ox: 500, oy: 600, op_off: 0, op_len: ops.len() as u32, bbox: bb },
                 PathRec { kind: PathKind::AyahOrnament, mark: Mark::None, family: Family::None, flags: 0, ox: 500, oy: 600, op_off: 0, op_len: ops.len() as u32, bbox: bb },
             ],
-            decos: vec![DecoRec { kind: DecoKind::AyahMarker, sura: 2, ayah: 3, text: NONE_U16, first_path: 1, n_paths: 1, bbox: bb }],
+            decos: vec![DecoRec { kind: DecoKind::AyahMarker, sura: 2, ayah: 3, text: NONE_U16, first_path: 1, n_paths: 1, line: 0, bbox: bb }],
             glyphs: vec![GlyphRec { op_off: 0, op_len: ops.len() as u32, bbox: bb }],
             insts: vec![InstRec { glyph: 0, a: 2.0, b: 0.0, c: 0.0, d: 2.0, e: 10.0, f: 20.0 }],
             ops,

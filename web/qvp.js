@@ -59,7 +59,7 @@
       const tabPtr = d.getUint32(s + 16, true), nPaths = d.getUint32(s + 20, true);
       this.ops = new Uint8Array(engine.mem.buffer, opsPtr, opsLen).slice();
       this.pts = new Float32Array(engine.mem.buffer.slice(ptsPtr, ptsPtr + ptsLen * 4));
-      this.table = new Uint32Array(engine.mem.buffer.slice(tabPtr, tabPtr + nPaths * 24));
+      this.table = new Uint32Array(engine.mem.buffer.slice(tabPtr, tabPtr + nPaths * 32));
       this.paths = null; // Path2D cache, built lazily
       this.words = new Array(this.nWords);
       this.ayahs = new Array(this.nAyahs);
@@ -72,12 +72,13 @@
     }
     free() { this.e.ex.qvp_page_free(this.h); this.h = 0; }
 
-    pathFlags(i) { return this.table[i * 6 + 4]; }
+    pathFlags(i) { return this.table[i * 8 + 4]; }
     pathKind(i) { return this.pathFlags(i) & 0xff; }
     pathMark(i) { return (this.pathFlags(i) >> 8) & 0xff; }
     pathFamily(i) { return (this.pathFlags(i) >> 16) & 0xff; }
     pathEvenOdd(i) { return ((this.pathFlags(i) >> 24) & 1) === 1; }
-    pathWord(i) { const w = this.table[i * 6 + 5]; return w === NONE ? -1 : w; }
+    pathWord(i) { const w = this.table[i * 8 + 5]; return w === NONE ? -1 : w; }
+    pathLine(i) { return this.table[i * 8 + 6]; }
 
     /** Build (once) a Path2D per path in page units. */
     buildPaths() {
@@ -85,7 +86,7 @@
       const t = this.table, ops = this.ops, pts = this.pts, out = new Array(this.nPaths);
       for (let i = 0; i < this.nPaths; i++) {
         const p = new Path2D();
-        let o = t[i * 6], oe = o + t[i * 6 + 1], k = t[i * 6 + 2];
+        let o = t[i * 8], oe = o + t[i * 8 + 1], k = t[i * 8 + 2];
         for (; o < oe; o++) {
           switch (ops[o]) {
             case 0: p.moveTo(pts[k], pts[k + 1]); k += 2; break;
@@ -150,6 +151,39 @@
     }
     findWord(sura, ayah, word) { return this.e.ex.qvp_find_word(this.h, sura, ayah, word); }
 
+    /**
+     * Engine layout: {viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, nominalLines}
+     * → {scale, ox, oy, contentH, pitch, lineDy: Float32Array, slots: [[top,bottom],...]}.
+     * Page → viewport: vx = ox + x*scale ; vy = oy + (y + lineDy[line])*scale.
+     */
+    layout(spec) {
+      const ex = this.e.ex, s = this.e.scratch;
+      let d = this.e.dv();
+      d.setFloat32(s, spec.viewportW, true); d.setFloat32(s + 4, spec.viewportH, true);
+      d.setFloat32(s + 8, spec.padTop || 0, true); d.setFloat32(s + 12, spec.padBottom || 0, true);
+      d.setFloat32(s + 16, spec.padLeft || 0, true); d.setFloat32(s + 20, spec.padRight || 0, true);
+      d.setFloat32(s + 24, spec.lineSpacing ?? 1, true); d.setUint32(s + 28, spec.fillHeight ? 1 : 0, true);
+      d.setUint32(s + 32, spec.nominalLines || 15, true);
+      ex.qvp_layout(this.h, s, s + 64);
+      d = this.e.dv();
+      const o = s + 64;
+      const n = d.getUint32(o + 20, true), lp = d.getUint32(o + 24, true);
+      const f = new Float32Array(this.e.mem.buffer.slice(lp, lp + n * 12));
+      const lineDy = new Float32Array(n), slots = new Array(n);
+      for (let i = 0; i < n; i++) { lineDy[i] = f[i * 3]; slots[i] = [f[i * 3 + 1], f[i * 3 + 2]]; }
+      this.currentLayout = { scale: d.getFloat32(o, true), ox: d.getFloat32(o + 4, true), oy: d.getFloat32(o + 8, true),
+        contentH: d.getFloat32(o + 12, true), pitch: d.getFloat32(o + 16, true), lineDy, slots };
+      return this.currentLayout;
+    }
+    /** Hit-test in viewport px through the current layout. */
+    hitTestView(vx, vy) {
+      const ex = this.e.ex, s = this.e.scratch;
+      if (!ex.qvp_hit_test_view(this.h, vx, vy, s)) return null;
+      const d = this.e.dv();
+      const f = v => (v === NONE ? -1 : v);
+      return { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), deco: f(d.getUint32(s + 8, true)) };
+    }
+
     /** rgba: 0xRRGGBBAA (alpha 0 hides). on=false removes the rule. */
     style(sel, a, b, c, rgba, on = true) { this.e.ex.qvp_style(this.h, sel, a >>> 0, b >>> 0, c >>> 0, rgba >>> 0, on ? 1 : 0); }
     styleWord(s, a, w, rgba, on = true) { this.style(SEL.WORD, s, a, w, rgba, on); }
@@ -199,22 +233,33 @@
       this.baseKey = '';
       this.stats = { baseMs: 0, overlayMs: 0, basePaths: 0, overlayPaths: 0 };
     }
-    /** view: {scale, ox, oy} in CSS px; page units × scale + offset. */
+    /**
+     * view: {scale, ox, oy} — pan/zoom in CSS px applied on top of the engine
+     * layout (page.currentLayout, or identity when none). Paths are drawn per
+     * line with the line's dy from the layout.
+     */
     draw(page, view, defaultInk, dpr) {
       const paths = page.buildPaths();
+      const L = page.currentLayout || { scale: 1, ox: 0, oy: 0, lineDy: null };
       const styled = page.styled();
       const styledSet = new Set(styled.map(s => s[0]));
-      const key = `${view.scale.toFixed(4)}|${dpr}|${defaultInk}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
+      const key = `${view.scale.toFixed(4)}|${view.ox.toFixed(1)}|${view.oy.toFixed(1)}|${dpr}|${defaultInk}|${L.scale}|${L.lineDy ? Array.from(L.lineDy).map(v => v.toFixed(2)).join(';') : ''}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
       const W = this.canvas.width, H = this.canvas.height;
+      const setTf = (c, line) => {
+        const s = dpr * view.scale * L.scale;
+        const dy = L.lineDy ? L.lineDy[line] : 0;
+        c.setTransform(s, 0, 0, s, dpr * (view.ox + view.scale * L.ox), dpr * (view.oy + view.scale * (L.oy + dy * L.scale)));
+      };
       if (key !== this.baseKey || this.base.width !== W || this.base.height !== H) {
         const t0 = performance.now();
         this.base.width = W; this.base.height = H;
         const b = this.base.getContext('2d');
-        b.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
         b.fillStyle = css(defaultInk);
-        let n = 0;
+        let n = 0, curLine = -1;
         for (let i = 0; i < page.nPaths; i++) {
           if (styledSet.has(i)) continue;
+          const ln = page.pathLine(i);
+          if (ln !== curLine) { setTf(b, ln); curLine = ln; }
           b.fill(paths[i], page.pathEvenOdd(i) ? 'evenodd' : 'nonzero');
           n++;
         }
@@ -227,14 +272,22 @@
       c.setTransform(1, 0, 0, 1, 0, 0);
       c.clearRect(0, 0, W, H);
       c.drawImage(this.base, 0, 0);
-      c.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
+      let curLine = -1;
       for (const [i, col] of styled) {
         if ((col & 255) === 0) continue;
+        const ln = page.pathLine(i);
+        if (ln !== curLine) { setTf(c, ln); curLine = ln; }
         c.fillStyle = css(col);
         c.fill(paths[i], page.pathEvenOdd(i) ? 'evenodd' : 'nonzero');
       }
       this.stats.overlayMs = performance.now() - t1;
       this.stats.overlayPaths = styled.length;
+    }
+    /** Transform helper for UI overlays: returns [scale, tx, ty] for a line in device px. */
+    lineTransform(page, view, line, dpr) {
+      const L = page.currentLayout || { scale: 1, ox: 0, oy: 0, lineDy: null };
+      const s = dpr * view.scale * L.scale, dy = L.lineDy ? L.lineDy[line] : 0;
+      return [s, dpr * (view.ox + view.scale * L.ox), dpr * (view.oy + view.scale * (L.oy + dy * L.scale))];
     }
   }
 

@@ -29,6 +29,7 @@
     sel: { word: -1, ayah: null, path: -1, pathColors: new Map() },
     hover: -1, tajweed: false, hideMarks: false, markers: false, playing: false, playIdx: 0,
     ink: 0x231f20ff, theme: 'light', lastHitUs: 0,
+    layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
   };
   const PALETTE = {
     [FAMILY.DIACRITIC]: '#1a73e8', [FAMILY.TANWEEN]: '#8e24aa', [FAMILY.DOTS]: '#c62828',
@@ -58,31 +59,44 @@
     canvas.style.width = r.width + 'px'; canvas.style.height = r.height + 'px';
     fit(false); draw();
   }
+  function relayout() {
+    const p = state.page; if (!p) return null;
+    const r = stage.getBoundingClientRect(), ls = state.layout;
+    // page width fills the stage width (minus side padding); height follows the layout mode
+    const maxW = Math.min(r.width, r.height * p.width / p.height * 1.15);
+    const L = p.layout({ viewportW: maxW, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide,
+      lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, nominalLines: 15 });
+    L.contentW = maxW;
+    return L;
+  }
   function fit(redraw = true) {
     const p = state.page; if (!p) return;
-    const r = stage.getBoundingClientRect(), m = 18;
-    const s = Math.min((r.width - 2 * m) / p.width, (r.height - 2 * m) / p.height);
-    state.view = { scale: s, ox: (r.width - p.width * s) / 2, oy: (r.height - p.height * s) / 2 };
+    const L = relayout(); if (!L) return;
+    const r = stage.getBoundingClientRect();
+    const s = Math.min(1, r.height / L.contentH);
+    state.view = { scale: s, ox: (r.width - L.contentW * s) / 2, oy: (r.height - L.contentH * s) / 2 };
+    renderer.baseKey = '';
     if (redraw) draw();
   }
-  function toPage(cx, cy) { const v = state.view; return [(cx - v.ox) / v.scale, (cy - v.oy) / v.scale]; }
+  /** stage CSS px → engine viewport px (the layout's coordinate space) */
+  function toView(cx, cy) { const v = state.view; return [(cx - v.ox) / v.scale, (cy - v.oy) / v.scale]; }
   let raf = 0;
   function draw() { if (!raf) raf = requestAnimationFrame(drawNow); }
   function drawNow() {
     raf = 0;
     const p = state.page; if (!p) return;
-    const v = state.view;
+    const v = state.view, L = p.currentLayout;
     paper.style.left = v.ox + 'px'; paper.style.top = v.oy + 'px';
-    paper.style.width = p.width * v.scale + 'px'; paper.style.height = p.height * v.scale + 'px';
+    paper.style.width = (L ? L.contentW : p.width) * v.scale + 'px'; paper.style.height = (L ? L.contentH : p.height) * v.scale + 'px';
     renderer.draw(p, v, state.ink, dpr);
     // cheap UI overlays that do not touch the engine: hover + selection backgrounds
     const c = renderer.ctx;
-    c.setTransform(dpr * v.scale, 0, 0, dpr * v.scale, dpr * v.ox, dpr * v.oy);
     c.globalCompositeOperation = 'destination-over';
-    const box = (w, fill) => { c.fillStyle = fill; const pd = 1.2; c.beginPath(); c.roundRect(w.x0 - pd, w.y0 - pd, w.x1 - w.x0 + 2 * pd, w.y1 - w.y0 + 2 * pd, 1.5); c.fill(); };
-    if (state.hover >= 0 && state.hover !== state.sel.word) box(p.words[state.hover], getComputedStyle(document.body).getPropertyValue('--hover'));
-    if (state.sel.word >= 0) box(p.words[state.sel.word], getComputedStyle(document.body).getPropertyValue('--sel'));
-    if (state.sel.ayah) for (const a of p.ayahs) if (a.sura === state.sel.ayah[0] && a.ayah === state.sel.ayah[1]) box(a, 'rgba(10,125,50,.08)');
+    const lineOf = w => (w.line !== undefined ? p.lines.findIndex(l => l.lineNo === w.line) : -1);
+    const box = (w, fill, line) => { const [s, tx, ty] = renderer.lineTransform(p, v, line, dpr); c.setTransform(s, 0, 0, s, tx, ty); c.fillStyle = fill; const pd = 1.2; c.beginPath(); c.roundRect(w.x0 - pd, w.y0 - pd, w.x1 - w.x0 + 2 * pd, w.y1 - w.y0 + 2 * pd, 1.5); c.fill(); };
+    if (state.hover >= 0 && state.hover !== state.sel.word) { const w = p.words[state.hover]; box(w, getComputedStyle(document.body).getPropertyValue('--hover'), lineOf(w)); }
+    if (state.sel.word >= 0) { const w = p.words[state.sel.word]; box(w, getComputedStyle(document.body).getPropertyValue('--sel'), lineOf(w)); }
+    if (state.sel.ayah) for (const a of p.ayahs) if (a.sura === state.sel.ayah[0] && a.ayah === state.sel.ayah[1]) { const w0 = p.words[a.firstWord]; box(a, 'rgba(10,125,50,.08)', w0 ? lineOf(w0) : 0); }
     c.globalCompositeOperation = 'source-over';
     hud();
   }
@@ -95,7 +109,8 @@
       `base layer    ${s.basePaths} paths in ${s.baseMs.toFixed(2)} ms (cached)\n` +
       `overlay       ${s.overlayPaths} styled paths in ${s.overlayMs.toFixed(2)} ms\n` +
       `hit-test      ${state.lastHitUs.toFixed(1)} µs (wasm)\n` +
-      `zoom          ${(state.view.scale * dpr).toFixed(2)}× device px per unit`;
+      `layout        ${state.layout.fillHeight ? 'fill height' : 'spacing ×' + state.layout.lineSpacing} · pad ${state.layout.padTop}/${state.layout.padBottom} · pitch ${(p.currentLayout ? p.currentLayout.pitch : 0).toFixed(1)} u\n` +
+      `zoom          ${(state.view.scale * (p.currentLayout ? p.currentLayout.scale : 1) * dpr).toFixed(2)}× device px per unit`;
   }
 
   // ── page loading ──
@@ -172,8 +187,8 @@
       if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); state.view.ox = drag.ox + dx; state.view.oy = drag.oy + dy; draw(); }
       return;
     }
-    const [x, y] = toPage(e.clientX - r.left, e.clientY - r.top);
-    const t = performance.now(); const h = state.page.hitTest(x, y); state.lastHitUs = (performance.now() - t) * 1000;
+    const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
+    const t = performance.now(); const h = state.page.hitTestView(x, y); state.lastHitUs = (performance.now() - t) * 1000;
     const hw = h ? h.word : -1;
     if (hw !== state.hover) { state.hover = hw; stage.style.cursor = hw >= 0 || (h && h.deco >= 0) ? 'pointer' : 'grab'; draw(); }
   });
@@ -183,8 +198,8 @@
     if (pts.size === 0) {
       stage.classList.remove('dragging');
       if (drag && !moved) {
-        const r = stage.getBoundingClientRect(); const [x, y] = toPage(e.clientX - r.left, e.clientY - r.top);
-        const t = performance.now(); const h = state.page.hitTest(x, y); state.lastHitUs = (performance.now() - t) * 1000;
+        const r = stage.getBoundingClientRect(); const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
+        const t = performance.now(); const h = state.page.hitTestView(x, y); state.lastHitUs = (performance.now() - t) * 1000;
         if (h && h.word >= 0) { state.sel.word = state.sel.word === h.word ? -1 : h.word; state.sel.ayah = null; state.sel.path = h.path; state.sel.pathColors.clear(); }
         else if (h && h.deco >= 0) { const d = state.page.decos[h.deco]; if (d.ayah) { state.sel.ayah = [d.sura, d.ayah]; state.sel.word = -1; } }
         else { state.sel.word = -1; state.sel.ayah = null; state.sel.pathColors.clear(); }
@@ -234,6 +249,11 @@
     }, 320);
     applyStyles();
   };
+  const relayoutUI = () => { $('spacingVal').textContent = '×' + state.layout.lineSpacing.toFixed(2); fit(); };
+  $('spacing').oninput = e => { state.layout.lineSpacing = +e.target.value; state.layout.fillHeight = false; $('fillH').classList.remove('on'); relayoutUI(); };
+  $('fillH').onclick = () => { state.layout.fillHeight = !state.layout.fillHeight; $('fillH').classList.toggle('on', state.layout.fillHeight); relayoutUI(); };
+  $('padTop').oninput = e => { state.layout.padTop = +e.target.value; $('padTopVal').textContent = e.target.value; relayoutUI(); };
+  $('padBottom').oninput = e => { state.layout.padBottom = +e.target.value; $('padBottomVal').textContent = e.target.value; relayoutUI(); };
   $('legend').innerHTML = Object.entries(PALETTE).map(([f, c]) => `<span class="hint"><i class="sw" style="background:${c}"></i>${engine.familyName(+f)}</span>`).join('');
 
   window.__qvp = { state, engine, renderer, loadPage, fit, applyStyles };

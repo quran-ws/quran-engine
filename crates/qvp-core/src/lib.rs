@@ -25,6 +25,10 @@ pub struct PathGeom {
     pub flags: u32,
     /// Owning word index, or NONE for decoration paths.
     pub word: u32,
+    /// Line index the path is laid out with (words: their line; decorations:
+    /// their line or the nearest by centre). Always valid.
+    pub line: u32,
+    pub reserved: u32,
 }
 
 /// Flattened page geometry in page units (f32), ready for any canvas.
@@ -88,9 +92,56 @@ impl StyleState {
     }
 }
 
+/// How to place lines vertically. All lengths in *viewport pixels*.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LayoutSpec {
+    pub viewport_w: f32,
+    pub viewport_h: f32,
+    pub pad_top: f32,
+    pub pad_bottom: f32,
+    pub pad_left: f32,
+    pub pad_right: f32,
+    /// Multiplier on the page's natural line pitch (1.0 = as printed).
+    /// Ignored when `fill_height` is set.
+    pub line_spacing: f32,
+    /// Spread the nominal line grid over `viewport_h - pad_top - pad_bottom`.
+    pub fill_height: bool,
+    /// Line grid the mushaf is designed on (15 for KFGQPC Hafs). Short pages
+    /// (fewer lines) are centred on this grid, as printed.
+    pub nominal_lines: u32,
+}
+
+impl Default for LayoutSpec {
+    fn default() -> Self {
+        LayoutSpec { viewport_w: 345.0, viewport_h: 550.0, pad_top: 0.0, pad_bottom: 0.0, pad_left: 0.0, pad_right: 0.0, line_spacing: 1.0, fill_height: false, nominal_lines: 15 }
+    }
+}
+
+/// Result of [`Page::layout`]: page units → viewport px is
+/// `vx = ox + x*scale`, `vy = oy + (y + line_dy[line])*scale`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Layout {
+    pub scale: f32,
+    pub ox: f32,
+    pub oy: f32,
+    /// Per-line vertical shift in page units.
+    pub line_dy: Vec<f32>,
+    /// Laid-out vertical extent of each line in viewport px: (top, bottom).
+    pub line_slots: Vec<(f32, f32)>,
+    /// Total content height in viewport px including padding.
+    pub content_h: f32,
+    /// Effective line pitch in page units.
+    pub pitch: f32,
+}
+
 pub struct Page {
     data: PageData,
     geom: Geometry,
+    /// per-line reference centre (y, page units) from body ink only
+    line_centre: Vec<f32>,
+    /// natural line pitch in page units
+    natural_pitch: f32,
+    layout: Option<Layout>,
     /// words of each line sorted by bbox.x0 ascending: (x0, word idx)
     line_words: Vec<Vec<(i32, u32)>>,
     /// word index → deco owner mapping for paths
@@ -121,6 +172,60 @@ impl Page {
             for p in d.first_path..d.first_path + d.n_paths as u32 {
                 path_deco[p as usize] = di as u32;
             }
+        }
+        // line reference centres from body ink (marks would wobble them)
+        let mut line_centre = vec![0f32; data.lines.len()];
+        for (li, l) in data.lines.iter().enumerate() {
+            let mut bb = IBox::EMPTY;
+            for wi in l.first_word..l.first_word + l.n_words {
+                let w = &data.words[wi as usize];
+                for p in w.first_path..w.first_path + w.n_paths as u32 {
+                    let pr = &data.paths[p as usize];
+                    if pr.kind == PathKind::Body {
+                        bb.union(&pr.bbox);
+                    }
+                }
+            }
+            for d in data.decos.iter().filter(|d| d.line as usize == li) {
+                bb.union(&d.bbox);
+            }
+            if bb.is_empty() {
+                bb = l.bbox;
+            }
+            line_centre[li] = if bb.is_empty() { 0.0 } else { (bb.y0 + bb.y1) as f32 / 2.0 / q };
+        }
+        let natural_pitch = {
+            let mut d: Vec<f32> = line_centre.windows(2).map(|w| (w[1] - w[0]).abs()).filter(|v| *v > 1.0).collect();
+            d.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            if d.is_empty() { data.header.height / 15.0 } else { d[d.len() / 2] }
+        };
+        let nearest_line = |y: f32| -> u32 {
+            let mut best = 0usize;
+            let mut bd = f32::MAX;
+            for (i, c) in line_centre.iter().enumerate() {
+                let dd = (c - y).abs();
+                if dd < bd {
+                    bd = dd;
+                    best = i;
+                }
+            }
+            best as u32
+        };
+        let mut path_line = vec![0u32; data.paths.len()];
+        for (i, _) in data.paths.iter().enumerate() {
+            let wi = path_word[i];
+            path_line[i] = if wi != NONE {
+                data.words[wi as usize].line_idx as u32
+            } else if path_deco[i] != NONE {
+                let d = &data.decos[path_deco[i] as usize];
+                if d.line != NONE_U16 && (d.line as usize) < data.lines.len() {
+                    d.line as u32
+                } else {
+                    nearest_line((d.bbox.y0 + d.bbox.y1) as f32 / 2.0 / q)
+                }
+            } else {
+                0
+            };
         }
         for (i, p) in data.paths.iter().enumerate() {
             let op_start = geom.ops.len() as u32;
@@ -156,6 +261,8 @@ impl Page {
                 pt_count: geom.pts.len() as u32 - pt_start,
                 flags: p.kind as u32 | (p.mark as u32) << 8 | (p.family as u32) << 16 | (evenodd | inst << 1) << 24,
                 word: path_word[i],
+                line: path_line[i],
+                reserved: 0,
             });
         }
         let mut line_words = Vec::with_capacity(data.lines.len());
@@ -167,7 +274,117 @@ impl Page {
         }
         let word_index = data.words.iter().enumerate().map(|(i, w)| ((w.sura, w.ayah, w.word), i as u32)).collect();
         let n = data.paths.len();
-        Page { data, geom, line_words, path_deco, word_index, style: StyleState::default(), colors: vec![DEFAULT_INK; n] }
+        Page { data, geom, line_centre, natural_pitch, layout: None, line_words, path_deco, word_index, style: StyleState::default(), colors: vec![DEFAULT_INK; n] }
+    }
+
+    // ───────────── layout ─────────────
+
+    pub fn natural_pitch(&self) -> f32 {
+        self.natural_pitch
+    }
+    pub fn line_centre(&self, li: usize) -> f32 {
+        self.line_centre[li]
+    }
+
+    /// Compute and store a layout. Horizontal placement is as printed
+    /// (scaled to the padded viewport width); vertical placement moves whole
+    /// lines by `line_dy`.
+    pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
+        let pw = self.width();
+        let avail_w = (spec.viewport_w - spec.pad_left - spec.pad_right).max(1.0);
+        let scale = avail_w / pw;
+        let n = self.data.lines.len();
+        let nominal = spec.nominal_lines.max(n as u32) as f32;
+        let pitch = if spec.fill_height {
+            let avail_h = (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0);
+            avail_h / scale / nominal
+        } else {
+            self.natural_pitch * spec.line_spacing.max(0.05)
+        };
+        // slot of each line on the nominal grid: short pages are centred
+        let slot0 = (nominal - n as f32) / 2.0;
+        let top_units = spec.pad_top / scale; // in page units, y=0 at viewport top - pad? no: at viewport top
+        let mut line_dy = Vec::with_capacity(n);
+        let mut line_slots = Vec::with_capacity(n);
+        for (i, l) in self.data.lines.iter().enumerate() {
+            let slot = slot0 + (l.line_no.max(1) as f32 - 1.0).min(n as f32 - 1.0);
+            let target_centre = top_units + (slot + 0.5) * pitch;
+            let dy = target_centre - self.line_centre[i];
+            line_dy.push(dy);
+            let top = (top_units + slot * pitch) * scale;
+            line_slots.push((top, top + pitch * scale));
+        }
+        let content_h = spec.pad_top + nominal * pitch * scale + spec.pad_bottom;
+        self.layout = Some(Layout { scale, ox: spec.pad_left, oy: 0.0, line_dy, line_slots, content_h, pitch });
+        self.layout.as_ref().unwrap()
+    }
+
+    pub fn current_layout(&self) -> Option<&Layout> {
+        self.layout.as_ref()
+    }
+
+    /// Hit-test in viewport px using the current layout (falls back to the
+    /// unscaled page when no layout is set).
+    pub fn hit_test_view(&self, vx: f32, vy: f32) -> Option<Hit> {
+        let Some(l) = &self.layout else { return self.hit_test(vx, vy) };
+        let x = (vx - l.ox) / l.scale;
+        let y = (vy - l.oy) / l.scale;
+        // candidate lines: those whose laid-out bbox contains y
+        let q = self.quant();
+        for (li, line) in self.data.lines.iter().enumerate() {
+            let py = y - l.line_dy[li];
+            let (y0, y1) = (line.bbox.y0 as f32 / q, line.bbox.y1 as f32 / q);
+            if py < y0 - 0.5 || py > y1 + 0.5 {
+                continue;
+            }
+            if let Some(h) = self.hit_test_in_line(li, x, py) {
+                return Some(h);
+            }
+        }
+        // decorations not in any line bbox (e.g. markers hanging outside)
+        for (di, d) in self.data.decos.iter().enumerate() {
+            let li = self.geom.table[d.first_path as usize].line as usize;
+            let py = y - l.line_dy[li];
+            let (qx, qy) = ((x * q).round() as i32, (py * q).round() as i32);
+            if d.bbox.contains(qx, qy) {
+                let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, py).unwrap_or(NONE);
+                return Some(Hit { word: NONE, path: pi, deco: di as u32 });
+            }
+        }
+        None
+    }
+
+    fn hit_test_in_line(&self, li: usize, x: f32, y: f32) -> Option<Hit> {
+        let q = self.quant();
+        let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
+        let ws = &self.line_words[li];
+        let k = ws.partition_point(|(x0, _)| *x0 <= qx);
+        let lo = k.saturating_sub(2);
+        let hi = (k + 1).min(ws.len());
+        let mut bbox_only = None;
+        for &(_, wi) in &ws[lo..hi] {
+            let w = &self.data.words[wi as usize];
+            if !w.bbox.contains(qx, qy) {
+                continue;
+            }
+            if bbox_only.is_none() {
+                bbox_only = Some(wi);
+            }
+            if let Some(pi) = self.exact_path_hit(w.first_path, w.n_paths as u32, x, y) {
+                return Some(Hit { word: wi, path: pi, deco: NONE });
+            }
+        }
+        if let Some(wi) = bbox_only {
+            return Some(Hit { word: wi, path: NONE, deco: NONE });
+        }
+        for (di, d) in self.data.decos.iter().enumerate() {
+            if self.geom.table[d.first_path as usize].line as usize != li || !d.bbox.contains(qx, qy) {
+                continue;
+            }
+            let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, y).unwrap_or(NONE);
+            return Some(Hit { word: NONE, path: pi, deco: di as u32 });
+        }
+        None
     }
 
     pub fn data(&self) -> &PageData {
@@ -557,6 +774,30 @@ mod tests {
         assert_eq!(p.hit_test(50.0, 50.0), None);
         assert_eq!(p.word_text(1), "ب");
         assert_eq!(p.find_word(1, 1, 2), Some(1));
+    }
+
+    #[test]
+    fn layout_fill_height_and_view_hit() {
+        let mut p = page();
+        // one line on a 15-line grid, viewport 200×1100 (2× the 100-unit test page), pads 50/50
+        let spec = LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, pad_top: 50.0, pad_bottom: 50.0, fill_height: true, ..Default::default() };
+        let l = p.layout(&spec).clone();
+        assert_eq!(l.scale, 2.0);
+        assert!((l.pitch - 1000.0 / 2.0 / 15.0).abs() < 1e-3, "pitch {}", l.pitch);
+        assert_eq!(l.line_dy.len(), 1);
+        // the single line is centred on the grid: slot 7 → centre at pad + 7.5 * pitch (viewport px)
+        let centre_view = 50.0 + 7.5 * l.pitch * 2.0;
+        let line_centre_page = p.line_centre(0); // body centre = 15 (squares at y 10..20)
+        assert!((line_centre_page - 15.0).abs() < 1e-3);
+        assert!(((line_centre_page + l.line_dy[0]) * 2.0 - centre_view).abs() < 1e-3);
+        // hit word A through the layout: A centre (15,15) page → view
+        let vx = l.ox + 15.0 * 2.0;
+        let vy = l.oy + (15.0 + l.line_dy[0]) * 2.0;
+        assert_eq!(p.hit_test_view(vx, vy), Some(Hit { word: 0, path: 0, deco: NONE }));
+        assert_eq!(p.hit_test_view(vx, 5.0), None);
+        // natural spacing ×1.5 keeps scale, changes pitch
+        let l2 = p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_spacing: 1.5, ..Default::default() }).clone();
+        assert!((l2.pitch - p.natural_pitch() * 1.5).abs() < 1e-3);
     }
 
     #[test]

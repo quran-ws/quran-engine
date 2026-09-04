@@ -10,3 +10,18 @@ web/qvp_ffi.wasm
 *.png
 # source pages are the exporter output, not code: keep them out of git history
 pages/
+# Android / Gradle
+packages/android/.gradle/
+packages/android/**/build/
+packages/android/**/.cxx/
+packages/android/local.properties
+packages/android/qvp/prebuilt/
+packages/android/demo/src/main/assets/pages/
+packages/flutter/**/android/src/main/jniLibs/
+packages/flutter/**/build/
+packages/flutter/**/.dart_tool/
+packages/flutter/**/assets/pages/
+# React Native
+packages/react-native/**/node_modules/
+packages/react-native/**/android/build/
+packages/react-native/**/android/.gradle/

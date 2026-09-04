@@ -71,6 +71,15 @@
       <div class="row" style="margin-top:6px" id="legend"></div>
     </section>
     <section>
+      <h2>Layout (engine)</h2>
+      <div class="kv" style="grid-template-columns:auto 1fr auto; align-items:center">
+        <b>line spacing</b><input id="spacing" type="range" min="0.6" max="2.2" step="0.05" value="1"><span id="spacingVal">×1.00</span>
+        <b>pad top</b><input id="padTop" type="range" min="0" max="120" step="4" value="24"><span id="padTopVal">24</span>
+        <b>pad bottom</b><input id="padBottom" type="range" min="0" max="120" step="4" value="24"><span id="padBottomVal">24</span>
+      </div>
+      <div class="row" style="margin-top:6px"><button id="fillH">Fill screen height</button><span class="hint">15-line grid spread over the viewport; short pages stay centred.</span></div>
+    </section>
+    <section>
       <h2>Engine</h2>
       <div id="hud" class="hud">loading…</div>
     </section>

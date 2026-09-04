@@ -131,10 +131,6 @@ impl<'a> Ctx<'a> {
         i
     }
 
-    fn q(&self, v: f64) -> i32 {
-        (v * self.quant).round() as i32
-    }
-
     fn node_tf(&self, n: Node<'a, '_>, parent: Affine) -> Result<Affine, String> {
         match n.attribute("transform") {
             Some(t) => Ok(parent.then(&Affine::parse(t)?)),
@@ -148,16 +144,16 @@ impl<'a> Ctx<'a> {
             let ctf = self.node_tf(c, tf)?;
             match (c.tag_name().name(), class(c)) {
                 ("g", "line") => self.line(c, ctf)?,
-                ("g", "ayah-marker") => self.deco(c, ctf, DecoKind::AyahMarker)?,
-                ("g", "surah-name") => self.deco(c, ctf, DecoKind::SurahName)?,
-                ("g", "basmalah") => self.deco(c, ctf, DecoKind::Basmalah)?,
-                ("g", "hizb-mark") => self.deco(c, ctf, DecoKind::HizbMark)?,
-                ("g", "sajdah-mark") => self.deco(c, ctf, DecoKind::SajdahMark)?,
+                ("g", "ayah-marker") => self.deco(c, ctf, DecoKind::AyahMarker, NONE_U16)?,
+                ("g", "surah-name") => self.deco(c, ctf, DecoKind::SurahName, NONE_U16)?,
+                ("g", "basmalah") => self.deco(c, ctf, DecoKind::Basmalah, NONE_U16)?,
+                ("g", "hizb-mark") => self.deco(c, ctf, DecoKind::HizbMark, NONE_U16)?,
+                ("g", "sajdah-mark") => self.deco(c, ctf, DecoKind::SajdahMark, NONE_U16)?,
                 ("g", _) => self.walk(c, ctf)?,
                 ("path", _) => {
                     self.warn(format!("stray path outside any group (parent class {:?})", class(n)));
                     let raw = self.raw_path(c, ctf)?;
-                    self.push_deco_from_raw(DecoKind::Other, 0, 0, NONE_U16, vec![raw]);
+                    self.push_deco_from_raw(DecoKind::Other, 0, 0, NONE_U16, NONE_U16, vec![raw]);
                 }
                 (t, _) => self.warn(format!("ignored element <{t}>")),
             }
@@ -187,11 +183,11 @@ impl<'a> Ctx<'a> {
             match (c.tag_name().name(), class(c)) {
                 ("g", "ayah") => self.ayah(c, ctf, line_idx)?,
                 ("g", "") => self.line_children(c, ctf, line_idx, line_no)?,
-                ("g", "surah-name") => self.deco(c, ctf, DecoKind::SurahName)?,
-                ("g", "basmalah") => self.deco(c, ctf, DecoKind::Basmalah)?,
-                ("g", "hizb-mark") => self.deco(c, ctf, DecoKind::HizbMark)?,
-                ("g", "sajdah-mark") => self.deco(c, ctf, DecoKind::SajdahMark)?,
-                ("g", "ayah-marker") => self.deco(c, ctf, DecoKind::AyahMarker)?,
+                ("g", "surah-name") => self.deco(c, ctf, DecoKind::SurahName, line_idx)?,
+                ("g", "basmalah") => self.deco(c, ctf, DecoKind::Basmalah, line_idx)?,
+                ("g", "hizb-mark") => self.deco(c, ctf, DecoKind::HizbMark, line_idx)?,
+                ("g", "sajdah-mark") => self.deco(c, ctf, DecoKind::SajdahMark, line_idx)?,
+                ("g", "ayah-marker") => self.deco(c, ctf, DecoKind::AyahMarker, line_idx)?,
                 (t, cl) => self.warn(format!("line {line_no}: unexpected <{t} class={cl:?}> inside line")),
             }
         }
@@ -274,7 +270,7 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    fn deco(&mut self, n: Node<'a, '_>, tf: Affine, kind: DecoKind) -> Result<(), String> {
+    fn deco(&mut self, n: Node<'a, '_>, tf: Affine, kind: DecoKind, line: u16) -> Result<(), String> {
         let (sura, ayah) = n
             .attribute("data-aid")
             .and_then(parse_aid)
@@ -297,7 +293,7 @@ impl<'a> Ctx<'a> {
         .unwrap_or(NONE_U16);
         let mut raws = Vec::new();
         self.collect_paths(n, tf, &mut raws)?;
-        let idx = self.push_deco_from_raw(kind, sura, ayah, text, raws);
+        let idx = self.push_deco_from_raw(kind, sura, ayah, text, line, raws);
         if let Some(id) = n.attribute("id") {
             self.marker_ids.insert(id.to_owned(), idx);
         }
@@ -316,10 +312,10 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    fn push_deco_from_raw(&mut self, kind: DecoKind, sura: u16, ayah: u16, text: u16, raws: Vec<RawPath>) -> u16 {
+    fn push_deco_from_raw(&mut self, kind: DecoKind, sura: u16, ayah: u16, text: u16, line: u16, raws: Vec<RawPath>) -> u16 {
         let (first_path, n_paths, bbox) = self.push_paths(raws);
         let idx = self.page.decos.len() as u16;
-        self.page.decos.push(DecoRec { kind, sura, ayah, text, first_path, n_paths, bbox });
+        self.page.decos.push(DecoRec { kind, sura, ayah, text, first_path, n_paths, line, bbox });
         idx
     }
 

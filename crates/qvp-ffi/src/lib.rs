@@ -4,7 +4,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use qvp_core::qvp_format::{DecoKind, Family, Mark, PathKind};
-use qvp_core::{Hit, Page, Selector, NONE};
+use qvp_core::{Hit, LayoutSpec, Page, Selector, NONE};
 use std::ffi::c_char;
 
 #[repr(C)]
@@ -25,7 +25,7 @@ pub struct QvpGeometry {
     pub ops_len: u32,
     pub pts: *const f32,
     pub pts_len: u32,
-    /// `n_paths` records of 6 × u32: op_start, op_count, pt_start, pt_count, flags, word
+    /// `n_paths` records of 8 × u32: op_start, op_count, pt_start, pt_count, flags, word, line, reserved
     pub table: *const u32,
     pub n_paths: u32,
 }
@@ -94,6 +94,31 @@ pub struct QvpHit {
     pub word: u32,
     pub path: u32,
     pub deco: u32,
+}
+
+#[repr(C)]
+pub struct QvpLayoutSpec {
+    pub viewport_w: f32,
+    pub viewport_h: f32,
+    pub pad_top: f32,
+    pub pad_bottom: f32,
+    pub pad_left: f32,
+    pub pad_right: f32,
+    pub line_spacing: f32,
+    pub fill_height: u32,
+    pub nominal_lines: u32,
+}
+
+#[repr(C)]
+pub struct QvpLayout {
+    pub scale: f32,
+    pub ox: f32,
+    pub oy: f32,
+    pub content_h: f32,
+    pub pitch: f32,
+    pub n_lines: u32,
+    /// per line: dy (page units), slot_top, slot_bottom (viewport px) — valid until the next qvp_layout call
+    pub lines: *const f32,
 }
 
 // ───────────── memory (wasm hosts have no malloc) ─────────────
@@ -268,6 +293,52 @@ pub unsafe extern "C" fn qvp_hit_test(page: *const Page, x: f32, y: f32, out: *m
 #[no_mangle]
 pub unsafe extern "C" fn qvp_find_word(page: *const Page, sura: u16, ayah: u16, word: u16) -> i32 {
     (*page).find_word(sura, ayah, word).map(|i| i as i32).unwrap_or(-1)
+}
+
+// ───────────── layout ─────────────
+
+/// Compute and store a layout (line spacing / fill height / padding).
+/// `out.lines` points at n_lines × 3 floats: dy, slot_top, slot_bottom.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec, out: *mut QvpLayout) {
+    let s = &*spec;
+    let p = &mut *page;
+    let l = p.layout(&LayoutSpec {
+        viewport_w: s.viewport_w,
+        viewport_h: s.viewport_h,
+        pad_top: s.pad_top,
+        pad_bottom: s.pad_bottom,
+        pad_left: s.pad_left,
+        pad_right: s.pad_right,
+        line_spacing: s.line_spacing,
+        fill_height: s.fill_height != 0,
+        nominal_lines: s.nominal_lines,
+    });
+    let mut buf = Vec::with_capacity(l.line_dy.len() * 3);
+    for (i, dy) in l.line_dy.iter().enumerate() {
+        buf.push(*dy);
+        buf.push(l.line_slots[i].0);
+        buf.push(l.line_slots[i].1);
+    }
+    let lines = buf.as_ptr();
+    LAYOUT_BUF.with(|b| *b.borrow_mut() = buf);
+    *out = QvpLayout { scale: l.scale, ox: l.ox, oy: l.oy, content_h: l.content_h, pitch: l.pitch, n_lines: l.line_dy.len() as u32, lines };
+}
+
+thread_local! {
+    static LAYOUT_BUF: std::cell::RefCell<Vec<f32>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Hit-test in viewport px through the current layout.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_hit_test_view(page: *const Page, vx: f32, vy: f32, out: *mut QvpHit) -> i32 {
+    match (*page).hit_test_view(vx, vy) {
+        Some(Hit { word, path, deco }) => {
+            *out = QvpHit { word, path, deco };
+            1
+        }
+        None => 0,
+    }
 }
 
 // ───────────── style ─────────────
