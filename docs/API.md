@@ -50,6 +50,7 @@ page.free(); atlas.free();
 | `page.findWord(s,a,w)` | index or −1 |
 | `page.resolve(target)` | word indices in reading order |
 | `page.wordForm(i, form)` | `'uthmani' \| 'imlaei' \| 'qpc' \| 'rasm' \| 'search'` (derived forms need the sidecar; `hasForm(form)`) |
+| `page.attachWords(json)` | attach `NNN.words.json` (`{"s:a:w": {imlaei, qpc, rasm, search}}`); returns words updated |
 | `page.pathKind/Mark/Family/Category(p)`, `pathWord(p)`, `pathLine(p)`, `pathNthMark(p)` | per-path facts from the geometry table |
 
 An ayah is several fragments. `resolve('2:255')` gives all its words on the page;

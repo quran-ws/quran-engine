@@ -1,0 +1,20 @@
+# quran-engine — working notes for Claude Code
+
+- One Rust core (`crates/qvp-core`) decides everything: hit-testing, layout, styles, highlights,
+  selection, masks, search, crop, atlas. Wrappers (`web/`, `packages/*`) only marshal and paint.
+  Never re-implement engine logic in a wrapper.
+- The C ABI (`crates/qvp-ffi/include/qvp.h`) is the only contract. When you add an engine
+  function: core → ffi + header → `crates/qvp-ffi/tests/abi.rs` → `web/qvp.js` (reference) →
+  Kotlin (`packages/android/qvp/src/main/cpp/qvp_jni.c` + `QvpNative.kt` + `QvpPage.kt`) →
+  Dart (`packages/flutter/qvp_flutter/lib/src/bindings.dart`) → `docs/API.md`. Same names everywhere.
+- Lossless only. No curve simplification, no lossy path in the converter or format.
+- Packages ship code only. Page data (`NNN.qvp`, `atlas.qva`, `NNN.words.json`) is loaded by apps;
+  demos bundle it as their own assets (gitignored).
+- Source SVG problems go in `docs/UPSTREAM-DATA-ISSUES.md`; do not patch data in the converter.
+- Production SVGs carry only uthmani; other text forms come from the JSON sidecar (`attachWords`).
+- Tests: `cargo test --workspace --release` (unit + ABI + identity gate on 8 pages);
+  `QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity` for all 604 pages.
+- Android/Flutter/RN builds need: JDK 17 (`~/.local/opt/jdk17`), `~/Android/Sdk` (SDK 35, NDK 27.2.12479018),
+  Flutter (`~/.local/opt/flutter`), Gradle (`~/.local/opt/gradle`), `cargo-ndk`; `scripts/build-engine-android.sh`
+  refreshes the native libs after any engine change.
+- Git: no Claude attribution or session footers in commits or PRs.
