@@ -42,7 +42,9 @@ final class DemoModel: ObservableObject {
     @Published var lineSpacing: Double = 100 { didSet { if lineSpacing != oldValue { view.lineGap = 0; fillHeight = false; view.lineSpacing = Float(lineSpacing / 100); view.relayout(); view.resetView(); hud() } } }
     @Published var padTop: Double = 12 { didSet { if padTop != oldValue { view.padTop = CGFloat(padTop); view.relayout(); view.resetView(); hud() } } }
     @Published var padBottom: Double = 12 { didSet { if padBottom != oldValue { view.padBottom = CGFloat(padBottom); view.relayout(); view.resetView(); hud() } } }
-    @Published var fillHeight = true { didSet { if fillHeight != oldValue { view.fillHeight = fillHeight; view.relayout(); view.resetView(); hud() } } }
+    @Published var fillHeight = true { didSet { if fillHeight != oldValue { if fillHeight { controlsShown = false }; view.fillHeight = fillHeight; view.relayout(); view.resetView(); hud() } } }
+    /// While `fillHeight` is on the bars are hidden; this brings them back until the reader hides them again.
+    @Published var controlsShown = false
     @Published var meta = ""
     @Published var hudText = ""
     @Published var toast: String?
@@ -75,6 +77,7 @@ final class DemoModel: ObservableObject {
         applyLaunchArguments()
     }
     /// Scripted states for screenshots / QA, e.g. `-qvpPage 582 -qvpSearch الله -qvpWord 5 -qvpTheme dark -qvpMarks 1`.
+    /// `-qvpFill 0` turns fill-screen off; `-qvpControls 1` starts with the bars visible in fill-screen mode.
     private func applyLaunchArguments() {
         let d = UserDefaults.standard
         if let t = d.string(forKey: "qvpTheme"), Self.themes[t] != nil { theme = t }
@@ -86,7 +89,8 @@ final class DemoModel: ObservableObject {
         if d.bool(forKey: "qvpMarks") { markColours = true }
         if d.bool(forKey: "qvpGold") { goldMarkers = true }
         if d.bool(forKey: "qvpMask") { maskModeIdx = 1; maskAyah() }
-        if d.bool(forKey: "qvpFill") { fillHeight = true }
+        if d.object(forKey: "qvpFill") != nil { fillHeight = d.bool(forKey: "qvpFill") }
+        if d.bool(forKey: "qvpControls") { controlsShown = true }
     }
 
     // ── navigation ──

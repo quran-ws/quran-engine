@@ -35,10 +35,13 @@ struct ReaderView: View {
         }
     }
 
+    /// Fill-screen mode is immersive: no bars, the page owns the whole screen, a floating button brings the controls back.
+    private var immersive: Bool { m.fillHeight && !m.controlsShown }
+
     private var reader: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                PageViewRep(view: m.view).padding(.bottom, 58).ignoresSafeArea(.keyboard)
+                PageViewRep(view: m.view).padding(.bottom, immersive ? 0 : 58).ignoresSafeArea(.keyboard)
                     .overlay(alignment: .top) {
                         if let img = m.flipImage {
                             Image(uiImage: img).resizable().aspectRatio(contentMode: .fit)
@@ -48,7 +51,11 @@ struct ReaderView: View {
                 if m.revealOn { revealBar }
             }
             .background(m.bgColor.ignoresSafeArea())
+            .overlay(alignment: .topTrailing) { if immersive { showControlsButton } }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(immersive ? .hidden : .visible, for: .navigationBar, .bottomBar)
+            .statusBarHidden(immersive)
+            .animation(.easeInOut(duration: 0.2), value: immersive)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 0) {
@@ -57,8 +64,11 @@ struct ReaderView: View {
                     }
                     .accessibilityIdentifier("pageTitle")
                 }
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
                     Button { showGoTo = true } label: { Label("Go to", systemImage: "list.bullet") }
+                    if m.fillHeight {
+                        Button { withAnimation { m.controlsShown = false } } label: { Label("Hide controls", systemImage: "arrow.up.left.and.arrow.down.right") }
+                    }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { showSearch = true } label: { Label("Search", systemImage: "magnifyingglass") }
@@ -88,6 +98,21 @@ struct ReaderView: View {
         .sheet(isPresented: $showGoTo) { GoToSheet(m: m) }
         .sheet(isPresented: $showSearch) { SearchSheet(m: m) }
         .sheet(isPresented: $showSettings) { SettingsSheet(m: m) }
+    }
+
+    /// Floating, translucent, in the top-right safe area: the only chrome left while the page fills the screen.
+    private var showControlsButton: some View {
+        Button { withAnimation { m.controlsShown = true } } label: {
+            Image(systemName: "chevron.down")
+                .font(.body.weight(.semibold))
+                .frame(width: 40, height: 40)
+                .background(.regularMaterial, in: Circle())
+                .shadow(color: .black.opacity(0.15), radius: 4, y: 1)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Show controls")
+        .padding(.top, 8).padding(.trailing, 12)
+        .transition(.opacity)
     }
 
     private var memoriseMenu: some View {

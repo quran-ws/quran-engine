@@ -1,15 +1,31 @@
 // Gesture checks against the running demo: tap → word highlight (exposed as the page's accessibility
-// value), tap on empty paper → cleared, pinch → zoom (the engine stats keep reporting), search sheet. Run:
+// value), tap on empty paper → cleared, pinch → zoom (the engine stats keep reporting), search sheet,
+// fill-screen mode hides the bars behind a floating button. Run:
 //   xcodebuild test -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:DemoUITests
 import XCTest
 
 final class DemoUITests: XCTestCase {
-    private func launch(_ args: [String] = []) -> XCUIApplication {
+    /// Launches on page 440 with the bars visible (fill-screen mode hides them by default).
+    private func launch(_ args: [String] = [], controls: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-qvpPage", "440"] + args
+        app.launchArguments = ["-qvpPage", "440", "-qvpControls", controls ? "1" : "0"] + args
         app.launch()
         XCTAssertTrue(app.otherElements["qvpPage"].waitForExistence(timeout: 10))
         return app
+    }
+
+    func testFillScreenHidesBarsBehindFloatingButton() {
+        let app = launch(controls: false)
+        XCTAssertFalse(app.buttons["Search"].exists, "fill-screen mode should start without the navigation bar")
+        XCTAssertFalse(app.buttons["Next page"].exists, "fill-screen mode should start without the bottom bar")
+        let show = app.buttons["Show controls"]
+        XCTAssertTrue(show.waitForExistence(timeout: 5))
+        show.tap()
+        XCTAssertTrue(app.buttons["Search"].waitForExistence(timeout: 5), "the floating button did not bring the bars back")
+        XCTAssertTrue(app.buttons["Next page"].exists)
+        app.buttons["Hide controls"].tap()
+        XCTAssertTrue(show.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Search"].exists)
     }
     private func pageValue(_ app: XCUIApplication) -> String { (app.otherElements["qvpPage"].value as? String) ?? "" }
     private func wait(_ app: XCUIApplication, _ cond: @escaping (String) -> Bool, timeout: Double = 5) -> Bool {
