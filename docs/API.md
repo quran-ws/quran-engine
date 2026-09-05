@@ -100,9 +100,14 @@ const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRigh
 // L = {scale, ox, oy, contentW, contentH, pitch, lineDy[], slots[]}
 ```
 
-Horizontal placement is as printed; each line moves by `lineDy[line]`. `lineSpacing`
-multiplies the printed pitch, `lineGap` adds leading in page units, `fillHeight` spreads
-the 15-line grid over the padded viewport (pages 1–2 stay centred). Pure helpers:
+Horizontal placement is as printed; each line moves by `lineDy[line]`. Lines are never
+re-spread onto a grid (printed lines are not equally tall or equally pitched, and ink
+crosses into neighbouring lines): every line keeps its printed position and the same
+delta is added between each pair of consecutive lines. `lineSpacing` sets that delta as
+a multiple of the printed pitch (`pitch·(lineSpacing−1)`), `lineGap` adds leading in page
+units, `fillHeight` picks the delta that makes the page fill the padded viewport
+(pages 1–2 stay centred). `slots[]` boundaries sit halfway between neighbouring lines.
+Pure helpers:
 `engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` and `wastedFraction(...)`.
 `wordBoxView(i)` gives a word's box in viewport px for scroll-into-view.
 

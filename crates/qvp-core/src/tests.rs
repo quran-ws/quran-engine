@@ -238,8 +238,18 @@ fn layout_fill_height_and_view_hit() {
     let spec = LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, pad_top: 50.0, pad_bottom: 50.0, fill_height: true, ..Default::default() };
     let l = p.layout(&spec).clone();
     assert_eq!(l.scale, 2.0);
-    assert!((l.pitch - 1000.0 / 2.0 / 15.0).abs() < 1e-3, "pitch {}", l.pitch);
+    // uniform delta: (500 − 100) units spread over the 14 gaps of the 15-line grid
+    let delta = 400.0 / 14.0;
+    assert!((l.pitch - (40.0 + delta)).abs() < 1e-3, "pitch {}", l.pitch);
     assert_eq!(l.line_dy.len(), 2);
+    // printed geometry kept: the two lines differ by exactly one delta (plus the
+    // padding); the short page is centred on the grid (slot0 = 6.5)
+    assert!((l.line_dy[1] - l.line_dy[0] - delta).abs() < 1e-3);
+    assert!((l.line_dy[0] - (25.0 + 6.5 * delta)).abs() < 1e-3);
+    assert!((l.content_h - 1100.0).abs() < 1e-3);
+    // slot boundary halfway between the laid-out line centres
+    let mid = ((15.0 + l.line_dy[0]) + (55.0 + l.line_dy[1])) / 2.0 * 2.0;
+    assert!((l.line_slots[0].1 - mid).abs() < 1e-3 && (l.line_slots[1].0 - mid).abs() < 1e-3);
     let vx = l.ox + 15.0 * 2.0;
     let vy = l.oy + (15.0 + l.line_dy[0]) * 2.0;
     assert_eq!(p.hit_test_view(vx, vy), Some(Hit { word: 0, path: 0, deco: NONE }));
@@ -248,6 +258,10 @@ fn layout_fill_height_and_view_hit() {
     assert_eq!((g.word, g.exact), (1, false));
     let l2 = p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_spacing: 1.5, ..Default::default() }).clone();
     assert!((l2.pitch - p.natural_pitch() * 1.5).abs() < 1e-3);
+    assert!((l2.line_dy[1] - l2.line_dy[0] - 20.0).abs() < 1e-3, "×1.5 adds half a pitch between lines");
+    // as printed: no shift at all
+    let l3 = p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, ..Default::default() }).clone();
+    assert!(l3.line_dy.iter().all(|d| d.abs() < 1e-6) && (l3.content_h - 200.0).abs() < 1e-3);
     assert!((gap_to_fill(345.0, 550.0, 15, 390.0, 844.0, f32::INFINITY) - 14.0).abs() < 0.1);
     assert_eq!(gap_to_fill(345.0, 550.0, 15, 820.0, 1180.0, 100.0), 0.0);
     assert!((wasted_fraction(345.0, 550.0, 390.0, 844.0) - 0.263).abs() < 0.01);

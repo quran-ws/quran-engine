@@ -131,7 +131,7 @@ copied from `dist/pages` by `sync-pages.sh` — never committed.
 A simple Quran reader built from stock iOS components (`NavigationStack`, toolbars, `Form`, `List`,
 `.searchable`, `Menu`, sheets), with the engine doing every visual decision:
 
-- **Reader** — the page fills the screen height (`fillHeight`, the engine spreads the 15-line grid),
+- **Reader** — the page fills the screen height (`fillHeight`, the engine adds equal leading between the printed lines),
   swipe right/left to flip pages in mushaf order (a snapshot of the old page slides away while the new
   one is already drawn), pinch to zoom then pan, double-tap to reset. The title shows surah · page · juz.
 - **Tap** a word or an ayah medallion to highlight it (engine highlight in the selection layer; the page's

@@ -11,15 +11,17 @@ pub struct LayoutSpec {
     pub pad_bottom: f32,
     pub pad_left: f32,
     pub pad_right: f32,
-    /// Multiplier on the printed line pitch (1.0 = as printed).
+    /// Multiplier on the printed line pitch (1.0 = as printed). The printed
+    /// positions are kept; the same delta `pitch·(line_spacing − 1)` is
+    /// added between every pair of consecutive lines.
     pub line_spacing: f32,
     /// Extra leading between lines in page units, added after the multiplier.
     pub line_gap: f32,
-    /// Spread the nominal line grid over `viewport_h - pad_top - pad_bottom`
+    /// Choose the delta so the page fills `viewport_h - pad_top - pad_bottom`
     /// (overrides line_spacing / line_gap).
     pub fill_height: bool,
     /// Line grid the mushaf is designed on (15 for KFGQPC Hafs). Short pages
-    /// (fewer lines) are centred on this grid, as printed.
+    /// (fewer lines) stay centred, as printed.
     pub nominal_lines: u32,
 }
 
@@ -39,12 +41,13 @@ pub struct Layout {
     /// Per-line vertical shift in page units.
     pub line_dy: Vec<f32>,
     /// Laid-out vertical extent of each line in viewport px: (top, bottom).
+    /// Boundaries sit halfway between neighbouring lines' laid-out centres.
     pub line_slots: Vec<(f32, f32)>,
     /// Total content height in viewport px including padding.
     pub content_h: f32,
     /// Content width in viewport px (the padded page width).
     pub content_w: f32,
-    /// Effective line pitch in page units.
+    /// Effective line pitch in page units (printed pitch + the added delta).
     pub pitch: f32,
 }
 
@@ -78,30 +81,55 @@ impl Page {
 
     /// Compute and store a layout. Horizontal placement is as printed (scaled to
     /// the padded viewport width); vertical placement moves whole lines by `line_dy`.
+    ///
+    /// Printed lines are neither equally tall nor equally pitched, and ink often
+    /// reaches into the neighbouring line, so lines are never re-spread onto a
+    /// grid. Instead every line keeps its printed position and the *same* delta
+    /// is inserted between each pair of consecutive lines: line `k` (0-based on
+    /// the nominal grid) moves by `k·delta`. `delta = 0` reproduces the print.
     pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
         let pw = self.width();
+        let ph = self.height();
         let avail_w = (spec.viewport_w - spec.pad_left - spec.pad_right).max(1.0);
         let scale = avail_w / pw;
         let n = self.data.lines.len();
-        let nominal = spec.nominal_lines.max(n as u32) as f32;
-        let pitch = if spec.fill_height {
+        let nominal = spec.nominal_lines.max(n as u32).max(2) as f32;
+        let natural = self.natural_pitch;
+        // never squeeze below 5% of the printed pitch
+        let min_delta = -0.95 * natural;
+        let delta = if spec.fill_height {
             let avail_h = (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0);
-            avail_h / scale / nominal
+            ((avail_h / scale - ph) / (nominal - 1.0)).max(min_delta)
         } else {
-            self.natural_pitch * spec.line_spacing.max(0.05) + spec.line_gap
+            (natural * (spec.line_spacing - 1.0) + spec.line_gap).max(min_delta)
         };
+        let pitch = natural + delta;
+        // short pages: the printed page is already centred; centre the added
+        // leading the same way so the page stays in the middle of the grid
         let slot0 = (nominal - n as f32) / 2.0;
         let top_units = spec.pad_top / scale;
         let mut line_dy = Vec::with_capacity(n);
-        let mut line_slots = Vec::with_capacity(n);
-        for (i, l) in self.data.lines.iter().enumerate() {
-            let slot = slot0 + (l.line_no.max(1) as f32 - 1.0).min(n as f32 - 1.0);
-            let target_centre = top_units + (slot + 0.5) * pitch;
-            line_dy.push(target_centre - self.line_centre[i]);
-            let top = (top_units + slot * pitch) * scale;
-            line_slots.push((top, top + pitch * scale));
+        for l in self.data.lines.iter() {
+            let k = slot0 + (l.line_no.max(1) as f32 - 1.0).min(n as f32 - 1.0);
+            line_dy.push(top_units + k * delta);
         }
-        let content_h = spec.pad_top + nominal * pitch * scale + spec.pad_bottom;
+        // laid-out centres in page units; slot boundaries halfway between neighbours
+        let centres: Vec<f32> = (0..n).map(|i| self.line_centre[i] + line_dy[i]).collect();
+        let half = pitch / 2.0;
+        let mut line_slots = Vec::with_capacity(n);
+        for i in 0..n {
+            let c = centres[i];
+            let top = match i.checked_sub(1).map(|j| centres[j]) {
+                Some(prev) if prev < c => (prev + c) / 2.0,
+                _ => c - half,
+            };
+            let bottom = match centres.get(i + 1) {
+                Some(&next) if next > c => (c + next) / 2.0,
+                _ => c + half,
+            };
+            line_slots.push((top * scale, bottom * scale));
+        }
+        let content_h = spec.pad_top + (ph + (nominal - 1.0) * delta) * scale + spec.pad_bottom;
         self.layout = Some(Layout { scale, ox: spec.pad_left, oy: 0.0, line_dy, line_slots, content_h, content_w: spec.viewport_w, pitch });
         self.layout.as_ref().unwrap()
     }
