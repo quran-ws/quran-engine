@@ -41,7 +41,7 @@ pages/*.svg ──qvp-convert──▶ NNN.qvp · atlas.qva · NNN.words.json (d
 | `packages/react-native` | `@quranpedia/qvp-react-native` (declarative props over the Kotlin library) + example — verified on the emulator |
 | `packages/ios` | `QvpKit` Swift package (binary XCFramework over `qvp.h`, CoreGraphics `QvpPageView`) + SwiftUI reader demo — 13 XCTests + 5 XCUITests, verified on the iOS simulator |
 | `docs/` | `API.md`, design spec, `UPSTREAM-DATA-ISSUES.md` (for the exporter team), `MACOS.md` |
-| `scripts/` | `build-engine-android.sh`, `build-engine-ios.sh` |
+| `scripts/` | `build-engine-android.sh`, `build-engine-ios.sh`, `package-ios-demo.sh` (zip for iOS developers) |
 
 ## Build the engine
 

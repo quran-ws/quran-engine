@@ -148,6 +148,12 @@ copied from `dist/pages` by `sync-pages.sh` — never committed. Launch argument
 screenshots and QA: `-qvpPage 582 -qvpGoto 2:255 -qvpSearch الله -qvpAyah 78:1 -qvpWord 12 -qvpTheme dark
 -qvpMarks 1 -qvpGold 1 -qvpMask 1 -qvpFill 1 -qvpSheet settings|search|goto`.
 
+## Share with an iOS developer
+
+`scripts/package-ios-demo.sh` → `dist/qvp-ios-demo.zip`: `packages/ios` with the built XCFramework and the
+demo's pages, plus `docs/API.md` and `qvp.h`. Open `Demo/Demo.xcodeproj`, set a signing team, run — no Rust,
+no data pipeline.
+
 ## Tests
 
 ```sh
