@@ -1,145 +1,255 @@
+// A simple Quran reader over QvpKit, using stock iOS components: NavigationStack + toolbars,
+// sheets with Form / List / .searchable, a Menu for memorisation. Tap a word or an ayah marker to highlight it.
 import SwiftUI
 import UIKit
 import QvpKit
 
 @main
 struct DemoApp: App {
-    var body: some Scene { WindowGroup { ContentView() } }
+    var body: some Scene { WindowGroup { ReaderView() } }
 }
 
-/// The QvpPageView is owned by the model so panel actions can relayout / redraw it.
+/// The QvpPageView is owned by the model so actions can relayout / redraw it.
 struct PageViewRep: UIViewRepresentable {
     let view: QvpPageView
     func makeUIView(context: Context) -> QvpPageView { view }
     func updateUIView(_ uiView: QvpPageView, context: Context) {}
 }
 
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: items, applicationActivities: nil) }
-    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
-}
+// MARK: - Reader
 
-struct ContentView: View {
+struct ReaderView: View {
     @StateObject private var m = DemoModel()
+    @State private var showGoTo = false
+    @State private var showSearch = false
+    @State private var showSettings = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            PageViewRep(view: m.view).frame(maxWidth: .infinity, maxHeight: .infinity)
-            panel.frame(height: 330)
+        reader.onAppear {
+            switch UserDefaults.standard.string(forKey: "qvpSheet") {   // screenshots / QA
+            case "settings": showSettings = true
+            case "search": showSearch = true
+            case "goto": showGoTo = true
+            default: break
+            }
         }
-        .background(m.bgColor.ignoresSafeArea())
+    }
+
+    private var reader: some View {
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                PageViewRep(view: m.view).padding(.bottom, 58).ignoresSafeArea(.keyboard)
+                    .overlay(alignment: .top) {
+                        if let img = m.flipImage {
+                            Image(uiImage: img).resizable().aspectRatio(contentMode: .fit)
+                                .offset(x: m.flipOffset).shadow(radius: 8).allowsHitTesting(false)
+                        }
+                    }
+                if m.revealOn { revealBar }
+            }
+            .background(m.bgColor.ignoresSafeArea())
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 0) {
+                        Text(m.title).font(.headline)
+                        Text(m.subtitle).font(.caption).foregroundStyle(.secondary)
+                    }
+                    .accessibilityIdentifier("pageTitle")
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showGoTo = true } label: { Label("Go to", systemImage: "list.bullet") }
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { showSearch = true } label: { Label("Search", systemImage: "magnifyingglass") }
+                    Button { showSettings = true } label: { Label("Settings", systemImage: "textformat.size") }
+                }
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button { m.flip(-1) } label: { Label("Previous page", systemImage: "chevron.left") }
+                    Spacer()
+                    Button { m.playing.toggle() } label: { Label(m.playing ? "Stop following" : "Follow words", systemImage: m.playing ? "pause.fill" : "play.fill") }
+                    Spacer()
+                    memoriseMenu
+                    Spacer()
+                    Button { m.flip(+1) } label: { Label("Next page", systemImage: "chevron.right") }
+                }
+            }
+        }
+        .tint(m.theme == "sepia" ? .brown : .accentColor)
         .preferredColorScheme(m.theme == "dark" ? .dark : .light)
         .overlay(alignment: .top) {
             if let t = m.toast {
-                Text(t).font(.footnote).padding(10).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8)).padding(.top, 56).transition(.opacity)
+                Text(t).font(.footnote).lineLimit(3).padding(10)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.top, 8).padding(.horizontal).transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .sheet(item: $m.share) { ShareSheet(items: [$0.url]) }
+        .animation(.easeInOut, value: m.toast)
+        .sheet(isPresented: $showGoTo) { GoToSheet(m: m) }
+        .sheet(isPresented: $showSearch) { SearchSheet(m: m) }
+        .sheet(isPresented: $showSettings) { SettingsSheet(m: m) }
     }
 
-    private var topBar: some View {
-        HStack(spacing: 6) {
-            TextField("2:255 · Yasin · juz 30", text: $m.gotoField).textFieldStyle(.roundedBorder).font(.footnote).submitLabel(.go).onSubmit { m.goto() }
-            Button("◀") { m.stepPage(-1) }.buttonStyle(.bordered)
-            TextField("1", text: $m.pageField).textFieldStyle(.roundedBorder).font(.footnote).keyboardType(.numberPad).multilineTextAlignment(.center).frame(width: 56).onSubmit { m.gotoPageField() }
-            Button("▶") { m.stepPage(+1) }.buttonStyle(.bordered)
+    private var memoriseMenu: some View {
+        Menu {
+            Section("Mask the current ayah") {
+                Button { m.maskModeIdx = 0; m.maskAyah() } label: { Label("Hide words", systemImage: "eye.slash") }
+                Button { m.maskModeIdx = 1; m.maskAyah() } label: { Label("Cover words", systemImage: "rectangle.fill") }
+            }
+            Button { m.revealNext() } label: { Label("Reveal next word", systemImage: "arrow.right.circle") }
+            Button { m.hideBack() } label: { Label("Hide last revealed", systemImage: "arrow.left.circle") }
+            Button { m.unmask() } label: { Label("Show everything", systemImage: "eye") }
+            Divider()
+            Toggle(isOn: $m.revealOn) { Label("Greyed page", systemImage: "circle.lefthalf.filled") }
+        } label: { Label("Memorise", systemImage: m.revealOn ? "brain.head.profile.fill" : "brain.head.profile") }
+    }
+
+    private var revealBar: some View {
+        HStack {
+            Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary)
+            Slider(value: $m.revealPos, in: 0...m.revealMax, step: 1)
+            Text(m.revealVal).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(minWidth: 44, alignment: .trailing)
         }
-        .padding(.horizontal, 8).padding(.vertical, 4)
+        .padding(.horizontal).padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal).padding(.bottom, 8)
+    }
+}
+
+// MARK: - Go to
+
+struct GoToSheet: View {
+    @ObservedObject var m: DemoModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var ayahKey = ""
+    @State private var query = ""
+    private var surahs: [QvpAtlasSurah] { m.atlas?.surahs() ?? [] }
+    private var filtered: [QvpAtlasSurah] {
+        query.isEmpty ? surahs : (m.atlas?.findSurah(query) ?? [])
     }
 
-    private var panel: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 4) {
-                section("Search this page")
-                TextField("الله · الرحمان", text: $m.searchField).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).environment(\.layoutDirection, .rightToLeft)
-                ForEach(m.results, id: \.word) { r in
-                    Button { m.selectWord(r.word) } label: {
-                        HStack { Spacer(); Text("\(r.text)  \(r.wid)\(r.loose ? " ~" : "")").font(.system(size: 15)) }
-                    }.buttonStyle(.plain).padding(.vertical, 1)
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack {
+                        TextField("Ayah, e.g. 2:255", text: $ayahKey).keyboardType(.numbersAndPunctuation).submitLabel(.go).onSubmit(goAyah)
+                        Button("Go", action: goAyah).disabled(ayahKey.isEmpty)
+                    }
+                } footer: {
+                    Text("This demo bundles pages 1–21, 440–445, 582 and 604; other targets open the nearest bundled page.")
                 }
-                if m.searchedEmpty { Text("no match on this page").font(.caption).opacity(0.6) }
-
-                section("Selection")
-                HStack { Spacer(); Text(m.selWord).font(.system(size: 26)).multilineTextAlignment(.trailing) }
-                Text(m.selInfo).font(.caption)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        ForEach(m.chips) { c in
-                            Button(c.label) { m.toggleChip(c.id) }.font(.caption2).buttonStyle(.bordered).tint(c.on ? .orange : .gray)
+                Section("Juz") {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(1...30, id: \.self) { j in
+                                Button("\(j)") { if let d = m.atlas?.juz(j) { m.loadPage(d.page); dismiss() } }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                            }
                         }
                     }
                 }
-                HStack {
-                    Button("Copy + citation") { m.copySelection() }.buttonStyle(.bordered)
-                    Button("Crop → SVG") { m.cropSelection() }.buttonStyle(.bordered)
+                Section("Surahs") {
+                    ForEach(filtered, id: \.n) { s in
+                        Button { m.loadPage(s.page); dismiss() } label: {
+                            HStack {
+                                Text("\(s.n)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 30, alignment: .trailing)
+                                VStack(alignment: .leading) {
+                                    Text(s.latin).font(.body)
+                                    Text("\(s.english) · \(s.ayahCount) ayahs · page \(s.page)").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text(s.arabic).font(.title3)
+                            }
+                        }
+                        .tint(.primary)
+                    }
                 }
-                Text("Tap a word · long-press and drag to select · tap an ayah marker · chips recolour one path (e.g. 2nd diacritic)").font(.caption2).opacity(0.7)
-
-                section("Highlights (engine-animated)")
-                HStack {
-                    Picker("mode", selection: $m.hlModeIdx) { Text("band + ink").tag(0); Text("band").tag(1); Text("ink").tag(2) }.pickerStyle(.segmented)
-                    Toggle("Follow words", isOn: $m.playing).toggleStyle(.button).font(.caption)
-                }
-                slider("fade ms", $m.hlMs, 0...800)
-
-                section("Styling (each toggle is one engine handle)")
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        Toggle("Mark colours", isOn: $m.markColours).toggleStyle(.button)
-                        Toggle("Hide marks", isOn: $m.hideMarks).toggleStyle(.button)
-                        Toggle("Gold markers", isOn: $m.goldMarkers).toggleStyle(.button)
-                    }.font(.caption)
-                }
-                HStack {
-                    Text("Theme").font(.caption)
-                    Picker("Theme", selection: $m.theme) { Text("Light").tag("light"); Text("Sepia").tag("sepia"); Text("Dark").tag("dark") }.pickerStyle(.segmented)
-                    Button("Clear all") { m.clearAll() }.buttonStyle(.bordered).font(.caption)
-                }
-
-                section("Memorisation")
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        Button("Mask ayah") { m.maskAyah() }.buttonStyle(.bordered)
-                        Picker("mask", selection: $m.maskModeIdx) { Text("hide").tag(0); Text("block").tag(1) }.pickerStyle(.segmented).frame(width: 120)
-                        Button("Reveal") { m.revealNext() }.buttonStyle(.bordered)
-                        Button("Hide back") { m.hideBack() }.buttonStyle(.bordered)
-                        Button("Unmask") { m.unmask() }.buttonStyle(.bordered)
-                    }.font(.caption)
-                }
-                HStack {
-                    Toggle("Greyed page", isOn: $m.revealOn).toggleStyle(.button).font(.caption)
-                    Slider(value: $m.revealPos, in: 0...m.revealMax, step: 1).disabled(!m.revealOn)
-                    Text(m.revealVal).font(.caption2).frame(minWidth: 44, alignment: .trailing)
-                }
-
-                section("Layout (engine)")
-                slider("line spacing ×100", $m.lineSpacing, 60...220)
-                slider("pad top", $m.padTop, 0...120)
-                slider("pad bottom", $m.padBottom, 0...120)
-                HStack {
-                    Toggle("Fill screen height", isOn: $m.fillHeight).toggleStyle(.button)
-                    Button("Leading to fill") { m.leadingToFill() }.buttonStyle(.bordered)
-                }.font(.caption)
-
-                section("Page")
-                Text(m.meta).font(.caption2)
-                section("Engine")
-                Text(m.hudText).font(.system(size: 10.5, design: .monospaced))
             }
-            .padding(.horizontal, 12).padding(.bottom, 8)
+            .searchable(text: $query, prompt: "Surah name or number")
+            .navigationTitle("Go to")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
+        .presentationDetents([.medium, .large])
     }
+    private func goAyah() { m.gotoField = ayahKey; m.goto(); dismiss() }
+}
 
-    private func section(_ t: String) -> some View {
-        Text(t.uppercased()).font(.system(size: 10.5, weight: .bold)).opacity(0.7).padding(.top, 10)
+// MARK: - Search
+
+struct SearchSheet: View {
+    @ObservedObject var m: DemoModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if m.searchField.isEmpty {
+                    ContentUnavailableView("Search this page", systemImage: "magnifyingglass", description: Text("Type a word; the engine normalises tashkeel and hamza forms (الرحمان finds الرحمن)."))
+                } else if m.searchedEmpty {
+                    ContentUnavailableView.search(text: m.searchField)
+                } else {
+                    List(m.results, id: \.word) { r in
+                        Button { m.selectWord(r.word); dismiss() } label: {
+                            HStack {
+                                Text(r.wid).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                if r.loose { Text("≈").foregroundStyle(.secondary) }
+                                Spacer()
+                                Text(r.text).font(.title3)
+                            }
+                        }.tint(.primary)
+                    }
+                }
+            }
+            .searchable(text: $m.searchField, placement: .navigationBarDrawer(displayMode: .always), prompt: "الله · الرحمان")
+            .navigationTitle("Search")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .presentationDetents([.medium, .large])
     }
-    private func slider(_ label: String, _ v: Binding<Double>, _ r: ClosedRange<Double>) -> some View {
-        HStack {
-            Text(label).font(.caption).frame(width: 110, alignment: .leading)
-            Slider(value: v, in: r, step: 1)
-            Text("\(Int(v.wrappedValue))").font(.caption).frame(width: 34, alignment: .trailing)
+}
+
+// MARK: - Settings
+
+struct SettingsSheet: View {
+    @ObservedObject var m: DemoModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Appearance") {
+                    Picker("Theme", selection: $m.theme) { Text("Light").tag("light"); Text("Sepia").tag("sepia"); Text("Dark").tag("dark") }.pickerStyle(.segmented)
+                    Toggle("Coloured marks", isOn: $m.markColours)
+                    Toggle("Hide tashkeel", isOn: $m.hideMarks)
+                    Toggle("Gold ayah markers", isOn: $m.goldMarkers)
+                }
+                Section("Layout") {
+                    Toggle("Fill screen height", isOn: $m.fillHeight)
+                    LabeledContent("Line spacing") { Text(String(format: "×%.2f", m.lineSpacing / 100)).monospacedDigit() }
+                    Slider(value: $m.lineSpacing, in: 60...220, step: 5) { Text("Line spacing") }
+                    LabeledContent("Top padding") { Text("\(Int(m.padTop)) pt").monospacedDigit() }
+                    Slider(value: $m.padTop, in: 0...120, step: 4) { Text("Top padding") }
+                    LabeledContent("Bottom padding") { Text("\(Int(m.padBottom)) pt").monospacedDigit() }
+                    Slider(value: $m.padBottom, in: 0...120, step: 4) { Text("Bottom padding") }
+                    Button("Add leading to fill the screen") { m.leadingToFill() }
+                }
+                Section("Highlights") {
+                    Picker("Style", selection: $m.hlModeIdx) { Text("Band + ink").tag(0); Text("Band").tag(1); Text("Ink").tag(2) }
+                    LabeledContent("Fade") { Text("\(Int(m.hlMs)) ms").monospacedDigit() }
+                    Slider(value: $m.hlMs, in: 0...800, step: 50) { Text("Fade") }
+                }
+                Section("This page") { Text(m.meta).font(.caption).foregroundStyle(.secondary) }
+                Section("Engine") {
+                    Text(m.hudText).font(.caption.monospaced()).foregroundStyle(.secondary).accessibilityIdentifier("engineStats")
+                }
+                Section { Button("Reset styles, highlights and masks", role: .destructive) { m.clearAll() } }
+            }
+            .navigationTitle("Reading")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }
 }

@@ -29,6 +29,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public var onDecoTap: ((QvpDecoration, QvpHitEx) -> Void)?
     public var onEmptyTap: (() -> Void)?
     public var onSelectionChanged: (([Int]) -> Void)?
+    /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
+    public var onSwipe: ((Int) -> Void)?
     public var zoomEnabled = true
     public var selectionEnabled = true
     public var hitOptions = QvpHitOptions(maxDistance: 6)
@@ -48,6 +50,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     private var selecting = false
     private var link: CADisplayLink?
     private var pinchStart: CGFloat = 1
+    private var fitScale: CGFloat = 1
+    /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
+    public var isZoomed: Bool { viewScale > fitScale * 1.02 }
 
     public override init(frame: CGRect) { super.init(frame: frame); setup() }
     public required init?(coder: NSCoder) { super.init(coder: coder); setup() }
@@ -96,6 +101,13 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     }
     @objc private func onPan(_ g: UIPanGestureRecognizer) {
         guard zoomEnabled, !selecting else { return }
+        if !isZoomed, onSwipe != nil {
+            if g.state == .ended {
+                let t = g.translation(in: self), v = g.velocity(in: self)
+                if abs(t.x) > abs(t.y) * 1.5, abs(t.x) > 40 || abs(v.x) > 500 { onSwipe?(t.x > 0 ? 1 : -1) }
+            }
+            return
+        }
         let d = g.translation(in: self)
         viewOx += d.x; viewOy += d.y; g.setTranslation(.zero, in: self)
         setNeedsDisplay()
@@ -143,6 +155,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public func resetView() {
         let l = page?.currentLayout
         viewScale = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
+        fitScale = viewScale
         viewOx = l.map { max((bounds.width - CGFloat($0.contentW) * viewScale) / 2, 0) } ?? 0
         viewOy = l.map { max((bounds.height - CGFloat($0.contentH) * viewScale) / 2, 0) } ?? 0
         setNeedsDisplay()

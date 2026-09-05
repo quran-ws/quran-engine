@@ -39,7 +39,7 @@ pages/*.svg ──qvp-convert──▶ NNN.qvp · atlas.qva · NNN.words.json (d
 | `packages/android` | Kotlin library (JNI over `qvp.h`) + demo app — built and verified on the emulator |
 | `packages/flutter` | Dart FFI plugin + example app — 13 FFI tests, verified on the emulator |
 | `packages/react-native` | `@quranpedia/qvp-react-native` (declarative props over the Kotlin library) + example — verified on the emulator |
-| `packages/ios` | `QvpKit` Swift package (binary XCFramework over `qvp.h`, CoreGraphics `QvpPageView`) + SwiftUI demo — 13 XCTests + 4 XCUITests, verified on the iOS simulator |
+| `packages/ios` | `QvpKit` Swift package (binary XCFramework over `qvp.h`, CoreGraphics `QvpPageView`) + SwiftUI reader demo — 13 XCTests + 5 XCUITests, verified on the iOS simulator |
 | `docs/` | `API.md`, design spec, `UPSTREAM-DATA-ISSUES.md` (for the exporter team), `MACOS.md` |
 | `scripts/` | `build-engine-android.sh`, `build-engine-ios.sh` |
 

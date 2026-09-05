@@ -18,8 +18,8 @@ packages/ios/
 │   │   └── QvpPageView.swift       UIView renderer: bands → cached base ink → styled ink → mask boxes; gestures; CADisplayLink
 │   └── Tests/QvpKitTests/          XCTest: the same assertions as the Flutter/Dart test (page 042, atlas)
 └── Demo/                           SwiftUI app (xcodegen project.yml → Demo.xcodeproj, committed)
-    ├── Sources/                    DemoModel (a port of the Android MainActivity) + ContentView
-    ├── UITests/                    XCUITest: tap, long-press drag selection, pinch on the real view
+    ├── Sources/                    DemoModel (engine state, a port of the Android MainActivity) + ContentView (the reader UI)
+    ├── UITests/                    XCUITest: tap, swipe page flip, pinch, search sheet on the real view
     ├── sync-pages.sh               copies 001–021, 440–445, 582, 604 + atlas.qva from dist/pages (pre-build step)
     └── pages/                      the demo's assets (gitignored)
 ```
@@ -98,6 +98,7 @@ let view = QvpPageView()
 view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.lineSpacing = 1; view.lineGap = 0; view.fillHeight = false
 view.paperColor = UIColor(...); view.selectionBand = 0x2d6fd640; view.hitOptions = QvpHitOptions(maxDistance: 6)
 view.onWordTap = { word, hit in }; view.onDecoTap = { deco, hit in }; view.onEmptyTap = { }; view.onSelectionChanged = { words in }
+view.onSwipe = { dir in }                 // horizontal swipe while not zoomed (+1 finger right, −1 left): flip pages; view.isZoomed
 view.page = page                          // lays out, fits and centres; setNeedsDisplay() after engine calls
 view.relayout(); view.resetView(); view.clearSelection(); view.lineTransform(line)
 view.lastBaseMs / lastOverlayMs / lastHitUs / lastBasePaths / lastOverlayPaths / lastBands / animating   // HUD stats
@@ -109,8 +110,9 @@ when the styled set, layout or pan/zoom changes) → `styled()` paths → `maskB
 transform: `vx = ox + x·scale`, `vy = oy + (y + lineDy[line])·scale`, with pinch/pan on top. Each
 frame calls `page.tick(now)`; a `CADisplayLink` keeps running while it returns true. Tap → gap-aware
 `hitTestViewEx` (max distance 6) → `onWordTap` / `onDecoTap` / `onEmptyTap`; long-press + drag →
-whole-word selection through `page.select` with a band highlight in `QvpLayer.SELECTION`; double-tap
-resets the view. Wrap it for SwiftUI with a `UIViewRepresentable` (see `Demo/Sources/ContentView.swift`).
+whole-word selection through `page.select` with a band highlight in `QvpLayer.SELECTION`
+(`selectionEnabled = false` turns it off); a horizontal pan while the page is at its fitted size is reported
+through `onSwipe` instead of panning, so the host can flip pages; double-tap resets the view. Wrap it for SwiftUI with a `UIViewRepresentable` (see `Demo/Sources/ContentView.swift`).
 
 ## Demo
 
@@ -126,20 +128,32 @@ Or open `Demo/Demo.xcodeproj` (regenerate with `xcodegen generate` after editing
 The app bundles only pages 001–021, 440–445, 582 and 604 (`.qvp` + `.words.json`) and `atlas.qva`,
 copied from `dist/pages` by `sync-pages.sh` — never committed.
 
-It reproduces the Android demo: page navigation and atlas goto (`2:255`, `Yasin`, `juz 30`),
-search with engine highlights, a selection panel with per-path chips (`Selector.wordMark`),
-copy with citation, crop → SVG share sheet, highlight mode + fade slider, follow words, mark
-colours / hide marks / gold markers, light/sepia/dark themes, mask (hide/block) and greyed-page
-reveal with a slider, line spacing / padding / fill-height / leading-to-fill, page metadata and
-engine stats. Launch arguments script a state for screenshots and QA:
-`-qvpPage 582 -qvpGoto 2:255 -qvpSearch الله -qvpAyah 78:1 -qvpWord 12 -qvpChip 2 -qvpTheme dark -qvpMarks 1 -qvpGold 1 -qvpMask 1 -qvpFill 1`.
+A simple Quran reader built from stock iOS components (`NavigationStack`, toolbars, `Form`, `List`,
+`.searchable`, `Menu`, sheets), with the engine doing every visual decision:
+
+- **Reader** — the page fills the screen height (`fillHeight`, the engine spreads the 15-line grid),
+  swipe right/left to flip pages in mushaf order (a snapshot of the old page slides away while the new
+  one is already drawn), pinch to zoom then pan, double-tap to reset. The title shows surah · page · juz.
+- **Tap** a word or an ayah medallion to highlight it (engine highlight in the selection layer; the page's
+  accessibility value announces it). Tap empty paper to clear.
+- **Go to** (list icon) — ayah key (`2:255`), juz buttons, searchable surah list from the atlas.
+- **Search** (magnifier) — engine search with normalisation; hits are highlighted on the page, pick one to jump.
+- **Reading** (AA) — theme (light / sepia / dark), coloured marks, hide tashkeel, gold markers; fill height,
+  line spacing, padding, leading-to-fill; highlight style and fade; page metadata; engine stats; reset.
+- **Memorise** (bottom bar) — mask the current ayah (hide or cover), reveal next / hide back / show all,
+  greyed page with a slider; **Follow words** walks the page word by word with one animated highlight.
+
+Only pages 001–021, 440–445, 582 and 604 (`.qvp` + `.words.json`) and `atlas.qva` are bundled,
+copied from `dist/pages` by `sync-pages.sh` — never committed. Launch arguments script a state for
+screenshots and QA: `-qvpPage 582 -qvpGoto 2:255 -qvpSearch الله -qvpAyah 78:1 -qvpWord 12 -qvpTheme dark
+-qvpMarks 1 -qvpGold 1 -qvpMask 1 -qvpFill 1 -qvpSheet settings|search|goto`.
 
 ## Tests
 
 ```sh
 cd packages/ios/QvpKit && swift test                                                          # macOS slice, 13 tests
 xcodebuild test -scheme QvpKit -destination 'platform=iOS Simulator,name=iPhone 17'           # same on the simulator
-cd ../Demo && xcodebuild test -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:DemoUITests   # gestures
+cd ../Demo && xcodebuild test -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:DemoUITests   # 5 gesture/UI tests
 ```
 
 `QvpKitTests` mirrors `packages/flutter/qvp_flutter/test/qvp_flutter_test.dart`: page 042 has 147

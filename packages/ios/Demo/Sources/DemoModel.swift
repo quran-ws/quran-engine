@@ -4,8 +4,6 @@ import SwiftUI
 import UIKit
 import QvpKit
 
-struct Chip: Identifiable { let id: Int; let label: String; var on: Bool }
-struct ShareItem: Identifiable { let id = UUID(); let url: URL }
 struct ThemeSpec { let ink: UInt32; let paper: UInt32; let bg: UInt32 }
 
 @MainActor
@@ -27,9 +25,8 @@ final class DemoModel: ObservableObject {
     @Published var searchField = "" { didSet { if searchField != oldValue { runSearch() } } }
     @Published var results: [QvpMatch] = []
     @Published var searchedEmpty = false
-    @Published var selWord = "—"
-    @Published var selInfo = ""
-    @Published var chips: [Chip] = []
+    @Published var title = ""
+    @Published var subtitle = ""
     @Published var hlModeIdx = 0 { didSet { if hlModeIdx != oldValue, selWordIdx >= 0 { let i = selWordIdx; selWordIdx = -1; selectWord(i) } } }
     @Published var hlMs: Double = 250
     @Published var playing = false { didSet { if playing != oldValue { playing ? startPlay() : stopPlay() } } }
@@ -45,16 +42,17 @@ final class DemoModel: ObservableObject {
     @Published var lineSpacing: Double = 100 { didSet { if lineSpacing != oldValue { view.lineGap = 0; fillHeight = false; view.lineSpacing = Float(lineSpacing / 100); view.relayout(); view.resetView(); hud() } } }
     @Published var padTop: Double = 12 { didSet { if padTop != oldValue { view.padTop = CGFloat(padTop); view.relayout(); view.resetView(); hud() } } }
     @Published var padBottom: Double = 12 { didSet { if padBottom != oldValue { view.padBottom = CGFloat(padBottom); view.relayout(); view.resetView(); hud() } } }
-    @Published var fillHeight = false { didSet { if fillHeight != oldValue { view.fillHeight = fillHeight; view.relayout(); view.resetView(); hud() } } }
+    @Published var fillHeight = true { didSet { if fillHeight != oldValue { view.fillHeight = fillHeight; view.relayout(); view.resetView(); hud() } } }
     @Published var meta = ""
     @Published var hudText = ""
     @Published var toast: String?
-    @Published var share: ShareItem?
+    /// Page-flip animation: a snapshot of the page that slides away while the new page is already drawn beneath.
+    @Published var flipImage: UIImage?
+    @Published var flipOffset: CGFloat = 0
 
     private var loadMs = 0.0, pageBytes = 0
     private var selWordIdx = -1, selAyah: (Int, Int)?
     private var hlSel = 0, hlAyah = 0, hlSearch = 0, hlPlay = 0
-    private var pathHandles: [Int: Int] = [:]
     private var tajweed = 0, hideMarksH = 0, markersH = 0
     private var playIdx = 0
     private var playTimer: Timer?, hudTimer: Timer?, toastTimer: Timer?
@@ -64,12 +62,13 @@ final class DemoModel: ObservableObject {
 
     init() {
         if let u = Bundle.main.url(forResource: "atlas", withExtension: "qva", subdirectory: "pages"), let d = try? Data(contentsOf: u) { atlas = try? QvpAtlas(bytes: d) }
-        view.padTop = 12; view.padBottom = 12; view.padSide = 8
+        view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.fillHeight = true
+        view.onSwipe = { [weak self] dir in self?.flip(dir) }   // mushaf order: finger right → next page
         view.isAccessibilityElement = true; view.accessibilityIdentifier = "qvpPage"; view.accessibilityLabel = "mushaf page"
+        view.selectionEnabled = false                       // a reader: tap highlights, no text selection
         view.onWordTap = { [weak self] w, _ in self?.selectWord(w.idx) }
         view.onDecoTap = { [weak self] d, _ in if d.ayah != 0 { self?.selectAyah(d.sura, d.ayah) } }
         view.onEmptyTap = { [weak self] in self?.selectWord(-1) }
-        view.onSelectionChanged = { [weak self] _ in self?.showSelection() }
         applyTheme()
         loadPage(Self.pages[0])
         hudTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.hud() } }
@@ -88,10 +87,19 @@ final class DemoModel: ObservableObject {
         if d.bool(forKey: "qvpGold") { goldMarkers = true }
         if d.bool(forKey: "qvpMask") { maskModeIdx = 1; maskAyah() }
         if d.bool(forKey: "qvpFill") { fillHeight = true }
-        if let i = d.string(forKey: "qvpChip").flatMap(Int.init), chips.indices.contains(i) { toggleChip(chips[i].id) }
     }
 
     // ── navigation ──
+    /// Slide the current page out (+1 = to the right, the next page in a right-to-left book) and load the neighbour.
+    func flip(_ dir: Int) {
+        guard let i = Self.pages.firstIndex(of: pageNo), Self.pages.indices.contains(i + dir) else { showToast(dir > 0 ? "Last bundled page" : "First bundled page"); return }
+        let r = UIGraphicsImageRenderer(bounds: view.bounds)
+        flipImage = r.image { _ in view.drawHierarchy(in: view.bounds, afterScreenUpdates: false) }
+        flipOffset = 0
+        loadPage(Self.pages[i + dir])
+        withAnimation(.easeInOut(duration: 0.28)) { flipOffset = CGFloat(dir) * view.bounds.width }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.flipImage = nil; self?.flipOffset = 0 }
+    }
     func stepPage(_ dir: Int) { if let i = Self.pages.firstIndex(of: pageNo), Self.pages.indices.contains(i + dir) { loadPage(Self.pages[i + dir]) } }
     func gotoPageField() { if let n = Int(pageField.trimmingCharacters(in: .whitespaces)) { loadPage(n) } }
     func goto() {
@@ -119,11 +127,19 @@ final class DemoModel: ObservableObject {
         if let wu = Bundle.main.url(forResource: "\(name).words", withExtension: "json", subdirectory: "pages"), let wd = try? Data(contentsOf: wu) { _ = p.attachWords(wd) }
         stopPlay(); playing = false; page?.close(); page = p; pageNo = target
         pageField = "\(target)"
-        selWordIdx = -1; selAyah = nil; hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; pathHandles.removeAll()
+        selWordIdx = -1; selAyah = nil; hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0
         tajweed = 0; hideMarksH = 0; markersH = 0; markColours = false; hideMarks = false; goldMarkers = false; revealOn = false
         p.setDefaultInk(themeSpec.ink)
         view.page = p
-        showSelection(); showMeta(); runSearch(); hud()
+        announce(); showMeta(); showTitle(); runSearch(); hud()
+    }
+    private func showTitle() {
+        guard let p = page else { return }
+        let first = p.words.first
+        let su = first.flatMap { w in atlas?.surah(w.sura) }
+        title = su.map { $0.latin.isEmpty ? $0.arabic : $0.latin } ?? p.surahs().first.map { $0.latin } ?? "Page \(pageNo)"
+        let j = first.flatMap { atlas?.juzAt($0.sura, $0.ayah) }
+        subtitle = "Page \(pageNo)" + (j.map { " · Juz \($0)" } ?? "")
     }
     private func showMeta() {
         guard let p = page else { return }
@@ -136,84 +152,33 @@ final class DemoModel: ObservableObject {
         meta = s
     }
 
-    // ── selection ──
+    // ── tap highlights ──
     func selectWord(_ i: Int) {
         guard let p = page else { return }
-        selAyah = nil; view.clearSelection(); if hlAyah != 0 { p.unhighlight(hlAyah); hlAyah = 0 }
-        pathHandles.values.forEach { p.unstyle($0) }; pathHandles.removeAll()
+        selAyah = nil; if hlAyah != 0 { p.unhighlight(hlAyah); hlAyah = 0 }
         if i < 0 || i == selWordIdx { selWordIdx = -1; if hlSel != 0 { p.unhighlight(hlSel); hlSel = 0 } }
         else {
             selWordIdx = i
             let st = QvpHighlightStyle(mode: hlMode, ink: 0x1a73e8ff, band: QvpColor.withAlpha(0x1a73e8ff, 0.18), radius: 1.5, transitionMs: Int(hlMs), layer: QvpLayer.SELECTION)
             if hlSel != 0 { p.rehighlight(hlSel, Target.word(i)) } else { hlSel = p.highlight(Target.word(i), st) }
         }
-        showSelection(); view.setNeedsDisplay()
+        announce(); view.setNeedsDisplay()
     }
     func selectAyah(_ s: Int, _ a: Int) {
         guard let p = page else { return }
-        if hlSel != 0 { p.unhighlight(hlSel); hlSel = 0 }; selWordIdx = -1; view.clearSelection()
+        guard !p.resolve(Target.ayah(s, a)).isEmpty else { showToast("Ayah \(s):\(a) is not on this page"); return }
+        if hlSel != 0 { p.unhighlight(hlSel); hlSel = 0 }; selWordIdx = -1
         selAyah = (s, a)
         let st = QvpHighlightStyle(mode: hlMode, ink: 0x0a7d32ff, band: QvpColor.withAlpha(0x0a7d32ff, 0.14), radius: 1.5, transitionMs: Int(hlMs), layer: QvpLayer.SELECTION)
         if hlAyah != 0 { p.rehighlight(hlAyah, Target.ayah(s, a)) } else { hlAyah = p.highlight(Target.ayah(s, a), st) }
-        showSelection(); view.setNeedsDisplay()
+        announce(); view.setNeedsDisplay()
     }
-    private func showSelection() {
+    /// VoiceOver value for the page: the highlighted word or ayah.
+    private func announce() {
         guard let p = page else { return }
-        chips = []
-        let sel = p.selection()
-        if sel.count > 1 { selWord = p.text(Target.words(sel)); selInfo = "selection · \(sel.count) words · \(p.citation(sel))"; return }
-        guard selWordIdx >= 0 else {
-            if let (s, a) = selAyah { let (count, complete) = p.ayahWordCount(s, a); selWord = p.text(Target.ayah(s, a)); selInfo = "ayah \(s):\(a) · \(count) words\(complete ? "" : " (continues on another page)")"; return }
-            selWord = "—"; selInfo = ""; return
-        }
-        let w = p.words[selWordIdx]
-        selWord = w.text
-        var info = "wid \(w.wid) · line \(w.line) · \(w.nPaths) paths\n"
-        if p.hasForm(.imlaei) { info += "imlaei \(p.wordForm(w.idx, .imlaei)) · search \(p.wordForm(w.idx, .search))\n" }
-        info += p.wordLabel(w.idx)
-        selInfo = info
-        chips = (w.firstPath..<w.firstPath + w.nPaths).map { i in
-            let kind = p.pathKind(i), nth = p.pathNthMark(i)
-            let label = kind == QvpKind.MARK ? "\(QvpEngine.markName(p.pathMark(i))) #\(nth)" : QvpEngine.kindName(kind)
-            return Chip(id: i, label: label, on: pathHandles[i] != nil)
-        }
-    }
-    /// Chips recolour one path — a mark through Selector.wordMark(word, nth), anything else through Selector.path.
-    func toggleChip(_ i: Int) {
-        guard let p = page, selWordIdx >= 0, let k = chips.firstIndex(where: { $0.id == i }) else { return }
-        if let h = pathHandles.removeValue(forKey: i) { p.unstyle(h); chips[k].on = false }
-        else {
-            let nth = p.pathNthMark(i)
-            pathHandles[i] = p.pathKind(i) == QvpKind.MARK && nth >= 0
-                ? p.style(Selector.wordMark(selWordIdx, nth), 0xef6c00ff, transitionMs: 200, layer: QvpLayer.TOP)
-                : p.style(Selector.path(i), 0xef6c00ff, transitionMs: 200, layer: QvpLayer.TOP)
-            chips[k].on = true
-        }
-        view.setNeedsDisplay()
-    }
-    private var currentTarget: Target? {
-        guard let p = page else { return nil }
-        if !p.selection().isEmpty { return Target.words(p.selection()) }
-        if let (s, a) = selAyah { return Target.ayah(s, a) }
-        if selWordIdx >= 0 { return Target.word(selWordIdx) }
-        return nil
-    }
-    func copySelection() {
-        guard let p = page else { return }
-        let text: String
-        if !p.selection().isEmpty { text = p.selectionText(.uthmani, citation: true) }
-        else if let (s, a) = selAyah { text = "\(p.text(Target.ayah(s, a))) (\(s):\(a))" }
-        else if selWordIdx >= 0 { text = "\(p.words[selWordIdx].text) (\(p.citation([selWordIdx])))" }
-        else { return }
-        UIPasteboard.general.string = text
-        showToast(text)
-    }
-    func cropSelection() {
-        guard let p = page, let t = currentTarget, let svg = p.cropSvg(t, pad: 3, keepMarkers: true, background: themeSpec.paper), let cb = p.cropBox(t, pad: 3, keepMarkers: true) else { return }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("qvp-crop.svg")
-        do { try svg.write(to: url, atomically: true, encoding: .utf8) } catch { showToast("\(error)"); return }
-        showToast(String(format: "SVG %d KB · box %.0f×%.0f units · marker %@", svg.utf8.count / 1024, cb.x1 - cb.x0, cb.y1 - cb.y0, cb.markerDeco >= 0 ? "kept" : "no"))
-        share = ShareItem(url: url)
+        if selWordIdx >= 0 { view.accessibilityValue = "word \(p.wid(selWordIdx)) · \(p.wordLabel(selWordIdx))" }
+        else if let (s, a) = selAyah { view.accessibilityValue = "ayah \(s):\(a)" }
+        else { view.accessibilityValue = nil }
     }
 
     // ── search ──
@@ -254,10 +219,10 @@ final class DemoModel: ObservableObject {
     }
     func clearAll() {
         guard let p = page else { return }
-        p.clearStyles(); p.clearHighlights(); p.unmask(); p.revealStop(); view.clearSelection()
-        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajweed = 0; hideMarksH = 0; markersH = 0; pathHandles.removeAll(); selWordIdx = -1; selAyah = nil
+        p.clearStyles(); p.clearHighlights(); p.unmask(); p.revealStop()
+        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajweed = 0; hideMarksH = 0; markersH = 0; selWordIdx = -1; selAyah = nil
         markColours = false; hideMarks = false; goldMarkers = false; revealOn = false; playing = false
-        searchField = ""; stopPlay(); showSelection(); view.setNeedsDisplay()
+        searchField = ""; stopPlay(); announce(); view.setNeedsDisplay()
     }
 
     // ── memorisation ──
