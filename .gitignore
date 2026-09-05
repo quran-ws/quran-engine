@@ -25,3 +25,12 @@ packages/flutter/**/assets/pages/
 packages/react-native/**/node_modules/
 packages/react-native/**/android/build/
 packages/react-native/**/android/.gradle/
+# iOS
+packages/ios/QvpKit/QvpEngine.xcframework/
+packages/ios/QvpKit/.build/
+packages/ios/QvpKit/.swiftpm/
+packages/ios/Demo/pages/
+packages/ios/Demo/build/
+packages/ios/**/xcuserdata/
+packages/ios/**/*.xcworkspace/xcshareddata/swiftpm/
+dist/ios/

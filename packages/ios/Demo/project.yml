@@ -1,0 +1,63 @@
+# xcodegen spec for the demo app (`xcodegen generate` → Demo.xcodeproj, which is committed).
+# Page data is NOT in git: Demo/pages/ is filled from dist/pages by sync-pages.sh (also run as a
+# pre-build step), and bundled as a folder reference under the app's Resources.
+name: Demo
+options:
+  bundleIdPrefix: net.quranpedia.qvp
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+packages:
+  QvpKit:
+    path: ../QvpKit
+targets:
+  Demo:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: pages
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: QvpKit
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: QVP Demo
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.quranpedia.qvp.demo
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.9"
+        ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+        CODE_SIGN_STYLE: Automatic
+    preBuildScripts:
+      - name: Sync page data from dist/pages
+        script: |
+          "$SRCROOT/sync-pages.sh"
+        basedOnDependencyAnalysis: false
+  DemoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Demo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.quranpedia.qvp.demo.uitests
+        TEST_TARGET_NAME: Demo
+        GENERATE_INFOPLIST_FILE: "YES"
+schemes:
+  Demo:
+    build:
+      targets: { Demo: all, DemoUITests: [test] }
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [DemoUITests]

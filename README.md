@@ -39,9 +39,9 @@ pages/*.svg ──qvp-convert──▶ NNN.qvp · atlas.qva · NNN.words.json (d
 | `packages/android` | Kotlin library (JNI over `qvp.h`) + demo app — built and verified on the emulator |
 | `packages/flutter` | Dart FFI plugin + example app — 13 FFI tests, verified on the emulator |
 | `packages/react-native` | `@quranpedia/qvp-react-native` (declarative props over the Kotlin library) + example — verified on the emulator |
-| `packages/ios` | Swift package + demo — not yet built (needs a Mac; see `docs/MACOS.md` for the prompt) |
+| `packages/ios` | `QvpKit` Swift package (binary XCFramework over `qvp.h`, CoreGraphics `QvpPageView`) + SwiftUI demo — 13 XCTests + 4 XCUITests, verified on the iOS simulator |
 | `docs/` | `API.md`, design spec, `UPSTREAM-DATA-ISSUES.md` (for the exporter team), `MACOS.md` |
-| `scripts/` | `build-engine-android.sh` |
+| `scripts/` | `build-engine-android.sh`, `build-engine-ios.sh` |
 
 ## Build the engine
 
@@ -53,6 +53,7 @@ cargo run -p qvp-convert --release -- batch pages dist/pages              # NNN.
 cargo build -p qvp-ffi --release                                          # target/release/libqvp_ffi.{so,a}
 cargo build -p qvp-ffi --release --target wasm32-unknown-unknown          # target/wasm32-unknown-unknown/release/qvp_ffi.wasm
 scripts/build-engine-android.sh                                           # arm64-v8a / x86_64 / armeabi-v7a
+scripts/build-engine-ios.sh                                               # packages/ios/QvpKit/QvpEngine.xcframework (device, simulator, macOS)
 ```
 
 ## Web demo

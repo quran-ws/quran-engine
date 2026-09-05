@@ -36,9 +36,19 @@ scripts/build-engine-android.sh
 (cd packages/react-native/example && npm install && npx react-native run-android)
 ```
 
-## iOS wrapper — prompt to run in Claude Code on the Mac
+## iOS (Swift package + demo)
 
-Paste this into Claude Code from the repo root:
+```sh
+scripts/build-engine-ios.sh                          # QvpEngine.xcframework (device, simulator, macOS)
+(cd packages/ios/QvpKit && swift test)               # 13 XCTests on the macOS slice
+(cd packages/ios/Demo && xcodebuild -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 17' build)
+```
+
+See `packages/ios/README.md`. Pick any installed simulator name (`xcrun simctl list devices available`).
+
+## iOS wrapper — the prompt it was built from
+
+This was run in Claude Code from the repo root (kept for reference):
 
 > Build the iOS/Swift wrapper and demo for the QVP engine in this repo. Read README.md,
 > docs/API.md, crates/qvp-ffi/include/qvp.h, web/qvp.js (reference wrapper),
