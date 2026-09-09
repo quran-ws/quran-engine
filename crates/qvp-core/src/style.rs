@@ -190,7 +190,7 @@ pub(crate) struct PathCtx {
     pub word: u32,
     pub deco: u32,
     pub line_no: u8,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub kind: PathKind,
     pub mark: Mark,
@@ -214,7 +214,7 @@ impl Rule {
             Selector::WordBody(w) => c.word == *w && c.kind == PathKind::Body,
             Selector::WordMarks(w) => c.word == *w && c.kind == PathKind::Mark,
             Selector::Word(w) => c.word == *w,
-            Selector::Ayah(s, a) => c.sura == *s && c.ayah == *a && c.ayah != 0,
+            Selector::Ayah(s, a) => c.surah == *s && c.ayah == *a && c.ayah != 0,
             Selector::Line(l) => c.line_no == *l,
             Selector::Mark(m) => c.mark == *m,
             Selector::Category(k) => c.category == *k && c.kind == PathKind::Mark,
@@ -414,8 +414,8 @@ impl Page {
             self.styles.push_under(h, LAYER_THEME, Selector::Page, Paint::fade(c, ms));
         }
         if let Some(c) = t.diacritics {
-            self.styles.push_under(h, LAYER_THEME, Selector::Category(Category::Haraka), Paint::fade(c, ms));
-            self.styles.push_under(h, LAYER_THEME, Selector::Category(Category::Tanween), Paint::fade(c, ms));
+            self.styles.push_under(h, LAYER_THEME, Selector::Category(Category::Harakah), Paint::fade(c, ms));
+            self.styles.push_under(h, LAYER_THEME, Selector::Category(Category::Tanwin), Paint::fade(c, ms));
             self.styles.push_under(h, LAYER_THEME, Selector::Mark(Mark::Maddah), Paint::fade(c, ms));
         }
         if let Some(c) = t.dots {
@@ -427,8 +427,8 @@ impl Page {
         if let Some(c) = t.sifr {
             self.styles.push_under(h, LAYER_THEME, Selector::Family(Family::Sifr), Paint::fade(c, ms));
         }
-        if let Some(c) = t.marker {
-            self.styles.push_under(h, LAYER_THEME, Selector::Kind(PathKind::AyahOrnament), Paint::fade(c, ms));
+        if let Some(c) = t.ayah_mark {
+            self.styles.push_under(h, LAYER_THEME, Selector::Kind(PathKind::AyahMarkOrnament), Paint::fade(c, ms));
         }
         if let Some(c) = t.numeral {
             self.styles.push_under(h, LAYER_THEME, Selector::Kind(PathKind::AyahNumber), Paint::fade(c, ms));
@@ -443,7 +443,7 @@ impl Page {
     }
 }
 
-/// Theme colours; None leaves that part alone.
+/// Theme colours; None leaves that colour alone.
 #[derive(Clone, Debug, Default)]
 pub struct Theme {
     pub ink: Option<Rgba>,
@@ -451,7 +451,7 @@ pub struct Theme {
     pub dots: Option<Rgba>,
     pub waqf: Option<Rgba>,
     pub sifr: Option<Rgba>,
-    pub marker: Option<Rgba>,
+    pub ayah_mark: Option<Rgba>,
     pub numeral: Option<Rgba>,
     pub headers: Option<Rgba>,
     pub marks: Vec<(Mark, Rgba)>,

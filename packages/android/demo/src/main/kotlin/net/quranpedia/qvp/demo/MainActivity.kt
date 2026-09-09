@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
     private var selWordIdx = -1; private var selAyah: Pair<Int, Int>? = null
     private var hlSel = 0; private var hlAyah = 0; private var hlSearch = 0; private var hlPlay = 0
     private val pathHandles = HashMap<Int, Int>()
-    private var tajweed = 0; private var hideMarksH = 0; private var markersH = 0
+    private var tajwid = 0; private var hideMarksH = 0; private var ayahMarksH = 0
     private var playing = false; private var playIdx = 0
     private var theme = "light"; private var hlMode = HighlightMode.BOTH; private var hlMs = 250; private var revealOn = false
     private val handler = Handler(Looper.getMainLooper())
@@ -65,7 +65,7 @@ class MainActivity : AppCompatActivity() {
         view = QvpPageView(this).apply {
             padTop = dp(12).toFloat(); padBottom = dp(12).toFloat(); padSide = dp(8).toFloat()
             onWordTap = { w, _ -> selectWord(w.idx) }
-            onDecoTap = { dec, _ -> if (dec.ayah != 0) selectAyah(dec.sura, dec.ayah) }
+            onDecoTap = { dec, _ -> if (dec.ayah != 0) selectAyah(dec.surah, dec.ayah) }
             onEmptyTap = { selectWord(-1) }
             onSelectionChanged = { showSelection() }
         }
@@ -92,7 +92,7 @@ class MainActivity : AppCompatActivity() {
         selRow.addView(Button(this).apply { text = "Copy + citation"; setOnClickListener { copySelection() } })
         selRow.addView(Button(this).apply { text = "Crop → SVG"; setOnClickListener { cropSelection() } })
         panel.addView(selRow)
-        panel.addView(TextView(this).apply { text = "Tap a word · long-press and drag to select · tap an ayah marker · chips recolour one path (e.g. 2nd diacritic)"; textSize = 11f; alpha = 0.7f })
+        panel.addView(TextView(this).apply { text = "Tap a word · long-press and drag to select · tap an ayah mark · chips recolour one path (e.g. 2nd diacritic)"; textSize = 11f; alpha = 0.7f })
 
         // highlights
         panel.addView(section("Highlights (engine-animated)"))
@@ -109,9 +109,9 @@ class MainActivity : AppCompatActivity() {
         // styling
         panel.addView(section("Styling (each toggle is one engine handle)"))
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val bTaj = toggleButton("Mark colours") { on -> page?.let { p -> if (tajweed != 0) { p.unstyle(tajweed); tajweed = 0 }; if (on) tajweed = p.theme(QvpTheme(diacritics = 0x1a73e8ff.toInt(), dots = 0xc62828ff.toInt(), waqf = 0x0a7d32ff.toInt(), sifr = 0xef6c00ff.toInt(), transitionMs = 200)); view.invalidate() } }
+        val bTaj = toggleButton("Mark colours") { on -> page?.let { p -> if (tajwid != 0) { p.unstyle(tajwid); tajwid = 0 }; if (on) tajwid = p.theme(QvpTheme(diacritics = 0x1a73e8ff.toInt(), dots = 0xc62828ff.toInt(), waqf = 0x0a7d32ff.toInt(), sifr = 0xef6c00ff.toInt(), transitionMs = 200)); view.invalidate() } }
         val bHide = toggleButton("Hide marks") { on -> page?.let { p -> if (hideMarksH != 0) { p.unstyle(hideMarksH); hideMarksH = 0 }; if (on) hideMarksH = p.hide(Selector.kind(QvpKind.MARK)); view.invalidate() } }
-        val bMk = toggleButton("Gold markers") { on -> page?.let { p -> if (markersH != 0) { p.unstyle(markersH); markersH = 0 }; if (on) markersH = p.style(Selector.deco(QvpDeco.AYAH_MARKER), 0xb8860bff.toInt(), 300, QvpLayer.THEME + 1); view.invalidate() } }
+        val bMk = toggleButton("Gold ayah marks") { on -> page?.let { p -> if (ayahMarksH != 0) { p.unstyle(ayahMarksH); ayahMarksH = 0 }; if (on) ayahMarksH = p.style(Selector.deco(QvpDeco.AYAH_MARK), 0xb8860bff.toInt(), 300, QvpLayer.THEME + 1); view.invalidate() } }
         listOf(bTaj, bHide, bMk).forEach { row1.addView(it) }
         panel.addView(HorizontalScrollView(this).apply { addView(row1) })
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -127,7 +127,7 @@ class MainActivity : AppCompatActivity() {
         panel.addView(section("Memorisation"))
         val mrow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val maskMode = Spinner(this).apply { adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, listOf("hide", "block")) }
-        mrow.addView(Button(this).apply { text = "Mask ayah"; setOnClickListener { page?.let { p -> val t = selAyah?.let { Target.ayah(it.first, it.second) } ?: (if (selWordIdx >= 0) p.words[selWordIdx].let { Target.ayah(it.sura, it.ayah) } else Target.page()); p.maskOptions(blockColor = QvpColor.rgba(themes[theme]!!.third)); p.mask(t, if (maskMode.selectedItemPosition == 1) MaskMode.BLOCK else MaskMode.HIDE); view.invalidate() } } })
+        mrow.addView(Button(this).apply { text = "Mask ayah"; setOnClickListener { page?.let { p -> val t = selAyah?.let { Target.ayah(it.first, it.second) } ?: (if (selWordIdx >= 0) p.words[selWordIdx].let { Target.ayah(it.surah, it.ayah) } else Target.page()); p.maskOptions(blockColor = QvpColor.rgba(themes[theme]!!.third)); p.mask(t, if (maskMode.selectedItemPosition == 1) MaskMode.BLOCK else MaskMode.HIDE); view.invalidate() } } })
         mrow.addView(maskMode)
         mrow.addView(Button(this).apply { text = "Reveal"; setOnClickListener { page?.revealNext(1); view.invalidate() } })
         mrow.addView(Button(this).apply { text = "Hide back"; setOnClickListener { page?.hideBack(1); view.invalidate() } })
@@ -193,7 +193,7 @@ class MainActivity : AppCompatActivity() {
         runCatching { p.attachWords(assets.open("pages/$name.words.json").readBytes()) }
         stopPlay(); page?.close(); page = p; pageNo = target
         pageField.setText("$target")
-        selWordIdx = -1; selAyah = null; hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; pathHandles.clear(); tajweed = 0; hideMarksH = 0; markersH = 0; revealOn = false; revealSeek.isEnabled = false
+        selWordIdx = -1; selAyah = null; hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; pathHandles.clear(); tajwid = 0; hideMarksH = 0; ayahMarksH = 0; revealOn = false; revealSeek.isEnabled = false
         p.setDefaultInk(themes[theme]!!.first)
         view.page = p
         showSelection(); showMeta(); runSearch()
@@ -201,8 +201,8 @@ class MainActivity : AppCompatActivity() {
     private fun showMeta() {
         val p = page ?: return
         val su = p.surahs().joinToString(", ") { "${it.number}${if (it.latin.isNotEmpty()) " " + it.latin else ""}${if (it.hasBanner) " (banner)" else ""}" }
-        val dv = p.divisions().joinToString(", ") { "${it.kind.name.lowercase()} ${it.n} at ${it.sura}:${it.ayah}" }
-        val j = atlas?.juzAt(p.words[0].sura, p.words[0].ayah)
+        val dv = p.divisions().joinToString(", ") { "${it.kind.name.lowercase()} ${it.n} at ${it.surah}:${it.ayah}" }
+        val j = atlas?.juzAt(p.words[0].surah, p.words[0].ayah)
         meta.text = "surahs: $su" + (if (dv.isNotEmpty()) "\nstarts here: $dv" else "") + (if (j != null) "\njuz $j · pages ${atlas!!.pagesOfJuz(j)}" else "") + "\nayahs: " + p.ayahKeys().joinToString(" ") { "${it.first}:${it.second}" }
     }
 
@@ -238,8 +238,8 @@ class MainActivity : AppCompatActivity() {
         }
         selWord.text = w.text
         selInfo.text = buildString {
-            append("wid ${w.wid} · line ${w.line} · ${w.nPaths} paths\n")
-            if (p.hasForm(Form.IMLAEI)) append("imlaei ${p.wordForm(w.idx, Form.IMLAEI)} · search ${p.wordForm(w.idx, Form.SEARCH)}\n")
+            append("wordKey ${w.wordKey} · line ${w.line} · ${w.nPaths} paths\n")
+            if (p.hasForm(Form.RASM_IMLAI)) append("rasmImlai ${p.wordForm(w.idx, Form.RASM_IMLAI)} · search ${p.wordForm(w.idx, Form.SEARCH)}\n")
             append(p.wordLabel(w.idx))
         }
         for (i in w.firstPath until w.firstPath + w.nPaths) {
@@ -252,7 +252,7 @@ class MainActivity : AppCompatActivity() {
     }
     private fun copySelection() {
         val p = page ?: return
-        val text = when { p.selection().isNotEmpty() -> p.selectionText(Form.UTHMANI, true); selAyah != null -> "${p.text(Target.ayah(selAyah!!.first, selAyah!!.second))} (${selAyah!!.first}:${selAyah!!.second})"; selWordIdx >= 0 -> "${p.words[selWordIdx].text} (${p.citation(intArrayOf(selWordIdx))})"; else -> return }
+        val text = when { p.selection().isNotEmpty() -> p.selectionText(Form.RASM_UTHMANI, true); selAyah != null -> "${p.text(Target.ayah(selAyah!!.first, selAyah!!.second))} (${selAyah!!.first}:${selAyah!!.second})"; selWordIdx >= 0 -> "${p.words[selWordIdx].text} (${p.citation(intArrayOf(selWordIdx))})"; else -> return }
         (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("quran", text))
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
     }
@@ -261,7 +261,7 @@ class MainActivity : AppCompatActivity() {
         val t = when { p.selection().isNotEmpty() -> Target.words(p.selection()); selAyah != null -> Target.ayah(selAyah!!.first, selAyah!!.second); selWordIdx >= 0 -> Target.word(selWordIdx); else -> return }
         val svg = p.cropSvg(t, 3f, true, QvpColor.rgba(themes[theme]!!.second)) ?: return
         val cb = p.cropBox(t, 3f, true)
-        Toast.makeText(this, "SVG ${svg.length / 1024} KB · box ${"%.0f×%.0f".format(cb!!.x1 - cb.x0, cb.y1 - cb.y0)} units · marker ${if (cb.markerDeco >= 0) "kept" else "no"}", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "SVG ${svg.length / 1024} KB · box ${"%.0f×%.0f".format(cb!!.x1 - cb.x0, cb.y1 - cb.y0)} units · marker ${if (cb.ayahMarkDeco >= 0) "kept" else "no"}", Toast.LENGTH_LONG).show()
     }
     private fun runSearch() {
         val p = page ?: return
@@ -271,7 +271,7 @@ class MainActivity : AppCompatActivity() {
         if (q.isEmpty()) { view.invalidate(); return }
         val m = p.search(q)
         if (m.isNotEmpty()) hlSearch = p.highlight(Target.words(m.map { it.word }), QvpHighlightStyle(mode = HighlightMode.BOTH, ink = 0xc62828ff.toInt(), band = QvpColor.withAlpha(0xc62828ff.toInt(), 0.12f), height = BandHeight.INK, padY = 1f, radius = 1f, transitionMs = hlMs))
-        for (x in m.take(8)) results.addView(TextView(this).apply { text = "${x.text}  ${x.wid}${if (x.loose) " ~" else ""}"; textDirection = View.TEXT_DIRECTION_RTL; textSize = 14f; setPadding(4, 2, 4, 2); setOnClickListener { selectWord(x.word) } })
+        for (x in m.take(8)) results.addView(TextView(this).apply { text = "${x.text}  ${x.wordKey}${if (x.loose) " ~" else ""}"; textDirection = View.TEXT_DIRECTION_RTL; textSize = 14f; setPadding(4, 2, 4, 2); setOnClickListener { selectWord(x.word) } })
         if (m.isEmpty()) results.addView(TextView(this).apply { text = "no match on this page"; textSize = 11f; alpha = 0.6f })
         view.invalidate()
     }
@@ -286,7 +286,7 @@ class MainActivity : AppCompatActivity() {
     private fun clearAll() {
         val p = page ?: return
         p.clearStyles(); p.clearHighlights(); p.unmask(); p.revealStop(); view.clearSelection()
-        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajweed = 0; hideMarksH = 0; markersH = 0; pathHandles.clear(); selWordIdx = -1; selAyah = null; revealOn = false; revealSeek.isEnabled = false
+        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajwid = 0; hideMarksH = 0; ayahMarksH = 0; pathHandles.clear(); selWordIdx = -1; selAyah = null; revealOn = false; revealSeek.isEnabled = false
         searchField.setText(""); stopPlay(); showSelection(); view.invalidate()
     }
     private fun startPlay() {

@@ -12,20 +12,13 @@
 #![forbid(unsafe_code)]
 
 pub mod atlas;
+pub mod codec;
 
 use std::fmt;
 
 pub const MAGIC: &[u8; 4] = b"QVP1";
 pub const VERSION: u16 = 1;
 pub const DEFAULT_QUANT: u16 = 100;
-pub const HEADER_LEN: usize = 80;
-pub const LINE_LEN: usize = 24;
-pub const AYAH_LEN: usize = 32;
-pub const WORD_LEN: usize = 44;
-pub const PATH_LEN: usize = 36;
-pub const DECO_LEN: usize = 32;
-pub const GLYPH_LEN: usize = 28;
-pub const INST_LEN: usize = 28;
 pub const NONE_U16: u16 = 0xFFFF;
 
 // ───────────────────────────── enums ─────────────────────────────
@@ -37,8 +30,11 @@ pub enum PathKind {
     Body = 0,
     Mark = 1,
     AyahNumber = 2,
-    AyahOrnament = 3,
+    AyahMarkOrnament = 3,
     HeaderInk = 4,
+    Ornament = 5,
+    PageNumber = 6,
+    RunningHead = 7,
     Other = 255,
 }
 
@@ -48,8 +44,11 @@ impl PathKind {
             0 => Self::Body,
             1 => Self::Mark,
             2 => Self::AyahNumber,
-            3 => Self::AyahOrnament,
+            3 => Self::AyahMarkOrnament,
             4 => Self::HeaderInk,
+            5 => Self::Ornament,
+            6 => Self::PageNumber,
+            7 => Self::RunningHead,
             _ => Self::Other,
         }
     }
@@ -57,9 +56,12 @@ impl PathKind {
         match v {
             "body" => Self::Body,
             "mark" => Self::Mark,
-            "ayah-number" => Self::AyahNumber,
-            "ayah-marker-ornament" => Self::AyahOrnament,
-            "header-ink" => Self::HeaderInk,
+            "ayah_number" => Self::AyahNumber,
+            "ayah_mark_ornament" => Self::AyahMarkOrnament,
+            "header_ink" => Self::HeaderInk,
+            "ornament" => Self::Ornament,
+            "page_number" => Self::PageNumber,
+            "running_head" => Self::RunningHead,
             _ => Self::Other,
         }
     }
@@ -67,9 +69,12 @@ impl PathKind {
         match self {
             Self::Body => "body",
             Self::Mark => "mark",
-            Self::AyahNumber => "ayah-number",
-            Self::AyahOrnament => "ayah-marker-ornament",
-            Self::HeaderInk => "header-ink",
+            Self::AyahNumber => "ayah_number",
+            Self::AyahMarkOrnament => "ayah_mark_ornament",
+            Self::HeaderInk => "header_ink",
+            Self::Ornament => "ornament",
+            Self::PageNumber => "page_number",
+            Self::RunningHead => "running_head",
             Self::Other => "other",
         }
     }
@@ -81,7 +86,7 @@ impl PathKind {
 pub enum Family {
     None = 0,
     Diacritic = 1,
-    Tanween = 2, // "diacritic tanween"
+    Tanwin = 2, // "diacritic tanwin"
     Dots = 3,
     Waqf = 4,
     Sifr = 5,
@@ -95,7 +100,7 @@ impl Family {
         match v {
             0 => Self::None,
             1 => Self::Diacritic,
-            2 => Self::Tanween,
+            2 => Self::Tanwin,
             3 => Self::Dots,
             4 => Self::Waqf,
             5 => Self::Sifr,
@@ -108,12 +113,12 @@ impl Family {
         match v {
             "" => Self::None,
             "diacritic" => Self::Diacritic,
-            "diacritic tanween" => Self::Tanween,
+            "diacritic tanwin" => Self::Tanwin,
             "dots" => Self::Dots,
             "waqf" => Self::Waqf,
             "sifr" => Self::Sifr,
             "sajdah" => Self::Sajdah,
-            "reading-sign" => Self::ReadingSign,
+            "reading_sign" => Self::ReadingSign,
             _ => Self::Other,
         }
     }
@@ -121,12 +126,12 @@ impl Family {
         match self {
             Self::None => "",
             Self::Diacritic => "diacritic",
-            Self::Tanween => "diacritic tanween",
+            Self::Tanwin => "diacritic tanwin",
             Self::Dots => "dots",
             Self::Waqf => "waqf",
             Self::Sifr => "sifr",
             Self::Sajdah => "sajdah",
-            Self::ReadingSign => "reading-sign",
+            Self::ReadingSign => "reading_sign",
             Self::Other => "other",
         }
     }
@@ -155,38 +160,38 @@ macro_rules! marks {
 
 marks! {
     None = 0 => "",
-    Fatha = 1 => "fatha",
-    Kasra = 2 => "kasra",
-    Damma = 3 => "damma",
-    Fathatan = 4 => "fathatan",
-    Kasratan = 5 => "kasratan",
-    Dammatan = 6 => "dammatan",
-    Shadda = 7 => "shadda",
+    Fathah = 1 => "fathah",
+    Kasrah = 2 => "kasrah",
+    Dammah = 3 => "dammah",
+    TanwinAlFath = 4 => "tanwin_al_fath",
+    TanwinAlKasr = 5 => "tanwin_al_kasr",
+    TanwinAlDamm = 6 => "tanwin_al_damm",
+    Shaddah = 7 => "shaddah",
     Sukun = 8 => "sukun",
     Maddah = 9 => "maddah",
-    Hamza = 10 => "hamza",
-    Wasla = 11 => "wasla",
-    SmallAlef = 12 => "small-alef",
-    SmallWaw = 13 => "small-waw",
-    SmallYa = 14 => "small-ya",
-    SmallNoon = 15 => "small-noon",
+    Hamzah = 10 => "hamzah",
+    HamzatAlWasl = 11 => "hamzat_al_wasl",
+    OmittedAlif = 12 => "omitted_alif",
+    SmallWaw = 13 => "small_waw",
+    SmallYaa = 14 => "small_yaa",
+    SmallNoon = 15 => "small_noon",
     Dot = 16 => "dot",
-    TwoDots = 17 => "two-dots",
-    ThreeDots = 18 => "three-dots",
-    SifrMustadir = 19 => "sifr-mustadir",
-    SifrMustatil = 20 => "sifr-mustatil",
-    WaqfJaiz = 21 => "waqf-jaiz",
-    WaqfAwla = 22 => "waqf-awla",
-    WaslAwla = 23 => "wasl-awla",
-    WaqfLazim = 24 => "waqf-lazim",
-    Muanaqah = 25 => "muanaqah",
+    TwoDots = 17 => "two_dots",
+    ThreeDots = 18 => "three_dots",
+    RoundedZero = 19 => "rounded_zero",
+    RectangularZero = 20 => "rectangular_zero",
+    WaqfJaizMustawiAlTarafayn = 21 => "waqf_jaiz_mustawi_al_tarafayn",
+    WaqfJaizWaqfAwla = 22 => "waqf_jaiz_waqf_awla",
+    WaqfJaizWaslAwla = 23 => "waqf_jaiz_wasl_awla",
+    WaqfLazim = 24 => "waqf_lazim",
+    WaqfAlMuanaqah = 25 => "waqf_al_muanaqah",
     Saktah = 26 => "saktah",
-    MeemIqlab = 27 => "meem-iqlab",
+    SmallMeem = 27 => "small_meem",
     Hizb = 28 => "hizb",
     Sajdah = 29 => "sajdah",
-    SajdahSign = 30 => "sajdah-sign",
-    SajdahLine = 31 => "sajdah-line",
-    SeenReading = 32 => "seen-reading",
+    SajdahMark = 30 => "sajdah_mark",
+    SajdahLine = 31 => "sajdah_line",
+    SeenAlQiraah = 32 => "seen_al_qiraah",
     Tashil = 33 => "tashil",
     Ishmam = 34 => "ishmam",
     Imalah = 35 => "imalah",
@@ -197,32 +202,38 @@ marks! {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum DecoKind {
-    AyahMarker = 0,
+    AyahMark = 0,
     SurahName = 1,
     Basmalah = 2,
-    HizbMark = 3,
+    DivisionMark = 3,
     SajdahMark = 4,
+    PageNumber = 5,
+    RunningHead = 6,
     Other = 255,
 }
 
 impl DecoKind {
     pub fn from_u8(v: u8) -> Self {
         match v {
-            0 => Self::AyahMarker,
+            0 => Self::AyahMark,
             1 => Self::SurahName,
             2 => Self::Basmalah,
-            3 => Self::HizbMark,
+            3 => Self::DivisionMark,
             4 => Self::SajdahMark,
+            5 => Self::PageNumber,
+            6 => Self::RunningHead,
             _ => Self::Other,
         }
     }
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::AyahMarker => "ayah-marker",
+            Self::AyahMark => "ayah-mark",
             Self::SurahName => "surah-name",
             Self::Basmalah => "basmalah",
-            Self::HizbMark => "hizb-mark",
+            Self::DivisionMark => "division-mark",
             Self::SajdahMark => "sajdah-mark",
+            Self::PageNumber => "page-number",
+            Self::RunningHead => "running-head",
             Self::Other => "other",
         }
     }
@@ -237,11 +248,13 @@ pub const PF_STAGGERED: u8 = 4;
 pub const PF_STANDALONE: u8 = 8;
 /// Path is a glyph instance: `op_off` is an index into `insts`, `op_len` = 0.
 pub const PF_GLYPH: u8 = 16;
+/// `data-duplicate`: the artwork draws this ornament twice, in place (pages 1-2).
+pub const PF_DUPLICATE: u8 = 32;
 
 /// Ayah flag bits.
 pub const AF_JUZ_START: u8 = 1;
 pub const AF_HIZB_START: u8 = 2;
-pub const AF_RUB_START: u8 = 4;
+pub const AF_RUBU_AL_HIZB_START: u8 = 4;
 pub const AF_NISF_START: u8 = 8;
 
 // ───────────────────────────── records ─────────────────────────────
@@ -299,32 +312,32 @@ pub struct LineRec {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct AyahRec {
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
-    pub part: u8,
-    pub parts: u8,
+    pub fragment: u8,
+    pub fragments: u8,
     pub flags: u8,
     pub first_word: u16,
     pub n_words: u16,
     /// Index into decos, or NONE_U16.
-    pub marker_deco: u16,
-    /// Rubʿ number (1..240) that starts at this ayah when any AF_*_START flag is
-    /// set, else 0. juz = (rub-1)/8+1, hizb = (rub-1)/4+1, nisf = (rub-1)/2+1.
-    pub rub: u16,
+    pub ayah_mark_deco: u16,
+    /// `rubu_al_hizb` number (1..240) that starts at this ayah when any AF_*_START flag is
+    /// set, else 0. juz = (rubu_al_hizb-1)/8+1, hizb = (rubu_al_hizb-1)/4+1, nisf = (rubu_al_hizb-1)/2+1.
+    pub rubu_al_hizb: u16,
     pub bbox: IBox,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct WordRec {
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub word: u16,
     pub line_idx: u16,
     pub ayah_idx: u16,
-    /// Index into strings (uthmani text) or NONE_U16.
+    /// Index into strings (rasm_uthmani text) or NONE_U16.
     pub text: u16,
-    /// Other text forms (imlaei, qpc, rasm, search): string index or NONE_U16.
-    pub imlaei: u16,
+    /// Other text forms (rasm_imlai, qpc, rasm, search): string index or NONE_U16.
+    pub rasm_imlai: u16,
     pub qpc: u16,
     pub rasm: u16,
     pub search: u16,
@@ -350,7 +363,7 @@ pub struct PathRec {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct DecoRec {
     pub kind: DecoKind,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     /// Index into strings (e.g. surah Arabic name / hizb info), or NONE_U16.
     pub text: u16,
@@ -538,6 +551,7 @@ pub fn decode_cmds(ops: &[u8], ox: i32, oy: i32) -> Result<Vec<Cmd>, Error> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     BadMagic,
+    Bounds(&'static str),
     BadVersion(u16),
     Truncated(&'static str),
     Corrupt(&'static str),
@@ -547,6 +561,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::BadMagic => write!(f, "not a QVP file"),
+            Error::Bounds(w) => write!(f, "index out of range at {w}"),
             Error::BadVersion(v) => write!(f, "unsupported QVP version {v}"),
             Error::Truncated(w) => write!(f, "truncated at {w}"),
             Error::Corrupt(w) => write!(f, "corrupt: {w}"),
@@ -557,412 +572,20 @@ impl std::error::Error for Error {}
 
 // ───────────────────────────── encode ─────────────────────────────
 
-struct W(Vec<u8>);
-impl W {
-    fn u8(&mut self, v: u8) {
-        self.0.push(v);
-    }
-    fn u16(&mut self, v: u16) {
-        self.0.extend_from_slice(&v.to_le_bytes());
-    }
-    fn u32(&mut self, v: u32) {
-        self.0.extend_from_slice(&v.to_le_bytes());
-    }
-    fn i32(&mut self, v: i32) {
-        self.0.extend_from_slice(&v.to_le_bytes());
-    }
-    fn f32(&mut self, v: f32) {
-        self.0.extend_from_slice(&v.to_le_bytes());
-    }
-    fn bbox(&mut self, b: &IBox) {
-        self.i32(b.x0);
-        self.i32(b.y0);
-        self.i32(b.x1);
-        self.i32(b.y1);
-    }
-    fn patch_u32(&mut self, at: usize, v: u32) {
-        self.0[at..at + 4].copy_from_slice(&v.to_le_bytes());
-    }
-}
-
 pub fn encode(p: &PageData) -> Vec<u8> {
-    let mut w = W(Vec::with_capacity(
-        HEADER_LEN
-            + p.lines.len() * LINE_LEN
-            + p.ayahs.len() * AYAH_LEN
-            + p.words.len() * WORD_LEN
-            + p.paths.len() * PATH_LEN
-            + p.decos.len() * DECO_LEN
-            + p.ops.len()
-            + 1024,
-    ));
-    // header
-    w.0.extend_from_slice(MAGIC);
-    w.u16(p.header.version);
-    w.u16(p.header.quant);
-    w.u16(p.header.page);
-    w.u16(p.header.flags);
-    w.f32(p.header.width);
-    w.f32(p.header.height);
-    w.u16(p.lines.len() as u16);
-    w.u16(p.ayahs.len() as u16);
-    w.u16(p.words.len() as u16);
-    w.u16(p.decos.len() as u16);
-    w.u32(p.paths.len() as u32);
-    let off_pos = w.0.len(); // 32: seven u32 offsets + len_ops
-    for _ in 0..8 {
-        w.u32(0);
-    }
-    w.u16(p.strings.len() as u16);
-    w.u16(p.glyphs.len() as u16);
-    w.u16(p.insts.len() as u16);
-    w.u16(0);
-    let off_pos2 = w.0.len();
-    w.u32(0);
-    w.u32(0);
-    debug_assert_eq!(w.0.len(), HEADER_LEN);
-
-    let off_lines = w.0.len();
-    for l in &p.lines {
-        w.u8(l.line_no);
-        w.u8(0);
-        w.u16(l.first_word);
-        w.u16(l.n_words);
-        w.u16(0);
-        w.bbox(&l.bbox);
-    }
-    let off_ayahs = w.0.len();
-    for a in &p.ayahs {
-        w.u16(a.sura);
-        w.u16(a.ayah);
-        w.u8(a.part);
-        w.u8(a.parts);
-        w.u16(a.first_word);
-        w.u16(a.n_words);
-        w.u16(a.marker_deco);
-        w.u8(a.flags);
-        w.u8(0);
-        w.u16(a.rub);
-        w.bbox(&a.bbox);
-    }
-    let off_words = w.0.len();
-    for x in &p.words {
-        w.u16(x.sura);
-        w.u16(x.ayah);
-        w.u16(x.word);
-        w.u16(x.line_idx);
-        w.u16(x.ayah_idx);
-        w.u16(x.text);
-        w.u16(x.imlaei);
-        w.u16(x.qpc);
-        w.u16(x.rasm);
-        w.u16(x.search);
-        w.u32(x.first_path);
-        w.u16(x.n_paths);
-        w.u16(0);
-        w.bbox(&x.bbox);
-    }
-    let off_paths = w.0.len();
-    for x in &p.paths {
-        w.u8(x.kind as u8);
-        w.u8(x.mark as u8);
-        w.u8(x.family as u8);
-        w.u8(x.flags);
-        w.i32(x.ox);
-        w.i32(x.oy);
-        w.u32(x.op_off);
-        w.u32(x.op_len);
-        w.bbox(&x.bbox);
-    }
-    let off_decos = w.0.len();
-    for d in &p.decos {
-        w.u8(d.kind as u8);
-        w.u8(0);
-        w.u16(d.sura);
-        w.u16(d.ayah);
-        w.u16(d.text);
-        w.u32(d.first_path);
-        w.u16(d.n_paths);
-        w.u16(d.line);
-        w.bbox(&d.bbox);
-    }
-    let off_glyphs = w.0.len();
-    for g in &p.glyphs {
-        w.u32(g.op_off);
-        w.u32(g.op_len);
-        w.bbox(&g.bbox);
-        w.u32(0);
-    }
-    let off_insts = w.0.len();
-    for i in &p.insts {
-        w.u16(i.glyph);
-        w.u16(0);
-        w.f32(i.a);
-        w.f32(i.b);
-        w.f32(i.c);
-        w.f32(i.d);
-        w.f32(i.e);
-        w.f32(i.f);
-    }
-    w.patch_u32(off_pos2, off_glyphs as u32);
-    w.patch_u32(off_pos2 + 4, off_insts as u32);
-    let off_ops = w.0.len();
-    w.0.extend_from_slice(&p.ops);
-    let off_strings = w.0.len();
-    for s in &p.strings {
-        let b = s.as_bytes();
-        w.u16(b.len() as u16);
-        w.0.extend_from_slice(b);
-    }
-    for (i, v) in [
-        off_lines,
-        off_ayahs,
-        off_words,
-        off_paths,
-        off_decos,
-        off_ops,
-        p.ops.len(),
-        off_strings,
-    ]
-    .iter()
-    .enumerate()
-    {
-        w.patch_u32(off_pos + i * 4, *v as u32);
-    }
-    w.0
+    codec::encode(p)
 }
 
 // ───────────────────────────── decode ─────────────────────────────
 
-struct R<'a> {
-    b: &'a [u8],
-    pos: usize,
-}
-impl<'a> R<'a> {
-    fn need(&self, n: usize, what: &'static str) -> Result<(), Error> {
-        if self.pos + n > self.b.len() {
-            Err(Error::Truncated(what))
-        } else {
-            Ok(())
-        }
-    }
-    fn u8(&mut self) -> u8 {
-        let v = self.b[self.pos];
-        self.pos += 1;
-        v
-    }
-    fn u16(&mut self) -> u16 {
-        let v = u16::from_le_bytes([self.b[self.pos], self.b[self.pos + 1]]);
-        self.pos += 2;
-        v
-    }
-    fn u32(&mut self) -> u32 {
-        let v = u32::from_le_bytes(self.b[self.pos..self.pos + 4].try_into().unwrap());
-        self.pos += 4;
-        v
-    }
-    fn i32(&mut self) -> i32 {
-        self.u32() as i32
-    }
-    fn f32(&mut self) -> f32 {
-        f32::from_bits(self.u32())
-    }
-    fn bbox(&mut self) -> IBox {
-        IBox { x0: self.i32(), y0: self.i32(), x1: self.i32(), y1: self.i32() }
-    }
-}
-
 pub fn decode(bytes: &[u8]) -> Result<PageData, Error> {
-    if bytes.len() < 4 || &bytes[0..4] != MAGIC {
+    if bytes.len() < 6 || &bytes[0..4] != MAGIC {
         return Err(Error::BadMagic);
     }
-    let mut r = R { b: bytes, pos: 0 };
-    r.need(HEADER_LEN, "header")?;
-    r.pos = 4;
-    let version = r.u16();
-    if version != VERSION {
-        return Err(Error::BadVersion(version));
+    match u16::from_le_bytes([bytes[4], bytes[5]]) {
+        VERSION => codec::decode(bytes),
+        v => Err(Error::BadVersion(v)),
     }
-    let quant = r.u16();
-    let page = r.u16();
-    let flags = r.u16();
-    let width = r.f32();
-    let height = r.f32();
-    let n_lines = r.u16() as usize;
-    let n_ayahs = r.u16() as usize;
-    let n_words = r.u16() as usize;
-    let n_decos = r.u16() as usize;
-    let n_paths = r.u32() as usize;
-    let off_lines = r.u32() as usize;
-    let off_ayahs = r.u32() as usize;
-    let off_words = r.u32() as usize;
-    let off_paths = r.u32() as usize;
-    let off_decos = r.u32() as usize;
-    let off_ops = r.u32() as usize;
-    let len_ops = r.u32() as usize;
-    let off_strings = r.u32() as usize;
-    let n_strings = r.u16() as usize;
-    let n_glyphs = r.u16() as usize;
-    let n_insts = r.u16() as usize;
-    r.u16();
-    let off_glyphs = r.u32() as usize;
-    let off_insts = r.u32() as usize;
-
-    r.pos = off_lines;
-    r.need(n_lines * LINE_LEN, "lines")?;
-    let mut lines = Vec::with_capacity(n_lines);
-    for _ in 0..n_lines {
-        let line_no = r.u8();
-        r.u8();
-        let first_word = r.u16();
-        let n_words = r.u16();
-        r.u16();
-        let bbox = r.bbox();
-        lines.push(LineRec { line_no, first_word, n_words, bbox });
-    }
-    r.pos = off_ayahs;
-    r.need(n_ayahs * AYAH_LEN, "ayahs")?;
-    let mut ayahs = Vec::with_capacity(n_ayahs);
-    for _ in 0..n_ayahs {
-        let sura = r.u16();
-        let ayah = r.u16();
-        let part = r.u8();
-        let parts = r.u8();
-        let first_word = r.u16();
-        let n_words = r.u16();
-        let marker_deco = r.u16();
-        let flags = r.u8();
-        r.u8();
-        let rub = r.u16();
-        let bbox = r.bbox();
-        ayahs.push(AyahRec { sura, ayah, part, parts, flags, first_word, n_words, marker_deco, rub, bbox });
-    }
-    r.pos = off_words;
-    r.need(n_words * WORD_LEN, "words")?;
-    let mut words = Vec::with_capacity(n_words);
-    for _ in 0..n_words {
-        let sura = r.u16();
-        let ayah = r.u16();
-        let word = r.u16();
-        let line_idx = r.u16();
-        let ayah_idx = r.u16();
-        let text = r.u16();
-        let imlaei = r.u16();
-        let qpc = r.u16();
-        let rasm = r.u16();
-        let search = r.u16();
-        let first_path = r.u32();
-        let n_paths = r.u16();
-        r.u16();
-        let bbox = r.bbox();
-        words.push(WordRec { sura, ayah, word, line_idx, ayah_idx, text, imlaei, qpc, rasm, search, first_path, n_paths, bbox });
-    }
-    r.pos = off_paths;
-    r.need(n_paths * PATH_LEN, "paths")?;
-    let mut paths = Vec::with_capacity(n_paths);
-    for _ in 0..n_paths {
-        let kind = PathKind::from_u8(r.u8());
-        let mark = Mark::from_u8(r.u8());
-        let family = Family::from_u8(r.u8());
-        let flags = r.u8();
-        let ox = r.i32();
-        let oy = r.i32();
-        let op_off = r.u32();
-        let op_len = r.u32();
-        let bbox = r.bbox();
-        if flags & PF_GLYPH == 0 && (op_off as usize) + (op_len as usize) > len_ops {
-            return Err(Error::Corrupt("path op range"));
-        }
-        paths.push(PathRec { kind, mark, family, flags, ox, oy, op_off, op_len, bbox });
-    }
-    r.pos = off_decos;
-    r.need(n_decos * DECO_LEN, "decos")?;
-    let mut decos = Vec::with_capacity(n_decos);
-    for _ in 0..n_decos {
-        let kind = DecoKind::from_u8(r.u8());
-        r.u8();
-        let sura = r.u16();
-        let ayah = r.u16();
-        let text = r.u16();
-        let first_path = r.u32();
-        let n_paths = r.u16();
-        let line = r.u16();
-        let bbox = r.bbox();
-        decos.push(DecoRec { kind, sura, ayah, text, first_path, n_paths, line, bbox });
-    }
-    r.pos = off_glyphs;
-    r.need(n_glyphs * GLYPH_LEN, "glyphs")?;
-    let mut glyphs = Vec::with_capacity(n_glyphs);
-    for _ in 0..n_glyphs {
-        let op_off = r.u32();
-        let op_len = r.u32();
-        let bbox = r.bbox();
-        r.u32();
-        if (op_off as usize) + (op_len as usize) > len_ops {
-            return Err(Error::Corrupt("glyph op range"));
-        }
-        glyphs.push(GlyphRec { op_off, op_len, bbox });
-    }
-    r.pos = off_insts;
-    r.need(n_insts * INST_LEN, "insts")?;
-    let mut insts = Vec::with_capacity(n_insts);
-    for _ in 0..n_insts {
-        let glyph = r.u16();
-        r.u16();
-        let (a, b, c, d, e, f) = (r.f32(), r.f32(), r.f32(), r.f32(), r.f32(), r.f32());
-        if glyph as usize >= glyphs.len() {
-            return Err(Error::Corrupt("inst glyph ref"));
-        }
-        insts.push(InstRec { glyph, a, b, c, d, e, f });
-    }
-    r.pos = off_ops;
-    r.need(len_ops, "ops")?;
-    let ops = bytes[off_ops..off_ops + len_ops].to_vec();
-    r.pos = off_strings;
-    let mut strings = Vec::with_capacity(n_strings);
-    for _ in 0..n_strings {
-        r.need(2, "string len")?;
-        let n = r.u16() as usize;
-        r.need(n, "string")?;
-        let s = std::str::from_utf8(&bytes[r.pos..r.pos + n]).map_err(|_| Error::Corrupt("utf8"))?;
-        strings.push(s.to_owned());
-        r.pos += n;
-    }
-    for w in &words {
-        if (w.first_path as usize) + (w.n_paths as usize) > paths.len() {
-            return Err(Error::Corrupt("word path range"));
-        }
-        for t in [w.text, w.imlaei, w.qpc, w.rasm, w.search] {
-            if t != NONE_U16 && t as usize >= strings.len() {
-                return Err(Error::Corrupt("word text ref"));
-            }
-        }
-        if w.line_idx as usize >= lines.len() || w.ayah_idx as usize >= ayahs.len() {
-            return Err(Error::Corrupt("word line/ayah ref"));
-        }
-    }
-    for d in &decos {
-        if (d.first_path as usize) + (d.n_paths as usize) > paths.len() {
-            return Err(Error::Corrupt("deco path range"));
-        }
-    }
-    for p in &paths {
-        if p.flags & PF_GLYPH != 0 && p.op_off as usize >= insts.len() {
-            return Err(Error::Corrupt("path inst ref"));
-        }
-    }
-    Ok(PageData {
-        header: Header { version, quant, page, flags, width, height },
-        lines,
-        ayahs,
-        words,
-        paths,
-        decos,
-        glyphs,
-        insts,
-        ops,
-        strings,
-    })
 }
 
 impl PageData {
@@ -1027,6 +650,34 @@ impl PageData {
     }
 }
 
+impl PageData {
+    /// Put the opcode stream in the order the codec writes it: every inline path's run
+    /// in path order, then every glyph outline in glyph order. The converter appends a
+    /// glyph outline the moment it first sees one, so a freshly built page interleaves
+    /// them; the codec reconstructs the canonical order, and `decode(encode(p)) == p`
+    /// only holds for a page already in it.
+    pub fn canonicalize_ops(&mut self) {
+        let mut ops = Vec::with_capacity(self.ops.len());
+        for p in self.paths.iter_mut() {
+            if p.flags & PF_GLYPH != 0 {
+                continue;
+            }
+            let run = &self.ops[p.op_off as usize..(p.op_off + p.op_len) as usize];
+            let off = ops.len() as u32;
+            ops.extend_from_slice(run);
+            p.op_off = off;
+        }
+        for g in self.glyphs.iter_mut() {
+            let run = &self.ops[g.op_off as usize..(g.op_off + g.op_len) as usize];
+            let off = ops.len() as u32;
+            ops.extend_from_slice(run);
+            g.op_off = off;
+        }
+        self.ops = ops;
+    }
+}
+
+
 /// Format quantised commands as an SVG `d` string (exact decimals, trimmed).
 pub fn svg_path_d(cmds: &[Cmd], quant: u16) -> String {
     use std::fmt::Write;
@@ -1081,13 +732,13 @@ pub fn svg_path_d(cmds: &[Cmd], quant: u16) -> String {
     d
 }
 
-/// Mark taxonomy category (mark-taxonomy v2 of the exporter).
+/// Mark taxonomy category (`mark-taxonomy` v2 of the quran-svg pipeline).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Category {
     None = 0,
-    Haraka = 1,
-    Tanween = 2,
+    Harakah = 1,
+    Tanwin = 2,
     LetterDot = 3,
     Orthographic = 4,
     Dabt = 5,
@@ -1099,8 +750,8 @@ pub enum Category {
 impl Category {
     pub fn from_u8(v: u8) -> Self {
         match v {
-            1 => Self::Haraka,
-            2 => Self::Tanween,
+            1 => Self::Harakah,
+            2 => Self::Tanwin,
             3 => Self::LetterDot,
             4 => Self::Orthographic,
             5 => Self::Dabt,
@@ -1113,13 +764,13 @@ impl Category {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::None => "",
-            Self::Haraka => "haraka",
-            Self::Tanween => "tanween",
-            Self::LetterDot => "letter-dot",
+            Self::Harakah => "harakah",
+            Self::Tanwin => "tanwin",
+            Self::LetterDot => "letter_dot",
             Self::Orthographic => "orthographic",
             Self::Dabt => "dabt",
             Self::Waqf => "waqf",
-            Self::ReadingSign => "reading-sign",
+            Self::ReadingSign => "reading_sign",
             Self::Standalone => "standalone",
         }
     }
@@ -1129,14 +780,14 @@ impl Mark {
     pub fn category(self) -> Category {
         use Mark::*;
         match self {
-            Fatha | Kasra | Damma | Sukun | Shadda => Category::Haraka,
-            Fathatan | Kasratan | Dammatan => Category::Tanween,
+            Fathah | Kasrah | Dammah | Sukun | Shaddah => Category::Harakah,
+            TanwinAlFath | TanwinAlKasr | TanwinAlDamm => Category::Tanwin,
             Dot | TwoDots | ThreeDots => Category::LetterDot,
-            Hamza | Wasla | SmallAlef | Maddah | SmallWaw | SmallYa | SmallNoon => Category::Orthographic,
-            SifrMustadir | SifrMustatil | MeemIqlab => Category::Dabt,
-            WaqfJaiz | WaslAwla | WaqfAwla | WaqfLazim | Muanaqah => Category::Waqf,
-            Saktah | SeenReading | Imalah | Ishmam | Tashil => Category::ReadingSign,
-            SajdahSign | SajdahLine | Sajdah | Hizb => Category::Standalone,
+            Hamzah | HamzatAlWasl | OmittedAlif | Maddah | SmallWaw | SmallYaa | SmallNoon => Category::Orthographic,
+            RoundedZero | RectangularZero | SmallMeem => Category::Dabt,
+            WaqfJaizMustawiAlTarafayn | WaqfJaizWaslAwla | WaqfJaizWaqfAwla | WaqfLazim | WaqfAlMuanaqah => Category::Waqf,
+            Saktah | SeenAlQiraah | Imalah | Ishmam | Tashil => Category::ReadingSign,
+            SajdahMark | SajdahLine | Sajdah | Hizb => Category::Standalone,
             None | Unknown => Category::None,
         }
     }
@@ -1203,27 +854,30 @@ mod tests {
         let p = PageData {
             header: Header { version: VERSION, quant: 100, page: 7, flags: 0, width: 345.0, height: 550.0 },
             lines: vec![LineRec { line_no: 1, first_word: 0, n_words: 1, bbox: bb }],
-            ayahs: vec![AyahRec { sura: 2, ayah: 3, part: 1, parts: 1, flags: AF_RUB_START, first_word: 0, n_words: 1, marker_deco: 0, rub: 5, bbox: bb }],
-            words: vec![WordRec { sura: 2, ayah: 3, word: 1, line_idx: 0, ayah_idx: 0, text: 0, imlaei: NONE_U16, qpc: NONE_U16, rasm: NONE_U16, search: 0, first_path: 0, n_paths: 1, bbox: bb }],
+            ayahs: vec![AyahRec { surah: 2, ayah: 3, fragment: 1, fragments: 1, flags: AF_RUBU_AL_HIZB_START, first_word: 0, n_words: 1, ayah_mark_deco: 0, rubu_al_hizb: 5, bbox: bb }],
+            words: vec![WordRec { surah: 2, ayah: 3, word: 1, line_idx: 0, ayah_idx: 0, text: 0, rasm_imlai: NONE_U16, qpc: NONE_U16, rasm: NONE_U16, search: 0, first_path: 0, n_paths: 1, bbox: bb }],
             paths: vec![
                 PathRec { kind: PathKind::Body, mark: Mark::None, family: Family::None, flags: PF_EVENODD, ox: 500, oy: 600, op_off: 0, op_len: ops.len() as u32, bbox: bb },
-                PathRec { kind: PathKind::AyahOrnament, mark: Mark::None, family: Family::None, flags: 0, ox: 500, oy: 600, op_off: 0, op_len: ops.len() as u32, bbox: bb },
+                PathRec { kind: PathKind::AyahMarkOrnament, mark: Mark::None, family: Family::None, flags: 0, ox: 500, oy: 600, op_off: 0, op_len: ops.len() as u32, bbox: bb },
             ],
-            decos: vec![DecoRec { kind: DecoKind::AyahMarker, sura: 2, ayah: 3, text: NONE_U16, first_path: 1, n_paths: 1, line: 0, bbox: bb }],
+            decos: vec![DecoRec { kind: DecoKind::AyahMark, surah: 2, ayah: 3, text: NONE_U16, first_path: 1, n_paths: 1, line: 0, bbox: bb }],
             glyphs: vec![GlyphRec { op_off: 0, op_len: ops.len() as u32, bbox: bb }],
             insts: vec![InstRec { glyph: 0, a: 2.0, b: 0.0, c: 0.0, d: 2.0, e: 10.0, f: 20.0 }],
             ops,
             strings: vec!["ذَٰلِكَ".to_owned()],
         };
         let mut p = p;
-        p.paths.push(PathRec { kind: PathKind::AyahOrnament, mark: Mark::None, family: Family::None, flags: PF_GLYPH, ox: 0, oy: 0, op_off: 0, op_len: 0, bbox: bb });
+        p.paths.push(PathRec { kind: PathKind::AyahMarkOrnament, mark: Mark::None, family: Family::None, flags: PF_GLYPH, ox: 0, oy: 0, op_off: 0, op_len: 0, bbox: bb });
+        // `encode` expects converter-shaped input: one contiguous run per path.
+        p.canonicalize_ops();
         let bytes = encode(&p);
         let q = decode(&bytes).unwrap();
         assert_eq!(p, q);
+        assert_eq!(decode(b"QVP1\x09\x00xx").unwrap_err(), Error::BadVersion(9));
         // instance: shared ops decode at glyph origin (0,0) → page (10,20) → quantised 1000,2000
         assert_eq!(q.path_cmds(2).unwrap()[0], Cmd::MoveTo(1000, 2000));
         assert_eq!(q.path_cmds(0).unwrap(), cmds.to_vec());
-        assert_eq!(decode(&bytes[..bytes.len() - 3]).unwrap_err(), Error::Truncated("string"));
+        assert!(matches!(decode(&bytes[..bytes.len() - 3]), Err(Error::Truncated(_))));
         assert_eq!(decode(b"nope").unwrap_err(), Error::BadMagic);
     }
 }

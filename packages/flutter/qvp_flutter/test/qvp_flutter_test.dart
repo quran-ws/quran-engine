@@ -46,10 +46,10 @@ void main() {
     expect(engine.version, greaterThan(0));
     expect(engine.engineName, 'qvp');
     expect(engine.kindName(QvpKind.mark), 'mark');
-    expect(engine.markName(1), 'fatha');
-    expect(engine.markName(7), engine.markName(QvpMark.id('shadda')));
+    expect(engine.markName(1), 'fathah');
+    expect(engine.markName(7), engine.markName(QvpMark.id('shaddah')));
     expect(engine.familyName(QvpFamily.diacritic), isNotEmpty);
-    expect(engine.categoryName(QvpCategory.haraka), isNotEmpty);
+    expect(engine.categoryName(QvpCategory.harakah), isNotEmpty);
     expect(engine.strip('بِسْمِ'), 'بسم');
     expect(engine.normalize('ٱللَّهِ'), isNotEmpty);
     expect(engine.looseKey('الله'), isNotEmpty);
@@ -78,14 +78,14 @@ void main() {
     final w0 = page.words[0];
     expect(w0.text, isNotEmpty);
     expect(w0.nPaths, greaterThan(0));
-    expect(page.findWord(w0.sura, w0.ayah, w0.word), 0);
-    expect(page.wid(0), w0.wid);
+    expect(page.findWord(w0.surah, w0.ayah, w0.word), 0);
+    expect(page.wordKey(0), w0.wordKey);
     expect(page.naturalPitch, greaterThan(0));
     expect(page.surahs().map((s) => s.number), contains(2));
     expect(page.ayahKeys(), contains((2, 255)));
     expect(page.wordLabel(0), isNotEmpty);
     expect(page.ayahLabel(page.words[0].ayahIdx), isNotEmpty);
-    expect(page.markers(), isNotEmpty);
+    expect(page.ayahMarks(), isNotEmpty);
     expect(page.lineBands().length, 15);
     expect(page.hitBoxes().length, 147);
     expect(page.text('page'), contains(w0.text));
@@ -95,7 +95,7 @@ void main() {
     final m = page.search('الله');
     expect(m.length, 7);
     expect(m.first.text, isNotEmpty);
-    expect(m.first.wid, page.wid(m.first.word));
+    expect(m.first.wordKey, page.wordKey(m.first.word));
   });
 
   test("resolve('2:255') → 50 words; citation; ayahWordCount", () {
@@ -114,8 +114,8 @@ void main() {
     final n = page.attachWords(File(wordsPath).readAsStringSync());
     expect(n, greaterThanOrEqualTo(0));
     expect(page.attachWords('not json'), -1);
-    expect(page.hasForm('imlaei'), isTrue);
-    expect(page.wordForm(0, 'imlaei'), isNotEmpty);
+    expect(page.hasForm('rasmImlai'), isTrue);
+    expect(page.wordForm(0, 'rasmImlai'), isNotEmpty);
     expect(page.wordForm(0, 'search'), isNotEmpty);
   });
 
@@ -126,7 +126,7 @@ void main() {
     expect(h, isNotNull);
     expect(h!.word, 0);
     expect(h.distance, 0);
-    expect(h.wid, w.wid);
+    expect(h.wordKey, w.wordKey);
     expect(h.line, w.lineIdx);
     expect(page.hitTest(cx, cy)?.word, 0);
     // the bbox centre can fall between glyphs: probe the bbox for a point inside the outline
@@ -183,7 +183,7 @@ void main() {
     expect(page.unstyle(h), greaterThan(0));
     expect(page.styled(), isEmpty);
     // theme + hide + target styling under handles
-    final th = page.theme(const QvpTheme(diacritics: '#1a73e8', dots: '#c62828', marks: {'shadda': '#0a7d32'}));
+    final th = page.theme(const QvpTheme(diacritics: '#1a73e8', dots: '#c62828', marks: {'shaddah': '#0a7d32'}));
     expect(page.styled(), isNotEmpty);
     final hh = page.hide(Sel.kind(QvpKind.mark));
     expect(page.styled().where((p) => (p.color & 0xff) == 0), isNotEmpty);
@@ -246,7 +246,7 @@ void main() {
   test('selection', () {
     page.select(0, 3);
     expect(page.selection(), [0, 1, 2, 3]);
-    expect(page.selectionText('uthmani', true), contains(':'));
+    expect(page.selectionText('rasmUthmani', true), contains(':'));
     page.clearSelection();
     expect(page.selection(), isEmpty);
   });

@@ -75,7 +75,7 @@ pub struct QvpGeometry {
 
 #[repr(C)]
 pub struct QvpWordInfo {
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub word: u16,
     pub line_no: u16,
@@ -92,16 +92,16 @@ pub struct QvpWordInfo {
 
 #[repr(C)]
 pub struct QvpAyahInfo {
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
-    pub part: u8,
-    pub parts: u8,
+    pub fragment: u8,
+    pub fragments: u8,
     pub flags: u8,
     pub _pad: u8,
-    pub rub: u16,
+    pub rubu_al_hizb: u16,
     pub first_word: u32,
     pub n_words: u32,
-    pub marker_deco: u32,
+    pub ayah_mark_deco: u32,
     pub x0: f32,
     pub y0: f32,
     pub x1: f32,
@@ -128,7 +128,7 @@ pub struct QvpLineInfo {
 pub struct QvpDecoInfo {
     pub kind: u8,
     pub _pad: u8,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub _pad2: u16,
     pub line: u32,
@@ -278,7 +278,7 @@ pub struct QvpTheme {
     pub dots: u32,
     pub waqf: u32,
     pub sifr: u32,
-    pub marker: u32,
+    pub ayah_mark: u32,
     pub numeral: u32,
     pub headers: u32,
     pub transition_ms: u32,
@@ -307,16 +307,16 @@ pub struct QvpDivision {
     pub kind: u8,
     pub line: u8,
     pub n: u16,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub ayah_idx: u32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct QvpMarker {
+pub struct QvpAyahMark {
     pub deco: u32,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub line: u32,
     pub cx: f32,
@@ -330,13 +330,13 @@ pub struct QvpMarker {
 #[derive(Clone, Copy)]
 pub struct QvpRosette {
     pub deco: u32,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub juz: u16,
     pub hizb: u16,
     pub nisf: u16,
-    pub rub: u16,
-    pub rub_in_hizb: u16,
+    pub rubu_al_hizb: u16,
+    pub rubu_al_hizb_in_hizb: u16,
     pub _pad: u16,
 }
 
@@ -344,7 +344,7 @@ pub struct QvpRosette {
 #[derive(Clone, Copy)]
 pub struct QvpSajdah {
     pub deco: u32,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub sign_path: u32,
 }
@@ -364,7 +364,7 @@ pub struct QvpCropBox {
     pub x1: f32,
     pub y1: f32,
     pub n_words: u32,
-    pub marker_deco: u32,
+    pub ayah_mark_deco: u32,
 }
 
 #[repr(C)]
@@ -381,9 +381,9 @@ pub struct QvpAtlasSurah {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct QvpAtlasRub {
-    pub rub: u16,
-    pub sura: u16,
+pub struct QvpAtlasRubuAlHizb {
+    pub rubu_al_hizb: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub page: u16,
 }
@@ -500,7 +500,7 @@ pub unsafe extern "C" fn qvp_word_info(page: *const Page, idx: u32, out: *mut Qv
     let q = p.quant();
     let t = p.word_text(idx);
     *out = QvpWordInfo {
-        sura: w.sura,
+        surah: w.surah,
         ayah: w.ayah,
         word: w.word,
         line_no: d.lines[w.line_idx as usize].line_no as u16,
@@ -516,7 +516,7 @@ pub unsafe extern "C" fn qvp_word_info(page: *const Page, idx: u32, out: *mut Qv
     };
     1
 }
-/// form: 0 uthmani, 1 imlaei, 2 qpc, 3 rasm, 4 search
+/// form: 0 rasm_uthmani, 1 rasm_imlai, 2 qpc, 3 rasm, 4 search
 #[no_mangle]
 pub unsafe extern "C" fn qvp_word_form(page: *const Page, idx: u32, form: u8, out: *mut QvpStr) -> i32 {
     let p = &*page;
@@ -532,7 +532,7 @@ pub unsafe extern "C" fn qvp_ayah_info(page: *const Page, idx: u32, out: *mut Qv
     let p = &*page;
     let Some(a) = p.data().ayahs.get(idx as usize) else { return 0 };
     let q = p.quant();
-    *out = QvpAyahInfo { sura: a.sura, ayah: a.ayah, part: a.part, parts: a.parts, flags: a.flags, _pad: 0, rub: a.rub, first_word: a.first_word as u32, n_words: a.n_words as u32, marker_deco: if a.marker_deco == u16::MAX { NONE } else { a.marker_deco as u32 }, x0: a.bbox.x0 as f32 / q, y0: a.bbox.y0 as f32 / q, x1: a.bbox.x1 as f32 / q, y1: a.bbox.y1 as f32 / q };
+    *out = QvpAyahInfo { surah: a.surah, ayah: a.ayah, fragment: a.fragment, fragments: a.fragments, flags: a.flags, _pad: 0, rubu_al_hizb: a.rubu_al_hizb, first_word: a.first_word as u32, n_words: a.n_words as u32, ayah_mark_deco: if a.ayah_mark_deco == u16::MAX { NONE } else { a.ayah_mark_deco as u32 }, x0: a.bbox.x0 as f32 / q, y0: a.bbox.y0 as f32 / q, x1: a.bbox.x1 as f32 / q, y1: a.bbox.y1 as f32 / q };
     1
 }
 #[no_mangle]
@@ -551,12 +551,12 @@ pub unsafe extern "C" fn qvp_deco_info(page: *const Page, idx: u32, out: *mut Qv
     let Some(d) = p.data().decos.get(idx as usize) else { return 0 };
     let q = p.quant();
     let t = p.deco_text(idx);
-    *out = QvpDecoInfo { kind: d.kind as u8, _pad: 0, sura: d.sura, ayah: d.ayah, _pad2: 0, line: p.geometry().table[d.first_path as usize].line, x0: d.bbox.x0 as f32 / q, y0: d.bbox.y0 as f32 / q, x1: d.bbox.x1 as f32 / q, y1: d.bbox.y1 as f32 / q, text: QvpStr { ptr: t.as_ptr(), len: t.len() as u32 }, first_path: d.first_path, n_paths: d.n_paths as u32 };
+    *out = QvpDecoInfo { kind: d.kind as u8, _pad: 0, surah: d.surah, ayah: d.ayah, _pad2: 0, line: p.geometry().table[d.first_path as usize].line, x0: d.bbox.x0 as f32 / q, y0: d.bbox.y0 as f32 / q, x1: d.bbox.x1 as f32 / q, y1: d.bbox.y1 as f32 / q, text: QvpStr { ptr: t.as_ptr(), len: t.len() as u32 }, first_path: d.first_path, n_paths: d.n_paths as u32 };
     1
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_find_word(page: *const Page, sura: u16, ayah: u16, word: u16) -> i32 {
-    (*page).find_word(sura, ayah, word).map(|i| i as i32).unwrap_or(-1)
+pub unsafe extern "C" fn qvp_find_word(page: *const Page, surah: u16, ayah: u16, word: u16) -> i32 {
+    (*page).find_word(surah, ayah, word).map(|i| i as i32).unwrap_or(-1)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_resolve(page: *const Page, t: *const QvpTarget, out: *mut u32, cap: u32) -> u32 {
@@ -603,33 +603,33 @@ pub unsafe extern "C" fn qvp_surah_at(page: *const Page, i: u32, out: *mut QvpSu
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_divisions(page: *const Page, out: *mut QvpDivision, cap: u32) -> u32 {
-    let v: Vec<QvpDivision> = (*page).divisions().iter().map(|d| QvpDivision { kind: d.kind, line: d.line, n: d.n, sura: d.sura, ayah: d.ayah, ayah_idx: d.ayah_idx }).collect();
+    let v: Vec<QvpDivision> = (*page).divisions().iter().map(|d| QvpDivision { kind: d.kind, line: d.line, n: d.n, surah: d.surah, ayah: d.ayah, ayah_idx: d.ayah_idx }).collect();
     fill(out, cap, &v)
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_markers(page: *const Page, out: *mut QvpMarker, cap: u32) -> u32 {
-    let v: Vec<QvpMarker> = (*page).markers().iter().map(|m| QvpMarker { deco: m.deco, sura: m.sura, ayah: m.ayah, line: m.line, cx: m.cx, cy: m.cy, r: m.r, ornament_path: m.ornament_path, numeral_path: m.numeral_path }).collect();
+pub unsafe extern "C" fn qvp_ayah_marks(page: *const Page, out: *mut QvpAyahMark, cap: u32) -> u32 {
+    let v: Vec<QvpAyahMark> = (*page).ayah_marks().iter().map(|m| QvpAyahMark { deco: m.deco, surah: m.surah, ayah: m.ayah, line: m.line, cx: m.cx, cy: m.cy, r: m.r, ornament_path: m.ornament_path, numeral_path: m.numeral_path }).collect();
     fill(out, cap, &v)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_rosettes(page: *const Page, out: *mut QvpRosette, cap: u32) -> u32 {
-    let v: Vec<QvpRosette> = (*page).rosettes().iter().map(|r| QvpRosette { deco: r.deco, sura: r.sura, ayah: r.ayah, juz: r.juz, hizb: r.hizb, nisf: r.nisf, rub: r.rub, rub_in_hizb: r.rub_in_hizb, _pad: 0 }).collect();
+    let v: Vec<QvpRosette> = (*page).rosettes().iter().map(|r| QvpRosette { deco: r.deco, surah: r.surah, ayah: r.ayah, juz: r.juz, hizb: r.hizb, nisf: r.nisf, rubu_al_hizb: r.rubu_al_hizb, rubu_al_hizb_in_hizb: r.rubu_al_hizb_in_hizb, _pad: 0 }).collect();
     fill(out, cap, &v)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_sajdahs(page: *const Page, out: *mut QvpSajdah, cap: u32) -> u32 {
-    let v: Vec<QvpSajdah> = (*page).sajdahs().iter().map(|&(d, s, a, p)| QvpSajdah { deco: d, sura: s, ayah: a, sign_path: p }).collect();
+    let v: Vec<QvpSajdah> = (*page).sajdahs().iter().map(|&(d, s, a, p)| QvpSajdah { deco: d, surah: s, ayah: a, sign_path: p }).collect();
     fill(out, cap, &v)
 }
-/// pairs of (sura, ayah) as u32 = sura<<16 | ayah
+/// pairs of (surah, ayah) as u32 = surah<<16 | ayah
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ayah_keys(page: *const Page, out: *mut u32, cap: u32) -> u32 {
     let v: Vec<u32> = (*page).ayah_keys().iter().map(|(s, a)| (*s as u32) << 16 | *a as u32).collect();
     fill(out, cap, &v)
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_ayah_word_count(page: *const Page, sura: u16, ayah: u16, complete: *mut u32) -> u32 {
-    let (n, c) = (*page).ayah_word_count(sura, ayah);
+pub unsafe extern "C" fn qvp_ayah_word_count(page: *const Page, surah: u16, ayah: u16, complete: *mut u32) -> u32 {
+    let (n, c) = (*page).ayah_word_count(surah, ayah);
     if !complete.is_null() {
         *complete = c as u32;
     }
@@ -638,8 +638,8 @@ pub unsafe extern "C" fn qvp_ayah_word_count(page: *const Page, sura: u16, ayah:
 /// Returns the number of words written, or -1 when the segment count does not match
 /// (follow the ayah whole instead of drifting).
 #[no_mangle]
-pub unsafe extern "C" fn qvp_recite_map(page: *const Page, sura: u16, ayah: u16, n_segments: u32, out: *mut u32, cap: u32) -> i32 {
-    match (*page).recite_map(sura, ayah, n_segments) {
+pub unsafe extern "C" fn qvp_recite_map(page: *const Page, surah: u16, ayah: u16, n_segments: u32, out: *mut u32, cap: u32) -> i32 {
+    match (*page).recite_map(surah, ayah, n_segments) {
         Some(v) => fill(out, cap, &v) as i32,
         None => -1,
     }
@@ -836,7 +836,7 @@ pub unsafe extern "C" fn qvp_theme(page: *mut Page, t: *const QvpTheme) -> u32 {
     let t = &*t;
     let c = |v: u32| if v & 0xff == 0 { None } else { Some(v) };
     let marks = if t.marks.is_null() { vec![] } else { std::slice::from_raw_parts(t.marks, (t.n_marks * 2) as usize).chunks(2).map(|p| (Mark::from_u8(p[0] as u8), p[1])).collect() };
-    (*page).theme(&Theme { ink: c(t.ink), diacritics: c(t.diacritics), dots: c(t.dots), waqf: c(t.waqf), sifr: c(t.sifr), marker: c(t.marker), numeral: c(t.numeral), headers: c(t.headers), marks, transition_ms: t.transition_ms })
+    (*page).theme(&Theme { ink: c(t.ink), diacritics: c(t.diacritics), dots: c(t.dots), waqf: c(t.waqf), sifr: c(t.sifr), ayah_mark: c(t.ayah_mark), numeral: c(t.numeral), headers: c(t.headers), marks, transition_ms: t.transition_ms })
 }
 /// Handles currently holding rules.
 #[no_mangle]
@@ -997,8 +997,8 @@ pub unsafe extern "C" fn qvp_mask_boxes(page: *const Page, out: *mut QvpBox, cap
     fill(out, cap, &v)
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_reveal_start(page: *mut Page, lit: u32, by_ayah: u32, grey: u32, ink: u32, markers: u32, transition_ms: u32) -> u32 {
-    (*page).reveal_start(lit, by_ayah != 0, grey, ink, markers != 0, transition_ms)
+pub unsafe extern "C" fn qvp_reveal_start(page: *mut Page, lit: u32, by_ayah: u32, grey: u32, ink: u32, ayah_marks: u32, transition_ms: u32) -> u32 {
+    (*page).reveal_start(lit, by_ayah != 0, grey, ink, ayah_marks != 0, transition_ms)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_goto(page: *mut Page, at: i64) -> u32 {
@@ -1024,16 +1024,16 @@ pub unsafe extern "C" fn qvp_reveal_stop(page: *mut Page) {
 // ───────────── crop ─────────────
 
 #[no_mangle]
-pub unsafe extern "C" fn qvp_crop_box(page: *const Page, t: *const QvpTarget, pad: f32, keep_markers: u32, out: *mut QvpCropBox) -> i32 {
-    match (*page).crop_box(&target(t), pad, keep_markers != 0) {
-        Some(c) => { *out = QvpCropBox { x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, n_words: c.n_words, marker_deco: c.marker_deco }; 1 }
+pub unsafe extern "C" fn qvp_crop_box(page: *const Page, t: *const QvpTarget, pad: f32, keep_ayah_marks: u32, out: *mut QvpCropBox) -> i32 {
+    match (*page).crop_box(&target(t), pad, keep_ayah_marks != 0) {
+        Some(c) => { *out = QvpCropBox { x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, n_words: c.n_words, ayah_mark_deco: c.ayah_mark_deco }; 1 }
         None => 0,
     }
 }
 /// Standalone SVG with the current colours. background alpha 0 = transparent.
 #[no_mangle]
-pub unsafe extern "C" fn qvp_crop_svg(page: *mut Page, t: *const QvpTarget, pad: f32, keep_markers: u32, background: u32, out: *mut QvpStr) -> i32 {
-    match (*page).crop_svg(&target(t), pad, keep_markers != 0, if background & 0xff == 0 { None } else { Some(background) }) {
+pub unsafe extern "C" fn qvp_crop_svg(page: *mut Page, t: *const QvpTarget, pad: f32, keep_ayah_marks: u32, background: u32, out: *mut QvpStr) -> i32 {
+    match (*page).crop_svg(&target(t), pad, keep_ayah_marks != 0, if background & 0xff == 0 { None } else { Some(background) }) {
         Some(s) => { out_str(out, &s); 1 }
         None => 0,
     }
@@ -1055,10 +1055,10 @@ pub unsafe extern "C" fn qvp_atlas_free(a: *mut Atlas) {
     }
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_atlas_page_of(a: *const Atlas, sura: u16, ayah: u16) -> i32 {
-    (*a).page_of(sura, ayah).map(|p| p as i32).unwrap_or(-1)
+pub unsafe extern "C" fn qvp_atlas_page_of(a: *const Atlas, surah: u16, ayah: u16) -> i32 {
+    (*a).page_of(surah, ayah).map(|p| p as i32).unwrap_or(-1)
 }
-/// out: first_sura, first_ayah, last_sura, last_ayah
+/// out: first_surah, first_ayah, last_surah, last_ayah
 #[no_mangle]
 pub unsafe extern "C" fn qvp_atlas_page_range(a: *const Atlas, page: u16, out: *mut u16) -> i32 {
     match (*a).page_range(page) {
@@ -1100,22 +1100,22 @@ pub unsafe extern "C" fn qvp_atlas_surah_at(a: *const Atlas, i: u32, out: *mut Q
         None => 0,
     }
 }
-fn rub_out(r: &qvp_core::qvp_format::atlas::AtlasRub) -> QvpAtlasRub {
-    QvpAtlasRub { rub: r.rub, sura: r.sura, ayah: r.ayah, page: r.page }
+fn rubu_al_hizb_out(r: &qvp_core::qvp_format::atlas::AtlasRubuAlHizb) -> QvpAtlasRubuAlHizb {
+    QvpAtlasRubuAlHizb { rubu_al_hizb: r.rubu_al_hizb, surah: r.surah, ayah: r.ayah, page: r.page }
 }
-/// kind: 0 juz, 1 hizb, 2 nisf, 3 rub
+/// kind: 0 juz, 1 hizb, 2 nisf, 3 rubu_al_hizb
 #[no_mangle]
-pub unsafe extern "C" fn qvp_atlas_division(a: *const Atlas, kind: u8, n: u16, out: *mut QvpAtlasRub) -> i32 {
-    let r = match kind { 0 => (*a).juz(n), 1 => (*a).hizb(n), 2 => (*a).nisf(n), _ => (*a).rub(n) };
+pub unsafe extern "C" fn qvp_atlas_division(a: *const Atlas, kind: u8, n: u16, out: *mut QvpAtlasRubuAlHizb) -> i32 {
+    let r = match kind { 0 => (*a).juz(n), 1 => (*a).hizb(n), 2 => (*a).nisf(n), _ => (*a).rubu_al_hizb(n) };
     match r {
-        Some(r) => { *out = rub_out(r); 1 }
+        Some(r) => { *out = rubu_al_hizb_out(r); 1 }
         None => 0,
     }
 }
-/// kind: 0 juz, 1 hizb, 2 nisf, 3 rub → division number containing the ayah, or -1
+/// kind: 0 juz, 1 hizb, 2 nisf, 3 rubu_al_hizb → division number containing the ayah, or -1
 #[no_mangle]
-pub unsafe extern "C" fn qvp_atlas_division_at(a: *const Atlas, kind: u8, sura: u16, ayah: u16) -> i32 {
-    let r = match kind { 0 => (*a).juz_at(sura, ayah), 1 => (*a).hizb_at(sura, ayah), 2 => (*a).nisf_at(sura, ayah), _ => (*a).rub_at(sura, ayah).map(|r| r.rub) };
+pub unsafe extern "C" fn qvp_atlas_division_at(a: *const Atlas, kind: u8, surah: u16, ayah: u16) -> i32 {
+    let r = match kind { 0 => (*a).juz_at(surah, ayah), 1 => (*a).hizb_at(surah, ayah), 2 => (*a).nisf_at(surah, ayah), _ => (*a).rubu_al_hizb_at(surah, ayah).map(|r| r.rubu_al_hizb) };
     r.map(|x| x as i32).unwrap_or(-1)
 }
 /// out: first_page, last_page

@@ -8,7 +8,7 @@ fn main() {
     let t = Instant::now();
     let mut page = Page::load(&bytes).expect("load");
     let load = t.elapsed();
-    let (first_sura, first_ayah) = (page.data().ayahs[0].sura, page.data().ayahs[0].ayah);
+    let (first_surah, first_ayah) = (page.data().ayahs[0].surah, page.data().ayahs[0].ayah);
     let d = page.data();
     println!("{path}: {} bytes, {} words, {} paths, {} pts; load {:?}", bytes.len(), d.words.len(), d.paths.len(), page.geometry().pts.len() / 2, load);
 
@@ -39,7 +39,7 @@ fn main() {
     println!("paint (no styles): {:?} per full display list", t.elapsed() / 100);
 
     page.style(Selector::Family(qvp_format::Family::Diacritic), Paint::new(0x1a73e8ff));
-    page.style(Selector::Ayah(first_sura, first_ayah), Paint::new(0x0a7d32ff));
+    page.style(Selector::Ayah(first_surah, first_ayah), Paint::new(0x0a7d32ff));
     let t = Instant::now();
     for _ in 0..100 {
         let _ = page.paint();
@@ -61,15 +61,15 @@ fn main() {
         let _ = page.hit_test_ex(100.0, 300.0, &HitOptions::default());
     }
     println!("gap-aware hit-test: {:?}", t.elapsed() / 100);
-    let sura = page.data().words[0].sura;
+    let surah = page.data().words[0].surah;
     let ayah = page.data().words[0].ayah;
     let t = Instant::now();
-    let h = page.highlight(&Target::Ayah(sura, ayah), HighlightStyle { mode: HighlightMode::Both, transition_ms: 200, ..Default::default() });
+    let h = page.highlight(&Target::Ayah(surah, ayah), HighlightStyle { mode: HighlightMode::Both, transition_ms: 200, ..Default::default() });
     page.tick(100.0);
     let b = page.highlight_boxes_view();
-    println!("highlight ayah {sura}:{ayah}: {} band boxes, tick+boxes {:?}", b.len(), t.elapsed());
+    println!("highlight ayah {surah}:{ayah}: {} band boxes, tick+boxes {:?}", b.len(), t.elapsed());
     page.unhighlight(h);
     println!("surahs: {:?}", page.surahs().iter().map(|s| (s.number, s.latin.clone(), s.has_banner)).collect::<Vec<_>>());
-    println!("divisions: {:?}", page.divisions().iter().map(|d| (d.kind, d.n, d.sura, d.ayah)).collect::<Vec<_>>());
-    println!("markers: {}", page.markers().len());
+    println!("divisions: {:?}", page.divisions().iter().map(|d| (d.kind, d.n, d.surah, d.ayah)).collect::<Vec<_>>());
+    println!("ayah_marks: {}", page.ayah_marks().len());
 }

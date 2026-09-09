@@ -36,7 +36,7 @@ pub fn to_svg(p: &PageData) -> Result<String, Error> {
     .unwrap();
     s.push_str("<g class=\"decorations\">");
     for d in &p.decos {
-        write!(s, "<g class=\"{}\" data-aid=\"{}:{}\">", d.kind.as_str(), d.sura, d.ayah).unwrap();
+        write!(s, "<g class=\"{}\" data-ayah-key=\"{}:{}\">", d.kind.as_str(), d.surah, d.ayah).unwrap();
         for i in d.first_path..d.first_path + d.n_paths as u32 {
             write_path(p, i as usize, &mut s)?;
         }
@@ -55,10 +55,10 @@ pub fn to_svg(p: &PageData) -> Result<String, Error> {
                 }
                 cur_ayah = w.ayah_idx;
                 let a = &p.ayahs[cur_ayah as usize];
-                write!(s, "<g class=\"ayah\" data-aid=\"{}:{}\" data-part=\"{}\" data-ayah-parts=\"{}\">", a.sura, a.ayah, a.part, a.parts).unwrap();
+                write!(s, "<g class=\"ayah-fragment\" data-ayah-key=\"{}:{}\" data-fragment=\"{}\" data-ayah-fragments=\"{}\">", a.surah, a.ayah, a.fragment, a.fragments).unwrap();
             }
             let text = if w.text == NONE_U16 { "" } else { &p.strings[w.text as usize] };
-            write!(s, "<g class=\"word\" data-wid=\"{}:{}:{}\" data-uthmani=\"{}\">", w.sura, w.ayah, w.word, text).unwrap();
+            write!(s, "<g class=\"word\" data-word-key=\"{}:{}:{}\" data-rasm-uthmani=\"{}\">", w.surah, w.ayah, w.word, text).unwrap();
             for i in w.first_path..w.first_path + w.n_paths as u32 {
                 write_path(p, i as usize, &mut s)?;
             }

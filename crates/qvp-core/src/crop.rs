@@ -10,14 +10,14 @@ pub struct CropBox {
     pub x1: f32,
     pub y1: f32,
     pub n_words: u32,
-    /// marker deco kept (whole ayah in the crop), or NONE
-    pub marker_deco: u32,
+    /// ayah_mark deco kept (whole ayah in the crop), or NONE
+    pub ayah_mark_deco: u32,
 }
 
 impl Page {
     /// Box around a target (page units), `pad` all round. A medallion is kept only when
     /// the whole ayah it closes is inside the target.
-    pub fn crop_box(&self, target: &Target, pad: f32, keep_markers: bool) -> Option<CropBox> {
+    pub fn crop_box(&self, target: &Target, pad: f32, keep_ayah_marks: bool) -> Option<CropBox> {
         let words = self.resolve(target);
         if words.is_empty() {
             return None;
@@ -28,25 +28,25 @@ impl Page {
         for &wi in &words {
             bb.union(&d.words[wi as usize].bbox);
         }
-        let mut marker = NONE;
-        if keep_markers {
-            let (s, a) = { let w = &d.words[*words.last().unwrap() as usize]; (w.sura, w.ayah) };
+        let mut ayah_mark = NONE;
+        if keep_ayah_marks {
+            let (s, a) = { let w = &d.words[*words.last().unwrap() as usize]; (w.surah, w.ayah) };
             let all: Vec<u32> = self.resolve(&Target::Ayah(s, a));
             let (_, complete) = self.ayah_word_count(s, a);
             if complete && all.iter().all(|w| words.contains(w)) {
                 if let Some(m) = self.marker_of(s, a) {
-                    marker = m.deco;
+                    ayah_mark = m.deco;
                     bb.union(&d.decos[m.deco as usize].bbox);
                 }
             }
         }
-        Some(CropBox { x0: bb.x0 as f32 / q - pad, y0: bb.y0 as f32 / q - pad, x1: bb.x1 as f32 / q + pad, y1: bb.y1 as f32 / q + pad, n_words: words.len() as u32, marker_deco: marker })
+        Some(CropBox { x0: bb.x0 as f32 / q - pad, y0: bb.y0 as f32 / q - pad, x1: bb.x1 as f32 / q + pad, y1: bb.y1 as f32 / q + pad, n_words: words.len() as u32, ayah_mark_deco: ayah_mark })
     }
 
     /// Standalone SVG of a target with the current colours (mask/reveal/rules applied).
     /// `background` None = transparent.
-    pub fn crop_svg(&mut self, target: &Target, pad: f32, keep_markers: bool, background: Option<Rgba>) -> Option<String> {
-        let cb = self.crop_box(target, pad, keep_markers)?;
+    pub fn crop_svg(&mut self, target: &Target, pad: f32, keep_ayah_marks: bool, background: Option<Rgba>) -> Option<String> {
+        let cb = self.crop_box(target, pad, keep_ayah_marks)?;
         let words = self.resolve(target);
         let colors: Vec<Rgba> = self.paint().to_vec();
         let d = self.data();
@@ -62,8 +62,8 @@ impl Page {
             let wr = &d.words[wi as usize];
             path_ids.extend(wr.first_path..wr.first_path + wr.n_paths as u32);
         }
-        if cb.marker_deco != NONE {
-            let dc = &d.decos[cb.marker_deco as usize];
+        if cb.ayah_mark_deco != NONE {
+            let dc = &d.decos[cb.ayah_mark_deco as usize];
             path_ids.extend(dc.first_path..dc.first_path + dc.n_paths as u32);
         }
         for pi in path_ids {

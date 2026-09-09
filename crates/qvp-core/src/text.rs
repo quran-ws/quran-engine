@@ -6,8 +6,8 @@ use qvp_format::NONE_U16;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Form {
-    Uthmani = 0,
-    Imlaei = 1,
+    RasmUthmani = 0,
+    RasmImlai = 1,
     Qpc = 2,
     Rasm = 3,
     Search = 4,
@@ -16,17 +16,17 @@ pub enum Form {
 impl Form {
     pub fn from_u8(v: u8) -> Form {
         match v {
-            1 => Form::Imlaei,
+            1 => Form::RasmImlai,
             2 => Form::Qpc,
             3 => Form::Rasm,
             4 => Form::Search,
-            _ => Form::Uthmani,
+            _ => Form::RasmUthmani,
         }
     }
     pub fn as_str(self) -> &'static str {
         match self {
-            Form::Uthmani => "uthmani",
-            Form::Imlaei => "imlaei",
+            Form::RasmUthmani => "rasm_uthmani",
+            Form::RasmImlai => "rasm_imlai",
             Form::Qpc => "qpc",
             Form::Rasm => "rasm",
             Form::Search => "search",
@@ -34,8 +34,8 @@ impl Form {
     }
 }
 
-/// Harakat, tanween (incl. the open forms U+08F0–08F2), dagger alef, waqf/dabt
-/// block, tatweel, the rubʿ sign, small letters and Quranic annotation signs.
+/// Harakah, tanwin (incl. the open forms U+08F0–08F2), omitted alif, waqf/dabt
+/// block, tatweel, the `rubu_al_hizb` sign, small letters and Quranic annotation signs.
 pub fn is_arabic_mark(c: char) -> bool {
     matches!(c as u32,
         0x064B..=0x0652 | 0x0653..=0x0655 | 0x0656..=0x065F | 0x0670 | 0x06D6..=0x06DC | 0x06DF..=0x06E4 |
@@ -65,7 +65,7 @@ pub fn normalize_query(s: &str) -> String {
     fold(&strip_marks(s)).split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Additionally drops bare alef and hamza so a typed الرحمان finds the printed الرحمن.
+/// Additionally drops bare alif and hamzah so a typed الرحمان finds the printed الرحمن.
 pub fn loose_key(s: &str) -> String {
     normalize_query(s).chars().filter(|c| !matches!(c, 'ا' | 'ء')).collect()
 }
@@ -106,15 +106,15 @@ impl Page {
     pub fn word_form(&self, wi: u32, form: Form) -> &str {
         let w = &self.data().words[wi as usize];
         let r = match form {
-            Form::Uthmani => w.text,
-            Form::Imlaei => w.imlaei,
+            Form::RasmUthmani => w.text,
+            Form::RasmImlai => w.rasm_imlai,
             Form::Qpc => w.qpc,
             Form::Rasm => w.rasm,
             Form::Search => w.search,
         };
         if r == NONE_U16 {
-            // fall back to uthmani, then search form
-            if form != Form::Uthmani && w.text != NONE_U16 {
+            // fall back to rasm_uthmani, then search form
+            if form != Form::RasmUthmani && w.text != NONE_U16 {
                 return &self.data().strings[w.text as usize];
             }
             ""
@@ -190,8 +190,8 @@ mod tests {
 // ───────────── sidecar text forms ─────────────
 
 /// Minimal JSON reader for the words sidecar:
-/// `{"2:255:3": {"imlaei": "...", "qpc": "...", "rasm": "...", "search": "..."}, ...}`
-/// (also accepts `{"words": [{"wid": "...", ...}, ...]}`). Unknown keys are ignored.
+/// `{"2:255:3": {"rasm_imlai": "...", "qpc": "...", "rasm": "...", "search": "..."}, ...}`
+/// (also accepts `{"words": [{"word_key": "...", ...}, ...]}`). Unknown keys are ignored.
 struct Json<'a> {
     b: &'a [u8],
     i: usize,
@@ -325,29 +325,31 @@ impl<'a> Json<'a> {
 /// One word's derived forms from the sidecar.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WordForms {
-    pub imlaei: Option<String>,
+    pub rasm_uthmani: Option<String>,
+    pub rasm_imlai: Option<String>,
     pub qpc: Option<String>,
     pub rasm: Option<String>,
     pub search: Option<String>,
 }
 
 impl Page {
-    /// Attach derived text forms (imlaei / qpc / rasm / search) for words of this page.
+    /// Attach text forms (rasm_uthmani / rasm_imlai / qpc / rasm / search) for words of this page.
     /// Keys are word ids "s:a:w". Returns the number of words updated. Inline forms
     /// already in the file are kept unless the sidecar provides a value.
     pub fn attach_forms(&mut self, forms: &[(String, WordForms)]) -> usize {
         let mut n = 0;
-        for (wid, f) in forms {
-            let mut it = wid.split(':').map(|x| x.parse::<u16>().unwrap_or(0));
+        for (word_key, f) in forms {
+            let mut it = word_key.split(':').map(|x| x.parse::<u16>().unwrap_or(0));
             let (s, a, w) = (it.next().unwrap_or(0), it.next().unwrap_or(0), it.next().unwrap_or(0));
             let Some(wi) = self.find_word(s, a, w) else { continue };
-            let mut set = |v: &Option<String>, slot: fn(&mut qvp_format::WordRec) -> &mut u16, page: &mut Page| {
+            let set = |v: &Option<String>, slot: fn(&mut qvp_format::WordRec) -> &mut u16, page: &mut Page| {
                 if let Some(v) = v {
                     let idx = page.intern(v);
                     *slot(&mut page.data_mut().words[wi as usize]) = idx;
                 }
             };
-            set(&f.imlaei, |w| &mut w.imlaei, self);
+            set(&f.rasm_uthmani, |w| &mut w.text, self);
+            set(&f.rasm_imlai, |w| &mut w.rasm_imlai, self);
             set(&f.qpc, |w| &mut w.qpc, self);
             set(&f.rasm, |w| &mut w.rasm, self);
             set(&f.search, |w| &mut w.search, self);
@@ -364,8 +366,8 @@ impl Page {
 
     pub fn has_form(&self, form: Form) -> bool {
         match form {
-            Form::Uthmani => true,
-            Form::Imlaei => self.data().words.iter().any(|w| w.imlaei != NONE_U16),
+            Form::RasmUthmani => true,
+            Form::RasmImlai => self.data().words.iter().any(|w| w.rasm_imlai != NONE_U16),
             Form::Qpc => self.data().words.iter().any(|w| w.qpc != NONE_U16),
             Form::Rasm => self.data().words.iter().any(|w| w.rasm != NONE_U16),
             Form::Search => self.data().words.iter().any(|w| w.search != NONE_U16),
@@ -373,7 +375,7 @@ impl Page {
     }
 }
 
-/// Parse `{"s:a:w": {form: text, ...}, ...}` or `{"words": [{"wid": "...", form: text}, ...]}`.
+/// Parse `{"s:a:w": {form: text, ...}, ...}` or `{"words": [{"word_key": "...", form: text}, ...]}`.
 pub fn parse_words_sidecar(json: &[u8]) -> Option<Vec<(String, WordForms)>> {
     let mut j = Json { b: json, i: 0 };
     let mut out = Vec::new();
@@ -382,18 +384,19 @@ pub fn parse_words_sidecar(json: &[u8]) -> Option<Vec<(String, WordForms)>> {
     }
     let to_forms = |kv: Vec<(String, String)>| {
         let mut f = WordForms::default();
-        let mut wid = None;
+        let mut word_key = None;
         for (k, v) in kv {
             match k.as_str() {
-                "imlaei" => f.imlaei = Some(v),
+                "rasm_uthmani" | "uthmani" => f.rasm_uthmani = Some(v),
+                "rasm_imlai" | "imlaei" => f.rasm_imlai = Some(v),
                 "qpc" => f.qpc = Some(v),
                 "rasm" => f.rasm = Some(v),
                 "search" => f.search = Some(v),
-                "wid" => wid = Some(v),
+                "word_key" => word_key = Some(v),
                 _ => {}
             }
         }
-        (wid, f)
+        (word_key, f)
     };
     loop {
         j.ws();
@@ -410,8 +413,8 @@ pub fn parse_words_sidecar(json: &[u8]) -> Option<Vec<(String, WordForms)>> {
                 if j.eat(b']') {
                     break;
                 }
-                let (wid, f) = to_forms(j.string_object()?);
-                if let Some(w) = wid {
+                let (word_key, f) = to_forms(j.string_object()?);
+                if let Some(w) = word_key {
                     out.push((w, f));
                 }
                 j.eat(b',');
@@ -432,12 +435,12 @@ mod sidecar_tests {
     use super::*;
     #[test]
     fn parses_both_shapes() {
-        let a = r#"{"2:255:3": {"imlaei": "الْحَيُّ", "search": "الحي", "x": 1}, "2:255:4": {"qpc": "ٱلۡقَيُّومُ"}}"#;
+        let a = r#"{"2:255:3": {"rasm_imlai": "الْحَيُّ", "search": "الحي", "x": 1}, "2:255:4": {"qpc": "ٱلۡقَيُّومُ"}}"#;
         let v = parse_words_sidecar(a.as_bytes()).unwrap();
         assert_eq!(v.len(), 2);
         assert_eq!(v[0].0, "2:255:3");
         assert_eq!(v[0].1.search.as_deref(), Some("الحي"));
-        let b = r#"{"page": 42, "words": [{"wid": "2:253:1", "rasm": "تلك", "search": "تلك"}]}"#;
+        let b = r#"{"page": 42, "words": [{"word_key": "2:253:1", "rasm": "تلك", "search": "تلك"}]}"#;
         let v = parse_words_sidecar(b.as_bytes()).unwrap();
         assert_eq!(v[0].1.search.as_deref(), Some("تلك"));
     }

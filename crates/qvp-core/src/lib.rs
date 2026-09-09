@@ -177,12 +177,12 @@ impl Page {
                 named.clear();
             }
             let di = path_deco[i];
-            let (sura, ayah, line_no) = if wi != NONE {
+            let (surah, ayah, line_no) = if wi != NONE {
                 let w = &data.words[wi as usize];
-                (w.sura, w.ayah, data.lines[w.line_idx as usize].line_no)
+                (w.surah, w.ayah, data.lines[w.line_idx as usize].line_no)
             } else if di != NONE {
                 let d = &data.decos[di as usize];
-                (d.sura, d.ayah, data.lines[path_line[i] as usize].line_no)
+                (d.surah, d.ayah, data.lines[path_line[i] as usize].line_no)
             } else {
                 (0, 0, 0)
             };
@@ -191,7 +191,7 @@ impl Page {
                 word: wi,
                 deco: di,
                 line_no,
-                sura,
+                surah,
                 ayah,
                 kind: p.kind,
                 mark: p.mark,
@@ -250,7 +250,7 @@ impl Page {
             v.sort_unstable();
             line_words.push(v);
         }
-        let word_index = data.words.iter().enumerate().map(|(i, w)| ((w.sura, w.ayah, w.word), i as u32)).collect();
+        let word_index = data.words.iter().enumerate().map(|(i, w)| ((w.surah, w.ayah, w.word), i as u32)).collect();
         let n = data.paths.len();
         Page {
             data,
@@ -304,18 +304,18 @@ impl Page {
         self.data.header.page
     }
     pub fn word_text(&self, wi: u32) -> &str {
-        self.word_form(wi, Form::Uthmani)
+        self.word_form(wi, Form::RasmUthmani)
     }
     pub fn deco_text(&self, di: u32) -> &str {
         let d = &self.data.decos[di as usize];
         if d.text == NONE_U16 { "" } else { &self.data.strings[d.text as usize] }
     }
-    pub fn find_word(&self, sura: u16, ayah: u16, word: u16) -> Option<u32> {
-        self.word_index.get(&(sura, ayah, word)).copied()
+    pub fn find_word(&self, surah: u16, ayah: u16, word: u16) -> Option<u32> {
+        self.word_index.get(&(surah, ayah, word)).copied()
     }
     /// All word indices of an ayah on this page, in reading order.
-    pub fn ayah_words(&self, sura: u16, ayah: u16) -> Vec<u32> {
-        self.resolve(&Target::Ayah(sura, ayah))
+    pub fn ayah_words(&self, surah: u16, ayah: u16) -> Vec<u32> {
+        self.resolve(&Target::Ayah(surah, ayah))
     }
     pub fn path_deco(&self, pi: u32) -> u32 {
         self.path_deco[pi as usize]
@@ -431,7 +431,7 @@ impl Page {
         for pass in 0..2 {
             for pi in first..first + n {
                 let p = &self.data.paths[pi as usize];
-                let is_body = matches!(p.kind, PathKind::Body | PathKind::HeaderInk | PathKind::AyahOrnament | PathKind::AyahNumber);
+                let is_body = matches!(p.kind, PathKind::Body | PathKind::HeaderInk | PathKind::AyahMarkOrnament | PathKind::AyahNumber);
                 if (pass == 0) != is_body || !p.bbox.contains(qx, qy) {
                     continue;
                 }

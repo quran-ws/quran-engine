@@ -29,13 +29,13 @@
     page: null, bytes: 0, loadMs: 0, n: src.pages[0],
     view: { scale: 1, ox: 0, oy: 0 },
     selWord: -1, selAyah: null, hlSel: 0, hlAyah: 0, hlSearch: 0, hlPlay: 0, pathHandles: new Map(),
-    hover: -1, theme: 'light', themeHandle: 0, tajweedHandle: 0, hideHandle: 0, markersHandle: 0,
+    hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
     layout: { lineSpacing: 1, lineGap: 0, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
     hlMode: 'both', hlMs: 250, revealOn: false,
   };
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
-  const PALETTE = { [CATEGORY.HARAKA]: '#1a73e8', [CATEGORY.TANWEEN]: '#8e24aa', [CATEGORY.LETTER_DOT]: '#c62828', [CATEGORY.WAQF]: '#0a7d32', [CATEGORY.DABT]: '#ef6c00', [CATEGORY.ORTHOGRAPHIC]: '#00838f', [CATEGORY.STANDALONE]: '#6d4c41' };
+  const PALETTE = { [CATEGORY.HARAKAH]: '#1a73e8', [CATEGORY.TANWIN]: '#8e24aa', [CATEGORY.LETTER_DOT]: '#c62828', [CATEGORY.WAQF]: '#0a7d32', [CATEGORY.DABT]: '#ef6c00', [CATEGORY.ORTHOGRAPHIC]: '#00838f', [CATEGORY.STANDALONE]: '#6d4c41' };
 
   // ── rendering loop: draw on demand, keep drawing while the engine animates ──
   let raf = 0;
@@ -93,7 +93,7 @@
     if (S.page) S.page.free();
     S.page = page; S.n = n; S.bytes = bytes.length;
     S.selWord = -1; S.selAyah = null; S.hover = -1; S.playIdx = 0; S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.pathHandles.clear(); S.revealOn = false;
-    S.themeHandle = S.tajweedHandle = S.hideHandle = S.markersHandle = 0;
+    S.themeHandle = S.tajwidHandle = S.hideHandle = S.ayahMarksHandle = 0;
     $('pageNo').value = n;
     applyTheme(); applyToggles();
     renderer.baseKey = '';
@@ -106,8 +106,8 @@
     const parts = [];
     for (const s of su) parts.push(`${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`);
     let t = `surahs: ${parts.join(', ')}`;
-    if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.kind} ${d.n} at ${d.sura}:${d.ayah}`).join(', ')}`;
-    if (atlas) { const j = atlas.juzAt(p.words[0].sura, p.words[0].ayah); if (j) t += `\njuz ${j} · pages ${atlas.pagesOfJuz(j).join('–')}`; }
+    if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.kind} ${d.n} at ${d.surah}:${d.ayah}`).join(', ')}`;
+    if (atlas) { const j = atlas.juzAt(p.words[0].surah, p.words[0].ayah); if (j) t += `\njuz ${j} · pages ${atlas.pagesOfJuz(j).join('–')}`; }
     t += `\nayahs: ${p.ayahKeys().map(([s, a]) => `${s}:${a}`).join(' ')}`;
     $('meta').textContent = t;
   }
@@ -131,8 +131,8 @@
       return;
     }
     $('selWord').textContent = w.text;
-    const rows = [['wid', p.wid(w.idx)], ['line', w.line], ['imlaei', p.wordForm(w.idx, 'imlaei')], ['qpc', p.wordForm(w.idx, 'qpc')], ['rasm', p.wordForm(w.idx, 'rasm')], ['search', p.wordForm(w.idx, 'search')], ['label', p.wordLabel(w.idx)], ['paths', w.nPaths]];
-    for (const [k, v] of rows) if (v !== undefined && v !== '') info.insertAdjacentHTML('beforeend', `<b>${k}</b><span class="${/imlaei|qpc|rasm|search/.test(k) ? 'v' : ''}">${v}</span>`);
+    const rows = [['word_key', p.wordKey(w.idx)], ['line', w.line], ['rasm_imlai', p.wordForm(w.idx, 'rasm_imlai')], ['qpc', p.wordForm(w.idx, 'qpc')], ['rasm', p.wordForm(w.idx, 'rasm')], ['search', p.wordForm(w.idx, 'search')], ['label', p.wordLabel(w.idx)], ['paths', w.nPaths]];
+    for (const [k, v] of rows) if (v !== undefined && v !== '') info.insertAdjacentHTML('beforeend', `<b>${k}</b><span class="${/rasm_imlai|qpc|rasm|search/.test(k) ? 'v' : ''}">${v}</span>`);
     for (let i = w.firstPath; i < w.firstPath + w.nPaths; i++) {
       const kind = p.pathKind(i), mark = p.pathMark(i), nth = p.pathNthMark(i);
       const label = kind === KIND.MARK ? `${engine.markName(mark)} #${nth}` : engine.kindName(kind);
@@ -176,7 +176,7 @@
     if (!q) { draw(); return; }
     const m = p.search(q, { mode: $('qmode').value });
     if (m.length) S.hlSearch = p.highlight(T.words(m.map(x => x.word)), { mode: 'both', ink: '#c62828', band: rgba('#c62828', 0.12), height: 'ink', padY: 1, radius: 1, ms: S.hlMs });
-    box.innerHTML = m.length ? m.map(x => `<div data-w="${x.word}">${x.text} <span class="hint">${x.wid}${x.loose ? ' ~' : ''}</span></div>`).join('') : `<div class="hint">no match on this page${atlas ? ' — try the goto box for surah names' : ''}</div>`;
+    box.innerHTML = m.length ? m.map(x => `<div data-w="${x.word}">${x.text} <span class="hint">${x.wordKey}${x.loose ? ' ~' : ''}</span></div>`).join('') : `<div class="hint">no match on this page${atlas ? ' — try the goto box for surah names' : ''}</div>`;
     box.querySelectorAll('[data-w]').forEach(el => el.onclick = () => selectWord(+el.dataset.w));
     draw();
   }
@@ -247,7 +247,7 @@
         const r = stage.getBoundingClientRect(); const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
         const t = performance.now(); const h = S.page.hitTestViewEx(x, y, { maxDistance: 6 }); S.lastHitUs = (performance.now() - t) * 1000;
         if (h && h.word >= 0) selectWord(h.word);
-        else if (h && h.deco >= 0) { const d = S.page.decos[h.deco]; if (d.ayah) selectAyah(d.sura, d.ayah); }
+        else if (h && h.deco >= 0) { const d = S.page.decos[h.deco]; if (d.ayah) selectAyah(d.surah, d.ayah); }
         else selectWord(-1);
       }
       drag = null; selecting = null;
@@ -266,7 +266,7 @@
   // ── copy / crop ──
   $('copy').onclick = async () => {
     const p = S.page; let text;
-    if (p.selection().length) text = p.selectionText('uthmani', true);
+    if (p.selection().length) text = p.selectionText('rasm_uthmani', true);
     else if (S.selAyah) text = `${p.text(T.ayah(...S.selAyah))} (${S.selAyah[0]}:${S.selAyah[1]})`;
     else if (S.selWord >= 0) text = `${p.words[S.selWord].text} (${p.citation([S.selWord])})`;
     else return;
@@ -277,7 +277,7 @@
     const p = S.page, sel = p.selection();
     const target = sel.length ? T.words(sel) : S.selAyah ? T.ayah(...S.selAyah) : S.selWord >= 0 ? T.word(S.selWord) : null;
     if (!target) return;
-    const svg = p.cropSvg(target, { pad: 3, keepMarkers: true, background: getComputedStyle(document.body).getPropertyValue('--paper').trim() });
+    const svg = p.cropSvg(target, { pad: 3, keepAyahMarks: true, background: getComputedStyle(document.body).getPropertyValue('--paper').trim() });
     const img = $('cropPreview'); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); img.hidden = false;
   };
 
@@ -303,16 +303,16 @@
   // ── styling toggles (each is one engine handle) ──
   function applyToggles() {
     const p = S.page;
-    if (S.tajweedHandle) { p.unstyle(S.tajweedHandle); S.tajweedHandle = 0; }
-    if ($('tajweed').classList.contains('on')) S.tajweedHandle = p.theme({ marks: {}, ms: 200, ...Object.fromEntries([]) , diacritics: PALETTE[CATEGORY.HARAKA], dots: PALETTE[CATEGORY.LETTER_DOT], waqf: PALETTE[CATEGORY.WAQF], sifr: PALETTE[CATEGORY.DABT] });
+    if (S.tajwidHandle) { p.unstyle(S.tajwidHandle); S.tajwidHandle = 0; }
+    if ($('tajwid').classList.contains('on')) S.tajwidHandle = p.theme({ marks: {}, ms: 200, ...Object.fromEntries([]) , diacritics: PALETTE[CATEGORY.HARAKAH], dots: PALETTE[CATEGORY.LETTER_DOT], waqf: PALETTE[CATEGORY.WAQF], sifr: PALETTE[CATEGORY.DABT] });
     if (S.hideHandle) { p.unstyle(S.hideHandle); S.hideHandle = 0; }
     if ($('hideMarks').classList.contains('on')) S.hideHandle = p.hide(Sel.kind(KIND.MARK));
-    if (S.markersHandle) { p.unstyle(S.markersHandle); S.markersHandle = 0; }
-    if ($('markers').classList.contains('on')) S.markersHandle = p.style(Sel.deco(DECO.AYAH_MARKER), '#b8860b', { ms: 300, layer: LAYER.THEME + 1 });
+    if (S.ayahMarksHandle) { p.unstyle(S.ayahMarksHandle); S.ayahMarksHandle = 0; }
+    if ($('ayahMarks').classList.contains('on')) S.ayahMarksHandle = p.style(Sel.deco(DECO.AYAH_MARK), '#b8860b', { ms: 300, layer: LAYER.THEME + 1 });
     draw();
   }
-  for (const id of ['tajweed', 'hideMarks', 'markers']) $(id).onclick = () => { $(id).classList.toggle('on'); applyToggles(); };
-  $('clear').onclick = () => { for (const id of ['tajweed', 'hideMarks', 'markers']) $(id).classList.remove('on'); S.page.clearStyles(); S.page.clearHighlights(); S.page.unmask(); S.page.revealStop(); S.page.clearSelection(); S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.themeHandle = S.tajweedHandle = S.hideHandle = S.markersHandle = 0; S.pathHandles.clear(); S.selWord = -1; S.selAyah = null; S.revealOn = false; $('revealMode').classList.remove('on'); $('revealPos').disabled = true; $('q').value = ''; $('results').innerHTML = ''; stopPlay(); applyTheme(); showSelection(); draw(); };
+  for (const id of ['tajwid', 'hideMarks', 'ayahMarks']) $(id).onclick = () => { $(id).classList.toggle('on'); applyToggles(); };
+  $('clear').onclick = () => { for (const id of ['tajwid', 'hideMarks', 'ayahMarks']) $(id).classList.remove('on'); S.page.clearStyles(); S.page.clearHighlights(); S.page.unmask(); S.page.revealStop(); S.page.clearSelection(); S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.themeHandle = S.tajwidHandle = S.hideHandle = S.ayahMarksHandle = 0; S.pathHandles.clear(); S.selWord = -1; S.selAyah = null; S.revealOn = false; $('revealMode').classList.remove('on'); $('revealPos').disabled = true; $('q').value = ''; $('results').innerHTML = ''; stopPlay(); applyTheme(); showSelection(); draw(); };
   function applyTheme() {
     const p = S.page; if (!p) return;
     document.body.setAttribute('data-qvp-theme', S.theme);
@@ -324,7 +324,7 @@
   $('legend').innerHTML = Object.entries(PALETTE).slice(0, 5).map(([c, col]) => `<span class="hint"><i class="sw" style="background:${col}"></i>${engine.categoryName(+c)}</span>`).join('');
 
   // ── memorisation ──
-  $('maskAyah').onclick = () => { const p = S.page; const t = S.selAyah ? T.ayah(...S.selAyah) : S.selWord >= 0 ? T.ayah(p.words[S.selWord].sura, p.words[S.selWord].ayah) : T.page(); p.maskOptions({ blockColor: getComputedStyle(document.body).getPropertyValue('--line').trim() }); p.mask(t, $('maskMode').value); draw(); };
+  $('maskAyah').onclick = () => { const p = S.page; const t = S.selAyah ? T.ayah(...S.selAyah) : S.selWord >= 0 ? T.ayah(p.words[S.selWord].surah, p.words[S.selWord].ayah) : T.page(); p.maskOptions({ blockColor: getComputedStyle(document.body).getPropertyValue('--line').trim() }); p.mask(t, $('maskMode').value); draw(); };
   $('revealNext').onclick = () => { S.page.revealNext(1); draw(); };
   $('hideBack').onclick = () => { S.page.hideBack(1); draw(); };
   $('unmask').onclick = () => { S.page.unmask(); draw(); };

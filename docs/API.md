@@ -19,9 +19,9 @@ Examples are JavaScript; read `page.hitTestEx(...)` as `page.hitTestEx(...)` in 
   `T.*` constructor.
 - **Selectors** say what a style rule applies to, from a whole page down to *the second
   diacritic of one word*: `Sel.page()`, `Sel.word(i)`, `Sel.ayah(s,a)`, `Sel.line(n)`,
-  `Sel.wordBody(i)`, `Sel.wordMarks(i)`, `Sel.wordMark(i, nth)`, `Sel.wordMarkNamed(i, 'fatha', nth)`,
-  `Sel.wordPath(i, nth)`, `Sel.path(p)`, `Sel.mark('shadda')`, `Sel.category('haraka')`,
-  `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.deco('ayah-marker')`, `Sel.decoIdx(d)`.
+  `Sel.wordBody(i)`, `Sel.wordMarks(i)`, `Sel.wordMark(i, nth)`, `Sel.wordMarkNamed(i, 'fathah', nth)`,
+  `Sel.wordPath(i, nth)`, `Sel.path(p)`, `Sel.mark('shaddah')`, `Sel.category('harakah')`,
+  `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.deco('ayah-mark')`, `Sel.decoIdx(d)`.
 - **The engine decides, the host draws.** Hit-testing, layout, styling, highlight bands,
   masks and search are engine calls. A wrapper only marshals and paints what it is told.
 - **Data is separate from code.** Pages (`NNN.qvp`), the atlas (`atlas.qva`) and the
@@ -43,14 +43,14 @@ page.free(); atlas.free();
 
 | | |
 |---|---|
-| `page.words[i]` | `{idx, sura, ayah, word, line, lineIdx, ayahIdx, x0,y0,x1,y1, text, firstPath, nPaths}` |
-| `page.ayahs[i]` | one **fragment** per printed line: `{sura, ayah, part, parts, flags, rub, firstWord, nWords, markerDeco, bbox}` |
+| `page.words[i]` | `{idx, surah, ayah, word, line, lineIdx, ayahIdx, x0,y0,x1,y1, text, firstPath, nPaths}` |
+| `page.ayahs[i]` | one **fragment** per printed line: `{surah, ayah, fragment, fragments, flags, rubuAlHizb, firstWord, nWords, ayahMarkDeco, bbox}` |
 | `page.lines[i]` | `{lineNo, isHeader, firstWord, nWords, bbox, bandY0, bandY1, centre}` |
-| `page.decos[i]` | `{kind, sura, ayah, line, bbox, text, firstPath, nPaths}` — ayah markers, surah banners, basmalah, hizb rosettes, sajdah signs |
+| `page.decos[i]` | `{kind, surah, ayah, line, bbox, text, firstPath, nPaths}` — ayah marks, surah banners, basmalah, division rosettes, sajdah signs, page furniture |
 | `page.findWord(s,a,w)` | index or −1 |
 | `page.resolve(target)` | word indices in reading order |
-| `page.wordForm(i, form)` | `'uthmani' \| 'imlaei' \| 'qpc' \| 'rasm' \| 'search'` (derived forms need the sidecar; `hasForm(form)`) |
-| `page.attachWords(json)` | attach `NNN.words.json` (`{"s:a:w": {imlaei, qpc, rasm, search}}`); returns words updated |
+| `page.wordForm(i, form)` | `'rasm_uthmani' \| 'rasm_imlai' \| 'qpc' \| 'rasm' \| 'search'` (derived forms need the sidecar; `hasForm(form)`) |
+| `page.attachWords(json)` | attach `NNN.words.json` (`{"s:a:w": {rasm_uthmani, rasm_imlai, qpc, rasm, search}}`); returns words updated |
 | `page.pathKind/Mark/Family/Category(p)`, `pathWord(p)`, `pathLine(p)`, `pathNthMark(p)` | per-path facts from the geometry table |
 
 An ayah is several fragments. `resolve('2:255')` gives all its words on the page;
@@ -60,8 +60,8 @@ continues on another page.
 ## Metadata (no database needed)
 
 `surahs()` → `{number, arabic, latin, english, place, ayahCount, hasBanner, hasBasmalah}`;
-`divisions()` → juz/hizb/nisf/rubʿ that **start** on the page; `rosettes()` (drawn hizb
-marks); `sajdahs()`; `markers()` → real ayah medallions with centre/radius and the
+`divisions()` → juz/hizb/nisf/`rubu_al_hizb` that **start** on the page; `rosettes()` (drawn division
+marks); `sajdahs()`; `ayahMarks()` → real ayah medallions with centre/radius and the
 ornament/numeral path indices (swap or restyle them); `ayahKeys()`; `wordLabel(i)`,
 `ayahLabel(i)` for screen readers.
 
@@ -70,20 +70,20 @@ ornament/numeral path indices (swap or restyle them); `ayahKeys()`; `wordLabel(i
 ```js
 page.text('2:255')                                   // with the mushaf's own line breaks
 page.text('page', {form: 'search', wordSep: ' '})
-page.search('الرحمان', {mode: 'includes'})            // [{word, wid, text, index, loose}]
+page.search('الرحمان', {mode: 'includes'})            // [{word, wordKey, text, index, loose}]
 page.citation([12, 13, 14])                           // "2:255" / "2:255-257" / "2:286, 3:1"
 engine.strip(s); engine.fold(s); engine.normalize(s); engine.looseKey(s)
 ```
 
 Search normalises both sides (strip marks + fold) and, when the strict pass finds
 nothing, retries with the loose key so a typed `الرحمان` finds the printed `الرحمن`.
-Modes: `includes`, `exact`, `prefix`. Without a sidecar it searches stripped uthmani.
+Modes: `includes`, `exact`, `prefix`. Without a sidecar it searches the stripped `rasm_uthmani`.
 
 ## Hit testing
 
 ```js
 page.hitTestViewEx(vx, vy, {maxDistance: 6, gapBias: 0.6})
-// → {word, path, deco, line, distance, exact, wid, aid} | null
+// → {word, path, deco, line, distance, exact, wordKey, ayahKey} | null
 ```
 
 Exact outline first, then **nearest with direction**: the point is resolved to a line
@@ -111,8 +111,8 @@ the 15-line grid over the padded viewport (pages 1–2 stay centred). Pure helpe
 ```js
 const h = page.style(Sel.wordMark(w, 1), '#1a73e8', {ms: 200});     // the 2nd diacritic only
 page.styleTarget('2:255', '#0a7d32', {layer: LAYER.HIGHLIGHT});
-page.hide(Sel.kind('mark'));                                          // reading view without tashkeel
-page.theme({ink: '#e8e4dc', diacritics: '#7fb0e8', dots: '#ff8a80', marker: '#b8860b', ms: 300});
+page.hide(Sel.kind('mark'));                                          // reading view without tashkil
+page.theme({ink: '#e8e4dc', diacritics: '#7fb0e8', dots: '#ff8a80', ayahMark: '#b8860b', ms: 300});
 page.restyle(h, '#ff0000', 100); page.unstyle(h); page.setDefaultInk('#231f20');
 ```
 
@@ -161,7 +161,7 @@ Draw the band with a highlight in `LAYER.SELECTION`; see `web/app.js` for drag-t
 ```js
 page.mask('2:255', 'hide' | 'block' | 'blur'); page.revealNext(1); page.hideBack(1);
 page.revealWord(i); page.revealAll(); page.hideAll(); page.unmask(); page.maskHidden()
-const steps = page.revealStart({lit: 2, byAyah: false, grey: '#c9c4b8', ink: '#231f20', markers: true, ms: 150});
+const steps = page.revealStart({lit: 2, byAyah: false, grey: '#c9c4b8', ink: '#231f20', ayahMarks: true, ms: 150});
 page.revealGoto(at); page.revealStop();
 ```
 
@@ -177,14 +177,14 @@ Drive the highlight with `rehighlight(h, T.word(i))`.
 
 ## Crop and export
 
-`cropBox(target, {pad, keepMarkers})`; `cropSvg(target, {pad, keepMarkers, background})`
+`cropBox(target, {pad, keepAyahMarks})`; `cropSvg(target, {pad, keepAyahMarks, background})`
 returns a standalone SVG string with the current colours (masks, themes and highlights'
 ink applied). The medallion is kept only when the whole ayah is inside the crop.
 
 ## Atlas (cross-page)
 
 `atlas.pageOf(s,a)`, `pageRange(page)`, `surah(n)`, `surahs()`, `pageOfSurah(n)`,
-`juz(n)/hizb(n)/rub(n)` → `{sura, ayah, page}`, `juzAt(s,a)`, `divisionAt(kind, s, a)`,
+`juz(n)/hizb(n)/rubuAlHizb(n)` → `{surah, ayah, page}`, `juzAt(s,a)`, `divisionAt(kind, s, a)`,
 `pagesOfJuz(n)`, `findSurah('cow' | 'البقرة' | '2')`.
 
 ## C ABI notes

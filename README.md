@@ -5,9 +5,9 @@ wrappers per platform, rendered by each platform's own canvas.
 
 - **Lossless.** Every page is converted from the source SVG with a pixel-diff gate
   (resvg, 4×) that all 604 pages pass. Coordinates are exact to 0.01 page unit.
-- **Small.** A full page is ~210 KB raw / ~85 KB compressed (4× smaller than the SVG);
-  the whole mushaf is ~50 MB compressed. Pages, atlas and text sidecars are data your app
-  loads — no package bundles them.
+- **Small.** A full page is ~135 KB raw / ~62 KB brotli (5.3× smaller than the SVG);
+  the whole mushaf is 92.5 MB raw / **38.9 MB brotli**, sidecars and atlas included.
+  Pages, atlas and text sidecars are data your app loads — no package bundles them.
 - **The engine decides, the host draws.** Hit-testing (gap-aware, exact outlines),
   layout (line spacing, fill-height, padding), layered styles with handles and
   transitions down to *one diacritic of one word*, animated highlight bands, selection,
@@ -67,16 +67,39 @@ python3 web/build.py embed 1-21,440-445,582,604                           # dist
 
 | | |
 |---|---|
-| page load + geometry | 1 ms |
+| page load + geometry | 1.6 ms |
 | exact hit-test / gap-aware hit-test | 0.7 µs / 0.07 µs |
 | full display list, 2 style rules | 0.2 µs |
 | search "الله" over the page | 17 µs |
 | six-line ayah highlight incl. band boxes | 48 µs |
-| wasm engine | 265 KB |
+| wasm engine | 273 KB |
+
+## Page format
+
+`NNN.qvp` stores only what cannot be worked out again. Bboxes, path origins and opcode
+offsets are all derived at load; the opcode stream is split into packed opcodes and
+separate x and y delta streams, which costs nothing raw and gives a compressor
+homogeneous streams. Against storing the records as they sit in memory that is **27%
+smaller raw and 19.6% smaller compressed** — 111.6 → 81.5 MB raw, 46.3 → 37.3 MB
+brotli over the mushaf — paid for at load by rebuilding what was dropped, about
+0.28 ms per page once decompression is counted.
 
 ## Data pipeline notes
 
-Source SVGs come from the exporter; issues found in them are listed in
-`docs/UPSTREAM-DATA-ISSUES.md` and are fixed upstream, never patched here. Production
-pages will carry only the uthmani text; derived forms (imlaei, qpc, rasm, search) are
-attached at runtime from `NNN.words.json` via `page.attachWords(...)`.
+The source data is the **`quran-svg hafs-kfgqpc` release bundle** (KFGQPC Madani
+mushaf V4 1441H, production profile, schema `quran-svg/version` 1.0.0). Unpack it so
+that `pages/` and `index/` sit side by side at the repo root — `batch` finds
+`index/by-page` next to `pages/` on its own.
+
+Issues found in the source are listed in `docs/UPSTREAM-DATA-ISSUES.md` and are fixed
+upstream, never patched here. Production pages carry only `data-word-key` and
+`data-rasm-uthmani`; the derived forms (`rasm_imlai`, `qpc`, `rasm`, `search`) come from
+`index/by-page/NNN.json`, which the converter folds into `NNN.words.json` for apps to
+attach at runtime via `page.attachWords(...)`.
+
+Mark, family and category names are the bundle's own `mark-taxonomy` v2 vocabulary
+(`schema/mark-taxonomy.json`), which follows the [Quran.ws terminology
+standard](https://github.com/quran-ws/guidelines): `fathah`, `hamzat_al_wasl`,
+`omitted_alif`, `rounded_zero`, `small_meem`, `waqf_jaiz_mustawi_al_tarafayn`. The same
+names appear in the C ABI, every wrapper and `docs/API.md`, and
+`crates/qvp-ffi/tests/abi.rs` gates them.

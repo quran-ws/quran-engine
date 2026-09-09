@@ -39,7 +39,7 @@ engine.strip(s); engine.fold(s); engine.normalize(s); engine.looseKey(s);       
 engine.gapToFill(pw, ph, lines, vw, vh); engine.wastedFraction(pw, ph, vw, vh);
 
 final page = engine.loadPage(bytes);                    // geometry copied once: page.ops / page.pts / page.table (stride 8)
-page.words / ayahs / lines / decos;  page.wordForm(i, 'imlaei');  page.findWord(2, 255, 3);
+page.words / ayahs / lines / decos;  page.wordForm(i, 'rasm_imlai');  page.findWord(2, 255, 3);
 page.resolve('2:255');                                  // targets: 'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | T.word(i) | [w0, w1]
 page.surahs(); page.divisions(); page.markers(); page.rosettes(); page.sajdahs(); page.ayahKeys();
 page.ayahWordCount(2, 255); page.reciteMap(2, 255, 4); page.wordLabel(i); page.ayahLabel(ai);
@@ -51,12 +51,12 @@ final l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50,
 page.wordBoxView(i);
 final h = page.style(Sel.wordMark(w, 1), '#ef6c00', ms: 200, layer: QvpLayer.top);  // Sel.path/word/ayah/line/mark/category/family/kind/deco…
 page.styleTarget('2:255', color); page.restyle(h, color); page.unstyle(h); page.hide(Sel.kind(QvpKind.mark));
-page.theme(QvpTheme(diacritics: '#1a73e8', marks: {'shadda': '#0a7d32'})); page.setDefaultInk('#231f20'); page.clearStyles(); page.clearLayer(QvpLayer.theme);
+page.theme(QvpTheme(diacritics: '#1a73e8', marks: {'shaddah': '#0a7d32'})); page.setDefaultInk('#231f20'); page.clearStyles(); page.clearLayer(QvpLayer.theme);
 page.tick(nowMs);                                       // true while animating — keep drawing frames
 page.paint(); page.styled(); page.colorOf(i);            // display list (per-path colours)
 final hl = page.highlight('2:255', QvpHighlightStyle(mode: 'both', ms: 200)); page.rehighlight(hl, T.word(3)); page.unhighlight(hl);
 page.highlightBoxes(); page.bandBoxes(words);            // viewport px; draw each id as one nonzero path behind the ink
-page.select(anchor, focus); page.selection(); page.selectionText('uthmani', true); page.clearSelection();
+page.select(anchor, focus); page.selection(); page.selectionText('rasm_uthmani', true); page.clearSelection();
 page.mask('2:255', 'hide'); page.revealNext(); page.hideBack(); page.unmask(); page.maskHidden(); page.maskBoxes();
 page.revealStart(lit: 2); page.revealGoto(3); page.revealAt(); page.revealSteps(); page.revealStop();
 page.cropBox('2:255'); page.cropSvg('2:255:1', background: '#fffdf7');
@@ -64,7 +64,7 @@ page.dispose();                                          // frees the native pag
 
 final atlas = engine.loadAtlas(atlasBytes);
 atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36);
-atlas.juz(30); atlas.hizb(1); atlas.rub(1); atlas.juzAt(2, 255); atlas.pagesOfJuz(30); atlas.findSurah('cow');
+atlas.juz(30); atlas.hizb(1); atlas.rubuAlHizb(1); atlas.juzAt(2, 255); atlas.pagesOfJuz(30); atlas.findSurah('cow');
 
 QvpColor.toColor(0x1a73e8ff); QvpColor.fromColor(Colors.blue); rgba('#d6a326', 0.3);   // 0xRRGGBBAA ↔ Color
 ```
