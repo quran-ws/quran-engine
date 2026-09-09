@@ -1,7 +1,10 @@
-//! SVG → QVP. Walks the exporter's structure
-//! (`line > ayah > word > path`, plus `ayah_markers`, `surah-name`, `basmalah`,
-//! `hizb-mark`, `sajdah-mark`), flattens every transform into page space,
+//! SVG → QVP. Walks the quran-svg bundle's structure
+//! (`line > ayah-fragment > word > path`, plus `ayah_markers`, `surah-name`,
+//! `basmalah`, `division-mark`, `sajdah-mark`, and page 17's `page_number` /
+//! `running_head` furniture), flattens every transform into page space,
 //! quantises and builds the tables. No data repair: quirks are reported.
+//!
+//! Names follow the bundle's `schema/FORMAT.md` and `schema/mark-taxonomy.json`.
 
 use crate::affine::Affine;
 use qvp_format::*;
@@ -13,12 +16,12 @@ pub struct Report {
     pub warnings: Vec<String>,
 }
 
-/// Side text index: wid → other text forms.
+/// Side text index: word_key → other text forms.
 #[derive(Debug, Default)]
 pub struct WordText {
-    pub wid: String,
-    pub uthmani: String,
-    pub imlaei: String,
+    pub word_key: String,
+    pub rasm_uthmani: String,
+    pub rasm_imlai: String,
     pub qpc: String,
     pub rasm: String,
     pub search: String,
@@ -36,7 +39,7 @@ struct Ctx<'a> {
     page: PageData,
     words_text: Vec<WordText>,
     report: Report,
-    marker_ids: HashMap<String, u16>,
+    ayah_mark_ids: HashMap<String, u16>,
     strings: HashMap<String, u16>,
     /// `d` strings that occur more than once on the page → glyph index (lazily assigned).
     shared_d: HashMap<&'a str, Option<u16>>,
@@ -96,7 +99,7 @@ pub fn convert(svg: &str) -> Result<Converted, String> {
         },
         words_text: vec![],
         report: Report::default(),
-        marker_ids: HashMap::new(),
+        ayah_mark_ids: HashMap::new(),
         strings: HashMap::new(),
         shared_d,
         _p: Default::default(),
@@ -104,6 +107,7 @@ pub fn convert(svg: &str) -> Result<Converted, String> {
     let tf = cx.page_tf;
     cx.walk(root, tf)?;
     cx.link_markers();
+    cx.page.canonicalize_ops();
     Ok(Converted { page: cx.page, words_text: cx.words_text, report: cx.report })
 }
 
@@ -111,7 +115,7 @@ fn class<'a, 'i>(n: Node<'a, 'i>) -> &'a str {
     n.attribute("class").unwrap_or("")
 }
 
-fn parse_aid(s: &str) -> Option<(u16, u16)> {
+fn parse_ayah_key(s: &str) -> Option<(u16, u16)> {
     let (a, b) = s.split_once(':')?;
     Some((a.parse().ok()?, b.parse().ok()?))
 }
@@ -144,11 +148,13 @@ impl<'a> Ctx<'a> {
             let ctf = self.node_tf(c, tf)?;
             match (c.tag_name().name(), class(c)) {
                 ("g", "line") => self.line(c, ctf)?,
-                ("g", "ayah-marker") => self.deco(c, ctf, DecoKind::AyahMarker, NONE_U16)?,
+                ("g", "ayah-mark") => self.deco(c, ctf, DecoKind::AyahMark, NONE_U16)?,
                 ("g", "surah-name") => self.deco(c, ctf, DecoKind::SurahName, NONE_U16)?,
                 ("g", "basmalah") => self.deco(c, ctf, DecoKind::Basmalah, NONE_U16)?,
-                ("g", "hizb-mark") => self.deco(c, ctf, DecoKind::HizbMark, NONE_U16)?,
+                ("g", "division-mark") => self.deco(c, ctf, DecoKind::DivisionMark, NONE_U16)?,
                 ("g", "sajdah-mark") => self.deco(c, ctf, DecoKind::SajdahMark, NONE_U16)?,
+                ("g", "page_number") => self.deco(c, ctf, DecoKind::PageNumber, NONE_U16)?,
+                ("g", "running_head") => self.deco(c, ctf, DecoKind::RunningHead, NONE_U16)?,
                 ("g", _) => self.walk(c, ctf)?,
                 ("path", _) => {
                     self.warn(format!("stray path outside any group (parent class {:?})", class(n)));
@@ -181,13 +187,13 @@ impl<'a> Ctx<'a> {
         for c in n.children().filter(|c| c.is_element()) {
             let ctf = self.node_tf(c, tf)?;
             match (c.tag_name().name(), class(c)) {
-                ("g", "ayah") => self.ayah(c, ctf, line_idx)?,
+                ("g", "ayah-fragment") => self.ayah(c, ctf, line_idx)?,
                 ("g", "") => self.line_children(c, ctf, line_idx, line_no)?,
                 ("g", "surah-name") => self.deco(c, ctf, DecoKind::SurahName, line_idx)?,
                 ("g", "basmalah") => self.deco(c, ctf, DecoKind::Basmalah, line_idx)?,
-                ("g", "hizb-mark") => self.deco(c, ctf, DecoKind::HizbMark, line_idx)?,
+                ("g", "division-mark") => self.deco(c, ctf, DecoKind::DivisionMark, line_idx)?,
                 ("g", "sajdah-mark") => self.deco(c, ctf, DecoKind::SajdahMark, line_idx)?,
-                ("g", "ayah-marker") => self.deco(c, ctf, DecoKind::AyahMarker, line_idx)?,
+                ("g", "ayah-mark") => self.deco(c, ctf, DecoKind::AyahMark, line_idx)?,
                 (t, cl) => self.warn(format!("line {line_no}: unexpected <{t} class={cl:?}> inside line")),
             }
         }
@@ -195,9 +201,9 @@ impl<'a> Ctx<'a> {
     }
 
     fn ayah(&mut self, n: Node<'a, '_>, tf: Affine, line_idx: u16) -> Result<(), String> {
-        let (sura, ayah) = n.attribute("data-aid").and_then(parse_aid).unwrap_or((0, 0));
-        let part = n.attribute("data-part").and_then(|s| s.parse().ok()).unwrap_or(1);
-        let parts = n.attribute("data-ayah-parts").and_then(|s| s.parse().ok()).unwrap_or(1);
+        let (surah, ayah) = n.attribute("data-ayah-key").and_then(parse_ayah_key).unwrap_or((0, 0));
+        let fragment = n.attribute("data-fragment").and_then(|s| s.parse().ok()).unwrap_or(1);
+        let fragments = n.attribute("data-ayah-fragments").and_then(|s| s.parse().ok()).unwrap_or(1);
         let mut flags = 0;
         if n.has_attribute("data-juz-start") {
             flags |= AF_JUZ_START;
@@ -205,27 +211,27 @@ impl<'a> Ctx<'a> {
         if n.has_attribute("data-hizb-start") {
             flags |= AF_HIZB_START;
         }
-        if n.has_attribute("data-rub-start") {
-            flags |= AF_RUB_START;
+        if n.has_attribute("data-rubu-al-hizb-start") {
+            flags |= AF_RUBU_AL_HIZB_START;
         }
         if n.has_attribute("data-nisf-start") {
             flags |= AF_NISF_START;
         }
         let num = |a: &str| n.attribute(a).and_then(|s| s.parse::<u16>().ok());
-        let rub: u16 = num("data-rub-start")
+        let rubu_al_hizb: u16 = num("data-rubu-al-hizb-start")
             .or_else(|| num("data-nisf-start").map(|x| (x - 1) * 2 + 1))
             .or_else(|| num("data-hizb-start").map(|x| (x - 1) * 4 + 1))
             .or_else(|| num("data-juz-start").map(|x| (x - 1) * 8 + 1))
             .unwrap_or(0);
         let first_word = self.page.words.len() as u16;
         let ayah_idx = self.page.ayahs.len() as u16;
-        // marker id is resolved after decos are all known
-        let marker_deco = match n.attribute("data-marker") {
+        // the ayah-mark id is resolved after decos are all known
+        let ayah_mark_deco = match n.attribute("data-ayah-mark") {
             Some(id) => self.intern(id) | 0x8000, // temp: string ref flagged
             None => NONE_U16,
         };
-        self.page.ayahs.push(AyahRec { sura, ayah, part, parts, flags, first_word, n_words: 0, marker_deco, rub, bbox: IBox::EMPTY });
-        self.ayah_children(n, tf, line_idx, ayah_idx, sura, ayah)?;
+        self.page.ayahs.push(AyahRec { surah, ayah, fragment, fragments, flags, first_word, n_words: 0, ayah_mark_deco, rubu_al_hizb, bbox: IBox::EMPTY });
+        self.ayah_children(n, tf, line_idx, ayah_idx, surah, ayah)?;
         let n_words = self.page.words.len() as u16 - first_word;
         let mut bb = IBox::EMPTY;
         for w in &self.page.words[first_word as usize..] {
@@ -237,34 +243,36 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    fn ayah_children(&mut self, n: Node<'a, '_>, tf: Affine, line_idx: u16, ayah_idx: u16, sura: u16, ayah: u16) -> Result<(), String> {
+    fn ayah_children(&mut self, n: Node<'a, '_>, tf: Affine, line_idx: u16, ayah_idx: u16, surah: u16, ayah: u16) -> Result<(), String> {
         for c in n.children().filter(|c| c.is_element()) {
             let ctf = self.node_tf(c, tf)?;
             match (c.tag_name().name(), class(c)) {
                 ("g", "word") => self.word(c, ctf, line_idx, ayah_idx)?,
-                ("g", "") => self.ayah_children(c, ctf, line_idx, ayah_idx, sura, ayah)?,
-                (t, cl) => self.warn(format!("ayah {sura}:{ayah}: unexpected <{t} class={cl:?}> inside ayah")),
+                ("g", "") => self.ayah_children(c, ctf, line_idx, ayah_idx, surah, ayah)?,
+                (t, cl) => self.warn(format!("ayah {surah}:{ayah}: unexpected <{t} class={cl:?}> inside ayah")),
             }
         }
         Ok(())
     }
 
     fn word(&mut self, n: Node<'a, '_>, tf: Affine, line_idx: u16, ayah_idx: u16) -> Result<(), String> {
-        let wid = n.attribute("data-wid").unwrap_or("");
-        let mut it = wid.split(':').map(|s| s.parse::<u16>().unwrap_or(0));
-        let (sura, ayah, word) = (it.next().unwrap_or(0), it.next().unwrap_or(0), it.next().unwrap_or(0));
-        let uthmani = n.attribute("data-uthmani").unwrap_or("");
+        let word_key = n.attribute("data-word-key").unwrap_or("");
+        let mut it = word_key.split(':').map(|s| s.parse::<u16>().unwrap_or(0));
+        let (surah, ayah, word) = (it.next().unwrap_or(0), it.next().unwrap_or(0), it.next().unwrap_or(0));
+        let rasm_uthmani = n.attribute("data-rasm-uthmani").unwrap_or("");
         self.words_text.push(WordText {
-            wid: wid.to_owned(),
-            uthmani: uthmani.to_owned(),
-            imlaei: n.attribute("data-imlaei").unwrap_or("").to_owned(),
+            word_key: word_key.to_owned(),
+            rasm_uthmani: rasm_uthmani.to_owned(),
+            rasm_imlai: n.attribute("data-rasm-imlai").unwrap_or("").to_owned(),
             qpc: n.attribute("data-qpc").unwrap_or("").to_owned(),
             rasm: n.attribute("data-rasm").unwrap_or("").to_owned(),
             search: n.attribute("data-search").unwrap_or("").to_owned(),
         });
-        let text = if uthmani.is_empty() { NONE_U16 } else { self.intern(uthmani) };
+        let text = if rasm_uthmani.is_empty() { NONE_U16 } else { self.intern(rasm_uthmani) };
+        // Dev-profile pages carry the derived forms inline; production pages do not,
+        // and `attach_words` fills them from `index/by-page/NNN.json` instead.
         let form = |cx: &mut Self, a: &str| -> u16 { match n.attribute(a) { Some(v) if !v.is_empty() => cx.intern(v), _ => NONE_U16 } };
-        let imlaei = form(self, "data-imlaei");
+        let rasm_imlai = form(self, "data-rasm-imlai");
         let qpc = form(self, "data-qpc");
         let rasm = form(self, "data-rasm");
         let search = form(self, "data-search");
@@ -273,18 +281,18 @@ impl<'a> Ctx<'a> {
             let ctf = self.node_tf(c, tf)?;
             match c.tag_name().name() {
                 "path" => raws.push(self.raw_path(c, ctf)?),
-                t => self.warn(format!("word {wid}: unexpected <{t}> inside word")),
+                t => self.warn(format!("word {word_key}: unexpected <{t}> inside word")),
             }
         }
         let (first_path, n_paths, bbox) = self.push_paths(raws);
-        self.page.words.push(WordRec { sura, ayah, word, line_idx, ayah_idx, text, imlaei, qpc, rasm, search, first_path, n_paths, bbox });
+        self.page.words.push(WordRec { surah, ayah, word, line_idx, ayah_idx, text, rasm_imlai, qpc, rasm, search, first_path, n_paths, bbox });
         Ok(())
     }
 
     fn deco(&mut self, n: Node<'a, '_>, tf: Affine, kind: DecoKind, line: u16) -> Result<(), String> {
-        let (sura, ayah) = n
-            .attribute("data-aid")
-            .and_then(parse_aid)
+        let (surah, ayah) = n
+            .attribute("data-ayah-key")
+            .and_then(parse_ayah_key)
             .or_else(|| n.attribute("data-sid").and_then(|s| s.parse().ok()).map(|s| (s, 0)))
             .unwrap_or((0, 0));
         let text = match kind {
@@ -299,12 +307,12 @@ impl<'a> Ctx<'a> {
                 );
                 Some(self.intern(&s))
             }
-            DecoKind::HizbMark => {
+            DecoKind::DivisionMark => {
                 let s = format!(
-                    "juz={};hizb={};rub={};nisf={}",
+                    "juz={};hizb={};rubu_al_hizb={};nisf={}",
                     n.attribute("data-juz").unwrap_or(""),
                     n.attribute("data-hizb").unwrap_or(""),
-                    n.attribute("data-rub").unwrap_or(""),
+                    n.attribute("data-rubu-al-hizb").unwrap_or(""),
                     n.attribute("data-nisf").unwrap_or("")
                 );
                 Some(self.intern(&s))
@@ -314,9 +322,9 @@ impl<'a> Ctx<'a> {
         .unwrap_or(NONE_U16);
         let mut raws = Vec::new();
         self.collect_paths(n, tf, &mut raws)?;
-        let idx = self.push_deco_from_raw(kind, sura, ayah, text, line, raws);
+        let idx = self.push_deco_from_raw(kind, surah, ayah, text, line, raws);
         if let Some(id) = n.attribute("id") {
-            self.marker_ids.insert(id.to_owned(), idx);
+            self.ayah_mark_ids.insert(id.to_owned(), idx);
         }
         Ok(())
     }
@@ -333,10 +341,10 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    fn push_deco_from_raw(&mut self, kind: DecoKind, sura: u16, ayah: u16, text: u16, line: u16, raws: Vec<RawPath>) -> u16 {
+    fn push_deco_from_raw(&mut self, kind: DecoKind, surah: u16, ayah: u16, text: u16, line: u16, raws: Vec<RawPath>) -> u16 {
         let (first_path, n_paths, bbox) = self.push_paths(raws);
         let idx = self.page.decos.len() as u16;
-        self.page.decos.push(DecoRec { kind, sura, ayah, text, first_path, n_paths, line, bbox });
+        self.page.decos.push(DecoRec { kind, surah, ayah, text, first_path, n_paths, line, bbox });
         idx
     }
 
@@ -396,6 +404,9 @@ impl<'a> Ctx<'a> {
         }
         if n.has_attribute("data-standalone") {
             flags |= PF_STANDALONE;
+        }
+        if n.has_attribute("data-duplicate") {
+            flags |= PF_DUPLICATE;
         }
         let d = n.attribute("d").ok_or("path without d")?;
         let quant = self.quant;
@@ -460,19 +471,19 @@ impl<'a> Ctx<'a> {
     fn link_markers(&mut self) {
         let mut unresolved = 0;
         for a in &mut self.page.ayahs {
-            if a.marker_deco != NONE_U16 && a.marker_deco & 0x8000 != 0 {
-                let id = &self.page.strings[(a.marker_deco & 0x7fff) as usize];
-                match self.marker_ids.get(id) {
-                    Some(&i) => a.marker_deco = i,
+            if a.ayah_mark_deco != NONE_U16 && a.ayah_mark_deco & 0x8000 != 0 {
+                let id = &self.page.strings[(a.ayah_mark_deco & 0x7fff) as usize];
+                match self.ayah_mark_ids.get(id) {
+                    Some(&i) => a.ayah_mark_deco = i,
                     None => {
                         unresolved += 1;
-                        a.marker_deco = NONE_U16;
+                        a.ayah_mark_deco = NONE_U16;
                     }
                 }
             }
         }
         if unresolved > 0 {
-            self.report.warnings.push(format!("{unresolved} ayah(s) reference a marker id that does not exist on the page"));
+            self.report.warnings.push(format!("{unresolved} ayah(s) reference an ayah-mark id that does not exist on the page"));
         }
     }
 }

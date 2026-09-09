@@ -19,7 +19,7 @@ fn page() -> Page {
     };
     let a = add(&square(1000, 1000, 2000, 2000), PathKind::Body, Mark::None, Family::None);
     let mut b = add(&square(3000, 1000, 4000, 2000), PathKind::Body, Mark::None, Family::None);
-    b.union(&add(&square(3200, 500, 3400, 700), PathKind::Mark, Mark::Fatha, Family::Diacritic));
+    b.union(&add(&square(3200, 500, 3400, 700), PathKind::Mark, Mark::Fathah, Family::Diacritic));
     b.union(&add(&square(3600, 500, 3800, 700), PathKind::Mark, Mark::Dot, Family::Dots));
     let c = add(&square(1000, 5000, 4000, 6000), PathKind::Body, Mark::None, Family::None);
     let mut l1 = a;
@@ -30,13 +30,13 @@ fn page() -> Page {
         header: Header { version: VERSION, quant: 100, page: 1, flags: 0, width: 100.0, height: 100.0 },
         lines: vec![LineRec { line_no: 1, first_word: 0, n_words: 2, bbox: l1 }, LineRec { line_no: 2, first_word: 2, n_words: 1, bbox: c }],
         ayahs: vec![
-            AyahRec { sura: 1, ayah: 1, part: 1, parts: 1, flags: AF_JUZ_START | AF_HIZB_START | AF_RUB_START, first_word: 0, n_words: 2, marker_deco: NONE_U16, rub: 1, bbox: l1 },
-            AyahRec { sura: 1, ayah: 2, part: 1, parts: 1, flags: 0, first_word: 2, n_words: 1, marker_deco: NONE_U16, rub: 0, bbox: c },
+            AyahRec { surah: 1, ayah: 1, fragment: 1, fragments: 1, flags: AF_JUZ_START | AF_HIZB_START | AF_RUBU_AL_HIZB_START, first_word: 0, n_words: 2, ayah_mark_deco: NONE_U16, rubu_al_hizb: 1, bbox: l1 },
+            AyahRec { surah: 1, ayah: 2, fragment: 1, fragments: 1, flags: 0, first_word: 2, n_words: 1, ayah_mark_deco: NONE_U16, rubu_al_hizb: 0, bbox: c },
         ],
         words: vec![
-            WordRec { sura: 1, ayah: 1, word: 1, line_idx: 0, ayah_idx: 0, text: ta, imlaei: ta, qpc: ta, rasm: ta_s, search: ta_s, first_path: 0, n_paths: 1, bbox: a },
-            WordRec { sura: 1, ayah: 1, word: 2, line_idx: 0, ayah_idx: 0, text: tb, imlaei: tb, qpc: tb, rasm: tb_s, search: tb_s, first_path: 1, n_paths: 3, bbox: b },
-            WordRec { sura: 1, ayah: 2, word: 1, line_idx: 1, ayah_idx: 1, text: tc, imlaei: tc, qpc: tc, rasm: tc_s, search: tc_s, first_path: 4, n_paths: 1, bbox: c },
+            WordRec { surah: 1, ayah: 1, word: 1, line_idx: 0, ayah_idx: 0, text: ta, rasm_imlai: ta, qpc: ta, rasm: ta_s, search: ta_s, first_path: 0, n_paths: 1, bbox: a },
+            WordRec { surah: 1, ayah: 1, word: 2, line_idx: 0, ayah_idx: 0, text: tb, rasm_imlai: tb, qpc: tb, rasm: tb_s, search: tb_s, first_path: 1, n_paths: 3, bbox: b },
+            WordRec { surah: 1, ayah: 2, word: 1, line_idx: 1, ayah_idx: 1, text: tc, rasm_imlai: tc, qpc: tc, rasm: tc_s, search: tc_s, first_path: 4, n_paths: 1, bbox: c },
         ],
         paths,
         decos: vec![],
@@ -107,7 +107,7 @@ fn styles_layers_handles_and_subword() {
     assert_eq!(p.color_of(3), 0xabcdefff);
     assert_eq!(p.color_of(2), DEFAULT_INK);
     p.unstyle(h);
-    let h = p.style(Selector::WordMarkNamed(1, Mark::Fatha, 0), Paint::new(0x123456ff));
+    let h = p.style(Selector::WordMarkNamed(1, Mark::Fathah, 0), Paint::new(0x123456ff));
     assert_eq!(p.color_of(2), 0x123456ff);
     p.unstyle(h);
     let h = p.style(Selector::Category(Category::LetterDot), Paint::new(0x0a0b0cff));
@@ -181,7 +181,7 @@ fn highlights_bands_and_animation() {
 #[test]
 fn text_search_selection_citation() {
     let p = page();
-    assert_eq!(p.text_of(&[0, 1, 2], Form::Uthmani, " ", "\n"), "ذَٰلِكَ ٱلْكِتَٰبُ\nلَا");
+    assert_eq!(p.text_of(&[0, 1, 2], Form::RasmUthmani, " ", "\n"), "ذَٰلِكَ ٱلْكِتَٰبُ\nلَا");
     assert_eq!(p.text_of(&p.resolve(&Target::Page), Form::Search, " ", " / "), "ذلك الكتاب / لا");
     let m = p.search("الكتاب", &SearchOptions::default());
     assert_eq!(m.len(), 1);

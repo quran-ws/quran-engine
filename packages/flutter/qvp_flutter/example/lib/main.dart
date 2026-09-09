@@ -32,8 +32,8 @@ class Palette {
 
 /// Mark-category colours (the "Mark colours" theme + legend).
 const Map<int, String> kPalette = {
-  QvpCategory.haraka: '#1a73e8',
-  QvpCategory.tanween: '#8e24aa',
+  QvpCategory.harakah: '#1a73e8',
+  QvpCategory.tanwin: '#8e24aa',
   QvpCategory.letterDot: '#c62828',
   QvpCategory.waqf: '#0a7d32',
   QvpCategory.dabt: '#ef6c00',
@@ -93,9 +93,9 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   // ── state (S in app.js) ──
   int selWord = -1;
   (int, int)? selAyah;
-  int hlSel = 0, hlAyah = 0, hlSearch = 0, hlPlay = 0, tajweedHandle = 0, hideHandle = 0, markersHandle = 0;
+  int hlSel = 0, hlAyah = 0, hlSearch = 0, hlPlay = 0, tajwidHandle = 0, hideHandle = 0, ayahMarksHandle = 0;
   final Map<int, int> pathHandles = {};
-  bool tajweed = false, hideMarks = false, goldMarkers = false;
+  bool tajwid = false, hideMarks = false, goldAyahMarks = false;
   bool playing = false;
   int playIdx = 0;
   Timer? playTimer;
@@ -194,7 +194,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       pathHandles.clear();
       revealOn = false;
       revealPos = -1;
-      tajweedHandle = hideHandle = markersHandle = 0;
+      tajwidHandle = hideHandle = ayahMarksHandle = 0;
       cropInfo = null;
       pageCtl.text = '$target';
     });
@@ -338,7 +338,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     final p = page!;
     String text;
     if (p.selection().isNotEmpty) {
-      text = p.selectionText('uthmani', true);
+      text = p.selectionText('rasmUthmani', true);
     } else if (selAyah != null) {
       text = '${p.text(T.ayah(selAyah!.$1, selAyah!.$2))} (${selAyah!.$1}:${selAyah!.$2})';
     } else if (selWord >= 0) {
@@ -364,12 +364,12 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     final t = _selTarget();
     if (t == null) return;
     final p = page!;
-    final svg = p.cropSvg(t, pad: 3, keepMarkers: true, background: QvpColor.fromColor(pal.paper));
+    final svg = p.cropSvg(t, pad: 3, keepAyahMarks: true, background: QvpColor.fromColor(pal.paper));
     final box = p.cropBox(t, pad: 3);
     setState(() => cropInfo = svg == null || box == null
         ? 'crop failed'
         : 'SVG ${svg.length} chars · ${svg.substring(0, svg.indexOf('>') + 1).replaceAll(RegExp(r'\s+'), ' ')}\n'
-            'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.markerDeco != qvpNone ? ' · marker' : ''}');
+            'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.ayahMarkDeco != qvpNone ? ' · ayahMark' : ''}');
   }
 
   // ── follow words ──
@@ -417,36 +417,36 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   void _applyToggles() {
     final p = page;
     if (p == null) return;
-    if (tajweedHandle != 0) {
-      p.unstyle(tajweedHandle);
-      tajweedHandle = 0;
+    if (tajwidHandle != 0) {
+      p.unstyle(tajwidHandle);
+      tajwidHandle = 0;
     }
-    if (tajweed) {
-      tajweedHandle = p.theme(QvpTheme(diacritics: kPalette[QvpCategory.haraka], dots: kPalette[QvpCategory.letterDot], waqf: kPalette[QvpCategory.waqf], sifr: kPalette[QvpCategory.dabt], ms: 200));
+    if (tajwid) {
+      tajwidHandle = p.theme(QvpTheme(diacritics: kPalette[QvpCategory.harakah], dots: kPalette[QvpCategory.letterDot], waqf: kPalette[QvpCategory.waqf], sifr: kPalette[QvpCategory.dabt], ms: 200));
     }
     if (hideHandle != 0) {
       p.unstyle(hideHandle);
       hideHandle = 0;
     }
     if (hideMarks) hideHandle = p.hide(Sel.kind(QvpKind.mark));
-    if (markersHandle != 0) {
-      p.unstyle(markersHandle);
-      markersHandle = 0;
+    if (ayahMarksHandle != 0) {
+      p.unstyle(ayahMarksHandle);
+      ayahMarksHandle = 0;
     }
-    if (goldMarkers) markersHandle = p.style(Sel.deco(QvpDeco.ayahMarker), '#b8860b', ms: 300, layer: QvpLayer.theme + 1);
+    if (goldAyahMarks) ayahMarksHandle = p.style(Sel.deco(QvpDeco.ayahMark), '#b8860b', ms: 300, layer: QvpLayer.theme + 1);
     setState(() {});
   }
 
   void clearAll() {
     final p = page!;
-    tajweed = hideMarks = goldMarkers = false;
+    tajwid = hideMarks = goldAyahMarks = false;
     p.clearStyles();
     p.clearHighlights();
     p.unmask();
     p.revealStop();
     viewKey.currentState?.clearSelection();
     hlSel = hlAyah = hlSearch = hlPlay = 0;
-    tajweedHandle = hideHandle = markersHandle = 0;
+    tajwidHandle = hideHandle = ayahMarksHandle = 0;
     pathHandles.clear();
     selWord = -1;
     selAyah = null;
@@ -473,7 +473,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     final t = selAyah != null
         ? T.ayah(selAyah!.$1, selAyah!.$2)
         : selWord >= 0
-            ? T.ayah(p.words[selWord].sura, p.words[selWord].ayah)
+            ? T.ayah(p.words[selWord].surah, p.words[selWord].ayah)
             : T.page();
     p.maskOptions(blockColor: QvpColor.fromColor(pal.line));
     p.mask(t, maskMode);
@@ -524,7 +524,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
             selectWord(w);
           },
           onDecoTap: (d) {
-            if (d.ayah > 0) selectAyah(d.sura, d.ayah);
+            if (d.ayah > 0) selectAyah(d.surah, d.ayah);
           },
           onEmptyTap: () => selectWord(-1),
           onSelectionChanged: _onDragSelection,
@@ -674,7 +674,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
                     child: Row(children: [
                       Text(m.text, style: const TextStyle(fontSize: 18)),
                       const SizedBox(width: 8),
-                      Text('${m.wid}${m.loose ? ' ~' : ''}', style: TextStyle(color: pal.muted, fontSize: 12)),
+                      Text('${m.wordKey}${m.loose ? ' ~' : ''}', style: TextStyle(color: pal.muted, fontSize: 12)),
                     ]),
                   ),
                 ),
@@ -699,9 +699,9 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       rows.add(('search form', p.text(T.words(sel), 'search'), true));
     } else if (w != null) {
       big = w.text;
-      rows.add(('wid', w.wid, false));
+      rows.add(('wordKey', w.wordKey, false));
       rows.add(('line', '${w.line}', false));
-      for (final f in ['imlaei', 'qpc', 'rasm', 'search']) {
+      for (final f in ['rasmImlai', 'qpc', 'rasm', 'search']) {
         final v = p.wordForm(w.idx, f);
         if (v.isNotEmpty) rows.add((f, v, true));
       }
@@ -753,7 +753,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       ]),
       if (cropInfo != null) Padding(padding: const EdgeInsets.only(top: 6), child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(border: Border.all(color: pal.line), borderRadius: BorderRadius.circular(6)), child: Text(cropInfo!, style: const TextStyle(fontSize: 11, fontFamily: 'monospace')))),
       const SizedBox(height: 6),
-      _hint('Tap a word. Long-press and drag across words to select (whole words, gap-aware). Tap an ayah marker for the ayah. Chips recolour one path — e.g. the 2nd diacritic only.'),
+      _hint('Tap a word. Long-press and drag across words to select (whole words, gap-aware). Tap an ayah mark for the ayah. Chips recolour one path — e.g. the 2nd diacritic only.'),
     ]);
   }
 
@@ -793,16 +793,16 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     Widget toggle(String label, bool on, VoidCallback f) => FilterChip(label: Text(label), selected: on, onSelected: (_) => f());
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 6, runSpacing: 4, children: [
-        toggle('Mark colours', tajweed, () {
-          tajweed = !tajweed;
+        toggle('Mark colours', tajwid, () {
+          tajwid = !tajwid;
           _applyToggles();
         }),
         toggle('Hide marks', hideMarks, () {
           hideMarks = !hideMarks;
           _applyToggles();
         }),
-        toggle('Gold markers', goldMarkers, () {
-          goldMarkers = !goldMarkers;
+        toggle('Gold ayah marks', goldAyahMarks, () {
+          goldAyahMarks = !goldAyahMarks;
           _applyToggles();
         }),
         ActionChip(label: const Text('Clear all'), onPressed: clearAll),
@@ -910,19 +910,19 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   Widget _pageSection() {
     final p = page!;
     final su = p.surahs(), dv = p.divisions();
-    final parts = [for (final s in su) '${s.number}${s.latin.isNotEmpty ? ' ${s.latin}' : ''}${s.arabic.isNotEmpty ? ' ${s.arabic}' : ''}${s.hasBanner ? ' (banner)' : ''}'];
-    var t = 'surahs: ${parts.join(', ')}';
-    if (dv.isNotEmpty) t += '\nstarts here: ${dv.map((d) => '${d.kind} ${d.n} at ${d.sura}:${d.ayah}').join(', ')}';
+    final names = [for (final s in su) '${s.number}${s.latin.isNotEmpty ? ' ${s.latin}' : ''}${s.arabic.isNotEmpty ? ' ${s.arabic}' : ''}${s.hasBanner ? ' (banner)' : ''}'];
+    var t = 'surahs: ${names.join(', ')}';
+    if (dv.isNotEmpty) t += '\nstarts here: ${dv.map((d) => '${d.kind} ${d.n} at ${d.surah}:${d.ayah}').join(', ')}';
     final a = atlas;
     if (a != null && p.words.isNotEmpty) {
-      final j = a.juzAt(p.words.first.sura, p.words.first.ayah);
+      final j = a.juzAt(p.words.first.surah, p.words.first.ayah);
       if (j != null) t += '\njuz $j · pages ${a.pagesOfJuz(j)?.join('–')}';
       final r = a.pageRange(p.page);
       if (r != null) t += '\nrange ${r.first.$1}:${r.first.$2} → ${r.last.$1}:${r.last.$2}';
     }
     final ros = p.rosettes(), saj = p.sajdahs();
-    if (ros.isNotEmpty) t += '\nrosettes: ${ros.map((r) => 'hizb ${r.hizb} rub ${r.rubInHizb}').join(', ')}';
-    if (saj.isNotEmpty) t += '\nsajdah: ${saj.map((s) => '${s.sura}:${s.ayah}').join(', ')}';
+    if (ros.isNotEmpty) t += '\nrosettes: ${ros.map((r) => 'hizb ${r.hizb} rubuAlHizb ${r.rubuAlHizbInHizb}').join(', ')}';
+    if (saj.isNotEmpty) t += '\nsajdah: ${saj.map((s) => '${s.surah}:${s.ayah}').join(', ')}';
     t += '\nayahs: ${p.ayahKeys().map((k) => '${k.$1}:${k.$2}').join(' ')}';
     return _hint(t);
   }
@@ -939,7 +939,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
         final dpr = MediaQuery.devicePixelRatioOf(context);
         final text = 'engine        ${engine!.engineName} v${engine!.version} (dart:ffi), open ${initMs.toStringAsFixed(1)} ms${atlas != null ? ' · atlas loaded (${atlas!.pages} pages)' : ''}\n'
             'page ${_pad(n)}      ${(bytes / 1024).toStringAsFixed(0)} KB, load+decode ${loadMs.toStringAsFixed(2)} ms\n'
-            'content       ${p.nWords} words · ${p.nPaths} paths · ${p.nAyahs} ayah parts · ${p.nLines} lines\n'
+            'content       ${p.nWords} words · ${p.nPaths} paths · ${p.nAyahs} ayah fragments · ${p.nLines} lines\n'
             'base layer    ${st?.basePaths ?? 0} paths in ${(st?.baseMs ?? 0).toStringAsFixed(2)} ms (cached image)\n'
             'overlay       ${st?.overlayPaths ?? 0} styled paths + ${st?.bands ?? 0} band boxes in ${(st?.overlayMs ?? 0).toStringAsFixed(2)} ms\n'
             'hit-test      gap-aware, engine (last distance ${lastHitUs.toStringAsFixed(2)} u)\n'

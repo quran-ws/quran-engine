@@ -134,7 +134,7 @@ class QvpPageView extends StatefulWidget {
   /// Tap on a word (gap-aware). [hit] carries path / deco / line / distance.
   final void Function(int word, QvpHitEx hit)? onWordTap;
 
-  /// Tap on a decoration (ayah marker, surah banner, …) that is not a word.
+  /// Tap on a decoration (ayah mark, surah banner, …) that is not a word.
   final void Function(QvpDecoInfo deco)? onDecoTap;
   final VoidCallback? onEmptyTap;
 

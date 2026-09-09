@@ -29,7 +29,7 @@ internal object QvpNative {
     @JvmStatic external fun surahNums(h: Long, i: Int): FloatArray?
     @JvmStatic external fun surahNames(h: Long, i: Int): Array<String>?
     @JvmStatic external fun divisions(h: Long): IntArray
-    @JvmStatic external fun markers(h: Long): FloatArray
+    @JvmStatic external fun ayahMarks(h: Long): FloatArray
     @JvmStatic external fun rosettes(h: Long): IntArray
     @JvmStatic external fun sajdahs(h: Long): IntArray
     @JvmStatic external fun ayahKeys(h: Long): IntArray
@@ -100,15 +100,15 @@ internal object QvpNative {
     @JvmStatic external fun maskHidden(h: Long): IntArray
     @JvmStatic external fun maskWords(h: Long): IntArray
     @JvmStatic external fun maskBoxes(h: Long): IntArray
-    @JvmStatic external fun revealStart(h: Long, lit: Int, byAyah: Boolean, grey: Int, ink: Int, markers: Boolean, ms: Int): Int
+    @JvmStatic external fun revealStart(h: Long, lit: Int, byAyah: Boolean, grey: Int, ink: Int, ayahMarks: Boolean, ms: Int): Int
     @JvmStatic external fun revealGoto(h: Long, at: Long): Boolean
     @JvmStatic external fun revealAt(h: Long): Long
     @JvmStatic external fun revealSteps(h: Long): Int
     @JvmStatic external fun revealStepOf(h: Long, wi: Int): Long
     @JvmStatic external fun revealStop(h: Long)
     // crop
-    @JvmStatic external fun cropBox(h: Long, target: IntArray, pad: Float, keepMarkers: Boolean): FloatArray?
-    @JvmStatic external fun cropSvg(h: Long, target: IntArray, pad: Float, keepMarkers: Boolean, background: Int): String?
+    @JvmStatic external fun cropBox(h: Long, target: IntArray, pad: Float, keepAyahMarks: Boolean): FloatArray?
+    @JvmStatic external fun cropSvg(h: Long, target: IntArray, pad: Float, keepAyahMarks: Boolean, background: Int): String?
     // atlas
     @JvmStatic external fun atlasLoad(bytes: ByteArray): Long
     @JvmStatic external fun atlasFree(h: Long)

@@ -24,28 +24,33 @@ const int qvpNone = 0xffffffff;
 
 /// `QVP_KIND_*`
 abstract final class QvpKind {
-  static const int body = 0, mark = 1, ayahNumber = 2, ayahOrnament = 3, headerInk = 4, other = 255;
+  static const int body = 0, mark = 1, ayahNumber = 2, ayahMarkOrnament = 3, headerInk = 4, other = 255;
 }
 
 /// `QVP_FAMILY_*`
 abstract final class QvpFamily {
-  static const int none = 0, diacritic = 1, tanween = 2, dots = 3, waqf = 4, sifr = 5, sajdah = 6, readingSign = 7;
+  static const int none = 0, diacritic = 1, tanwin = 2, dots = 3, waqf = 4, sifr = 5, sajdah = 6, readingSign = 7;
 }
 
 /// `QVP_CATEGORY_*`
 abstract final class QvpCategory {
-  static const int none = 0, haraka = 1, tanween = 2, letterDot = 3, orthographic = 4, dabt = 5, waqf = 6, readingSign = 7, standalone = 8;
+  static const int none = 0, harakah = 1, tanwin = 2, letterDot = 3, orthographic = 4, dabt = 5, waqf = 6, readingSign = 7, standalone = 8;
 }
 
 /// `QVP_DECO_*`
 abstract final class QvpDeco {
-  static const int ayahMarker = 0, surahName = 1, basmalah = 2, hizbMark = 3, sajdahMark = 4;
+  static const int ayahMark = 0, surahName = 1, basmalah = 2, divisionMark = 3, sajdahMark = 4;
 }
 
-/// `QVP_FORM_*` — text forms. Strings 'uthmani' | 'imlaei' | 'qpc' | 'rasm' | 'search' are accepted everywhere a form is.
+/// `QVP_FORM_*` — text forms. Strings 'rasmUthmani' | 'rasmImlai' | 'qpc' | 'rasm' | 'search' are accepted everywhere a form is.
 abstract final class QvpForm {
-  static const int uthmani = 0, imlaei = 1, qpc = 2, rasm = 3, search = 4;
-  static const Map<String, int> byName = {'uthmani': 0, 'imlaei': 1, 'qpc': 2, 'rasm': 3, 'search': 4};
+  static const int rasmUthmani = 0, rasmImlai = 1, qpc = 2, rasm = 3, search = 4;
+  /// Both the Dart spelling and the engine's own `rasm_uthmani` / `rasm_imlai` resolve.
+  static const Map<String, int> byName = {
+    'rasmUthmani': 0, 'rasm_uthmani': 0,
+    'rasmImlai': 1, 'rasm_imlai': 1,
+    'qpc': 2, 'rasm': 3, 'search': 4,
+  };
   static int of(Object f) => f is int ? f : (byName[f as String] ?? 0);
 }
 
@@ -56,17 +61,15 @@ abstract final class QvpLayer {
 
 /// `QVP_DIV_*`
 abstract final class QvpDiv {
-  static const int juz = 0, hizb = 1, nisf = 2, rub = 3;
-  static const List<String> names = ['juz', 'hizb', 'nisf', 'rub'];
+  static const int juz = 0, hizb = 1, nisf = 2, rubuAlHizb = 3;
+  static const List<String> names = ['juz', 'hizb', 'nisf', 'rubuAlHizb'];
   static int of(Object k) => k is int ? k : names.indexOf(k as String);
 }
 
 /// Mark ids ↔ names (`qvp_mark_name`). Index = id; 255 = unknown.
 abstract final class QvpMark {
   static const List<String> names = [
-    '', 'fatha', 'kasra', 'damma', 'fathatan', 'kasratan', 'dammatan', 'shadda', 'sukun', 'maddah', 'hamza', 'wasla', 'small-alef', 'small-waw', 'small-ya', //
-    'small-noon', 'dot', 'two-dots', 'three-dots', 'sifr-mustadir', 'sifr-mustatil', 'waqf-jaiz', 'waqf-awla', 'wasl-awla', 'waqf-lazim', 'muanaqah', 'saktah', //
-    'meem-iqlab', 'hizb', 'sajdah', 'sajdah-sign', 'sajdah-line', 'seen-reading', 'tashil', 'ishmam', 'imalah',
+    '', 'fathah', 'kasrah', 'dammah', 'tanwin_al_fath', 'tanwin_al_kasr', 'tanwin_al_damm', 'shaddah', 'sukun', 'maddah', 'hamzah', 'hamzat_al_wasl', 'omitted_alif', 'small_waw', 'small_yaa', 'small_noon', 'dot', 'two_dots', 'three_dots', 'rounded_zero', 'rectangular_zero', 'waqf_jaiz_mustawi_al_tarafayn', 'waqf_jaiz_waqf_awla', 'waqf_jaiz_wasl_awla', 'waqf_lazim', 'waqf_al_muanaqah', 'saktah', 'small_meem', 'hizb', 'sajdah', 'sajdah_mark', 'sajdah_line', 'seen_al_qiraah', 'tashil', 'ishmam', 'imalah',
   ];
 
   /// Mark id from a name or an id; unknown names → 255.
@@ -147,12 +150,12 @@ abstract final class Sel {
 /// '2:255-257', 'line:7', 'surah:2'. A `List<int>` of word indices is a target too.
 @immutable
 final class QvpTarget {
-  const QvpTarget(this.kind, {this.a = 0, this.b = 0, this.c = 0, this.words, this.wid});
+  const QvpTarget(this.kind, {this.a = 0, this.b = 0, this.c = 0, this.words, this.wordKey});
   final int kind, a, b, c;
   final List<int>? words;
 
-  /// `[sura, ayah, word]` for the '2:255:3' string form; resolved per page via `findWord`.
-  final List<int>? wid;
+  /// `[surah, ayah, word]` for the '2:255:3' string form; resolved per page via `findWord`.
+  final List<int>? wordKey;
 
   static QvpTarget parse(String s) {
     if (s == 'page') return T.page();
@@ -163,7 +166,7 @@ final class QvpTarget {
       return T.ayahRange(int.parse(m!.group(1)!), int.parse(m.group(2)!), int.parse(m.group(3)!));
     }
     if ((m = RegExp(r'^(\d+):(\d+):(\d+)$').firstMatch(s)) != null) {
-      return QvpTarget(1, wid: [int.parse(m!.group(1)!), int.parse(m.group(2)!), int.parse(m.group(3)!)]);
+      return QvpTarget(1, wordKey: [int.parse(m!.group(1)!), int.parse(m.group(2)!), int.parse(m.group(3)!)]);
     }
     if ((m = RegExp(r'^(\d+):(\d+)$').firstMatch(s)) != null) return T.ayah(int.parse(m!.group(1)!), int.parse(m.group(2)!));
     throw ArgumentError('bad target $s');
@@ -196,7 +199,7 @@ abstract final class T {
 final class QvpWordInfo {
   const QvpWordInfo({
     required this.idx,
-    required this.sura,
+    required this.surah,
     required this.ayah,
     required this.word,
     required this.line,
@@ -210,41 +213,41 @@ final class QvpWordInfo {
     required this.firstPath,
     required this.nPaths,
   });
-  final int idx, sura, ayah, word, line, ayahIdx, lineIdx, firstPath, nPaths;
+  final int idx, surah, ayah, word, line, ayahIdx, lineIdx, firstPath, nPaths;
   final double x0, y0, x1, y1;
 
-  /// Uthmani text (inline in the QVP file).
+  /// `rasm_uthmani`, the text of record (inline in the QVP file).
   final String text;
 
-  /// `sura:ayah:word`
-  String get wid => '$sura:$ayah:$word';
+  /// `surah:ayah:word`
+  String get wordKey => '$surah:$ayah:$word';
 
-  /// `sura:ayah`
-  String get aid => '$sura:$ayah';
+  /// `surah:ayah`
+  String get ayahKey => '$surah:$ayah';
 }
 
 @immutable
 final class QvpAyahInfo {
   const QvpAyahInfo({
     required this.idx,
-    required this.sura,
+    required this.surah,
     required this.ayah,
-    required this.part,
-    required this.parts,
+    required this.fragment,
+    required this.fragments,
     required this.flags,
-    required this.rub,
+    required this.rubuAlHizb,
     required this.firstWord,
     required this.nWords,
-    required this.markerDeco,
+    required this.ayahMarkDeco,
     required this.x0,
     required this.y0,
     required this.x1,
     required this.y1,
   });
-  final int idx, sura, ayah, part, parts, flags, rub, firstWord, nWords;
+  final int idx, surah, ayah, fragment, fragments, flags, rubuAlHizb, firstWord, nWords;
 
-  /// Deco index of the ayah marker or [qvpNone].
-  final int markerDeco;
+  /// Deco index of the ayah mark or [qvpNone].
+  final int ayahMarkDeco;
   final double x0, y0, x1, y1;
 }
 
@@ -274,7 +277,7 @@ final class QvpDecoInfo {
   const QvpDecoInfo({
     required this.idx,
     required this.kind,
-    required this.sura,
+    required this.surah,
     required this.ayah,
     required this.line,
     required this.x0,
@@ -285,7 +288,7 @@ final class QvpDecoInfo {
     required this.firstPath,
     required this.nPaths,
   });
-  final int idx, kind, sura, ayah, line, firstPath, nPaths;
+  final int idx, kind, surah, ayah, line, firstPath, nPaths;
   final double x0, y0, x1, y1;
   final String text;
 }
@@ -302,11 +305,11 @@ final class QvpHit {
 /// Gap-aware hit (`QvpHitEx`); indices are -1 when absent.
 @immutable
 final class QvpHitEx {
-  const QvpHitEx({required this.word, required this.path, required this.deco, required this.line, required this.distance, required this.exact, this.wid, this.aid});
+  const QvpHitEx({required this.word, required this.path, required this.deco, required this.line, required this.distance, required this.exact, this.wordKey, this.ayahKey});
   final int word, path, deco, line;
   final double distance;
   final bool exact;
-  final String? wid, aid;
+  final String? wordKey, ayahKey;
   @override
   String toString() => 'QvpHitEx(word: $word, path: $path, deco: $deco, line: $line, distance: $distance, exact: $exact)';
 }
@@ -448,8 +451,8 @@ final class QvpHighlightStyle {
 /// A theme: every colour is optional (0 / null = leave alone); `marks` maps mark name or id → colour.
 @immutable
 final class QvpTheme {
-  const QvpTheme({this.ink, this.diacritics, this.dots, this.waqf, this.sifr, this.marker, this.numeral, this.headers, this.marks = const {}, this.ms = 0});
-  final Object? ink, diacritics, dots, waqf, sifr, marker, numeral, headers;
+  const QvpTheme({this.ink, this.diacritics, this.dots, this.waqf, this.sifr, this.ayahMark, this.numeral, this.headers, this.marks = const {}, this.ms = 0});
+  final Object? ink, diacritics, dots, waqf, sifr, ayahMark, numeral, headers;
   final Map<Object, Object> marks;
   final int ms;
 }
@@ -466,45 +469,45 @@ final class QvpSurahInfo {
 
 @immutable
 final class QvpDivision {
-  const QvpDivision({required this.kind, required this.line, required this.n, required this.sura, required this.ayah, required this.ayahIdx});
+  const QvpDivision({required this.kind, required this.line, required this.n, required this.surah, required this.ayah, required this.ayahIdx});
 
-  /// 'juz' | 'hizb' | 'nisf' | 'rub'
+  /// 'juz' | 'hizb' | 'nisf' | 'rubuAlHizb'
   final String kind;
-  final int line, n, sura, ayah, ayahIdx;
+  final int line, n, surah, ayah, ayahIdx;
 }
 
 @immutable
-final class QvpMarker {
-  const QvpMarker({required this.deco, required this.sura, required this.ayah, required this.line, required this.cx, required this.cy, required this.r, required this.ornamentPath, required this.numeralPath});
-  final int deco, sura, ayah, line, ornamentPath, numeralPath;
+final class QvpAyahMark {
+  const QvpAyahMark({required this.deco, required this.surah, required this.ayah, required this.line, required this.cx, required this.cy, required this.r, required this.ornamentPath, required this.numeralPath});
+  final int deco, surah, ayah, line, ornamentPath, numeralPath;
   final double cx, cy, r;
 }
 
 @immutable
 final class QvpRosette {
-  const QvpRosette({required this.deco, required this.sura, required this.ayah, required this.juz, required this.hizb, required this.nisf, required this.rub, required this.rubInHizb});
-  final int deco, sura, ayah, juz, hizb, nisf, rub, rubInHizb;
+  const QvpRosette({required this.deco, required this.surah, required this.ayah, required this.juz, required this.hizb, required this.nisf, required this.rubuAlHizb, required this.rubuAlHizbInHizb});
+  final int deco, surah, ayah, juz, hizb, nisf, rubuAlHizb, rubuAlHizbInHizb;
 }
 
 @immutable
 final class QvpSajdah {
-  const QvpSajdah({required this.deco, required this.sura, required this.ayah, required this.signPath});
-  final int deco, sura, ayah, signPath;
+  const QvpSajdah({required this.deco, required this.surah, required this.ayah, required this.signPath});
+  final int deco, surah, ayah, signPath;
 }
 
 @immutable
 final class QvpMatch {
-  const QvpMatch({required this.word, required this.index, required this.loose, required this.wid, required this.text});
+  const QvpMatch({required this.word, required this.index, required this.loose, required this.wordKey, required this.text});
   final int word, index;
   final bool loose;
-  final String wid, text;
+  final String wordKey, text;
 }
 
 @immutable
 final class QvpCropBox {
-  const QvpCropBox({required this.x0, required this.y0, required this.x1, required this.y1, required this.nWords, required this.markerDeco});
+  const QvpCropBox({required this.x0, required this.y0, required this.x1, required this.y1, required this.nWords, required this.ayahMarkDeco});
   final double x0, y0, x1, y1;
-  final int nWords, markerDeco;
+  final int nWords, ayahMarkDeco;
 }
 
 @immutable
@@ -515,10 +518,10 @@ final class QvpAtlasSurah {
 }
 
 @immutable
-final class QvpAtlasRub {
-  const QvpAtlasRub({required this.rub, required this.sura, required this.ayah, required this.page});
-  final int rub, sura, ayah, page;
-  String get aid => '$sura:$ayah';
+final class QvpAtlasRubuAlHizb {
+  const QvpAtlasRubuAlHizb({required this.rubuAlHizb, required this.surah, required this.ayah, required this.page});
+  final int rubuAlHizb, surah, ayah, page;
+  String get ayahKey => '$surah:$ayah';
 }
 
 /// One entry of [QvpPage.styled].
@@ -820,7 +823,7 @@ class QvpPage extends ChangeNotifier {
       final w = o.ref;
       return QvpWordInfo(
         idx: i,
-        sura: w.sura,
+        surah: w.surah,
         ayah: w.ayah,
         word: w.word,
         line: w.lineNo,
@@ -846,15 +849,15 @@ class QvpPage extends ChangeNotifier {
       final a = o.ref;
       return QvpAyahInfo(
         idx: i,
-        sura: a.sura,
+        surah: a.surah,
         ayah: a.ayah,
-        part: a.part,
-        parts: a.parts,
+        fragment: a.fragment,
+        fragments: a.fragments,
         flags: a.flags,
-        rub: a.rub,
+        rubuAlHizb: a.rubuAlHizb,
         firstWord: a.firstWord,
         nWords: a.nWords,
-        markerDeco: a.markerDeco,
+        ayahMarkDeco: a.ayahMarkDeco,
         x0: a.x0,
         y0: a.y0,
         x1: a.x1,
@@ -897,7 +900,7 @@ class QvpPage extends ChangeNotifier {
       return QvpDecoInfo(
         idx: i,
         kind: d.kind,
-        sura: d.sura,
+        surah: d.surah,
         ayah: d.ayah,
         line: d.line,
         x0: d.x0,
@@ -913,26 +916,26 @@ class QvpPage extends ChangeNotifier {
     }
   }
 
-  /// Text of word [i] in a form ('uthmani' | 'imlaei' | 'qpc' | 'rasm' | 'search' or [QvpForm]); '' when the form is not attached.
-  String wordForm(int i, [Object form = 'uthmani']) {
+  /// Text of word [i] in a form ('rasmUthmani' | 'rasmImlai' | 'qpc' | 'rasm' | 'search' or [QvpForm]); '' when the form is not attached.
+  String wordForm(int i, [Object form = 'rasmUthmani']) {
     if (_b.wordForm(_p, i, QvpForm.of(form), _e._str) == 0) return '';
     return _e._s();
   }
 
-  /// Word index for (sura, ayah, word) or -1.
-  int findWord(int sura, int ayah, int word) {
-    final i = _b.findWord(_p, sura, ayah, word);
+  /// Word index for (surah, ayah, word) or -1.
+  int findWord(int surah, int ayah, int word) {
+    final i = _b.findWord(_p, surah, ayah, word);
     return i < 0 ? -1 : i;
   }
 
-  /// `sura:ayah:word` of word [i].
-  String wid(int i) => words[i].wid;
+  /// `surah:ayah:word` of word [i].
+  String wordKey(int i) => words[i].wordKey;
 
   /// Marshals a target (String / QvpTarget / `List<int>`) and runs [f] with the pointer.
   R _t<R>(Object target, R Function(ffi.Pointer<QvpTargetC> t) f) {
     var t = QvpTarget.of(target);
-    if (t.wid != null) {
-      final i = findWord(t.wid![0], t.wid![1], t.wid![2]);
+    if (t.wordKey != null) {
+      final i = findWord(t.wordKey![0], t.wordKey![1], t.wordKey![2]);
       t = i >= 0 ? T.word(i) : T.words(const []);
     }
     final r = _e._target.ref;
@@ -982,23 +985,23 @@ class QvpPage extends ChangeNotifier {
     }
   }
 
-  /// Divisions (juz / hizb / nisf / rub) that start on this page.
+  /// Divisions (juz / hizb / nisf / rubuAlHizb) that start on this page.
   List<QvpDivision> divisions() {
     final o = _e._out<QvpDivisionC>(), cap = _e._cap(ffi.sizeOf<QvpDivisionC>());
     final n = _b.divisions(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final d = (o + i).ref;
-      return QvpDivision(kind: QvpDiv.names[d.kind.clamp(0, 3)], line: d.line, n: d.n, sura: d.sura, ayah: d.ayah, ayahIdx: d.ayahIdx);
+      return QvpDivision(kind: QvpDiv.names[d.kind.clamp(0, 3)], line: d.line, n: d.n, surah: d.surah, ayah: d.ayah, ayahIdx: d.ayahIdx);
     }, growable: false);
   }
 
   /// Real ayah medallions.
-  List<QvpMarker> markers() {
-    final o = _e._out<QvpMarkerC>(), cap = _e._cap(ffi.sizeOf<QvpMarkerC>());
-    final n = _b.markers(_p, o, cap).clamp(0, cap);
+  List<QvpAyahMark> ayahMarks() {
+    final o = _e._out<QvpAyahMarkC>(), cap = _e._cap(ffi.sizeOf<QvpAyahMarkC>());
+    final n = _b.ayahMarks(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final m = (o + i).ref;
-      return QvpMarker(deco: m.deco, sura: m.sura, ayah: m.ayah, line: m.line, cx: m.cx, cy: m.cy, r: m.r, ornamentPath: m.ornamentPath, numeralPath: m.numeralPath);
+      return QvpAyahMark(deco: m.deco, surah: m.surah, ayah: m.ayah, line: m.line, cx: m.cx, cy: m.cy, r: m.r, ornamentPath: m.ornamentPath, numeralPath: m.numeralPath);
     }, growable: false);
   }
 
@@ -1008,7 +1011,7 @@ class QvpPage extends ChangeNotifier {
     final n = _b.rosettes(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final r = (o + i).ref;
-      return QvpRosette(deco: r.deco, sura: r.sura, ayah: r.ayah, juz: r.juz, hizb: r.hizb, nisf: r.nisf, rub: r.rub, rubInHizb: r.rubInHizb);
+      return QvpRosette(deco: r.deco, surah: r.surah, ayah: r.ayah, juz: r.juz, hizb: r.hizb, nisf: r.nisf, rubuAlHizb: r.rubuAlHizb, rubuAlHizbInHizb: r.rubuAlHizbInHizb);
     }, growable: false);
   }
 
@@ -1017,23 +1020,23 @@ class QvpPage extends ChangeNotifier {
     final n = _b.sajdahs(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final s = (o + i).ref;
-      return QvpSajdah(deco: s.deco, sura: s.sura, ayah: s.ayah, signPath: s.signPath);
+      return QvpSajdah(deco: s.deco, surah: s.surah, ayah: s.ayah, signPath: s.signPath);
     }, growable: false);
   }
 
-  /// `(sura, ayah)` keys in reading order.
+  /// `(surah, ayah)` keys in reading order.
   List<(int, int)> ayahKeys() => _u32(_b.ayahKeys(_p, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>()))).map((k) => (k >> 16, k & 0xffff)).toList(growable: false);
 
   /// Words of an ayah on this page and whether the ayah is complete here.
-  ({int count, bool complete}) ayahWordCount(int sura, int ayah) {
+  ({int count, bool complete}) ayahWordCount(int surah, int ayah) {
     final o = _e._out<ffi.Uint32>();
-    final n = _b.ayahWordCount(_p, sura, ayah, o);
+    final n = _b.ayahWordCount(_p, surah, ayah, o);
     return (count: n, complete: o.value != 0);
   }
 
   /// Words for [nSegments] recitation segments, or null when the counts disagree (follow the ayah whole).
-  List<int>? reciteMap(int sura, int ayah, int nSegments) {
-    final n = _b.reciteMap(_p, sura, ayah, nSegments, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>()));
+  List<int>? reciteMap(int surah, int ayah, int nSegments) {
+    final n = _b.reciteMap(_p, surah, ayah, nSegments, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>()));
     return n < 0 ? null : _u32(n);
   }
 
@@ -1051,7 +1054,7 @@ class QvpPage extends ChangeNotifier {
 
   // ── text & search ──
   /// Text of a target (default: the page).
-  String text([Object target = 'page', Object form = 'uthmani', String wordSep = ' ', String lineSep = '\n']) => _e.withString(wordSep, (wp, wn) => _e.withString(lineSep, (lp, ln) => _t(target, (t) {
+  String text([Object target = 'page', Object form = 'rasmUthmani', String wordSep = ' ', String lineSep = '\n']) => _e.withString(wordSep, (wp, wn) => _e.withString(lineSep, (lp, ln) => _t(target, (t) {
         _b.textTarget(_p, t, QvpForm.of(form), wp, wn, lp, ln, _e._str);
         return _e._s();
       })));
@@ -1062,7 +1065,7 @@ class QvpPage extends ChangeNotifier {
     final n = _e.withString(query, (p, len) => _b.search(_p, p, len, QvpForm.of(form), const {'includes': 0, 'exact': 1, 'prefix': 2}[mode] ?? 0, normalize ? 1 : 0, loose ? 1 : 0, limit, o, cap)).clamp(0, cap);
     return List.generate(n, (i) {
       final m = (o + i).ref;
-      return QvpMatch(word: m.word, index: m.index, loose: m.loose != 0, wid: wid(m.word), text: words[m.word].text);
+      return QvpMatch(word: m.word, index: m.index, loose: m.loose != 0, wordKey: wordKey(m.word), text: words[m.word].text);
     }, growable: false);
   }
 
@@ -1121,8 +1124,8 @@ class QvpPage extends ChangeNotifier {
       line: h.line,
       distance: h.distance,
       exact: h.exact != 0,
-      wid: w >= 0 ? words[w].wid : null,
-      aid: w >= 0 ? words[w].aid : null,
+      wordKey: w >= 0 ? words[w].wordKey : null,
+      ayahKey: w >= 0 ? words[w].ayahKey : null,
     );
   }
 
@@ -1246,7 +1249,7 @@ class QvpPage extends ChangeNotifier {
     r.dots = c(t.dots);
     r.waqf = c(t.waqf);
     r.sifr = c(t.sifr);
-    r.marker = c(t.marker);
+    r.ayahMark = c(t.ayahMark);
     r.numeral = c(t.numeral);
     r.headers = c(t.headers);
     r.transitionMs = t.ms;
@@ -1351,7 +1354,7 @@ class QvpPage extends ChangeNotifier {
 
   void clearSelection() => select(-1, -1);
   List<int> selection() => _u32(_b.selection(_p, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>())));
-  String selectionText([Object form = 'uthmani', bool citation = false]) {
+  String selectionText([Object form = 'rasmUthmani', bool citation = false]) {
     _b.selectionText(_p, QvpForm.of(form), citation ? 1 : 0, _e._str);
     return _e._s();
   }
@@ -1421,8 +1424,8 @@ class QvpPage extends ChangeNotifier {
   List<QvpBox> maskBoxes() => _boxes(_b.maskBoxes(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
 
   /// Greyed page with a lit window → steps.
-  int revealStart({int lit = 1, bool byAyah = false, Object grey = '#c9c4b8', Object ink = '#231f20', bool markers = true, int ms = 0}) {
-    final n = _b.revealStart(_p, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), markers ? 1 : 0, ms);
+  int revealStart({int lit = 1, bool byAyah = false, Object grey = '#c9c4b8', Object ink = '#231f20', bool ayahMarks = true, int ms = 0}) {
+    final n = _b.revealStart(_p, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms);
     _touch();
     return n;
   }
@@ -1448,16 +1451,16 @@ class QvpPage extends ChangeNotifier {
   }
 
   // ── crop ──
-  QvpCropBox? cropBox(Object target, {double pad = 2, bool keepMarkers = true}) {
-    final ok = _t(target, (t) => _b.cropBox(_p, t, pad, keepMarkers ? 1 : 0, _e._crop));
+  QvpCropBox? cropBox(Object target, {double pad = 2, bool keepAyahMarks = true}) {
+    final ok = _t(target, (t) => _b.cropBox(_p, t, pad, keepAyahMarks ? 1 : 0, _e._crop));
     if (ok == 0) return null;
     final c = _e._crop.ref;
-    return QvpCropBox(x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, nWords: c.nWords, markerDeco: c.markerDeco);
+    return QvpCropBox(x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, nWords: c.nWords, ayahMarkDeco: c.ayahMarkDeco);
   }
 
   /// Standalone SVG of a target (current colours), or null.
-  String? cropSvg(Object target, {double pad = 2, bool keepMarkers = true, Object? background}) {
-    final ok = _t(target, (t) => _b.cropSvg(_p, t, pad, keepMarkers ? 1 : 0, background == null ? 0 : rgba(background), _e._str));
+  String? cropSvg(Object target, {double pad = 2, bool keepAyahMarks = true, Object? background}) {
+    final ok = _t(target, (t) => _b.cropSvg(_p, t, pad, keepAyahMarks ? 1 : 0, background == null ? 0 : rgba(background), _e._str));
     return ok == 0 ? null : _e._s();
   }
 }
@@ -1488,12 +1491,12 @@ class QvpAtlas {
   int get pages => _b.atlasPages(_a);
 
   /// Page of an ayah, or null.
-  int? pageOf(int sura, int ayah) {
-    final p = _b.atlasPageOf(_a, sura, ayah);
+  int? pageOf(int surah, int ayah) {
+    final p = _b.atlasPageOf(_a, surah, ayah);
     return p < 0 ? null : p;
   }
 
-  /// First and last ayah `(sura, ayah)` of a page, or null.
+  /// First and last ayah `(surah, ayah)` of a page, or null.
   ({(int, int) first, (int, int) last})? pageRange(int page) {
     final o = engine._out<ffi.Uint16>();
     if (_b.atlasPageRange(_a, page, o) == 0) return null;
@@ -1534,29 +1537,29 @@ class QvpAtlas {
 
   int? pageOfSurah(int n) => surah(n)?.page;
 
-  /// Start of division [n] of [kind] ('juz' | 'hizb' | 'nisf' | 'rub' or [QvpDiv]).
-  QvpAtlasRub? division(Object kind, int n) {
-    final o = pffi.calloc<QvpAtlasRubC>();
+  /// Start of division [n] of [kind] ('juz' | 'hizb' | 'nisf' | 'rubuAlHizb' or [QvpDiv]).
+  QvpAtlasRubuAlHizb? division(Object kind, int n) {
+    final o = pffi.calloc<QvpAtlasRubuAlHizbC>();
     try {
       if (_b.atlasDivision(_a, QvpDiv.of(kind), n, o) == 0) return null;
       final r = o.ref;
-      return QvpAtlasRub(rub: r.rub, sura: r.sura, ayah: r.ayah, page: r.page);
+      return QvpAtlasRubuAlHizb(rubuAlHizb: r.rubuAlHizb, surah: r.surah, ayah: r.ayah, page: r.page);
     } finally {
       pffi.calloc.free(o);
     }
   }
 
-  QvpAtlasRub? juz(int n) => division('juz', n);
-  QvpAtlasRub? hizb(int n) => division('hizb', n);
-  QvpAtlasRub? rub(int n) => division('rub', n);
+  QvpAtlasRubuAlHizb? juz(int n) => division('juz', n);
+  QvpAtlasRubuAlHizb? hizb(int n) => division('hizb', n);
+  QvpAtlasRubuAlHizb? rubuAlHizb(int n) => division('rubuAlHizb', n);
 
   /// Division number containing an ayah, or null.
-  int? divisionAt(Object kind, int sura, int ayah) {
-    final v = _b.atlasDivisionAt(_a, QvpDiv.of(kind), sura, ayah);
+  int? divisionAt(Object kind, int surah, int ayah) {
+    final v = _b.atlasDivisionAt(_a, QvpDiv.of(kind), surah, ayah);
     return v < 0 ? null : v;
   }
 
-  int? juzAt(int sura, int ayah) => divisionAt('juz', sura, ayah);
+  int? juzAt(int surah, int ayah) => divisionAt('juz', surah, ayah);
 
   /// `[first, last]` page of a juz, or null.
   List<int>? pagesOfJuz(int n) {

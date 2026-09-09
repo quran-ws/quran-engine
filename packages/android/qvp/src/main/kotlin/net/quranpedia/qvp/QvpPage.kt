@@ -83,20 +83,20 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     }
 
     // ── words / text ──
-    fun wid(i: Int) = words[i].wid
-    fun wordForm(i: Int, form: Form = Form.UTHMANI): String = QvpNative.wordForm(h, i, form.id) ?: ""
-    fun findWord(sura: Int, ayah: Int, word: Int): Int = QvpNative.findWord(h, sura, ayah, word)
+    fun wordKey(i: Int) = words[i].wordKey
+    fun wordForm(i: Int, form: Form = Form.RASM_UTHMANI): String = QvpNative.wordForm(h, i, form.id) ?: ""
+    fun findWord(surah: Int, ayah: Int, word: Int): Int = QvpNative.findWord(h, surah, ayah, word)
     fun target(s: String) = Target.parse(s, this)
     fun resolve(t: Target): IntArray = QvpNative.resolve(h, t.arr)
     fun resolve(s: String) = resolve(target(s))
-    fun text(t: Target, form: Form = Form.UTHMANI, wordSep: String = " ", lineSep: String = "\n"): String = QvpNative.textTarget(h, t.arr, form.id, wordSep, lineSep)
-    fun text(s: String, form: Form = Form.UTHMANI, wordSep: String = " ", lineSep: String = "\n") = text(target(s), form, wordSep, lineSep)
+    fun text(t: Target, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n"): String = QvpNative.textTarget(h, t.arr, form.id, wordSep, lineSep)
+    fun text(s: String, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n") = text(target(s), form, wordSep, lineSep)
     fun search(query: String, form: Form = Form.SEARCH, mode: SearchMode = SearchMode.INCLUDES, normalize: Boolean = true, loose: Boolean = true, limit: Int = 0): List<QvpMatch> {
         val v = QvpNative.search(h, query, form.id, mode.id, normalize, loose, limit)
-        return List(v.size / 3) { k -> val w = v[k * 3]; QvpMatch(w, v[k * 3 + 1], v[k * 3 + 2] != 0, wid(w), words[w].text) }
+        return List(v.size / 3) { k -> val w = v[k * 3]; QvpMatch(w, v[k * 3 + 1], v[k * 3 + 2] != 0, wordKey(w), words[w].text) }
     }
     fun citation(ws: IntArray): String = QvpNative.citation(h, ws)
-    /** attach a words sidecar ({"s:a:w": {"imlaei","qpc","rasm","search"}}); returns words updated, -1 on bad JSON */
+    /** attach a words sidecar ({"s:a:w": {"rasmImlai","qpc","rasm","search"}}); returns words updated, -1 on bad JSON */
     fun attachWords(json: ByteArray): Int = QvpNative.attachWords(h, json)
     fun attachWords(json: String) = attachWords(json.toByteArray())
     fun hasForm(form: Form) = QvpNative.hasForm(h, form.id)
@@ -105,15 +105,15 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun surahs(): List<QvpSurah> = List(QvpNative.surahsCount(h)) { i -> val n = QvpNative.surahNums(h, i)!!; val s = QvpNative.surahNames(h, i)!!
         QvpSurah(n[0].toInt(), n[1].toInt(), n[2] > 0.5f, n[3] > 0.5f, when (n[4].toInt()) { 0 -> "makkah"; 1 -> "madinah"; else -> "" }, n[5].toInt(), s[0], s[1], s[2]) }
     fun divisions(): List<QvpDivision> { val v = QvpNative.divisions(h); return List(v.size / 6) { k -> QvpDivision(Division.entries[v[k * 6]], v[k * 6 + 2], v[k * 6 + 3], v[k * 6 + 4], v[k * 6 + 1], v[k * 6 + 5]) } }
-    fun markers(): List<QvpMarker> { val v = QvpNative.markers(h); return List(v.size / 9) { k -> val o = k * 9; QvpMarker(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3].toInt(), v[o + 4], v[o + 5], v[o + 6], v[o + 7].toInt(), v[o + 8].toInt()) } }
-    fun markerOf(sura: Int, ayah: Int) = markers().firstOrNull { it.sura == sura && it.ayah == ayah }
+    fun ayahMarks(): List<QvpAyahMark> { val v = QvpNative.ayahMarks(h); return List(v.size / 9) { k -> val o = k * 9; QvpAyahMark(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3].toInt(), v[o + 4], v[o + 5], v[o + 6], v[o + 7].toInt(), v[o + 8].toInt()) } }
+    fun ayahMarkOf(surah: Int, ayah: Int) = ayahMarks().firstOrNull { it.surah == surah && it.ayah == ayah }
     fun rosettes(): List<QvpRosette> { val v = QvpNative.rosettes(h); return List(v.size / 8) { k -> val o = k * 8; QvpRosette(v[o], v[o + 1], v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7]) } }
     fun sajdahs(): List<QvpSajdah> { val v = QvpNative.sajdahs(h); return List(v.size / 4) { k -> QvpSajdah(v[k * 4], v[k * 4 + 1], v[k * 4 + 2], v[k * 4 + 3]) } }
     fun ayahKeys(): List<Pair<Int, Int>> = QvpNative.ayahKeys(h).map { (it ushr 16) to (it and 0xffff) }
     /** (count on this page, whole ayah is here) */
-    fun ayahWordCount(sura: Int, ayah: Int): Pair<Int, Boolean> { val v = QvpNative.ayahWordCount(h, sura, ayah); return v[0] to (v[1] != 0) }
+    fun ayahWordCount(surah: Int, ayah: Int): Pair<Int, Boolean> { val v = QvpNative.ayahWordCount(h, surah, ayah); return v[0] to (v[1] != 0) }
     /** words for n recitation segments, or null when the counts disagree (follow the ayah whole) */
-    fun reciteMap(sura: Int, ayah: Int, nSegments: Int): IntArray? = QvpNative.reciteMap(h, sura, ayah, nSegments)
+    fun reciteMap(surah: Int, ayah: Int, nSegments: Int): IntArray? = QvpNative.reciteMap(h, surah, ayah, nSegments)
     fun wordLabel(i: Int) = QvpNative.wordLabel(h, i)
     fun ayahLabel(i: Int) = QvpNative.ayahLabel(h, i)
 
@@ -147,7 +147,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun setDefaultInk(rgba: Int) { defaultInk = rgba; QvpNative.styleDefault(h, rgba) }
     fun theme(t: QvpTheme): Int {
         val z = { c: Int? -> c ?: 0 }
-        val base = intArrayOf(z(t.ink), z(t.diacritics), z(t.dots), z(t.waqf), z(t.sifr), z(t.marker), z(t.numeral), z(t.headers), t.transitionMs)
+        val base = intArrayOf(z(t.ink), z(t.diacritics), z(t.dots), z(t.waqf), z(t.sifr), z(t.ayahMark), z(t.numeral), z(t.headers), t.transitionMs)
         val marks = t.marks.flatMap { (m, c) -> listOf(markId(m), c) }.toIntArray()
         return QvpNative.theme(h, base + marks)
     }
@@ -179,7 +179,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun select(anchor: Int, focus: Int = anchor) = QvpNative.select(h, anchor, focus)
     fun clearSelection() = QvpNative.select(h, -1, -1)
     fun selection(): IntArray = QvpNative.selection(h)
-    fun selectionText(form: Form = Form.UTHMANI, citation: Boolean = false) = QvpNative.selectionText(h, form.id, citation)
+    fun selectionText(form: Form = Form.RASM_UTHMANI, citation: Boolean = false) = QvpNative.selectionText(h, form.id, citation)
 
     // ── memorisation ──
     fun mask(t: Target, mode: MaskMode = MaskMode.HIDE) = QvpNative.mask(h, t.arr, mode.id)
@@ -196,7 +196,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun maskWords(): IntArray = QvpNative.maskWords(h)
     fun maskBoxes(): List<QvpBox> = boxes(QvpNative.maskBoxes(h))
     /** greyed page with a lit window; returns steps */
-    fun revealStart(lit: Int = 1, byAyah: Boolean = false, grey: Int = 0xc9c4b8ff.toInt(), ink: Int = 0x231f20ff.toInt(), markers: Boolean = true, transitionMs: Int = 0) = QvpNative.revealStart(h, lit, byAyah, grey, ink, markers, transitionMs)
+    fun revealStart(lit: Int = 1, byAyah: Boolean = false, grey: Int = 0xc9c4b8ff.toInt(), ink: Int = 0x231f20ff.toInt(), ayahMarks: Boolean = true, transitionMs: Int = 0) = QvpNative.revealStart(h, lit, byAyah, grey, ink, ayahMarks, transitionMs)
     fun revealGoto(at: Long) = QvpNative.revealGoto(h, at)
     fun revealAt(): Long? = QvpNative.revealAt(h).let { if (it == -2L) null else it }
     fun revealSteps() = QvpNative.revealSteps(h)
@@ -204,9 +204,9 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun revealStop() = QvpNative.revealStop(h)
 
     // ── crop ──
-    fun cropBox(t: Target, pad: Float = 2f, keepMarkers: Boolean = true): QvpCropBox? = QvpNative.cropBox(h, t.arr, pad, keepMarkers)?.let { QvpCropBox(it[0], it[1], it[2], it[3], it[4].toInt(), it[5].toInt()) }
+    fun cropBox(t: Target, pad: Float = 2f, keepAyahMarks: Boolean = true): QvpCropBox? = QvpNative.cropBox(h, t.arr, pad, keepAyahMarks)?.let { QvpCropBox(it[0], it[1], it[2], it[3], it[4].toInt(), it[5].toInt()) }
     /** standalone SVG with the current colours; background alpha 0 = transparent */
-    fun cropSvg(t: Target, pad: Float = 2f, keepMarkers: Boolean = true, background: Int = 0): String? = QvpNative.cropSvg(h, t.arr, pad, keepMarkers, background)
+    fun cropSvg(t: Target, pad: Float = 2f, keepAyahMarks: Boolean = true, background: Int = 0): String? = QvpNative.cropSvg(h, t.arr, pad, keepAyahMarks, background)
 
     override fun close() { if (h != 0L) { QvpNative.pageFree(h); h = 0 } }
 }
@@ -216,18 +216,18 @@ class QvpAtlas(bytes: ByteArray) : AutoCloseable {
     private var h: Long = QvpNative.atlasLoad(bytes)
     init { require(h != 0L) { "qvp_atlas_load failed" } }
     private fun surah(v: Array<String>?) = v?.let { QvpAtlasSurah(it[0].toInt(), it[1].toInt(), it[2].toInt(), when (it[3]) { "0" -> "makkah"; "1" -> "madinah"; else -> "" }, it[4], it[5], it[6]) }
-    fun pageOf(sura: Int, ayah: Int): Int? = QvpNative.atlasPageOf(h, sura, ayah).let { if (it < 0) null else it }
+    fun pageOf(surah: Int, ayah: Int): Int? = QvpNative.atlasPageOf(h, surah, ayah).let { if (it < 0) null else it }
     fun pageRange(page: Int): Pair<Pair<Int, Int>, Pair<Int, Int>>? = QvpNative.atlasPageRange(h, page)?.let { (it[0] to it[1]) to (it[2] to it[3]) }
     fun pages() = QvpNative.atlasPages(h)
     fun surah(n: Int) = surah(QvpNative.atlasSurah(h, n))
     fun surahs(): List<QvpAtlasSurah> = List(QvpNative.atlasSurahs(h)) { surah(QvpNative.atlasSurahAt(h, it))!! }
     fun pageOfSurah(n: Int) = surah(n)?.page
-    fun division(kind: Division, n: Int): QvpAtlasRub? = QvpNative.atlasDivision(h, kind.id, n)?.let { QvpAtlasRub(it[0], it[1], it[2], it[3]) }
+    fun division(kind: Division, n: Int): QvpAtlasRubuAlHizb? = QvpNative.atlasDivision(h, kind.id, n)?.let { QvpAtlasRubuAlHizb(it[0], it[1], it[2], it[3]) }
     fun juz(n: Int) = division(Division.JUZ, n)
     fun hizb(n: Int) = division(Division.HIZB, n)
-    fun rub(n: Int) = division(Division.RUB, n)
-    fun divisionAt(kind: Division, sura: Int, ayah: Int): Int? = QvpNative.atlasDivisionAt(h, kind.id, sura, ayah).let { if (it < 0) null else it }
-    fun juzAt(sura: Int, ayah: Int) = divisionAt(Division.JUZ, sura, ayah)
+    fun rubuAlHizb(n: Int) = division(Division.RUBU_AL_HIZB, n)
+    fun divisionAt(kind: Division, surah: Int, ayah: Int): Int? = QvpNative.atlasDivisionAt(h, kind.id, surah, ayah).let { if (it < 0) null else it }
+    fun juzAt(surah: Int, ayah: Int) = divisionAt(Division.JUZ, surah, ayah)
     fun pagesOfJuz(n: Int): Pair<Int, Int>? = QvpNative.atlasPagesOfJuz(h, n)?.let { it[0] to it[1] }
     fun findSurah(text: String): List<QvpAtlasSurah> = QvpNative.atlasFindSurah(h, text).toList().mapNotNull { n -> surah(n) }
     override fun close() { if (h != 0L) { QvpNative.atlasFree(h); h = 0 } }

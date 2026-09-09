@@ -1,0 +1,66 @@
+{
+  "_comment": "Quran.ws terminology standard (github.com/quran-ws/guidelines), enforced with the quranic-terminology skill's audit_terminology.py. Every entry below is a judged decision, not a silencer.",
+  "paths": [
+    "crates",
+    "web",
+    "packages",
+    "docs",
+    "README.md",
+    "CLAUDE.md"
+  ],
+  "exclude": [
+    "pages/**",
+    "index/**",
+    "dist/**",
+    "target/**",
+    "web/pages/**",
+    "**/node_modules/**",
+    "**/package-lock.json",
+    "**/assets/pages/**",
+    "docs/superpowers/**"
+  ],
+  "_exclude": "Data and build output, not code. pages/ and index/ are the quran-svg bundle verbatim; dist/ and web/pages/ are generated from it. docs/superpowers/ holds the dated design spec, a historical record that should keep its original wording.",
+  "ignore_words": [
+    "pos",
+    "stop",
+    "reading",
+    "diacritics",
+    "parts",
+    "simple",
+    "segment",
+    "timings",
+    "waqf_jaiz"
+  ],
+  "_ignore_words": [
+    "pos      — a byte position in the codec (qvp-format), not a part of speech.",
+    "stop     — reveal_stop / qvp_reveal_stop end an animation; nothing to do with waqf.",
+    "reading  — reading order in hit-testing and layout, not a qiraah.",
+    "diacritics — the theme slot for the `diacritic` mark family, which is its real name; not a gloss of harakah.",
+    "parts    — only survives inside Rust's from_raw_parts; every ayah `part` is now `fragment`.",
+    "simple   — only inside SimplePathSegment (svgtypes) and android.R.layout.simple_spinner_*; not rasm imlai.",
+    "timings  — recitation segment timings passed in by the host; the engine stores no ayah_timing.",
+    "waqf_jaiz — audit false positive: it prefix-matches the CANONICAL `waqf_jaiz_mustawi_al_tarafayn`. The deprecated bare name is not used anywhere in this repo."
+  ],
+  "external_names": [
+    "ayah_markers",
+    "data-[a-z-]+",
+    "Uthmani mushaf",
+    "word-by-word",
+    "Ya-Sin",
+    "\\bAl-Baqarah\\b",
+    "KFGQPC Uthmanic Script[A-Za-z ]*",
+    "g\\.ayah-mark"
+  ],
+  "_external_names": [
+    "ayah_markers  — the id of the medallion layer in the quran-svg source SVG; a locator in their file, not our name.",
+    "data-*        — quran-svg attribute names, quoted from schema/FORMAT.md.",
+    "Uthmani mushaf / word-by-word — prose describing the print, where the standard allows the established English.",
+    "Ya-Sin, Al-Baqarah — surah labels quoted in a demo and a test fixture, display forms rather than identifiers.",
+    "KFGQPC Uthmanic Script HAFS — a font family the demo asks the browser for; renaming it breaks the reference.",
+    "g.ayah-mark — audit false positive: the CSS selector splits to `g_ayah`, which it reads as the ayah_fragment concept."
+  ],
+  "compatibility": [
+    "crates/qvp-core/src/text.rs"
+  ],
+  "_compatibility": "parse_words_sidecar keeps accepting the pre-1.0 sidecar keys `uthmani` and `imlaei` alongside the canonical `rasm_uthmani` / `rasm_imlai`, so page data already shipped inside apps still attaches. Deprecated names keep resolving; they are not written in new code."
+}

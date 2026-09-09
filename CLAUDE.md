@@ -9,10 +9,27 @@
   Dart (`packages/flutter/qvp_flutter/lib/src/bindings.dart`) → Swift (`packages/ios/QvpKit/Sources/QvpKit/QvpPage.swift`,
   then `scripts/build-engine-ios.sh` to refresh the XCFramework) → `docs/API.md`. Same names everywhere.
 - Lossless only. No curve simplification, no lossy path in the converter or format.
+- The page codec is `crates/qvp-format/src/codec.rs`. It derives bboxes, path origins and op
+  offsets at load, so it needs the ops in canonical order — `PageData::canonicalize_ops`, which
+  the converter calls. Two boxes are stored, not derived: a glyph instance's and a glyph
+  outline's (both are measured on unquantised coordinates, so recomputing them rounds twice).
+  Changing the encoding means re-running `QVP_TEST_ALL=1` and regenerating `dist/pages` — and
+  every demo's bundled `assets/pages` copy, which holds a 29-page sample, not the whole mushaf.
 - Packages ship code only. Page data (`NNN.qvp`, `atlas.qva`, `NNN.words.json`) is loaded by apps;
-  demos bundle it as their own assets (gitignored).
-- Source SVG problems go in `docs/UPSTREAM-DATA-ISSUES.md`; do not patch data in the converter.
-- Production SVGs carry only uthmani; other text forms come from the JSON sidecar (`attachWords`).
+  demos bundle it as their own assets (gitignored). The built data is published as a GitHub
+  release (`gh release list`), never committed — regenerating it would add ~92 MB to history
+  each time. Cutting a new one: `batch`, then tar `dist/pages` with a VERSION.json and the
+  upstream rights notice, and `gh release create`.
+- Source data is the `quran-svg hafs-kfgqpc` release bundle: unpack `pages/` and `index/`
+  side by side at the repo root (both gitignored). Source problems go in
+  `docs/UPSTREAM-DATA-ISSUES.md`; do not patch data in the converter.
+- Production SVGs carry only `data-word-key` + `data-rasm-uthmani`; the other text forms come
+  from `index/by-page/NNN.json`, which `batch` folds into `NNN.words.json` (`attachWords`).
+- Naming follows the Quran.ws terminology standard and the bundle's `mark-taxonomy` v2:
+  `surah`, `rasm_uthmani`, `rasm_imlai`, `rubu_al_hizb`, `word_key`, `ayah_mark`, `ayah-fragment`,
+  `fathah`, `hamzat_al_wasl`, `omitted_alif`, `small_meem`. Run the
+  `quranic-terminology` skill's `audit_terminology.py` before adding a name; `.terminology.json`
+  records what this repo has already decided.
 - Tests: `cargo test --workspace --release` (unit + ABI + identity gate on 8 pages);
   `QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity` for all 604 pages.
 - iOS: `scripts/build-engine-ios.sh` (rustup iOS targets + Xcode) → `packages/ios/QvpKit/QvpEngine.xcframework`; the demo

@@ -23,7 +23,7 @@ fn abi_end_to_end() {
         // word + forms
         let mut w = std::mem::zeroed::<QvpWordInfo>();
         assert_eq!(qvp_word_info(page, 0, &mut w), 1);
-        assert_eq!(w.sura, 2);
+        assert_eq!(w.surah, 2);
         let mut f = QvpStr { ptr: std::ptr::null(), len: 0 };
         assert_eq!(qvp_word_form(page, 0, 4, &mut f), 1);
         assert!(!s(&f).is_empty());
@@ -33,7 +33,7 @@ fn abi_end_to_end() {
         let n = qvp_search(page, q.as_ptr(), q.len() as u32, 4, 0, 1, 1, 0, m.as_mut_ptr(), 64);
         assert!(n > 0 && n < 64, "{n}");
         let mut t = QvpStr { ptr: std::ptr::null(), len: 0 };
-        let tg = QvpTarget { kind: 3, a: w.sura as u32, b: w.ayah as u32, c: 0, words: std::ptr::null(), n_words: 0 };
+        let tg = QvpTarget { kind: 3, a: w.surah as u32, b: w.ayah as u32, c: 0, words: std::ptr::null(), n_words: 0 };
         qvp_text_target(page, &tg, 0, b" ".as_ptr(), 1, b"\n".as_ptr(), 1, &mut t);
         assert!(s(&t).contains(' '));
         // gap-aware hit at the centre of word 0's line but between words: always resolves
@@ -69,10 +69,10 @@ fn abi_end_to_end() {
         assert_eq!(qvp_tick(page, 1000.0), 0);
         qvp_unhighlight(page, hh);
         // metadata
-        let mut d = [QvpDivision { kind: 0, line: 0, n: 0, sura: 0, ayah: 0, ayah_idx: 0 }; 8];
+        let mut d = [QvpDivision { kind: 0, line: 0, n: 0, surah: 0, ayah: 0, ayah_idx: 0 }; 8];
         let _ = qvp_divisions(page, d.as_mut_ptr(), 8);
-        let mut mk = [QvpMarker { deco: 0, sura: 0, ayah: 0, line: 0, cx: 0.0, cy: 0.0, r: 0.0, ornament_path: 0, numeral_path: 0 }; 32];
-        assert_eq!(qvp_markers(page, mk.as_mut_ptr(), 32), 6);
+        let mut mk = [QvpAyahMark { deco: 0, surah: 0, ayah: 0, line: 0, cx: 0.0, cy: 0.0, r: 0.0, ornament_path: 0, numeral_path: 0 }; 32];
+        assert_eq!(qvp_ayah_marks(page, mk.as_mut_ptr(), 32), 6);
         // mask/reveal
         qvp_mask(page, &tg, 0);
         assert!(qvp_mask_hidden(page, std::ptr::null_mut(), 0) > 0);
@@ -99,19 +99,65 @@ fn abi_end_to_end() {
             assert_eq!(qvp_atlas_page_of(a, 1, 1), 1);
             assert_eq!(qvp_atlas_page_of(a, 114, 6), 604);
             assert_eq!(qvp_atlas_division_at(a, 0, 78, 1), 30);
-            let mut r = QvpAtlasRub { rub: 0, sura: 0, ayah: 0, page: 0 };
+            let mut r = QvpAtlasRubuAlHizb { rubu_al_hizb: 0, surah: 0, ayah: 0, page: 0 };
             assert_eq!(qvp_atlas_division(a, 0, 30, &mut r), 1);
-            assert_eq!((r.sura, r.ayah, r.page), (78, 1, 582));
+            assert_eq!((r.surah, r.ayah, r.page), (78, 1, 582));
             let mut pj = [0u16; 2];
             assert_eq!(qvp_atlas_pages_of_juz(a, 30, pj.as_mut_ptr()), 1);
             assert_eq!(pj, [582, 604]);
             let mut su = std::mem::zeroed::<QvpAtlasSurah>();
             assert_eq!(qvp_atlas_surah(a, 2, &mut su), 1);
-            assert_eq!(s(&su.latin), "Al-Baqarah");
+            // The bundle writes the bare name: "Baqarah", not "Al-Baqarah".
+            assert_eq!(s(&su.latin), "Baqarah");
             let mut found = [0u16; 8];
             assert_eq!(qvp_atlas_find_surah(a, b"cow".as_ptr(), 3, found.as_mut_ptr(), 8), 1);
             assert_eq!(found[0], 2);
             qvp_atlas_free(a);
         }
+    }
+}
+
+/// The taxonomy is the contract: these names are the quran-svg `mark-taxonomy` v2
+/// vocabulary, and every wrapper mirrors this table by index. Changing one here
+/// means changing `qvp.h`, `web/qvp.js`, Kotlin, Dart, React Native and `docs/API.md`.
+#[test]
+fn taxonomy_names_are_the_pipeline_vocabulary() {
+    unsafe fn name(f: unsafe extern "C" fn(u8, *mut QvpStr), i: u8) -> String {
+        let mut o = QvpStr { ptr: std::ptr::null(), len: 0 };
+        f(i, &mut o);
+        s(&o)
+    }
+    unsafe {
+        let marks: Vec<String> = (0u8..=35).map(|i| name(qvp_mark_name, i)).collect();
+        assert_eq!(
+            marks,
+            [
+                "", "fathah", "kasrah", "dammah", "tanwin_al_fath", "tanwin_al_kasr", "tanwin_al_damm", "shaddah", "sukun", "maddah",
+                "hamzah", "hamzat_al_wasl", "omitted_alif", "small_waw", "small_yaa", "small_noon", "dot", "two_dots", "three_dots",
+                "rounded_zero", "rectangular_zero", "waqf_jaiz_mustawi_al_tarafayn", "waqf_jaiz_waqf_awla", "waqf_jaiz_wasl_awla",
+                "waqf_lazim", "waqf_al_muanaqah", "saktah", "small_meem", "hizb", "sajdah", "sajdah_mark", "sajdah_line",
+                "seen_al_qiraah", "tashil", "ishmam", "imalah",
+            ]
+        );
+        assert_eq!(name(qvp_mark_name, 255), "unknown");
+        for (i, m) in marks.iter().enumerate().skip(1) {
+            assert_eq!(qvp_mark_from_name(m.as_ptr(), m.len() as u32), i as u8, "round trip for {m}");
+        }
+        assert_eq!(qvp_mark_from_name(b"not-a-mark".as_ptr(), 10), 255);
+
+        let families: Vec<String> = (0u8..=7).map(|i| name(qvp_family_name, i)).collect();
+        assert_eq!(families, ["", "diacritic", "diacritic tanwin", "dots", "waqf", "sifr", "sajdah", "reading_sign"]);
+
+        let categories: Vec<String> = (0u8..=8).map(|i| name(qvp_category_name, i)).collect();
+        assert_eq!(
+            categories,
+            ["", "harakah", "tanwin", "letter_dot", "orthographic", "dabt", "waqf", "reading_sign", "standalone"]
+        );
+
+        let kinds: Vec<String> = (0u8..=7).map(|i| name(qvp_kind_name, i)).collect();
+        assert_eq!(
+            kinds,
+            ["body", "mark", "ayah_number", "ayah_mark_ornament", "header_ink", "ornament", "page_number", "running_head"]
+        );
     }
 }

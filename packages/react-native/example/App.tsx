@@ -73,7 +73,7 @@ function Demo() {
   const [pathOn, setPathOn] = useState<Map<number, Selector>>(new Map());
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<Match[]>([]);
-  const [tajweed, setTajweed] = useState(false);
+  const [tajwid, setTajwid] = useState(false);
   const [hideMarks, setHideMarks] = useState(false);
   const [gold, setGold] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -129,9 +129,9 @@ function Demo() {
     setInfo(e); setSelWord(null); setSelAyah(null); setAyahInfo(null); setSelection(null); setPathOn(new Map()); setRevealOn(false); setRevealAt(-1); setMask(null);
     const [surahs, divisions, keys] = await Promise.all([qvp.surahs(), qvp.divisions(), qvp.ayahKeys()]);
     let t = 'surahs: ' + surahs.map(s => `${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`).join(', ');
-    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.kind} ${d.n} at ${d.sura}:${d.ayah}`).join(', ');
-    if (atlas && keys.length) { const j = await atlas.juzAt(keys[0].sura, keys[0].ayah); if (j) { const pr = await atlas.pagesOfJuz(j); t += `\njuz ${j} · pages ${pr ? pr.join('–') : ''}`; } }
-    t += '\nayahs: ' + keys.map(k => k.aid).join(' ');
+    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.kind} ${d.n} at ${d.surah}:${d.ayah}`).join(', ');
+    if (atlas && keys.length) { const j = await atlas.juzAt(keys[0].surah, keys[0].ayah); if (j) { const pr = await atlas.pagesOfJuz(j); t += `\njuz ${j} · pages ${pr ? pr.join('–') : ''}`; } }
+    t += '\nayahs: ' + keys.map(k => k.ayahKey).join(' ');
     setMeta(t);
     if (query.trim()) setMatches(await qvp.search(query.trim()));
     if (pendingAyah.current) { const [s, a] = pendingAyah.current; pendingAyah.current = null; selectAyah(s, a); }
@@ -171,15 +171,15 @@ function Demo() {
   const styles = useMemo<StyleRule[]>(() => {
     const out: StyleRule[] = [];
     if (hideMarks) out.push({ id: 'hide-marks', selector: Sel.kind(KIND.MARK), hide: true });
-    if (gold) out.push({ id: 'markers', selector: Sel.deco(DECO.AYAH_MARKER), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 });
+    if (gold) out.push({ id: 'ayahMarks', selector: Sel.deco(DECO.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 });
     for (const [i, selector] of pathOn) out.push({ id: `path:${i}`, selector, color: '#ef6c00', ms: 200, layer: LAYER.TOP });
     return out;
   }, [hideMarks, gold, pathOn]);
-  const markTheme = useMemo<Theme | null>(() => (tajweed ? { diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', sifr: '#ef6c00', ms: 200 } : null), [tajweed]);
+  const markTheme = useMemo<Theme | null>(() => (tajwid ? { diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', sifr: '#ef6c00', ms: 200 } : null), [tajwid]);
   const reveal = useMemo<Reveal | null>(() => (revealOn ? { lit: 2, grey: theme === 'dark' ? '#4a4f57' : '#c9c4b8', ink: th.ink, ms: 150, at: revealAt } : null), [revealOn, revealAt, theme, th.ink]);
 
   const maskAyah = () => {
-    const target = selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.ayah(selWord.sura, selWord.ayah) : 'page';
+    const target = selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.ayah(selWord.surah, selWord.ayah) : 'page';
     setMask({ target, mode: maskMode, blockColor: th.line });
   };
   const copySelection = async () => {
@@ -193,11 +193,11 @@ function Demo() {
   const cropSelection = async () => {
     const target = selection && selection.words.length ? T.words(selection.words) : selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.word(selWord.idx) : null;
     if (!target) return;
-    const [svg, box] = await Promise.all([qvp.cropSvg(target, { pad: 3, keepMarkers: true, background: th.paper }), qvp.cropBox(target, { pad: 3, keepMarkers: true })]);
-    if (svg && box) flash(`SVG ${(svg.length / 1024).toFixed(0)} KB · box ${(box.x1 - box.x0).toFixed(0)}×${(box.y1 - box.y0).toFixed(0)} units · marker ${box.markerDeco >= 0 ? 'kept' : 'no'}`);
+    const [svg, box] = await Promise.all([qvp.cropSvg(target, { pad: 3, keepAyahMarks: true, background: th.paper }), qvp.cropBox(target, { pad: 3, keepAyahMarks: true })]);
+    if (svg && box) flash(`SVG ${(svg.length / 1024).toFixed(0)} KB · box ${(box.x1 - box.x0).toFixed(0)}×${(box.y1 - box.y0).toFixed(0)} units · ayahMark ${box.ayahMarkDeco >= 0 ? 'kept' : 'no'}`);
   };
   const clearAll = () => {
-    setTajweed(false); setHideMarks(false); setGold(false); setPlaying(false); setMask(null); setRevealOn(false); setRevealAt(-1);
+    setTajwid(false); setHideMarks(false); setGold(false); setPlaying(false); setMask(null); setRevealOn(false); setRevealAt(-1);
     setQuery(''); setMatches([]); selectWord(null);
   };
   const leadingToFill = async () => {
@@ -209,7 +209,7 @@ function Demo() {
   // ── selection panel ──
   const selMain = selection && selection.words.length > 1 ? selection.text : selWord ? selWord.text : ayahInfo ? ayahInfo.text : '—';
   const selInfo = selection && selection.words.length > 1 ? `selection · ${selection.words.length} words · ${selection.citation}`
-    : selWord ? `wid ${selWord.wid} · line ${selWord.line} · ${selWord.nPaths} paths\n${selWord.forms.imlaei ? `imlaei ${selWord.forms.imlaei} · search ${selWord.forms.search}\n` : ''}${selWord.label}`
+    : selWord ? `wordKey ${selWord.wordKey} · line ${selWord.line} · ${selWord.nPaths} paths\n${selWord.forms.rasmImlai ? `rasmImlai ${selWord.forms.rasmImlai} · search ${selWord.forms.search}\n` : ''}${selWord.label}`
     : selAyah && ayahInfo ? `ayah ${selAyah[0]}:${selAyah[1]} · ${ayahInfo.count} words${ayahInfo.complete ? '' : ' (continues on another page)'}` : '';
 
   const hud = stats ? [
@@ -244,7 +244,7 @@ function Demo() {
         theme={markTheme} styles={styles} highlights={highlights} mask={mask} reveal={reveal}
         onPageLoad={onPageLoad}
         onWordTap={e => selectWord(e.word)}
-        onDecoTap={(e: { deco: Deco }) => { if (e.deco.ayah) selectAyah(e.deco.sura, e.deco.ayah); }}
+        onDecoTap={(e: { deco: Deco }) => { if (e.deco.ayah) selectAyah(e.deco.surah, e.deco.ayah); }}
         onEmptyTap={() => selectWord(null)}
         onSelectionChanged={e => { setSelection(e); if (e.words.length > 1) { setSelWord(null); setSelAyah(null); setAyahInfo(null); } }}
         onRevealChanged={e => setRevealSteps(e.steps)}
@@ -257,7 +257,7 @@ function Demo() {
         <TextInput style={[st.input, { color: th.fg, borderColor: th.line, textAlign: 'right' }]} placeholder="الله · الرحمان" placeholderTextColor="#999" value={query} onChangeText={setQuery} />
         {query.trim() !== '' && matches.length === 0 && <Text style={[st.small, { color: th.fg, opacity: 0.6 }]}>no match on this page</Text>}
         {matches.slice(0, 8).map(m => (
-          <Pressable key={m.word} onPress={async () => selectWord((await qvp.word(m.word))!)}><Text style={[st.result, { color: th.fg }]}>{m.text}  <Text style={st.small}>{m.wid}{m.loose ? ' ~' : ''}</Text></Text></Pressable>
+          <Pressable key={m.word} onPress={async () => selectWord((await qvp.word(m.word))!)}><Text style={[st.result, { color: th.fg }]}>{m.text}  <Text style={st.small}>{m.wordKey}{m.loose ? ' ~' : ''}</Text></Text></Pressable>
         ))}
 
         <Section title="Selection" fg={th.fg} />
@@ -273,7 +273,7 @@ function Demo() {
           </ScrollView>
         )}
         <View style={st.row}><Btn label="Copy + citation" onPress={copySelection} /><Btn label="Crop → SVG" onPress={cropSelection} /></View>
-        <Text style={[st.small, { color: th.fg, opacity: 0.7 }]}>Tap a word · long-press and drag to select · tap an ayah marker · chips recolour one path (e.g. 2nd diacritic)</Text>
+        <Text style={[st.small, { color: th.fg, opacity: 0.7 }]}>Tap a word · long-press and drag to select · tap an ayah mark · chips recolour one path (e.g. 2nd diacritic)</Text>
 
         <Section title="Highlights (engine-animated)" fg={th.fg} />
         <View style={st.row}>
@@ -284,9 +284,9 @@ function Demo() {
 
         <Section title="Styling (each toggle is one engine handle)" fg={th.fg} />
         <View style={st.row}>
-          <Btn label="Mark colours" on={tajweed} onPress={() => setTajweed(!tajweed)} />
+          <Btn label="Mark colours" on={tajwid} onPress={() => setTajwid(!tajwid)} />
           <Btn label="Hide marks" on={hideMarks} onPress={() => setHideMarks(!hideMarks)} />
-          <Btn label="Gold markers" on={gold} onPress={() => setGold(!gold)} />
+          <Btn label="Gold ayah marks" on={gold} onPress={() => setGold(!gold)} />
         </View>
         <View style={st.row}>
           <Text style={[st.small, { color: th.fg }]}>Theme </Text>

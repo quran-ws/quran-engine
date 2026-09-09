@@ -17,17 +17,17 @@ import {
 } from 'react-native';
 
 // ── constants (mirror qvp.h) ─────────────────────────────────────────────────────────────────
-export const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_ORNAMENT: 3, HEADER_INK: 4, OTHER: 255 } as const;
-export const FAMILY = { NONE: 0, DIACRITIC: 1, TANWEEN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 } as const;
-export const CATEGORY = { NONE: 0, HARAKA: 1, TANWEEN: 2, LETTER_DOT: 3, ORTHOGRAPHIC: 4, DABT: 5, WAQF: 6, READING_SIGN: 7, STANDALONE: 8 } as const;
-export const DECO = { AYAH_MARKER: 0, SURAH_NAME: 1, BASMALAH: 2, HIZB_MARK: 3, SAJDAH_MARK: 4 } as const;
+export const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, OTHER: 255 } as const;
+export const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 } as const;
+export const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGRAPHIC: 4, DABT: 5, WAQF: 6, READING_SIGN: 7, STANDALONE: 8 } as const;
+export const DECO = { AYAH_MARK: 0, SURAH_NAME: 1, BASMALAH: 2, DIVISION_MARK: 3, SAJDAH_MARK: 4 } as const;
 export const LAYER = { BASE: 0, THEME: 10, HIGHLIGHT: 50, SELECTION: 60, TOP: 100 } as const;
-export const DIVISION = { JUZ: 0, HIZB: 1, NISF: 2, RUB: 3 } as const;
-export const MARKS = ['', 'fatha', 'kasra', 'damma', 'fathatan', 'kasratan', 'dammatan', 'shadda', 'sukun', 'maddah', 'hamza', 'wasla', 'small-alef', 'small-waw', 'small-ya', 'small-noon', 'dot', 'two-dots', 'three-dots', 'sifr-mustadir', 'sifr-mustatil', 'waqf-jaiz', 'waqf-awla', 'wasl-awla', 'waqf-lazim', 'muanaqah', 'saktah', 'meem-iqlab', 'hizb', 'sajdah', 'sajdah-sign', 'sajdah-line', 'seen-reading', 'tashil', 'ishmam', 'imalah'];
+export const DIVISION = { JUZ: 0, HIZB: 1, NISF: 2, RUBU_AL_HIZB: 3 } as const;
+export const MARKS = ['', 'fathah', 'kasrah', 'dammah', 'tanwin_al_fath', 'tanwin_al_kasr', 'tanwin_al_damm', 'shaddah', 'sukun', 'maddah', 'hamzah', 'hamzat_al_wasl', 'omitted_alif', 'small_waw', 'small_yaa', 'small_noon', 'dot', 'two_dots', 'three_dots', 'rounded_zero', 'rectangular_zero', 'waqf_jaiz_mustawi_al_tarafayn', 'waqf_jaiz_waqf_awla', 'waqf_jaiz_wasl_awla', 'waqf_lazim', 'waqf_al_muanaqah', 'saktah', 'small_meem', 'hizb', 'sajdah', 'sajdah_mark', 'sajdah_line', 'seen_al_qiraah', 'tashil', 'ishmam', 'imalah'];
 const KIND_NAMES = ['body', 'mark', 'ayah-number', 'ayah-ornament', 'header-ink'];
-const FAMILY_NAMES = ['none', 'diacritic', 'tanween', 'dots', 'waqf', 'sifr', 'sajdah', 'reading-sign'];
-const CATEGORY_NAMES = ['none', 'haraka', 'tanween', 'letter-dot', 'orthographic', 'dabt', 'waqf', 'reading-sign', 'standalone'];
-const DECO_NAMES = ['ayah-marker', 'surah-name', 'basmalah', 'hizb-mark', 'sajdah-mark'];
+const FAMILY_NAMES = ['none', 'diacritic', 'tanwin', 'dots', 'waqf', 'sifr', 'sajdah', 'reading_sign'];
+const CATEGORY_NAMES = ['none', 'harakah', 'tanwin', 'letter_dot', 'orthographic', 'dabt', 'waqf', 'reading_sign', 'standalone'];
+const DECO_NAMES = ['ayah-mark', 'surah-name', 'basmalah', 'division-mark', 'sajdah-mark', 'page-number', 'running-head'];
 export function markId(name: string | number): number {
   if (typeof name === 'number') return name;
   const i = MARKS.indexOf(name);
@@ -88,43 +88,43 @@ export const Sel = {
 };
 
 // ── records ──────────────────────────────────────────────────────────────────────────────────
-export type Form = 'uthmani' | 'imlaei' | 'qpc' | 'rasm' | 'search';
+export type Form = 'rasmUthmani' | 'rasmImlai' | 'qpc' | 'rasm' | 'search';
 export type HighlightMode = 'ink' | 'band' | 'both';
 export type MaskMode = 'hide' | 'block' | 'blur';
-export type DivisionKind = 'juz' | 'hizb' | 'nisf' | 'rub';
+export type DivisionKind = 'juz' | 'hizb' | 'nisf' | 'rubuAlHizb';
 export interface WordPath { idx: number; kind: number; kindName: string; mark: number; markName: string; nthMark: number; nthInWord: number; category: number; categoryName: string; family: number; familyName: string; line: number }
 export interface Word {
-  idx: number; sura: number; ayah: number; word: number; line: number; lineIdx: number; ayahIdx: number;
+  idx: number; surah: number; ayah: number; word: number; line: number; lineIdx: number; ayahIdx: number;
   x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number;
-  wid: string; aid: string; forms: Partial<Record<Form, string>>; label: string; paths: WordPath[];
+  wordKey: string; ayahKey: string; forms: Partial<Record<Form, string>>; label: string; paths: WordPath[];
 }
-export interface Deco { idx: number; kind: number; kindName: string; sura: number; ayah: number; line: number; x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number }
-export interface Hit { word: number; path: number; deco: number; line: number; distance: number; exact: boolean; wid: string | null; aid: string | null }
-export interface Ayah { idx: number; sura: number; ayah: number; part: number; parts: number; flags: number; rub: number; firstWord: number; nWords: number; markerDeco: number; bbox: number[] }
+export interface Deco { idx: number; kind: number; kindName: string; surah: number; ayah: number; line: number; x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number }
+export interface Hit { word: number; path: number; deco: number; line: number; distance: number; exact: boolean; wordKey: string | null; ayahKey: string | null }
+export interface Ayah { idx: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDeco: number; bbox: number[] }
 export interface Line { idx: number; lineNo: number; isHeader: boolean; firstWord: number; nWords: number; bbox: number[]; bandY0: number; bandY1: number; centre: number }
 export interface SelectionInfo { words: number[]; text: string; citation: string; textWithCitation: string }
 export interface PageInfo { page: number; width: number; height: number; nLines: number; nAyahs: number; nWords: number; nPaths: number; nDecos: number; naturalPitch: number; forms: Form[]; loadMs: number; bytes: number; uri?: string }
-export interface Match { word: number; index: number; loose: boolean; wid: string; text: string }
+export interface Match { word: number; index: number; loose: boolean; wordKey: string; text: string }
 export interface Surah { number: number; ayahCount: number; hasBanner: boolean; hasBasmalah: boolean; place: string; bannerDeco: number; arabic: string; latin: string; english: string }
-export interface Division { kind: DivisionKind; n: number; sura: number; ayah: number; line: number; ayahIdx: number }
-export interface Marker { deco: number; sura: number; ayah: number; line: number; cx: number; cy: number; r: number; ornamentPath: number; numeralPath: number }
-export interface Rosette { deco: number; sura: number; ayah: number; juz: number; hizb: number; nisf: number; rub: number; rubInHizb: number }
-export interface Sajdah { deco: number; sura: number; ayah: number; signPath: number }
-export interface CropBox { x0: number; y0: number; x1: number; y1: number; nWords: number; markerDeco: number }
+export interface Division { kind: DivisionKind; n: number; surah: number; ayah: number; line: number; ayahIdx: number }
+export interface Marker { deco: number; surah: number; ayah: number; line: number; cx: number; cy: number; r: number; ornamentPath: number; numeralPath: number }
+export interface Rosette { deco: number; surah: number; ayah: number; juz: number; hizb: number; nisf: number; rubuAlHizb: number; rubuAlHizbInHizb: number }
+export interface Sajdah { deco: number; surah: number; ayah: number; signPath: number }
+export interface CropBox { x0: number; y0: number; x1: number; y1: number; nWords: number; ayahMarkDeco: number }
 export interface Layout { scale: number; ox: number; oy: number; contentW: number; contentH: number; pitch: number; lineDy: number[]; slots: number[][] }
 export interface Stats { loadMs: number; bytes: number; baseMs: number; overlayMs: number; basePaths: number; overlayPaths: number; bands: number; hitUs: number; animating: boolean; styleHandles: number; highlightHandles: number; engineVersion: number; viewScale: number; layout: Layout | null }
 export interface AtlasSurah { n: number; number: number; page: number; ayahCount: number; place: string; arabic: string; latin: string; english: string }
-export interface AtlasRub { rub: number; sura: number; ayah: number; page: number; aid: string }
+export interface AtlasRubuAlHizb { rubuAlHizb: number; surah: number; ayah: number; page: number; ayahKey: string }
 
 export interface HighlightStyle { mode?: HighlightMode; ink?: Color; band?: Color; height?: 'pitch' | 'ink'; padX?: number; padY?: number; radius?: number; seam?: number; ms?: number; layer?: number }
 /** One declarative highlight; the native side keeps id → handle and calls highlight / rehighlight / restyleHighlight / unhighlight on diff. */
 export interface Highlight { id: string; target: Target; style?: HighlightStyle }
 /** One declarative style rule: `selector` (→ page.style) or `target` (→ page.styleTarget); `hide` → page.hide(selector). */
 export interface StyleRule { id: string; selector?: Selector; target?: Target; color?: Color; ms?: number; layer?: number; hide?: boolean }
-export interface Theme { ink?: Color; diacritics?: Color; dots?: Color; waqf?: Color; sifr?: Color; marker?: Color; numeral?: Color; headers?: Color; marks?: Record<string, Color>; ms?: number }
+export interface Theme { ink?: Color; diacritics?: Color; dots?: Color; waqf?: Color; sifr?: Color; ayahMark?: Color; numeral?: Color; headers?: Color; marks?: Record<string, Color>; ms?: number }
 export interface Mask { target: Target; mode?: MaskMode; blockColor?: Color; padX?: number; padY?: number; radius?: number; reverse?: boolean }
-/** Greyed-page reveal: `revealStart(lit, byAyah, grey, ink, markers, ms)` then `revealGoto(at)` whenever `at` changes; null → revealStop. */
-export interface Reveal { lit?: number; byAyah?: boolean; grey?: Color; ink?: Color; markers?: boolean; ms?: number; at?: number }
+/** Greyed-page reveal: `revealStart(lit, byAyah, grey, ink, ayahMarks, ms)` then `revealGoto(at)` whenever `at` changes; null → revealStop. */
+export interface Reveal { lit?: number; byAyah?: boolean; grey?: Color; ink?: Color; ayahMarks?: boolean; ms?: number; at?: number }
 
 // ── the view ─────────────────────────────────────────────────────────────────────────────────
 export interface QvpPageViewProps extends ViewProps {
@@ -161,7 +161,7 @@ type NativeProps = ViewProps & Omit<QvpPageViewProps, 'onWordTap' | 'onDecoTap' 
 };
 const NativeQvpPageView = requireNativeComponent<NativeProps>('QvpPageView') as HostComponent<NativeProps>;
 
-const colorKeys = ['ink', 'band', 'diacritics', 'dots', 'waqf', 'sifr', 'marker', 'numeral', 'headers', 'color', 'blockColor', 'grey'];
+const colorKeys = ['ink', 'band', 'diacritics', 'dots', 'waqf', 'sifr', 'ayahMark', 'numeral', 'headers', 'color', 'blockColor', 'grey'];
 function normColors<X>(o: X): X {
   if (o == null || typeof o !== 'object') return o;
   if (Array.isArray(o)) return o.map(normColors) as X;
@@ -217,7 +217,7 @@ if (!M) throw new Error('@quranpedia/qvp-react-native: native module QvpModule n
 
 export interface SearchOptions { form?: Form; mode?: 'includes' | 'exact' | 'prefix'; normalize?: boolean; loose?: boolean; limit?: number }
 export interface TextOptions { form?: Form; wordSep?: string; lineSep?: string }
-export interface CropOptions { pad?: number; keepMarkers?: boolean; background?: Color }
+export interface CropOptions { pad?: number; keepAyahMarks?: boolean; background?: Color }
 export interface HitOptions { maxDistance?: number; gapBias?: number; exactFirst?: boolean }
 
 /** Page-bound queries; `tag` is the react tag of a mounted `<QvpPageView />` (`findNodeHandle`). */
@@ -230,15 +230,15 @@ export const Qvp = {
   decos: (tag: number): Promise<Deco[]> => M.decos(tag),
   findWord: (tag: number, s: number, a: number, w: number): Promise<number> => M.findWord(tag, s, a, w),
   resolve: (tag: number, target: Target): Promise<number[]> => M.resolve(tag, target),
-  wordForm: (tag: number, idx: number, form: Form = 'uthmani'): Promise<string> => M.wordForm(tag, idx, form),
+  wordForm: (tag: number, idx: number, form: Form = 'rasmUthmani'): Promise<string> => M.wordForm(tag, idx, form),
   hasForm: (tag: number, form: Form): Promise<boolean> => M.hasForm(tag, form),
   attachWords: (tag: number, json: string | object): Promise<number> => M.attachWords(tag, typeof json === 'string' ? json : JSON.stringify(json)),
   surahs: (tag: number): Promise<Surah[]> => M.surahs(tag),
   divisions: (tag: number): Promise<Division[]> => M.divisions(tag),
-  markers: (tag: number): Promise<Marker[]> => M.markers(tag),
+  ayahMarks: (tag: number): Promise<Marker[]> => M.ayahMarks(tag),
   rosettes: (tag: number): Promise<Rosette[]> => M.rosettes(tag),
   sajdahs: (tag: number): Promise<Sajdah[]> => M.sajdahs(tag),
-  ayahKeys: (tag: number): Promise<{ sura: number; ayah: number; aid: string }[]> => M.ayahKeys(tag),
+  ayahKeys: (tag: number): Promise<{ surah: number; ayah: number; ayahKey: string }[]> => M.ayahKeys(tag),
   ayahWordCount: (tag: number, s: number, a: number): Promise<{ count: number; complete: boolean }> => M.ayahWordCount(tag, s, a),
   reciteMap: (tag: number, s: number, a: number, nSegments: number): Promise<number[] | null> => M.reciteMap(tag, s, a, nSegments),
   wordLabel: (tag: number, i: number): Promise<string> => M.wordLabel(tag, i),
@@ -255,7 +255,7 @@ export const Qvp = {
   select: (tag: number, anchor: number, focus: number = anchor): Promise<SelectionInfo> => M.select(tag, anchor, focus),
   clearSelection: (tag: number): Promise<void> => M.clearSelection(tag),
   selection: (tag: number): Promise<SelectionInfo> => M.selection(tag),
-  selectionText: (tag: number, form: Form = 'uthmani', citation = false): Promise<string> => M.selectionText(tag, form, citation),
+  selectionText: (tag: number, form: Form = 'rasmUthmani', citation = false): Promise<string> => M.selectionText(tag, form, citation),
   revealNext: (tag: number, n = 1): Promise<number> => M.revealNext(tag, n),
   hideBack: (tag: number, n = 1): Promise<number> => M.hideBack(tag, n),
   revealWord: (tag: number, i: number): Promise<boolean> => M.revealWord(tag, i),
@@ -288,12 +288,12 @@ export const Qvp = {
   loadAtlas: (uri: string): Promise<number> => M.loadAtlas(uri),
   freeAtlas: (id: number): Promise<void> => M.freeAtlas(id),
   atlasPageOf: (id: number, s: number, a: number): Promise<number | null> => M.atlasPageOf(id, s, a),
-  atlasPageRange: (id: number, page: number): Promise<{ first: { sura: number; ayah: number }; last: { sura: number; ayah: number } } | null> => M.atlasPageRange(id, page),
+  atlasPageRange: (id: number, page: number): Promise<{ first: { surah: number; ayah: number }; last: { surah: number; ayah: number } } | null> => M.atlasPageRange(id, page),
   atlasPages: (id: number): Promise<number> => M.atlasPages(id),
   atlasSurah: (id: number, n: number): Promise<AtlasSurah | null> => M.atlasSurah(id, n),
   atlasSurahs: (id: number): Promise<AtlasSurah[]> => M.atlasSurahs(id),
   atlasPageOfSurah: (id: number, n: number): Promise<number | null> => M.atlasPageOfSurah(id, n),
-  atlasDivision: (id: number, kind: DivisionKind, n: number): Promise<AtlasRub | null> => M.atlasDivision(id, kind, n),
+  atlasDivision: (id: number, kind: DivisionKind, n: number): Promise<AtlasRubuAlHizb | null> => M.atlasDivision(id, kind, n),
   atlasDivisionAt: (id: number, kind: DivisionKind, s: number, a: number): Promise<number | null> => M.atlasDivisionAt(id, kind, s, a),
   atlasJuzAt: (id: number, s: number, a: number): Promise<number | null> => M.atlasJuzAt(id, s, a),
   atlasPagesOfJuz: (id: number, n: number): Promise<[number, number] | null> => M.atlasPagesOfJuz(id, n),
@@ -314,7 +314,7 @@ export class QvpAtlas {
   division(kind: DivisionKind, n: number) { return Qvp.atlasDivision(this.id, kind, n); }
   juz(n: number) { return Qvp.atlasDivision(this.id, 'juz', n); }
   hizb(n: number) { return Qvp.atlasDivision(this.id, 'hizb', n); }
-  rub(n: number) { return Qvp.atlasDivision(this.id, 'rub', n); }
+  rubuAlHizb(n: number) { return Qvp.atlasDivision(this.id, 'rubuAlHizb', n); }
   divisionAt(kind: DivisionKind, s: number, a: number) { return Qvp.atlasDivisionAt(this.id, kind, s, a); }
   juzAt(s: number, a: number) { return Qvp.atlasJuzAt(this.id, s, a); }
   pagesOfJuz(n: number) { return Qvp.atlasPagesOfJuz(this.id, n); }
@@ -322,7 +322,7 @@ export class QvpAtlas {
 }
 
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decos', 'findWord', 'resolve', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'markers', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestViewEx', 'wordBoxView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'revealNext', 'hideBack', 'revealWord', 'hideWord', 'revealAll', 'hideAll', 'maskHidden', 'maskWords', 'revealSteps', 'revealAt', 'revealStepOf', 'cropBox', 'cropSvg'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decos', 'findWord', 'resolve', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestViewEx', 'wordBoxView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'revealNext', 'hideBack', 'revealWord', 'hideWord', 'revealAll', 'hideAll', 'maskHidden', 'maskWords', 'revealSteps', 'revealAt', 'revealStepOf', 'cropBox', 'cropSvg'] as const;
 type PageMethod = (typeof pageMethods)[number];
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {

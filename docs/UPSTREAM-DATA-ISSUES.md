@@ -1,91 +1,71 @@
-# Upstream SVG data issues (to fix in the exporter, not in the engine)
+# Upstream SVG data issues (to fix in the pipeline, not in the engine)
 
-Found while measuring `pages/*.svg` on 2026-09-04. The converter does **not**
-work around any of these; it converts what it is given and prints a warning.
+Measured against the `quran-svg hafs-kfgqpc v1.0.0` bundle (production profile,
+schema `quran-svg/version` 1.0.0, artwork `b91d39e1`, pipeline `6588ce9`). The
+converter does **not** work around any of these; it converts what it is given
+and prints a warning.
 
-## 1. Pages 001 and 002: ayah markers are duplicated and mis-attributed
+`cargo run -p qvp-convert --release -- batch pages dist/pages` on this bundle
+reports **0 errors and 0 warnings** over all 604 pages.
 
-Every marker position carries two `ayah-marker` groups: one with the ornament
-only, one with ornament + number. Ids are shifted, and later groups have no
-`id` / `data-aid` at all. Page 002 has 10 ornaments for 5 ayahs. Normal pages
-(e.g. 036) are clean: one group per ayah with ornament + number.
+## Fixed in v1.0.0
 
-```
-<g class="ayah-marker" id="mk-2-1" data-aid="2:1"><g transform="translate(231.135 317.344) …">[ornament]</g></g>
-<g class="ayah-marker" id="mk-2-2" data-aid="2:2"><g transform="translate(231.135 317.344) …">[ornament]</g><g …>[number]</g></g>
-…
-<g class="ayah-marker"><g transform="translate(187.856 274.933) …">[ornament]</g><g …>[number]</g></g>   ← no id, no aid
-```
+Everything the 2026-09-04 revision of this file listed as items 1–6 is fixed,
+and each fix is verified here rather than taken on trust:
 
-Effect: the ornament is drawn twice (invisible, same ink), the marker for
-ayah N is tagged as ayah N+1, and some markers cannot be linked to an ayah.
-Expected: exactly one `ayah-marker` group per ayah, with `id="mk-S-A"` and
-`data-aid="S:A"`, containing one ornament and one number.
+| was | now |
+|---|---|
+| pages 1–2 drew every ayah ornament twice, with shifted ids and groups carrying no `id` / `data-aid` | 6,236 `g.ayah-mark` groups, every one with `id="mk-S-A"` and `data-ayah-key`; the 12 doubled ornaments sit inside their own ayah's group as `data-duplicate="1"` and are kept deliberately (two fills composite differently at the edge) |
+| pages 1–2 used `viewBox="-53.3109 -198.4777 345 550"` | every page is `viewBox="0 0 345 550"`; the offset is folded into the page matrix |
+| four `<path>` elements had no `data-kind` | every ink path carries `data-kind` |
+| 72 `<path>` elements carried an inline `transform` | no `<path>` carries a transform; the translation is baked into the absolute movetos |
+| coordinate noise such as `166.17999999999796` | absolute movetos are written to at most three decimals |
+| all five text forms repeated on all 77,432 word groups | the production profile carries `data-word-key` and `data-rasm-uthmani` only; the four derived forms ship once in `index/by-page/NNN.json` |
 
-## 2. Pages 001 and 002 use a different viewBox and root transform
+## Still open
 
-```
-001/002:  viewBox="-53.3109 -198.4777 345 550"  root g transform="matrix(1.3333 0 0 -1.3333 -136 482)"
-others:   viewBox="0 0 345 550"                  root g transform="matrix(1.3333 0 0 -1.3333 -55|-115 640)"
-```
+### 1. No per-letter segmentation
 
-Harmless for the converter (it flattens transforms), but every consumer of
-the raw SVG has to special-case two pages. Expected: same viewBox everywhere.
+Body paths are per connected stroke, not per letter. Tajwid colouring by letter
+(e.g. colouring only the noon of an ikhfa) is not possible from this data. The
+dev profile's `<g class="ligature">` is a rendering run, not a spelling — the
+bundle's own `schema/FORMAT.md` §10.3 says so — and the production profile drops
+it. If letter colouring is a product goal, the pipeline needs to emit letter
+boundaries (or at least glyph ids) per body path.
 
-## 3. Four `<path>` elements have no `data-kind`
+### 2. Ayah numbers are one merged outline per number
 
-They only carry `d` and `fill`. The converter files them as kind `other`.
-Run `qvp-convert batch` and look for `warn: path without data-kind` to locate
-them (page and parent group are printed).
+Sampled 87 pages: 891 `data-kind="ayah_number"` paths, **891 distinct outlines**,
+each holding 1–5 subpaths (the digits) with no digit boundaries. Expected: one
+`<path>` per digit with a glyph id (e.g. `data-glyph="digit-3"`), so the engine
+can store ten digit glyphs once and place instances. Saves ~2–3 % of the mushaf
+and lets apps restyle or replace the numerals.
 
-## 4. 72 `<path>` elements carry an inline `transform`
+### 3. Surah header and basmalah ink is baked per instance
 
-```
-<path data-kind="mark" data-mark="waqf-awla" transform="matrix(1 0 0 1 -0.376 6.71)" d="…"/>
-```
+Sampled 87 pages: 33 `data-kind="header_ink"` paths, **33 distinct outlines**.
+v1.0.0 merged each banner's ink into a single compound path (226 paths for 226
+banners, down from 5,670), which is smaller but moves further from reuse: the
+decorative frame, the calligraphic surah name and the basmalah are all one
+outline. Expected: emit the frame and the basmalah as reusable glyphs placed by
+a transform — the way the ayah ornament already is — and keep the surah name as
+its own paths.
 
-The converter applies them, so no visual issue, but they suggest a manual
-nudge step in the exporter that other tooling will miss. Expected: bake the
-translation into `d`.
+### 4. Ayah ornament is a shared glyph — please keep it that way
 
-## 5. Coordinate noise
+Sampled 87 pages: 898 `data-kind="ayah_mark_ornament"` paths from **one**
+outline, placed by `translate(…) scale(0.011 -0.011)` (`0.0075` on pages 1–2).
+The engine stores it once per page as a glyph instance. Do not bake it into
+absolute coordinates in future exports.
 
-Baked transforms leave values such as `166.17999999999796`. Real precision is
-three decimals. Rounding at export time would cut the SVG size by roughly a
-third and make diffs readable.
+## Not a defect
 
-## 6. Per-word text forms repeated on every word group
+Two things that look wrong and are not, both documented in the bundle's
+`schema/FORMAT.md`, recorded here so nobody "fixes" them in the converter:
 
-`data-uthmani`, `data-imlaei`, `data-qpc`, `data-rasm`, `data-search` are
-carried on all 77,432 word groups. The engine keeps only `uthmani` inline and
-writes the rest to a side file (`NNN.words.json`). Exporting the text index
-once, separately from the geometry, would be cleaner.
-
-## 7. No per-letter segmentation
-
-Body paths are per connected stroke, not per letter. Tajweed colouring by
-letter (e.g. colouring only the noon of an ikhfa) is not possible from this
-data. If that is a product goal, the exporter needs to emit letter boundaries
-(or at least glyph ids) per body path.
-
-## 8. Ayah numbers are one merged outline per number
-
-6,230 unique outlines out of 6,236 numbers; each contains 3–4 subpaths (the
-digits) but no digit boundaries. Expected: one `<path>` per digit with a
-glyph id (e.g. `data-glyph="digit-3"`), so the engine can store 10 digit
-glyphs once and place instances. Saves ~2–3 % of the mushaf and lets apps
-restyle or replace numerals.
-
-## 9. Surah header frames and basmalah are baked per instance
-
-`surah-name` paths are all unique even after position normalisation, so the
-decorative frame and the calligraphic name are merged into the same outlines.
-Basmalah repeats only partially (3,370 → 2,962 unique). Expected: emit the
-frame and the basmalah as reusable glyphs with a transform (the way the ayah
-ornament already is), and keep the surah name as its own paths.
-
-## 10. Ayah ornament is already a shared glyph — keep it that way
-
-One outline placed 6,248 times via `translate(...) scale(0.011 -0.011)`
-(`0.0075` on pages 001–002). The engine stores it once per page as a glyph
-instance. Please do not bake it into absolute coordinates in future exports.
+- **`data-rasm-uthmani` disagrees with `data-rasm-imlai` at all 609 iqlab sites**
+  (§9.7) and around the open tanwin U+08F0–U+08F2 (§9.8). That is the print's
+  orthography, not corruption.
+- **A mark can be drawn outside its own word** (§9.9) — a word-final tanwin
+  floats into the gap toward the next word. Word bounding boxes therefore
+  overlap. Ownership is the enclosing `g.word`, never proximity.

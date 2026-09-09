@@ -1,19 +1,19 @@
 package net.quranpedia.qvp
 
 /** Constants mirroring qvp.h. Colours everywhere are 0xRRGGBBAA (see [QvpColor]). */
-object QvpKind { const val BODY = 0; const val MARK = 1; const val AYAH_NUMBER = 2; const val AYAH_ORNAMENT = 3; const val HEADER_INK = 4; const val OTHER = 255 }
-object QvpFamily { const val NONE = 0; const val DIACRITIC = 1; const val TANWEEN = 2; const val DOTS = 3; const val WAQF = 4; const val SIFR = 5; const val SAJDAH = 6; const val READING_SIGN = 7 }
-object QvpCategory { const val NONE = 0; const val HARAKA = 1; const val TANWEEN = 2; const val LETTER_DOT = 3; const val ORTHOGRAPHIC = 4; const val DABT = 5; const val WAQF = 6; const val READING_SIGN = 7; const val STANDALONE = 8 }
-object QvpDeco { const val AYAH_MARKER = 0; const val SURAH_NAME = 1; const val BASMALAH = 2; const val HIZB_MARK = 3; const val SAJDAH_MARK = 4 }
+object QvpKind { const val BODY = 0; const val MARK = 1; const val AYAH_NUMBER = 2; const val AYAH_MARK_ORNAMENT = 3; const val HEADER_INK = 4; const val ORNAMENT = 5; const val PAGE_NUMBER = 6; const val RUNNING_HEAD = 7; const val OTHER = 255 }
+object QvpFamily { const val NONE = 0; const val DIACRITIC = 1; const val TANWIN = 2; const val DOTS = 3; const val WAQF = 4; const val SIFR = 5; const val SAJDAH = 6; const val READING_SIGN = 7 }
+object QvpCategory { const val NONE = 0; const val HARAKAH = 1; const val TANWIN = 2; const val LETTER_DOT = 3; const val ORTHOGRAPHIC = 4; const val DABT = 5; const val WAQF = 6; const val READING_SIGN = 7; const val STANDALONE = 8 }
+object QvpDeco { const val AYAH_MARK = 0; const val SURAH_NAME = 1; const val BASMALAH = 2; const val DIVISION_MARK = 3; const val SAJDAH_MARK = 4; const val PAGE_NUMBER = 5; const val RUNNING_HEAD = 6; const val OTHER = 255 }
 object QvpLayer { const val BASE = 0; const val THEME = 10; const val HIGHLIGHT = 50; const val SELECTION = 60; const val TOP = 100 }
-enum class Form(val id: Int) { UTHMANI(0), IMLAEI(1), QPC(2), RASM(3), SEARCH(4) }
+enum class Form(val id: Int) { RASM_UTHMANI(0), RASM_IMLAI(1), QPC(2), RASM(3), SEARCH(4) }
 enum class SearchMode(val id: Int) { INCLUDES(0), EXACT(1), PREFIX(2) }
 enum class HighlightMode(val id: Int) { INK(0), BAND(1), BOTH(2) }
 enum class BandHeight(val id: Int) { PITCH(0), INK(1) }
 enum class MaskMode(val id: Int) { HIDE(0), BLOCK(1), BLUR(2) }
-enum class Division(val id: Int) { JUZ(0), HIZB(1), NISF(2), RUB(3) }
+enum class Division(val id: Int) { JUZ(0), HIZB(1), NISF(2), RUBU_AL_HIZB(3) }
 
-val QVP_MARKS = listOf("", "fatha", "kasra", "damma", "fathatan", "kasratan", "dammatan", "shadda", "sukun", "maddah", "hamza", "wasla", "small-alef", "small-waw", "small-ya", "small-noon", "dot", "two-dots", "three-dots", "sifr-mustadir", "sifr-mustatil", "waqf-jaiz", "waqf-awla", "wasl-awla", "waqf-lazim", "muanaqah", "saktah", "meem-iqlab", "hizb", "sajdah", "sajdah-sign", "sajdah-line", "seen-reading", "tashil", "ishmam", "imalah")
+val QVP_MARKS = listOf("", "fathah", "kasrah", "dammah", "tanwin_al_fath", "tanwin_al_kasr", "tanwin_al_damm", "shaddah", "sukun", "maddah", "hamzah", "hamzat_al_wasl", "omitted_alif", "small_waw", "small_yaa", "small_noon", "dot", "two_dots", "three_dots", "rounded_zero", "rectangular_zero", "waqf_jaiz_mustawi_al_tarafayn", "waqf_jaiz_waqf_awla", "waqf_jaiz_wasl_awla", "waqf_lazim", "waqf_al_muanaqah", "saktah", "small_meem", "hizb", "sajdah", "sajdah_mark", "sajdah_line", "seen_al_qiraah", "tashil", "ishmam", "imalah")
 fun markId(name: String): Int = QVP_MARKS.indexOf(name).let { if (it < 0) 255 else it }
 
 /** 0xRRGGBBAA ↔ Android ARGB. */
@@ -79,16 +79,16 @@ class Target private constructor(internal val arr: IntArray) {
     }
 }
 
-data class QvpWord(val idx: Int, val sura: Int, val ayah: Int, val word: Int, val line: Int, val ayahIdx: Int, val lineIdx: Int,
+data class QvpWord(val idx: Int, val surah: Int, val ayah: Int, val word: Int, val line: Int, val ayahIdx: Int, val lineIdx: Int,
                    val x0: Float, val y0: Float, val x1: Float, val y1: Float, val text: String, val firstPath: Int, val nPaths: Int) {
-    val wid get() = "$sura:$ayah:$word"
-    val aid get() = "$sura:$ayah"
+    val wordKey get() = "$surah:$ayah:$word"
+    val ayahKey get() = "$surah:$ayah"
 }
-data class QvpAyah(val idx: Int, val sura: Int, val ayah: Int, val part: Int, val parts: Int, val flags: Int, val rub: Int, val firstWord: Int, val nWords: Int,
-                   val markerDeco: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
+data class QvpAyah(val idx: Int, val surah: Int, val ayah: Int, val fragment: Int, val fragments: Int, val flags: Int, val rubuAlHizb: Int, val firstWord: Int, val nWords: Int,
+                   val ayahMarkDeco: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
 data class QvpLine(val idx: Int, val lineNo: Int, val isHeader: Boolean, val firstWord: Int, val nWords: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
                    val bandY0: Float, val bandY1: Float, val centre: Float)
-data class QvpDecoration(val idx: Int, val kind: Int, val sura: Int, val ayah: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
+data class QvpDecoration(val idx: Int, val kind: Int, val surah: Int, val ayah: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
                          val text: String, val firstPath: Int, val nPaths: Int)
 /** Indices are -1 when absent. */
 data class QvpHit(val word: Int, val path: Int, val deco: Int)
@@ -106,15 +106,15 @@ data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val i
     internal fun ints() = intArrayOf(mode.id, height.id, ink, band, transitionMs, layer)
     internal fun floats() = floatArrayOf(padX, padY, radius, seam)
 }
-/** Colours with alpha 0 (or null) leave that part alone. */
-data class QvpTheme(val ink: Int? = null, val diacritics: Int? = null, val dots: Int? = null, val waqf: Int? = null, val sifr: Int? = null, val marker: Int? = null, val numeral: Int? = null,
+/** Colours with alpha 0 (or null) leave that colour alone. */
+data class QvpTheme(val ink: Int? = null, val diacritics: Int? = null, val dots: Int? = null, val waqf: Int? = null, val sifr: Int? = null, val ayahMark: Int? = null, val numeral: Int? = null,
                     val headers: Int? = null, val marks: Map<String, Int> = emptyMap(), val transitionMs: Int = 0)
 data class QvpSurah(val number: Int, val ayahCount: Int, val hasBanner: Boolean, val hasBasmalah: Boolean, val place: String, val bannerDeco: Int, val arabic: String, val latin: String, val english: String)
-data class QvpDivision(val kind: Division, val n: Int, val sura: Int, val ayah: Int, val line: Int, val ayahIdx: Int)
-data class QvpMarker(val deco: Int, val sura: Int, val ayah: Int, val line: Int, val cx: Float, val cy: Float, val r: Float, val ornamentPath: Int, val numeralPath: Int)
-data class QvpRosette(val deco: Int, val sura: Int, val ayah: Int, val juz: Int, val hizb: Int, val nisf: Int, val rub: Int, val rubInHizb: Int)
-data class QvpSajdah(val deco: Int, val sura: Int, val ayah: Int, val signPath: Int)
-data class QvpMatch(val word: Int, val index: Int, val loose: Boolean, val wid: String, val text: String)
-data class QvpCropBox(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val nWords: Int, val markerDeco: Int)
+data class QvpDivision(val kind: Division, val n: Int, val surah: Int, val ayah: Int, val line: Int, val ayahIdx: Int)
+data class QvpAyahMark(val deco: Int, val surah: Int, val ayah: Int, val line: Int, val cx: Float, val cy: Float, val r: Float, val ornamentPath: Int, val numeralPath: Int)
+data class QvpRosette(val deco: Int, val surah: Int, val ayah: Int, val juz: Int, val hizb: Int, val nisf: Int, val rubuAlHizb: Int, val rubuAlHizbInHizb: Int)
+data class QvpSajdah(val deco: Int, val surah: Int, val ayah: Int, val signPath: Int)
+data class QvpMatch(val word: Int, val index: Int, val loose: Boolean, val wordKey: String, val text: String)
+data class QvpCropBox(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val nWords: Int, val ayahMarkDeco: Int)
 data class QvpAtlasSurah(val n: Int, val page: Int, val ayahCount: Int, val place: String, val arabic: String, val latin: String, val english: String)
-data class QvpAtlasRub(val rub: Int, val sura: Int, val ayah: Int, val page: Int) { val aid get() = "$sura:$ayah" }
+data class QvpAtlasRubuAlHizb(val rubuAlHizb: Int, val surah: Int, val ayah: Int, val page: Int) { val ayahKey get() = "$surah:$ayah" }
