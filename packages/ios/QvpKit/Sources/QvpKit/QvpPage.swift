@@ -38,13 +38,13 @@ public final class QvpPage {
         table = Array(UnsafeBufferPointer(start: g.table, count: Int(g.n_paths) * 8))
         words = (0..<Int(info.n_words)).map { k in
             var w = QvpWordInfo(); _ = qvp_word_info(h, UInt32(k), &w)
-            return QvpWord(idx: k, sura: Int(w.sura), ayah: Int(w.ayah), word: Int(w.word), line: Int(w.line_no), ayahIdx: Int(w.ayah_idx), lineIdx: Int(w.line_idx),
+            return QvpWord(idx: k, surah: Int(w.surah), ayah: Int(w.ayah), word: Int(w.word), line: Int(w.line_no), ayahIdx: Int(w.ayah_idx), lineIdx: Int(w.line_idx),
                            x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1, text: w.text.string, firstPath: Int(w.first_path), nPaths: Int(w.n_paths))
         }
         ayahs = (0..<Int(info.n_ayahs)).map { k in
             var a = QvpAyahInfo(); _ = qvp_ayah_info(h, UInt32(k), &a)
-            return QvpAyah(idx: k, sura: Int(a.sura), ayah: Int(a.ayah), part: Int(a.part), parts: Int(a.parts), flags: Int(a.flags), rub: Int(a.rub), firstWord: Int(a.first_word), nWords: Int(a.n_words),
-                           markerDeco: idx(a.marker_deco), x0: a.x0, y0: a.y0, x1: a.x1, y1: a.y1)
+            return QvpAyah(idx: k, surah: Int(a.surah), ayah: Int(a.ayah), fragment: Int(a.fragment), fragments: Int(a.fragments), flags: Int(a.flags), rubuAlHizb: Int(a.rubu_al_hizb), firstWord: Int(a.first_word), nWords: Int(a.n_words),
+                           ayahMarkDeco: idx(a.ayah_mark_deco), x0: a.x0, y0: a.y0, x1: a.x1, y1: a.y1)
         }
         lines = (0..<Int(info.n_lines)).map { k in
             var l = QvpLineInfo(); _ = qvp_line_info(h, UInt32(k), &l)
@@ -53,7 +53,7 @@ public final class QvpPage {
         }
         decos = (0..<Int(info.n_decos)).map { k in
             var d = QvpDecoInfo(); _ = qvp_deco_info(h, UInt32(k), &d)
-            return QvpDecoration(idx: k, kind: Int(d.kind), sura: Int(d.sura), ayah: Int(d.ayah), line: Int(d.line), x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1,
+            return QvpDecoration(idx: k, kind: Int(d.kind), surah: Int(d.surah), ayah: Int(d.ayah), line: Int(d.line), x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1,
                                  text: d.text.string, firstPath: Int(d.first_path), nPaths: Int(d.n_paths))
         }
         naturalPitch = qvp_natural_pitch(h)
@@ -102,23 +102,23 @@ public final class QvpPage {
     }
 
     // ── words / text ──
-    public func wid(_ i: Int) -> String { words[i].wid }
-    public func wordForm(_ i: Int, _ form: Form = .uthmani) -> String { var s = QvpStr(); return qvp_word_form(p, UInt32(i), UInt8(form.rawValue), &s) != 0 ? s.string : "" }
-    public func findWord(_ sura: Int, _ ayah: Int, _ word: Int) -> Int { Int(qvp_find_word(p, UInt16(sura), UInt16(ayah), UInt16(word))) }
+    public func wordKey(_ i: Int) -> String { words[i].wordKey }
+    public func wordForm(_ i: Int, _ form: Form = .rasmUthmani) -> String { var s = QvpStr(); return qvp_word_form(p, UInt32(i), UInt8(form.rawValue), &s) != 0 ? s.string : "" }
+    public func findWord(_ surah: Int, _ ayah: Int, _ word: Int) -> Int { Int(qvp_find_word(p, UInt16(surah), UInt16(ayah), UInt16(word))) }
     public func target(_ s: String) -> Target { Target.parse(s, page: self) }
     public func resolve(_ t: Target) -> [Int] { t.withC { tp in collect(512) { o, c in qvp_resolve(p, tp, o, c) } }.map { Int($0) } }
     public func resolve(_ s: String) -> [Int] { resolve(target(s)) }
     public func resolve(_ ws: [Int]) -> [Int] { resolve(Target.words(ws)) }
-    public func text(_ t: Target, form: Form = .uthmani, wordSep: String = " ", lineSep: String = "\n") -> String {
+    public func text(_ t: Target, form: Form = .rasmUthmani, wordSep: String = " ", lineSep: String = "\n") -> String {
         withBytes(wordSep) { wp, wn in withBytes(lineSep) { lp, ln in t.withC { tp in var s = QvpStr(); qvp_text_target(p, tp, UInt8(form.rawValue), wp, wn, lp, ln, &s); return s.string } } }
     }
-    public func text(_ s: String = "page", form: Form = .uthmani, wordSep: String = " ", lineSep: String = "\n") -> String { text(target(s), form: form, wordSep: wordSep, lineSep: lineSep) }
+    public func text(_ s: String = "page", form: Form = .rasmUthmani, wordSep: String = " ", lineSep: String = "\n") -> String { text(target(s), form: form, wordSep: wordSep, lineSep: lineSep) }
     public func search(_ query: String, form: Form = .search, mode: SearchMode = .includes, normalize: Bool = true, loose: Bool = true, limit: Int = 0) -> [QvpMatch] {
         let v: [QvpFFI.QvpMatch] = withBytes(query) { qp, qn in collect(256) { o, c in qvp_search(p, qp, qn, UInt8(form.rawValue), UInt8(mode.rawValue), normalize ? 1 : 0, loose ? 1 : 0, UInt32(limit), o, c) } }
-        return v.map { m in let w = Int(m.word); return QvpMatch(word: w, index: Int(m.index), loose: m.loose != 0, wid: wid(w), text: words[w].text) }
+        return v.map { m in let w = Int(m.word); return QvpMatch(word: w, index: Int(m.index), loose: m.loose != 0, wordKey: wordKey(w), text: words[w].text) }
     }
     public func citation(_ ws: [Int]) -> String { ws.map { UInt32($0) }.withUnsafeBufferPointer { b in var s = QvpStr(); qvp_citation(p, b.baseAddress, UInt32(b.count), &s); return s.string } }
-    /// Attach a words sidecar ({"s:a:w": {"imlaei","qpc","rasm","search"}}); returns words updated, -1 on bad JSON.
+    /// Attach a words sidecar ({"s:a:w": {"rasm_imlai","qpc","rasm","search"}}); returns words updated, -1 on bad JSON.
     public func attachWords(_ json: Data) -> Int { json.withUnsafeBytes { Int(qvp_attach_words(p, $0.bindMemory(to: UInt8.self).baseAddress, UInt32($0.count))) } }
     public func attachWords(_ json: String) -> Int { attachWords(Data(json.utf8)) }
     public func hasForm(_ form: Form) -> Bool { qvp_has_form(p, UInt8(form.rawValue)) != 0 }
@@ -130,20 +130,20 @@ public final class QvpPage {
             return QvpSurah(number: Int(s.number), ayahCount: Int(s.ayah_count), hasBanner: s.has_banner != 0, hasBasmalah: s.has_basmalah != 0, place: place(s.place), bannerDeco: idx(s.banner_deco), arabic: s.arabic.string, latin: s.latin.string, english: s.english.string)
         }
     }
-    public func divisions() -> [QvpDivision] { collect(64) { o, c in qvp_divisions(p, o, c) }.map { (d: QvpFFI.QvpDivision) in QvpDivision(kind: Division(rawValue: Int(d.kind)) ?? .juz, n: Int(d.n), sura: Int(d.sura), ayah: Int(d.ayah), line: Int(d.line), ayahIdx: Int(d.ayah_idx)) } }
-    public func markers() -> [QvpMarker] { collect(128) { o, c in qvp_markers(p, o, c) }.map { (m: QvpFFI.QvpMarker) in QvpMarker(deco: idx(m.deco), sura: Int(m.sura), ayah: Int(m.ayah), line: Int(m.line), cx: m.cx, cy: m.cy, r: m.r, ornamentPath: idx(m.ornament_path), numeralPath: idx(m.numeral_path)) } }
-    public func markerOf(_ sura: Int, _ ayah: Int) -> QvpMarker? { markers().first { $0.sura == sura && $0.ayah == ayah } }
-    public func rosettes() -> [QvpRosette] { collect(32) { o, c in qvp_rosettes(p, o, c) }.map { (r: QvpFFI.QvpRosette) in QvpRosette(deco: idx(r.deco), sura: Int(r.sura), ayah: Int(r.ayah), juz: Int(r.juz), hizb: Int(r.hizb), nisf: Int(r.nisf), rub: Int(r.rub), rubInHizb: Int(r.rub_in_hizb)) } }
-    public func sajdahs() -> [QvpSajdah] { collect(16) { o, c in qvp_sajdahs(p, o, c) }.map { (s: QvpFFI.QvpSajdah) in QvpSajdah(deco: idx(s.deco), sura: Int(s.sura), ayah: Int(s.ayah), signPath: idx(s.sign_path)) } }
+    public func divisions() -> [QvpDivision] { collect(64) { o, c in qvp_divisions(p, o, c) }.map { (d: QvpFFI.QvpDivision) in QvpDivision(kind: Division(rawValue: Int(d.kind)) ?? .juz, n: Int(d.n), surah: Int(d.surah), ayah: Int(d.ayah), line: Int(d.line), ayahIdx: Int(d.ayah_idx)) } }
+    public func ayahMarks() -> [QvpAyahMark] { collect(128) { o, c in qvp_ayah_marks(p, o, c) }.map { (m: QvpFFI.QvpAyahMark) in QvpAyahMark(deco: idx(m.deco), surah: Int(m.surah), ayah: Int(m.ayah), line: Int(m.line), cx: m.cx, cy: m.cy, r: m.r, ornamentPath: idx(m.ornament_path), numeralPath: idx(m.numeral_path)) } }
+    public func ayahMarkOf(_ surah: Int, _ ayah: Int) -> QvpAyahMark? { ayahMarks().first { $0.surah == surah && $0.ayah == ayah } }
+    public func rosettes() -> [QvpRosette] { collect(32) { o, c in qvp_rosettes(p, o, c) }.map { (r: QvpFFI.QvpRosette) in QvpRosette(deco: idx(r.deco), surah: Int(r.surah), ayah: Int(r.ayah), juz: Int(r.juz), hizb: Int(r.hizb), nisf: Int(r.nisf), rubuAlHizb: Int(r.rubu_al_hizb), rubuAlHizbInHizb: Int(r.rubu_al_hizb_in_hizb)) } }
+    public func sajdahs() -> [QvpSajdah] { collect(16) { o, c in qvp_sajdahs(p, o, c) }.map { (s: QvpFFI.QvpSajdah) in QvpSajdah(deco: idx(s.deco), surah: Int(s.surah), ayah: Int(s.ayah), signPath: idx(s.sign_path)) } }
     public func ayahKeys() -> [(Int, Int)] { collect(256) { o, c in qvp_ayah_keys(p, o, c) }.map { (k: UInt32) in (Int(k >> 16), Int(k & 0xffff)) } }
     /// (count on this page, whole ayah is here)
-    public func ayahWordCount(_ sura: Int, _ ayah: Int) -> (count: Int, complete: Bool) { var c: UInt32 = 0; let n = qvp_ayah_word_count(p, UInt16(sura), UInt16(ayah), &c); return (Int(n), c != 0) }
+    public func ayahWordCount(_ surah: Int, _ ayah: Int) -> (count: Int, complete: Bool) { var c: UInt32 = 0; let n = qvp_ayah_word_count(p, UInt16(surah), UInt16(ayah), &c); return (Int(n), c != 0) }
     /// Words for n recitation segments, or nil when the counts disagree (follow the ayah whole).
-    public func reciteMap(_ sura: Int, _ ayah: Int, nSegments: Int) -> [Int]? {
+    public func reciteMap(_ surah: Int, _ ayah: Int, nSegments: Int) -> [Int]? {
         var buf = [UInt32](repeating: 0, count: Swift.max(nSegments, 1) * 4 + 16)
-        let n = buf.withUnsafeMutableBufferPointer { qvp_recite_map(p, UInt16(sura), UInt16(ayah), UInt32(nSegments), $0.baseAddress, UInt32($0.count)) }
+        let n = buf.withUnsafeMutableBufferPointer { qvp_recite_map(p, UInt16(surah), UInt16(ayah), UInt32(nSegments), $0.baseAddress, UInt32($0.count)) }
         if n < 0 { return nil }
-        if Int(n) > buf.count { buf = [UInt32](repeating: 0, count: Int(n)); _ = buf.withUnsafeMutableBufferPointer { qvp_recite_map(p, UInt16(sura), UInt16(ayah), UInt32(nSegments), $0.baseAddress, UInt32($0.count)) } }
+        if Int(n) > buf.count { buf = [UInt32](repeating: 0, count: Int(n)); _ = buf.withUnsafeMutableBufferPointer { qvp_recite_map(p, UInt16(surah), UInt16(ayah), UInt32(nSegments), $0.baseAddress, UInt32($0.count)) } }
         return buf.prefix(Int(n)).map { Int($0) }
     }
     public func wordLabel(_ i: Int) -> String { var s = QvpStr(); qvp_word_label(p, UInt32(i), &s); return s.string }
@@ -196,7 +196,7 @@ public final class QvpPage {
     @discardableResult public func theme(_ t: QvpTheme) -> Int {
         let pairs: [UInt32] = t.marks.flatMap { [UInt32(markId($0.key)), $0.value] }
         return pairs.withUnsafeBufferPointer { mp in
-            var c = QvpFFI.QvpTheme(ink: t.ink ?? 0, diacritics: t.diacritics ?? 0, dots: t.dots ?? 0, waqf: t.waqf ?? 0, sifr: t.sifr ?? 0, marker: t.marker ?? 0, numeral: t.numeral ?? 0, headers: t.headers ?? 0, transition_ms: UInt32(t.transitionMs), marks: pairs.isEmpty ? nil : mp.baseAddress, n_marks: UInt32(pairs.count / 2))
+            var c = QvpFFI.QvpTheme(ink: t.ink ?? 0, diacritics: t.diacritics ?? 0, dots: t.dots ?? 0, waqf: t.waqf ?? 0, sifr: t.sifr ?? 0, ayah_mark: t.ayahMark ?? 0, numeral: t.numeral ?? 0, headers: t.headers ?? 0, transition_ms: UInt32(t.transitionMs), marks: pairs.isEmpty ? nil : mp.baseAddress, n_marks: UInt32(pairs.count / 2))
             return Int(qvp_theme(p, &c))
         }
     }
@@ -235,7 +235,7 @@ public final class QvpPage {
     public func select(_ anchor: Int, _ focus: Int? = nil) { qvp_select(p, anchor < 0 ? QVP_NONE : UInt32(anchor), (focus ?? anchor) < 0 ? QVP_NONE : UInt32(focus ?? anchor)) }
     public func clearSelection() { qvp_select(p, QVP_NONE, QVP_NONE) }
     public func selection() -> [Int] { collect(512) { o, c in qvp_selection(p, o, c) }.map { (w: UInt32) in Int(w) } }
-    public func selectionText(_ form: Form = .uthmani, citation: Bool = false) -> String { var s = QvpStr(); qvp_selection_text(p, UInt8(form.rawValue), citation ? 1 : 0, &s); return s.string }
+    public func selectionText(_ form: Form = .rasmUthmani, citation: Bool = false) -> String { var s = QvpStr(); qvp_selection_text(p, UInt8(form.rawValue), citation ? 1 : 0, &s); return s.string }
 
     // ── memorisation ──
     public func mask(_ t: Target, _ mode: MaskMode = .hide) { t.withC { qvp_mask(p, $0, UInt8(mode.rawValue)) } }
@@ -254,8 +254,8 @@ public final class QvpPage {
     /// Block/blur boxes in viewport px, drawn over the ink.
     public func maskBoxes() -> [QvpBox] { boxes(collect(128) { o, c in qvp_mask_boxes(p, o, c) }) }
     /// Greyed page with a lit window; returns steps.
-    @discardableResult public func revealStart(lit: Int = 1, byAyah: Bool = false, grey: UInt32 = 0xc9c4b8ff, ink: UInt32 = 0x231f20ff, markers: Bool = true, transitionMs: Int = 0) -> Int {
-        Int(qvp_reveal_start(p, UInt32(lit), byAyah ? 1 : 0, grey, ink, markers ? 1 : 0, UInt32(transitionMs)))
+    @discardableResult public func revealStart(lit: Int = 1, byAyah: Bool = false, grey: UInt32 = 0xc9c4b8ff, ink: UInt32 = 0x231f20ff, ayahMarks: Bool = true, transitionMs: Int = 0) -> Int {
+        Int(qvp_reveal_start(p, UInt32(lit), byAyah ? 1 : 0, grey, ink, ayahMarks ? 1 : 0, UInt32(transitionMs)))
     }
     @discardableResult public func revealGoto(_ at: Int) -> Bool { qvp_reveal_goto(p, Int64(at)) != 0 }
     /// Current step, -1 when nothing is lit yet, nil when no reveal is running.
@@ -265,18 +265,18 @@ public final class QvpPage {
     public func revealStop() { qvp_reveal_stop(p) }
 
     // ── crop ──
-    public func cropBox(_ t: Target, pad: Float = 2, keepMarkers: Bool = true) -> QvpCropBox? {
+    public func cropBox(_ t: Target, pad: Float = 2, keepAyahMarks: Bool = true) -> QvpCropBox? {
         var b = QvpFFI.QvpCropBox()
-        guard t.withC({ qvp_crop_box(p, $0, pad, keepMarkers ? 1 : 0, &b) }) != 0 else { return nil }
-        return QvpCropBox(x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, nWords: Int(b.n_words), markerDeco: idx(b.marker_deco))
+        guard t.withC({ qvp_crop_box(p, $0, pad, keepAyahMarks ? 1 : 0, &b) }) != 0 else { return nil }
+        return QvpCropBox(x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, nWords: Int(b.n_words), ayahMarkDeco: idx(b.ayah_mark_deco))
     }
-    public func cropBox(_ s: String, pad: Float = 2, keepMarkers: Bool = true) -> QvpCropBox? { cropBox(target(s), pad: pad, keepMarkers: keepMarkers) }
+    public func cropBox(_ s: String, pad: Float = 2, keepAyahMarks: Bool = true) -> QvpCropBox? { cropBox(target(s), pad: pad, keepAyahMarks: keepAyahMarks) }
     /// Standalone SVG with the current colours; background alpha 0 = transparent.
-    public func cropSvg(_ t: Target, pad: Float = 2, keepMarkers: Bool = true, background: UInt32 = 0) -> String? {
+    public func cropSvg(_ t: Target, pad: Float = 2, keepAyahMarks: Bool = true, background: UInt32 = 0) -> String? {
         var s = QvpStr()
-        return t.withC({ qvp_crop_svg(p, $0, pad, keepMarkers ? 1 : 0, background, &s) }) != 0 ? s.string : nil
+        return t.withC({ qvp_crop_svg(p, $0, pad, keepAyahMarks ? 1 : 0, background, &s) }) != 0 ? s.string : nil
     }
-    public func cropSvg(_ key: String, pad: Float = 2, keepMarkers: Bool = true, background: UInt32 = 0) -> String? { cropSvg(target(key), pad: pad, keepMarkers: keepMarkers, background: background) }
+    public func cropSvg(_ key: String, pad: Float = 2, keepAyahMarks: Bool = true, background: UInt32 = 0) -> String? { cropSvg(target(key), pad: pad, keepAyahMarks: keepAyahMarks, background: background) }
 }
 
 /// Cross-page lookup from atlas.qva.
@@ -292,8 +292,8 @@ public final class QvpAtlas {
     private func surah(_ ok: Int32, _ s: QvpFFI.QvpAtlasSurah) -> QvpAtlasSurah? {
         ok != 0 ? QvpAtlasSurah(n: Int(s.n), page: Int(s.first_page), ayahCount: Int(s.ayah_count), place: place(s.place), arabic: s.arabic.string, latin: s.latin.string, english: s.english.string) : nil
     }
-    public func pageOf(_ sura: Int, _ ayah: Int) -> Int? { let v = qvp_atlas_page_of(p, UInt16(sura), UInt16(ayah)); return v < 0 ? nil : Int(v) }
-    /// ((first sura, first ayah), (last sura, last ayah)) printed on the page.
+    public func pageOf(_ surah: Int, _ ayah: Int) -> Int? { let v = qvp_atlas_page_of(p, UInt16(surah), UInt16(ayah)); return v < 0 ? nil : Int(v) }
+    /// ((first surah, first ayah), (last surah, last ayah)) printed on the page.
     public func pageRange(_ page: Int) -> (first: (Int, Int), last: (Int, Int))? {
         var r: (UInt16, UInt16, UInt16, UInt16) = (0, 0, 0, 0)
         let ok = withUnsafeMutablePointer(to: &r) { $0.withMemoryRebound(to: UInt16.self, capacity: 4) { qvp_atlas_page_range(p, UInt16(page), $0) } }
@@ -303,15 +303,15 @@ public final class QvpAtlas {
     public func surah(_ n: Int) -> QvpAtlasSurah? { var s = QvpFFI.QvpAtlasSurah(); return surah(qvp_atlas_surah(p, UInt16(n), &s), s) }
     public func surahs() -> [QvpAtlasSurah] { (0..<Int(qvp_atlas_surahs(p))).compactMap { var s = QvpFFI.QvpAtlasSurah(); return surah(qvp_atlas_surah_at(p, UInt32($0), &s), s) } }
     public func pageOfSurah(_ n: Int) -> Int? { surah(n)?.page }
-    public func division(_ kind: Division, _ n: Int) -> QvpAtlasRub? {
-        var r = QvpFFI.QvpAtlasRub()
-        return qvp_atlas_division(p, UInt8(kind.rawValue), UInt16(n), &r) != 0 ? QvpAtlasRub(rub: Int(r.rub), sura: Int(r.sura), ayah: Int(r.ayah), page: Int(r.page)) : nil
+    public func division(_ kind: Division, _ n: Int) -> QvpAtlasRubuAlHizb? {
+        var r = QvpFFI.QvpAtlasRubuAlHizb()
+        return qvp_atlas_division(p, UInt8(kind.rawValue), UInt16(n), &r) != 0 ? QvpAtlasRubuAlHizb(rubuAlHizb: Int(r.rubu_al_hizb), surah: Int(r.surah), ayah: Int(r.ayah), page: Int(r.page)) : nil
     }
-    public func juz(_ n: Int) -> QvpAtlasRub? { division(.juz, n) }
-    public func hizb(_ n: Int) -> QvpAtlasRub? { division(.hizb, n) }
-    public func rub(_ n: Int) -> QvpAtlasRub? { division(.rub, n) }
-    public func divisionAt(_ kind: Division, _ sura: Int, _ ayah: Int) -> Int? { let v = qvp_atlas_division_at(p, UInt8(kind.rawValue), UInt16(sura), UInt16(ayah)); return v < 0 ? nil : Int(v) }
-    public func juzAt(_ sura: Int, _ ayah: Int) -> Int? { divisionAt(.juz, sura, ayah) }
+    public func juz(_ n: Int) -> QvpAtlasRubuAlHizb? { division(.juz, n) }
+    public func hizb(_ n: Int) -> QvpAtlasRubuAlHizb? { division(.hizb, n) }
+    public func rubuAlHizb(_ n: Int) -> QvpAtlasRubuAlHizb? { division(.rubuAlHizb, n) }
+    public func divisionAt(_ kind: Division, _ surah: Int, _ ayah: Int) -> Int? { let v = qvp_atlas_division_at(p, UInt8(kind.rawValue), UInt16(surah), UInt16(ayah)); return v < 0 ? nil : Int(v) }
+    public func juzAt(_ surah: Int, _ ayah: Int) -> Int? { divisionAt(.juz, surah, ayah) }
     public func pagesOfJuz(_ n: Int) -> (Int, Int)? {
         var r: (UInt16, UInt16) = (0, 0)
         let ok = withUnsafeMutablePointer(to: &r) { $0.withMemoryRebound(to: UInt16.self, capacity: 2) { qvp_atlas_pages_of_juz(p, UInt16(n), $0) } }

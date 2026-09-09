@@ -8,7 +8,8 @@ struct ThemeSpec { let ink: UInt32; let paper: UInt32; let bg: UInt32 }
 
 @MainActor
 final class DemoModel: ObservableObject {
-    static let pages: [Int] = Array(1...21) + Array(440...445) + [582, 604]
+    /// The whole mushaf: Demo/pages holds all 604 pages (see Demo/sync-pages.sh).
+    static let pages = 1...604
     static let themes: [String: ThemeSpec] = [
         "light": ThemeSpec(ink: 0x231f20ff, paper: 0xfffdf7ff, bg: 0xf6f1e7ff),
         "sepia": ThemeSpec(ink: 0x3b2a14ff, paper: 0xf3e7cfff, bg: 0xe9dcc3ff),
@@ -32,7 +33,7 @@ final class DemoModel: ObservableObject {
     @Published var playing = false { didSet { if playing != oldValue { playing ? startPlay() : stopPlay() } } }
     @Published var markColours = false { didSet { if markColours != oldValue { toggleTajweed(markColours) } } }
     @Published var hideMarks = false { didSet { if hideMarks != oldValue { toggleHideMarks(hideMarks) } } }
-    @Published var goldMarkers = false { didSet { if goldMarkers != oldValue { toggleMarkers(goldMarkers) } } }
+    @Published var goldAyahMarks = false { didSet { if goldAyahMarks != oldValue { toggleAyahMarks(goldAyahMarks) } } }
     @Published var theme = "light" { didSet { if theme != oldValue { applyTheme() } } }
     @Published var maskModeIdx = 0
     @Published var revealOn = false { didSet { if revealOn != oldValue { toggleReveal(revealOn) } } }
@@ -55,7 +56,7 @@ final class DemoModel: ObservableObject {
     private var loadMs = 0.0, pageBytes = 0
     private var selWordIdx = -1, selAyah: (Int, Int)?
     private var hlSel = 0, hlAyah = 0, hlSearch = 0, hlPlay = 0
-    private var tajweed = 0, hideMarksH = 0, markersH = 0
+    private var tajweed = 0, hideMarksH = 0, ayahMarksH = 0
     private var playIdx = 0
     private var playTimer: Timer?, hudTimer: Timer?, toastTimer: Timer?
     private var hlMode: HighlightMode { [.both, .band, .ink][hlModeIdx] }
@@ -69,10 +70,10 @@ final class DemoModel: ObservableObject {
         view.isAccessibilityElement = true; view.accessibilityIdentifier = "qvpPage"; view.accessibilityLabel = "mushaf page"
         view.selectionEnabled = false                       // a reader: tap highlights, no text selection
         view.onWordTap = { [weak self] w, _ in self?.selectWord(w.idx) }
-        view.onDecoTap = { [weak self] d, _ in if d.ayah != 0 { self?.selectAyah(d.sura, d.ayah) } }
+        view.onDecoTap = { [weak self] d, _ in if d.ayah != 0 { self?.selectAyah(d.surah, d.ayah) } }
         view.onEmptyTap = { [weak self] in self?.selectWord(-1) }
         applyTheme()
-        loadPage(Self.pages[0])
+        loadPage(Self.pages.lowerBound)
         hudTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.hud() } }
         applyLaunchArguments()
     }
@@ -87,7 +88,7 @@ final class DemoModel: ObservableObject {
         if let a = d.string(forKey: "qvpAyah") { let g = a.split(separator: ":").compactMap { Int($0) }; if g.count == 2 { selectAyah(g[0], g[1]) } }
         if let w = d.string(forKey: "qvpWord").flatMap(Int.init) { selectWord(w) }
         if d.bool(forKey: "qvpMarks") { markColours = true }
-        if d.bool(forKey: "qvpGold") { goldMarkers = true }
+        if d.bool(forKey: "qvpGold") { goldAyahMarks = true }
         if d.bool(forKey: "qvpMask") { maskModeIdx = 1; maskAyah() }
         if d.object(forKey: "qvpFill") != nil { fillHeight = d.bool(forKey: "qvpFill") }
         if d.bool(forKey: "qvpControls") { controlsShown = true }
@@ -96,15 +97,15 @@ final class DemoModel: ObservableObject {
     // ── navigation ──
     /// Slide the current page out (+1 = to the right, the next page in a right-to-left book) and load the neighbour.
     func flip(_ dir: Int) {
-        guard let i = Self.pages.firstIndex(of: pageNo), Self.pages.indices.contains(i + dir) else { showToast(dir > 0 ? "Last bundled page" : "First bundled page"); return }
+        guard Self.pages.contains(pageNo + dir) else { showToast(dir > 0 ? "Last page of the mushaf" : "First page of the mushaf"); return }
         let r = UIGraphicsImageRenderer(bounds: view.bounds)
         flipImage = r.image { _ in view.drawHierarchy(in: view.bounds, afterScreenUpdates: false) }
         flipOffset = 0
-        loadPage(Self.pages[i + dir])
+        loadPage(pageNo + dir)
         withAnimation(.easeInOut(duration: 0.28)) { flipOffset = CGFloat(dir) * view.bounds.width }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.flipImage = nil; self?.flipOffset = 0 }
     }
-    func stepPage(_ dir: Int) { if let i = Self.pages.firstIndex(of: pageNo), Self.pages.indices.contains(i + dir) { loadPage(Self.pages[i + dir]) } }
+    func stepPage(_ dir: Int) { if Self.pages.contains(pageNo + dir) { loadPage(pageNo + dir) } }
     func gotoPageField() { if let n = Int(pageField.trimmingCharacters(in: .whitespaces)) { loadPage(n) } }
     func goto() {
         guard let a = atlas else { return }
@@ -121,7 +122,7 @@ final class DemoModel: ObservableObject {
         if let su = a.findSurah(s).first { loadPage(su.page) }
     }
     func loadPage(_ n: Int) {
-        let target = Self.pages.contains(n) ? n : Self.pages.min { abs($0 - n) < abs($1 - n) }!
+        let target = Swift.min(Swift.max(n, Self.pages.lowerBound), Self.pages.upperBound)
         let name = String(format: "%03d", target)
         guard let u = Bundle.main.url(forResource: name, withExtension: "qvp", subdirectory: "pages"), let bytes = try? Data(contentsOf: u) else { showToast("no page \(name) in the app bundle — run Demo/sync-pages.sh"); return }
         let t0 = CACurrentMediaTime()
@@ -132,7 +133,7 @@ final class DemoModel: ObservableObject {
         stopPlay(); playing = false; page?.close(); page = p; pageNo = target
         pageField = "\(target)"
         selWordIdx = -1; selAyah = nil; hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0
-        tajweed = 0; hideMarksH = 0; markersH = 0; markColours = false; hideMarks = false; goldMarkers = false; revealOn = false
+        tajweed = 0; hideMarksH = 0; ayahMarksH = 0; markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false
         p.setDefaultInk(themeSpec.ink)
         view.page = p
         announce(); showMeta(); showTitle(); runSearch(); hud()
@@ -140,18 +141,18 @@ final class DemoModel: ObservableObject {
     private func showTitle() {
         guard let p = page else { return }
         let first = p.words.first
-        let su = first.flatMap { w in atlas?.surah(w.sura) }
+        let su = first.flatMap { w in atlas?.surah(w.surah) }
         title = su.map { $0.latin.isEmpty ? $0.arabic : $0.latin } ?? p.surahs().first.map { $0.latin } ?? "Page \(pageNo)"
-        let j = first.flatMap { atlas?.juzAt($0.sura, $0.ayah) }
+        let j = first.flatMap { atlas?.juzAt($0.surah, $0.ayah) }
         subtitle = "Page \(pageNo)" + (j.map { " · Juz \($0)" } ?? "")
     }
     private func showMeta() {
         guard let p = page else { return }
         let su = p.surahs().map { "\($0.number)\($0.latin.isEmpty ? "" : " " + $0.latin)\($0.hasBanner ? " (banner)" : "")" }.joined(separator: ", ")
-        let dv = p.divisions().map { "\($0.kind) \($0.n) at \($0.sura):\($0.ayah)" }.joined(separator: ", ")
+        let dv = p.divisions().map { "\($0.kind) \($0.n) at \($0.surah):\($0.ayah)" }.joined(separator: ", ")
         var s = "surahs: \(su)"
         if !dv.isEmpty { s += "\nstarts here: \(dv)" }
-        if let a = atlas, let w = p.words.first, let j = a.juzAt(w.sura, w.ayah) { s += "\njuz \(j) · pages \(a.pagesOfJuz(j).map { "\($0.0)–\($0.1)" } ?? "?")" }
+        if let a = atlas, let w = p.words.first, let j = a.juzAt(w.surah, w.ayah) { s += "\njuz \(j) · pages \(a.pagesOfJuz(j).map { "\($0.0)–\($0.1)" } ?? "?")" }
         s += "\nayahs: " + p.ayahKeys().map { "\($0.0):\($0.1)" }.joined(separator: " ")
         meta = s
     }
@@ -180,7 +181,7 @@ final class DemoModel: ObservableObject {
     /// VoiceOver value for the page: the highlighted word or ayah.
     private func announce() {
         guard let p = page else { return }
-        if selWordIdx >= 0 { view.accessibilityValue = "word \(p.wid(selWordIdx)) · \(p.wordLabel(selWordIdx))" }
+        if selWordIdx >= 0 { view.accessibilityValue = "word \(p.wordKey(selWordIdx)) · \(p.wordLabel(selWordIdx))" }
         else if let (s, a) = selAyah { view.accessibilityValue = "ayah \(s):\(a)" }
         else { view.accessibilityValue = nil }
     }
@@ -211,10 +212,10 @@ final class DemoModel: ObservableObject {
         if on { hideMarksH = p.hide(Selector.kind(QvpKind.MARK)) }
         view.setNeedsDisplay()
     }
-    private func toggleMarkers(_ on: Bool) {
+    private func toggleAyahMarks(_ on: Bool) {
         guard let p = page else { return }
-        if markersH != 0 { p.unstyle(markersH); markersH = 0 }
-        if on { markersH = p.style(Selector.deco(QvpDeco.AYAH_MARKER), 0xb8860bff, transitionMs: 300, layer: QvpLayer.THEME + 1) }
+        if ayahMarksH != 0 { p.unstyle(ayahMarksH); ayahMarksH = 0 }
+        if on { ayahMarksH = p.style(Selector.deco(QvpDeco.AYAH_MARK), 0xb8860bff, transitionMs: 300, layer: QvpLayer.THEME + 1) }
         view.setNeedsDisplay()
     }
     private func applyTheme() {
@@ -224,15 +225,15 @@ final class DemoModel: ObservableObject {
     func clearAll() {
         guard let p = page else { return }
         p.clearStyles(); p.clearHighlights(); p.unmask(); p.revealStop()
-        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajweed = 0; hideMarksH = 0; markersH = 0; selWordIdx = -1; selAyah = nil
-        markColours = false; hideMarks = false; goldMarkers = false; revealOn = false; playing = false
+        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajweed = 0; hideMarksH = 0; ayahMarksH = 0; selWordIdx = -1; selAyah = nil
+        markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false; playing = false
         searchField = ""; stopPlay(); announce(); view.setNeedsDisplay()
     }
 
     // ── memorisation ──
     func maskAyah() {
         guard let p = page else { return }
-        let t: Target = selAyah.map { Target.ayah($0.0, $0.1) } ?? (selWordIdx >= 0 ? Target.ayah(p.words[selWordIdx].sura, p.words[selWordIdx].ayah) : Target.page())
+        let t: Target = selAyah.map { Target.ayah($0.0, $0.1) } ?? (selWordIdx >= 0 ? Target.ayah(p.words[selWordIdx].surah, p.words[selWordIdx].ayah) : Target.page())
         p.maskOptions(blockColor: themeSpec.bg)
         p.mask(t, maskModeIdx == 1 ? .block : .hide); view.setNeedsDisplay()
     }

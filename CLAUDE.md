@@ -14,7 +14,8 @@
   the converter calls. Two boxes are stored, not derived: a glyph instance's and a glyph
   outline's (both are measured on unquantised coordinates, so recomputing them rounds twice).
   Changing the encoding means re-running `QVP_TEST_ALL=1` and regenerating `dist/pages` — and
-  every demo's bundled `assets/pages` copy, which holds a 29-page sample, not the whole mushaf.
+  every demo's bundled `assets/pages` copy — a 29-page sample, except the iOS demo, whose
+  `Demo/sync-pages.sh` bundles all 604 pages from the data release.
 - Packages ship code only. Page data (`NNN.qvp`, `atlas.qva`, `NNN.words.json`) is loaded by apps;
   demos bundle it as their own assets (gitignored).
 - Source data is the `quran-svg hafs-kfgqpc` release bundle: unpack `pages/` and `index/`

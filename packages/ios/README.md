@@ -20,7 +20,7 @@ packages/ios/
 └── Demo/                           SwiftUI app (xcodegen project.yml → Demo.xcodeproj, committed)
     ├── Sources/                    DemoModel (engine state, a port of the Android MainActivity) + ContentView (the reader UI)
     ├── UITests/                    XCUITest: tap, swipe page flip, pinch, search sheet on the real view
-    ├── sync-pages.sh               copies 001–021, 440–445, 582, 604 + atlas.qva from dist/pages (pre-build step)
+    ├── sync-pages.sh               fills pages/ with all 604 pages + atlas.qva, from the data release or dist/pages (pre-build step)
     └── pages/                      the demo's assets (gitignored)
 ```
 
@@ -36,8 +36,12 @@ lipo'd into one slice) and macOS (arm64, so `swift test` runs on the Mac), then
 `xcodebuild -create-xcframework` with `qvp.h` and a `module.modulemap` (clang module `QvpFFI`)
 → `packages/ios/QvpKit/QvpEngine.xcframework`. Rerun after any engine change.
 
-Page data comes from the converter: `cargo run -p qvp-convert --release -- batch pages dist/pages`
-→ `dist/pages/NNN.qvp`, `NNN.words.json` (text forms sidecar), `atlas.qva`.
+Page data is a separate download — the whole mushaf, not built here:
+`Demo/sync-pages.sh` fetches the `quran-engine-pages-hafs-kfgqpc.tar.gz` asset of the
+[`v0.1.0` data release](https://github.com/quranpedia/quran-engine/releases/tag/v0.1.0), checks its
+sha256 and unpacks it into `dist/pages` (`NNN.qvp`, `NNN.words.json` text-forms sidecar, `atlas.qva`).
+Set `QVP_DATA_TAG` to pin another release, or `QVP_PAGES=<dir>` to use converter output
+(`cargo run -p qvp-convert --release -- batch pages dist/pages`) instead.
 
 ## Depend on it
 
@@ -52,14 +56,14 @@ Xcode → File → Add Package Dependencies → local path `packages/ios/QvpKit`
 ```swift
 import QvpKit
 
-QvpEngine.version(); QvpEngine.markName(7); QvpEngine.kindName(QvpKind.MARK); QvpEngine.markFromName("shadda")
+QvpEngine.version(); QvpEngine.markName(7); QvpEngine.kindName(QvpKind.MARK); QvpEngine.markFromName("shaddah")
 QvpEngine.strip(s); QvpEngine.fold(s); QvpEngine.normalize(s); QvpEngine.looseKey(s)          // Arabic text tools
 QvpEngine.gapToFill(pageW:pageH:lines:viewW:viewH:); QvpEngine.wastedFraction(pageW:pageH:viewW:viewH:)
 
 let page = try QvpPage(bytes: data)                     // geometry copied once: page.ops / page.pts / page.table (stride 8)
-page.words / ayahs / lines / decos;  page.wordForm(i, .imlaei);  page.findWord(2, 255, 3);  page.buildPaths()  // [CGPath]
+page.words / ayahs / lines / decos;  page.wordForm(i, .rasmImlai);  page.findWord(2, 255, 3);  page.buildPaths()  // [CGPath]
 page.resolve("2:255")                                   // "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | Target.word(i) | [w0, w1]
-page.surahs(); page.divisions(); page.markers(); page.rosettes(); page.sajdahs(); page.ayahKeys()
+page.surahs(); page.divisions(); page.ayahMarks(); page.rosettes(); page.sajdahs(); page.ayahKeys()
 page.ayahWordCount(2, 255); page.reciteMap(2, 255, nSegments: 4); page.wordLabel(i); page.ayahLabel(ai)
 page.text("2:255"); page.search("الله", mode: .includes); page.citation(words); page.attachWords(json); page.hasForm(.qpc)
 page.hitTest(x, y); page.hitTestEx(x, y, QvpHitOptions(maxDistance: 6))                        // page units, exact / gap-aware
@@ -69,12 +73,12 @@ let l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, p
 page.wordBoxView(i)
 let h = page.style(Selector.wordMark(w, 1), 0xef6c00ff, transitionMs: 200, layer: QvpLayer.TOP)   // Selector.path/word/ayah/line/mark/category/family/kind/deco…
 page.styleTarget("2:255", rgba); page.restyle(h, rgba); page.unstyle(h); page.hide(Selector.kind(QvpKind.MARK))
-page.theme(QvpTheme(diacritics: 0x1a73e8ff, marks: ["shadda": 0x0a7d32ff])); page.setDefaultInk(0x231f20ff); page.clearStyles(); page.clearLayer(QvpLayer.THEME)
+page.theme(QvpTheme(diacritics: 0x1a73e8ff, marks: ["shaddah": 0x0a7d32ff])); page.setDefaultInk(0x231f20ff); page.clearStyles(); page.clearLayer(QvpLayer.THEME)
 page.tick(nowMs)                                        // true while animating — keep drawing frames
 page.paint(); page.styled(); page.colorOf(i)             // display list (per-path colours)
 let hl = page.highlight("2:255", QvpHighlightStyle(mode: .both, transitionMs: 200)); page.rehighlight(hl, Target.word(3)); page.unhighlight(hl)
 page.highlightBoxes(); page.bandBoxes(words)             // viewport px; draw each id as one nonzero path behind the ink
-page.select(anchor, focus); page.selection(); page.selectionText(.uthmani, citation: true); page.clearSelection()
+page.select(anchor, focus); page.selection(); page.selectionText(.rasmUthmani, citation: true); page.clearSelection()
 page.mask("2:255", .hide); page.revealNext(); page.hideBack(); page.unmask(); page.maskHidden(); page.maskBoxes()
 page.revealStart(lit: 2); page.revealGoto(3); page.revealAt(); page.revealSteps(); page.revealStop()
 page.cropBox("2:255"); page.cropSvg("2:255:1", background: 0xfffdf7ff)
@@ -82,7 +86,7 @@ page.close()                                             // frees the native pag
 
 let atlas = try QvpAtlas(bytes: atlasData)
 atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36)
-atlas.juz(30); atlas.hizb(1); atlas.rub(1); atlas.juzAt(2, 255); atlas.pagesOfJuz(30); atlas.findSurah("cow")
+atlas.juz(30); atlas.hizb(1); atlas.rubuAlHizb(1); atlas.juzAt(2, 255); atlas.pagesOfJuz(30); atlas.findSurah("cow")
 
 QvpColor.parse("#d6a326", alpha: 0.3)  // 0xd6a3264d
 QvpColor.withAlpha(rgba, 0.18); QvpColor.cgColor(rgba); QvpColor.rgba(cgColor)
@@ -118,15 +122,15 @@ through `onSwipe` instead of panning, so the host can flip pages; double-tap res
 
 ```sh
 scripts/build-engine-ios.sh                                                   # engine
-cargo run -p qvp-convert --release -- batch pages dist/pages                  # data
+# data: Demo/sync-pages.sh downloads the release bundle on the first build
 cd packages/ios/Demo
 xcodebuild -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 17' build   # sync-pages.sh runs as a pre-build step
 xcrun simctl install booted build/…/Demo.app && xcrun simctl launch booted net.quranpedia.qvp.demo
 ```
 
 Or open `Demo/Demo.xcodeproj` (regenerate with `xcodegen generate` after editing `project.yml`).
-The app bundles only pages 001–021, 440–445, 582 and 604 (`.qvp` + `.words.json`) and `atlas.qva`,
-copied from `dist/pages` by `sync-pages.sh` — never committed.
+The app bundles the complete mushaf — all 604 pages (`.qvp` + `.words.json`) and `atlas.qva`, about
+91 MB — put there by `sync-pages.sh` and never committed.
 
 A simple Quran reader built from stock iOS components (`NavigationStack`, toolbars, `Form`, `List`,
 `.searchable`, `Menu`, sheets), with the engine doing every visual decision:
@@ -134,17 +138,17 @@ A simple Quran reader built from stock iOS components (`NavigationStack`, toolba
 - **Reader** — the page fills the screen height (`fillHeight`, the engine adds equal leading between the printed lines),
   swipe right/left to flip pages in mushaf order (a snapshot of the old page slides away while the new
   one is already drawn), pinch to zoom then pan, double-tap to reset. The title shows surah · page · juz.
-- **Tap** a word or an ayah medallion to highlight it (engine highlight in the selection layer; the page's
+- **Tap** a word or an ayah mark to highlight it (engine highlight in the selection layer; the page's
   accessibility value announces it). Tap empty paper to clear.
 - **Go to** (list icon) — ayah key (`2:255`), juz buttons, searchable surah list from the atlas.
 - **Search** (magnifier) — engine search with normalisation; hits are highlighted on the page, pick one to jump.
-- **Reading** (AA) — theme (light / sepia / dark), coloured marks, hide tashkeel, gold markers; fill height,
+- **Reading** (AA) — theme (light / sepia / dark), coloured marks, hide tashkeel, gold ayah marks; fill height,
   line spacing, padding, leading-to-fill; highlight style and fade; page metadata; engine stats; reset.
 - **Memorise** (bottom bar) — mask the current ayah (hide or cover), reveal next / hide back / show all,
   greyed page with a slider; **Follow words** walks the page word by word with one animated highlight.
 
-Only pages 001–021, 440–445, 582 and 604 (`.qvp` + `.words.json`) and `atlas.qva` are bundled,
-copied from `dist/pages` by `sync-pages.sh` — never committed. Launch arguments script a state for
+All 604 pages (`.qvp` + `.words.json`) and `atlas.qva` are bundled by `sync-pages.sh` — never
+committed; page navigation covers the whole mushaf. Launch arguments script a state for
 screenshots and QA: `-qvpPage 582 -qvpGoto 2:255 -qvpSearch الله -qvpAyah 78:1 -qvpWord 12 -qvpTheme dark
 -qvpMarks 1 -qvpGold 1 -qvpMask 1 -qvpFill 1 -qvpSheet settings|search|goto`.
 

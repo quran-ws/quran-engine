@@ -2,7 +2,7 @@
 # Bundle the iOS wrapper + demo into one zip an iOS developer can open without Rust or the data
 # pipeline: packages/ios (Swift package with the built QvpEngine.xcframework, the demo project with
 # its synced pages/ assets, README) plus docs/API.md and the C header.
-# Needs: scripts/build-engine-ios.sh run first, and dist/pages from the converter.
+# Needs: scripts/build-engine-ios.sh run first; the page data is fetched by sync-pages.sh.
 # Output: dist/qvp-ios-demo.zip
 set -euo pipefail
 cd "$(dirname "$0")/.."

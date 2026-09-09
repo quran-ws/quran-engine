@@ -31,11 +31,11 @@ final class QvpKitTests: XCTestCase {
         XCTAssertGreaterThan(QvpEngine.version(), 0)
         XCTAssertEqual(QvpEngine.engineName(), "qvp")
         XCTAssertEqual(QvpEngine.kindName(QvpKind.MARK), "mark")
-        XCTAssertEqual(QvpEngine.markName(1), "fatha")
-        XCTAssertEqual(QvpEngine.markName(7), QvpEngine.markName(markId("shadda")))
-        XCTAssertEqual(QvpEngine.markFromName("shadda"), 7)
+        XCTAssertEqual(QvpEngine.markName(1), "fathah")
+        XCTAssertEqual(QvpEngine.markName(7), QvpEngine.markName(markId("shaddah")))
+        XCTAssertEqual(QvpEngine.markFromName("shaddah"), 7)
         XCTAssertFalse(QvpEngine.familyName(QvpFamily.DIACRITIC).isEmpty)
-        XCTAssertFalse(QvpEngine.categoryName(QvpCategory.HARAKA).isEmpty)
+        XCTAssertFalse(QvpEngine.categoryName(QvpCategory.HARAKAH).isEmpty)
         XCTAssertEqual(QvpEngine.strip("بِسْمِ"), "بسم")
         XCTAssertFalse(QvpEngine.normalize("ٱللَّهِ").isEmpty)
         XCTAssertFalse(QvpEngine.looseKey("الله").isEmpty)
@@ -67,14 +67,14 @@ final class QvpKitTests: XCTestCase {
         let w0 = page.words[0]
         XCTAssertFalse(w0.text.isEmpty)
         XCTAssertGreaterThan(w0.nPaths, 0)
-        XCTAssertEqual(page.findWord(w0.sura, w0.ayah, w0.word), 0)
-        XCTAssertEqual(page.wid(0), w0.wid)
+        XCTAssertEqual(page.findWord(w0.surah, w0.ayah, w0.word), 0)
+        XCTAssertEqual(page.wordKey(0), w0.wordKey)
         XCTAssertGreaterThan(page.naturalPitch, 0)
         XCTAssertTrue(page.surahs().map { $0.number }.contains(2))
         XCTAssertTrue(page.ayahKeys().contains { $0 == (2, 255) })
         XCTAssertFalse(page.wordLabel(0).isEmpty)
         XCTAssertFalse(page.ayahLabel(page.words[0].ayahIdx).isEmpty)
-        XCTAssertFalse(page.markers().isEmpty)
+        XCTAssertFalse(page.ayahMarks().isEmpty)
         XCTAssertEqual(page.lineBands().count, 15)
         XCTAssertEqual(page.hitBoxes().count, 147)
         XCTAssertTrue(page.text("page").contains(w0.text))
@@ -84,7 +84,7 @@ final class QvpKitTests: XCTestCase {
         let m = page.search("الله")
         XCTAssertEqual(m.count, 7)
         XCTAssertFalse(m[0].text.isEmpty)
-        XCTAssertEqual(m[0].wid, page.wid(m[0].word))
+        XCTAssertEqual(m[0].wordKey, page.wordKey(m[0].word))
     }
 
     func testResolve2_255() {
@@ -103,8 +103,8 @@ final class QvpKitTests: XCTestCase {
         try XCTSkipUnless(FileManager.default.fileExists(atPath: url.path), "no sidecar")
         XCTAssertGreaterThanOrEqual(page.attachWords(try Data(contentsOf: url)), 0)
         XCTAssertEqual(page.attachWords("not json"), -1)
-        XCTAssertTrue(page.hasForm(.imlaei))
-        XCTAssertFalse(page.wordForm(0, .imlaei).isEmpty)
+        XCTAssertTrue(page.hasForm(.rasmImlai))
+        XCTAssertFalse(page.wordForm(0, .rasmImlai).isEmpty)
         XCTAssertFalse(page.wordForm(0, .search).isEmpty)
     }
 
@@ -167,7 +167,7 @@ final class QvpKitTests: XCTestCase {
         XCTAssertTrue(page.styleHandles().contains(h))
         XCTAssertGreaterThan(page.unstyle(h), 0)
         XCTAssertTrue(page.styled().isEmpty)
-        let th = page.theme(QvpTheme(diacritics: 0x1a73e8ff, dots: 0xc62828ff, marks: ["shadda": 0x0a7d32ff]))
+        let th = page.theme(QvpTheme(diacritics: 0x1a73e8ff, dots: 0xc62828ff, marks: ["shaddah": 0x0a7d32ff]))
         XCTAssertFalse(page.styled().isEmpty)
         let hh = page.hide(Selector.kind(QvpKind.MARK))
         XCTAssertTrue(page.styled().contains { $0.color & 0xff == 0 })
@@ -231,7 +231,7 @@ final class QvpKitTests: XCTestCase {
     func testSelection() {
         page.select(0, 3)
         XCTAssertEqual(page.selection(), [0, 1, 2, 3])
-        XCTAssertTrue(page.selectionText(.uthmani, citation: true).contains(":"))
+        XCTAssertTrue(page.selectionText(.rasmUthmani, citation: true).contains(":"))
         page.clearSelection()
         XCTAssertTrue(page.selection().isEmpty)
     }
