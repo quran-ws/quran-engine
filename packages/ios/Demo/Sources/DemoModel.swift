@@ -31,7 +31,7 @@ final class DemoModel: ObservableObject {
     @Published var hlModeIdx = 0 { didSet { if hlModeIdx != oldValue, selWordIdx >= 0 { let i = selWordIdx; selWordIdx = -1; selectWord(i) } } }
     @Published var hlMs: Double = 250
     @Published var playing = false { didSet { if playing != oldValue { playing ? startPlay() : stopPlay() } } }
-    @Published var markColours = false { didSet { if markColours != oldValue { toggleTajweed(markColours) } } }
+    @Published var markColours = false { didSet { if markColours != oldValue { toggleTajwid(markColours) } } }
     @Published var hideMarks = false { didSet { if hideMarks != oldValue { toggleHideMarks(hideMarks) } } }
     @Published var goldAyahMarks = false { didSet { if goldAyahMarks != oldValue { toggleAyahMarks(goldAyahMarks) } } }
     @Published var theme = "light" { didSet { if theme != oldValue { applyTheme() } } }
@@ -56,7 +56,7 @@ final class DemoModel: ObservableObject {
     private var loadMs = 0.0, pageBytes = 0
     private var selWordIdx = -1, selAyah: (Int, Int)?
     private var hlSel = 0, hlAyah = 0, hlSearch = 0, hlPlay = 0
-    private var tajweed = 0, hideMarksH = 0, ayahMarksH = 0
+    private var tajwid = 0, hideMarksH = 0, ayahMarksH = 0
     private var playIdx = 0
     private var playTimer: Timer?, hudTimer: Timer?, toastTimer: Timer?
     private var hlMode: HighlightMode { [.both, .band, .ink][hlModeIdx] }
@@ -133,7 +133,7 @@ final class DemoModel: ObservableObject {
         stopPlay(); playing = false; page?.close(); page = p; pageNo = target
         pageField = "\(target)"
         selWordIdx = -1; selAyah = nil; hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0
-        tajweed = 0; hideMarksH = 0; ayahMarksH = 0; markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false
+        tajwid = 0; hideMarksH = 0; ayahMarksH = 0; markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false
         p.setDefaultInk(themeSpec.ink)
         view.page = p
         announce(); showMeta(); showTitle(); runSearch(); hud()
@@ -200,10 +200,10 @@ final class DemoModel: ObservableObject {
     }
 
     // ── styling ──
-    private func toggleTajweed(_ on: Bool) {
+    private func toggleTajwid(_ on: Bool) {
         guard let p = page else { return }
-        if tajweed != 0 { p.unstyle(tajweed); tajweed = 0 }
-        if on { tajweed = p.theme(QvpTheme(diacritics: 0x1a73e8ff, dots: 0xc62828ff, waqf: 0x0a7d32ff, sifr: 0xef6c00ff, transitionMs: 200)) }
+        if tajwid != 0 { p.unstyle(tajwid); tajwid = 0 }
+        if on { tajwid = p.theme(QvpTheme(diacritics: 0x1a73e8ff, dots: 0xc62828ff, waqf: 0x0a7d32ff, sifr: 0xef6c00ff, transitionMs: 200)) }
         view.setNeedsDisplay()
     }
     private func toggleHideMarks(_ on: Bool) {
@@ -225,7 +225,7 @@ final class DemoModel: ObservableObject {
     func clearAll() {
         guard let p = page else { return }
         p.clearStyles(); p.clearHighlights(); p.unmask(); p.revealStop()
-        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajweed = 0; hideMarksH = 0; ayahMarksH = 0; selWordIdx = -1; selAyah = nil
+        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajwid = 0; hideMarksH = 0; ayahMarksH = 0; selWordIdx = -1; selAyah = nil
         markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false; playing = false
         searchField = ""; stopPlay(); announce(); view.setNeedsDisplay()
     }

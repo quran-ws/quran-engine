@@ -27,6 +27,7 @@
     "diacritics",
     "parts",
     "simple",
+    "part",
     "segment",
     "timings",
     "waqf_jaiz"
@@ -37,6 +38,7 @@
     "reading  — reading order in hit-testing and layout, not a qiraah.",
     "diacritics — the theme slot for the `diacritic` mark family, which is its real name; not a gloss of harakah.",
     "parts    — only survives inside Rust's from_raw_parts; every ayah `part` is now `fragment`.",
+    "part     — ordinary English: prose in the codec header, a Kotlin comment, and a loop variable in web/build.py splitting a page range; never the juz.",
     "simple   — only inside SimplePathSegment (svgtypes) and android.R.layout.simple_spinner_*; not rasm imlai.",
     "timings  — recitation segment timings passed in by the host; the engine stores no ayah_timing.",
     "waqf_jaiz — audit false positive: it prefix-matches the CANONICAL `waqf_jaiz_mustawi_al_tarafayn`. The deprecated bare name is not used anywhere in this repo."
@@ -49,7 +51,8 @@
     "Ya-Sin",
     "\\bAl-Baqarah\\b",
     "KFGQPC Uthmanic Script[A-Za-z ]*",
-    "g\\.ayah-mark"
+    "g\\.ayah-mark",
+    "pause\\.fill"
   ],
   "_external_names": [
     "ayah_markers  — the id of the medallion layer in the quran-svg source SVG; a locator in their file, not our name.",
@@ -57,6 +60,7 @@
     "Uthmani mushaf / word-by-word — prose describing the print, where the standard allows the established English.",
     "Ya-Sin, Al-Baqarah — surah labels quoted in a demo and a test fixture, display forms rather than identifiers.",
     "KFGQPC Uthmanic Script HAFS — a font family the demo asks the browser for; renaming it breaks the reference.",
+    "pause.fill   — an SF Symbol name Apple defines; the demo's play/stop button asks UIKit for it, nothing to do with waqf.",
     "g.ayah-mark — audit false positive: the CSS selector splits to `g_ayah`, which it reads as the ayah_fragment concept."
   ],
   "compatibility": [
