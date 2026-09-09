@@ -211,7 +211,7 @@ struct SearchSheet: View {
         NavigationStack {
             Group {
                 if m.searchField.isEmpty {
-                    ContentUnavailableView("Search this page", systemImage: "magnifyingglass", description: Text("Type a word; the engine normalises tashkeel and hamza forms (الرحمان finds الرحمن)."))
+                    ContentUnavailableView("Search this page", systemImage: "magnifyingglass", description: Text("Type a word; the engine normalises tashkil and hamzah forms (الرحمان finds الرحمن)."))
                 } else if m.searchedEmpty {
                     ContentUnavailableView.search(text: m.searchField)
                 } else {
@@ -248,7 +248,7 @@ struct SettingsSheet: View {
                 Section("Appearance") {
                     Picker("Theme", selection: $m.theme) { Text("Light").tag("light"); Text("Sepia").tag("sepia"); Text("Dark").tag("dark") }.pickerStyle(.segmented)
                     Toggle("Coloured marks", isOn: $m.markColours)
-                    Toggle("Hide tashkeel", isOn: $m.hideMarks)
+                    Toggle("Hide tashkil", isOn: $m.hideMarks)
                     Toggle("Gold ayah marks", isOn: $m.goldAyahMarks)
                 }
                 Section("Layout") {

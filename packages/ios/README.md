@@ -142,7 +142,7 @@ A simple Quran reader built from stock iOS components (`NavigationStack`, toolba
   accessibility value announces it). Tap empty paper to clear.
 - **Go to** (list icon) — ayah key (`2:255`), juz buttons, searchable surah list from the atlas.
 - **Search** (magnifier) — engine search with normalisation; hits are highlighted on the page, pick one to jump.
-- **Reading** (AA) — theme (light / sepia / dark), coloured marks, hide tashkeel, gold ayah marks; fill height,
+- **Reading** (AA) — theme (light / sepia / dark), coloured marks, hide tashkil, gold ayah marks; fill height,
   line spacing, padding, leading-to-fill; highlight style and fade; page metadata; engine stats; reset.
 - **Memorise** (bottom bar) — mask the current ayah (hide or cover), reveal next / hide back / show all,
   greyed page with a slider; **Follow words** walks the page word by word with one animated highlight.
