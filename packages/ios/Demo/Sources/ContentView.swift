@@ -1,5 +1,5 @@
 // A simple Quran reader over QvpKit, using stock iOS components: NavigationStack + toolbars,
-// sheets with Form / List / .searchable, a Menu for memorisation. Tap a word or an ayah marker to highlight it.
+// sheets with Form / List / .searchable, a Menu for memorisation. Tap a word or an ayah mark to highlight it.
 import SwiftUI
 import UIKit
 import QvpKit
@@ -162,7 +162,7 @@ struct GoToSheet: View {
                         Button("Go", action: goAyah).disabled(ayahKey.isEmpty)
                     }
                 } footer: {
-                    Text("This demo bundles pages 1–21, 440–445, 582 and 604; other targets open the nearest bundled page.")
+                    Text("The whole mushaf is bundled — 604 pages. Type an ayah key, pick a juz, or search a surah by name or number.")
                 }
                 Section("Juz") {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -218,7 +218,7 @@ struct SearchSheet: View {
                     List(m.results, id: \.word) { r in
                         Button { m.selectWord(r.word); dismiss() } label: {
                             HStack {
-                                Text(r.wid).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                Text(r.wordKey).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                                 if r.loose { Text("≈").foregroundStyle(.secondary) }
                                 Spacer()
                                 Text(r.text).font(.title3)
@@ -249,7 +249,7 @@ struct SettingsSheet: View {
                     Picker("Theme", selection: $m.theme) { Text("Light").tag("light"); Text("Sepia").tag("sepia"); Text("Dark").tag("dark") }.pickerStyle(.segmented)
                     Toggle("Coloured marks", isOn: $m.markColours)
                     Toggle("Hide tashkeel", isOn: $m.hideMarks)
-                    Toggle("Gold ayah markers", isOn: $m.goldMarkers)
+                    Toggle("Gold ayah marks", isOn: $m.goldAyahMarks)
                 }
                 Section("Layout") {
                     Toggle("Fill screen height", isOn: $m.fillHeight)

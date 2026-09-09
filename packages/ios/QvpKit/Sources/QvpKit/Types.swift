@@ -7,21 +7,21 @@ import QvpFFI
 /// Absent index in the C ABI.
 public let QVP_NONE: UInt32 = 0xFFFF_FFFF
 
-public enum QvpKind { public static let BODY = 0, MARK = 1, AYAH_NUMBER = 2, AYAH_ORNAMENT = 3, HEADER_INK = 4, OTHER = 255 }
-public enum QvpFamily { public static let NONE = 0, DIACRITIC = 1, TANWEEN = 2, DOTS = 3, WAQF = 4, SIFR = 5, SAJDAH = 6, READING_SIGN = 7 }
-public enum QvpCategory { public static let NONE = 0, HARAKA = 1, TANWEEN = 2, LETTER_DOT = 3, ORTHOGRAPHIC = 4, DABT = 5, WAQF = 6, READING_SIGN = 7, STANDALONE = 8 }
-public enum QvpDeco { public static let AYAH_MARKER = 0, SURAH_NAME = 1, BASMALAH = 2, HIZB_MARK = 3, SAJDAH_MARK = 4 }
+public enum QvpKind { public static let BODY = 0, MARK = 1, AYAH_NUMBER = 2, AYAH_MARK_ORNAMENT = 3, HEADER_INK = 4, ORNAMENT = 5, PAGE_NUMBER = 6, RUNNING_HEAD = 7, OTHER = 255 }
+public enum QvpFamily { public static let NONE = 0, DIACRITIC = 1, TANWIN = 2, DOTS = 3, WAQF = 4, SIFR = 5, SAJDAH = 6, READING_SIGN = 7 }
+public enum QvpCategory { public static let NONE = 0, HARAKAH = 1, TANWIN = 2, LETTER_DOT = 3, ORTHOGRAPHIC = 4, DABT = 5, WAQF = 6, READING_SIGN = 7, STANDALONE = 8 }
+public enum QvpDeco { public static let AYAH_MARK = 0, SURAH_NAME = 1, BASMALAH = 2, DIVISION_MARK = 3, SAJDAH_MARK = 4, PAGE_NUMBER = 5, RUNNING_HEAD = 6, OTHER = 255 }
 public enum QvpLayer { public static let BASE = 0, THEME = 10, HIGHLIGHT = 50, SELECTION = 60, TOP = 100 }
 
-public enum Form: Int { case uthmani = 0, imlaei, qpc, rasm, search }
+public enum Form: Int { case rasmUthmani = 0, rasmImlai, qpc, rasm, search }
 public enum SearchMode: Int { case includes = 0, exact, prefix }
 public enum HighlightMode: Int { case ink = 0, band, both }
 public enum BandHeight: Int { case pitch = 0, ink }
 public enum MaskMode: Int { case hide = 0, block, blur }
-public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rub }
+public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rubuAlHizb }
 
 /// Mark ids by name (index = id; 255 = unknown).
-public let QVP_MARKS: [String] = ["", "fatha", "kasra", "damma", "fathatan", "kasratan", "dammatan", "shadda", "sukun", "maddah", "hamza", "wasla", "small-alef", "small-waw", "small-ya", "small-noon", "dot", "two-dots", "three-dots", "sifr-mustadir", "sifr-mustatil", "waqf-jaiz", "waqf-awla", "wasl-awla", "waqf-lazim", "muanaqah", "saktah", "meem-iqlab", "hizb", "sajdah", "sajdah-sign", "sajdah-line", "seen-reading", "tashil", "ishmam", "imalah"]
+public let QVP_MARKS: [String] = ["", "fathah", "kasrah", "dammah", "tanwin_al_fath", "tanwin_al_kasr", "tanwin_al_damm", "shaddah", "sukun", "maddah", "hamzah", "hamzat_al_wasl", "omitted_alif", "small_waw", "small_yaa", "small_noon", "dot", "two_dots", "three_dots", "rounded_zero", "rectangular_zero", "waqf_jaiz_mustawi_al_tarafayn", "waqf_jaiz_waqf_awla", "waqf_jaiz_wasl_awla", "waqf_lazim", "waqf_al_muanaqah", "saktah", "small_meem", "hizb", "sajdah", "sajdah_mark", "sajdah_line", "seen_al_qiraah", "tashil", "ishmam", "imalah"]
 public func markId(_ name: String) -> Int { QVP_MARKS.firstIndex(of: name) ?? 255 }
 
 /// 0xRRGGBBAA helpers.
@@ -117,14 +117,14 @@ public struct Target {
 }
 
 public struct QvpWord: Equatable {
-    public let idx: Int, sura: Int, ayah: Int, word: Int, line: Int, ayahIdx: Int, lineIdx: Int
+    public let idx: Int, surah: Int, ayah: Int, word: Int, line: Int, ayahIdx: Int, lineIdx: Int
     public let x0: Float, y0: Float, x1: Float, y1: Float
     public let text: String, firstPath: Int, nPaths: Int
-    public var wid: String { "\(sura):\(ayah):\(word)" }
-    public var aid: String { "\(sura):\(ayah)" }
+    public var wordKey: String { "\(surah):\(ayah):\(word)" }
+    public var ayahKey: String { "\(surah):\(ayah)" }
 }
 public struct QvpAyah: Equatable {
-    public let idx: Int, sura: Int, ayah: Int, part: Int, parts: Int, flags: Int, rub: Int, firstWord: Int, nWords: Int, markerDeco: Int
+    public let idx: Int, surah: Int, ayah: Int, fragment: Int, fragments: Int, flags: Int, rubuAlHizb: Int, firstWord: Int, nWords: Int, ayahMarkDeco: Int
     public let x0: Float, y0: Float, x1: Float, y1: Float
 }
 public struct QvpLine: Equatable {
@@ -132,7 +132,7 @@ public struct QvpLine: Equatable {
     public let x0: Float, y0: Float, x1: Float, y1: Float, bandY0: Float, bandY1: Float, centre: Float
 }
 public struct QvpDecoration: Equatable {
-    public let idx: Int, kind: Int, sura: Int, ayah: Int, line: Int
+    public let idx: Int, kind: Int, surah: Int, ayah: Int, line: Int
     public let x0: Float, y0: Float, x1: Float, y1: Float
     public let text: String, firstPath: Int, nPaths: Int
 }
@@ -170,23 +170,23 @@ public struct QvpHighlightStyle: Equatable {
         QvpFFI.QvpHighlightStyle(mode: UInt8(mode.rawValue), height: UInt8(height.rawValue), ink: ink, band: band, pad_x: padX, pad_y: padY, radius: radius, seam: seam, transition_ms: UInt32(transitionMs), layer: Int32(layer))
     }
 }
-/// Colours that are nil (or alpha 0) leave that part alone.
+/// Colours that are nil (or alpha 0) leave that colour alone.
 public struct QvpTheme: Equatable {
-    public var ink: UInt32?, diacritics: UInt32?, dots: UInt32?, waqf: UInt32?, sifr: UInt32?, marker: UInt32?, numeral: UInt32?, headers: UInt32?
+    public var ink: UInt32?, diacritics: UInt32?, dots: UInt32?, waqf: UInt32?, sifr: UInt32?, ayahMark: UInt32?, numeral: UInt32?, headers: UInt32?
     public var marks: [String: UInt32], transitionMs: Int
-    public init(ink: UInt32? = nil, diacritics: UInt32? = nil, dots: UInt32? = nil, waqf: UInt32? = nil, sifr: UInt32? = nil, marker: UInt32? = nil, numeral: UInt32? = nil, headers: UInt32? = nil, marks: [String: UInt32] = [:], transitionMs: Int = 0) {
-        self.ink = ink; self.diacritics = diacritics; self.dots = dots; self.waqf = waqf; self.sifr = sifr; self.marker = marker; self.numeral = numeral; self.headers = headers; self.marks = marks; self.transitionMs = transitionMs
+    public init(ink: UInt32? = nil, diacritics: UInt32? = nil, dots: UInt32? = nil, waqf: UInt32? = nil, sifr: UInt32? = nil, ayahMark: UInt32? = nil, numeral: UInt32? = nil, headers: UInt32? = nil, marks: [String: UInt32] = [:], transitionMs: Int = 0) {
+        self.ink = ink; self.diacritics = diacritics; self.dots = dots; self.waqf = waqf; self.sifr = sifr; self.ayahMark = ayahMark; self.numeral = numeral; self.headers = headers; self.marks = marks; self.transitionMs = transitionMs
     }
 }
 public struct QvpSurah: Equatable { public let number: Int, ayahCount: Int, hasBanner: Bool, hasBasmalah: Bool, place: String, bannerDeco: Int, arabic: String, latin: String, english: String }
-public struct QvpDivision: Equatable { public let kind: Division, n: Int, sura: Int, ayah: Int, line: Int, ayahIdx: Int }
-public struct QvpMarker: Equatable { public let deco: Int, sura: Int, ayah: Int, line: Int, cx: Float, cy: Float, r: Float, ornamentPath: Int, numeralPath: Int }
-public struct QvpRosette: Equatable { public let deco: Int, sura: Int, ayah: Int, juz: Int, hizb: Int, nisf: Int, rub: Int, rubInHizb: Int }
-public struct QvpSajdah: Equatable { public let deco: Int, sura: Int, ayah: Int, signPath: Int }
-public struct QvpMatch: Equatable { public let word: Int, index: Int, loose: Bool, wid: String, text: String }
-public struct QvpCropBox: Equatable { public let x0: Float, y0: Float, x1: Float, y1: Float, nWords: Int, markerDeco: Int }
+public struct QvpDivision: Equatable { public let kind: Division, n: Int, surah: Int, ayah: Int, line: Int, ayahIdx: Int }
+public struct QvpAyahMark: Equatable { public let deco: Int, surah: Int, ayah: Int, line: Int, cx: Float, cy: Float, r: Float, ornamentPath: Int, numeralPath: Int }
+public struct QvpRosette: Equatable { public let deco: Int, surah: Int, ayah: Int, juz: Int, hizb: Int, nisf: Int, rubuAlHizb: Int, rubuAlHizbInHizb: Int }
+public struct QvpSajdah: Equatable { public let deco: Int, surah: Int, ayah: Int, signPath: Int }
+public struct QvpMatch: Equatable { public let word: Int, index: Int, loose: Bool, wordKey: String, text: String }
+public struct QvpCropBox: Equatable { public let x0: Float, y0: Float, x1: Float, y1: Float, nWords: Int, ayahMarkDeco: Int }
 public struct QvpAtlasSurah: Equatable { public let n: Int, page: Int, ayahCount: Int, place: String, arabic: String, latin: String, english: String }
-public struct QvpAtlasRub: Equatable { public let rub: Int, sura: Int, ayah: Int, page: Int; public var aid: String { "\(sura):\(ayah)" } }
+public struct QvpAtlasRubuAlHizb: Equatable { public let rubuAlHizb: Int, surah: Int, ayah: Int, page: Int; public var ayahKey: String { "\(surah):\(ayah)" } }
 
 // ── C interop helpers ──
 extension QvpStr {
