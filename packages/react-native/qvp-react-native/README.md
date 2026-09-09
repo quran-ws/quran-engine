@@ -44,14 +44,14 @@ const qvp = useQvp();
   ref={qvp.ref}
   style={{ flex: 1 }}
   pageUri="asset://pages/042.qvp"
-  wordsUri="asset://pages/042.words.json"                       // optional sidecar (imlaei/qpc/rasm/search forms)
+  wordsUri="asset://pages/042.words.json"                       // optional sidecar (rasm_imlai/qpc/rasm/search forms)
   padTop={12} padBottom={12} padSide={8}                        // dp
   lineSpacing={1} lineGap={0} fillHeight={false}                // engine layout knobs (page units for lineGap)
   paperColor="#fffdf7" defaultInk="#231f20"
   theme={{ diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', ms: 200 }}     // page.theme(...) — one handle
   styles={[
     { id: 'hide-marks', selector: Sel.kind(KIND.MARK), hide: true },                  // page.hide(sel)
-    { id: 'gold', selector: Sel.deco(DECO.AYAH_MARKER), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 },
+    { id: 'gold', selector: Sel.deco(DECO.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 },
     { id: 'mark', selector: Sel.wordMark(12, 1), color: '#ef6c00', ms: 200, layer: LAYER.TOP },  // 2nd diacritic of word 12
     { id: 'ayah', target: '2:255', color: '#0a7d32' },                                 // page.styleTarget(...)
   ]}
@@ -61,7 +61,7 @@ const qvp = useQvp();
   ]}
   mask={{ target: '2:255', mode: 'hide' }}                       // or 'block' | 'blur' (+ blockColor, padX, padY, radius)
   reveal={{ lit: 2, grey: '#c9c4b8', ink: '#231f20', ms: 150, at: 3 }}   // greyed page; `at` drives revealGoto
-  onWordTap={({ word, hit }) => …}      // word: {idx, sura, ayah, word, line, …, text, wid, aid, forms, label, paths[]}
+  onWordTap={({ word, hit }) => …}      // word: {idx, surah, ayah, word, line, …, text, wordKey, aid, forms, label, paths[]}
   onDecoTap={({ deco, hit }) => …}      // ayah markers, banners, basmalah, rosettes, sajdah signs
   onEmptyTap={() => …}
   onSelectionChanged={({ words, text, citation, textWithCitation }) => …}   // long-press-drag selection
@@ -95,15 +95,15 @@ Everything takes the view's react tag (`findNodeHandle`) — or use the bound fo
 ```ts
 const qvp = useQvp();
 await qvp.info(); qvp.words(); qvp.word(i); qvp.ayahs(); qvp.lines(); qvp.decos();
-await qvp.search('الرحمان', { mode: 'includes' });     // [{word, wid, text, index, loose}]
+await qvp.search('الرحمان', { mode: 'includes' });     // [{word, wordKey, text, index, loose}]
 await qvp.text('2:255', { form: 'search', wordSep: ' ' });
-await qvp.resolve('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'imlaei'); qvp.hasForm('qpc');
+await qvp.resolve('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
 await qvp.attachWords(jsonString);                      // when you do not use the wordsUri prop
 await qvp.surahs(); qvp.divisions(); qvp.markers(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
 await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ai);
 await qvp.citation([12, 13, 14]);
 await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' }); qvp.cropBox(target);
-await qvp.select(anchor, focus); qvp.clearSelection(); qvp.selection(); qvp.selectionText('uthmani', true);
+await qvp.select(anchor, focus); qvp.clearSelection(); qvp.selection(); qvp.selectionText('rasm_uthmani', true);
 await qvp.revealNext(1); qvp.hideBack(1); qvp.revealWord(i); qvp.hideWord(i); qvp.revealAll(); qvp.hideAll();
 await qvp.maskHidden(); qvp.maskWords(); qvp.revealSteps(); qvp.revealAt(); qvp.revealStepOf(i);
 await qvp.hitTestViewEx(x, y, { maxDistance: 6 }); qvp.wordBoxView(i); qvp.currentLayout(); qvp.relayout(); qvp.resetView(); qvp.stats();
@@ -116,7 +116,7 @@ Qvp.markName(7); Qvp.kindName(1); Qvp.categoryName(1); Qvp.familyName(3); Qvp.ve
 // atlas (cross-page)
 const atlas = await QvpAtlas.load('asset://pages/atlas.qva');
 await atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36);
-await atlas.juz(30); atlas.hizb(3); atlas.rub(7); atlas.juzAt(2, 255); atlas.divisionAt('hizb', 2, 255);
+await atlas.juz(30); atlas.hizb(3); atlas.rubuAlHizb(7); atlas.juzAt(2, 255); atlas.divisionAt('hizb', 2, 255);
 await atlas.pagesOfJuz(30); atlas.findSurah('cow' | 'البقرة' | '2'); atlas.free();
 // tag-level equivalents: Qvp.atlasPageOf(id, s, a), Qvp.atlasFindSurah(id, text), Qvp.atlasPagesOfJuz(id, n), Qvp.atlasJuzAt(id, s, a), …
 ```

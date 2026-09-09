@@ -1,15 +1,14 @@
 target/
 dist/
-pages/*.gz
-pages/*.br
 web/pages/
 node_modules/
 web/index.html
 web/qvp_ffi.wasm
 .playwright-mcp/
 *.png
-# source pages are the exporter output, not code: keep them out of git history
+# the quran-svg release bundle: exporter output, not code
 pages/
+index/
 # Android / Gradle
 packages/android/.gradle/
 packages/android/**/build/

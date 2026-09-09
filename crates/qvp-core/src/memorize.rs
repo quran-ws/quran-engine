@@ -41,7 +41,7 @@ pub struct Reveal {
     pub by_ayah: bool,
     pub grey: Rgba,
     pub ink: Rgba,
-    pub markers: bool,
+    pub ayah_marks: bool,
     pub transition_ms: u32,
     /// step index per word
     pub(crate) step_of_word: Vec<u32>,
@@ -53,9 +53,9 @@ impl Reveal {
         let c = &page.path_ctx[pi as usize];
         let step = if c.word != NONE {
             self.step_of_word[c.word as usize] as i64
-        } else if self.markers && c.deco != NONE && c.ayah != 0 && page.data().decos[c.deco as usize].kind == qvp_format::DecoKind::AyahMarker {
+        } else if self.ayah_marks && c.deco != NONE && c.ayah != 0 && page.data().decos[c.deco as usize].kind == qvp_format::DecoKind::AyahMark {
             // a medallion lights with the ayah it closes: its last word's step
-            match page.data().words.iter().rposition(|w| w.sura == c.sura && w.ayah == c.ayah) {
+            match page.data().words.iter().rposition(|w| w.surah == c.surah && w.ayah == c.ayah) {
                 Some(wi) => self.step_of_word[wi] as i64,
                 None => return Some(self.grey),
             }
@@ -193,18 +193,18 @@ impl Page {
     }
 
     /// Start the greyed-page reveal. Steps are words (or ayahs) in reading order.
-    pub fn reveal_start(&mut self, lit: u32, by_ayah: bool, grey: Rgba, ink: Rgba, markers: bool, transition_ms: u32) -> u32 {
+    pub fn reveal_start(&mut self, lit: u32, by_ayah: bool, grey: Rgba, ink: Rgba, ayah_marks: bool, transition_ms: u32) -> u32 {
         let d = self.data();
         let mut step_of_word = Vec::with_capacity(d.words.len());
         let mut steps = 0u32;
         let mut last = (u16::MAX, u16::MAX);
         for (i, w) in d.words.iter().enumerate() {
             if by_ayah {
-                if (w.sura, w.ayah) != last {
+                if (w.surah, w.ayah) != last {
                     if i > 0 {
                         steps += 1;
                     }
-                    last = (w.sura, w.ayah);
+                    last = (w.surah, w.ayah);
                 }
                 step_of_word.push(steps);
             } else {
@@ -212,7 +212,7 @@ impl Page {
             }
         }
         steps = if by_ayah { steps + 1 } else { d.words.len() as u32 };
-        self.reveal = Some(Reveal { at: -1, lit: lit.max(1), by_ayah, grey, ink, markers, transition_ms, step_of_word, steps });
+        self.reveal = Some(Reveal { at: -1, lit: lit.max(1), by_ayah, grey, ink, ayah_marks, transition_ms, step_of_word, steps });
         self.state_dirty = true;
         steps
     }

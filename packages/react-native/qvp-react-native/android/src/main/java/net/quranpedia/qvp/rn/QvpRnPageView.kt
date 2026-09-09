@@ -202,7 +202,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
             appliedReveal = cfg; appliedRevealAt = null
             if (cfg == null) { p.revealStop(); revealSteps = 0; emit("onRevealChanged", mapOf("steps" to 0, "at" to null)); return }
             revealSteps = p.revealStart((cfg["lit"] as? Number)?.toInt() ?: 1, cfg["byAyah"] == true, Marshal.color(cfg["grey"], 0xc9c4b8ff.toInt()), Marshal.color(cfg["ink"], appliedInk ?: 0x231f20ff.toInt()),
-                cfg["markers"] != false, (cfg["ms"] as? Number)?.toInt() ?: 0)
+                cfg["ayahMarks"] != false, (cfg["ms"] as? Number)?.toInt() ?: 0)
             emit("onRevealChanged", mapOf("steps" to revealSteps, "at" to -1))
         }
         if (r == null) return

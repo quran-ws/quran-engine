@@ -29,12 +29,12 @@ impl Page {
         let mut i = 0;
         while i < words.len() {
             let w = &d.words[words[i] as usize];
-            let (s, a0) = (w.sura, w.ayah);
+            let (s, a0) = (w.surah, w.ayah);
             let mut a1 = a0;
             let mut j = i + 1;
             while j < words.len() {
                 let x = &d.words[words[j] as usize];
-                if x.sura != s || x.ayah > a1 + 1 {
+                if x.surah != s || x.ayah > a1 + 1 {
                     break;
                 }
                 a1 = a1.max(x.ayah);

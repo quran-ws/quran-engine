@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 fn usage() -> ! {
     eprintln!(
-        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg>\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir>"
+        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg>\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out."
     );
     std::process::exit(2)
 }
@@ -17,12 +17,20 @@ struct Done {
     page: qvp_format::PageData,
 }
 
-fn one(svg_path: &Path, out: &Path, json: Option<&Path>) -> Result<Done, String> {
+fn one(svg_path: &Path, out: &Path, json: Option<&Path>, words_index: Option<&Path>) -> Result<Done, String> {
     let svg = fs::read_to_string(svg_path).map_err(|e| format!("{}: {e}", svg_path.display()))?;
-    let c = convert(&svg).map_err(|e| format!("{}: {e}", svg_path.display()))?;
+    let mut c = convert(&svg).map_err(|e| format!("{}: {e}", svg_path.display()))?;
     let bytes = qvp_format::encode(&c.page);
     fs::write(out, &bytes).map_err(|e| e.to_string())?;
     if let Some(j) = json {
+        if let Some(ix) = words_index {
+            match fs::read(ix) {
+                Ok(b) => {
+                    merge_words_index(&mut c.words_text, &b, &mut c.report.warnings);
+                }
+                Err(e) => c.report.warnings.push(format!("words index {}: {e}", ix.display())),
+            }
+        }
         fs::write(j, words_json(&c.words_text)).map_err(|e| e.to_string())?;
     }
     Ok(Done { svg_len: svg.len(), qvp_len: bytes.len(), warnings: c.report.warnings, page: c.page })
@@ -36,7 +44,8 @@ fn main() {
     match args[1].as_str() {
         "svg2qvp" if args.len() >= 4 => {
             let json = args.get(4).map(PathBuf::from);
-            match one(Path::new(&args[2]), Path::new(&args[3]), json.as_deref()) {
+            let words_index = args.get(5).map(PathBuf::from);
+            match one(Path::new(&args[2]), Path::new(&args[3]), json.as_deref(), words_index.as_deref()) {
                 Ok(d) => {
                     for x in d.warnings {
                         eprintln!("warn: {x}");
@@ -64,8 +73,14 @@ fn main() {
             );
         }
         "batch" if args.len() >= 4 => {
+            let svg_dir = PathBuf::from(&args[2]);
             let out_dir = PathBuf::from(&args[3]);
             fs::create_dir_all(&out_dir).expect("mkdir");
+            let words_index_dir = args.get(4).map(PathBuf::from).or_else(|| default_words_index(&svg_dir));
+            match &words_index_dir {
+                Some(d) => println!("words index: {}", d.display()),
+                None => eprintln!("warn: no words index found next to {}; NNN.words.json will carry rasm_uthmani only", svg_dir.display()),
+            }
             let mut files: Vec<PathBuf> = fs::read_dir(&args[2])
                 .expect("read dir")
                 .filter_map(|e| e.ok().map(|e| e.path()))
@@ -78,7 +93,8 @@ fn main() {
                     let stem = f.file_stem().unwrap().to_string_lossy().to_string();
                     let out = out_dir.join(format!("{stem}.qvp"));
                     let json = out_dir.join(format!("{stem}.words.json"));
-                    (stem, one(f, &out, Some(&json)))
+                    let ix = words_index_dir.as_ref().map(|d| d.join(format!("{stem}.json")));
+                    (stem.clone(), one(f, &out, Some(&json), ix.as_deref()))
                 })
                 .collect();
             let (mut svg_total, mut qvp_total, mut n, mut errs, mut warns) = (0usize, 0usize, 0usize, 0usize, 0usize);
@@ -107,7 +123,7 @@ fn main() {
             let atlas = atlas.build();
             fs::write(out_dir.join("atlas.qva"), atlas.encode()).expect("write atlas");
             fs::write(out_dir.join("atlas.json"), atlas.to_json()).expect("write atlas json");
-            println!("atlas: {} pages, {} surahs, {} rub boundaries → atlas.qva / atlas.json", atlas.pages.len(), atlas.surahs.len(), atlas.rubs.len());
+            println!("atlas: {} pages, {} surahs, {} rubu_al_hizb boundaries → atlas.qva / atlas.json", atlas.pages.len(), atlas.surahs.len(), atlas.rubu_al_hizbs.len());
             println!(
                 "pages={n} errors={errs} warnings={warns}\nsvg total {:.1} MB → qvp total {:.2} MB ({:.1}x)\nper page: min {} B, avg {} B, max {} B",
                 svg_total as f64 / 1e6,

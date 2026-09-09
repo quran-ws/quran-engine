@@ -1,4 +1,4 @@
-//! Metadata read off the page: surahs, divisions, markers, sajdahs, rosettes.
+//! Metadata read off the page: surahs, divisions, ayah_marks, sajdahs, rosettes.
 use crate::{Page, NONE};
 use qvp_format::*;
 
@@ -19,10 +19,10 @@ pub struct SurahInfo {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Division {
-    /// 0 juz, 1 hizb, 2 nisf, 3 rub
+    /// 0 juz, 1 hizb, 2 nisf, 3 rubu_al_hizb
     pub kind: u8,
     pub n: u16,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub line: u8,
     pub ayah_idx: u32,
@@ -31,7 +31,7 @@ pub struct Division {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MarkerInfo {
     pub deco: u32,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub line: u32,
     /// medallion centre and radius in page units (from the ornament, or the whole group)
@@ -46,13 +46,13 @@ pub struct MarkerInfo {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rosette {
     pub deco: u32,
-    pub sura: u16,
+    pub surah: u16,
     pub ayah: u16,
     pub juz: u16,
     pub hizb: u16,
     pub nisf: u16,
-    pub rub: u16,
-    pub rub_in_hizb: u16,
+    pub rubu_al_hizb: u16,
+    pub rubu_al_hizb_in_hizb: u16,
 }
 
 impl Page {
@@ -60,18 +60,18 @@ impl Page {
         let d = self.data();
         let mut out: Vec<SurahInfo> = Vec::new();
         for w in &d.words {
-            if !out.iter().any(|s| s.number == w.sura) {
-                out.push(SurahInfo { number: w.sura, arabic: String::new(), latin: String::new(), english: String::new(), revelation_place: String::new(), ayah_count: 0, has_banner: false, has_basmalah: false, banner_deco: NONE });
+            if !out.iter().any(|s| s.number == w.surah) {
+                out.push(SurahInfo { number: w.surah, arabic: String::new(), latin: String::new(), english: String::new(), revelation_place: String::new(), ayah_count: 0, has_banner: false, has_basmalah: false, banner_deco: NONE });
             }
         }
         for (di, dc) in d.decos.iter().enumerate() {
             if dc.kind != DecoKind::SurahName && dc.kind != DecoKind::Basmalah {
                 continue;
             }
-            let s = match out.iter_mut().find(|s| s.number == dc.sura) {
+            let s = match out.iter_mut().find(|s| s.number == dc.surah) {
                 Some(s) => s,
                 None => {
-                    out.push(SurahInfo { number: dc.sura, arabic: String::new(), latin: String::new(), english: String::new(), revelation_place: String::new(), ayah_count: 0, has_banner: false, has_basmalah: false, banner_deco: NONE });
+                    out.push(SurahInfo { number: dc.surah, arabic: String::new(), latin: String::new(), english: String::new(), revelation_place: String::new(), ayah_count: 0, has_banner: false, has_basmalah: false, banner_deco: NONE });
                     out.last_mut().unwrap()
                 }
             };
@@ -101,22 +101,22 @@ impl Page {
         let d = self.data();
         let mut out = Vec::new();
         for (ai, a) in d.ayahs.iter().enumerate() {
-            if a.flags == 0 || a.rub == 0 || a.part != 1 {
+            if a.flags == 0 || a.rubu_al_hizb == 0 || a.fragment != 1 {
                 continue;
             }
             let line = d.lines[d.words.get(a.first_word as usize).map(|w| w.line_idx as usize).unwrap_or(0)].line_no;
-            let push = |out: &mut Vec<Division>, kind: u8, n: u16| out.push(Division { kind, n, sura: a.sura, ayah: a.ayah, line, ayah_idx: ai as u32 });
+            let push = |out: &mut Vec<Division>, kind: u8, n: u16| out.push(Division { kind, n, surah: a.surah, ayah: a.ayah, line, ayah_idx: ai as u32 });
             if a.flags & AF_JUZ_START != 0 {
-                push(&mut out, 0, (a.rub - 1) / 8 + 1);
+                push(&mut out, 0, (a.rubu_al_hizb - 1) / 8 + 1);
             }
             if a.flags & AF_HIZB_START != 0 {
-                push(&mut out, 1, (a.rub - 1) / 4 + 1);
+                push(&mut out, 1, (a.rubu_al_hizb - 1) / 4 + 1);
             }
             if a.flags & AF_NISF_START != 0 {
-                push(&mut out, 2, (a.rub - 1) / 2 + 1);
+                push(&mut out, 2, (a.rubu_al_hizb - 1) / 2 + 1);
             }
-            if a.flags & AF_RUB_START != 0 {
-                push(&mut out, 3, a.rub);
+            if a.flags & AF_RUBU_AL_HIZB_START != 0 {
+                push(&mut out, 3, a.rubu_al_hizb);
             }
         }
         out
@@ -128,9 +128,9 @@ impl Page {
         d.decos
             .iter()
             .enumerate()
-            .filter(|(_, x)| x.kind == DecoKind::HizbMark)
+            .filter(|(_, x)| x.kind == DecoKind::DivisionMark)
             .map(|(i, x)| {
-                let mut r = Rosette { deco: i as u32, sura: x.sura, ayah: x.ayah, juz: 0, hizb: 0, nisf: 0, rub: 0, rub_in_hizb: 0 };
+                let mut r = Rosette { deco: i as u32, surah: x.surah, ayah: x.ayah, juz: 0, hizb: 0, nisf: 0, rubu_al_hizb: 0, rubu_al_hizb_in_hizb: 0 };
                 if x.text != NONE_U16 {
                     for kv in d.strings[x.text as usize].split(';') {
                         if let Some((k, v)) = kv.split_once('=') {
@@ -139,13 +139,13 @@ impl Page {
                                 "juz" => r.juz = n,
                                 "hizb" => r.hizb = n,
                                 "nisf" => r.nisf = n,
-                                "rub" => r.rub = n,
+                                "rubu_al_hizb" => r.rubu_al_hizb = n,
                                 _ => {}
                             }
                         }
                     }
-                    if r.hizb > 0 && r.rub > 0 {
-                        r.rub_in_hizb = r.rub - (r.hizb - 1) * 4;
+                    if r.hizb > 0 && r.rubu_al_hizb > 0 {
+                        r.rubu_al_hizb_in_hizb = r.rubu_al_hizb - (r.hizb - 1) * 4;
                     }
                 }
                 r
@@ -153,14 +153,14 @@ impl Page {
             .collect()
     }
 
-    /// Sajdah sites: (deco, sura, ayah, sign path index).
+    /// Sajdah sites: (deco, surah, ayah, sign path index).
     pub fn sajdahs(&self) -> Vec<(u32, u16, u16, u32)> {
         let d = self.data();
         let mut out = Vec::new();
         for (di, dc) in d.decos.iter().enumerate() {
             for p in dc.first_path..dc.first_path + dc.n_paths as u32 {
-                if d.paths[p as usize].mark == Mark::SajdahSign {
-                    out.push((di as u32, dc.sura, dc.ayah, p));
+                if d.paths[p as usize].mark == Mark::SajdahMark {
+                    out.push((di as u32, dc.surah, dc.ayah, p));
                 }
             }
         }
@@ -168,13 +168,13 @@ impl Page {
     }
 
     /// Real ayah medallions (with an ayah id). Decorative rosettes without an id are excluded.
-    pub fn markers(&self) -> Vec<MarkerInfo> {
+    pub fn ayah_marks(&self) -> Vec<MarkerInfo> {
         let d = self.data();
         let q = self.quant();
         d.decos
             .iter()
             .enumerate()
-            .filter(|(_, x)| x.kind == DecoKind::AyahMarker && x.ayah != 0)
+            .filter(|(_, x)| x.kind == DecoKind::AyahMark && x.ayah != 0)
             .map(|(i, x)| {
                 let mut orn = NONE;
                 let mut num = NONE;
@@ -182,7 +182,7 @@ impl Page {
                 for p in x.first_path..x.first_path + x.n_paths as u32 {
                     let pr = &d.paths[p as usize];
                     match pr.kind {
-                        PathKind::AyahOrnament => {
+                        PathKind::AyahMarkOrnament => {
                             if orn == NONE {
                                 orn = p;
                             }
@@ -195,7 +195,7 @@ impl Page {
                 let b = if ob.is_empty() { x.bbox } else { ob };
                 MarkerInfo {
                     deco: i as u32,
-                    sura: x.sura,
+                    surah: x.surah,
                     ayah: x.ayah,
                     line: self.geometry().table[x.first_path as usize].line,
                     cx: (b.x0 + b.x1) as f32 / 2.0 / q,
@@ -208,9 +208,9 @@ impl Page {
             .collect()
     }
 
-    /// The medallion that closes (sura, ayah), if drawn on this page.
-    pub fn marker_of(&self, sura: u16, ayah: u16) -> Option<MarkerInfo> {
-        self.markers().into_iter().find(|m| m.sura == sura && m.ayah == ayah)
+    /// The medallion that closes (surah, ayah), if drawn on this page.
+    pub fn marker_of(&self, surah: u16, ayah: u16) -> Option<MarkerInfo> {
+        self.ayah_marks().into_iter().find(|m| m.surah == surah && m.ayah == ayah)
     }
 
     /// True for banner lines (surah name / basmalah) that hold no words.
@@ -222,14 +222,14 @@ impl Page {
     /// Accessible label for a word: "text (s:a:w)".
     pub fn word_label(&self, wi: u32) -> String {
         let w = &self.data().words[wi as usize];
-        format!("{} ({}:{}:{})", self.word_text(wi), w.sura, w.ayah, w.word)
+        format!("{} ({}:{}:{})", self.word_text(wi), w.surah, w.ayah, w.word)
     }
     /// Accessible label for an ayah fragment.
     pub fn ayah_label(&self, ai: u32) -> String {
         let a = &self.data().ayahs[ai as usize];
-        let name = self.surahs().into_iter().find(|s| s.number == a.sura).map(|s| s.latin).filter(|s| !s.is_empty()).unwrap_or_else(|| format!("surah {}", a.sura));
-        if a.parts > 1 {
-            format!("Ayah {} of {}, part {} of {}", a.ayah, name, a.part, a.parts)
+        let name = self.surahs().into_iter().find(|s| s.number == a.surah).map(|s| s.latin).filter(|s| !s.is_empty()).unwrap_or_else(|| format!("surah {}", a.surah));
+        if a.fragments > 1 {
+            format!("Ayah {} of {}, fragment {} of {}", a.ayah, name, a.fragment, a.fragments)
         } else {
             format!("Ayah {} of {}", a.ayah, name)
         }

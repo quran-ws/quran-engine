@@ -76,7 +76,7 @@ object Marshal {
         }
     }
 
-    fun form(v: Any?, d: Form = Form.UTHMANI): Form = when (v) {
+    fun form(v: Any?, d: Form = Form.RASM_UTHMANI): Form = when (v) {
         is Number -> Form.entries.getOrElse(v.toInt()) { d }
         is String -> Form.entries.firstOrNull { it.name.equals(v, true) } ?: d
         else -> d
@@ -106,55 +106,55 @@ object Marshal {
         return QvpHighlightStyle(mode = mode, ink = color(m["ink"], d.ink), band = color(m["band"], d.band), height = height, padX = flt(m["padX"], d.padX), padY = flt(m["padY"], d.padY),
             radius = flt(m["radius"], d.radius), seam = flt(m["seam"], d.seam), transitionMs = num(m["ms"] ?: m["transitionMs"]) ?: d.transitionMs, layer = num(m["layer"]) ?: d.layer)
     }
-    /** {ink, diacritics, dots, waqf, sifr, marker, numeral, headers, marks: {name: colour}, ms} → [QvpTheme]. */
+    /** {ink, diacritics, dots, waqf, sifr, ayahMark, numeral, headers, marks: {name: colour}, ms} → [QvpTheme]. */
     fun theme(v: Any?): QvpTheme {
         val m = v as? Map<*, *> ?: return QvpTheme()
         val marks = (m["marks"] as? Map<*, *>)?.entries?.mapNotNull { (k, c) -> colorOrNull(c)?.let { (k as String) to it } }?.toMap() ?: emptyMap()
         return QvpTheme(ink = colorOrNull(m["ink"]), diacritics = colorOrNull(m["diacritics"]), dots = colorOrNull(m["dots"]), waqf = colorOrNull(m["waqf"]), sifr = colorOrNull(m["sifr"]),
-            marker = colorOrNull(m["marker"]), numeral = colorOrNull(m["numeral"]), headers = colorOrNull(m["headers"]), marks = marks, transitionMs = num(m["ms"] ?: m["transitionMs"]) ?: 0)
+            ayahMark = colorOrNull(m["ayahMark"]), numeral = colorOrNull(m["numeral"]), headers = colorOrNull(m["headers"]), marks = marks, transitionMs = num(m["ms"] ?: m["transitionMs"]) ?: 0)
     }
 
     // ── Kotlin → JS ──
     fun word(p: QvpPage, w: QvpWord): Map<String, Any?> {
         val forms = LinkedHashMap<String, String>()
-        for (f in Form.entries) if (f == Form.UTHMANI || p.hasForm(f)) forms[f.name.lowercase()] = p.wordForm(w.idx, f)
+        for (f in Form.entries) if (f == Form.RASM_UTHMANI || p.hasForm(f)) forms[f.name.lowercase()] = p.wordForm(w.idx, f)
         val paths = (w.firstPath until w.firstPath + w.nPaths).map { i ->
             val kind = p.pathKind(i); val mark = p.pathMark(i); val cat = p.pathCategory(i); val fam = p.pathFamily(i)
             mapOf("idx" to i, "kind" to kind, "kindName" to QvpEngine.kindName(kind), "mark" to mark, "markName" to QvpEngine.markName(mark), "nthMark" to p.pathNthMark(i),
                 "nthInWord" to p.pathNthInWord(i), "category" to cat, "categoryName" to QvpEngine.categoryName(cat), "family" to fam, "familyName" to QvpEngine.familyName(fam), "line" to p.pathLine(i))
         }
-        return mapOf("idx" to w.idx, "sura" to w.sura, "ayah" to w.ayah, "word" to w.word, "line" to w.line, "lineIdx" to w.lineIdx, "ayahIdx" to w.ayahIdx,
+        return mapOf("idx" to w.idx, "surah" to w.surah, "ayah" to w.ayah, "word" to w.word, "line" to w.line, "lineIdx" to w.lineIdx, "ayahIdx" to w.ayahIdx,
             "x0" to w.x0, "y0" to w.y0, "x1" to w.x1, "y1" to w.y1, "text" to w.text, "firstPath" to w.firstPath, "nPaths" to w.nPaths,
-            "wid" to w.wid, "aid" to w.aid, "forms" to forms, "label" to p.wordLabel(w.idx), "paths" to paths)
+            "wordKey" to w.wordKey, "ayahKey" to w.ayahKey, "forms" to forms, "label" to p.wordLabel(w.idx), "paths" to paths)
     }
-    fun deco(d: QvpDecoration): Map<String, Any?> = mapOf("idx" to d.idx, "kind" to d.kind, "kindName" to listOf("ayah-marker", "surah-name", "basmalah", "hizb-mark", "sajdah-mark").getOrElse(d.kind) { "other" },
-        "sura" to d.sura, "ayah" to d.ayah, "line" to d.line, "x0" to d.x0, "y0" to d.y0, "x1" to d.x1, "y1" to d.y1, "text" to d.text, "firstPath" to d.firstPath, "nPaths" to d.nPaths)
+    fun deco(d: QvpDecoration): Map<String, Any?> = mapOf("idx" to d.idx, "kind" to d.kind, "kindName" to listOf("ayah-ayahMark", "surah-name", "basmalah", "division-mark", "sajdah-mark").getOrElse(d.kind) { "other" },
+        "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "x0" to d.x0, "y0" to d.y0, "x1" to d.x1, "y1" to d.y1, "text" to d.text, "firstPath" to d.firstPath, "nPaths" to d.nPaths)
     fun hit(p: QvpPage, h: QvpHitEx): Map<String, Any?> {
         val w = if (h.word >= 0) p.words[h.word] else null
-        return mapOf("word" to h.word, "path" to h.path, "deco" to h.deco, "line" to h.line, "distance" to h.distance, "exact" to h.exact, "wid" to w?.wid, "aid" to w?.aid)
+        return mapOf("word" to h.word, "path" to h.path, "deco" to h.deco, "line" to h.line, "distance" to h.distance, "exact" to h.exact, "wordKey" to w?.wordKey, "ayahKey" to w?.ayahKey)
     }
-    fun ayah(a: QvpAyah): Map<String, Any?> = mapOf("idx" to a.idx, "sura" to a.sura, "ayah" to a.ayah, "part" to a.part, "parts" to a.parts, "flags" to a.flags, "rub" to a.rub, "firstWord" to a.firstWord, "nWords" to a.nWords,
-        "markerDeco" to a.markerDeco, "bbox" to listOf(a.x0, a.y0, a.x1, a.y1))
+    fun ayah(a: QvpAyah): Map<String, Any?> = mapOf("idx" to a.idx, "surah" to a.surah, "ayah" to a.ayah, "fragment" to a.fragment, "fragments" to a.fragments, "flags" to a.flags, "rubuAlHizb" to a.rubuAlHizb, "firstWord" to a.firstWord, "nWords" to a.nWords,
+        "ayahMarkDeco" to a.ayahMarkDeco, "bbox" to listOf(a.x0, a.y0, a.x1, a.y1))
     fun line(l: QvpLine): Map<String, Any?> = mapOf("idx" to l.idx, "lineNo" to l.lineNo, "isHeader" to l.isHeader, "firstWord" to l.firstWord, "nWords" to l.nWords, "bbox" to listOf(l.x0, l.y0, l.x1, l.y1),
         "bandY0" to l.bandY0, "bandY1" to l.bandY1, "centre" to l.centre)
     fun surah(s: QvpSurah): Map<String, Any?> = mapOf("number" to s.number, "ayahCount" to s.ayahCount, "hasBanner" to s.hasBanner, "hasBasmalah" to s.hasBasmalah, "place" to s.place, "bannerDeco" to s.bannerDeco,
         "arabic" to s.arabic, "latin" to s.latin, "english" to s.english)
-    fun division(d: QvpDivision): Map<String, Any?> = mapOf("kind" to d.kind.name.lowercase(), "n" to d.n, "sura" to d.sura, "ayah" to d.ayah, "line" to d.line, "ayahIdx" to d.ayahIdx)
-    fun marker(m: QvpMarker): Map<String, Any?> = mapOf("deco" to m.deco, "sura" to m.sura, "ayah" to m.ayah, "line" to m.line, "cx" to m.cx, "cy" to m.cy, "r" to m.r, "ornamentPath" to m.ornamentPath, "numeralPath" to m.numeralPath)
-    fun rosette(r: QvpRosette): Map<String, Any?> = mapOf("deco" to r.deco, "sura" to r.sura, "ayah" to r.ayah, "juz" to r.juz, "hizb" to r.hizb, "nisf" to r.nisf, "rub" to r.rub, "rubInHizb" to r.rubInHizb)
-    fun sajdah(s: QvpSajdah): Map<String, Any?> = mapOf("deco" to s.deco, "sura" to s.sura, "ayah" to s.ayah, "signPath" to s.signPath)
-    fun match(m: QvpMatch): Map<String, Any?> = mapOf("word" to m.word, "index" to m.index, "loose" to m.loose, "wid" to m.wid, "text" to m.text)
-    fun cropBox(c: QvpCropBox): Map<String, Any?> = mapOf("x0" to c.x0, "y0" to c.y0, "x1" to c.x1, "y1" to c.y1, "nWords" to c.nWords, "markerDeco" to c.markerDeco)
+    fun division(d: QvpDivision): Map<String, Any?> = mapOf("kind" to d.kind.name.lowercase(), "n" to d.n, "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "ayahIdx" to d.ayahIdx)
+    fun ayahMark(m: QvpAyahMark): Map<String, Any?> = mapOf("deco" to m.deco, "surah" to m.surah, "ayah" to m.ayah, "line" to m.line, "cx" to m.cx, "cy" to m.cy, "r" to m.r, "ornamentPath" to m.ornamentPath, "numeralPath" to m.numeralPath)
+    fun rosette(r: QvpRosette): Map<String, Any?> = mapOf("deco" to r.deco, "surah" to r.surah, "ayah" to r.ayah, "juz" to r.juz, "hizb" to r.hizb, "nisf" to r.nisf, "rubuAlHizb" to r.rubuAlHizb, "rubuAlHizbInHizb" to r.rubuAlHizbInHizb)
+    fun sajdah(s: QvpSajdah): Map<String, Any?> = mapOf("deco" to s.deco, "surah" to s.surah, "ayah" to s.ayah, "signPath" to s.signPath)
+    fun match(m: QvpMatch): Map<String, Any?> = mapOf("word" to m.word, "index" to m.index, "loose" to m.loose, "wordKey" to m.wordKey, "text" to m.text)
+    fun cropBox(c: QvpCropBox): Map<String, Any?> = mapOf("x0" to c.x0, "y0" to c.y0, "x1" to c.x1, "y1" to c.y1, "nWords" to c.nWords, "ayahMarkDeco" to c.ayahMarkDeco)
     fun atlasSurah(s: QvpAtlasSurah): Map<String, Any?> = mapOf("n" to s.n, "number" to s.n, "page" to s.page, "ayahCount" to s.ayahCount, "place" to s.place, "arabic" to s.arabic, "latin" to s.latin, "english" to s.english)
-    fun atlasRub(r: QvpAtlasRub): Map<String, Any?> = mapOf("rub" to r.rub, "sura" to r.sura, "ayah" to r.ayah, "page" to r.page, "aid" to r.aid)
+    fun atlasRubuAlHizb(r: QvpAtlasRubuAlHizb): Map<String, Any?> = mapOf("rubuAlHizb" to r.rubuAlHizb, "surah" to r.surah, "ayah" to r.ayah, "page" to r.page, "ayahKey" to r.ayahKey)
     fun layout(l: QvpLayout): Map<String, Any?> = mapOf("scale" to l.scale, "ox" to l.ox, "oy" to l.oy, "contentW" to l.contentW, "contentH" to l.contentH, "pitch" to l.pitch, "lineDy" to l.lineDy.toList(),
         "slots" to l.slotTop.indices.map { listOf(l.slotTop[it], l.slotBottom[it]) })
     fun pageInfo(p: QvpPage): Map<String, Any?> = mapOf("page" to p.pageNo, "width" to p.width, "height" to p.height, "nLines" to p.nLines, "nAyahs" to p.nAyahs, "nWords" to p.nWords, "nPaths" to p.nPaths, "nDecos" to p.nDecos,
-        "naturalPitch" to p.naturalPitch, "forms" to Form.entries.filter { it == Form.UTHMANI || p.hasForm(it) }.map { it.name.lowercase() })
+        "naturalPitch" to p.naturalPitch, "forms" to Form.entries.filter { it == Form.RASM_UTHMANI || p.hasForm(it) }.map { it.name.lowercase() })
     fun selection(p: QvpPage): Map<String, Any?> {
         val ws = p.selection()
         return mapOf("words" to ws.toList(), "text" to (if (ws.isEmpty()) "" else p.text(Target.words(ws))), "citation" to (if (ws.isEmpty()) "" else p.citation(ws)),
-            "textWithCitation" to (if (ws.isEmpty()) "" else p.selectionText(Form.UTHMANI, true)))
+            "textWithCitation" to (if (ws.isEmpty()) "" else p.selectionText(Form.RASM_UTHMANI, true)))
     }
 
     /** Any Kotlin value (maps, lists, arrays, primitives) → a bridge value. */

@@ -3,7 +3,7 @@
 One screen (`App.tsx`) reproducing the web / Android demos on top of
 `@quranpedia/qvp-react-native` (`../qvp-react-native`, linked as a `file:` dependency):
 page prev/next + goto (atlas: `2:255`, `Yasin`, `juz 30`), search with highlighted results, tap word →
-selection panel (uthmani, wid, forms, per-path chips colouring one mark via `Sel.wordMark`), tap
+selection panel (rasm_uthmani, wordKey, forms, per-path chips colouring one mark via `Sel.wordMark`), tap
 marker → ayah, long-press-drag selection with copy + citation, highlight mode + fade slider, follow-words
 timer (rehighlight through the `highlights` prop), mark colours / hide marks / gold markers toggles
 (`theme` / `styles` props), light / sepia / dark, memorisation (mask ayah, reveal next, hide back, unmask,

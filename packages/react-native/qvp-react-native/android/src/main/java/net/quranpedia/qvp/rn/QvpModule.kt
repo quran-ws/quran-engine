@@ -54,10 +54,10 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     // ── metadata ──
     @ReactMethod fun surahs(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.surahs().map { Marshal.surah(it) } }
     @ReactMethod fun divisions(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.divisions().map { Marshal.division(it) } }
-    @ReactMethod fun markers(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.markers().map { Marshal.marker(it) } }
+    @ReactMethod fun ayahMarks(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahMarks().map { Marshal.ayahMark(it) } }
     @ReactMethod fun rosettes(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.rosettes().map { Marshal.rosette(it) } }
     @ReactMethod fun sajdahs(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.sajdahs().map { Marshal.sajdah(it) } }
-    @ReactMethod fun ayahKeys(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahKeys().map { mapOf("sura" to it.first, "ayah" to it.second, "aid" to "${it.first}:${it.second}") } }
+    @ReactMethod fun ayahKeys(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahKeys().map { mapOf("surah" to it.first, "ayah" to it.second, "ayahKey" to "${it.first}:${it.second}") } }
     @ReactMethod fun ayahWordCount(tag: Int, s: Int, a: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahWordCount(s, a).let { mapOf("count" to it.first, "complete" to it.second) } }
     @ReactMethod fun reciteMap(tag: Int, s: Int, a: Int, n: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.reciteMap(s, a, n)?.toList() }
     @ReactMethod fun wordLabel(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.wordLabel(i) }
@@ -107,9 +107,9 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
 
     // ── crop ──
     @ReactMethod fun cropBox(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
-        val o = opt(opts); p.cropBox(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: 2f, o["keepMarkers"] != false)?.let { Marshal.cropBox(it) } }
+        val o = opt(opts); p.cropBox(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: 2f, o["keepAyahMarks"] != false)?.let { Marshal.cropBox(it) } }
     @ReactMethod fun cropSvg(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
-        val o = opt(opts); p.cropSvg(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: 2f, o["keepMarkers"] != false, Marshal.color(o["background"], 0)) }
+        val o = opt(opts); p.cropSvg(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: 2f, o["keepAyahMarks"] != false, Marshal.color(o["background"], 0)) }
 
     // ── atlas ──
     @ReactMethod fun loadAtlas(uri: String, promise: Promise) = ui(promise) {
@@ -127,12 +127,12 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     }
     @ReactMethod fun freeAtlas(id: Int, promise: Promise) = ui(promise) { atlases.remove(id)?.close(); atlasByUri.entries.removeAll { it.value == id }; null }
     @ReactMethod fun atlasPageOf(id: Int, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.pageOf(s, a) }
-    @ReactMethod fun atlasPageRange(id: Int, page: Int, promise: Promise) = withAtlas(id, promise) { it.pageRange(page)?.let { r -> mapOf("first" to mapOf("sura" to r.first.first, "ayah" to r.first.second), "last" to mapOf("sura" to r.second.first, "ayah" to r.second.second)) } }
+    @ReactMethod fun atlasPageRange(id: Int, page: Int, promise: Promise) = withAtlas(id, promise) { it.pageRange(page)?.let { r -> mapOf("first" to mapOf("surah" to r.first.first, "ayah" to r.first.second), "last" to mapOf("surah" to r.second.first, "ayah" to r.second.second)) } }
     @ReactMethod fun atlasPages(id: Int, promise: Promise) = withAtlas(id, promise) { it.pages() }
     @ReactMethod fun atlasSurah(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.surah(n)?.let { s -> Marshal.atlasSurah(s) } }
     @ReactMethod fun atlasSurahs(id: Int, promise: Promise) = withAtlas(id, promise) { it.surahs().map { s -> Marshal.atlasSurah(s) } }
     @ReactMethod fun atlasPageOfSurah(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.pageOfSurah(n) }
-    @ReactMethod fun atlasDivision(id: Int, kind: String, n: Int, promise: Promise) = withAtlas(id, promise) { it.division(Marshal.division(kind), n)?.let { r -> Marshal.atlasRub(r) } }
+    @ReactMethod fun atlasDivision(id: Int, kind: String, n: Int, promise: Promise) = withAtlas(id, promise) { it.division(Marshal.division(kind), n)?.let { r -> Marshal.atlasRubuAlHizb(r) } }
     @ReactMethod fun atlasDivisionAt(id: Int, kind: String, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.divisionAt(Marshal.division(kind), s, a) }
     @ReactMethod fun atlasJuzAt(id: Int, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.juzAt(s, a) }
     @ReactMethod fun atlasPagesOfJuz(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.pagesOfJuz(n)?.let { r -> listOf(r.first, r.second) } }
