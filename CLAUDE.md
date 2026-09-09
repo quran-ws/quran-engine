@@ -15,7 +15,10 @@
   Changing the encoding means re-running `QVP_TEST_ALL=1` and regenerating `dist/pages` — and
   every demo's bundled `assets/pages` copy, which holds a 29-page sample, not the whole mushaf.
 - Packages ship code only. Page data (`NNN.qvp`, `atlas.qva`, `NNN.words.json`) is loaded by apps;
-  demos bundle it as their own assets (gitignored).
+  demos bundle it as their own assets (gitignored). The built data is published as a GitHub
+  release (`gh release list`), never committed — regenerating it would add ~92 MB to history
+  each time. Cutting a new one: `batch`, then tar `dist/pages` with a VERSION.json and the
+  upstream rights notice, and `gh release create`.
 - Source data is the `quran-svg hafs-kfgqpc` release bundle: unpack `pages/` and `index/`
   side by side at the repo root (both gitignored). Source problems go in
   `docs/UPSTREAM-DATA-ISSUES.md`; do not patch data in the converter.

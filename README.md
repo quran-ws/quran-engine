@@ -74,6 +74,20 @@ python3 web/build.py embed 1-21,440-445,582,604                           # dist
 | six-line ayah highlight incl. band boxes | 48 µs |
 | wasm engine | 273 KB |
 
+## Getting the page data
+
+The engine ships code only. The built data — 604 `NNN.qvp`, their `NNN.words.json`
+sidecars and `atlas.qva` — is published as a release:
+
+```sh
+gh release download v0.1.0 -R quranpedia/quran-engine -p '*.tar.gz'
+tar xzf quran-engine-pages-hafs-kfgqpc.tar.gz          # 44 MB → 92.5 MB, 604 pages
+```
+
+Serve it pre-compressed; the whole mushaf is ~37 MB brotli. To rebuild it from source
+instead, see **Build the engine** above. The data carries the source bundle's terms,
+not the engine's MIT licence — see the `README.md` inside it.
+
 ## Page format
 
 `NNN.qvp` stores only what cannot be worked out again. Bboxes, path origins and opcode
