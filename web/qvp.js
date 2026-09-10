@@ -106,6 +106,15 @@
       if (!h) throw new Error('qvp_atlas_load failed');
       return new QvpAtlas(this, h);
     }
+    /** an ornament set (ornaments.qvo) — the medallions, bands and borders of other mushafs */
+    loadOrnaments(bytes) {
+      const p = this.ex.qvp_alloc(bytes.length);
+      new Uint8Array(this.mem.buffer, p, bytes.length).set(bytes);
+      const h = this.ex.qvp_ornaments_load(p, bytes.length);
+      this.ex.qvp_dealloc(p, bytes.length);
+      if (!h) throw new Error('qvp_ornaments_load failed');
+      return new QvpOrnaments(this, h);
+    }
     gapToFill(pageW, pageH, lines, viewW, viewH, max = 0) { return this.ex.qvp_gap_to_fill(pageW, pageH, lines, viewW, viewH, max); }
     wastedFraction(pageW, pageH, viewW, viewH) { return this.ex.qvp_wasted_fraction(pageW, pageH, viewW, viewH); }
   }
@@ -166,6 +175,8 @@
       this.pts = new Float32Array(engine.mem.buffer.slice(ptsPtr, ptsPtr + ptsLen * 4));
       this.table = new Uint32Array(engine.mem.buffer.slice(tabPtr, tabPtr + nPaths * 32));
       this.paths = null;
+      this.ornaments = null;
+      this.ornamentsRevision = -1;
       this.words = Array.from({ length: this.nWords }, (_, i) => this._word(i));
       this.ayahs = Array.from({ length: this.nAyahs }, (_, i) => this._ayah(i));
       this.lines = Array.from({ length: this.nLines }, (_, i) => this._line(i));
@@ -175,6 +186,100 @@
       this._defaultInk = 0x231f20ff;
     }
     free() { this.e.ex.qvp_page_free(this.h); this.h = 0; }
+
+    // ── dress: another mushaf's ornaments ──
+    /**
+     * Put a style's ornaments on the page. `style` is a name, an index, or one
+     * of `ornaments.styles`. Returns the readout, or null when the set has no
+     * such mushaf. Replaces any previous dress.
+     *
+     * colors: {partName: colour} — the design's own printed colour is kept for
+     * every part left out.
+     */
+    dress(ornaments, { style = 0, gap = 5, lineArt = false, ayahMarks = true, surahHeaders = true, pageFrame = true, colors = null } = {}) {
+      const st = typeof style === 'object' ? style : (typeof style === 'string' ? ornaments.find(style) : ornaments.styles[style]);
+      if (!st) return null;
+      const pairs = [];
+      for (const name in colors || {}) {
+        const p = st.parts.find(x => x && x.name === name);
+        if (p) pairs.push(p.index, rgba(colors[name]));
+      }
+      const cp = pairs.length ? this.e.putU32(Uint32Array.from(pairs), 2048) : 0;
+      const s = this.e.scratch2, d = this.e.dv();
+      d.setUint32(s, st.index, true); d.setFloat32(s + 4, gap, true);
+      d.setUint32(s + 8, lineArt ? 1 : 0, true); d.setUint32(s + 12, ayahMarks ? 1 : 0, true);
+      d.setUint32(s + 16, surahHeaders ? 1 : 0, true); d.setUint32(s + 20, pageFrame ? 1 : 0, true);
+      d.setUint32(s + 24, cp, true); d.setUint32(s + 28, pairs.length / 2, true);
+      if (!this.e.ex.qvp_dress(this.h, ornaments.h, s)) return null;
+      this.ornaments = null;
+      return this.dressInfo();
+    }
+    undress() { this.e.ex.qvp_undress(this.h); this.ornaments = null; }
+    /** the readout, or null when the page is not dressed */
+    dressInfo() {
+      const s = this.e.scratch;
+      if (!this.e.ex.qvp_dress_info(this.h, s)) return null;
+      const d = this.e.dv();
+      return { style: d.getUint32(s, true), ayahMarks: d.getUint32(s + 4, true), surahHeaders: d.getUint32(s + 8, true),
+        frameRepeats: d.getUint32(s + 12, true), frameStretched: !!d.getUint32(s + 16, true), nDraws: d.getUint32(s + 20, true),
+        revision: d.getUint32(s + 24, true),
+        viewBox: [d.getFloat32(s + 28, true), d.getFloat32(s + 32, true), d.getFloat32(s + 36, true), d.getFloat32(s + 40, true)] };
+    }
+    /**
+     * The ornament display list, in page units, as Path2D + paint. DRAW IT
+     * BEHIND THE PAGE INK: that is what keeps the print's own ayah numerals on
+     * top of whatever replaced the rings around them.
+     */
+    /**
+     * Bumped whenever the ornament layer is rebuilt — a new dress, or a layout
+     * that respaced the page under the border. 0 when undressed.
+     */
+    dressRevision() { const i = this.dressInfo(); return i ? i.revision : 0; }
+    dressGeometry() {
+      // A LAYOUT REBUILDS THIS LAYER: the border is drawn around the laid-out
+      // page, so a cache kept only until the next dress() goes stale on a resize.
+      const rev = this.dressRevision();
+      if (this.ornaments && this.ornamentsRevision === rev) return this.ornaments;
+      this.ornamentsRevision = rev;
+      const s = this.e.scratch;
+      this.e.ex.qvp_dress_geometry(this.h, s);
+      const d = this.e.dv(), n = d.getUint32(s + 20, true);
+      if (!n) return (this.ornaments = []);
+      const opsPtr = d.getUint32(s, true), opsLen = d.getUint32(s + 4, true), ptsPtr = d.getUint32(s + 8, true), ptsLen = d.getUint32(s + 12, true), tabPtr = d.getUint32(s + 16, true);
+      const ops = new Uint8Array(this.e.mem.buffer, opsPtr, opsLen);
+      const pts = new Float32Array(this.e.mem.buffer, ptsPtr, ptsLen);
+      const t = new Uint32Array(this.e.mem.buffer.slice(tabPtr, tabPtr + n * 36));
+      const tf = new Float32Array(t.buffer);
+      const out = new Array(n);
+      for (let i = 0; i < n; i++) {
+        const p = new Path2D();
+        let o = t[i * 9], oe = o + t[i * 9 + 1], k = t[i * 9 + 2];
+        for (; o < oe; o++) {
+          switch (ops[o]) {
+            case 0: p.moveTo(pts[k], pts[k + 1]); k += 2; break;
+            case 1: p.lineTo(pts[k], pts[k + 1]); k += 2; break;
+            case 2: p.quadraticCurveTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3]); k += 4; break;
+            case 3: p.bezierCurveTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3], pts[k + 4], pts[k + 5]); k += 6; break;
+            case 4: p.closePath(); break;
+          }
+        }
+        const flags = t[i * 9 + 5], line = t[i * 9 + 8];
+        out[i] = { path: p, color: t[i * 9 + 4], kind: ['ayah_mark', 'surah_header', 'page_frame'][flags & 0xff],
+          evenOdd: !!(flags & 0x100), stroke: !!(flags & 0x200), strokeWidth: tf[i * 9 + 6],
+          part: t[i * 9 + 7], line: line === NONE ? -1 : line };
+      }
+      return (this.ornaments = out);
+    }
+    /**
+     * How much bigger the dressed page is than the laid-out content, on each
+     * side, in viewport px: [left, top, right, bottom]. Fit `content + overflow`
+     * or a border is cropped off; an undressed page answers zeroes.
+     */
+    dressOverflow() { const s = this.e.scratch; this.e.ex.qvp_dress_overflow(this.h, s); const v = new Float32Array(this.e.mem.buffer, s, 4); return [v[0], v[1], v[2], v[3]]; }
+    /** the page's viewBox [x, y, w, h]; a border grows it */
+    viewBox() { const s = this.e.scratch; this.e.ex.qvp_page_view_box(this.h, s); const v = new Float32Array(this.e.mem.buffer, s, 4); return [v[0], v[1], v[2], v[3]]; }
+    /** the box the page's text occupies: {x0, y0, x1, y1} */
+    contentBox() { const s = this.e.scratch; this.e.ex.qvp_content_box(this.h, s); const v = new Float32Array(this.e.mem.buffer, s, 4); return { x0: v[0], y0: v[1], x1: v[2], y1: v[3] }; }
 
     // ── geometry ──
     pathFlags(i) { return this.table[i * 8 + 4]; }
@@ -423,6 +528,41 @@
   }
 
   /**
+   * The ornaments of other printed mushafs, from `ornaments.qvo`.
+   *
+   * NONE OF THESE OUTLINES IS PART OF A QVP PAGE. They are traced from scans of
+   * other prints, and each style says what it may be redistributed under — read
+   * `licence` before you publish a page wearing them.
+   */
+  class QvpOrnaments {
+    constructor(engine, handle) {
+      this.e = engine; this.h = handle;
+      this.styles = Array.from({ length: engine.ex.qvp_ornament_styles(handle) }, (_, i) => this._style(i));
+    }
+    free() { this.e.ex.qvp_ornaments_free(this.h); this.h = 0; }
+    _style(i) {
+      const s = this.e.scratch;
+      if (!this.e.ex.qvp_ornament_style(this.h, i, s)) return null;
+      const d = this.e.dv(), assets = d.getUint32(s, true), nParts = d.getUint32(s + 4, true);
+      return {
+        index: i, name: this.e.qstr(s + 16), riwayah: this.e.qstr(s + 24),
+        // what this mushaf draws; a style need not have all three
+        has: { ayahMark: !!(assets & 1), surahHeader: !!(assets & 2), pageFrame: !!(assets & 4), slices: !!(assets & 8) },
+        licence: { id: this.e.qstr(s + 32), status: this.e.qstr(s + 40), redistributable: !!d.getUint32(s + 8, true), attribution: this.e.qstr(s + 48) },
+        // one entry per printed colour; `slot` is the window the design leaves open
+        parts: Array.from({ length: nParts }, (_, k) => this._part(i, k)),
+      };
+    }
+    _part(style, k) {
+      const s = this.e.scratch2 + 4096;   // not `scratch`: a style is being read out of it
+      if (!this.e.ex.qvp_ornament_part(this.h, style, k, s)) return null;
+      const d = this.e.dv();
+      return { index: k, color: d.getUint32(s, true), stroke: !!d.getUint32(s + 4, true), name: this.e.qstr(s + 8) };
+    }
+    find(name) { const i = this.e.ex.qvp_ornament_find_style(this.h, ...this.e.putStr(name)); return i < 0 ? null : this.styles[i]; }
+  }
+
+  /**
    * Canvas2D host renderer. Order: highlight bands → base ink (cached) → styled ink → mask boxes.
    * Call `page.tick(performance.now())` before `draw` each frame; keep drawing while it returns true.
    */
@@ -430,11 +570,14 @@
     constructor(canvas) {
       this.canvas = canvas; this.ctx = canvas.getContext('2d');
       this.base = document.createElement('canvas'); this.baseKey = '';
+      this.orn = null; this.ornKey = '';
       this.stats = { baseMs: 0, overlayMs: 0, basePaths: 0, overlayPaths: 0, bands: 0 };
     }
     lineTransform(page, view, line, dpr) {
       const L = page.currentLayout || { scale: 1, ox: 0, oy: 0, lineDy: null };
-      const s = dpr * view.scale * L.scale, dy = L.lineDy ? L.lineDy[line] : 0;
+      // a negative line takes no line shift: that is the page's own frame, which
+      // the border is placed from and which no layout moves
+      const s = dpr * view.scale * L.scale, dy = L.lineDy && line >= 0 ? L.lineDy[line] : 0;
       return [s, dpr * (view.ox + view.scale * L.ox), dpr * (view.oy + view.scale * (L.oy + dy * L.scale))];
     }
     /** boxes are in layout viewport px; view adds pan/zoom on top */
@@ -447,6 +590,39 @@
         if (b.radius > 0) cur.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, b.radius); else cur.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
       }
       flush();
+    }
+    /**
+     * The ornament layer, BEHIND everything else. A draw carries the page line
+     * it was measured against, so it moves with that line's ink under a layout
+     * that respaces the page; the border belongs to no line and never moves.
+     *
+     * RASTERISED ONCE, like the base ink. A tiled border is hundreds of filled
+     * and stroked outlines and nothing about it changes while a highlight
+     * animates, so re-drawing it every frame is what makes playback stutter.
+     */
+    drawOrnaments(c, page, view, dpr) {
+      const rev = page.dressRevision();
+      if (!rev) { this.orn = null; this.ornKey = ''; return; }
+      const W = this.canvas.width, H = this.canvas.height;
+      const key = `${view.scale.toFixed(4)}|${view.ox.toFixed(1)}|${view.oy.toFixed(1)}|${dpr}|${rev}|${W}x${H}`;
+      if (!this.orn || key !== this.ornKey || this.orn.width !== W || this.orn.height !== H) {
+        if (!this.orn) this.orn = document.createElement('canvas');
+        this.orn.width = W; this.orn.height = H;
+        const b = this.orn.getContext('2d');
+        let cur = -2;
+        for (const o of page.dressGeometry()) {
+          if (o.line !== cur) {
+            const [s, tx, ty] = this.lineTransform(page, view, o.line, dpr);
+            b.setTransform(s, 0, 0, s, tx, ty);
+            cur = o.line;
+          }
+          if (o.stroke) { b.strokeStyle = css(o.color); b.lineWidth = o.strokeWidth; b.lineCap = 'round'; b.lineJoin = 'round'; b.stroke(o.path); }
+          else { b.fillStyle = css(o.color); b.fill(o.path, o.evenOdd ? 'evenodd' : 'nonzero'); }
+        }
+        this.ornKey = key;
+      }
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.drawImage(this.orn, 0, 0);
     }
     draw(page, view, dpr) {
       const paths = page.buildPaths();
@@ -473,6 +649,7 @@
       const t1 = performance.now();
       const c = this.ctx;
       c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+      this.drawOrnaments(c, page, view, dpr);
       const bands = page.highlightBoxes();
       this.drawBoxes(c, bands, view, dpr);
       c.setTransform(1, 0, 0, 1, 0, 0);
@@ -488,5 +665,5 @@
     }
   }
 
-  global.QVP = { QvpEngine, QvpPage, QvpAtlas, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECO, FORM, LAYER, MARK, MARKS, NONE, css, rgba, parseTarget };
+  global.QVP = { QvpEngine, QvpPage, QvpAtlas, QvpOrnaments, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECO, FORM, LAYER, MARK, MARKS, NONE, css, rgba, parseTarget };
 })(typeof window !== 'undefined' ? window : globalThis);

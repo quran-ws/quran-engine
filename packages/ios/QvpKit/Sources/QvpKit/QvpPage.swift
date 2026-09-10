@@ -6,7 +6,7 @@ import Foundation
 import CoreGraphics
 import QvpFFI
 
-public enum QvpError: Error { case badPage, badAtlas }
+public enum QvpError: Error { case badPage, badAtlas, badOrnaments }
 
 public final class QvpPage {
     private var h: OpaquePointer?
@@ -24,6 +24,8 @@ public final class QvpPage {
     public private(set) var currentLayout: QvpLayout?
     public private(set) var defaultInk: UInt32 = 0x231f20ff
     private var paths: [CGPath]?
+    private var dressed: [QvpOrnamentDraw]?
+    private var dressedRevision: UInt32 = 0
 
     /// Load a `NNN.qvp` page; bytes are copied by the engine.
     public init(bytes: Data) throws {
@@ -99,6 +101,119 @@ public final class QvpPage {
             out.append(m)
         }
         paths = out; return out
+    }
+
+    // ── dress: another mushaf's ornaments ──
+
+    /// Put a mushaf's ornaments on this page. Returns the readout, or nil when
+    /// the set has no such style. Replaces any previous dress.
+    ///
+    /// `colors` is by part NAME; the design's own printed colour is kept for
+    /// every part left out.
+    @discardableResult
+    public func dress(_ ornaments: QvpOrnaments, style: Int = 0, gap: Float = 5,
+                      lineArt: Bool = false, ayahMarks: Bool = true, surahHeaders: Bool = true,
+                      pageFrame: Bool = true, colors: [String: UInt32] = [:]) -> QvpDress? {
+        guard style >= 0, style < ornaments.styles.count else { return nil }
+        let parts = ornaments.styles[style].parts
+        var pairs: [UInt32] = []
+        for (name, rgba) in colors {
+            if let k = parts.firstIndex(where: { $0.name == name }) { pairs.append(UInt32(k)); pairs.append(rgba) }
+        }
+        let ok: UInt32 = pairs.withUnsafeBufferPointer { cp in
+            var spec = QvpDressSpec(style: UInt32(style), gap: gap,
+                                    line_art: lineArt ? 1 : 0, ayah_marks: ayahMarks ? 1 : 0,
+                                    surah_headers: surahHeaders ? 1 : 0, page_frame: pageFrame ? 1 : 0,
+                                    colors: pairs.isEmpty ? nil : cp.baseAddress, n_colors: UInt32(pairs.count / 2))
+            return qvp_dress(p, ornaments.handle, &spec)
+        }
+        guard ok != 0 else { return nil }
+        dressed = nil
+        return dressInfo()
+    }
+
+    /// Take the ornaments off: the printed rings come back and the viewBox
+    /// returns to the page's own.
+    public func undress() { qvp_undress(p); dressed = nil }
+
+    /// Bumped whenever the ornament layer is rebuilt — a new dress, or a layout
+    /// that respaced the page under the border. 0 when the page is undressed.
+    public var dressRevision: UInt32 {
+        var d = QvpDressInfo()
+        return qvp_dress_info(p, &d) != 0 ? d.revision : 0
+    }
+
+    /// The readout, or nil when the page is not dressed.
+    public func dressInfo() -> QvpDress? {
+        var d = QvpDressInfo()
+        guard qvp_dress_info(p, &d) != 0 else { return nil }
+        return QvpDress(style: Int(d.style), ayahMarks: Int(d.n_ayah_marks), surahHeaders: Int(d.n_surah_headers),
+                        frameRepeats: Int(d.n_frame_repeats), frameStretched: d.frame_stretched != 0, nDraws: Int(d.n_draws),
+                        revision: d.revision, viewBox: (d.view_box.0, d.view_box.1, d.view_box.2, d.view_box.3))
+    }
+
+    /// The ornament display list, in page units, as CGPath + paint. DRAW IT
+    /// BEHIND THE PAGE INK: that is what keeps the print's own ayah numerals on
+    /// top of whatever replaced the rings around them.
+    public func dressGeometry() -> [QvpOrnamentDraw] {
+        // A LAYOUT REBUILDS THIS LAYER: the border is drawn around the laid-out
+        // page, so a cache kept only until the next dress() would go stale under
+        // a resize. The engine's revision is what says so.
+        let rev = dressRevision
+        if let dressed, dressedRevision == rev { return dressed }
+        dressedRevision = rev
+        var g = QvpDressGeometry(); qvp_dress_geometry(p, &g)
+        guard g.n_draws > 0, let tab = g.table, let opp = g.ops, let ptp = g.pts else { dressed = []; return [] }
+        let t = UnsafeBufferPointer(start: tab, count: Int(g.n_draws) * 9)
+        let o = UnsafeBufferPointer(start: opp, count: Int(g.ops_len))
+        let v = UnsafeBufferPointer(start: ptp, count: Int(g.pts_len))
+        var out: [QvpOrnamentDraw] = []; out.reserveCapacity(Int(g.n_draws))
+        for i in 0..<Int(g.n_draws) {
+            let m = CGMutablePath()
+            var k = Int(t[i * 9]); let ke = k + Int(t[i * 9 + 1]); var j = Int(t[i * 9 + 2])
+            while k < ke {
+                switch o[k] {
+                case 0: m.move(to: CGPoint(x: CGFloat(v[j]), y: CGFloat(v[j + 1]))); j += 2
+                case 1: m.addLine(to: CGPoint(x: CGFloat(v[j]), y: CGFloat(v[j + 1]))); j += 2
+                case 2: m.addQuadCurve(to: CGPoint(x: CGFloat(v[j + 2]), y: CGFloat(v[j + 3])), control: CGPoint(x: CGFloat(v[j]), y: CGFloat(v[j + 1]))); j += 4
+                case 3: m.addCurve(to: CGPoint(x: CGFloat(v[j + 4]), y: CGFloat(v[j + 5])), control1: CGPoint(x: CGFloat(v[j]), y: CGFloat(v[j + 1])), control2: CGPoint(x: CGFloat(v[j + 2]), y: CGFloat(v[j + 3]))); j += 6
+                case 4: m.closeSubpath()
+                default: break
+                }
+                k += 1
+            }
+            let flags = t[i * 9 + 5]
+            let line = t[i * 9 + 8]
+            out.append(QvpOrnamentDraw(path: m, color: t[i * 9 + 4], kind: OrnamentKind(rawValue: Int(flags & 0xff)) ?? .pageFrame,
+                                       evenOdd: flags & 0x100 != 0, stroke: flags & 0x200 != 0,
+                                       strokeWidth: Float(bitPattern: t[i * 9 + 6]), part: Int(t[i * 9 + 7]),
+                                       line: line == 0xffff_ffff ? -1 : Int(line)))
+        }
+        dressed = out; return out
+    }
+
+    /// How much bigger the dressed page is than the laid-out content, on each
+    /// side, in viewport px through the current layout: (left, top, right, bottom).
+    /// Fit `content + overflow` or a border is cropped off; an undressed page
+    /// answers zeroes.
+    public func dressOverflow() -> (Float, Float, Float, Float) {
+        var v = [Float](repeating: 0, count: 4)
+        v.withUnsafeMutableBufferPointer { qvp_dress_overflow(p, $0.baseAddress) }
+        return (v[0], v[1], v[2], v[3])
+    }
+
+    /// The page's viewBox (x, y, w, h). A dressed page's border grows it.
+    public func viewBox() -> (Float, Float, Float, Float) {
+        var v = [Float](repeating: 0, count: 4)
+        v.withUnsafeMutableBufferPointer { qvp_page_view_box(p, $0.baseAddress) }
+        return (v[0], v[1], v[2], v[3])
+    }
+
+    /// The box the page's text occupies (x0, y0, x1, y1) in page units.
+    public func contentBox() -> (Float, Float, Float, Float) {
+        var v = [Float](repeating: 0, count: 4)
+        v.withUnsafeMutableBufferPointer { qvp_content_box(p, $0.baseAddress) }
+        return (v[0], v[1], v[2], v[3])
     }
 
     // ── words / text ──
@@ -323,4 +438,46 @@ public final class QvpAtlas {
         return ns.compactMap { surah(Int($0)) }
     }
     public func json() -> String { var s = QvpStr(); qvp_atlas_json(p, &s); return s.string }
+}
+
+/// The ornaments of other printed mushafs, from `ornaments.qvo`.
+///
+/// NONE OF THESE OUTLINES IS PART OF A QVP PAGE. They are traced from scans of
+/// other prints, and each style says what it may be redistributed under — read
+/// `licence` before you publish a page wearing them.
+public final class QvpOrnaments {
+    private var h: OpaquePointer?
+    public private(set) var styles: [QvpOrnamentStyle] = []
+
+    /// Load an `ornaments.qvo` set; bytes are copied by the engine.
+    public init(bytes: Data) throws {
+        h = bytes.withUnsafeBytes { qvp_ornaments_load($0.bindMemory(to: UInt8.self).baseAddress, $0.count) }
+        guard let h else { throw QvpError.badOrnaments }
+        styles = (0..<Int(qvp_ornament_styles(h))).map { i in
+            var s = QvpFFI.QvpOrnamentStyle()
+            _ = qvp_ornament_style(h, UInt32(i), &s)
+            let parts = (0..<Int(s.n_parts)).map { k -> QvpOrnamentPart in
+                var pt = QvpFFI.QvpOrnamentPart()
+                _ = qvp_ornament_part(h, UInt32(i), UInt32(k), &pt)
+                return QvpOrnamentPart(index: k, name: pt.name.string, color: pt.color, stroke: pt.stroke != 0)
+            }
+            return QvpOrnamentStyle(index: i, name: s.name.string, riwayah: s.riwayah.string,
+                                    hasAyahMark: s.assets & 1 != 0, hasSurahHeader: s.assets & 2 != 0,
+                                    hasPageFrame: s.assets & 4 != 0, tiles: s.assets & 8 != 0,
+                                    licence: QvpOrnamentLicence(id: s.license_id.string, status: s.license_status.string,
+                                                                redistributable: s.redistributable != 0,
+                                                                attribution: s.attribution.string),
+                                    parts: parts)
+        }
+    }
+    deinit { close() }
+    public func close() { if let o = h { qvp_ornaments_free(o); h = nil } }
+    internal var handle: OpaquePointer { h! }
+    public func find(_ name: String) -> QvpOrnamentStyle? {
+        let i = name.withCString { cs -> Int32 in
+            let n = strlen(cs)
+            return cs.withMemoryRebound(to: UInt8.self, capacity: n) { qvp_ornament_find_style(handle, $0, UInt32(n)) }
+        }
+        return i < 0 ? nil : styles[Int(i)]
+    }
 }

@@ -534,10 +534,92 @@ final class QvpPageC extends ffi.Opaque {}
 /// Opaque `QvpAtlas`.
 final class QvpAtlasC extends ffi.Opaque {}
 
+/// Opaque `QvpOrnaments`.
+final class QvpOrnamentsC extends ffi.Opaque {}
+
+/// `{ uint32_t assets, n_parts, redistributable, _pad; QvpStr name, riwayah, license_id, license_status, attribution; }`
+final class QvpOrnamentStyleC extends ffi.Struct {
+  @ffi.Uint32()
+  external int assets;
+  @ffi.Uint32()
+  external int nParts;
+  @ffi.Uint32()
+  external int redistributable;
+  @ffi.Uint32()
+  external int pad;
+  external QvpStrC name;
+  external QvpStrC riwayah;
+  external QvpStrC licenseId;
+  external QvpStrC licenseStatus;
+  external QvpStrC attribution;
+}
+
+/// `{ uint32_t color, stroke; QvpStr name; }`
+final class QvpOrnamentPartC extends ffi.Struct {
+  @ffi.Uint32()
+  external int color;
+  @ffi.Uint32()
+  external int stroke;
+  external QvpStrC name;
+}
+
+/// `{ uint32_t style; float gap; uint32_t line_art, ayah_marks, surah_headers, page_frame; const uint32_t* colors; uint32_t n_colors; }`
+final class QvpDressSpecC extends ffi.Struct {
+  @ffi.Uint32()
+  external int style;
+  @ffi.Float()
+  external double gap;
+  @ffi.Uint32()
+  external int lineArt;
+  @ffi.Uint32()
+  external int ayahMarks;
+  @ffi.Uint32()
+  external int surahHeaders;
+  @ffi.Uint32()
+  external int pageFrame;
+  external ffi.Pointer<ffi.Uint32> colors;
+  @ffi.Uint32()
+  external int nColors;
+}
+
+/// `{ uint32_t style, n_ayah_marks, n_surah_headers, n_frame_repeats, frame_stretched, n_draws, revision; float view_box[4]; }`
+final class QvpDressInfoC extends ffi.Struct {
+  @ffi.Uint32()
+  external int style;
+  @ffi.Uint32()
+  external int nAyahMarks;
+  @ffi.Uint32()
+  external int nSurahHeaders;
+  @ffi.Uint32()
+  external int nFrameRepeats;
+  @ffi.Uint32()
+  external int frameStretched;
+  @ffi.Uint32()
+  external int nDraws;
+  @ffi.Uint32()
+  external int revision;
+  @ffi.Array.multi([4])
+  external ffi.Array<ffi.Float> viewBox;
+}
+
+/// `{ const uint8_t* ops; uint32_t ops_len; const float* pts; uint32_t pts_len; const uint32_t* table; uint32_t n_draws; }`
+final class QvpDressGeometryC extends ffi.Struct {
+  external ffi.Pointer<ffi.Uint8> ops;
+  @ffi.Uint32()
+  external int opsLen;
+  external ffi.Pointer<ffi.Float> pts;
+  @ffi.Uint32()
+  external int ptsLen;
+  external ffi.Pointer<ffi.Uint32> table;
+  @ffi.Uint32()
+  external int nDraws;
+}
+
 // ───────────── C function typedefs (native ↔ dart) ─────────────
 
 typedef PtrPage = ffi.Pointer<QvpPageC>;
 typedef PtrAtlas = ffi.Pointer<QvpAtlasC>;
+typedef PtrOrnaments = ffi.Pointer<QvpOrnamentsC>;
 typedef PtrU8 = ffi.Pointer<ffi.Uint8>;
 typedef PtrU16 = ffi.Pointer<ffi.Uint16>;
 typedef PtrU32 = ffi.Pointer<ffi.Uint32>;
@@ -733,6 +815,28 @@ final class QvpBindings {
       ffi.Int32 Function(PtrPage, PtrTarget, ffi.Float, ffi.Uint32, ffi.Pointer<QvpCropBoxC>), int Function(PtrPage, PtrTarget, double, int, ffi.Pointer<QvpCropBoxC>)>('qvp_crop_box');
   late final int Function(PtrPage, PtrTarget, double, int, int, PtrStr) cropSvg = lib.lookupFunction<
       ffi.Int32 Function(PtrPage, PtrTarget, ffi.Float, ffi.Uint32, ffi.Uint32, PtrStr), int Function(PtrPage, PtrTarget, double, int, int, PtrStr)>('qvp_crop_svg');
+
+  // dress: another mushaf's ornaments
+  late final PtrOrnaments Function(PtrU8, int) ornamentsLoad =
+      lib.lookupFunction<PtrOrnaments Function(PtrU8, ffi.Size), PtrOrnaments Function(PtrU8, int)>('qvp_ornaments_load');
+  late final void Function(PtrOrnaments) ornamentsFree = lib.lookupFunction<ffi.Void Function(PtrOrnaments), void Function(PtrOrnaments)>('qvp_ornaments_free');
+  late final int Function(PtrOrnaments) ornamentStyles = lib.lookupFunction<ffi.Uint32 Function(PtrOrnaments), int Function(PtrOrnaments)>('qvp_ornament_styles');
+  late final int Function(PtrOrnaments, PtrU8, int) ornamentFindStyle =
+      lib.lookupFunction<ffi.Int32 Function(PtrOrnaments, PtrU8, ffi.Uint32), int Function(PtrOrnaments, PtrU8, int)>('qvp_ornament_find_style');
+  late final int Function(PtrOrnaments, int, ffi.Pointer<QvpOrnamentStyleC>) ornamentStyle =
+      lib.lookupFunction<ffi.Int32 Function(PtrOrnaments, ffi.Uint32, ffi.Pointer<QvpOrnamentStyleC>), int Function(PtrOrnaments, int, ffi.Pointer<QvpOrnamentStyleC>)>('qvp_ornament_style');
+  late final int Function(PtrOrnaments, int, int, ffi.Pointer<QvpOrnamentPartC>) ornamentPart =
+      lib.lookupFunction<ffi.Int32 Function(PtrOrnaments, ffi.Uint32, ffi.Uint32, ffi.Pointer<QvpOrnamentPartC>), int Function(PtrOrnaments, int, int, ffi.Pointer<QvpOrnamentPartC>)>('qvp_ornament_part');
+  late final int Function(PtrPage, PtrOrnaments, ffi.Pointer<QvpDressSpecC>) dress =
+      lib.lookupFunction<ffi.Uint32 Function(PtrPage, PtrOrnaments, ffi.Pointer<QvpDressSpecC>), int Function(PtrPage, PtrOrnaments, ffi.Pointer<QvpDressSpecC>)>('qvp_dress');
+  late final void Function(PtrPage) undress = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_undress');
+  late final int Function(PtrPage, ffi.Pointer<QvpDressInfoC>) dressInfo =
+      lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Pointer<QvpDressInfoC>), int Function(PtrPage, ffi.Pointer<QvpDressInfoC>)>('qvp_dress_info');
+  late final void Function(PtrPage, ffi.Pointer<QvpDressGeometryC>) dressGeometry =
+      lib.lookupFunction<ffi.Void Function(PtrPage, ffi.Pointer<QvpDressGeometryC>), void Function(PtrPage, ffi.Pointer<QvpDressGeometryC>)>('qvp_dress_geometry');
+  late final void Function(PtrPage, PtrF32) pageViewBox = lib.lookupFunction<ffi.Void Function(PtrPage, PtrF32), void Function(PtrPage, PtrF32)>('qvp_page_view_box');
+  late final void Function(PtrPage, PtrF32) dressOverflow = lib.lookupFunction<ffi.Void Function(PtrPage, PtrF32), void Function(PtrPage, PtrF32)>('qvp_dress_overflow');
+  late final void Function(PtrPage, PtrF32) contentBox = lib.lookupFunction<ffi.Void Function(PtrPage, PtrF32), void Function(PtrPage, PtrF32)>('qvp_content_box');
 
   // atlas
   late final PtrAtlas Function(PtrU8, int) atlasLoad = lib.lookupFunction<PtrAtlas Function(PtrU8, ffi.Size), PtrAtlas Function(PtrU8, int)>('qvp_atlas_load');

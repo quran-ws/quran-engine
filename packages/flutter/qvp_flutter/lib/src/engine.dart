@@ -524,6 +524,115 @@ final class QvpAtlasRubuAlHizb {
   String get ayahKey => '$surah:$ayah';
 }
 
+/// What a mushaf's ornaments may be redistributed under. Traced ornaments
+/// belong to their publisher; read this before publishing a dressed page.
+@immutable
+final class QvpOrnamentLicence {
+  const QvpOrnamentLicence({required this.id, required this.status, required this.redistributable, required this.attribution});
+  final String id, status, attribution;
+  final bool redistributable;
+}
+
+/// One printed colour of a design. `slot` is the window the design leaves open
+/// for the thing it frames, and has no colour of its own (alpha 0).
+@immutable
+final class QvpOrnamentPart {
+  const QvpOrnamentPart({required this.index, required this.name, required this.color, required this.stroke});
+  final int index, color;
+  final String name;
+  final bool stroke;
+}
+
+/// One mushaf's ornaments.
+@immutable
+final class QvpOrnamentStyle {
+  const QvpOrnamentStyle({
+    required this.index,
+    required this.name,
+    required this.riwayah,
+    required this.hasAyahMark,
+    required this.hasSurahHeader,
+    required this.hasPageFrame,
+    required this.tiles,
+    required this.licence,
+    required this.parts,
+  });
+  final int index;
+  final String name, riwayah;
+  final bool hasAyahMark, hasSurahHeader, hasPageFrame;
+
+  /// The frame is assembled from a corner and two repeat units rather than
+  /// stretched whole.
+  final bool tiles;
+  final QvpOrnamentLicence licence;
+  final List<QvpOrnamentPart> parts;
+}
+
+/// What dressing the page did.
+@immutable
+final class QvpDress {
+  const QvpDress({
+    required this.style,
+    required this.ayahMarks,
+    required this.surahHeaders,
+    required this.frameRepeats,
+    required this.frameStretched,
+    required this.nDraws,
+    required this.revision,
+    required this.viewBox,
+  });
+  final int style, ayahMarks, surahHeaders, frameRepeats, nDraws;
+
+  /// Bumped on every rebuild of the display list; cache a raster against it.
+  final int revision;
+  final bool frameStretched;
+
+  /// The page's viewBox after the border grew it: x, y, w, h in page units.
+  final (double, double, double, double) viewBox;
+}
+
+/// What an ornament replaces.
+abstract final class QvpOrnamentKind {
+  static const int ayahMark = 0;
+  static const int surahHeader = 1;
+  static const int pageFrame = 2;
+}
+
+/// One placed ornament outline, in page units.
+@immutable
+final class QvpOrnamentDraw {
+  const QvpOrnamentDraw({
+    required this.opStart,
+    required this.opCount,
+    required this.ptStart,
+    required this.ptCount,
+    required this.color,
+    required this.kind,
+    required this.evenOdd,
+    required this.stroke,
+    required this.strokeWidth,
+    required this.part,
+    required this.line,
+  });
+  final int opStart, opCount, ptStart, ptCount, color, kind, part;
+  final bool evenOdd, stroke;
+  final double strokeWidth;
+
+  /// The page line it was measured against, or -1 for the border, which is
+  /// placed from the page and does not move with a line.
+  final int line;
+}
+
+/// The ornament display list of a dressed page, in page units.
+@immutable
+final class QvpDressGeometry {
+  const QvpDressGeometry({required this.ops, required this.pts, required this.draws});
+  final Uint8List ops;
+  final Float32List pts;
+  final List<QvpOrnamentDraw> draws;
+  bool get isEmpty => draws.isEmpty;
+}
+
 /// One entry of [QvpPage.styled].
 typedef QvpStyledPath = ({int path, int color});
 
@@ -648,6 +757,17 @@ class QvpEngine {
     return QvpPage._(this, h);
   }
 
+  /// Decodes an ornament set (`ornaments.qvo`) — the medallions, surah bands
+  /// and page borders of other printed mushafs. Throws on a bad file.
+  ///
+  /// NONE OF THESE OUTLINES IS PART OF A QVP PAGE: they are traced from scans
+  /// of other prints, each with a licence of its own.
+  QvpOrnaments loadOrnaments(Uint8List bytes) {
+    final h = withBytes(bytes, (p, n) => b.ornamentsLoad(p, n));
+    if (h == ffi.nullptr) throw const FormatException('qvp_ornaments_load failed');
+    return QvpOrnaments._(this, h);
+  }
+
   /// Decodes an atlas (`atlas.qva`). Throws on a bad file.
   QvpAtlas loadAtlas(Uint8List bytes) {
     final h = withBytes(bytes, (p, n) => b.atlasLoad(p, n));
@@ -762,6 +882,9 @@ class QvpPage extends ChangeNotifier {
   /// Bumped on every mutating call.
   int revision = 0;
 
+  QvpDressGeometry? _dress;
+  int _dressRevision = -1;
+
   bool get isDisposed => _h == ffi.nullptr;
 
   ffi.Pointer<QvpPageC> get _p {
@@ -778,6 +901,171 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Frees the native page. The copied geometry and info lists stay usable.
+  // ── dress: another mushaf's ornaments ──
+
+  /// Put a mushaf's ornaments on this page. Returns the readout, or null when
+  /// the set has no such style. Replaces any previous dress.
+  ///
+  /// [colors] is by part NAME; the design's own printed colour is kept for
+  /// every part left out.
+  QvpDress? dress(
+    QvpOrnaments ornaments, {
+    int style = 0,
+    double gap = 5,
+    bool lineArt = false,
+    bool ayahMarks = true,
+    bool surahHeaders = true,
+    bool pageFrame = true,
+    Map<String, Object>? colors,
+  }) {
+    if (style < 0 || style >= ornaments.styles.length) return null;
+    final parts = ornaments.styles[style].parts;
+    final pairs = <int>[];
+    for (final e in (colors ?? const <String, Object>{}).entries) {
+      final k = parts.indexWhere((p) => p.name == e.key);
+      if (k >= 0) pairs.addAll([k, rgba(e.value)]);
+    }
+    final spec = pffi.calloc<QvpDressSpecC>();
+    try {
+      final ok = engine.withU32(pairs, (cp, n) {
+        final r = spec.ref;
+        r.style = style;
+        r.gap = gap;
+        r.lineArt = lineArt ? 1 : 0;
+        r.ayahMarks = ayahMarks ? 1 : 0;
+        r.surahHeaders = surahHeaders ? 1 : 0;
+        r.pageFrame = pageFrame ? 1 : 0;
+        r.colors = pairs.isEmpty ? ffi.nullptr : cp;
+        r.nColors = pairs.length ~/ 2;
+        return engine.b.dress(_p, ornaments._o, spec);
+      });
+      if (ok == 0) return null;
+    } finally {
+      pffi.calloc.free(spec);
+    }
+    _dress = null;
+    _touch();
+    return dressInfo();
+  }
+
+  /// Take the ornaments off: the printed rings come back and the viewBox
+  /// returns to the page's own.
+  void undress() {
+    engine.b.undress(_p);
+    _dress = null;
+    _touch();
+  }
+
+  /// The readout, or null when the page is not dressed.
+  QvpDress? dressInfo() {
+    final out = pffi.calloc<QvpDressInfoC>();
+    try {
+      if (engine.b.dressInfo(_p, out) == 0) return null;
+      final r = out.ref;
+      return QvpDress(
+        style: r.style,
+        ayahMarks: r.nAyahMarks,
+        surahHeaders: r.nSurahHeaders,
+        frameRepeats: r.nFrameRepeats,
+        frameStretched: r.frameStretched != 0,
+        nDraws: r.nDraws,
+        revision: r.revision,
+        viewBox: (r.viewBox[0], r.viewBox[1], r.viewBox[2], r.viewBox[3]),
+      );
+    } finally {
+      pffi.calloc.free(out);
+    }
+  }
+
+  /// Bumped whenever the ornament layer is rebuilt — a new dress, or a layout
+  /// that respaced the page under the border. 0 when undressed.
+  int dressRevision() => dressInfo()?.revision ?? 0;
+
+  /// The ornament display list, in page units. DRAW IT BEHIND THE PAGE INK:
+  /// that is what keeps the print's own ayah numerals on top of whatever
+  /// replaced the rings around them.
+  QvpDressGeometry dressGeometry() {
+    // A LAYOUT REBUILDS THIS LAYER: the border is drawn around the laid-out
+    // page, so a cache kept only until the next dress() goes stale on a resize.
+    final rev = dressRevision();
+    final cached = _dress;
+    if (cached != null && _dressRevision == rev) return cached;
+    _dressRevision = rev;
+    final g = pffi.calloc<QvpDressGeometryC>();
+    try {
+      engine.b.dressGeometry(_p, g);
+      final r = g.ref;
+      if (r.nDraws == 0) {
+        return _dress = QvpDressGeometry(ops: Uint8List(0), pts: Float32List(0), draws: const []);
+      }
+      final table = r.table.asTypedList(r.nDraws * 9);
+      final asFloat = Float32List.view(Uint32List.fromList(table).buffer);
+      final draws = List<QvpOrnamentDraw>.generate(r.nDraws, (i) {
+        final flags = table[i * 9 + 5];
+        final line = table[i * 9 + 8];
+        return QvpOrnamentDraw(
+          opStart: table[i * 9],
+          opCount: table[i * 9 + 1],
+          ptStart: table[i * 9 + 2],
+          ptCount: table[i * 9 + 3],
+          color: table[i * 9 + 4],
+          kind: flags & 0xff,
+          evenOdd: flags & 0x100 != 0,
+          stroke: flags & 0x200 != 0,
+          strokeWidth: asFloat[i * 9 + 6],
+          part: table[i * 9 + 7],
+          line: line == 0xffffffff ? -1 : line,
+        );
+      }, growable: false);
+      return _dress = QvpDressGeometry(
+        ops: Uint8List.fromList(r.ops.asTypedList(r.opsLen)),
+        pts: Float32List.fromList(r.pts.asTypedList(r.ptsLen)),
+        draws: draws,
+      );
+    } finally {
+      pffi.calloc.free(g);
+    }
+  }
+
+  /// How much bigger the dressed page is than the laid-out content, on each
+  /// side, in viewport px through the current layout: (left, top, right, bottom).
+  /// Fit `content + overflow` or a border is cropped off; an undressed page
+  /// answers zeroes.
+  (double, double, double, double) dressOverflow() {
+    final p = pffi.calloc<ffi.Float>(4);
+    try {
+      engine.b.dressOverflow(_p, p);
+      final v = p.asTypedList(4);
+      return (v[0], v[1], v[2], v[3]);
+    } finally {
+      pffi.calloc.free(p);
+    }
+  }
+
+  /// The page's viewBox: (x, y, w, h). A dressed page's border grows it.
+  (double, double, double, double) viewBox() {
+    final p = pffi.calloc<ffi.Float>(4);
+    try {
+      engine.b.pageViewBox(_p, p);
+      final v = p.asTypedList(4);
+      return (v[0], v[1], v[2], v[3]);
+    } finally {
+      pffi.calloc.free(p);
+    }
+  }
+
+  /// The box the page's text occupies: (x0, y0, x1, y1) in page units.
+  (double, double, double, double) contentBox() {
+    final p = pffi.calloc<ffi.Float>(4);
+    try {
+      engine.b.contentBox(_p, p);
+      final v = p.asTypedList(4);
+      return (v[0], v[1], v[2], v[3]);
+    } finally {
+      pffi.calloc.free(p);
+    }
+  }
+
   void free() {
     if (_h != ffi.nullptr) {
       engine.b.pageFree(_h);
@@ -1581,4 +1869,72 @@ class QvpAtlas {
     _b.atlasJson(_a, engine._str);
     return engine._s();
   }
+}
+
+// ───────────── ornaments ─────────────
+
+/// The ornaments of other printed mushafs, from `ornaments.qvo`.
+///
+/// NONE OF THESE OUTLINES IS PART OF A QVP PAGE. They are traced from scans of
+/// other prints, and each style says what it may be redistributed under — read
+/// [QvpOrnamentStyle.licence] before you publish a page wearing them.
+class QvpOrnaments {
+  QvpOrnaments._(this.engine, this._h) {
+    final st = pffi.calloc<QvpOrnamentStyleC>();
+    final pt = pffi.calloc<QvpOrnamentPartC>();
+    try {
+      final n = engine.b.ornamentStyles(_h);
+      styles = List<QvpOrnamentStyle>.generate(n, (i) {
+        engine.b.ornamentStyle(_h, i, st);
+        final r = st.ref;
+        final nParts = r.nParts;
+        return QvpOrnamentStyle(
+          index: i,
+          name: QvpEngine.str(r.name),
+          riwayah: QvpEngine.str(r.riwayah),
+          hasAyahMark: r.assets & 1 != 0,
+          hasSurahHeader: r.assets & 2 != 0,
+          hasPageFrame: r.assets & 4 != 0,
+          tiles: r.assets & 8 != 0,
+          licence: QvpOrnamentLicence(
+            id: QvpEngine.str(r.licenseId),
+            status: QvpEngine.str(r.licenseStatus),
+            redistributable: r.redistributable != 0,
+            attribution: QvpEngine.str(r.attribution),
+          ),
+          parts: List<QvpOrnamentPart>.generate(nParts, (k) {
+            engine.b.ornamentPart(_h, i, k, pt);
+            final p = pt.ref;
+            return QvpOrnamentPart(index: k, name: QvpEngine.str(p.name), color: p.color, stroke: p.stroke != 0);
+          }, growable: false),
+        );
+      }, growable: false);
+    } finally {
+      pffi.calloc.free(st);
+      pffi.calloc.free(pt);
+    }
+  }
+
+  final QvpEngine engine;
+  ffi.Pointer<QvpOrnamentsC> _h;
+  late final List<QvpOrnamentStyle> styles;
+
+  ffi.Pointer<QvpOrnamentsC> get _o {
+    assert(_h != ffi.nullptr, 'QvpOrnaments used after dispose()');
+    return _h;
+  }
+
+  QvpOrnamentStyle? find(String name) {
+    final i = engine.withString(name, (p, n) => engine.b.ornamentFindStyle(_o, p, n));
+    return i < 0 ? null : styles[i];
+  }
+
+  void free() {
+    if (_h != ffi.nullptr) {
+      engine.b.ornamentsFree(_h);
+      _h = ffi.nullptr;
+    }
+  }
+
+  void dispose() => free();
 }

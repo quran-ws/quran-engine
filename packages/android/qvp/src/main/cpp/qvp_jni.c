@@ -11,6 +11,7 @@
 #define FN(name) JNIEXPORT JNICALL Java_net_quranpedia_qvp_QvpNative_##name
 #define PG(h) ((QvpPage*)(intptr_t)(h))
 #define AT(h) ((QvpAtlas*)(intptr_t)(h))
+#define ORN(h) ((QvpOrnaments*)(intptr_t)(h))
 
 static jfloatArray floats(JNIEnv* env, const float* v, jsize n) { jfloatArray a = (*env)->NewFloatArray(env, n); if (n) (*env)->SetFloatArrayRegion(env, a, 0, n, v); return a; }
 static jintArray ints(JNIEnv* env, const jint* v, jsize n) { jintArray a = (*env)->NewIntArray(env, n); if (n) (*env)->SetIntArrayRegion(env, a, 0, n, v); return a; }
@@ -334,6 +335,79 @@ jintArray FN(atlasDivision)(JNIEnv* env, jclass c, jlong h, jint kind, jint n) {
 jint FN(atlasDivisionAt)(JNIEnv* env, jclass c, jlong h, jint kind, jint s, jint a) { return qvp_atlas_division_at(AT(h), (uint8_t)kind, (uint16_t)s, (uint16_t)a); }
 jintArray FN(atlasPagesOfJuz)(JNIEnv* env, jclass c, jlong h, jint n) { uint16_t o[2]; if (!qvp_atlas_pages_of_juz(AT(h), (uint16_t)n, o)) return NULL; jint v[2] = { o[0], o[1] }; return ints(env, v, 2); }
 jintArray FN(atlasFindSurah)(JNIEnv* env, jclass c, jlong h, jstring text) { uint32_t n; uint8_t* b = jbytes(env, text, &n); uint16_t o[128]; uint32_t k = qvp_atlas_find_surah(AT(h), b, n, o, 128); free(b); if (k > 128) k = 128; jint v[128]; for (uint32_t i = 0; i < k; i++) v[i] = o[i]; return ints(env, v, k); }
+
+
+/* ───────── dress: another mushaf's ornaments ───────── */
+jlong FN(ornamentsLoad)(JNIEnv* env, jclass c, jbyteArray bytes) {
+    jsize n = (*env)->GetArrayLength(env, bytes);
+    jbyte* p = (*env)->GetByteArrayElements(env, bytes, NULL);
+    QvpOrnaments* o = qvp_ornaments_load((const uint8_t*)p, (size_t)n);
+    (*env)->ReleaseByteArrayElements(env, bytes, p, JNI_ABORT);
+    return (jlong)(intptr_t)o;
+}
+void FN(ornamentsFree)(JNIEnv* env, jclass c, jlong h) { qvp_ornaments_free(ORN(h)); }
+jint FN(ornamentStyles)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_ornament_styles(ORN(h)); }
+jint FN(ornamentFindStyle)(JNIEnv* env, jclass c, jlong h, jstring name) {
+    uint32_t n; uint8_t* b = jbytes(env, name, &n);
+    jint r = qvp_ornament_find_style(ORN(h), b, n);
+    free(b); return r;
+}
+/* {assets, nParts, redistributable} */
+jintArray FN(ornamentStyleInts)(JNIEnv* env, jclass c, jlong h, jint i) {
+    QvpOrnamentStyle s; if (!qvp_ornament_style(ORN(h), (uint32_t)i, &s)) return NULL;
+    jint v[3] = { (jint)s.assets, (jint)s.n_parts, (jint)s.redistributable };
+    return ints(env, v, 3);
+}
+/* {name, riwayah, licenceId, licenceStatus, attribution} */
+jobjectArray FN(ornamentStyleStrings)(JNIEnv* env, jclass c, jlong h, jint i) {
+    QvpOrnamentStyle s; if (!qvp_ornament_style(ORN(h), (uint32_t)i, &s)) return NULL;
+    jobjectArray arr = (*env)->NewObjectArray(env, 5, (*env)->FindClass(env, "java/lang/String"), NULL);
+    QvpStr all[5] = { s.name, s.riwayah, s.license_id, s.license_status, s.attribution };
+    for (int k = 0; k < 5; k++) (*env)->SetObjectArrayElement(env, arr, k, qstr(env, all[k]));
+    return arr;
+}
+/* {colour, stroke} */
+jintArray FN(ornamentPart)(JNIEnv* env, jclass c, jlong h, jint style, jint i) {
+    QvpOrnamentPart p; if (!qvp_ornament_part(ORN(h), (uint32_t)style, (uint32_t)i, &p)) return NULL;
+    jint v[2] = { (jint)p.color, (jint)p.stroke };
+    return ints(env, v, 2);
+}
+jstring FN(ornamentPartName)(JNIEnv* env, jclass c, jlong h, jint style, jint i) {
+    QvpOrnamentPart p; if (!qvp_ornament_part(ORN(h), (uint32_t)style, (uint32_t)i, &p)) return NULL;
+    return qstr(env, p.name);
+}
+/* colours: (part, rgba) pairs */
+jboolean FN(dress)(JNIEnv* env, jclass c, jlong h, jlong set, jint style, jfloat gap, jboolean lineArt,
+                   jboolean ayahMarks, jboolean surahHeaders, jboolean pageFrame, jintArray colors) {
+    jint* cp = NULL; jsize n = 0;
+    if (colors) { n = (*env)->GetArrayLength(env, colors); cp = (*env)->GetIntArrayElements(env, colors, NULL); }
+    QvpDressSpec spec = { (uint32_t)style, gap, lineArt, ayahMarks, surahHeaders, pageFrame, (const uint32_t*)cp, (uint32_t)(n / 2) };
+    uint32_t ok = qvp_dress(PG(h), (const QvpOrnaments*)(intptr_t)set, &spec);
+    if (cp) (*env)->ReleaseIntArrayElements(env, colors, cp, JNI_ABORT);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+void FN(undress)(JNIEnv* env, jclass c, jlong h) { qvp_undress(PG(h)); }
+/* {style, ayahMarks, surahHeaders, frameRepeats, frameStretched, nDraws, revision, vbX, vbY, vbW, vbH} */
+jfloatArray FN(dressInfo)(JNIEnv* env, jclass c, jlong h) {
+    QvpDressInfo d; if (!qvp_dress_info(PG(h), &d)) return NULL;
+    float v[11] = { (float)d.style, (float)d.n_ayah_marks, (float)d.n_surah_headers, (float)d.n_frame_repeats,
+                    (float)d.frame_stretched, (float)d.n_draws, (float)d.revision,
+                    d.view_box[0], d.view_box[1], d.view_box[2], d.view_box[3] };
+    return floats(env, v, 11);
+}
+jbyteArray FN(dressOps)(JNIEnv* env, jclass c, jlong h) {
+    QvpDressGeometry g; qvp_dress_geometry(PG(h), &g);
+    jbyteArray a = (*env)->NewByteArray(env, g.ops_len);
+    if (g.ops_len) (*env)->SetByteArrayRegion(env, a, 0, g.ops_len, (const jbyte*)g.ops);
+    return a;
+}
+jfloatArray FN(dressPts)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g; qvp_dress_geometry(PG(h), &g); return floats(env, g.pts, g.pts_len); }
+/* 9 ints per draw: opStart, opCount, ptStart, ptCount, colour, flags, strokeWidth (float bits), part, line */
+jintArray FN(dressTable)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g; qvp_dress_geometry(PG(h), &g); return ints(env, (const jint*)g.table, g.n_draws * 9); }
+jfloatArray FN(pageViewBox)(JNIEnv* env, jclass c, jlong h) { float v[4]; qvp_page_view_box(PG(h), v); return floats(env, v, 4); }
+/* {left, top, right, bottom} in viewport px */
+jfloatArray FN(dressOverflow)(JNIEnv* env, jclass c, jlong h) { float v[4]; qvp_dress_overflow(PG(h), v); return floats(env, v, 4); }
+jfloatArray FN(contentBox)(JNIEnv* env, jclass c, jlong h) { float v[4]; qvp_content_box(PG(h), v); return floats(env, v, 4); }
 
 /* ───────── names ───────── */
 jstring FN(markName)(JNIEnv* env, jclass c, jint m) { QvpStr s; qvp_mark_name((uint8_t)m, &s); return qstr(env, s); }

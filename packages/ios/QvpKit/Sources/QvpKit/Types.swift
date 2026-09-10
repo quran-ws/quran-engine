@@ -19,6 +19,8 @@ public enum HighlightMode: Int { case ink = 0, band, both }
 public enum BandHeight: Int { case pitch = 0, ink }
 public enum MaskMode: Int { case hide = 0, block, blur }
 public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rubuAlHizb }
+/// What an ornament replaces.
+public enum OrnamentKind: Int, CaseIterable { case ayahMark = 0, surahHeader, pageFrame }
 
 /// Mark ids by name (index = id; 255 = unknown).
 public let QVP_MARKS: [String] = ["", "fathah", "kasrah", "dammah", "tanwin_al_fath", "tanwin_al_kasr", "tanwin_al_damm", "shaddah", "sukun", "maddah", "hamzah", "hamzat_al_wasl", "omitted_alif", "small_waw", "small_yaa", "small_noon", "dot", "two_dots", "three_dots", "rounded_zero", "rectangular_zero", "waqf_jaiz_mustawi_al_tarafayn", "waqf_jaiz_waqf_awla", "waqf_jaiz_wasl_awla", "waqf_lazim", "waqf_al_muanaqah", "saktah", "small_meem", "hizb", "sajdah", "sajdah_mark", "sajdah_line", "seen_al_qiraah", "tashil", "ishmam", "imalah"]
@@ -185,6 +187,59 @@ public struct QvpRosette: Equatable { public let deco: Int, surah: Int, ayah: In
 public struct QvpSajdah: Equatable { public let deco: Int, surah: Int, ayah: Int, signPath: Int }
 public struct QvpMatch: Equatable { public let word: Int, index: Int, loose: Bool, wordKey: String, text: String }
 public struct QvpCropBox: Equatable { public let x0: Float, y0: Float, x1: Float, y1: Float, nWords: Int, ayahMarkDeco: Int }
+/// What a mushaf's ornaments may be redistributed under. Traced ornaments
+/// belong to their publisher; read this before publishing a dressed page.
+public struct QvpOrnamentLicence: Equatable {
+    public let id: String, status: String
+    public let redistributable: Bool
+    public let attribution: String
+}
+
+/// One printed colour of a design. `slot` is the window the design leaves open
+/// for the thing it frames, and has no colour of its own (alpha 0).
+public struct QvpOrnamentPart: Equatable {
+    public let index: Int, name: String, color: UInt32
+    public let stroke: Bool
+}
+
+/// One mushaf's ornaments.
+public struct QvpOrnamentStyle: Equatable {
+    public let index: Int, name: String, riwayah: String
+    public let hasAyahMark: Bool, hasSurahHeader: Bool, hasPageFrame: Bool
+    /// The frame is assembled from a corner and two repeat units rather than stretched whole.
+    public let tiles: Bool
+    public let licence: QvpOrnamentLicence
+    public let parts: [QvpOrnamentPart]
+}
+
+/// What dressing the page did. `viewBox` is x, y, w, h — the border grew it.
+public struct QvpDress: Equatable {
+    public let style: Int, ayahMarks: Int, surahHeaders: Int, frameRepeats: Int
+    public let frameStretched: Bool
+    public let nDraws: Int
+    /// Bumped on every rebuild of the display list; cache a raster against it.
+    public let revision: UInt32
+    public let viewBox: (Float, Float, Float, Float)
+    public static func == (a: QvpDress, b: QvpDress) -> Bool {
+        a.style == b.style && a.ayahMarks == b.ayahMarks && a.surahHeaders == b.surahHeaders
+            && a.frameRepeats == b.frameRepeats && a.frameStretched == b.frameStretched
+            && a.nDraws == b.nDraws && a.revision == b.revision && a.viewBox == b.viewBox
+    }
+}
+
+/// One placed ornament outline, in page units.
+public struct QvpOrnamentDraw {
+    public let path: CGPath
+    public let color: UInt32
+    public let kind: OrnamentKind
+    public let evenOdd: Bool, stroke: Bool
+    public let strokeWidth: Float
+    public let part: Int
+    /// The page line it was measured against, or -1 for the border, which is
+    /// placed from the page and does not move with a line.
+    public let line: Int
+}
+
 public struct QvpAtlasSurah: Equatable { public let n: Int, page: Int, ayahCount: Int, place: String, arabic: String, latin: String, english: String }
 public struct QvpAtlasRubuAlHizb: Equatable { public let rubuAlHizb: Int, surah: Int, ayah: Int, page: Int; public var ayahKey: String { "\(surah):\(ayah)" } }
 

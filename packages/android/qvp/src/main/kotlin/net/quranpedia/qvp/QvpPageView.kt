@@ -40,6 +40,9 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     var viewScale = 1f; var viewOx = 0f; var viewOy = 0f
     private var base: Bitmap? = null
     private var baseKey = ""
+    /** The dress, rasterised: it never changes while a highlight animates. */
+    private var ornBitmap: Bitmap? = null
+    private var ornKey = ""
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val m = Matrix()
     private val rect = RectF()
@@ -135,16 +138,32 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         p.layout(QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, lineGap, fillHeight))
         baseKey = ""; invalidate()
     }
+    /**
+     * Fit the content and centre it.
+     *
+     * A DRESSED PAGE IS BIGGER THAN ITS TEXT: the border was drawn around it, so
+     * fitting to the content box alone crops the border off. The engine says by
+     * how much, on all four sides, and nothing here has to know why.
+     */
     fun resetView() {
-        val l = page?.currentLayout
-        viewScale = if (l != null && l.contentH > height) height / l.contentH else 1f
-        viewOx = 0f; viewOy = if (l != null) ((height - l.contentH * viewScale) / 2f).coerceAtLeast(0f) else 0f
+        val p = page; val l = p?.currentLayout
+        if (p == null || l == null || width <= 0 || height <= 0) { viewScale = 1f; viewOx = 0f; viewOy = 0f; invalidate(); return }
+        val o = p.dressOverflow()
+        val left = o[0]; val top = o[1]; val right = o[2]; val bottom = o[3]
+        val w = l.contentW + left + right; val h = l.contentH + top + bottom
+        viewScale = minOf(if (h > height && h > 0) height / h else 1f, if (w > width && w > 0) width / w else 1f)
+        viewOx = ((width - w * viewScale) / 2f).coerceAtLeast(0f) + left * viewScale
+        viewOy = ((height - h * viewScale) / 2f).coerceAtLeast(0f) + top * viewScale
         invalidate()
     }
-    /** Matrix mapping page units of [line] to view px (layout + pan/zoom). */
+    /**
+     * Matrix mapping page units of [line] to view px (layout + pan/zoom). A
+     * negative line takes no line shift at all: that is the page's own frame,
+     * which the border is placed from and which no layout moves.
+     */
     fun lineMatrix(line: Int, out: Matrix = m): Matrix {
         val l = page?.currentLayout
-        val ls = l?.scale ?: 1f; val lox = l?.ox ?: 0f; val loy = (l?.oy ?: 0f) + (l?.lineDy?.getOrNull(line) ?: 0f) * ls
+        val ls = l?.scale ?: 1f; val lox = l?.ox ?: 0f; val loy = (l?.oy ?: 0f) + (if (line >= 0) l?.lineDy?.getOrNull(line) ?: 0f else 0f) * ls
         out.reset(); out.setScale(viewScale * ls, viewScale * ls); out.postTranslate(viewOx + viewScale * lox, viewOy + viewScale * loy)
         return out
     }
@@ -161,6 +180,45 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         flush(); canvas.restore()
     }
 
+    /**
+     * The ornament layer, BEHIND everything else. A draw carries the page line it
+     * was measured against, so it moves with that line's ink under a layout that
+     * respaces the page; the border belongs to no line and never moves.
+     *
+     * RASTERISED ONCE, like the base ink. A tiled border is hundreds of filled
+     * and stroked outlines and nothing about it changes while a highlight
+     * animates, so re-drawing it every frame is what makes playback stutter.
+     */
+    private fun drawOrnaments(canvas: Canvas, p: QvpPage) {
+        val rev = p.dressRevision()
+        if (rev == 0) { ornBitmap = null; ornKey = ""; return }
+        val key = "$viewScale|$viewOx|$viewOy|$rev|${width}x$height"
+        var b = ornBitmap
+        if (b == null || key != ornKey || b.width != width || b.height != height) {
+            if (width <= 0 || height <= 0) return
+            if (b == null || b.width != width || b.height != height) { b = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888); ornBitmap = b }
+            b.eraseColor(Color.TRANSPARENT)
+            val bc = Canvas(b)
+            bc.save()
+            var cur = -2
+            for (o in p.dressGeometry()) {
+                if (o.line != cur) { bc.restore(); bc.save(); bc.concat(lineMatrix(o.line)); cur = o.line }
+                paint.color = QvpColor.argb(o.color)
+                if (o.stroke) {
+                    paint.style = Paint.Style.STROKE; paint.strokeWidth = o.strokeWidth
+                    paint.strokeCap = Paint.Cap.ROUND; paint.strokeJoin = Paint.Join.ROUND
+                    bc.drawPath(o.path, paint)
+                    paint.style = Paint.Style.FILL
+                } else {
+                    bc.drawPath(o.path, paint)
+                }
+            }
+            bc.restore()
+            ornKey = key
+        }
+        canvas.drawBitmap(ornBitmap!!, 0f, 0f, null)
+    }
+
     override fun onDraw(canvas: Canvas) {
         val p = page ?: return
         if (p.currentLayout == null) relayout()
@@ -173,6 +231,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val ink = p.defaultInk
         val key = "$viewScale|$viewOx|$viewOy|$ink|${l.pitch}|${l.lineDy.contentHashCode()}|${styledSet.sorted().hashCode()}|$width|$height"
         if (paperColor != Color.TRANSPARENT) { paint.color = paperColor; canvas.drawRect(viewOx, viewOy, viewOx + l.contentW * viewScale, viewOy + l.contentH * viewScale, paint) }
+        drawOrnaments(canvas, p)
         val bands = p.highlightBoxes()
         drawBoxes(canvas, bands)
         var b = base

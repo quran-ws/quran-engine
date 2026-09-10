@@ -208,7 +208,123 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** standalone SVG with the current colours; background alpha 0 = transparent */
     fun cropSvg(t: Target, pad: Float = 2f, keepAyahMarks: Boolean = true, background: Int = 0): String? = QvpNative.cropSvg(h, t.arr, pad, keepAyahMarks, background)
 
+    // ── dress: another mushaf's ornaments ──
+    private var dressed: List<QvpOrnamentDraw>? = null
+    private var dressedRevision = -1
+
+    /**
+     * Put a mushaf's ornaments on this page. Returns the readout, or null when
+     * the set has no such style. Replaces any previous dress.
+     *
+     * `colors` is by part NAME; the design's own printed colour is kept for
+     * every part left out.
+     */
+    fun dress(
+        ornaments: QvpOrnaments,
+        style: Int = 0,
+        gap: Float = 5f,
+        lineArt: Boolean = false,
+        ayahMarks: Boolean = true,
+        surahHeaders: Boolean = true,
+        pageFrame: Boolean = true,
+        colors: Map<String, Int> = emptyMap(),
+    ): QvpDress? {
+        val st = ornaments.styles.getOrNull(style) ?: return null
+        val pairs = ArrayList<Int>(colors.size * 2)
+        for ((name, rgba) in colors) {
+            val k = st.parts.indexOfFirst { it.name == name }
+            if (k >= 0) { pairs.add(k); pairs.add(rgba) }
+        }
+        if (!QvpNative.dress(h, ornaments.handle, style, gap, lineArt, ayahMarks, surahHeaders, pageFrame, pairs.toIntArray())) return null
+        dressed = null
+        return dressInfo()
+    }
+    fun undress() { QvpNative.undress(h); dressed = null }
+    /** the readout, or null when the page is not dressed */
+    fun dressInfo(): QvpDress? = QvpNative.dressInfo(h)?.let {
+        QvpDress(it[0].toInt(), it[1].toInt(), it[2].toInt(), it[3].toInt(), it[4] > 0.5f, it[5].toInt(), it[6].toInt(), floatArrayOf(it[7], it[8], it[9], it[10]))
+    }
+    /**
+     * Bumped whenever the ornament layer is rebuilt — a new dress, or a layout
+     * that respaced the page under the border. 0 when the page is undressed.
+     */
+    fun dressRevision(): Int = dressInfo()?.revision ?: 0
+    /**
+     * The ornament display list, in page units. DRAW IT BEHIND THE PAGE INK:
+     * that is what keeps the print's own ayah numerals on top of whatever
+     * replaced the rings around them.
+     */
+    fun dressGeometry(): List<QvpOrnamentDraw> {
+        // A LAYOUT REBUILDS THIS LAYER: the border is drawn around the laid-out
+        // page, so a cache kept only until the next dress() goes stale on a resize.
+        val rev = dressRevision()
+        dressed?.let { if (dressedRevision == rev) return it }
+        dressedRevision = rev
+        val t = QvpNative.dressTable(h)
+        if (t.isEmpty()) { dressed = emptyList(); return emptyList() }
+        val o = QvpNative.dressOps(h); val v = QvpNative.dressPts(h)
+        val out = ArrayList<QvpOrnamentDraw>(t.size / 9)
+        for (i in 0 until t.size / 9) {
+            val p = Path(); var k = t[i * 9]; val ke = k + t[i * 9 + 1]; var j = t[i * 9 + 2]
+            while (k < ke) {
+                when (o[k].toInt()) {
+                    0 -> { p.moveTo(v[j], v[j + 1]); j += 2 }
+                    1 -> { p.lineTo(v[j], v[j + 1]); j += 2 }
+                    2 -> { p.quadTo(v[j], v[j + 1], v[j + 2], v[j + 3]); j += 4 }
+                    3 -> { p.cubicTo(v[j], v[j + 1], v[j + 2], v[j + 3], v[j + 4], v[j + 5]); j += 6 }
+                    4 -> p.close()
+                }
+                k++
+            }
+            val flags = t[i * 9 + 5]
+            if (flags and 0x100 != 0) p.fillType = Path.FillType.EVEN_ODD
+            val line = t[i * 9 + 8]
+            out.add(QvpOrnamentDraw(p, t[i * 9 + 4], flags and 0xff, flags and 0x200 != 0,
+                Float.fromBits(t[i * 9 + 6]), t[i * 9 + 7], if (line == -1) -1 else line))
+        }
+        dressed = out; return out
+    }
+    /**
+     * How much bigger the dressed page is than the laid-out content, on each
+     * side, in viewport px through the current layout: (left, top, right, bottom).
+     * Fit `content + overflow` or a border is cropped off; an undressed page
+     * answers zeroes.
+     */
+    fun dressOverflow(): FloatArray = QvpNative.dressOverflow(h)
+    /** the page's viewBox (x, y, w, h); a border grows it */
+    fun viewBox(): FloatArray = QvpNative.pageViewBox(h)
+    /** the box the page's text occupies (x0, y0, x1, y1) */
+    fun contentBox(): FloatArray = QvpNative.contentBox(h)
+
     override fun close() { if (h != 0L) { QvpNative.pageFree(h); h = 0 } }
+}
+
+/**
+ * The ornaments of other printed mushafs, from `ornaments.qvo`.
+ *
+ * NONE OF THESE OUTLINES IS PART OF A QVP PAGE. They are traced from scans of
+ * other prints, and each style says what it may be redistributed under — read
+ * [QvpOrnamentStyle.licence] before you publish a page wearing them.
+ */
+class QvpOrnaments(bytes: ByteArray) : AutoCloseable {
+    internal var handle: Long = QvpNative.ornamentsLoad(bytes)
+    init { require(handle != 0L) { "qvp_ornaments_load failed (not a QVO1 file?)" } }
+    val styles: List<QvpOrnamentStyle> = List(QvpNative.ornamentStyles(handle)) { i ->
+        val n = QvpNative.ornamentStyleInts(handle, i)!!
+        val s = QvpNative.ornamentStyleStrings(handle, i)!!
+        QvpOrnamentStyle(
+            i, s[0], s[1],
+            hasAyahMark = n[0] and 1 != 0, hasSurahHeader = n[0] and 2 != 0,
+            hasPageFrame = n[0] and 4 != 0, tiles = n[0] and 8 != 0,
+            licence = QvpOrnamentLicence(s[2], s[3], n[2] != 0, s[4]),
+            parts = List(n[1]) { k ->
+                val p = QvpNative.ornamentPart(handle, i, k)!!
+                QvpOrnamentPart(k, QvpNative.ornamentPartName(handle, i, k) ?: "", p[0], p[1] != 0)
+            },
+        )
+    }
+    fun find(name: String): QvpOrnamentStyle? = QvpNative.ornamentFindStyle(handle, name).let { if (it < 0) null else styles[it] }
+    override fun close() { if (handle != 0L) { QvpNative.ornamentsFree(handle); handle = 0 } }
 }
 
 /** Cross-page lookup from atlas.qva. */

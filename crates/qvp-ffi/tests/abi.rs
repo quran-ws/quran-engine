@@ -161,3 +161,155 @@ fn taxonomy_names_are_the_pipeline_vocabulary() {
         );
     }
 }
+
+/// One style with one square outline per asset, built in memory: enough to prove
+/// the whole dress path over the ABI without a licensed artwork fixture.
+fn ornament_bytes() -> Vec<u8> {
+    use qvp_core::qvp_format::ornaments::*;
+    use qvp_core::qvp_format::Cmd;
+    let mut set = OrnamentSet::default();
+    let q = set.quant as i32;
+    let unit = |w: i32, h: i32| vec![Cmd::MoveTo(0, 0), Cmd::LineTo(w * q, 0), Cmd::LineTo(w * q, h * q), Cmd::LineTo(0, h * q), Cmd::Close];
+    let asset = |w: i32, h: i32, slot: Option<[f32; 4]>, set: &mut OrnamentSet| {
+        let first = set.paths.len() as u32;
+        set.push_path(0, 0, 0, &unit(w, h));
+        set.push_path(1, OPF_STROKE, q / 10, &unit(w, h));
+        Asset { view_box: [0.0, 0.0, w as f32, h as f32], slot, first_path: first, n_paths: 2 }
+    };
+    let ayah_mark = asset(80, 100, Some([20.0, 20.0, 40.0, 60.0]), &mut set);
+    let surah_header = asset(800, 100, Some([100.0, 10.0, 600.0, 80.0]), &mut set);
+    let page_frame = asset(70, 100, Some([5.0, 5.0, 60.0, 90.0]), &mut set);
+    set.styles.push(Style {
+        name: "test".into(),
+        riwayah: "Hafs 'an Asim".into(),
+        license: License { id: "CC-BY-NC-SA-4.0".into(), status: "provisional".into(), redistributable: false, attribution: "a test".into() },
+        parts: vec![Part { name: "c1".into(), color: 0x00649bff, stroke: false }, Part { name: "line".into(), color: 0x303641ff, stroke: true }],
+        ayah_mark: Some(ayah_mark),
+        surah_header: Some(surah_header),
+        page_frame: Some(page_frame),
+        slices: None,
+    });
+    set.encode()
+}
+
+#[test]
+fn dress_over_the_abi() {
+    let Some(bytes) = page_bytes("604.qvp") else { eprintln!("skip: no dist/pages"); return };
+    let orn = ornament_bytes();
+    unsafe {
+        let page = qvp_page_load(bytes.as_ptr(), bytes.len());
+        assert!(!page.is_null());
+        let set = qvp_ornaments_load(orn.as_ptr(), orn.len());
+        assert!(!set.is_null());
+        assert_eq!(qvp_ornament_styles(set), 1);
+        assert_eq!(qvp_ornament_find_style(set, b"test".as_ptr(), 4), 0);
+        assert_eq!(qvp_ornament_find_style(set, b"nope".as_ptr(), 4), -1);
+
+        let mut st = std::mem::zeroed::<QvpOrnamentStyle>();
+        assert_eq!(qvp_ornament_style(set, 0, &mut st), 1);
+        assert_eq!(s(&st.name), "test");
+        assert_eq!(s(&st.license_id), "CC-BY-NC-SA-4.0");
+        assert_eq!(st.redistributable, 0);
+        assert_eq!(st.assets, 0b0111); // three assets, no slices
+        assert_eq!(st.n_parts, 2);
+        let mut part = std::mem::zeroed::<QvpOrnamentPart>();
+        assert_eq!(qvp_ornament_part(set, 0, 1, &mut part), 1);
+        assert_eq!((s(&part.name), part.color, part.stroke), ("line".into(), 0x303641ff, 1));
+
+        // undressed, the page's viewBox is its own and there is no display list
+        let mut vb = [0f32; 4];
+        qvp_page_view_box(page, vb.as_mut_ptr());
+        let mut pi = std::mem::zeroed::<QvpPageInfo>();
+        qvp_page_info(page, &mut pi);
+        assert_eq!(vb, [0.0, 0.0, pi.width, pi.height]);
+        let mut di = std::mem::zeroed::<QvpDressInfo>();
+        assert_eq!(qvp_dress_info(page, &mut di), 0);
+
+        // the printed rings are visible before the dress
+        let ring = (0..pi.n_paths).find(|i| qvp_color_of(page, *i) != 0 && path_kind(page, *i) == 3).expect("a printed ring");
+        assert_ne!(qvp_color_of(page, ring) & 0xff, 0);
+
+        let colors: [u32; 2] = [0, 0xff0000ff]; // repaint part 0 red
+        let spec = QvpDressSpec { style: 0, gap: 5.0, line_art: 0, ayah_marks: 1, surah_headers: 1, page_frame: 1, colors: colors.as_ptr(), n_colors: 1 };
+        assert_eq!(qvp_dress(page, set, &spec), 1);
+        assert_eq!(qvp_dress_info(page, &mut di), 1);
+        assert!(di.n_ayah_marks > 0 && di.n_surah_headers > 0);
+        assert_eq!(di.frame_stretched, 1); // no slices in this set
+        assert_eq!(di.n_frame_repeats, 0);
+        // the border grew the page around the text, and nothing moved
+        qvp_page_view_box(page, vb.as_mut_ptr());
+        assert_eq!(vb, di.view_box);
+        assert!(vb[0] < 0.0 && vb[1] < 0.0 && vb[2] > pi.width && vb[3] > pi.height, "{vb:?}");
+        // and a host that fits content+overflow shows all of it
+        let mut over = [0f32; 4];
+        qvp_dress_overflow(page, over.as_mut_ptr());
+        assert!(over.iter().all(|v| *v > 0.0), "{over:?}");
+
+        // A LAYOUT THAT RESPACES THE LINES MAKES THE PAGE TALLER, and the border
+        // goes around what is on the page: it grows with it, unasked.
+        let tall = QvpLayoutSpec { viewport_w: 690.0, viewport_h: 2000.0, pad_top: 0.0, pad_bottom: 0.0, pad_left: 0.0, pad_right: 0.0, line_spacing: 1.0, line_gap: 0.0, fill_height: 1, nominal_lines: 15 };
+        let mut lay = std::mem::zeroed::<QvpLayout>();
+        qvp_layout(page, &tall, &mut lay);
+        let mut vb2 = [0f32; 4];
+        qvp_page_view_box(page, vb2.as_mut_ptr());
+        assert!(vb2[3] > vb[3], "the border must follow the laid-out page: {vb:?} → {vb2:?}");
+        assert_eq!(vb2[2], vb[2], "only the height changed");
+        // and a host's raster cache of that layer is told it went stale
+        let before = di.revision;
+        assert_eq!(qvp_dress_info(page, &mut di), 1);
+        assert_ne!(di.revision, before, "a relayout rebuilds the ornament layer");
+        // the print's own rings are hidden; its numerals are not
+        assert_eq!(qvp_color_of(page, ring) & 0xff, 0);
+
+        let mut g = std::mem::zeroed::<QvpDressGeometry>();
+        qvp_dress_geometry(page, &mut g);
+        assert_eq!(g.n_draws, di.n_draws);
+        // one filled + one stroked outline per placed asset
+        assert_eq!(g.n_draws, (di.n_ayah_marks + di.n_surah_headers + 1) * 2);
+        let table = std::slice::from_raw_parts(g.table, g.n_draws as usize * 9);
+        let (mut filled, mut stroked) = (0, 0);
+        for d in table.chunks_exact(9) {
+            let (color, flags, width) = (d[4], d[5], f32::from_bits(d[6]));
+            assert!(d[1] > 0 && d[3] > 0);
+            if flags & (2 << 8) != 0 {
+                stroked += 1;
+                assert!(width > 0.0, "a stroke needs a width in page units");
+                assert_eq!(color, 0x303641ff);
+            } else {
+                filled += 1;
+                assert_eq!(color, 0xff0000ff, "part 0 was repainted");
+            }
+            assert!(flags & 0xff <= 2, "ornament kind");
+            // the border is placed from the page and belongs to no line; the rest follow one
+            assert_eq!(d[8] == u32::MAX, flags & 0xff == 2, "kind {} line {}", flags & 0xff, d[8]);
+        }
+        assert_eq!((filled, stroked), (g.n_draws / 2, g.n_draws / 2));
+
+        // line art draws one ink, and only one
+        let spec = QvpDressSpec { line_art: 1, ..spec };
+        assert_eq!(qvp_dress(page, set, &spec), 1);
+        qvp_dress_geometry(page, &mut g);
+        assert_eq!(g.n_draws, di.n_draws / 2);
+
+        // a style the set does not hold changes nothing
+        let spec = QvpDressSpec { style: 9, ..spec };
+        assert_eq!(qvp_dress(page, set, &spec), 0);
+        assert_eq!(qvp_dress_info(page, &mut di), 0);
+
+        qvp_undress(page);
+        assert_eq!(qvp_dress_info(page, &mut di), 0);
+        qvp_page_view_box(page, vb.as_mut_ptr());
+        assert_eq!(vb, [0.0, 0.0, pi.width, pi.height]);
+        assert_ne!(qvp_color_of(page, ring) & 0xff, 0, "undressing puts the printed rings back");
+
+        qvp_ornaments_free(set);
+        qvp_page_free(page);
+    }
+}
+
+/// `flags` byte 0 of the page geometry table.
+unsafe fn path_kind(page: *mut qvp_core::Page, i: u32) -> u32 {
+    let mut g = std::mem::zeroed::<QvpGeometry>();
+    qvp_geometry(page, &mut g);
+    *g.table.add(i as usize * 8 + 4) & 0xff
+}

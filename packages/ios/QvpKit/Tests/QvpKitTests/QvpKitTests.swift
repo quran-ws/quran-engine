@@ -27,6 +27,57 @@ final class QvpKitTests: XCTestCase {
     override class func tearDown() { page?.close(); page = nil; super.tearDown() }
     var page: QvpPage { Self.page }
 
+    /// The dress surface with no ornament set: an undressed page's viewBox is
+    /// its own, and it wears nothing. A set to dress it in is licensed artwork
+    /// that never ships with the engine, so point QVP_ORNAMENTS at one
+    /// (`qvp-convert ornaments <assets_dir> out.qvo`) to exercise the rest.
+    func testDress() {
+        XCTAssertNil(page.dressInfo())
+        XCTAssertTrue(page.dressGeometry().isEmpty)
+        let vb = page.viewBox()
+        XCTAssertEqual(vb.0, 0)
+        XCTAssertEqual(vb.1, 0)
+        XCTAssertEqual(vb.2, page.width)
+        XCTAssertEqual(vb.3, page.height)
+        let content = page.contentBox()
+        XCTAssertGreaterThan(content.2, content.0)
+        XCTAssertGreaterThan(content.3, content.1)
+        XCTAssertLessThanOrEqual(content.2, page.width)
+
+        guard let path = ProcessInfo.processInfo.environment["QVP_ORNAMENTS"],
+              let bytes = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let set = try? QvpOrnaments(bytes: bytes), let style = set.styles.first
+        else { return }
+        XCTAssertNil(set.find("not-a-mushaf"))
+        XCTAssertEqual(set.find(style.name)?.index, style.index)
+        XCTAssertFalse(style.parts.isEmpty)
+
+        let ring = (0..<page.nPaths).first { page.pathKind($0) == QvpKind.AYAH_MARK_ORNAMENT }
+        if let ring { XCTAssertNotEqual(page.colorOf(ring) & 0xff, 0) }
+
+        let d = page.dress(set, style: style.index, colors: [style.parts[0].name: 0xff0000ff])
+        XCTAssertNotNil(d)
+        XCTAssertEqual(d!.nDraws, page.dressGeometry().count)
+        if style.hasAyahMark {
+            XCTAssertGreaterThan(d!.ayahMarks, 0)
+            // the print's own rings are hidden; its numerals are not
+            if let ring { XCTAssertEqual(page.colorOf(ring) & 0xff, 0) }
+        }
+        if style.hasPageFrame {
+            // the border grew the page around the text, and no word moved
+            let g = page.viewBox()
+            XCTAssertLessThan(g.0, 0)
+            XCTAssertGreaterThan(g.2, page.width)
+        }
+        XCTAssertNil(page.dress(set, style: set.styles.count + 1))
+
+        page.undress()
+        XCTAssertNil(page.dressInfo())
+        XCTAssertTrue(page.dressGeometry().isEmpty)
+        if let ring { XCTAssertNotEqual(page.colorOf(ring) & 0xff, 0) }
+        set.close()
+    }
+
     func testEngineVersionNamesArabicTools() {
         XCTAssertGreaterThan(QvpEngine.version(), 0)
         XCTAssertEqual(QvpEngine.engineName(), "qvp")

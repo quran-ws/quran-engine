@@ -129,8 +129,12 @@ impl Page {
             };
             line_slots.push((top * scale, bottom * scale));
         }
-        let content_h = spec.pad_top + (ph + (nominal - 1.0) * delta) * scale + spec.pad_bottom;
+        let laid_h = ph + (nominal - 1.0) * delta;
+        let content_h = spec.pad_top + laid_h * scale + spec.pad_bottom;
+        self.laid_page = Some((top_units, laid_h));
         self.layout = Some(Layout { scale, ox: spec.pad_left, oy: 0.0, line_dy, line_slots, content_h, content_w: spec.viewport_w, pitch });
+        // a dress's border goes around the laid-out page, so it moves with it
+        self.redress();
         self.layout.as_ref().unwrap()
     }
 

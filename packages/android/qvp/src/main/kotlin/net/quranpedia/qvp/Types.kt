@@ -12,6 +12,8 @@ enum class HighlightMode(val id: Int) { INK(0), BAND(1), BOTH(2) }
 enum class BandHeight(val id: Int) { PITCH(0), INK(1) }
 enum class MaskMode(val id: Int) { HIDE(0), BLOCK(1), BLUR(2) }
 enum class Division(val id: Int) { JUZ(0), HIZB(1), NISF(2), RUBU_AL_HIZB(3) }
+/** what an ornament replaces */
+object QvpOrnamentKind { const val AYAH_MARK = 0; const val SURAH_HEADER = 1; const val PAGE_FRAME = 2 }
 
 val QVP_MARKS = listOf("", "fathah", "kasrah", "dammah", "tanwin_al_fath", "tanwin_al_kasr", "tanwin_al_damm", "shaddah", "sukun", "maddah", "hamzah", "hamzat_al_wasl", "omitted_alif", "small_waw", "small_yaa", "small_noon", "dot", "two_dots", "three_dots", "rounded_zero", "rectangular_zero", "waqf_jaiz_mustawi_al_tarafayn", "waqf_jaiz_waqf_awla", "waqf_jaiz_wasl_awla", "waqf_lazim", "waqf_al_muanaqah", "saktah", "small_meem", "hizb", "sajdah", "sajdah_mark", "sajdah_line", "seen_al_qiraah", "tashil", "ishmam", "imalah")
 fun markId(name: String): Int = QVP_MARKS.indexOf(name).let { if (it < 0) 255 else it }
@@ -91,6 +93,33 @@ data class QvpLine(val idx: Int, val lineNo: Int, val isHeader: Boolean, val fir
 data class QvpDecoration(val idx: Int, val kind: Int, val surah: Int, val ayah: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
                          val text: String, val firstPath: Int, val nPaths: Int)
 /** Indices are -1 when absent. */
+/** what a mushaf's ornaments may be redistributed under */
+data class QvpOrnamentLicence(val id: String, val status: String, val redistributable: Boolean, val attribution: String)
+/** one printed colour of a design; `slot` is the window it leaves open (alpha 0) */
+data class QvpOrnamentPart(val index: Int, val name: String, val color: Int, val stroke: Boolean)
+data class QvpOrnamentStyle(
+    val index: Int, val name: String, val riwayah: String,
+    val hasAyahMark: Boolean, val hasSurahHeader: Boolean, val hasPageFrame: Boolean,
+    /** the frame is assembled from a corner and two repeat units rather than stretched */
+    val tiles: Boolean,
+    val licence: QvpOrnamentLicence, val parts: List<QvpOrnamentPart>,
+)
+/** what dressing the page did; `viewBox` is x, y, w, h — the border grew it */
+data class QvpDress(
+    val style: Int, val ayahMarks: Int, val surahHeaders: Int, val frameRepeats: Int,
+    val frameStretched: Boolean, val nDraws: Int,
+    /** bumped on every rebuild of the display list; cache a raster against it */
+    val revision: Int,
+    val viewBox: FloatArray,
+)
+/** one placed ornament outline in page units; [kind] is a [QvpOrnamentKind] */
+data class QvpOrnamentDraw(
+    val path: android.graphics.Path, val color: Int, val kind: Int, val stroke: Boolean,
+    val strokeWidth: Float, val part: Int,
+    /** the page line it was measured against, or -1 for the border, which never moves */
+    val line: Int,
+)
+
 data class QvpHit(val word: Int, val path: Int, val deco: Int)
 data class QvpHitEx(val word: Int, val path: Int, val deco: Int, val line: Int, val distance: Float, val exact: Boolean)
 data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = 0.6f, val exactFirst: Boolean = true)

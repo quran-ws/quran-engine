@@ -12,6 +12,10 @@
     atlas: async () => { if (EMB) return EMB.atlas ? b64(EMB.atlas) : null; try { const r = await fetch('pages/atlas.qva'); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } },
     pages: EMB ? Object.keys(EMB.pages).map(Number).sort((a, b) => a - b) : Array.from({ length: 604 }, (_, i) => i + 1),
     page: async n => EMB ? b64(EMB.pages[pad(n)]) : new Uint8Array(await (await fetch(`pages/${pad(n)}.qvp`)).arrayBuffer()),
+    // THE ORNAMENTS ARE NOT PART OF THE PAGES. They are traced from scans of
+    // other printed mushafs, each with a licence of its own, and are loaded
+    // separately or not at all — the demo works without them.
+    ornaments: async () => { if (EMB) return EMB.ornaments ? b64(EMB.ornaments) : null; try { const r = await fetch('ornaments.qvo'); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } },
   };
 
   const t0 = performance.now();
@@ -33,7 +37,9 @@
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
     layout: { lineSpacing: 1, lineGap: 0, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
     hlMode: 'both', hlMs: 250, revealOn: false,
+    dress: { on: false, style: 0, gap: 5, lineArt: false, ayahMarks: true, surahHeaders: true, pageFrame: true, colors: {} },
   };
+  let ornaments = null;
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
   const PALETTE = { [CATEGORY.HARAKAH]: '#1a73e8', [CATEGORY.TANWIN]: '#8e24aa', [CATEGORY.LETTER_DOT]: '#c62828', [CATEGORY.WAQF]: '#0a7d32', [CATEGORY.DABT]: '#ef6c00', [CATEGORY.ORTHOGRAPHIC]: '#00838f', [CATEGORY.STANDALONE]: '#6d4c41' };
 
@@ -68,10 +74,16 @@
     return p.layout({ viewportW: maxW, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, lineGap: ls.lineGap, fillHeight: ls.fillHeight, nominalLines: 15 });
   }
   function fit(redraw = true) {
+    const p = S.page;
     const L = relayout(); if (!L) return;
     const r = stage.getBoundingClientRect();
-    const s = Math.min(1, r.height / L.contentH);
-    S.view = { scale: s, ox: (r.width - L.contentW * s) / 2, oy: (r.height - L.contentH * s) / 2 };
+    // A DRESSED PAGE IS BIGGER THAN ITS TEXT: the border was drawn around it, so
+    // fitting to the content box alone would cut the border off. The engine says
+    // by how much, on all four sides, and nothing here has to know why.
+    const [l, t, right, bottom] = p.dressOverflow();
+    const w = L.contentW + l + right, h = L.contentH + t + bottom;
+    const s = Math.min(1, r.height / h, r.width / w);
+    S.view = { scale: s, ox: (r.width - w * s) / 2 + l * s, oy: (r.height - h * s) / 2 + t * s };
     renderer.baseKey = '';
     if (redraw) draw();
   }
@@ -95,7 +107,7 @@
     S.selWord = -1; S.selAyah = null; S.hover = -1; S.playIdx = 0; S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.pathHandles.clear(); S.revealOn = false;
     S.themeHandle = S.tajwidHandle = S.hideHandle = S.ayahMarksHandle = 0;
     $('pageNo').value = n;
-    applyTheme(); applyToggles();
+    applyTheme(); applyToggles(); applyDress();
     renderer.baseKey = '';
     fit(false);
     showSelection(); showMeta(); runSearch();
@@ -352,6 +364,53 @@
   $('pageMax').textContent = src.pages[src.pages.length - 1];
   window.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if (e.key === 'ArrowLeft') $('next').click(); if (e.key === 'ArrowRight') $('prev').click(); });
 
+  // ── dress: another mushaf's ornaments ────────────────────────────────────
+  // Every ornament is placed by the ENGINE, from a measurement of the group it
+  // dresses. This panel only says which mushaf and which parts; it does no
+  // arithmetic of its own, and the readout below is the engine's.
+  function applyDress() {
+    const p = S.page; if (!p) return;
+    const d = S.dress;
+    if (!ornaments || !d.on) { p.undress(); $('dressInfo').textContent = ornaments ? 'as printed' : 'no ornament set loaded (put ornaments.qvo beside the pages)'; renderer.baseKey = ''; draw(); return; }
+    const info = p.dress(ornaments, { style: d.style, gap: d.gap, lineArt: d.lineArt, ayahMarks: d.ayahMarks, surahHeaders: d.surahHeaders, pageFrame: d.pageFrame, colors: d.colors });
+    const st = ornaments.styles[d.style];
+    $('dressInfo').textContent = info
+      ? `${info.ayahMarks} medallions · ${info.surahHeaders} band(s) · ` +
+        (info.frameStretched ? 'no slices for this mushaf, the whole frame is stretched' : `${info.frameRepeats} border repeats tiled to this page`) +
+        `\nviewBox ${info.viewBox.map(v => v.toFixed(1)).join(' ')} — the border grew the page; no word moved` +
+        `\n${st.licence.id || 'licence unstated'}, ${st.licence.status}, redistributable: ${st.licence.redistributable}`
+      : 'that mushaf is not in this set';
+    // the base ink is cached by key; the dress hid the printed rings, so redraw it
+    renderer.baseKey = '';
+    fit();
+  }
+  function dressSwatches() {
+    const host = $('dressParts');
+    host.innerHTML = '';
+    if (!ornaments) return;
+    const st = ornaments.styles[S.dress.style];
+    // LINE ART DRAWS ONE INK, so it gets one swatch. A row of wells for parts
+    // the drawing no longer has would be a lie about what is on screen.
+    const parts = S.dress.lineArt ? st.parts.filter(x => x && x.name === 'line') : st.parts.filter(Boolean);
+    for (const part of parts) {
+      const wrap = document.createElement('label');
+      wrap.className = 'hint';
+      // the design's own printed colour; `slot` is open, and a colour well
+      // cannot show "none", so it opens on the paper
+      const own = (part.color & 255) === 0 ? '#f4ecd8' : '#' + (part.color >>> 8).toString(16).padStart(6, '0');
+      wrap.innerHTML = `<input type="color" value="${S.dress.colors[part.name] || own}"> ${part.name}`;
+      wrap.firstChild.onchange = e => { S.dress.colors[part.name] = e.target.value; applyDress(); };
+      host.append(wrap);
+    }
+  }
+  $('dressStyle').onchange = e => { S.dress.style = +e.target.value; S.dress.on = true; S.dress.colors = {}; dressSwatches(); applyDress(); };
+  $('dressOn').onclick = () => { S.dress.on = true; applyDress(); };
+  $('undress').onclick = () => { S.dress.on = false; S.dress.colors = {}; applyDress(); };
+  $('dressGap').oninput = e => { S.dress.gap = +e.target.value; $('dressGapVal').textContent = e.target.value; if (S.dress.on) applyDress(); };
+  for (const [id, key] of [['dressMarks', 'ayahMarks'], ['dressBands', 'surahHeaders'], ['dressFrame', 'pageFrame'], ['dressLine', 'lineArt']]) {
+    $(id).onchange = e => { S.dress[key] = e.target.checked; if (key === 'lineArt') { S.dress.colors = {}; dressSwatches(); } if (S.dress.on) applyDress(); };
+  }
+
   function hud() {
     const p = S.page, s = renderer.stats, L = p.currentLayout;
     $('hud').textContent =
@@ -370,6 +429,19 @@
   const prefersDark = document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
   if (prefersDark) { S.theme = 'dark'; $('theme').value = 'dark'; $('ink').value = INK.dark; }
   window.addEventListener('resize', resize);
+  try {
+    const ob = await src.ornaments();
+    if (ob) {
+      ornaments = engine.loadOrnaments(ob);
+      // the picker offers the mushafs the set really holds, not a baked-in list
+      $('dressStyle').innerHTML = ornaments.styles.map(st => `<option value="${st.index}">${st.name}${st.riwayah ? ' — ' + st.riwayah : ''}</option>`).join('');
+      dressSwatches();
+    } else {
+      $('dressStyle').innerHTML = '<option>no ornament set</option>';
+      $('dressStyle').disabled = true;
+    }
+  } catch (e) { console.warn('no ornaments', e); }
+  applyDress();
   await loadPage(src.pages[0]);
   resize();
   const q = new URLSearchParams(location.search).get('p'); if (q) loadPage(+q);

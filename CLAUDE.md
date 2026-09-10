@@ -18,6 +18,12 @@
   `Demo/sync-pages.sh` bundles all 604 pages from the data release.
 - Packages ship code only. Page data (`NNN.qvp`, `atlas.qva`, `NNN.words.json`) is loaded by apps;
   demos bundle it as their own assets (gitignored).
+- `dress` puts another mushaf's ornaments on a page. The set is `ornaments.qvo`, built by
+  `qvp-convert ornaments <quran-assets dir> out.qvo` from `quran-ws/quran-assets` — traced
+  from scans of other prints, CC-BY-NC-SA-4.0, `redistributable: false`, so it is gitignored
+  everywhere and never ships in a package. Each style carries its own licence and the engine
+  reports it. Placement is engine-side and measured, never a fixed offset; hosts paint the
+  display list behind the page ink and fit `content + dressOverflow()`.
 - Source data is the `quran-svg hafs-kfgqpc` release bundle: unpack `pages/` and `index/`
   side by side at the repo root (both gitignored). Source problems go in
   `docs/UPSTREAM-DATA-ISSUES.md`; do not patch data in the converter.

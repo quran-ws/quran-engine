@@ -251,6 +251,32 @@ struct SettingsSheet: View {
                     Toggle("Hide tashkil", isOn: $m.hideMarks)
                     Toggle("Gold ayah marks", isOn: $m.goldAyahMarks)
                 }
+                Section("Dress") {
+                    if let set = m.ornaments, !set.styles.isEmpty {
+                        Picker("Mushaf", selection: $m.dressStyle) {
+                            Text("As printed").tag(-1)
+                            ForEach(set.styles, id: \.index) { st in
+                                Text(st.riwayah.isEmpty ? st.name : "\(st.name) — \(st.riwayah)").tag(st.index)
+                            }
+                        }
+                        if m.dressStyle >= 0 {
+                            // LINE ART is the same drawing with the fills taken away,
+                            // so there is one ink instead of the design's palette.
+                            Toggle("Line art", isOn: $m.dressLineArt)
+                            Toggle("Medallions", isOn: $m.dressAyahMarks)
+                            Toggle("Surah band", isOn: $m.dressSurahHeaders)
+                            Toggle("Border", isOn: $m.dressPageFrame)
+                            LabeledContent("Breathing space") { Text("\(Int(m.dressGap)) u").monospacedDigit() }
+                            Slider(value: $m.dressGap, in: 0...24, step: 1) { Text("Breathing space") }
+                        }
+                        if !m.dressReadout.isEmpty {
+                            Text(m.dressReadout).font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("No ornament set in this build. The medallions, surah bands and borders of other mushafs are traced artwork with a licence of their own — build one with `qvp-convert ornaments` and drop it in Demo/pages.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Section("Layout") {
                     Toggle("Fill screen height", isOn: $m.fillHeight)
                     LabeledContent("Line spacing") { Text(String(format: "×%.2f", m.lineSpacing / 100)).monospacedDigit() }

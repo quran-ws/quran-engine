@@ -109,6 +109,24 @@ internal object QvpNative {
     // crop
     @JvmStatic external fun cropBox(h: Long, target: IntArray, pad: Float, keepAyahMarks: Boolean): FloatArray?
     @JvmStatic external fun cropSvg(h: Long, target: IntArray, pad: Float, keepAyahMarks: Boolean, background: Int): String?
+    // dress: another mushaf's ornaments
+    @JvmStatic external fun ornamentsLoad(bytes: ByteArray): Long
+    @JvmStatic external fun ornamentsFree(h: Long)
+    @JvmStatic external fun ornamentStyles(h: Long): Int
+    @JvmStatic external fun ornamentFindStyle(h: Long, name: String): Int
+    @JvmStatic external fun ornamentStyleInts(h: Long, i: Int): IntArray?
+    @JvmStatic external fun ornamentStyleStrings(h: Long, i: Int): Array<String>?
+    @JvmStatic external fun ornamentPart(h: Long, style: Int, i: Int): IntArray?
+    @JvmStatic external fun ornamentPartName(h: Long, style: Int, i: Int): String?
+    @JvmStatic external fun dress(h: Long, set: Long, style: Int, gap: Float, lineArt: Boolean, ayahMarks: Boolean, surahHeaders: Boolean, pageFrame: Boolean, colors: IntArray?): Boolean
+    @JvmStatic external fun undress(h: Long)
+    @JvmStatic external fun dressInfo(h: Long): FloatArray?
+    @JvmStatic external fun dressOps(h: Long): ByteArray
+    @JvmStatic external fun dressPts(h: Long): FloatArray
+    @JvmStatic external fun dressTable(h: Long): IntArray
+    @JvmStatic external fun pageViewBox(h: Long): FloatArray
+    @JvmStatic external fun dressOverflow(h: Long): FloatArray
+    @JvmStatic external fun contentBox(h: Long): FloatArray
     // atlas
     @JvmStatic external fun atlasLoad(bytes: ByteArray): Long
     @JvmStatic external fun atlasFree(h: Long)

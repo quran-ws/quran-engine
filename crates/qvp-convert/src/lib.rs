@@ -1,5 +1,7 @@
 pub mod affine;
 pub mod atlas;
+pub mod json;
+pub mod ornaments;
 pub mod qvp2svg;
 pub mod svg2qvp;
 

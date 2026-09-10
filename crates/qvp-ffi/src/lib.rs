@@ -1136,6 +1136,212 @@ pub unsafe extern "C" fn qvp_atlas_json(a: *const Atlas, out: *mut QvpStr) {
     out_str(out, &(*a).to_json());
 }
 
+// ───────────── dress: another mushaf's ornaments ─────────────
+
+/// The handle a host holds: an ornament set a dressed page can keep a share of.
+pub type Ornaments = std::sync::Arc<OrnamentSet>;
+
+/// One style of an ornament set. The strings live as long as the set.
+#[repr(C)]
+pub struct QvpOrnamentStyle {
+    /// bit0 ayah_mark, bit1 surah_header, bit2 page_frame, bit3 the frame tiles
+    pub assets: u32,
+    pub n_parts: u32,
+    pub redistributable: u32,
+    pub _pad: u32,
+    pub name: QvpStr,
+    pub riwayah: QvpStr,
+    pub license_id: QvpStr,
+    pub license_status: QvpStr,
+    pub attribution: QvpStr,
+}
+
+/// One printed colour of a design. `color` is the mushaf's own ink; alpha 0 is
+/// the window the design leaves open (the `slot` part).
+#[repr(C)]
+pub struct QvpOrnamentPart {
+    pub color: u32,
+    pub stroke: u32,
+    pub name: QvpStr,
+}
+
+#[repr(C)]
+pub struct QvpDressSpec {
+    pub style: u32,
+    /// Breathing space between the text and the border, in page units.
+    pub gap: f32,
+    pub line_art: u32,
+    pub ayah_marks: u32,
+    pub surah_headers: u32,
+    pub page_frame: u32,
+    /// (part, rgba) pairs overriding the design's own colours; NULL for none.
+    pub colors: *const u32,
+    pub n_colors: u32,
+}
+
+#[repr(C)]
+pub struct QvpDressInfo {
+    pub style: u32,
+    pub n_ayah_marks: u32,
+    pub n_surah_headers: u32,
+    pub n_frame_repeats: u32,
+    pub frame_stretched: u32,
+    pub n_draws: u32,
+    /// Bumped whenever the display list is rebuilt — a new dress, or a layout
+    /// that respaced the page under the border. Cache the raster of the ornament
+    /// layer against it.
+    pub revision: u32,
+    /// The page's viewBox after the border grew it: x, y, w, h.
+    pub view_box: [f32; 4],
+}
+
+#[repr(C)]
+pub struct QvpDressGeometry {
+    pub ops: *const u8,
+    pub ops_len: u32,
+    pub pts: *const f32,
+    pub pts_len: u32,
+    /// `n_draws` records of 9 × u32: op_start, op_count, pt_start, pt_count,
+    /// colour, flags, stroke_width (float bits), part, line
+    pub table: *const u32,
+    pub n_draws: u32,
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn qvp_ornaments_load(bytes: *const u8, len: usize) -> *mut Ornaments {
+    if bytes.is_null() {
+        return std::ptr::null_mut();
+    }
+    match OrnamentSet::decode(std::slice::from_raw_parts(bytes, len)) {
+        // shared, because a dressed page keeps hold of the set: a new layout
+        // re-places the border and the host is not asked for it again
+        Ok(s) => Box::into_raw(Box::new(std::sync::Arc::new(s))),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+#[no_mangle]
+pub unsafe extern "C" fn qvp_ornaments_free(s: *mut Ornaments) {
+    if !s.is_null() {
+        drop(Box::from_raw(s));
+    }
+}
+#[no_mangle]
+pub unsafe extern "C" fn qvp_ornament_styles(s: *const Ornaments) -> u32 {
+    let set = &*s;
+    set.styles.len() as u32
+}
+#[no_mangle]
+pub unsafe extern "C" fn qvp_ornament_find_style(s: *const Ornaments, name: *const u8, len: u32) -> i32 {
+    let want = in_str(name, len);
+    let set = &*s;
+    set.styles.iter().position(|st| st.name == want).map(|i| i as i32).unwrap_or(-1)
+}
+#[no_mangle]
+pub unsafe extern "C" fn qvp_ornament_style(s: *const Ornaments, i: u32, out: *mut QvpOrnamentStyle) -> i32 {
+    let set = &*s;
+    let Some(st) = set.styles.get(i as usize) else { return 0 };
+    let q = |t: &str| QvpStr { ptr: t.as_ptr(), len: t.len() as u32 };
+    *out = QvpOrnamentStyle {
+        assets: st.ayah_mark.is_some() as u32 | (st.surah_header.is_some() as u32) << 1 | (st.page_frame.is_some() as u32) << 2 | (st.slices.is_some() as u32) << 3,
+        n_parts: st.parts.len() as u32,
+        redistributable: st.license.redistributable as u32,
+        _pad: 0,
+        name: q(&st.name),
+        riwayah: q(&st.riwayah),
+        license_id: q(&st.license.id),
+        license_status: q(&st.license.status),
+        attribution: q(&st.license.attribution),
+    };
+    1
+}
+#[no_mangle]
+pub unsafe extern "C" fn qvp_ornament_part(s: *const Ornaments, style: u32, i: u32, out: *mut QvpOrnamentPart) -> i32 {
+    let set = &*s;
+    let Some(p) = set.styles.get(style as usize).and_then(|st| st.parts.get(i as usize)) else { return 0 };
+    *out = QvpOrnamentPart { color: p.color, stroke: p.stroke as u32, name: QvpStr { ptr: p.name.as_ptr(), len: p.name.len() as u32 } };
+    1
+}
+
+/// Put a style's ornaments on the page. Returns 0 when the set has no such style.
+/// Replaces any previous dress; the display list is read with `qvp_dress_geometry`.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_dress(page: *mut Page, set: *const Ornaments, spec: *const QvpDressSpec) -> u32 {
+    if page.is_null() || set.is_null() || spec.is_null() {
+        return 0;
+    }
+    let s = &*spec;
+    let mut colors = Vec::new();
+    if !s.colors.is_null() {
+        let raw = std::slice::from_raw_parts(s.colors, s.n_colors as usize * 2);
+        colors = raw.chunks_exact(2).map(|c| (c[0] as u16, c[1])).collect();
+    }
+    let spec = DressSpec {
+        style: s.style as usize,
+        gap: s.gap,
+        line_art: s.line_art != 0,
+        ayah_marks: s.ayah_marks != 0,
+        surah_headers: s.surah_headers != 0,
+        page_frame: s.page_frame != 0,
+        colors,
+    };
+    (*page).dress(&*set, &spec).is_some() as u32
+}
+#[no_mangle]
+pub unsafe extern "C" fn qvp_undress(page: *mut Page) {
+    (*page).undress();
+}
+/// 0 when the page is not dressed; `out` is then left alone.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_dress_info(page: *const Page, out: *mut QvpDressInfo) -> i32 {
+    let Some(d) = (*page).dress_of() else { return 0 };
+    *out = QvpDressInfo {
+        style: d.style as u32,
+        n_ayah_marks: d.n_ayah_marks,
+        n_surah_headers: d.n_surah_headers,
+        n_frame_repeats: d.n_frame_repeats,
+        frame_stretched: d.frame_stretched as u32,
+        n_draws: d.table.len() as u32,
+        revision: d.revision,
+        view_box: d.view_box,
+    };
+    1
+}
+/// The ornament display list, in page units, valid until the next dress/undress.
+/// Paint it BEHIND the page ink: that is what keeps the print's own ayah numerals
+/// on top of whatever replaced the rings around them.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_dress_geometry(page: *const Page, out: *mut QvpDressGeometry) {
+    match (*page).dress_of() {
+        Some(d) => *out = QvpDressGeometry { ops: d.ops.as_ptr(), ops_len: d.ops.len() as u32, pts: d.pts.as_ptr(), pts_len: d.pts.len() as u32, table: d.table.as_ptr() as *const u32, n_draws: d.table.len() as u32 },
+        None => *out = QvpDressGeometry { ops: std::ptr::null(), ops_len: 0, pts: std::ptr::null(), pts_len: 0, table: std::ptr::null(), n_draws: 0 },
+    }
+}
+/// The page's viewBox: x, y, w, h. A dressed page's border grows it.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_page_view_box(page: *const Page, out: *mut f32) {
+    let vb = (*page).view_box();
+    std::ptr::copy_nonoverlapping(vb.as_ptr(), out, 4);
+}
+/// How much bigger the dressed page is than the laid-out content, on each side,
+/// in viewport px through the current layout: left, top, right, bottom.
+/// A host fits `content + overflow` so the border is not cropped off; an
+/// undressed page answers zeroes.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_dress_overflow(page: *const Page, out: *mut f32) {
+    let (l, t, r, b) = (*page).dress_overflow();
+    for (i, v) in [l, t, r, b].into_iter().enumerate() {
+        *out.add(i) = v;
+    }
+}
+/// The box the page's text occupies: x0, y0, x1, y1 in page units.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_content_box(page: *const Page, out: *mut f32) {
+    let (x0, y0, x1, y1) = (*page).content_box();
+    for (i, v) in [x0, y0, x1, y1].into_iter().enumerate() {
+        *out.add(i) = v;
+    }
+}
+
 // ───────────── names ─────────────
 
 #[no_mangle]

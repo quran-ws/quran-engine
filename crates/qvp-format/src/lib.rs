@@ -13,6 +13,7 @@
 
 pub mod atlas;
 pub mod codec;
+pub mod ornaments;
 
 use std::fmt;
 

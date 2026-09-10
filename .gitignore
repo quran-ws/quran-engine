@@ -4,6 +4,8 @@ web/pages/
 node_modules/
 web/index.html
 web/qvp_ffi.wasm
+# traced from other mushafs' scans, each with a licence of its own — never in git
+web/ornaments.qvo
 .playwright-mcp/
 *.png
 # the quran-svg release bundle: exporter output, not code

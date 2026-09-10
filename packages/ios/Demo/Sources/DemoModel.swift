@@ -19,6 +19,10 @@ final class DemoModel: ObservableObject {
     let view = QvpPageView()
     private(set) var page: QvpPage?
     private(set) var atlas: QvpAtlas?
+    /// Another mushaf's ornaments, when the bundle carries a set. NONE OF THIS
+    /// ARTWORK IS PART OF THE PAGES — it is traced from scans of other prints and
+    /// each style carries a licence of its own, which [dressReadout] shows.
+    private(set) var ornaments: QvpOrnaments?
 
     @Published var pageNo = 1
     @Published var pageField = "1"
@@ -35,6 +39,15 @@ final class DemoModel: ObservableObject {
     @Published var hideMarks = false { didSet { if hideMarks != oldValue { toggleHideMarks(hideMarks) } } }
     @Published var goldAyahMarks = false { didSet { if goldAyahMarks != oldValue { toggleAyahMarks(goldAyahMarks) } } }
     @Published var theme = "light" { didSet { if theme != oldValue { applyTheme() } } }
+    // Every dress knob re-dresses the page that is open: the engine places the
+    // ornaments from a measurement of it, so nothing is carried over.
+    @Published var dressStyle = -1 { didSet { if dressStyle != oldValue { applyDress() } } }
+    @Published var dressLineArt = false { didSet { if dressLineArt != oldValue { applyDress() } } }
+    @Published var dressAyahMarks = true { didSet { if dressAyahMarks != oldValue { applyDress() } } }
+    @Published var dressSurahHeaders = true { didSet { if dressSurahHeaders != oldValue { applyDress() } } }
+    @Published var dressPageFrame = true { didSet { if dressPageFrame != oldValue { applyDress() } } }
+    @Published var dressGap: Double = 5 { didSet { if dressGap != oldValue { applyDress() } } }
+    @Published var dressReadout = ""
     @Published var maskModeIdx = 0
     @Published var revealOn = false { didSet { if revealOn != oldValue { toggleReveal(revealOn) } } }
     @Published var revealPos: Double = 0 { didSet { if revealOn, let p = page { p.revealGoto(Int(revealPos)); revealVal = "\(Int(revealPos) + 1)/\(p.revealSteps())"; view.setNeedsDisplay() } } }
@@ -65,6 +78,8 @@ final class DemoModel: ObservableObject {
 
     init() {
         if let u = Bundle.main.url(forResource: "atlas", withExtension: "qva", subdirectory: "pages"), let d = try? Data(contentsOf: u) { atlas = try? QvpAtlas(bytes: d) }
+        // optional, and gitignored like the pages: `qvp-convert ornaments <quran-assets> Demo/pages/ornaments.qvo`
+        if let u = Bundle.main.url(forResource: "ornaments", withExtension: "qvo", subdirectory: "pages"), let d = try? Data(contentsOf: u) { ornaments = try? QvpOrnaments(bytes: d) }
         view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.fillHeight = true
         view.onSwipe = { [weak self] dir in self?.flip(dir) }   // mushaf order: finger right → next page
         view.isAccessibilityElement = true; view.accessibilityIdentifier = "qvpPage"; view.accessibilityLabel = "mushaf page"
@@ -78,7 +93,8 @@ final class DemoModel: ObservableObject {
         applyLaunchArguments()
     }
     /// Scripted states for screenshots / QA, e.g. `-qvpPage 582 -qvpSearch الله -qvpWord 5 -qvpTheme dark -qvpMarks 1`.
-    /// `-qvpFill 0` turns fill-screen off; `-qvpControls 1` starts with the bars visible in fill-screen mode.
+    /// `-qvpFill 0` turns fill-screen off; `-qvpControls 1` starts with the bars visible in fill-screen mode;
+    /// `-qvpDress qalon` puts that mushaf's ornaments on the page, `-qvpLineArt 1` in line art.
     private func applyLaunchArguments() {
         let d = UserDefaults.standard
         if let t = d.string(forKey: "qvpTheme"), Self.themes[t] != nil { theme = t }
@@ -87,6 +103,11 @@ final class DemoModel: ObservableObject {
         if let s = d.string(forKey: "qvpSearch") { searchField = s }
         if let a = d.string(forKey: "qvpAyah") { let g = a.split(separator: ":").compactMap { Int($0) }; if g.count == 2 { selectAyah(g[0], g[1]) } }
         if let w = d.string(forKey: "qvpWord").flatMap(Int.init) { selectWord(w) }
+        // `-qvpDress qalon` dresses the page in that mushaf's ornaments, when the
+        // build carries a set. A name, so a screenshot script never depends on
+        // the order a catalogue happened to list the styles in.
+        if let name = d.string(forKey: "qvpDress"), let i = ornaments?.find(name)?.index { dressStyle = i }
+        if d.bool(forKey: "qvpLineArt") { dressLineArt = true }
         if d.bool(forKey: "qvpMarks") { markColours = true }
         if d.bool(forKey: "qvpGold") { goldAyahMarks = true }
         if d.bool(forKey: "qvpMask") { maskModeIdx = 1; maskAyah() }
@@ -136,6 +157,7 @@ final class DemoModel: ObservableObject {
         tajwid = 0; hideMarksH = 0; ayahMarksH = 0; markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false
         p.setDefaultInk(themeSpec.ink)
         view.page = p
+        applyDress()
         announce(); showMeta(); showTitle(); runSearch(); hud()
     }
     private func showTitle() {
@@ -218,6 +240,26 @@ final class DemoModel: ObservableObject {
         if on { ayahMarksH = p.style(Selector.deco(QvpDeco.AYAH_MARK), 0xb8860bff, transitionMs: 300, layer: QvpLayer.THEME + 1) }
         view.setNeedsDisplay()
     }
+    /// Put the chosen mushaf's ornaments on the page, or take them off. Every
+    /// ornament is placed by the ENGINE, from a measurement of the group it
+    /// dresses; nothing here does arithmetic of its own.
+    func applyDress() {
+        guard let p = page else { return }
+        guard let set = ornaments, dressStyle >= 0, dressStyle < set.styles.count else {
+            p.undress(); dressReadout = ornaments == nil ? "no ornament set in this build" : "as printed"
+            view.relayout(); view.resetView(); view.setNeedsDisplay(); return
+        }
+        let st = set.styles[dressStyle]
+        guard let d = p.dress(set, style: dressStyle, gap: Float(dressGap), lineArt: dressLineArt,
+                              ayahMarks: dressAyahMarks, surahHeaders: dressSurahHeaders, pageFrame: dressPageFrame)
+        else { dressReadout = "that mushaf is not in this set"; return }
+        dressReadout = "\(st.name): \(d.ayahMarks) medallions · \(d.surahHeaders) band(s) · "
+            + (d.frameStretched ? "frame stretched whole" : "\(d.frameRepeats) border repeats")
+            + "\n" + (dressLineArt ? "line art — one ink" : st.parts.map(\.name).joined(separator: ", "))
+            + "\n\(st.licence.id.isEmpty ? "licence unstated" : st.licence.id), \(st.licence.status), redistributable: \(st.licence.redistributable)"
+        view.relayout(); view.resetView(); view.setNeedsDisplay()
+    }
+
     private func applyTheme() {
         view.paperColor = UIColor(rgba: themeSpec.paper)
         page?.setDefaultInk(themeSpec.ink); view.setNeedsDisplay()
@@ -291,7 +333,9 @@ final class DemoModel: ObservableObject {
             + String(format: "base layer    %d paths in %.2f ms (cached)\n", view.lastBasePaths, view.lastBaseMs)
             + String(format: "overlay       %d styled + %d bands in %.2f ms\n", view.lastOverlayPaths, view.lastBands, view.lastOverlayMs)
             + String(format: "hit-test      %.1f µs · %d handles · %d highlights\n", view.lastHitUs, p.styleHandles().count, p.highlightHandles().count)
-            + String(format: "layout        %@ · pitch %.1f u", layout, l?.pitch ?? 0)
+            // interpolate the String rather than pass it as %@: String(format:) bridges
+            // a Swift String badly, and `?? 0` makes the pitch an Int literal
+            + "layout        \(layout) · pitch " + String(format: "%.1f u", Double(l?.pitch ?? 0))
     }
     func showToast(_ s: String) {
         toast = s

@@ -145,6 +145,15 @@ object Marshal {
     fun sajdah(s: QvpSajdah): Map<String, Any?> = mapOf("deco" to s.deco, "surah" to s.surah, "ayah" to s.ayah, "signPath" to s.signPath)
     fun match(m: QvpMatch): Map<String, Any?> = mapOf("word" to m.word, "index" to m.index, "loose" to m.loose, "wordKey" to m.wordKey, "text" to m.text)
     fun cropBox(c: QvpCropBox): Map<String, Any?> = mapOf("x0" to c.x0, "y0" to c.y0, "x1" to c.x1, "y1" to c.y1, "nWords" to c.nWords, "ayahMarkDeco" to c.ayahMarkDeco)
+    fun ornamentStyle(s: QvpOrnamentStyle): Map<String, Any?> = mapOf(
+        "index" to s.index, "name" to s.name, "riwayah" to s.riwayah,
+        "has" to mapOf("ayahMark" to s.hasAyahMark, "surahHeader" to s.hasSurahHeader, "pageFrame" to s.hasPageFrame, "slices" to s.tiles),
+        "licence" to mapOf("id" to s.licence.id, "status" to s.licence.status, "redistributable" to s.licence.redistributable, "attribution" to s.licence.attribution),
+        "parts" to s.parts.map { mapOf("index" to it.index, "name" to it.name, "color" to it.color, "stroke" to it.stroke) })
+    fun dress(d: QvpDress): Map<String, Any?> = mapOf(
+        "style" to d.style, "ayahMarks" to d.ayahMarks, "surahHeaders" to d.surahHeaders,
+        "frameRepeats" to d.frameRepeats, "frameStretched" to d.frameStretched, "nDraws" to d.nDraws,
+        "viewBox" to d.viewBox.toList())
     fun atlasSurah(s: QvpAtlasSurah): Map<String, Any?> = mapOf("n" to s.n, "number" to s.n, "page" to s.page, "ayahCount" to s.ayahCount, "place" to s.place, "arabic" to s.arabic, "latin" to s.latin, "english" to s.english)
     fun atlasRubuAlHizb(r: QvpAtlasRubuAlHizb): Map<String, Any?> = mapOf("rubuAlHizb" to r.rubuAlHizb, "surah" to r.surah, "ayah" to r.ayah, "page" to r.page, "ayahKey" to r.ayahKey)
     fun layout(l: QvpLayout): Map<String, Any?> = mapOf("scale" to l.scale, "ox" to l.ox, "oy" to l.oy, "contentW" to l.contentW, "contentH" to l.contentH, "pitch" to l.pitch, "lineDy" to l.lineDy.toList(),

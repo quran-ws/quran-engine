@@ -277,4 +277,52 @@ void main() {
     expect(atlas.pageRange(42)!.first.$1, 2);
     atlas.dispose();
   });
+
+  /// The dress surface with no ornament set: an undressed page's viewBox is its
+  /// own, and it wears nothing. A set to dress it in is licensed artwork that
+  /// never ships with the engine, so point QVP_ORNAMENTS at one
+  /// (`qvp-convert ornaments <assets_dir> out.qvo`) to exercise the rest.
+  test('dress: undressed page, and a set when one is given', () {
+    expect(page.dressInfo(), isNull);
+    expect(page.dressGeometry().isEmpty, isTrue);
+    expect(page.viewBox(), (0.0, 0.0, page.width, page.height));
+    final content = page.contentBox();
+    expect(content.$3, greaterThan(content.$1));
+    expect(content.$4, greaterThan(content.$2));
+
+    final ornPath = Platform.environment['QVP_ORNAMENTS'];
+    if (ornPath == null || !File(ornPath).existsSync()) return;
+    final set = engine.loadOrnaments(File(ornPath).readAsBytesSync());
+    final style = set.styles.first;
+    expect(set.find('not-a-mushaf'), isNull);
+    expect(set.find(style.name)?.index, style.index);
+    expect(style.parts, isNotEmpty);
+
+    var ring = -1;
+    for (var i = 0; i < page.nPaths; i++) {
+      if (page.pathKind(i) == QvpKind.ayahMarkOrnament) { ring = i; break; }
+    }
+    if (ring >= 0) expect(page.colorOf(ring) & 0xff, isNot(0));
+
+    final d = page.dress(set, style: style.index, colors: {style.parts.first.name: 0xff0000ff});
+    expect(d, isNotNull);
+    expect(d!.nDraws, page.dressGeometry().draws.length);
+    if (style.hasAyahMark) {
+      expect(d.ayahMarks, greaterThan(0));
+      // the print's own rings are hidden; its numerals are not
+      if (ring >= 0) expect(page.colorOf(ring) & 0xff, 0);
+    }
+    if (style.hasPageFrame) {
+      // the border grew the page around the text, and no word moved
+      expect(page.viewBox().$1, lessThan(0));
+      expect(page.viewBox().$3, greaterThan(page.width));
+    }
+    expect(page.dress(set, style: set.styles.length + 1), isNull);
+
+    page.undress();
+    expect(page.dressInfo(), isNull);
+    expect(page.dressGeometry().isEmpty, isTrue);
+    if (ring >= 0) expect(page.colorOf(ring) & 0xff, isNot(0));
+    set.dispose();
+  });
 }

@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 pub mod crop;
+pub mod dress;
 pub mod highlight;
 pub mod hit;
 pub mod layout;
@@ -16,6 +17,7 @@ pub mod target;
 pub mod text;
 
 pub use crop::CropBox;
+pub use dress::{Dress, DressSpec, OrnamentDraw};
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
 pub use hit::{HitBox, HitEx, HitOptions, LineBand};
 pub use layout::{gap_to_fill, wasted_fraction, Layout, LayoutSpec};
@@ -23,6 +25,7 @@ pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
 pub use qvp_format;
 pub use qvp_format::atlas::Atlas;
+pub use qvp_format::ornaments::{OrnamentKind, OrnamentSet, Part, Style as OrnamentStyle};
 pub use selection::Selection;
 pub use style::{Handle, Paint, Selector, StyleEngine, Theme, LAYER_BASE, LAYER_HIGHLIGHT, LAYER_SELECTION, LAYER_THEME, LAYER_TOP};
 pub use target::Target;
@@ -86,6 +89,15 @@ pub struct Page {
     pub(crate) reveal: Option<Reveal>,
     pub(crate) highlights: Vec<highlight::Highlight>,
     pub selection: Selection,
+    pub(crate) dress: Option<dress::Dress>,
+    /// The laid-out page box in page units: (top, height). A layout that
+    /// respaces the lines makes the page taller than it is printed, and the
+    /// border a dress draws goes around what is on the page, not what was
+    /// printed. `None` until the first layout.
+    pub(crate) laid_page: Option<(f32, f32)>,
+    /// Monotonic across dresses of this page, so a host's raster cache of the
+    /// ornament layer is never mistaken for a newer one.
+    pub(crate) dress_revision: u32,
     pub(crate) clock_ms: f64,
     pub(crate) anim: Vec<PathAnim>,
     pub(crate) state_dirty: bool,
@@ -267,6 +279,9 @@ impl Page {
             reveal: None,
             highlights: vec![],
             selection: Selection::default(),
+            dress: None,
+            laid_page: None,
+            dress_revision: 0,
             clock_ms: 0.0,
             anim: vec![PathAnim::default(); n],
             state_dirty: true,

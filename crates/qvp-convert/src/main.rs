@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 fn usage() -> ! {
     eprintln!(
-        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg>\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out."
+        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg> [ornaments.qvo] [style]\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert ornaments <assets_dir> <out.qvo> [style,style,...]\n\n<assets_dir> is a quran-assets checkout (or a vendored copy): catalog.json with\nthe assets/ tree beside it. Leave the style list out to take every mushaf.\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out."
     );
     std::process::exit(2)
 }
@@ -60,8 +60,21 @@ fn main() {
         }
         "qvp2svg" if args.len() >= 4 => {
             let bytes = fs::read(&args[2]).expect("read qvp");
-            let page = qvp_format::decode(&bytes).expect("decode");
-            fs::write(&args[3], to_svg(&page).expect("to_svg")).expect("write svg");
+            let data = qvp_format::decode(&bytes).expect("decode");
+            match args.get(4) {
+                // dressed: the ornament layer, then the print on top of it
+                Some(qvo) => {
+                    let set = std::sync::Arc::new(qvp_format::ornaments::OrnamentSet::decode(&fs::read(qvo).expect("read qvo")).expect("decode qvo"));
+                    let want = args.get(5).cloned().unwrap_or_else(|| set.styles[0].name.clone());
+                    let style = set.styles.iter().position(|s| s.name == want).unwrap_or_else(|| panic!("no style {want:?} in {qvo}"));
+                    let mut page = qvp_core::Page::from_data(data);
+                    let spec = qvp_core::DressSpec { style, ..qvp_core::DressSpec::default() };
+                    let d = page.dress(&set, &spec).expect("dress").clone();
+                    eprintln!("dressed in {want}: {} medallions, {} bands, {} border repeats{}", d.n_ayah_marks, d.n_surah_headers, d.n_frame_repeats, if d.frame_stretched { ", frame stretched whole" } else { "" });
+                    fs::write(&args[3], qvp_convert::ornaments::dress_svg(&mut page, &d)).expect("write svg");
+                }
+                None => fs::write(&args[3], to_svg(&data).expect("to_svg")).expect("write svg"),
+            }
         }
         "info" => {
             let bytes = fs::read(&args[2]).expect("read qvp");
@@ -71,6 +84,25 @@ fn main() {
                 p.header.page, p.header.width, p.header.height, p.header.quant,
                 p.lines.len(), p.ayahs.len(), p.words.len(), p.paths.len(), p.decos.len(), p.glyphs.len(), p.insts.len(), p.ops.len(), p.strings.len(), bytes.len()
             );
+        }
+        "ornaments" if args.len() >= 4 => {
+            let dir = PathBuf::from(&args[2]);
+            let styles: Vec<String> = args.get(4).map(|s| s.split(',').filter(|t| !t.is_empty()).map(str::to_owned).collect()).unwrap_or_default();
+            match qvp_convert::ornaments::build(&dir, &styles) {
+                Ok((set, report)) => {
+                    for w in &report.warnings {
+                        eprintln!("warn: {w}");
+                    }
+                    let bytes = set.encode();
+                    fs::write(&args[3], &bytes).expect("write qvo");
+                    print!("{}", qvp_convert::ornaments::describe(&set));
+                    println!("{} styles, {} outlines → {} ({} B)", set.styles.len(), set.paths.len(), args[3], bytes.len());
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1)
+                }
+            }
         }
         "batch" if args.len() >= 4 => {
             let svg_dir = PathBuf::from(&args[2]);

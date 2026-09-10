@@ -59,4 +59,15 @@ for n in $(seq 1 604); do
   [ -f "$SRC/$p.words.json" ] && cp "$SRC/$p.words.json" pages/
 done
 cp "$SRC/atlas.qva" pages/
+
+# Optional: another mushaf's ornaments, for the demo's Dress control. This artwork is
+# traced from scans of other prints and licensed separately, so it never ships with the
+# engine — build one with `qvp-convert ornaments <quran-assets dir> ornaments.qvo` and
+# leave it in dist/ (or point QVP_ORNAMENTS at it).
+ORN="${QVP_ORNAMENTS:-$ROOT/dist/ornaments.qvo}"
+if [ -f "$ORN" ]; then
+  cp "$ORN" pages/ornaments.qvo
+  echo "ornament set bundled from $ORN"
+fi
+
 echo "demo pages synced: $(ls pages | wc -l | tr -d ' ') files from $SRC"

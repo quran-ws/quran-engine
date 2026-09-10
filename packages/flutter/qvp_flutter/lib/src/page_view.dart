@@ -256,12 +256,17 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     _ctl.viewport = size;
   }
 
+  /// A DRESSED PAGE IS BIGGER THAN ITS TEXT: the border was drawn around it, so
+  /// fitting to the content box alone crops the border off. The engine says by
+  /// how much, on all four sides, and nothing here has to know why.
   void _fit(Size size) {
     final l = page.currentLayout!;
-    final s = math.min(1.0, size.height / l.contentH);
+    final (left, top, right, bottom) = page.dressOverflow();
+    final w = l.contentW + left + right, h = l.contentH + top + bottom;
+    final s = math.min(1.0, math.min(size.height / h, size.width / w));
     _ctl.scale = s;
-    _ctl.ox = (size.width - l.contentW * s) / 2;
-    _ctl.oy = (size.height - l.contentH * s) / 2;
+    _ctl.ox = (size.width - w * s) / 2 + left * s;
+    _ctl.oy = (size.height - h * s) / 2 + top * s;
     _ctl._fitRequested = false;
   }
 
@@ -404,6 +409,9 @@ class _InkCache {
     if (page == p) return;
     page = p;
     paths = null;
+    ornamentPaths = null;
+    ornamentRevision = -1;
+    dropOrnamentPicture();
     key = '';
     _dropImage();
   }
@@ -417,8 +425,56 @@ class _InkCache {
 
   void dispose() {
     _dropImage();
+    dropOrnamentPicture();
     paths = null;
     page = null;
+  }
+
+  List<ui.Path>? ornamentPaths;
+  int ornamentRevision = -1;
+  ui.Picture? ornamentPicture;
+  String ornamentKey = '';
+
+  void dropOrnamentPicture() {
+    ornamentPicture?.dispose();
+    ornamentPicture = null;
+    ornamentKey = '';
+  }
+
+  /// The dress's outlines, rebuilt whenever the page is dressed differently.
+  List<ui.Path> buildOrnamentPaths(QvpPage p) {
+    final g = p.dressGeometry();
+    final rev = p.dressRevision();
+    final cached = ornamentPaths;
+    if (cached != null && ornamentRevision == rev) return cached;
+    final out = List<ui.Path>.generate(g.draws.length, (i) {
+      final d = g.draws[i];
+      final path = ui.Path()..fillType = d.evenOdd ? PathFillType.evenOdd : PathFillType.nonZero;
+      var o = d.opStart;
+      final oe = o + d.opCount;
+      var k = d.ptStart;
+      for (; o < oe; o++) {
+        switch (g.ops[o]) {
+          case QvpOp.moveTo:
+            path.moveTo(g.pts[k], g.pts[k + 1]);
+            k += 2;
+          case QvpOp.lineTo:
+            path.lineTo(g.pts[k], g.pts[k + 1]);
+            k += 2;
+          case QvpOp.quadTo:
+            path.quadraticBezierTo(g.pts[k], g.pts[k + 1], g.pts[k + 2], g.pts[k + 3]);
+            k += 4;
+          case QvpOp.cubicTo:
+            path.cubicTo(g.pts[k], g.pts[k + 1], g.pts[k + 2], g.pts[k + 3], g.pts[k + 4], g.pts[k + 5]);
+            k += 6;
+          case QvpOp.close:
+            path.close();
+        }
+      }
+      return path;
+    }, growable: false);
+    ornamentRevision = rev;
+    return ornamentPaths = out;
   }
 
   List<ui.Path> buildPaths(QvpPage p) {
@@ -467,9 +523,11 @@ class _QvpPainter extends CustomPainter {
   final bool paperShadow;
 
   /// Transform of one line: (scale, tx, ty) in logical px.
+  /// A negative line takes no line shift at all: that is the page's own frame,
+  /// which the border is placed from and which no layout moves.
   (double, double, double) _lineTf(QvpLayout? l, int line) {
     final ls = l?.scale ?? 1, lox = l?.ox ?? 0, loy = l?.oy ?? 0;
-    final dy = l != null && line < l.lineDy.length ? l.lineDy[line] : 0.0;
+    final dy = l != null && line >= 0 && line < l.lineDy.length ? l.lineDy[line] : 0.0;
     return (view.scale * ls, view.ox + view.scale * lox, view.oy + view.scale * (loy + dy * ls));
   }
 
@@ -507,6 +565,60 @@ class _QvpPainter extends CustomPainter {
     c.restore();
   }
 
+  /// The dress, if the page is wearing one. A draw carries the page line it was
+  /// measured against, so it moves with that line's ink under a layout that
+  /// respaces the page; the border belongs to no line and never moves.
+  ///
+  /// RECORDED ONCE, like the base ink. A tiled border is hundreds of filled and
+  /// stroked outlines and nothing about it changes while a highlight animates,
+  /// so replaying it every frame is what makes playback stutter.
+  void _paintOrnaments(ui.Canvas canvas) {
+    final rev = page.dressRevision();
+    if (rev == 0) {
+      cache.dropOrnamentPicture();
+      return;
+    }
+    final key = '${view.scale.toStringAsFixed(5)}|${view.ox.toStringAsFixed(2)}|${view.oy.toStringAsFixed(2)}|$rev';
+    if (cache.ornamentPicture == null || cache.ornamentKey != key) {
+      final g = page.dressGeometry();
+      final l = page.currentLayout;
+      final paths = cache.buildOrnamentPaths(page);
+      final rec = ui.PictureRecorder();
+      final c = ui.Canvas(rec);
+      var cur = -2;
+      var open = false;
+      for (var i = 0; i < g.draws.length; i++) {
+        final d = g.draws[i];
+        if (d.line != cur) {
+          if (open) c.restore();
+          final (s, tx, ty) = _lineTf(l, d.line);
+          c.save();
+          c.translate(tx, ty);
+          c.scale(s);
+          open = true;
+          cur = d.line;
+        }
+        final paint = ui.Paint()
+          ..color = QvpColor.toColor(d.color)
+          ..isAntiAlias = true;
+        if (d.stroke) {
+          paint
+            ..style = ui.PaintingStyle.stroke
+            ..strokeWidth = d.strokeWidth
+            ..strokeCap = ui.StrokeCap.round
+            ..strokeJoin = ui.StrokeJoin.round;
+        }
+        c.drawPath(paths[i], paint);
+      }
+      if (open) c.restore();
+      cache.dropOrnamentPicture();
+      cache.ornamentPicture = rec.endRecording();
+      cache.ornamentKey = key;
+    }
+    final pic = cache.ornamentPicture;
+    if (pic != null) canvas.drawPicture(pic);
+  }
+
   @override
   void paint(ui.Canvas canvas, Size size) {
     if (page.isDisposed) return;
@@ -523,6 +635,11 @@ class _QvpPainter extends CustomPainter {
       if (paperShadow) canvas.drawShadow(ui.Path()..addRect(rect), const Color(0x66000000), 6, false);
       canvas.drawRect(rect, ui.Paint()..color = paperColor);
     }
+
+    // THE ORNAMENT LAYER, BEHIND EVERYTHING ELSE. Drawing it behind is what
+    // keeps the print's own ayah numerals on top of whatever ornament replaced
+    // the rings around them.
+    _paintOrnaments(canvas);
 
     // base ink cache: every non-styled path at the current transform
     final ids = styledSet.toList()..sort();

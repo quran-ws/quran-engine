@@ -186,6 +186,45 @@ Drive the highlight with `rehighlight(h, T.word(i))`.
 returns a standalone SVG string with the current colours (masks, themes and highlights'
 ink applied). The medallion is kept only when the whole ayah is inside the crop.
 
+## Dress (another mushaf's ornaments)
+
+A page carries the King Fahd Complex's own medallions, surah bands and page furniture.
+`dress` puts **another printed mushaf's** ornaments on it instead — the ayah medallion,
+the surah band and the page border — and hands back a display list to paint behind the ink.
+
+```js
+const orn  = engine.loadOrnaments(await fetchBytes('ornaments.qvo'));
+const info = page.dress(orn, {style: 'qalon', gap: 5, colors: {c3: '#7a1f3d'}});
+// → {style, ayahMarks, surahHeaders, frameRepeats, frameStretched, nDraws, viewBox}
+for (const o of page.dressGeometry()) { /* {path, color, kind, stroke, strokeWidth, part, line} */ }
+page.viewBox();      // [x, y, w, h] — the border GREW the page; no word moved
+page.undress();
+```
+
+`orn.styles` is what the set really holds: `{index, name, riwayah, has: {ayahMark,
+surahHeader, pageFrame, slices}, licence, parts}`. `parts` is the design's printed
+palette, one entry per colour, and `colors` repaints any of them by name — `slot` is the
+transparent window the design leaves for the number, the name or the text area.
+`lineArt: true` keeps only the constant-width strokes, so there is one ink and one swatch.
+
+**Every ornament is placed from a measurement**, never a fixed offset: the medallion from
+the printed ring's box, the band from the surah name's box and the page's text column, the
+border from the page's own viewBox. That is why the same rules land correctly on all 604
+pages of a print these ornaments were never drawn for.
+
+**Paint the display list behind the page ink.** Only the printed *ring* is hidden; the
+numeral inside it is the print's own drawing and stays exactly where it was, on top of
+whatever replaced the ring. Each draw carries the page `line` it was measured against, so
+it moves with that line's ink under a layout that respaces the page; the border belongs to
+no line (`-1`) and never moves. `contentBox()` is the box the page's text occupies.
+
+**The ornaments are not part of these files.** An `ornaments.qvo` is built by
+`qvp-convert ornaments <quran-assets dir> out.qvo` from `quran-ws/quran-assets`, whose
+artwork is traced from scans of other printed mushafs and belongs to their publishers.
+Each style carries its own `licence` — `{id, status, redistributable, attribution}` — and
+the engine reports it so a host can say so on screen. Read it before you publish a dressed
+page. No package ships one.
+
 ## Atlas (cross-page)
 
 `atlas.pageOf(s,a)`, `pageRange(page)`, `surah(n)`, `surahs()`, `pageOfSurah(n)`,

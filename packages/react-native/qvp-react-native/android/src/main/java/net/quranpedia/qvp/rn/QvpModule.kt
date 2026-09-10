@@ -17,6 +17,9 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     private val atlases = HashMap<Int, QvpAtlas>()
     private val atlasByUri = HashMap<String, Int>()
     private var nextAtlas = 1
+    private val ornaments = HashMap<Int, QvpOrnaments>()
+    private val ornamentsByUri = HashMap<String, Int>()
+    private var nextOrnaments = 1
 
     private fun view(tag: Int): QvpRnPageView? = QvpRegistry.get(tag) ?: runCatching { UIManagerHelper.getUIManagerForReactTag(ctx, tag)?.resolveView(tag) as? QvpRnPageView }.getOrNull()
     // Every @ReactMethod must be `void` for the TurboModule interop layer: these helpers return Unit on purpose.
@@ -111,18 +114,55 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun cropSvg(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
         val o = opt(opts); p.cropSvg(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: 2f, o["keepAyahMarks"] != false, Marshal.color(o["background"], 0)) }
 
+    // ── dress: another mushaf's ornaments ──
+    // The ornament set is NOT part of the pages: it is traced from scans of other
+    // prints and carries a licence of its own, which `ornamentStyles` reports.
+    @ReactMethod fun loadOrnaments(uri: String, promise: Promise) = ui(promise) {
+        ornamentsByUri[uri] ?: run {
+            val id = nextOrnaments++
+            ornaments[id] = QvpOrnaments(readBytes(uri)); ornamentsByUri[uri] = id; id
+        }
+    }
+    @ReactMethod fun freeOrnaments(id: Int, promise: Promise) = ui(promise) { ornaments.remove(id)?.close(); ornamentsByUri.entries.removeAll { it.value == id }; null }
+    @ReactMethod fun ornamentStyles(id: Int, promise: Promise) = ui(promise) {
+        (ornaments[id] ?: throw IllegalStateException("no ornament set $id")).styles.map { Marshal.ornamentStyle(it) }
+    }
+    @ReactMethod fun dress(tag: Int, ornamentsId: Int, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { v, p ->
+        val set = ornaments[ornamentsId] ?: throw IllegalStateException("no ornament set $ornamentsId")
+        val o = opt(opts)
+        val style = when (val st = o["style"]) {
+            is String -> set.find(st)?.index ?: -1
+            is Number -> st.toInt()
+            else -> 0
+        }
+        val colors = (o["colors"] as? Map<*, *>)?.entries?.mapNotNull { (k, c) ->
+            val name = k as? String ?: return@mapNotNull null
+            name to Marshal.color(c, 0)
+        }?.toMap() ?: emptyMap()
+        val d = if (style < 0) null else p.dress(set, style,
+            (o["gap"] as? Number)?.toFloat() ?: 5f, o["lineArt"] == true,
+            o["ayahMarks"] != false, o["surahHeaders"] != false, o["pageFrame"] != false, colors)
+        v.invalidate()
+        d?.let { Marshal.dress(it) }
+    }
+    @ReactMethod fun undress(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.undress(); v.invalidate(); null }
+    @ReactMethod fun dressInfo(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.dressInfo()?.let { Marshal.dress(it) } }
+    @ReactMethod fun viewBox(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.viewBox().toList() }
+    @ReactMethod fun dressOverflow(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.dressOverflow().toList() }
+    @ReactMethod fun contentBox(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.contentBox().let { mapOf("x0" to it[0], "y0" to it[1], "x1" to it[2], "y1" to it[3]) } }
+
     // ── atlas ──
+    private fun readBytes(uri: String): ByteArray = when {
+        uri.startsWith("asset://") -> ctx.assets.open(uri.removePrefix("asset://")).use { it.readBytes() }
+        uri.startsWith("asset:") -> ctx.assets.open(uri.removePrefix("asset:")).use { it.readBytes() }
+        uri.startsWith("file://") -> java.io.File(uri.removePrefix("file://")).readBytes()
+        uri.startsWith("/") -> java.io.File(uri).readBytes()
+        uri.startsWith("base64:") -> android.util.Base64.decode(uri.removePrefix("base64:"), android.util.Base64.DEFAULT)
+        else -> ctx.assets.open(uri).use { it.readBytes() }
+    }
     @ReactMethod fun loadAtlas(uri: String, promise: Promise) = ui(promise) {
         atlasByUri[uri] ?: run {
-            val bytes = when {
-                uri.startsWith("asset://") -> ctx.assets.open(uri.removePrefix("asset://")).use { it.readBytes() }
-                uri.startsWith("asset:") -> ctx.assets.open(uri.removePrefix("asset:")).use { it.readBytes() }
-                uri.startsWith("file://") -> java.io.File(uri.removePrefix("file://")).readBytes()
-                uri.startsWith("/") -> java.io.File(uri).readBytes()
-                uri.startsWith("base64:") -> android.util.Base64.decode(uri.removePrefix("base64:"), android.util.Base64.DEFAULT)
-                else -> ctx.assets.open(uri).use { it.readBytes() }
-            }
-            val id = nextAtlas++; atlases[id] = QvpAtlas(bytes); atlasByUri[uri] = id; id
+            val id = nextAtlas++; atlases[id] = QvpAtlas(readBytes(uri)); atlasByUri[uri] = id; id
         }
     }
     @ReactMethod fun freeAtlas(id: Int, promise: Promise) = ui(promise) { atlases.remove(id)?.close(); atlasByUri.entries.removeAll { it.value == id }; null }

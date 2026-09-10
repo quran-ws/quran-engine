@@ -102,6 +102,30 @@ export interface Deco { idx: number; kind: number; kindName: string; surah: numb
 export interface Hit { word: number; path: number; deco: number; line: number; distance: number; exact: boolean; wordKey: string | null; ayahKey: string | null }
 export interface Ayah { idx: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDeco: number; bbox: number[] }
 export interface Line { idx: number; lineNo: number; isHeader: boolean; firstWord: number; nWords: number; bbox: number[]; bandY0: number; bandY1: number; centre: number }
+/** What a mushaf's ornaments may be redistributed under. */
+export interface OrnamentLicence { id: string; status: string; redistributable: boolean; attribution: string }
+/** One printed colour of a design; `slot` is the window it leaves open (alpha 0). */
+export interface OrnamentPart { index: number; name: string; color: number; stroke: boolean }
+export interface OrnamentStyle {
+  index: number; name: string; riwayah: string;
+  has: { ayahMark: boolean; surahHeader: boolean; pageFrame: boolean; slices: boolean };
+  licence: OrnamentLicence; parts: OrnamentPart[];
+}
+export interface DressOptions {
+  /** a style name or its index */
+  style?: string | number;
+  /** breathing space between the text and the border, in page units */
+  gap?: number;
+  lineArt?: boolean; ayahMarks?: boolean; surahHeaders?: boolean; pageFrame?: boolean;
+  /** by part NAME; the design's own printed colour is kept for every part left out */
+  colors?: Record<string, string | number>;
+}
+/** What dressing the page did; `viewBox` is [x, y, w, h] — the border grew it. */
+export interface DressInfo {
+  style: number; ayahMarks: number; surahHeaders: number; frameRepeats: number;
+  frameStretched: boolean; nDraws: number; viewBox: number[];
+}
+
 export interface SelectionInfo { words: number[]; text: string; citation: string; textWithCitation: string }
 export interface PageInfo { page: number; width: number; height: number; nLines: number; nAyahs: number; nWords: number; nPaths: number; nDecos: number; naturalPitch: number; forms: Form[]; loadMs: number; bytes: number; uri?: string }
 export interface Match { word: number; index: number; loose: boolean; wordKey: string; text: string }
@@ -283,6 +307,20 @@ export const Qvp = {
   categoryName: (c: number): string => CATEGORY_NAMES[c] ?? '',
   familyName: (f: number): string => FAMILY_NAMES[f] ?? '',
   version: (M.getConstants?.().version ?? 0) as number,
+
+  // dress: another mushaf's ornaments. The set is NOT part of the pages — it is
+  // traced from scans of other prints and carries a licence of its own.
+  loadOrnaments: (uri: string): Promise<number> => M.loadOrnaments(uri),
+  freeOrnaments: (id: number): Promise<void> => M.freeOrnaments(id),
+  ornamentStyles: (id: number): Promise<OrnamentStyle[]> => M.ornamentStyles(id),
+  dress: (tag: number, ornaments: number, opts?: DressOptions): Promise<DressInfo | null> => M.dress(tag, ornaments, opts ?? {}),
+  undress: (tag: number): Promise<void> => M.undress(tag),
+  dressInfo: (tag: number): Promise<DressInfo | null> => M.dressInfo(tag),
+  /** the page's viewBox [x, y, w, h]; a border grows it */
+  viewBox: (tag: number): Promise<number[]> => M.viewBox(tag),
+  /** how much bigger a dressed page is than the content: [left, top, right, bottom] in viewport px */
+  dressOverflow: (tag: number): Promise<number[]> => M.dressOverflow(tag),
+  contentBox: (tag: number): Promise<{ x0: number; y0: number; x1: number; y1: number }> => M.contentBox(tag),
 
   // atlas
   loadAtlas: (uri: string): Promise<number> => M.loadAtlas(uri),

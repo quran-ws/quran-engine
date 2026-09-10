@@ -12,7 +12,7 @@ import QuartzCore
 /// top of the engine layout; double-tap resets the view.
 public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public var page: QvpPage? {
-        didSet { base = nil; baseKey = ""; selectionHandle = 0; relayout(); resetView(); setNeedsDisplay() }
+        didSet { base = nil; baseKey = ""; ornBase = nil; ornKey = ""; selectionHandle = 0; relayout(); resetView(); setNeedsDisplay() }
     }
     // layout knobs (viewport size comes from the view)
     public var padTop: CGFloat = 0 { didSet { relayout() } }
@@ -45,6 +45,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
 
     private var base: CGImage?
     private var baseKey = ""
+    /// The dress, rasterised: it never changes while a highlight animates.
+    private var ornBase: CGImage?
+    private var ornKey = ""
     private var selectionHandle = 0
     private var selAnchor = -1
     private var selecting = false
@@ -151,20 +154,32 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight))
         baseKey = ""; setNeedsDisplay()
     }
-    /// Fit the content height and centre it.
+    /// Fit the content and centre it.
+    ///
+    /// A DRESSED PAGE IS BIGGER THAN ITS TEXT: the border was drawn around it, so
+    /// fitting to the content box alone crops the border off. The engine says by
+    /// how much, on all four sides, and nothing here has to know why.
     public func resetView() {
-        let l = page?.currentLayout
-        viewScale = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
+        guard let p = page, let l = p.currentLayout, bounds.width > 0, bounds.height > 0 else {
+            viewScale = 1; fitScale = 1; viewOx = 0; viewOy = 0; setNeedsDisplay(); return
+        }
+        let o = p.dressOverflow()
+        let left = CGFloat(o.0), top = CGFloat(o.1), right = CGFloat(o.2), bottom = CGFloat(o.3)
+        let w = CGFloat(l.contentW) + left + right, h = CGFloat(l.contentH) + top + bottom
+        viewScale = min(h > bounds.height && h > 0 ? bounds.height / h : 1,
+                        w > bounds.width && w > 0 ? bounds.width / w : 1)
         fitScale = viewScale
-        viewOx = l.map { max((bounds.width - CGFloat($0.contentW) * viewScale) / 2, 0) } ?? 0
-        viewOy = l.map { max((bounds.height - CGFloat($0.contentH) * viewScale) / 2, 0) } ?? 0
+        viewOx = max((bounds.width - w * viewScale) / 2, 0) + left * viewScale
+        viewOy = max((bounds.height - h * viewScale) / 2, 0) + top * viewScale
         setNeedsDisplay()
     }
     /// Page units of `line` → view points (engine layout + pan/zoom).
+    /// A negative line takes no line shift at all: that is the page's own frame,
+    /// which the border is placed from and which no layout moves.
     public func lineTransform(_ line: Int) -> CGAffineTransform {
         let l = page?.currentLayout
         let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.ox ?? 0)
-        let dy = (l.flatMap { line < $0.lineDy.count ? $0.lineDy[line] : nil }) ?? 0
+        let dy = (l.flatMap { line >= 0 && line < $0.lineDy.count ? $0.lineDy[line] : nil }) ?? 0
         let loy = CGFloat(l?.oy ?? 0) + CGFloat(dy) * ls
         let s = viewScale * ls
         return CGAffineTransform(a: s, b: 0, c: 0, d: s, tx: viewOx + viewScale * lox, ty: viewOy + viewScale * loy)
@@ -183,6 +198,50 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
             if b.radius > 0 { path!.addRoundedRect(in: r, cornerWidth: min(CGFloat(b.radius), r.width / 2), cornerHeight: min(CGFloat(b.radius), r.height / 2)) } else { path!.addRect(r) }
         }
         flush(); ctx.restoreGState()
+    }
+
+    /// The ornament layer, BEHIND everything else. A draw carries the page line
+    /// it was measured against, so it moves with that line's ink under a layout
+    /// that respaces the page; the border belongs to no line and never moves.
+    ///
+    /// RASTERISED ONCE, like the base ink. A tiled border is hundreds of filled
+    /// and stroked outlines and nothing about it changes while a highlight
+    /// animates, so re-drawing it every frame is what makes playback stutter.
+    /// The engine's `dressRevision` says when the layer really did change.
+    private func drawOrnaments(_ ctx: CGContext, _ p: QvpPage, _ scale: CGFloat, _ W: Int, _ H: Int) {
+        let rev = p.dressRevision
+        if rev == 0 { ornBase = nil; ornKey = ""; return }
+        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(rev)|\(W)x\(H)"
+        if ornBase == nil || key != ornKey, W > 0, H > 0 {
+            let cs = CGColorSpaceCreateDeviceRGB()
+            guard let bc = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8, bytesPerRow: 0, space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) else { return }
+            bc.translateBy(x: 0, y: CGFloat(H)); bc.scaleBy(x: scale, y: -scale)
+            bc.setAllowsAntialiasing(true); bc.setShouldAntialias(true)
+            var cur = Int.min
+            for o in p.dressGeometry() {
+                if o.line != cur {
+                    if cur != Int.min { bc.restoreGState() }
+                    bc.saveGState(); bc.concatenate(lineTransform(o.line)); cur = o.line
+                }
+                bc.addPath(o.path)
+                if o.stroke {
+                    bc.setStrokeColor(QvpColor.cgColor(o.color))
+                    bc.setLineWidth(CGFloat(o.strokeWidth))
+                    bc.setLineCap(.round); bc.setLineJoin(.round)
+                    bc.strokePath()
+                } else {
+                    bc.setFillColor(QvpColor.cgColor(o.color))
+                    bc.fillPath(using: o.evenOdd ? .evenOdd : .winding)
+                }
+            }
+            if cur != Int.min { bc.restoreGState() }
+            ornBase = bc.makeImage(); ornKey = key
+        }
+        guard let img = ornBase else { return }
+        ctx.saveGState()
+        ctx.translateBy(x: 0, y: bounds.height); ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(img, in: CGRect(origin: .zero, size: bounds.size))
+        ctx.restoreGState()
     }
 
     // ── frame ──
@@ -204,6 +263,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
             ctx.setFillColor(paper.cgColor)
             ctx.fill(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale))
         }
+        drawOrnaments(ctx, p, scale, W, H)
         let bands = p.highlightBoxes()
         drawBoxes(ctx, bands)
 

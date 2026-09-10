@@ -89,6 +89,25 @@
       <div class="row" style="margin-top:6px" id="legend"></div>
     </section>
     <section>
+      <h2>Dress (another mushaf&rsquo;s ornaments)</h2>
+      <div class="row">
+        <label>mushaf <select id="dressStyle"></select></label>
+        <button id="dressOn">Dress the page</button>
+        <button id="undress">As printed</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label><input id="dressMarks" type="checkbox" checked> medallions</label>
+        <label><input id="dressBands" type="checkbox" checked> surah band</label>
+        <label><input id="dressFrame" type="checkbox" checked> border</label>
+        <label><input id="dressLine" type="checkbox"> line art</label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <b>breathing space</b><input id="dressGap" type="range" min="0" max="24" step="1" value="5" style="flex:1"><span id="dressGapVal" class="hint">5</span>
+      </div>
+      <div class="row" style="margin-top:6px" id="dressParts"></div>
+      <div id="dressInfo" class="hint" style="white-space:pre-line"></div>
+    </section>
+    <section>
       <h2>Memorisation</h2>
       <div class="row">
         <button id="maskAyah">Mask selected ayah</button>
