@@ -26,7 +26,8 @@ pub use qvp_format::atlas::Atlas;
 pub use selection::Selection;
 pub use style::{Handle, Paint, Selector, StyleEngine, Theme, LAYER_BASE, LAYER_HIGHLIGHT, LAYER_SELECTION, LAYER_THEME, LAYER_TOP};
 pub use target::Target;
-pub use text::{fold, loose_key, normalize_query, parse_words_sidecar, strip_marks, Form, Match, SearchMode, SearchOptions, WordForms};
+pub use text::{fold, is_mark, loose_key, normalize_query, parse_words_sidecar, search_key,
+               search_variants, strip_marks, Form, Match, SearchMode, SearchOptions, WordForms};
 
 use qvp_format::*;
 use std::collections::HashMap;
