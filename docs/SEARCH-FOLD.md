@@ -189,6 +189,115 @@ rules match on how a word is *read*. It exposes no search API. The one thing it
 owes this spec is a note saying its normaliser is phonetic and is not a search
 fold — otherwise someone will reuse it as one.
 
+## 9. What the open-source implementations do
+
+Checked against source, not blog posts, and the live quran.com API was probed
+directly. This section exists because the decisions that recur across
+independently built systems are the ones that have survived real users.
+
+### The dagger alif, project by project
+
+| | U+0670 | evidence |
+|---|---|---|
+| **quran.com / Quran Foundation** | **dropped** | `icu_folding` in the analyzer chain; `DiacriticFolding.txt` carries `0670>` (delete). Confirmed live: `لكن` returns 6 hits all containing U+0670, `لكان` returns 6 hits all containing a real alif — **disjoint sets**, so it cannot be folding to alif. |
+| **QUL / Tarteel** | **dropped** in `app/services/search/arabic_normalizer.rb` — but **folded to alif** in `lib/export_quran_fts.rb`, which feeds the SQLite FTS tables. One organisation, two policies. |
+| **Tanzil** | **kept** in `simple`/`simple-plain`/`simple-min`; **dropped** in `simple-clean` |
+| **alfanous** | **folded to a full alif**, deliberately — its docstring says "so that words like سَمَّٰكُمُ normalize to سماكم matching standard user input" |
+| **Quranic Arabic Corpus** | **preserved** as distinct — its own Buckwalter symbol `` ` ``, never `A` |
+| **Lucene `ArabicNormalizer`** | **untouched** — the whole filter is five maps (آأإ→ا, ى→ي, ة→ه) and two deletions (tatweel, U+064B–U+0652). It cannot match a ʿUthmānī word against a typed one at all. |
+
+So alfanous is the one project that did what `quran-text` did, and it is the
+outlier. The largest live system drops it.
+
+### The premise needed correcting, and the correction strengthens §3
+
+The obvious framing — "ʿUthmānī `الرحمن` versus imlāʾī `الرحمان`" — is wrong, and
+worth stating because it is the intuitive way to get this backwards. **Tanzil's
+Imlaei script does not write `الرحمان`.** It writes `الرَّحْمَـٰنِ`, keeping U+0670 on
+a tatweel carrier. `الرحمان` is a machine artifact of folding, not a spelling
+anyone publishes.
+
+What Tanzil actually does is the whole point: converting ʿUthmānī to Simple
+turns roughly 6,500 of 9,838 dagger alifs into a real U+0627 and **leaves 3,330
+alone** — and the ~385 word-forms that keep it are precisely the ones modern
+orthography also writes without an alif (`علىٰ` 428, `ذٰلك` 280, `إلىٰ` 265,
+`هٰذا` 190, `الرحمٰن` 157).
+
+That is **word-class-selective, not mechanical** — independently, in the
+canonical Imlaei source, the same conclusion §3 reaches from our own corpus.
+Our `rasm_imlai` and Tanzil's Simple are doing the same job. It is the single
+strongest confirmation in this document, and it was not designed for.
+
+### What recurs, and so is load-bearing
+
+Present in three or more independently built systems:
+
+1. **Strip tatweel U+0640** — Lucene, ICU, QUL, alfanous, Tanzil. No dissent.
+2. **Strip U+064B–U+0652.** Universal.
+3. **ة→ه and ى→ي** — Lucene, ICU, QUL, alfanous, Larkey 2002, Kadri & Nie 2006,
+   and Tanzil's documented behaviour (`نعمت` matches `نعمة`). Six confirmations,
+   the most corroborated rule in the set.
+4. **Alif-seated hamzas أ إ آ → ا.** Universal.
+5. **Marks stripped before letters mapped** — §4.2 step 2 before step 3.
+6. **The same function at index and query time.** QUL calls one normaliser on
+   both sides; quran.com has a single `analyzer:` with no `search_analyzer`
+   override, confirmed by three equivalent queries returning identical results.
+   **No project normalises only one side.** §4.2 does this; it is why Elements'
+   published recipe needed fixing.
+7. **Keep the original beside the folded form.** alfanous ships an unfolded
+   `standard_full` field; QUL keeps four scripts plus an offset map for
+   highlighting; quran.com keeps un-normalised `lemma`/`stem`/`root` beside
+   normalised ones. **Nobody destroys the original.** §4.1 stores unfolded and
+   folds at match time for exactly this reason.
+
+### Where they genuinely disagree, and what we picked
+
+- **ؤ and ئ.** QUL → و / ي. alfanous → ء. Lucene, ICU, Larkey → unchanged.
+  No consensus. **We follow QUL** (و / ي), which is also what Engine already
+  did. A deliberate pick, not a default.
+- **ة→ه and ى→ي word-final only?** Larkey 2002 and Kadri & Nie 2006 both
+  restrict them to word-final position; every software implementation applies
+  them unconditionally. **We follow the software consensus.** The literature's
+  corpora were unvocalised newswire, where the trade-off is different.
+- **U+0671 alef wasla.** QUL and alfanous both fold it; Lucene and ICU both
+  leave it (it has no canonical decomposition). Both hand-rolled *Qurʾān*
+  normalisers independently added the rule the generic Arabic tooling lacks,
+  which is itself the signal. **We fold it.**
+
+### The experiment that forces `search_variants`
+
+Folded under each verified scheme, no single policy matches both the ʿUthmānī
+word and both spellings a user might type:
+
+| scheme | ʿUthmānī `ٱلرَّحۡمَٰنِ` | typed `الرحمن` | typed `الرحمان` |
+|---|---|---|---|
+| Lucene ArabicNormalizer | `الرحمٰن` | ✗ | ✗ |
+| ICU folding / QUL | `الرحمن` | **✓** | ✗ |
+| alfanous | `الرحمان` | ✗ | **✓** |
+
+Drop wins the typed query and loses `الرحمان`; fold does the reverse. **The only
+policy that serves both is to index more than one form** — §6's
+`search_variants`, or §4.3's flagged fallback. That conclusion is forced by the
+data rather than chosen, and it is reassuring that two of our repos had already
+arrived at the fallback half of it independently.
+
+### One premise, now with a citation
+
+A standard Arabic **phone** keyboard cannot produce U+0670: it appears nowhere
+in the AOSP/LineageOS `rowkeys_arabic*.xml` layouts, long-press alternates
+included. On desktop it is third-level (AltGr) in xkeyboard-config's
+`symbols/ara`. So the spelling users can actually type is the one without it —
+which is what §4 keys on.
+
+### Retrieval evidence
+
+Larkey, Ballesteros & Connell (SIGIR 2002) measured normalisation — diacritic
+removal plus أإآ→ا, final ى→ي, final ة→ه — at **+23.1%** average precision
+monolingual (.194 → .238) and **+133%** cross-language. Their corpus was
+unvocalised newswire, so "remove diacritics" cost them nothing that it costs us;
+treat the number as directional, not transferable. No paper was found that
+ablates individual normalisation rules, so per-rule deltas would be invention.
+
 ## 8. Conformance vector
 
 Every input below is copied from a real data file; none is typed by hand. The
