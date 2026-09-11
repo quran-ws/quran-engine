@@ -674,11 +674,12 @@ pub unsafe extern "C" fn qvp_search(page: *const Page, query: *const u8, query_l
     let v: Vec<QvpMatch> = (*page).search(in_str(query, query_len), &opt).iter().map(|m| QvpMatch { word: m.word, index: m.index as u32, loose: m.loose as u32 }).collect();
     fill(out, cap, &v)
 }
-/// kind: 0 strip marks, 1 fold, 2 normalize query, 3 loose key
+/// kind: 0 strip marks, 1 fold, 2 normalize query (match fold), 3 loose key,
+/// 4 search key. See docs/SEARCH-FOLD.md; 4 is additive, the rest are unchanged.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_arabic(kind: u8, s: *const u8, len: u32, out: *mut QvpStr) {
     let i = in_str(s, len);
-    let r = match kind { 0 => strip_marks(i), 1 => fold(i), 3 => loose_key(i), _ => normalize_query(i) };
+    let r = match kind { 0 => strip_marks(i), 1 => fold(i), 3 => loose_key(i), 4 => search_key(i), _ => normalize_query(i) };
     out_str(out, &r);
 }
 #[no_mangle]

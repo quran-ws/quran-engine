@@ -1,0 +1,150 @@
+{
+  "spec": "https://github.com/quran-ws/landing/blob/main/docs/search-fold-spec.md",
+  "note": "Every input is copied from a real data file in the quran-ws repositories; none is typed by hand. Shared verbatim across quran-text, quran-svg-elements and quran-engine.",
+  "vectors": [
+    {
+      "note": "dagger alif U+0670 is a MARK: stripped, never expanded",
+      "source": "quran-text hafs rasm_uthmani 1:1:3",
+      "input": "ٱلرَّحۡمَٰنِ",
+      "search_key": "ٱلرحمن",
+      "match_fold": "الرحمن",
+      "loose_key": "لرحمن"
+    },
+    {
+      "note": "  ...the same word's imlai, the search-key source",
+      "source": "quran-text hafs rasm_imlai 1:1:3",
+      "input": "الرحمن",
+      "search_key": "الرحمن",
+      "match_fold": "الرحمن",
+      "loose_key": "لرحمن"
+    },
+    {
+      "note": "dagger alif where imlai writes a FULL alif",
+      "source": "quran-text hafs rasm_uthmani 1:2:4",
+      "input": "ٱلۡعَٰلَمِينَ",
+      "search_key": "ٱلعلمين",
+      "match_fold": "العلمين",
+      "loose_key": "لعلمين"
+    },
+    {
+      "note": "  ...its imlai",
+      "source": "quran-text hafs rasm_imlai 1:2:4",
+      "input": "العالمين",
+      "search_key": "العالمين",
+      "match_fold": "العالمين",
+      "loose_key": "لعلمين"
+    },
+    {
+      "note": "alef wasla U+0671",
+      "source": "quran-text hafs rasm_uthmani",
+      "input": "ٱللَّهِ",
+      "search_key": "ٱلله",
+      "match_fold": "الله",
+      "loose_key": "لله"
+    },
+    {
+      "note": "hamza above U+0623",
+      "source": "quran-text hafs rasm_uthmani",
+      "input": "أَنۡعَمۡتَ",
+      "search_key": "أنعمت",
+      "match_fold": "انعمت",
+      "loose_key": "نعمت"
+    },
+    {
+      "note": "madda U+0622",
+      "source": "quran-text hafs rasm_uthmani",
+      "input": "ٱلضَّآلِّينَ",
+      "search_key": "ٱلضآلين",
+      "match_fold": "الضالين",
+      "loose_key": "لضلين"
+    },
+    {
+      "note": "ta marbuta U+0629",
+      "source": "quran-text hafs rasm_uthmani",
+      "input": "ٱلصَّلَوٰةَ",
+      "search_key": "ٱلصلوة",
+      "match_fold": "الصلوه",
+      "loose_key": "لصلوه"
+    },
+    {
+      "note": "waw hamza U+0624",
+      "source": "quran-text hafs rasm_uthmani",
+      "input": "يُؤۡمِنُونَ",
+      "search_key": "يؤمنون",
+      "match_fold": "يومنون",
+      "loose_key": "يومنون"
+    },
+    {
+      "note": "yeh hamza U+0626",
+      "source": "quran-text hafs rasm_uthmani",
+      "input": "أُوْلَٰٓئِكَ",
+      "search_key": "أولئك",
+      "match_fold": "اوليك",
+      "loose_key": "وليك"
+    },
+    {
+      "note": "bare hamza U+0621",
+      "source": "quran-text hafs rasm_uthmani",
+      "input": "سَوَآءٌ",
+      "search_key": "سوآء",
+      "match_fold": "سواء",
+      "loose_key": "سو"
+    },
+    {
+      "note": "shadda + tanwin",
+      "source": "quran-text hafs rasm_uthmani",
+      "input": "رَغَدًا",
+      "search_key": "رغدا",
+      "match_fold": "رغدا",
+      "loose_key": "رغد"
+    },
+    {
+      "note": "tatweel-borne hamza: stripping the uthmani LOSES the consonant",
+      "source": "quran-text hafs rasm_uthmani 2:31",
+      "input": "أَنۢبُِٔونِي",
+      "search_key": "أنبوني",
+      "match_fold": "انبوني",
+      "loose_key": "نبوني"
+    },
+    {
+      "note": "  ...its imlai keeps it",
+      "source": "quran-text hafs rasm_imlai 2:31",
+      "input": "أنبئوني",
+      "search_key": "أنبئوني",
+      "match_fold": "انبيوني",
+      "loose_key": "نبيوني"
+    },
+    {
+      "note": "rub el hizb U+06DE (category So)",
+      "source": "quran-tajweed uthmani-hafs.json 2:26",
+      "input": "۞ إِنَّ",
+      "search_key": "إن",
+      "match_fold": "ان",
+      "loose_key": "ن"
+    },
+    {
+      "note": "sajdah U+06E9 + small high madda U+06E4",
+      "source": "quran-tajweed uthmani-hafs.json 13:15",
+      "input": "وَٱلۡأٓصَالِ۩",
+      "search_key": "وٱلأصال",
+      "match_fold": "والاصال",
+      "loose_key": "ولصل"
+    },
+    {
+      "note": "waqf sign U+06D6 (category Mn)",
+      "source": "quran-tajweed uthmani-hafs.json 2:5",
+      "input": "رَّبِّهِمۡۖ",
+      "search_key": "ربهم",
+      "match_fold": "ربهم",
+      "loose_key": "ربهم"
+    },
+    {
+      "note": "tatweel U+0640 (category Lm)",
+      "source": "quran-tajweed uthmani-hafs.json 2:31",
+      "input": "أَنۢبِـُٔونِي",
+      "search_key": "أنبوني",
+      "match_fold": "انبوني",
+      "loose_key": "نبوني"
+    }
+  ]
+}
