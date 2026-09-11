@@ -1,119 +1,235 @@
-# quran-engine
+# Quran Engine
 
-A lossless vector engine for the word-by-word Uthmani mushaf. One Rust core, thin
-wrappers per platform, rendered by each platform's own canvas.
+**SVG does not perform on mobile. This does.** The same interactive muṣḥaf page —
+one printed page of the Qur'an — as a compact binary, with hit-testing, layout,
+styling and search inside the engine, drawn by each platform's own canvas.
 
-- **Lossless.** Every page is converted from the source SVG with a pixel-diff gate
-  (resvg, 4×) that all 604 pages pass. Coordinates are exact to 0.01 page unit.
-- **Small.** A full page is ~135 KB raw / ~62 KB brotli (5.3× smaller than the SVG);
-  the whole mushaf is 92.5 MB raw / **38.9 MB brotli**, sidecars and atlas included.
-  Pages, atlas and text sidecars are data your app loads — no package bundles them.
-- **The engine decides, the host draws.** Hit-testing (gap-aware, exact outlines),
-  layout (line spacing, fill-height, padding), layered styles with handles and
-  transitions down to *one diacritic of one word*, animated highlight bands, selection,
-  masking and reveal for memorisation, search with Arabic normalisation, crop-to-SVG,
-  metadata and the cross-page atlas all live in the core. A wrapper marshals and paints.
-- **One API everywhere.** `docs/API.md` documents it once; `web/qvp.js` is the reference
-  wrapper, the Kotlin, Dart, React Native and Swift wrappers mirror its names.
+| Package | Version | Whole muṣḥaf | Engine |
+|---|---|---|---|
+| not published yet — build from source | 0.1.0 | 604 pages · 92.5 MB raw · **38.9 MB brotli** | 280 KB wasm |
 
-```
-pages/*.svg ──qvp-convert──▶ NNN.qvp · atlas.qva · NNN.words.json (data, shipped by the app)
-                                      │
-                      qvp-core (Rust) ─┤  loader · geometry · hit-test · layout · styles · highlights
-                                      │  selection · mask/reveal · text/search · crop · atlas
-                      qvp-ffi (C ABI) ─┤  libqvp_ffi.{so,a,dylib} · qvp_ffi.wasm · include/qvp.h
-                                      │
-   web/qvp.js (Canvas2D) · packages/android (Kotlin, JNI) · packages/flutter (Dart FFI) ·
-   packages/react-native · packages/ios (Swift)  ← thin wrappers + demos
-```
+<sub>Sizes measured over the `v0.1.0` page data (`node` brotli-11, quality 11) and over
+`qvp_ffi.wasm` built from this repository at `3b17fc7`.</sub>
 
-## Repository
+A *muṣḥaf* is a printed copy of the Qur'an, and its page breaks belong to that
+edition, not to the Qur'an itself —
+[glossary](https://quran.ws/docs/concepts/glossary/#mushaf).
 
-| path | what |
+## What it provides
+
+- **604 printed pages as `NNN.qvp`**, converted from the split SVG artwork with a
+  pixel-diff gate (resvg, 4×) that every page passes; coordinates stay exact to
+  0.01 page unit.
+- **A Rust core, one C ABI, thin wrappers.** Hit-testing, layout, layered styles,
+  highlight bands, selection, masking, search, crop-to-SVG and the cross-page
+  atlas all live in the core. A wrapper marshals and paints.
+- **Word-level addressing that costs microseconds.** Exact-outline hit-testing
+  with a gap-aware fallback, so a tap between two words resolves the way a reader
+  expects rather than landing nowhere.
+- **Styling down to one diacritic of one word**, in layers, with handles — undo
+  exactly the call you made, never a global clear.
+- **Text without a database.** Five text forms per word from the sidecars,
+  Arabic-normalised search, citations, surah and juzʾ metadata, screen-reader
+  labels.
+
+## Use it when you need
+
+- A mobile or native app, where shipping and rendering 604 split SVG pages is too
+  large and too slow.
+- The same word-level behaviour across Web, Android, Flutter and React Native
+  from one API and one set of names.
+- Memorisation tools that hide and reveal words in place, on the page itself.
+- Following recitation word by word, where every frame costs a hit-test and a
+  highlight move.
+
+## Not for
+
+| If you want | Use |
 |---|---|
-| `crates/qvp-format` | QVP1 page format, QVA1 atlas format, codec, mark taxonomy |
-| `crates/qvp-convert` | `svg2qvp`, `qvp2svg`, `batch` (all pages + atlas + sidecars), identity test |
-| `crates/qvp-core` | the engine (see `docs/API.md`) |
-| `crates/qvp-ffi` | C ABI: `include/qvp.h`, native + wasm builds, ABI smoke test |
-| `web/` | reference wrapper `qvp.js`, Canvas2D renderer, demo app, single-file build |
-| `packages/android` | Kotlin library (JNI over `qvp.h`) + demo app — built and verified on the emulator |
-| `packages/flutter` | Dart FFI plugin + example app — 13 FFI tests, verified on the emulator |
-| `packages/react-native` | `@quranpedia/qvp-react-native` (declarative props over the Kotlin library) + example — verified on the emulator |
-| `packages/ios` | Swift package + demo — not yet built (needs a Mac; see `docs/MACOS.md` for the prompt) |
-| `docs/` | `API.md`, design spec, `UPSTREAM-DATA-ISSUES.md` (for the exporter team), `MACOS.md` |
-| `scripts/` | `build-engine-android.sh` |
+| A page in a browser, where the split SVGs already render fast enough | [Quran SVG Elements](https://github.com/quran-ws/quran-svg-elements) |
+| A muṣḥaf that has not been split into elements — most of the archive | [Quran SVG](https://github.com/quran-ws/quran-svg) |
+| Showing a page and tapping whole ayat, with no library at all | [Quran SVG](https://github.com/quran-ws/quran-svg) |
+| The Qur'anic text itself, as text you can query | [Quran Text](https://github.com/quran-ws/quran-text) |
 
-## Build the engine
+Three blocks render printed pages, and they are not a queue. **Coverage narrows
+as addressing deepens:**
 
-```sh
-curl -sSf https://sh.rustup.rs | sh -s -- -y -t wasm32-unknown-unknown      # once
-cargo test --workspace --release                    # unit tests + ABI test + identity gate (8 pages)
-QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity        # all 604 pages
-cargo run -p qvp-convert --release -- batch pages dist/pages              # NNN.qvp, NNN.words.json, atlas.qva/json
-cargo build -p qvp-ffi --release                                          # target/release/libqvp_ffi.{so,a}
-cargo build -p qvp-ffi --release --target wasm32-unknown-unknown          # target/wasm32-unknown-unknown/release/qvp_ffi.wasm
-scripts/build-engine-android.sh                                           # arm64-v8a / x86_64 / armeabi-v7a
-```
+| | Covers | You can address |
+|---|---|---|
+| Quran SVG | every vectorised muṣḥaf, and growing by contribution | an ayah |
+| Quran SVG Elements | only the muṣḥafs that have been split | a word, a mark |
+| **Quran Engine** | those same split muṣḥafs, on mobile | the same, fast |
 
-## Web demo
+Quran SVG is the archive, not a stepping stone — splitting a muṣḥaf is hard work
+and not every one of them will ever be split. This engine can only serve those
+that have.
 
-```sh
-cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/ && cp dist/pages/* web/pages/
-python3 web/build.py dev && (cd web && python3 -m http.server 8765)      # http://127.0.0.1:8765/?p=42
-python3 web/build.py embed 1-21,440-445,582,604                           # dist/demo.html, single file
-```
+It is also **not the artwork** — the shapes come from Elements — and **not a text
+source**: word text is attached at runtime from the `NNN.words.json` sidecars,
+which the converter folds in from the source bundle's own per-page index.
 
-## Measured (page 042, release build)
+## See it work
+
+<https://quran.ws/blocks/quran-engine/> runs this engine in the browser: the real
+wasm built from these crates, the real converted page, and the repository's own
+`web/qvp.js`. Tap a word and the timing shown is measured in your browser.
+
+The repository's own demo is `web/` — see **Quick start**.
+
+## Supported riwayat
+
+A *riwayah* is one transmitted reading of the Qur'an; different riwayat print
+different muṣḥafs — [glossary](https://quran.ws/docs/concepts/glossary/#riwayah).
+
+| Riwayah | Print | Status |
+|---|---|---|
+| Ḥafṣ ʿan ʿĀṣim | KFGQPC Madani muṣḥaf, V4 1441H | published as `v0.1.0` page data |
+
+The converter reads the `quran-svg` bundle format (schema `quran-svg/version`
+1.0.0), so any muṣḥaf published in that shape can be converted. One is published
+today.
+
+## Provenance
 
 | | |
 |---|---|
-| page load + geometry | 1.6 ms |
-| exact hit-test / gap-aware hit-test | 0.7 µs / 0.07 µs |
-| full display list, 2 style rules | 0.2 µs |
-| search "الله" over the page | 17 µs |
-| six-line ayah highlight incl. band boxes | 48 µs |
-| wasm engine | 273 KB |
-
-## Getting the page data
-
-The engine ships code only. The built data — 604 `NNN.qvp`, their `NNN.words.json`
-sidecars and `atlas.qva` — is published as a release:
+| Release | `v0.1.0` — *page data only*, no engine build (see Quick start) |
+| Source bundle | `quran-svg hafs-kfgqpc` v1.0.0 |
+| Built by engine commit | `16d16e7606e1` |
+| Contents | 604 pages · 77,432 words · 6,236 ayat · 114 surahs · 240 rubʿ al-ḥizb boundaries |
+| Sizes | 81.5 MB `.qvp` · 11.0 MB sidecars · 10 KB atlas |
+| Digest | `sha256:bbc05984b9a5a2aa4e2bb655d95677825bc01ae679ee5892ada2335980209666` |
 
 ```sh
-gh release download v0.1.0 -R quranpedia/quran-engine -p '*.tar.gz'
-tar xzf quran-engine-pages-hafs-kfgqpc.tar.gz          # 44 MB → 92.5 MB, 604 pages
+shasum -a 256 -c quran-engine-pages-hafs-kfgqpc.tar.gz.sha256
 ```
 
-Serve it pre-compressed; the whole mushaf is ~37 MB brotli. To rebuild it from source
-instead, see **Build the engine** above. The data carries the source bundle's terms,
-not the engine's MIT licence — see the `README.md` inside it.
+Every count above is read from `VERSION.json` inside the bundle; the sizes were
+recomputed from the unpacked files.
 
-## Page format
+## Quick start
 
-`NNN.qvp` stores only what cannot be worked out again. Bboxes, path origins and opcode
-offsets are all derived at load; the opcode stream is split into packed opcodes and
-separate x and y delta streams, which costs nothing raw and gives a compressor
-homogeneous streams. Against storing the records as they sit in memory that is **27%
-smaller raw and 19.6% smaller compressed** — 111.6 → 81.5 MB raw, 46.3 → 37.3 MB
-brotli over the mushaf — paid for at load by rebuilding what was dropped, about
-0.28 ms per page once decompression is counted.
+**There is no install line.** Nothing is published to a package registry, and the
+release carries the page data but no engine build — no wasm, no native library,
+no `qvp.js`. Publishing those as release assets is planned. Until then the engine
+is built from source, which means a Rust toolchain.
 
-## Data pipeline notes
+```sh
+git clone https://github.com/quran-ws/quran-engine && cd quran-engine
 
-The source data is the **`quran-svg hafs-kfgqpc` release bundle** (KFGQPC Madani
-mushaf V4 1441H, production profile, schema `quran-svg/version` 1.0.0). Unpack it so
-that `pages/` and `index/` sit side by side at the repo root — `batch` finds
-`index/by-page` next to `pages/` on its own.
+# 1 — the page data (44 MB download, 92.5 MB unpacked, 604 pages)
+gh release download v0.1.0 -R quran-ws/quran-engine -p '*.tar.gz'
+tar xzf quran-engine-pages-hafs-kfgqpc.tar.gz
 
-Issues found in the source are listed in `docs/UPSTREAM-DATA-ISSUES.md` and are fixed
-upstream, never patched here. Production pages carry only `data-word-key` and
-`data-rasm-uthmani`; the derived forms (`rasm_imlai`, `qpc`, `rasm`, `search`) come from
-`index/by-page/NNN.json`, which the converter folds into `NNN.words.json` for apps to
-attach at runtime via `page.attachWords(...)`.
+# 2 — the engine (~40 s once the toolchain is there)
+curl -sSf https://sh.rustup.rs | sh -s -- -y -t wasm32-unknown-unknown
+cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
 
-Mark, family and category names are the bundle's own `mark-taxonomy` v2 vocabulary
-(`schema/mark-taxonomy.json`), which follows the [Quran.ws terminology
-standard](https://github.com/quran-ws/guidelines): `fathah`, `hamzat_al_wasl`,
-`omitted_alif`, `rounded_zero`, `small_meem`, `waqf_jaiz_mustawi_al_tarafayn`. The same
-names appear in the C ABI, every wrapper and `docs/API.md`, and
-`crates/qvp-ffi/tests/abi.rs` gates them.
+# 3 — the reference web demo
+mkdir -p web/pages
+cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/
+cp quran-engine-pages-hafs-kfgqpc/{042.qvp,042.words.json,atlas.qva} web/pages/
+python3 web/build.py dev && (cd web && python3 -m http.server 8765)
+# http://127.0.0.1:8765/?p=42
+```
+
+Then, in your own code, through `web/qvp.js`:
+
+```js
+const engine = await QvpEngine.init(wasmBytes);
+const page   = engine.loadPage(qvpBytes);
+page.attachWords(wordsJson);                             // optional text forms
+
+page.layout({ viewportW, viewportH, nominalLines: page.nLines });
+page.hitTestEx(x, y, { maxDistance: 6, gapBias: 0.6 });  // → {word, wordKey: "1:2:3", exact, …}
+page.highlight("1:2", { mode: "both", ink: "#0a7d32" }); // → a handle; unhighlight(h) undoes it
+page.search("الرحمان");                                   // normalised: finds the printed form
+```
+
+Two things that are easy to get wrong:
+
+- **Pass `nominalLines: page.nLines`.** It defaults to 15 so that consecutive
+  full pages share a grid. Lay out a short page without it and the engine
+  reserves room for 15 lines — al-Fātiḥa has 8, and renders half-size inside an
+  empty box.
+- **`page.buildPaths()` is a renderer concern.** It caches `Path2D` per path and
+  is only needed before drawing, so it needs a DOM. Every query API — geometry,
+  hit-testing, layout, styles, text, search, crop, metadata — works headless
+  without it.
+
+## Platforms
+
+| | In the tree |
+|---|---|
+| Web (Canvas2D over wasm) | `web/qvp.js` — the reference wrapper |
+| Android (Kotlin, JNI) | `packages/android` + demo app |
+| Flutter (Dart FFI) | `packages/flutter` |
+| React Native | `packages/react-native` |
+| iOS (Swift) | **not written yet** — see `docs/MACOS.md` |
+
+`docs/API.md` documents the API once; each wrapper exposes the same names in its
+own casing, and `crates/qvp-ffi/include/qvp.h` is the source of truth.
+
+## Measured
+
+Page 042, release build, Apple silicon — run it yourself and expect different
+numbers on different hardware:
+
+```sh
+cargo run -p qvp-core --release --example bench -- quran-engine-pages-hafs-kfgqpc/042.qvp
+```
+
+| | |
+|---|---|
+| page load + geometry | 2.4 ms |
+| exact hit-test | 1.4 µs |
+| gap-aware hit-test | 0.15 µs |
+| full display list, 2 style rules | 0.24 µs |
+| search `الله` over the page | 86 µs |
+| six-line ayah highlight, bands included | 65 µs |
+
+The reason for the engine is not this table. It is that a fully split page is
+hundreds of kilobytes of vector paths, and a phone cannot hold 604 of them in a
+DOM and stay responsive.
+
+## Known rough edges
+
+- `revealStart()` in `web/qvp.js` throws `ReferenceError: markers is not defined`
+  on every call — the greyed-page reveal is unreachable from the web wrapper. The
+  rest of the memorisation surface (`mask`, `revealNext`, `revealWord`, `unmask`,
+  `maskHidden`, `maskBoxes`) works.
+- `surahs()` returns a `bannerDeco` field that `docs/API.md` does not list; it
+  indexes into `page.decos`.
+- No package is published, on any registry.
+
+## Works with
+
+| | |
+|---|---|
+| [Quran SVG Elements](https://github.com/quran-ws/quran-svg-elements) | the split artwork this engine converts and draws |
+| [Quran Text](https://github.com/quran-ws/quran-text) | the Qur'anic text as queryable data, when you need more than the words on the page |
+| [Quran Tajweed](https://github.com/quran-ws/quran-tajweed) | recitation-rule spans fed into layered styles — [what tajwīd is](https://quran.ws/docs/concepts/glossary/#tajweed) |
+| [Qiraat Ayah Map](https://github.com/quran-ws/qiraat-ayah-map) | reconcile ayah numbers when your source counts differently |
+
+## Documentation
+
+- `docs/API.md` — the whole API, once, for every platform.
+- `crates/qvp-ffi/include/qvp.h` — the C ABI, which the wrappers mirror.
+- `docs/UPSTREAM-DATA-ISSUES.md` — issues found in the source data, fixed
+  upstream and never patched here.
+- <https://quran.ws/docs/reference/quran-engine/> — the long form, with the
+  running demo.
+
+## Licence
+
+Code is **MIT** — `crates/`, `packages/`, `scripts/`, `web/`. Documentation is
+**CC BY 4.0**, with attribution waived for use inside a product.
+
+The page data is a separate release with its own terms: CC BY 4.0 covers this
+project's decomposition, labels and indexes. The page artwork and the Qur'anic
+text belong to the King Fahd Glorious Qur'an Printing Complex and are **not**
+licensed by us — the Complex's own usage rights are reproduced in full in
+`LICENSE`.
+
+Anyone publishing Qur'anic text to readers is responsible for verifying it
+against an authorised printed muṣḥaf. Corrections: corrections@quran.ws.
