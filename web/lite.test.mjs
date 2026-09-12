@@ -27,6 +27,55 @@ assert.equal(interactivePage.hitTest(2, 3), page.words[0])
 assert.equal(interactivePage.hitTest(6, 7), page.words[1])
 assert.equal(interactivePage.hitTest(4, 4), null)
 
+let nextPath = 0
+globalThis.Path2D = class {
+  constructor() { this.id = nextPath++ }
+  moveTo() {}
+  lineTo() {}
+  quadraticCurveTo() {}
+  bezierCurveTo() {}
+  closePath() {}
+}
+const renderedPage = new QvpLitePage({
+  width: 10,
+  height: 20,
+  number: 1,
+  paths: [
+    { ops: [0], pts: [1, 1], rule: 'evenodd' },
+    { ops: [0], pts: [2, 2], rule: 'nonzero' },
+    { ops: [0], pts: [3, 3], rule: 'nonzero' }
+  ],
+  words: [
+    { firstPath: 0, nPaths: 1 },
+    { firstPath: 2, nPaths: 1 }
+  ]
+})
+const calls = []
+const ctx = {
+  save: () => calls.push(['save']),
+  setTransform: (...args) => calls.push(['setTransform', ...args]),
+  set fillStyle(value) { calls.push(['fillStyle', value]) },
+  fill: (path, rule) => calls.push(['fill', path.id, rule]),
+  restore: () => calls.push(['restore'])
+}
+renderedPage.drawWords(ctx, [1, 0, 1], { scale: 2, x: 3, y: 4, ink: 'red' })
+renderedPage.drawDecorations(ctx, { scale: 5, x: 6, y: 7, ink: 'blue' })
+assert.deepEqual(calls, [
+  ['save'],
+  ['setTransform', 2, 0, 0, 2, 3, 4],
+  ['fillStyle', 'red'],
+  ['fill', 2, 'nonzero'],
+  ['fill', 0, 'evenodd'],
+  ['restore'],
+  ['save'],
+  ['setTransform', 5, 0, 0, 5, 6, 7],
+  ['fillStyle', 'blue'],
+  ['fill', 1, 'nonzero'],
+  ['restore']
+])
+assert.throws(() => renderedPage.drawWords(ctx, [2]), RangeError)
+assert.equal('paths' in renderedPage, false)
+
 assert.throws(() => decodeGeometry(bytes.subarray(0, -1)), /section length/)
 const wrongMagic = bytes.slice()
 wrongMagic[0] = 0

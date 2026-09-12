@@ -314,12 +314,15 @@ export function decodeGeometry(buffer) {
 }
 
 export class QvpLitePage {
+  #paths
+  #decorationPaths
+
   constructor({ width, height, number, paths, words }) {
     this.width = width
     this.height = height
     this.number = number
     this.words = words
-    this.paths = paths.map(({ ops, pts, rule }) => {
+    this.#paths = paths.map(({ ops, pts, rule }) => {
       const path = new Path2D()
       let point = 0
       for (const operation of ops) {
@@ -334,6 +337,15 @@ export class QvpLitePage {
       }
       return { path, rule }
     })
+    const wordPaths = new Uint8Array(this.#paths.length)
+    for (const { firstPath, nPaths } of words) {
+      for (let path = firstPath; path < firstPath + nPaths; path++) {
+        if (wordPaths[path]) throw new Error('Overlapping QVP word paths')
+        wordPaths[path] = 1
+      }
+    }
+    this.#decorationPaths = Array.from(wordPaths, (owned, path) => owned ? -1 : path)
+      .filter(path => path >= 0)
   }
 
   fit(canvas, padding = 0) {
@@ -354,7 +366,37 @@ export class QvpLitePage {
       if (box) ctx.fillRect(box[0], box[1], box[2] - box[0], box[3] - box[1])
     }
     ctx.fillStyle = ink
-    for (const { path, rule } of this.paths) ctx.fill(path, rule)
+    for (const { path, rule } of this.#paths) ctx.fill(path, rule)
+    ctx.restore()
+  }
+
+  drawWords(ctx, wordIndices, options = {}) {
+    const pathIndices = []
+    const seen = new Set()
+    for (const index of wordIndices) {
+      if (!Number.isInteger(index) || index < 0 || index >= this.words.length) {
+        throw new RangeError(`Invalid QVP word index: ${index}`)
+      }
+      if (seen.has(index)) continue
+      seen.add(index)
+      const { firstPath, nPaths } = this.words[index]
+      for (let path = firstPath; path < firstPath + nPaths; path++) pathIndices.push(path)
+    }
+    this.#drawPaths(ctx, pathIndices, options)
+  }
+
+  drawDecorations(ctx, options = {}) {
+    this.#drawPaths(ctx, this.#decorationPaths, options)
+  }
+
+  #drawPaths(ctx, pathIndices, { scale = 1, x = 0, y = 0, ink = '#231f20' } = {}) {
+    ctx.save()
+    ctx.setTransform(scale, 0, 0, scale, x, y)
+    ctx.fillStyle = ink
+    for (const index of pathIndices) {
+      const { path, rule } = this.#paths[index]
+      ctx.fill(path, rule)
+    }
     ctx.restore()
   }
 
