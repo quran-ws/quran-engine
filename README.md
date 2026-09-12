@@ -38,6 +38,9 @@ const canvas = document.querySelector('canvas')
 page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
 ```
 
+Decoded words include their `surah`, `ayah`, `word` and page-coordinate `box`.
+`page.hitTest(x, y)` returns the word at a point in those same page coordinates.
+
 Use the main package for layout, exact hit-testing, search, styling, selection,
 masks and animation.
 

@@ -118,11 +118,29 @@ export function decodeGeometry(buffer) {
     metadata.varint()
     metadata.varint()
   }
-  const wordRecords = Array.from({ length: nWords }, () => {
+  let surah = 0
+  let ayah = 0
+  let word = 0
+  let lineIdx = 0
+  let ayahIdx = 0
+  const wordRecords = Array.from({ length: nWords }, (_, idx) => {
     const firstPathDelta = metadata.zigzag()
-    for (let i = 0; i < 5; i++) metadata.zigzag()
+    surah += metadata.zigzag()
+    ayah += metadata.zigzag()
+    word += metadata.zigzag()
+    lineIdx += metadata.zigzag()
+    ayahIdx += metadata.zigzag()
     for (let i = 0; i < 5; i++) metadata.varint()
-    return { firstPathDelta, nPaths: metadata.varint() }
+    return {
+      idx,
+      surah,
+      ayah,
+      word,
+      lineIdx,
+      ayahIdx,
+      firstPathDelta,
+      nPaths: metadata.varint()
+    }
   })
   const columns = Array.from({ length: 4 }, () =>
     Uint8Array.from({ length: nPaths }, () => metadata.byte()))
@@ -265,7 +283,8 @@ export function decodeGeometry(buffer) {
   })
 
   let previousWordEnd = 0
-  const words = wordRecords.map(({ firstPathDelta, nPaths: wordPathCount }) => {
+  const words = wordRecords.map(record => {
+    const { firstPathDelta, nPaths: wordPathCount } = record
     const firstPath = previousWordEnd + firstPathDelta
     const endPath = firstPath + wordPathCount
     if (firstPath < 0 || endPath > nPaths) throw new Error('Invalid QVP word path range')
@@ -279,7 +298,17 @@ export function decodeGeometry(buffer) {
     }
     previousWordEnd = endPath
     if (box.some(value => !Number.isFinite(value))) throw new Error('Invalid QVP word box')
-    return box
+    return {
+      idx: record.idx,
+      surah: record.surah,
+      ayah: record.ayah,
+      word: record.word,
+      lineIdx: record.lineIdx,
+      ayahIdx: record.ayahIdx,
+      firstPath,
+      nPaths: wordPathCount,
+      box
+    }
   })
   return { width, height, number, paths, words }
 }
@@ -321,11 +350,16 @@ export class QvpLitePage {
     ctx.setTransform(scale, 0, 0, scale, x, y)
     ctx.fillStyle = band
     for (const index of highlight) {
-      const box = this.words[index]
+      const box = this.words[index]?.box
       if (box) ctx.fillRect(box[0], box[1], box[2] - box[0], box[3] - box[1])
     }
     ctx.fillStyle = ink
     for (const { path, rule } of this.paths) ctx.fill(path, rule)
     ctx.restore()
+  }
+
+  hitTest(x, y) {
+    return this.words.find(({ box: [x0, y0, x1, y1] }) =>
+      x >= x0 && x <= x1 && y >= y0 && y <= y1) ?? null
   }
 }
