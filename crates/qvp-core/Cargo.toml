@@ -3,7 +3,9 @@ name = "qvp-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "QVP engine core: page loader, hit-testing, style state, display list"
 
 [dependencies]
-qvp-format = { path = "../qvp-format" }
+qvp-format = { path = "../qvp-format", version = "0.1.0" }

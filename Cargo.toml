@@ -6,6 +6,8 @@ members = ["crates/qvp-format", "crates/qvp-convert", "crates/qvp-core", "crates
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+repository = "https://github.com/quran-ws/quran-engine"
+homepage = "https://quran.ws/blocks/quran-engine"
 
 [profile.release]
 opt-level = 3
