@@ -8,7 +8,7 @@ https://qvp.quran.ws/v0.1.0/manifest.json
 https://qvp.quran.ws/v0.1.0/001.qvp
 https://qvp.quran.ws/v0.1.0/001.words.json
 https://qvp.quran.ws/v0.1.0/atlas.qva
-https://qvp.quran.ws/v0.1.0/hafs-kfgqpc.tar
+https://qvp.quran.ws/v0.1.0/hafs-kfgqpc.tar.br
 ```
 
 A reader fetches the pages near its position and caches them; a service worker can prefetch
@@ -33,23 +33,27 @@ a juz from the manifest. Nothing needs the whole 92 MB up front.
   1,212. Solid brotli sees the redundancy between 604 pages of one mushaf; gzip's 32 KB
   window never has two pages in scope at once, which is why the release `.tar.gz` is 42 MB
   and saves nothing over fetching pages individually.
-- **The bundle is stored brotli-11 and served as `Content-Encoding: br`**, so the transport
-  layer decodes it and *no client needs a brotli decoder*. Measured against the live CDN:
+- **The bundle is an opaque brotli file.** No `Content-Encoding` is involved: every client
+  receives the same 26 MB and decodes it itself. iOS does this with `COMPRESSION_BROTLI`
+  (iOS 15+, 0.31 s for the whole mushaf measured on arm64).
 
-  | client | wire | encoding |
-  |---|---|---|
-  | Chrome (`br, zstd`) | **25.9 MB** | br |
-  | iOS `URLSession` (sends `gzip, deflate, br`) | **25.9 MB** | br |
-  | OkHttp / Dart `http` (gzip only) | 42.0 MB | gzip, made by the edge |
-  | client sending no `Accept-Encoding` | 89.2 MB | identity |
+  Serving it as `Content-Encoding: br` was tried and reverted. It looked ideal — 26 MB to
+  browsers and iOS with no client decoder — but the edge caches one normalised body, so
+  **whichever client filled the cache first decided what everyone got**:
 
-  Browsers expose **no brotli decoder to JavaScript** — `DecompressionStream` supports only
-  gzip/deflate/deflate-raw — so serving the archive as an opaque `.tar.br` would have forced
-  a wasm brotli into every web client. Letting the transport layer do it costs nothing and
-  works everywhere. There is no reason to publish a separate `.tar.gz`: the edge manufactures
-  gzip on demand for clients that need it.
-- The manifest's `bundle.sha256` covers the **decoded tar** — what a client holds after the
-  transport layer is done — not the stored bytes.
+  | first request | subsequent br clients |
+  |---|---|
+  | br | 26 MB, correct |
+  | gzip | **89 MB, uncompressed**, and it stays that way until a purge |
+
+  That is not shippable: it would have failed randomly per Cloudflare POP.
+
+  Browsers have no brotli decoder in JavaScript — `DecompressionStream` supports only
+  gzip/deflate/deflate-raw — so a web app should fetch pages individually rather than use
+  the bundle. 20 pages arrive in 36 ms, which is what a reader wants anyway.
+
+- The manifest's `bundle.sha256` covers the bytes as downloaded; `bundle.decoded` carries
+  the size and digest of the tar inside, so a client can check both ends of the decode.
 
 ## Publishing
 
@@ -76,7 +80,7 @@ Zone settings this depends on, all on `quran.ws`:
 | setting | value | why |
 |---|---|---|
 | Compression Rule `qvp page data` | host, **excluding `.tar`** → zstd, brotli, gzip | Cloudflare does not compress `application/octet-stream` by default. The `.tar` exclusion stops the edge re-encoding the bundle's brotli-11 at its own faster, worse level — Chrome advertises zstd, and without the exclusion it was served 37 MB of zstd instead of 26 MB of br. |
-| Compression Rule `qvp bundle` | host, `.tar`, and request does **not** accept br → brotli/gzip | with the exclusion above, a gzip-only client would otherwise get the bundle uncompressed at 89 MB. This rule gives it 42 MB. |
+| Compression Rule `qvp bundle` | host, `.tar`, and request does not accept br | **obsolete** — it existed for the `Content-Encoding: br` design and now matches nothing, since the bundle ends in `.tar.br`. Safe to delete. |
 | Cache Rule `qvp page data` | same match → eligible for cache, edge and browser TTL respect origin | the objects carry `immutable`; this stops a zone-wide rule overriding them |
 | Tiered Cache | Smart topology | POPs fill from a regional parent instead of each hitting R2 |
 | HTTP/3, 0-RTT | on | a reader fetches many small files at once, and returns often |

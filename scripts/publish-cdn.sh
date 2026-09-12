@@ -15,10 +15,12 @@
 # 41.8 MB for the same pages fetched individually). gzip cannot do this — its 32 KB window
 # never sees two pages at once.
 #
-# The bundle is stored brotli-11 but served as `Content-Encoding: br`, so the transport layer
-# decodes it and no client needs a brotli decoder: browsers get 26 MB (no wasm), and the edge
-# falls back to gzip (42 MB) for OkHttp and Dart, or identity (89 MB) for a client that asks
-# for neither. Two compression rules make that work — see docs/CDN.md.
+# The bundle is an opaque brotli file: no Content-Encoding, so every client receives the same
+# 26 MB and decodes it itself. Serving it as `Content-Encoding: br` was tried and reverted —
+# the edge caches one normalised body, so whichever client filled the cache first decided
+# what everyone got: a gzip client filling it first left every browser downloading 89 MB.
+# iOS decodes this with COMPRESSION_BROTLI (iOS 15+). Browsers have no brotli decoder in
+# JavaScript, so a web app should fetch pages individually — 20 of them arrive in 36 ms.
 #
 # Objects are stored RAW. Compression happens at the edge: a Cloudflare Compression Rule on
 # qvp.quran.ws compresses application/octet-stream, negotiating zstd → brotli → gzip per
@@ -74,20 +76,21 @@ done
 
 # 2b. The solid bundle, named for the edition alone: the host says the format and the prefix
 #     says the version, so anything more just repeats the URL. Built once per release; brotli -q 11 over ~92 MB takes a few minutes.
-BUNDLE="hafs-kfgqpc.tar"
+BUNDLE="hafs-kfgqpc.tar.br"
 echo "== building $BUNDLE (solid brotli, this takes a few minutes)"
 # COPYFILE_DISABLE: macOS tar otherwise stores extended attributes as AppleDouble "._name"
 # members. `tar tf` on macOS hides them, but Linux, iOS and every JS untar see them — the
 # archive would extract to 2,424 files, half of them junk, and differ from a CI build.
   # --format ustar keeps it to the portable header, with no pax extensions to parse.
 ( cd "$SRC" && COPYFILE_DISABLE=1 tar --format ustar -cf - $(ls *.qvp *.words.json atlas.qva atlas.json VERSION.json README.md) ) \
-  | brotli -q 11 -c > "$STAGE/$BUNDLE.br"
-# The manifest describes what a client ends up holding — the decoded tar, since the transport
-# layer undoes the brotli — not the stored bytes.
-brotli -dc "$STAGE/$BUNDLE.br" > "$STAGE/$BUNDLE.tmp"
-bundle_bytes=$(wc -c < "$STAGE/$BUNDLE.tmp" | tr -d ' ')
-bundle_sha=$(sha256 "$STAGE/$BUNDLE.tmp")
-rm -f "$STAGE/$BUNDLE.tmp"
+  | brotli -q 11 -c > "$STAGE/$BUNDLE"
+bundle_bytes=$(wc -c < "$STAGE/$BUNDLE" | tr -d ' ')
+bundle_sha=$(sha256 "$STAGE/$BUNDLE")
+# also record the archive inside, so a client can check what it decoded
+brotli -dc "$STAGE/$BUNDLE" > "$STAGE/.tar.tmp"
+tar_bytes=$(wc -c < "$STAGE/.tar.tmp" | tr -d ' ')
+tar_sha=$(sha256 "$STAGE/.tar.tmp")
+rm -f "$STAGE/.tar.tmp"
 echo "   $(echo "scale=1; $bundle_bytes/1048576" | bc) MB"
 
 # 3. A manifest so a service worker can prefetch a range of pages and verify what it got,
@@ -95,12 +98,14 @@ echo "   $(echo "scale=1; $bundle_bytes/1048576" | bc) MB"
 jq -n --arg version "$VERSION" \
       --arg base "https://qvp.quran.ws/$PREFIX/" \
       --arg bundle "$BUNDLE" --arg bbytes "$bundle_bytes" --arg bsha "$bundle_sha" \
+      --arg tbytes "$tar_bytes" --arg tsha "$tar_sha" \
       --slurpfile release "$SRC/VERSION.json" \
       --rawfile tsv "$STAGE/.files.tsv" '
   {version: $version, base: $base, encoding: "identity", release: $release[0],
    bundle: {name: $bundle, bytes: ($bbytes|tonumber), sha256: $bsha,
-            transfer: "Content-Encoding: br (26 MB); edge falls back to gzip, then identity",
-            contains: "ustar archive of every file below"},
+            compression: "brotli — the client decodes it; no Content-Encoding is used",
+            contains: "ustar archive of every file below",
+            decoded: {bytes: ($tbytes|tonumber), sha256: $tsha}},
    files: ($tsv | rtrimstr("\n") | split("\n") | map(split("\t") |
      {name: .[0], bytes: (.[1]|tonumber), sha256: .[2]}))}
 ' > "$STAGE/manifest.json"
@@ -141,13 +146,7 @@ put() {
 }
 export -f put
 cut -f1 "$STAGE/.files.tsv" | xargs -P 16 -I{} bash -c 'put "{}" "$SRC/{}"'
-# stored brotli, advertised as br: the transport layer decodes it for every client
-curl -sS -o /dev/null -w '%{http_code}' -X PUT \
-  --aws-sigv4 "aws:amz:auto:s3" --user "$R2_ACCESS_KEY_ID:$R2_SECRET_ACCESS_KEY" \
-  -H "Content-Type: application/x-tar" -H "Content-Encoding: br" \
-  -H "Cache-Control: public, max-age=31536000, immutable" \
-  --data-binary "@$STAGE/$BUNDLE.br" "$ENDPOINT/$BUCKET/$PREFIX/$BUNDLE" | grep -q 200 \
-  || { echo "PUT $BUNDLE failed" >&2; exit 1; }
+put "$BUNDLE" "$STAGE/$BUNDLE"
 put manifest.json "$STAGE/manifest.json"
 
 echo "== published https://qvp.quran.ws/$PREFIX/manifest.json"
