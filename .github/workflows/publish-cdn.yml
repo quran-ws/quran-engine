@@ -1,0 +1,60 @@
+# Publish a data release to qvp.quran.ws. Versions are immutable: this runs once per
+# release and refuses to overwrite a prefix that already exists.
+name: publish-cdn
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to publish (e.g. v0.1.0)'
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # The R2 credentials live in this environment, not in repo secrets, so only a run
+    # started from a tag — and approved — can reach them.
+    environment: cdn
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # The bundle is built with brotli -q 11; the runner image does not guarantee it.
+      - name: Install brotli
+        run: command -v brotli || sudo apt-get install -y -qq brotli
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'qvp-pages' }}
+          VERSION: ${{ inputs.version || github.event.release.tag_name }}
+        run: ./scripts/publish-cdn.sh "$VERSION" --from-release
+
+      - name: Check it is live
+        env:
+          VERSION: ${{ inputs.version || github.event.release.tag_name }}
+        run: |
+          base="https://qvp.quran.ws/$VERSION"
+          curl -fsS "$base/manifest.json" -o /tmp/m.json
+
+          # a page: CORS must be present, and the bytes must match the manifest digest.
+          # The Origin header is required — R2 only emits the CORS headers in response to one.
+          curl -fsS --compressed -H 'Origin: https://example.com' -o /tmp/001.qvp -D /tmp/h "$base/001.qvp"
+          grep -qi '^access-control-allow-origin' /tmp/h || { echo "no CORS header"; exit 1; }
+          want=$(jq -r '.files[]|select(.name=="001.qvp")|.sha256' /tmp/m.json)
+          got=$(sha256sum /tmp/001.qvp | cut -d' ' -f1)
+          [ "$want" = "$got" ] || { echo "001.qvp digest mismatch"; exit 1; }
+
+          # the bundle: the edge must pass the stored brotli through, not re-encode it
+          name=$(jq -r .bundle.name /tmp/m.json)
+          enc=$(curl -fsS -o /dev/null -D - -H 'Accept-Encoding: gzip, deflate, br, zstd' \
+                  "$base/$name" | tr -d '\r' | awk 'tolower($1)=="content-encoding:"{print tolower($2)}')
+          [ "$enc" = br ] || { echo "bundle served as '${enc:-identity}', expected br — check the compression rules"; exit 1; }
+
+          echo "pages, digests and bundle encoding all ok"

@@ -38,6 +38,13 @@ const canvas = document.querySelector('canvas')
 page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
 ```
 
+Page files are served from `qvp.quran.ws` under immutable, versioned URLs, so a
+browser can load one page without shipping the data — `docs/CDN.md`:
+
+```js
+const page = await loadPage('https://qvp.quran.ws/v0.1.0/042.qvp')
+```
+
 Decoded words include their `surah`, `ayah`, `word` and page-coordinate `box`.
 `page.hitTest(x, y)` returns the word at a point in those same page coordinates.
 `drawWords(ctx, wordIndices, options)` draws selected words with their dots,

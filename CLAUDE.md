@@ -21,6 +21,13 @@
   release (`gh release list`), never committed — regenerating it would add ~92 MB to history
   each time. Cutting a new one: `batch`, then tar `dist/pages` with a VERSION.json and the
   upstream rights notice, and `gh release create`.
+- The release is mirrored to `qvp.quran.ws` (Cloudflare R2) for apps that fetch over HTTP:
+  `scripts/publish-cdn.sh`, run by `.github/workflows/publish-cdn.yml` when a release is
+  published. The GitHub release stays canonical — the CDN is built from its signed tarball,
+  never from a working tree. A published version is immutable: rewriting one needs a manual
+  cache purge, so cut a new version instead. See `docs/CDN.md`, which also records the
+  Cloudflare rules the URLs depend on. The engine itself stays URL-agnostic: `qvp.js` and
+  every wrapper take bytes or paths, never a base URL.
 - Source data is the `quran-svg hafs-kfgqpc` release bundle: unpack `pages/` and `index/`
   side by side at the repo root (both gitignored). Source problems go in
   `docs/UPSTREAM-DATA-ISSUES.md`; do not patch data in the converter.
