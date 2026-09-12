@@ -1,4 +1,4 @@
-package net.quranpedia.qvp
+package ws.quran.qvp
 
 import android.graphics.Path
 

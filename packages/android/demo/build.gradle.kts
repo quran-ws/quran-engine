@@ -1,10 +1,10 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 
 android {
-    namespace = "net.quranpedia.qvp.demo"
+    namespace = "ws.quran.qvp.demo"
     compileSdk = 35
     defaultConfig {
-        applicationId = "net.quranpedia.qvp.demo"
+        applicationId = "ws.quran.qvp.demo"
         minSdk = 24; targetSdk = 35; versionCode = 1; versionName = "0.1"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }

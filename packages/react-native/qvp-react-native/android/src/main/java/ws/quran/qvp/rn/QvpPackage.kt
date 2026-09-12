@@ -1,4 +1,4 @@
-package net.quranpedia.qvp.rn
+package ws.quran.qvp.rn
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

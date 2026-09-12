@@ -1,5 +1,5 @@
 // @quran.ws/qvp-react-native — Android module. Thin: marshalling + handle reconciliation over the Kotlin
-// library `net.quranpedia.qvp` (packages/android/qvp), which is JNI over crates/qvp-ffi/include/qvp.h.
+// library `ws.quran.qvp` (packages/android/qvp), which is JNI over crates/qvp-ffi/include/qvp.h.
 //
 // Linking the Kotlin library, two ways:
 //   1. (preferred) the app's settings.gradle includes it as a Gradle project:
@@ -25,7 +25,7 @@ def qvpProject = findProject(":qvp")
 def qvpDir = file(rootProject.findProperty("qvpAndroidDir") ?: "$projectDir/../../../android/qvp")
 
 android {
-    namespace "net.quranpedia.qvp.rn"
+    namespace "ws.quran.qvp.rn"
     compileSdk safeExtGet("compileSdkVersion", 35)
     defaultConfig {
         minSdkVersion safeExtGet("minSdkVersion", 24)

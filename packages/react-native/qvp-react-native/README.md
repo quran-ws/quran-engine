@@ -1,7 +1,7 @@
 # @quran.ws/qvp-react-native
 
 React Native wrapper for the QVP vector mushaf engine. Android-first: a native view
-(`<QvpPageView />`) hosting the Kotlin library's `QvpPageView` (`net.quranpedia.qvp`,
+(`<QvpPageView />`) hosting the Kotlin library's `QvpPageView` (`ws.quran.qvp`,
 `packages/android/qvp`, JNI over `crates/qvp-ffi/include/qvp.h`) plus a promise-based module
 (`QvpModule`) for queries. The wrapper is *thin*: no hit-testing, layout or styling logic in JS or
 in the module — it marshals props/targets/selectors and reconciles declarative arrays against engine
@@ -129,7 +129,7 @@ microseconds.
 
 ```
 android/build.gradle                       library module; depends on project(':qvp') or compiles its sources
-android/src/main/java/net/quranpedia/qvp/rn/
+android/src/main/java/ws/quran/qvp/rn/
   QvpRnPageView.kt      QvpPageView subclass: page loading, prop → handle reconciliation, events
   QvpPageViewManager.kt SimpleViewManager<QvpRnPageView> (props, events, commit after each prop batch)
   QvpModule.kt          ReactContextBaseJavaModule: page queries by react tag, engine helpers, atlas

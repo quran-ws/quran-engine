@@ -1,10 +1,10 @@
-package net.quranpedia.qvp.rn
+package ws.quran.qvp.rn
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.uimanager.UIManagerHelper
-import net.quranpedia.qvp.*
-import net.quranpedia.qvp.Target
+import ws.quran.qvp.*
+import ws.quran.qvp.Target
 
 /**
  * Promise-based queries on the page behind a `<QvpPageView />` (looked up by react tag) plus engine-wide

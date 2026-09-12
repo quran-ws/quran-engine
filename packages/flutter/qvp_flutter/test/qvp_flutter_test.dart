@@ -9,7 +9,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvp_flutter/qvp_flutter.dart';
 
-const _repo = '/home/abdullah/Dev/github.com/quranpedia/quran-engine';
+const _repo = '/home/abdullah/Dev/github.com/quran-ws/quran-engine';
 
 String _findRepo() {
   var d = Directory.current;

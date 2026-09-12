@@ -1,4 +1,4 @@
-/* JNI shim: net.quranpedia.qvp.QvpNative ↔ qvp.h (complete surface).
+/* JNI shim: ws.quran.qvp.QvpNative ↔ qvp.h (complete surface).
  * Marshalling rules: structs go to the JVM as FloatArray/IntArray records (documented per function
  * in QvpNative.kt); colours stay uint32 inside IntArray; QvpStr → String; targets/selectors come in
  * as IntArray {kind, a, b, c, words...}. */
@@ -8,7 +8,7 @@
 #include <math.h>
 #include "qvp.h"
 
-#define FN(name) JNIEXPORT JNICALL Java_net_quranpedia_qvp_QvpNative_##name
+#define FN(name) JNIEXPORT JNICALL Java_ws_quran_qvp_QvpNative_##name
 #define PG(h) ((QvpPage*)(intptr_t)(h))
 #define AT(h) ((QvpAtlas*)(intptr_t)(h))
 

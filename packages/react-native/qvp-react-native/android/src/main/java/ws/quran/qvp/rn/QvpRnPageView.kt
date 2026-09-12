@@ -1,4 +1,4 @@
-package net.quranpedia.qvp.rn
+package ws.quran.qvp.rn
 
 import android.util.Base64
 import android.util.Log
@@ -8,8 +8,8 @@ import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.events.Event
 import android.widget.FrameLayout
-import net.quranpedia.qvp.*
-import net.quranpedia.qvp.Target
+import ws.quran.qvp.*
+import ws.quran.qvp.Target
 import java.io.File
 
 /**

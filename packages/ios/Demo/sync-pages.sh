@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT=$(cd ../../.. && pwd)
 
-REPO="${QVP_DATA_REPO:-quranpedia/quran-engine}"
+REPO="${QVP_DATA_REPO:-quran-ws/quran-engine}"
 TAG="${QVP_DATA_TAG:-v0.1.0}"
 ASSET=quran-engine-pages-hafs-kfgqpc.tar.gz
 BASE="https://github.com/$REPO/releases/download/$TAG"

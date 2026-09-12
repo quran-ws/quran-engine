@@ -34,7 +34,7 @@ so the debug APK runs standalone without Metro.
 npm install
 cd android && ./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64,arm64-v8a
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.qvpexample/.MainActivity
+adb shell am start -n ws.quran.qvp_example/.MainActivity
 ```
 
 For live-reload development run `npm start` and build with `debuggableVariants = ["debug"]` again.

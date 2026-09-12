@@ -80,9 +80,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.qvpexample"
+    namespace "ws.quran.qvp_example"
     defaultConfig {
-        applicationId "com.qvpexample"
+        applicationId "ws.quran.qvp_example"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
