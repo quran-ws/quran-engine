@@ -3,10 +3,12 @@ name = "qvp-ffi"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "C ABI for the QVP engine (native shared/static lib and wasm)"
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-qvp-core = { path = "../qvp-core" }
+qvp-core = { path = "../qvp-core", version = "0.1.0" }
