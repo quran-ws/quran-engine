@@ -2,14 +2,18 @@
 
 <img src=".github/banner.svg" alt="Quran Engine — Rendering, Beta" width="820">
 
-**SVG does not perform on mobile. This does — the same interactive Mushaf page, as a compact binary, drawn by each platform's own canvas.**
+**A rendering engine for interactive Mushaf pages that uses each platform's native graphics APIs.**
 
 <a href="https://quran.ws/blocks/quran-engine"><img alt="See it work" src="https://img.shields.io/badge/See_it_work-15705D?style=for-the-badge&labelColor=102F29"></a>
 <a href="https://quran.ws/docs/reference/quran-engine"><img alt="Documentation" src="https://img.shields.io/badge/Documentation-102F29?style=for-the-badge&labelColor=102F29"></a>
 
 </div>
 
-> محرّكٌ يعرض صفحات المصحف المُفصَّلة على الهاتف بصيغةٍ ثنائيةٍ مُوجَزة، حيث لا يفي الرسم الشعاعي.
+Use it when building Quran applications for mobile or desktop and you need fast, lightweight page rendering with interactive access to page elements.
+
+> محرّك لعرض صفحات المصحف التفاعلية بكفاءة باستخدام الرسم الأصلي لكل منصة.
+>
+> استخدمه عند بناء تطبيقات القرآن على الجوال أو سطح المكتب عندما تحتاج عرضًا سريعًا وخفيفًا لصفحات المصحف مع إمكانية التفاعل مع عناصرها.
 
 | | |
 |---|---|
