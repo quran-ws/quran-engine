@@ -31,6 +31,7 @@
       "import": "./web/index.mjs",
       "require": "./web/index.cjs"
     },
+    "./lite": "./web/lite.mjs",
     "./qvp.js": "./web/qvp.js",
     "./qvp_ffi.wasm": "./web/qvp_ffi.wasm",
     "./package.json": "./package.json"
@@ -40,6 +41,7 @@
   "files": [
     "web/index.mjs",
     "web/index.cjs",
+    "web/lite.mjs",
     "web/qvp.js",
     "web/qvp_ffi.wasm",
     "docs/API.md",
@@ -56,6 +58,7 @@
   "scripts": {
     "build:wasm": "cargo build -p qvp-ffi --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm",
     "prepack": "npm run build:wasm",
-    "test": "node web/smoke.mjs"
+    "test": "node web/smoke.mjs && node web/lite.test.mjs",
+    "test:lite": "node web/lite.test.mjs"
   }
 }
