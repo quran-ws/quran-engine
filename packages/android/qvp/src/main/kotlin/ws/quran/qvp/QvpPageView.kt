@@ -1,5 +1,6 @@
 package ws.quran.qvp
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -24,7 +25,18 @@ import android.view.View
  */
 class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
     var page: QvpPage? = null
-        set(v) { field = v; base = null; baseKey = ""; selectionHandle = 0; relayout(); resetView(); invalidate() }
+        set(v) {
+            if (field === v) return
+            Choreographer.getInstance().removeFrameCallback(frameCb)
+            animating = false
+            field = v
+            releaseBase()
+            baseKey = ""
+            selectionHandle = 0
+            relayout()
+            resetView()
+            invalidate()
+        }
     // layout knobs (viewport size comes from the view)
     var padTop = 0f; var padBottom = 0f; var padSide = 0f; var lineSpacing = 1f; var lineGap = 0f; var fillHeight = false
     var paperColor: Int = Color.TRANSPARENT           // ARGB
@@ -43,6 +55,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val m = Matrix()
     private val rect = RectF()
+    private val styledPaths = HashSet<Int>()
     private var selectionHandle = 0
     private var selAnchor = -1
     private var selecting = false
@@ -52,6 +65,11 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
 
     private val frameCb = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) { animating = false; invalidate() }
+    }
+
+    private fun releaseBase() {
+        base?.recycle()
+        base = null
     }
 
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -86,6 +104,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
                 hit.deco >= 0 -> onDecoTap?.invoke(p.decos[hit.deco], hit)
                 else -> onEmptyTap?.invoke()
             }
+            performClick()
             return true
         }
     })
@@ -118,6 +137,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         onSelectionChanged?.invoke(IntArray(0)); invalidate()
     }
 
+    @SuppressLint("ClickableViewAccessibility") // GestureDetector calls performClick for confirmed taps.
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             if (selecting) { selecting = false; parent?.requestDisallowInterceptTouchEvent(false) }
@@ -126,7 +146,19 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         gestureDetector.onTouchEvent(event); return true
     }
 
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) { relayout(); resetView() }
+
+    override fun onDetachedFromWindow() {
+        Choreographer.getInstance().removeFrameCallback(frameCb)
+        animating = false
+        releaseBase()
+        super.onDetachedFromWindow()
+    }
 
     /** Recompute the engine layout for the current size/knobs. */
     fun relayout() {
@@ -168,22 +200,31 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val moving = p.tick(System.nanoTime() / 1e6)
         val paths = p.buildPaths()
         val styled = p.styled()
-        val styledSet = HashSet<Int>(styled.size / 2); var i = 0
-        while (i < styled.size) { styledSet.add(styled[i]); i += 2 }
+        styledPaths.clear(); var i = 0; var styledKey = 1
+        while (i < styled.size) {
+            val pi = styled[i]
+            styledPaths.add(pi)
+            styledKey = 31 * styledKey + pi
+            i += 2
+        }
         val ink = p.defaultInk
-        val key = "$viewScale|$viewOx|$viewOy|$ink|${l.pitch}|${l.lineDy.contentHashCode()}|${styledSet.sorted().hashCode()}|$width|$height"
+        val key = "$viewScale|$viewOx|$viewOy|$ink|${l.pitch}|${l.lineDy.contentHashCode()}|$styledKey|$width|$height"
         if (paperColor != Color.TRANSPARENT) { paint.color = paperColor; canvas.drawRect(viewOx, viewOy, viewOx + l.contentW * viewScale, viewOy + l.contentH * viewScale, paint) }
         val bands = p.highlightBoxes()
         drawBoxes(canvas, bands)
         var b = base
         if (b == null || key != baseKey || b.width != width || b.height != height) {
             val t0 = System.nanoTime()
-            if (b == null || b.width != width || b.height != height) { b = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888); base = b }
+            if (b == null || b.width != width || b.height != height) {
+                b?.recycle()
+                b = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                base = b
+            }
             b.eraseColor(Color.TRANSPARENT)
             val bc = Canvas(b); paint.color = QvpColor.argb(ink)
             var cur = -1; var n = 0
             for (pi in 0 until p.nPaths) {
-                if (pi in styledSet) continue
+                if (pi in styledPaths) continue
                 val ln = p.pathLine(pi); if (ln != cur) { bc.setMatrix(lineMatrix(ln)); cur = ln }
                 bc.drawPath(paths[pi], paint); n++
             }

@@ -22,6 +22,21 @@ cargo run -p qvp-core --release --example bench -- quran-engine-pages-hafs-kfgqp
 | search `الله` over the page | 86 µs |
 | six-line ayah highlight, bands included | 65 µs |
 
+Android wrapper baseline for page 042 on the API 35 arm64 Android emulator
+(`Google sdk_gphone64_arm64`), using debug instrumentation with the release-built Rust core:
+
+| | |
+|---|---|
+| `QvpPage` load + metadata copy | 1.36–1.90 ms median |
+| Android `Path` construction | 2.62–3.71 ms median |
+| first 1080 × 1920 software Canvas draw | 14.37–17.29 ms median |
+| cached Canvas draw | 0.57–0.59 ms median |
+
+Run `scripts/sync-android-test-data.sh`, then
+`./gradlew :qvp:connectedDebugAndroidTest` from `packages/android` to reproduce it.
+`QvpAndroidBenchmarkTest` emits the raw JSON under the `QvpBenchmark` log tag. These are a
+development baseline, not physical-device numbers; comparisons need the same device and build.
+
 The reason for the engine is not this table. It is that a fully split page is
 hundreds of kilobytes of vector paths, and a phone cannot hold 604 of them in a
 DOM and stay responsive.
@@ -34,4 +49,5 @@ DOM and stay responsive.
   `maskHidden`, `maskBoxes`) works.
 - `surahs()` returns a `bannerDeco` field that `docs/API.md` does not list; it
   indexes into `page.decos`.
-- No package is published, on any registry.
+- No package is published on a public registry. The Android build can produce a versioned AAR or
+  publish `ws.quran:qvp-android` to Maven Local.
