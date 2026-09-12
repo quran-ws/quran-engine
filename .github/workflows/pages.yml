@@ -1,0 +1,71 @@
+name: QVP pages
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pages.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build versioned page site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          archive=quran-engine-pages-hafs-kfgqpc.tar.gz
+          checksum="$archive.sha256"
+          mkdir -p site/qvp
+
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.draft == false) | select(any(.assets[]; .name == "quran-engine-pages-hafs-kfgqpc.tar.gz")) | .tag_name' |
+          while read -r tag; do
+            [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+
+            download="$RUNNER_TEMP/qvp-$tag"
+            destination="site/qvp/$tag"
+            mkdir -p "$download" "$destination"
+
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern "$archive" --pattern "$checksum" --dir "$download"
+            (cd "$download" && sha256sum -c "$checksum")
+            tar -xzf "$download/$archive" --strip-components=1 -C "$destination" \
+              --wildcards '*/[0-9][0-9][0-9].qvp'
+
+            count=$(find "$destination" -maxdepth 1 -type f -name '*.qvp' | wc -l)
+            [[ "$count" -eq 604 ]]
+          done
+
+          [[ $(find site/qvp -mindepth 1 -maxdepth 1 -type d | wc -l) -gt 0 ]]
+          touch site/.nojekyll
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

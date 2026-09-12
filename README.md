@@ -38,6 +38,12 @@ const canvas = document.querySelector('canvas')
 page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
 ```
 
+Versioned page files are also published for direct browser loading:
+
+```text
+https://quran-ws.github.io/quran-engine/qvp/v0.1.0/042.qvp
+```
+
 Decoded words include their `surah`, `ayah`, `word` and page-coordinate `box`.
 `page.hitTest(x, y)` returns the word at a point in those same page coordinates.
 `drawWords(ctx, wordIndices, options)` draws selected words with their dots,
