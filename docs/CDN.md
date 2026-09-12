@@ -8,7 +8,7 @@ https://qvp.quran.ws/v0.1.0/manifest.json
 https://qvp.quran.ws/v0.1.0/001.qvp
 https://qvp.quran.ws/v0.1.0/001.words.json
 https://qvp.quran.ws/v0.1.0/atlas.qva
-https://qvp.quran.ws/v0.1.0/quran-engine-pages-hafs-kfgqpc.tar
+https://qvp.quran.ws/v0.1.0/hafs-kfgqpc.tar
 ```
 
 A reader fetches the pages near its position and caches them; a service worker can prefetch

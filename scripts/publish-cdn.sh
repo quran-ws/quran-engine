@@ -72,8 +72,9 @@ for f in "$SRC"/*.qvp "$SRC"/*.words.json "$SRC"/atlas.qva "$SRC"/atlas.json "$S
   printf '%s\t%s\t%s\n' "$(basename "$f")" "$(wc -c < "$f" | tr -d ' ')" "$(sha256 "$f")" >> "$STAGE/.files.tsv"
 done
 
-# 2b. The solid bundle. Built once per release; brotli -q 11 over ~92 MB takes a few minutes.
-BUNDLE="quran-engine-pages-hafs-kfgqpc.tar"
+# 2b. The solid bundle, named for the edition alone: the host says the format and the prefix
+#     says the version, so anything more just repeats the URL. Built once per release; brotli -q 11 over ~92 MB takes a few minutes.
+BUNDLE="hafs-kfgqpc.tar"
 echo "== building $BUNDLE (solid brotli, this takes a few minutes)"
 # COPYFILE_DISABLE: macOS tar otherwise stores extended attributes as AppleDouble "._name"
 # members. `tar tf` on macOS hides them, but Linux, iOS and every JS untar see them — the
