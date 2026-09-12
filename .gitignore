@@ -15,6 +15,7 @@ packages/android/**/build/
 packages/android/**/.cxx/
 packages/android/local.properties
 packages/android/qvp/prebuilt/
+packages/android/qvp/src/androidTest/assets/
 packages/android/demo/src/main/assets/pages/
 packages/flutter/**/android/src/main/jniLibs/
 packages/flutter/**/build/

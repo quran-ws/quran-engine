@@ -25,8 +25,11 @@ object QvpEngine {
  * Mirrors web/qvp.js — see docs/API.md. Call [close] when done.
  */
 class QvpPage(bytes: ByteArray) : AutoCloseable {
-    private var h: Long = QvpNative.pageLoad(bytes)
-    init { require(h != 0L) { "qvp_page_load failed (not a QVP1 file?)" } }
+    private var nativeHandle: Long = QvpNative.pageLoad(bytes)
+    private val h: Long get() = nativeHandle.takeIf { it != 0L } ?: error("QvpPage is closed")
+    init { require(nativeHandle != 0L) { "qvp_page_load failed (not a QVP1 file?)" } }
+
+    val isClosed: Boolean get() = nativeHandle == 0L
 
     val width: Float; val height: Float; val pageNo: Int
     val nLines: Int; val nAyahs: Int; val nWords: Int; val nPaths: Int; val nDecos: Int
@@ -208,13 +211,22 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** standalone SVG with the current colours; background alpha 0 = transparent */
     fun cropSvg(t: Target, pad: Float = 2f, keepAyahMarks: Boolean = true, background: Int = 0): String? = QvpNative.cropSvg(h, t.arr, pad, keepAyahMarks, background)
 
-    override fun close() { if (h != 0L) { QvpNative.pageFree(h); h = 0 } }
+    @Synchronized
+    override fun close() {
+        val handle = nativeHandle
+        if (handle != 0L) {
+            nativeHandle = 0L
+            QvpNative.pageFree(handle)
+        }
+    }
 }
 
 /** Cross-page lookup from atlas.qva. */
 class QvpAtlas(bytes: ByteArray) : AutoCloseable {
-    private var h: Long = QvpNative.atlasLoad(bytes)
-    init { require(h != 0L) { "qvp_atlas_load failed" } }
+    private var nativeHandle: Long = QvpNative.atlasLoad(bytes)
+    private val h: Long get() = nativeHandle.takeIf { it != 0L } ?: error("QvpAtlas is closed")
+    init { require(nativeHandle != 0L) { "qvp_atlas_load failed" } }
+    val isClosed: Boolean get() = nativeHandle == 0L
     private fun surah(v: Array<String>?) = v?.let { QvpAtlasSurah(it[0].toInt(), it[1].toInt(), it[2].toInt(), when (it[3]) { "0" -> "makkah"; "1" -> "madinah"; else -> "" }, it[4], it[5], it[6]) }
     fun pageOf(surah: Int, ayah: Int): Int? = QvpNative.atlasPageOf(h, surah, ayah).let { if (it < 0) null else it }
     fun pageRange(page: Int): Pair<Pair<Int, Int>, Pair<Int, Int>>? = QvpNative.atlasPageRange(h, page)?.let { (it[0] to it[1]) to (it[2] to it[3]) }
@@ -230,5 +242,12 @@ class QvpAtlas(bytes: ByteArray) : AutoCloseable {
     fun juzAt(surah: Int, ayah: Int) = divisionAt(Division.JUZ, surah, ayah)
     fun pagesOfJuz(n: Int): Pair<Int, Int>? = QvpNative.atlasPagesOfJuz(h, n)?.let { it[0] to it[1] }
     fun findSurah(text: String): List<QvpAtlasSurah> = QvpNative.atlasFindSurah(h, text).toList().mapNotNull { n -> surah(n) }
-    override fun close() { if (h != 0L) { QvpNative.atlasFree(h); h = 0 } }
+    @Synchronized
+    override fun close() {
+        val handle = nativeHandle
+        if (handle != 0L) {
+            nativeHandle = 0L
+            QvpNative.atlasFree(handle)
+        }
+    }
 }
