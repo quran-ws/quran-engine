@@ -10,7 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "@quranpedia/qvp-react-native": "file:../qvp-react-native",
+    "@quran.ws/qvp-react-native": "file:../qvp-react-native",
     "@react-native/new-app-screen": "0.87.1",
     "react": "19.2.3",
     "react-native": "0.87.1",

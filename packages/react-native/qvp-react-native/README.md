@@ -1,4 +1,4 @@
-# @quranpedia/qvp-react-native
+# @quran.ws/qvp-react-native
 
 React Native wrapper for the QVP vector mushaf engine. Android-first: a native view
 (`<QvpPageView />`) hosting the Kotlin library's `QvpPageView` (`net.quranpedia.qvp`,
@@ -10,7 +10,7 @@ handles. Names follow `docs/API.md`. **The package ships no page data.**
 ## Install
 
 ```sh
-npm install @quranpedia/qvp-react-native        # or a file:/git dependency inside the monorepo
+npm install @quran.ws/qvp-react-native        # or a file:/git dependency inside the monorepo
 ```
 
 Android needs the Kotlin library. Preferred: include it as a Gradle project in your app's
@@ -37,7 +37,7 @@ URIs: `asset://pages/042.qvp`, `file:///…`, `/abs/path`, or `base64:…`.
 ## The view
 
 ```tsx
-import { QvpPageView, useQvp, Sel, T, LAYER, KIND, DECO, rgba } from '@quranpedia/qvp-react-native';
+import { QvpPageView, useQvp, Sel, T, LAYER, KIND, DECO, rgba } from '@quran.ws/qvp-react-native';
 
 const qvp = useQvp();
 <QvpPageView

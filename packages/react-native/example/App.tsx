@@ -8,7 +8,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   QvpPageView, QvpAtlas, Qvp, useQvp, Sel, T, KIND, DECO, LAYER, rgba,
   type Word, type Deco, type Highlight, type StyleRule, type Theme, type Mask, type Reveal, type Match, type SelectionInfo, type PageInfo, type Stats, type HighlightMode, type Selector,
-} from '@quranpedia/qvp-react-native';
+} from '@quran.ws/qvp-react-native';
 
 const PAGES = [...Array.from({ length: 21 }, (_, i) => i + 1), 440, 441, 442, 443, 444, 445, 582, 604];
 const pad3 = (n: number) => String(n).padStart(3, '0');
