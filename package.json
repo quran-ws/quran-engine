@@ -1,0 +1,61 @@
+{
+  "name": "@quran.ws/engine",
+  "version": "0.1.0",
+  "description": "Rendering engine for interactive muṣḥaf pages: layout, hit-testing, styling and search over the QVP page format, as wasm with a Canvas2D wrapper.",
+  "license": "MIT",
+  "homepage": "https://quran.ws/blocks/quran-engine",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quran-ws/quran-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/quran-ws/quran-engine/issues"
+  },
+  "keywords": [
+    "quran",
+    "mushaf",
+    "arabic",
+    "wasm",
+    "canvas",
+    "rendering",
+    "qvp"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "./web/qvp.js",
+    "./web/index.mjs",
+    "./web/index.cjs"
+  ],
+  "exports": {
+    ".": {
+      "import": "./web/index.mjs",
+      "require": "./web/index.cjs"
+    },
+    "./qvp.js": "./web/qvp.js",
+    "./qvp_ffi.wasm": "./web/qvp_ffi.wasm",
+    "./package.json": "./package.json"
+  },
+  "main": "./web/index.cjs",
+  "module": "./web/index.mjs",
+  "files": [
+    "web/index.mjs",
+    "web/index.cjs",
+    "web/qvp.js",
+    "web/qvp_ffi.wasm",
+    "docs/API.md",
+    "README.md",
+    "LICENSE",
+    "LICENSES/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build:wasm": "cargo build -p qvp-ffi --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm",
+    "prepack": "npm run build:wasm",
+    "test": "node web/smoke.mjs"
+  }
+}
