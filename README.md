@@ -26,6 +26,29 @@ Use it when building Quran applications for mobile or desktop and you need fast,
 # not published — build the wasm, or take it from the release
 ```
 
+For a small Canvas-only reader that needs page drawing and word bands, import
+the dependency-free QVP decoder. It loads the original page files directly and
+does not load Wasm:
+
+```js
+import { loadPage } from '@quran.ws/engine/lite'
+
+const page = await loadPage('/pages/042.qvp')
+const canvas = document.querySelector('canvas')
+page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
+```
+
+Decoded words include their `surah`, `ayah`, `word` and page-coordinate `box`.
+`page.hitTest(x, y)` returns the word at a point in those same page coordinates.
+`drawWords(ctx, wordIndices, options)` draws selected words with their dots,
+diacritics and pause marks. `drawDecorations(ctx, options)` draws non-word page
+elements such as ayah markers, surah banners, basmalahs, division and sajdah
+marks, running heads and page numbers. Both accept the same `scale`, `x`, `y`
+and `ink` options as `draw()` and leave clearing and sizing to the caller.
+
+Use the main package for layout, exact hit-testing, search, styling, selection,
+masks and animation.
+
 ## Where the documentation is
 
 Everything about using it lives on the site. This repository is the source.
