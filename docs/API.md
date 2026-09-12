@@ -144,6 +144,27 @@ function frame(now) {
 }
 ```
 
+`Renderer.draw()` calls `page.buildPaths()` for you, and `buildPaths()` memoises, so a
+consumer using the supplied renderer never calls it directly. Call it yourself only when
+you write your own renderer on top of `paint()`/`styled()`: it turns the page's op/point
+arrays into the path objects those lists index, and drawing without it has nothing to
+fill.
+
+`buildPaths()` constructs `Path2D`, and so does `drawBoxes()` — `Path2D` is a DOM
+interface, so **everything from `buildPaths()` down is browser-only**. In Node or in a
+worker without a DOM the call fails at its first path:
+
+```console
+$ node -e 'new Path2D()'
+ReferenceError: Path2D is not defined
+```
+
+Everything above drawing is pure wasm and runs anywhere: loading, `words`/`ayahs`/`lines`,
+hit-testing, `layout()`, styles, `paint()` and `styled()` themselves. So a server-side or
+worker consumer can use the engine for everything except the final fill, and should stop
+at the display list. The native bindings build paths against their own platform types
+(`CGPath`, `android.graphics.Path`, `ui.Path`) and have no such restriction.
+
 `paint()` is the full display list (a colour per path); `styled()` lists only the
 paths that differ from the default ink, which is what the cached-base-layer renderer
 repaints. `highlightBoxes()` and `maskBoxes()` are viewport-px rectangles.
