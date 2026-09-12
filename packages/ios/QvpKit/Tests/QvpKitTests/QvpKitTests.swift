@@ -262,4 +262,41 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(atlas.pageRange(42)!.first.0, 2)
         atlas.close()
     }
+
+    /// QvpCanvasController mirrors QvpPageView's fit / transform / tap maths over the same engine layout.
+    @MainActor func testCanvasController() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let bytes = try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp"))
+        let p = try QvpPage(bytes: bytes)
+        defer { p.close() }
+        let c = QvpCanvasController()
+        c.page = p
+        c.setBounds(CGSize(width: 690, height: 1100))
+        let l = try XCTUnwrap(p.currentLayout)
+        // fit-and-centre, exactly QvpPageView.resetView()
+        let expScale: CGFloat = CGFloat(l.contentH) > 1100 ? 1100 / CGFloat(l.contentH) : 1
+        XCTAssertEqual(c.viewScale, expScale, accuracy: 1e-5)
+        XCTAssertEqual(c.viewOx, max((690 - CGFloat(l.contentW) * expScale) / 2, 0), accuracy: 1e-3)
+        XCTAssertEqual(c.viewOy, max((1100 - CGFloat(l.contentH) * expScale) / 2, 0), accuracy: 1e-3)
+        XCTAssertFalse(c.isZoomed)
+        // lineTransform composes engine layout + view transform
+        let w = p.words[0]
+        let t = c.lineTransform(w.lineIdx)
+        let pt = CGPoint(x: CGFloat((w.x0 + w.x1) / 2), y: CGFloat((w.y0 + w.y1) / 2)).applying(t)
+        // a tap at that view point resolves to the same word through the controller
+        var tapped: Int? = nil
+        c.onWordTap = { word, _ in tapped = word.idx }
+        c.tap(pt)
+        XCTAssertEqual(tapped, 0)
+        // pinch past the fitted scale flips isZoomed; resetView clears it
+        c.pinch(2.0, at: CGPoint(x: 345, y: 550))
+        XCTAssertTrue(c.isZoomed)
+        c.resetView()
+        XCTAssertFalse(c.isZoomed)
+        // line spacing only opens up: below 1 clamps to the printed pitch
+        c.lineSpacing = 0.5
+        XCTAssertEqual(c.lineSpacing, 1)
+        c.lineSpacing = 1.5
+        XCTAssertEqual(c.lineSpacing, 1.5)
+    }
 }
