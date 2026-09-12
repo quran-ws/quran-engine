@@ -1,4 +1,4 @@
-package com.qvpexample
+package ws.quran.qvp_example
 
 import android.app.Application
 import com.facebook.react.PackageList

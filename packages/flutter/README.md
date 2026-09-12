@@ -108,5 +108,5 @@ layout controls, page metadata and engine stats. It bundles pages 001–021,
 bash scripts/build-engine-android.sh
 cd packages/flutter/qvp_flutter/example
 flutter build apk --debug && adb install -r build/app/outputs/flutter-apk/app-debug.apk
-flutter run                                        # or: adb shell am start -n org.quranpedia.qvp_flutter_example/.MainActivity
+flutter run                                        # or: adb shell am start -n ws.quran.qvp_flutter_example/.MainActivity
 ```

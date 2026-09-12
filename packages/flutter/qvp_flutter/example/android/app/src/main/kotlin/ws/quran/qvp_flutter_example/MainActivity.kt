@@ -1,4 +1,4 @@
-package org.quranpedia.qvp_flutter_example
+package ws.quran.qvp_flutter_example
 
 import io.flutter.embedding.android.FlutterActivity
 

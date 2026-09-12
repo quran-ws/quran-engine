@@ -1,7 +1,7 @@
 plugins { id("com.android.library"); id("org.jetbrains.kotlin.android") }
 
 android {
-    namespace = "net.quranpedia.qvp"
+    namespace = "ws.quran.qvp"
     compileSdk = 35
     ndkVersion = "27.2.12479018"
     defaultConfig {

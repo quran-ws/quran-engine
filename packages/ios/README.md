@@ -38,7 +38,7 @@ lipo'd into one slice) and macOS (arm64, so `swift test` runs on the Mac), then
 
 Page data is a separate download — the whole mushaf, not built here:
 `Demo/sync-pages.sh` fetches the `quran-engine-pages-hafs-kfgqpc.tar.gz` asset of the
-[`v0.1.0` data release](https://github.com/quranpedia/quran-engine/releases/tag/v0.1.0), checks its
+[`v0.1.0` data release](https://github.com/quran-ws/quran-engine/releases/tag/v0.1.0), checks its
 sha256 and unpacks it into `dist/pages` (`NNN.qvp`, `NNN.words.json` text-forms sidecar, `atlas.qva`).
 Set `QVP_DATA_TAG` to pin another release, or `QVP_PAGES=<dir>` to use converter output
 (`cargo run -p qvp-convert --release -- batch pages dist/pages`) instead.
@@ -125,7 +125,7 @@ scripts/build-engine-ios.sh                                                   # 
 # data: Demo/sync-pages.sh downloads the release bundle on the first build
 cd packages/ios/Demo
 xcodebuild -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 17' build   # sync-pages.sh runs as a pre-build step
-xcrun simctl install booted build/…/Demo.app && xcrun simctl launch booted net.quranpedia.qvp.demo
+xcrun simctl install booted build/…/Demo.app && xcrun simctl launch booted ws.quran.qvp.demo
 ```
 
 Or open `Demo/Demo.xcodeproj` (regenerate with `xcodegen generate` after editing `project.yml`).

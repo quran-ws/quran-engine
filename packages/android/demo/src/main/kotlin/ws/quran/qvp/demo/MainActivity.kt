@@ -1,4 +1,4 @@
-package net.quranpedia.qvp.demo
+package ws.quran.qvp.demo
 
 import android.graphics.Color
 import android.graphics.Typeface
@@ -11,8 +11,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import net.quranpedia.qvp.*
-import net.quranpedia.qvp.Target
+import ws.quran.qvp.*
+import ws.quran.qvp.Target
 
 /** Mushaf Vector Reader — Android demo. Every visual state is engine state; the view only paints. */
 class MainActivity : AppCompatActivity() {

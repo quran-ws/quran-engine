@@ -2,7 +2,7 @@
  * @quran.ws/qvp-react-native — typed JS API over the native module.
  *
  * Names follow docs/API.md. Nothing here decides anything: targets, selectors and colours are marshalled
- * to the Kotlin library (`net.quranpedia.qvp`), which is JNI over crates/qvp-ffi/include/qvp.h.
+ * to the Kotlin library (`ws.quran.qvp`), which is JNI over crates/qvp-ffi/include/qvp.h.
  * Declarative props (`highlights`, `styles`, `theme`, `mask`, `reveal`) are reconciled against engine
  * handles on the native side, so JS never sees a handle.
  */

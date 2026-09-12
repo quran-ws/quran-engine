@@ -1,12 +1,12 @@
-package net.quranpedia.qvp.rn
+package ws.quran.qvp.rn
 
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
-import net.quranpedia.qvp.*
-import net.quranpedia.qvp.Target
+import ws.quran.qvp.*
+import ws.quran.qvp.Target
 
 /**
  * Marshalling only: JS shapes (docs/API.md) ↔ Kotlin library types. No hit-testing, layout or

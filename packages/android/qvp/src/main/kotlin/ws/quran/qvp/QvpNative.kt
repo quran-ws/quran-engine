@@ -1,4 +1,4 @@
-package net.quranpedia.qvp
+package ws.quran.qvp
 
 /**
  * Raw JNI surface over the QVP C ABI (qvp.h). Use [QvpPage] / [QvpAtlas] instead.

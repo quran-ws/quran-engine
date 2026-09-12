@@ -5,7 +5,7 @@ Everything here also builds on macOS. The iOS wrapper is the one piece that need
 ## Setup (once)
 
 ```sh
-git clone git@github.com:quranpedia/quran-engine.git && cd quran-engine
+git clone git@github.com:quran-ws/quran-engine.git && cd quran-engine
 curl -sSf https://sh.rustup.rs | sh -s -- -y -t wasm32-unknown-unknown
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 brew install cmake ninja          # optional, for Flutter desktop
@@ -52,7 +52,7 @@ This was run in Claude Code from the repo root (kept for reference):
 
 > Build the iOS/Swift wrapper and demo for the QVP engine in this repo. Read README.md,
 > docs/API.md, crates/qvp-ffi/include/qvp.h, web/qvp.js (reference wrapper),
-> packages/android/qvp/src/main/kotlin/net/quranpedia/qvp/*.kt (the Kotlin wrapper: mirror
+> packages/android/qvp/src/main/kotlin/ws/quran/qvp/*.kt (the Kotlin wrapper: mirror
 > its class and method names in Swift: QvpEngine, QvpPage, QvpAtlas, Selector, Target,
 > QvpHighlightStyle, QvpTheme, QvpLayoutSpec, QvpPageView) and packages/android/demo for the
 > demo behaviours. Deliverables: (1) scripts/build-engine-ios.sh that builds qvp-ffi for
