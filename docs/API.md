@@ -111,6 +111,13 @@ Pure helpers:
 `engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` and `wastedFraction(...)`.
 `wordBoxView(i)` gives a word's box in viewport px for scroll-into-view.
 
+`nominalLines` is the grid the page is laid out *inside*, not the page's own line
+count: it defaults to 15 and is clamped up to `page.nLines`, never down. A short page
+laid out at 15 — al-Fatiha's 7 lines, say — is therefore centred in a full-page box and
+draws at under half the height, with the rest of the viewport left empty. That is the
+spec working, not a rendering bug. Pass `nominalLines: page.nLines` when you want the
+page to fill what you gave it, and keep 15 only when several pages must share one grid.
+
 ## Styles
 
 ```js
