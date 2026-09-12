@@ -17,7 +17,7 @@ Use it when building Quran applications for mobile or desktop and you need fast,
 
 | | |
 |---|---|
-| **Package** | `@quran-ws/engine` · `0.1.0` |
+| **Package** | `@quran.ws/engine` · `0.1.0` |
 | **Whole mushaf** | 38.9 MB brotli |
 | **Wasm engine** | 311 KB |
 | **Licence** | MIT (the code) · source bundle terms (the data) |

@@ -1,5 +1,5 @@
 {
-  "name": "@quranpedia/qvp-react-native",
+  "name": "@quran.ws/qvp-react-native",
   "version": "0.1.0",
   "description": "React Native wrapper for the QVP vector mushaf engine (Android; iOS TODO). Thin marshalling over the Kotlin library, which is JNI over qvp.h.",
   "main": "src/index.tsx",
@@ -25,6 +25,14 @@
     "vector"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quran-ws/quran-engine.git",
+    "directory": "packages/react-native/qvp-react-native"
+  },
   "peerDependencies": {
     "react": "*",
     "react-native": "*"

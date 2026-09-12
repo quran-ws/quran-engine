@@ -4,6 +4,6 @@ extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autoli
 rootProject.name = 'QvpExample'
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')
-// The Kotlin QVP library (JNI over qvp.h) as a Gradle project; @quranpedia/qvp-react-native depends on `project(":qvp")`.
+// The Kotlin QVP library (JNI over qvp.h) as a Gradle project; @quran.ws/qvp-react-native depends on `project(":qvp")`.
 include ':qvp'
 project(':qvp').projectDir = file('../../../android/qvp')

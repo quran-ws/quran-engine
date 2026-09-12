@@ -1,4 +1,4 @@
-// @quranpedia/qvp-react-native — Android module. Thin: marshalling + handle reconciliation over the Kotlin
+// @quran.ws/qvp-react-native — Android module. Thin: marshalling + handle reconciliation over the Kotlin
 // library `net.quranpedia.qvp` (packages/android/qvp), which is JNI over crates/qvp-ffi/include/qvp.h.
 //
 // Linking the Kotlin library, two ways:

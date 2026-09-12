@@ -1,5 +1,5 @@
 /**
- * @quranpedia/qvp-react-native — typed JS API over the native module.
+ * @quran.ws/qvp-react-native — typed JS API over the native module.
  *
  * Names follow docs/API.md. Nothing here decides anything: targets, selectors and colours are marshalled
  * to the Kotlin library (`net.quranpedia.qvp`), which is JNI over crates/qvp-ffi/include/qvp.h.
@@ -213,7 +213,7 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
 
 // ── the module ───────────────────────────────────────────────────────────────────────────────
 const M = NativeModules.QvpModule as any;
-if (!M) throw new Error('@quranpedia/qvp-react-native: native module QvpModule not linked (Android only for now; see README)');
+if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not linked (Android only for now; see README)');
 
 export interface SearchOptions { form?: Form; mode?: 'includes' | 'exact' | 'prefix'; normalize?: boolean; loose?: boolean; limit?: number }
 export interface TextOptions { form?: Form; wordSep?: string; lineSep?: string }
