@@ -9,7 +9,7 @@ import QuartzCore
 /// Each frame calls `page.tick(now)`; a CADisplayLink keeps running while the engine says so.
 /// Gestures: tap → gap-aware hit-test → `onWordTap` / `onDecoTap` / `onEmptyTap`; long-press +
 /// drag → whole-word selection (engine `select`, band in the selection layer); pinch / pan on
-/// top of the engine layout; double-tap resets the view.
+/// top of the engine layout; double-tap resets the view (or runs `onDoubleTap` when set).
 public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public var page: QvpPage? {
         didSet { base = nil; baseKey = ""; selectionHandle = 0; relayout(); resetView(); setNeedsDisplay() }
@@ -31,6 +31,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public var onSelectionChanged: (([Int]) -> Void)?
     /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
     public var onSwipe: ((Int) -> Void)?
+    /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
+    /// (e.g. marking reading progress) can still call `resetView()` itself — `isZoomed` says when.
+    public var onDoubleTap: (() -> Void)?
     public var zoomEnabled = true
     public var selectionEnabled = true
     public var hitOptions = QvpHitOptions(maxDistance: 6)
@@ -61,7 +64,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         backgroundColor = .clear
         contentMode = .redraw
         isMultipleTouchEnabled = true
-        let dbl = UITapGestureRecognizer(target: self, action: #selector(onDoubleTap)); dbl.numberOfTapsRequired = 2
+        let dbl = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap)); dbl.numberOfTapsRequired = 2
         let tap = UITapGestureRecognizer(target: self, action: #selector(onTap)); tap.require(toFail: dbl)
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(onPinch))
         let pan = UIPanGestureRecognizer(target: self, action: #selector(onPan)); pan.maximumNumberOfTouches = 2
@@ -90,7 +93,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
         else { onEmptyTap?() }
     }
-    @objc private func onDoubleTap(_ g: UITapGestureRecognizer) { resetView() }
+    @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) { if let cb = onDoubleTap { cb() } else { resetView() } }
     @objc private func onPinch(_ g: UIPinchGestureRecognizer) {
         guard zoomEnabled, !selecting else { return }
         if g.state == .began { pinchStart = viewScale }

@@ -1,0 +1,300 @@
+// SwiftUI renderer for a `QvpPage` — the same frame as QvpPageView (UIKit), drawn with
+// `Canvas`: highlight bands → cached base ink (a CGImage of every non-styled path at the
+// current per-line transform, rebuilt only when the styled set / layout / transform changes)
+// → styled ink from `styled()` → mask boxes. A `TimelineView(.animation)` runs frames only
+// while `page.tick(now)` reports a transition in flight.
+//
+// SwiftUI has no `setNeedsDisplay()`, so the mutable surface lives on `QvpCanvasController`
+// (`@Observable`): set the page and the layout knobs there, call `invalidate()` after engine
+// calls the controller cannot see (`highlight`, `style`, `mask`, …), and pass the controller
+// to `QvpPageCanvas`. Gestures mirror QvpPageView and every one is a callback: tap →
+// gap-aware hit-test → `onWordTap` / `onDecoTap` / `onEmptyTap`; double-tap → `onDoubleTap`
+// (nil resets the view); long-press + drag → whole-word selection; pinch / pan on top of the
+// engine layout, with a horizontal swipe at the fitted size reported through `onSwipe`.
+// When the page is not zoomed and `onSwipe` is nil the drag gesture is detached entirely,
+// so an enclosing pager (`TabView`, `ScrollView`) keeps its own swipe.
+#if canImport(SwiftUI)
+import SwiftUI
+import CoreGraphics
+
+/// Engine state + view state for one `QvpPageCanvas`. Create one per displayed page slot,
+/// assign `page`, and call `invalidate()` after engine calls that change what is drawn.
+@available(iOS 17.0, macOS 14.0, *)
+@MainActor @Observable
+public final class QvpCanvasController {
+    public var page: QvpPage? {
+        didSet { cache.image = nil; cache.key = ""; selectionHandle = 0; relayout(); resetView() }
+    }
+    // layout knobs (viewport size comes from the canvas)
+    public var padTop: CGFloat = 0 { didSet { relayout() } }
+    public var padBottom: CGFloat = 0 { didSet { relayout() } }
+    public var padSide: CGFloat = 0 { didSet { relayout() } }
+    /// Line spacing only opens up: the printed pitch is the floor, so values below 1 clamp to 1.
+    /// (Explicit accessors — reassigning inside a `didSet` recurses under `@Observable`.)
+    public var lineSpacing: Float {
+        get { lineSpacingRaw }
+        set { lineSpacingRaw = max(1, newValue); relayout() }
+    }
+    @ObservationIgnored private var lineSpacingRaw: Float = 1
+    public var lineGap: Float = 0 { didSet { relayout() } }
+    public var fillHeight = false { didSet { relayout() } }
+    /// Paper behind the page content, 0xRRGGBBAA (nil = transparent).
+    public var paperColor: UInt32?
+    /// 0xRRGGBBAA band colour of the drag selection.
+    public var selectionBand: UInt32 = 0x2d6fd640
+    public var onWordTap: ((QvpWord, QvpHitEx) -> Void)?
+    public var onDecoTap: ((QvpDecoration, QvpHitEx) -> Void)?
+    public var onEmptyTap: (() -> Void)?
+    public var onSelectionChanged: (([Int]) -> Void)?
+    /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
+    public var onSwipe: ((Int) -> Void)?
+    /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
+    /// can still call `resetView()` itself — `isZoomed` says when.
+    public var onDoubleTap: (() -> Void)?
+    public var zoomEnabled = true
+    public var selectionEnabled = true
+    public var hitOptions = QvpHitOptions(maxDistance: 6)
+
+    public private(set) var viewScale: CGFloat = 1
+    public private(set) var viewOx: CGFloat = 0
+    public private(set) var viewOy: CGFloat = 0
+    /// True while an engine transition is fading — the canvas keeps drawing frames.
+    public private(set) var animating = false
+    // stats for a HUD
+    @ObservationIgnored public private(set) var lastBaseMs = 0.0
+    @ObservationIgnored public private(set) var lastOverlayMs = 0.0
+    @ObservationIgnored public private(set) var lastHitUs = 0.0
+    @ObservationIgnored public private(set) var lastBasePaths = 0
+    @ObservationIgnored public private(set) var lastOverlayPaths = 0
+    @ObservationIgnored public private(set) var lastBands = 0
+
+    /// Redraw epoch: bumped by `invalidate()`; the canvas body reads it.
+    private(set) var revision = 0
+    /// Cached base-ink layer. A plain class so draw-time rebuilds don't re-enter observation.
+    @ObservationIgnored private let cache = BaseCache()
+    @ObservationIgnored private var bounds = CGSize.zero
+    @ObservationIgnored private var fitScale: CGFloat = 1
+    @ObservationIgnored private var selectionHandle = 0
+    @ObservationIgnored private var selAnchor = -1
+    @ObservationIgnored var selecting = false
+    @ObservationIgnored var pinching = false
+    @ObservationIgnored var pinchStart: CGFloat = 1
+    @ObservationIgnored var lastDrag = CGSize.zero
+    /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
+    public var isZoomed: Bool { viewScale > fitScale * 1.02 }
+
+    final class BaseCache { var image: CGImage?; var key = "" }
+
+    public init() {}
+
+    /// Redraw after engine calls the controller cannot see (`highlight`, `style`, `mask`, `theme`, …).
+    public func invalidate() { revision &+= 1 }
+
+    /// Recompute the engine layout for the current size / knobs.
+    public func relayout() {
+        guard let p = page, bounds.width > 0, bounds.height > 0 else { return }
+        _ = p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height),
+                                   padTop: Float(padTop), padBottom: Float(padBottom),
+                                   padLeft: Float(padSide), padRight: Float(padSide),
+                                   lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight))
+        cache.key = ""; invalidate()
+    }
+    /// Fit the content height and centre it.
+    public func resetView() {
+        let l = page?.currentLayout
+        viewScale = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
+        fitScale = viewScale
+        viewOx = l.map { max((bounds.width - CGFloat($0.contentW) * viewScale) / 2, 0) } ?? 0
+        viewOy = l.map { max((bounds.height - CGFloat($0.contentH) * viewScale) / 2, 0) } ?? 0
+        invalidate()
+    }
+    /// Clear the selection band and the engine selection.
+    public func clearSelection() {
+        guard let p = page else { return }
+        p.clearSelection(); if selectionHandle != 0 { p.unhighlight(selectionHandle); selectionHandle = 0 }
+        onSelectionChanged?([]); invalidate()
+    }
+    /// Page units of `line` → view points (engine layout + pan/zoom).
+    public func lineTransform(_ line: Int) -> CGAffineTransform {
+        let l = page?.currentLayout
+        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.ox ?? 0)
+        let dy = (l.flatMap { line < $0.lineDy.count ? $0.lineDy[line] : nil }) ?? 0
+        let loy = CGFloat(l?.oy ?? 0) + CGFloat(dy) * ls
+        let s = viewScale * ls
+        return CGAffineTransform(a: s, b: 0, c: 0, d: s, tx: viewOx + viewScale * lox, ty: viewOy + viewScale * loy)
+    }
+
+    // ── input (called by QvpPageCanvas) ──
+    func setBounds(_ size: CGSize) {
+        guard size != bounds else { return }
+        bounds = size; relayout(); resetView()
+    }
+    func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHitEx? {
+        guard let p = page else { return nil }
+        let t0 = now()
+        let h = p.hitTestViewEx(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
+        lastHitUs = (now() - t0) * 1e6
+        return h
+    }
+    func tap(_ pt: CGPoint) {
+        guard let p = page else { return }
+        let hit = hitAt(pt)
+        if let h = hit, h.word >= 0 { onWordTap?(p.words[h.word], h) }
+        else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
+        else { onEmptyTap?() }
+    }
+    func doubleTap() { if let cb = onDoubleTap { cb() } else { resetView() } }
+    func pinch(_ magnification: CGFloat, at focus: CGPoint) {
+        guard zoomEnabled, !selecting else { return }
+        if !pinching { pinching = true; pinchStart = viewScale }
+        let ns = min(max(pinchStart * magnification, 0.5), 12); let k = ns / viewScale
+        viewOx = focus.x - (focus.x - viewOx) * k; viewOy = focus.y - (focus.y - viewOy) * k; viewScale = ns
+    }
+    func pan(_ translation: CGSize) {
+        guard zoomEnabled, !selecting, isZoomed else { return }
+        viewOx += translation.width - lastDrag.width; viewOy += translation.height - lastDrag.height
+        lastDrag = translation; invalidate()
+    }
+    func panEnded(_ t: CGSize, velocity v: CGSize) {
+        lastDrag = .zero
+        guard !isZoomed, !selecting, onSwipe != nil else { return }
+        if abs(t.width) > abs(t.height) * 1.5, abs(t.width) > 40 || abs(v.width) > 500 { onSwipe?(t.width > 0 ? 1 : -1) }
+    }
+    func selectTo(_ pt: CGPoint) {
+        guard selectionEnabled, let p = page else { return }
+        if !selecting {
+            guard let h = hitAt(pt), h.word >= 0 else { return }
+            selecting = true; selAnchor = h.word
+            p.select(h.word, h.word); paintSelection()
+        } else if let h = hitAt(pt, QvpHitOptions()), h.word >= 0 {
+            p.select(selAnchor, h.word); paintSelection()
+        }
+    }
+    func selectEnded() { selecting = false }
+    private func paintSelection() {
+        guard let p = page else { return }
+        let ws = p.selection()
+        let t = Target.words(ws)
+        if selectionHandle != 0 { p.rehighlight(selectionHandle, t) }
+        else { selectionHandle = p.highlight(t, QvpHighlightStyle(mode: .band, band: selectionBand, padX: 0.6, layer: QvpLayer.SELECTION)) }
+        onSelectionChanged?(ws); invalidate()
+    }
+
+    // ── frame (called from the Canvas renderer) ──
+    func draw(in ctx: GraphicsContext, size: CGSize, displayScale: CGFloat) {
+        guard let p = page else { return }
+        if p.currentLayout == nil { relayout() }
+        guard let l = p.currentLayout else { return }
+        let moving = p.tick(now() * 1000)
+        let paths = p.buildPaths()
+        let styled = p.styled()
+        let styledSet = Set(styled.map { $0.path })
+        let ink = p.defaultInk
+        let W = Int(size.width * displayScale), H = Int(size.height * displayScale)
+        var hasher = Hasher(); hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
+        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.pitch)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
+
+        if let paper = paperColor {
+            ctx.fill(Path(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale)),
+                     with: .color(color(paper)))
+        }
+        let bands = p.highlightBoxes()
+        drawBoxes(ctx, bands)
+
+        if cache.image == nil || key != cache.key || cache.image!.width != W || cache.image!.height != H, W > 0, H > 0 {
+            let t0 = now()
+            let cs = CGColorSpaceCreateDeviceRGB()
+            if let bc = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8, bytesPerRow: 0, space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
+                // flip to y-down page space so `makeImage()` comes out upright
+                bc.translateBy(x: 0, y: CGFloat(H)); bc.scaleBy(x: displayScale, y: -displayScale)
+                bc.setFillColor(QvpColor.cgColor(ink))
+                bc.setAllowsAntialiasing(true); bc.setShouldAntialias(true)
+                var cur = -1, n = 0
+                for pi in 0..<p.nPaths where !styledSet.contains(pi) {
+                    let ln = p.pathLine(pi)
+                    if ln != cur { if cur >= 0 { bc.restoreGState() }; bc.saveGState(); bc.concatenate(lineTransform(ln)); cur = ln }
+                    bc.addPath(paths[pi]); bc.fillPath(using: p.pathEvenOdd(pi) ? .evenOdd : .winding); n += 1
+                }
+                if cur >= 0 { bc.restoreGState() }
+                cache.image = bc.makeImage(); cache.key = key
+                lastBaseMs = (now() - t0) * 1000; lastBasePaths = n
+            }
+        }
+        if let img = cache.image {
+            ctx.draw(Image(decorative: img, scale: displayScale), in: CGRect(origin: .zero, size: size))
+        }
+        let t1 = now()
+        for (pi, col) in styled where col & 0xff != 0 {
+            var c = ctx
+            c.concatenate(lineTransform(p.pathLine(pi)))
+            c.fill(Path(paths[pi]), with: .color(color(col)), style: FillStyle(eoFill: p.pathEvenOdd(pi)))
+        }
+        drawBoxes(ctx, p.maskBoxes())
+        lastOverlayMs = (now() - t1) * 1000; lastOverlayPaths = styled.count; lastBands = bands.count
+        if moving != animating {
+            Task { @MainActor [weak self] in if let self, moving != self.animating { self.animating = moving; self.invalidate() } }
+        }
+    }
+    private func drawBoxes(_ ctx: GraphicsContext, _ boxes: [QvpBox]) {
+        if boxes.isEmpty { return }
+        var c = ctx
+        c.concatenate(CGAffineTransform(a: viewScale, b: 0, c: 0, d: viewScale, tx: viewOx, ty: viewOy))
+        var path = Path(), curColor: UInt32 = 0, curId = Int.min
+        func flush() { if !path.isEmpty { c.fill(path, with: .color(color(curColor))) }; path = Path() }
+        for b in boxes {
+            if b.id != curId || b.color != curColor { flush(); curId = b.id; curColor = b.color }
+            let r = CGRect(x: CGFloat(b.x0), y: CGFloat(b.y0), width: CGFloat(b.x1 - b.x0), height: CGFloat(b.y1 - b.y0))
+            if b.radius > 0 { path.addRoundedRect(in: r, cornerSize: CGSize(width: min(CGFloat(b.radius), r.width / 2), height: min(CGFloat(b.radius), r.height / 2))) }
+            else { path.addRect(r) }
+        }
+        flush()
+    }
+    private func color(_ rgba: UInt32) -> Color {
+        let c = QvpColor.components(rgba)
+        return Color(red: c.r, green: c.g, blue: c.b, opacity: c.a)
+    }
+    private func now() -> Double { Double(DispatchTime.now().uptimeNanoseconds) / 1e9 }
+}
+
+/// SwiftUI canvas over a `QvpCanvasController`. Give it a size (it fills what it is given),
+/// set `controller.page`, and wire the controller's callbacks.
+@available(iOS 17.0, macOS 14.0, *)
+public struct QvpPageCanvas: View {
+    @Bindable private var controller: QvpCanvasController
+    @Environment(\.displayScale) private var displayScale
+
+    public init(controller: QvpCanvasController) { self.controller = controller }
+
+    public var body: some View {
+        // read the observable state the renderer depends on, so the canvas redraws on it
+        let _ = controller.revision
+        let _ = controller.viewScale; let _ = controller.viewOx; let _ = controller.viewOy
+        GeometryReader { geo in
+            TimelineView(.animation(minimumInterval: nil, paused: !controller.animating)) { _ in
+                Canvas(opaque: false, rendersAsynchronously: false) { ctx, size in
+                    controller.draw(in: ctx, size: size, displayScale: displayScale)
+                }
+            }
+            .onAppear { controller.setBounds(geo.size) }
+            .onChange(of: geo.size) { _, s in controller.setBounds(s) }
+        }
+        .contentShape(Rectangle())
+        .gesture(SpatialTapGesture(count: 2).onEnded { _ in controller.doubleTap() }
+            .exclusively(before: SpatialTapGesture().onEnded { v in controller.tap(v.location) }))
+        .gesture(MagnifyGesture()
+            .onChanged { v in controller.pinch(v.magnification, at: v.startLocation) }
+            .onEnded { _ in controller.pinching = false },
+                 including: controller.zoomEnabled ? .all : .subviews)
+        // detached at the fitted size when `onSwipe` is nil, so an enclosing pager keeps its swipe
+        .highPriorityGesture(DragGesture(minimumDistance: 12)
+            .onChanged { v in controller.pan(v.translation) }
+            .onEnded { v in controller.panEnded(v.translation, velocity: v.velocity) },
+                             including: controller.isZoomed || controller.onSwipe != nil ? .all : .subviews)
+        .gesture(LongPressGesture(minimumDuration: 0.35)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { v in if case .second(true, let drag) = v, let d = drag { controller.selectTo(d.location) } }
+            .onEnded { _ in controller.selectEnded() },
+                 including: controller.selectionEnabled ? .all : .subviews)
+    }
+}
+#endif

@@ -57,6 +57,13 @@ An ayah is several fragments. `resolve('2:255')` gives all its words on the page
 `ayahWordCount(s,a)` returns `{count, complete}` — `complete` is false when the ayah
 continues on another page.
 
+**Word tokenization.** The mushaf holds **77,432** words, keyed `surah:ayah:word` — the
+quran-ws shared word identity (the same keys quran-svg, quran-svg-elements and the tajweed
+spans use). A host app with its own word table may tokenize an edge case differently (a
+compound written as one word split into two, or the reverse); map at the boundary with
+`findWord(s,a,w)` / `words[i].wordKey`, and treat a per-ayah word-count mismatch as
+"skip, don't guess" — the engine's numbering follows the standard, never a host table.
+
 ## Metadata (no database needed)
 
 `surahs()` → `{number, arabic, latin, english, place, ayahCount, hasBanner, hasBasmalah}`;
