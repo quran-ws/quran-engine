@@ -391,7 +391,7 @@
     maskWords() { const n = this.e.ex.qvp_mask_words(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     maskBoxes() { const n = this.e.ex.qvp_mask_boxes(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
     /** greyed page with a lit window: {lit, byAyah, grey, ink, ayahMarks, ms} → steps */
-    revealStart({ lit = 1, byAyah = false, grey = '#c9c4b8', ink = '#231f20', ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), markers ? 1 : 0, ms); }
+    revealStart({ lit = 1, byAyah = false, grey = '#c9c4b8', ink = '#231f20', ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms); }
     revealGoto(at) { return !!this.e.ex.qvp_reveal_goto(this.h, BigInt(at)); }
     revealAt() { const v = Number(this.e.ex.qvp_reveal_at(this.h)); return v === -2 ? null : v; }
     revealSteps() { return this.e.ex.qvp_reveal_steps(this.h); }
