@@ -66,6 +66,10 @@ is owed.
 | `qvp_line_info` | react-native | list form: bound as `lines()` |
 | `qvp_decoration_info` | react-native | list form: bound as `decorations()` |
 | `qvp_text` | react-native | list form: `text(target)` takes a target |
+| `qvp_mask_transition` | web | issue (to open): a binding is owed; the fade landed on iOS first |
+| `qvp_mask_transition` | android | issue (to open): a binding is owed; the fade landed on iOS first |
+| `qvp_mask_transition` | flutter | issue (to open): a binding is owed; the fade landed on iOS first |
+| `qvp_mask_transition` | react-native | issue (to open): a binding is owed; the fade landed on iOS first |
 
 ## Platform-level gaps
 
@@ -215,7 +219,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-114 symbols in the header, 114 Rust exports. web: 114 bound, android: 112 bound, flutter: 114 bound, ios: 112 bound, react-native: 76 bound.
+115 symbols in the header, 115 Rust exports. web: 114 bound, android: 112 bound, flutter: 114 bound, ios: 113 bound, react-native: 76 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -284,6 +288,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_mask_from` | yes | yes | yes | yes | yes |
 | `qvp_mask_hidden` | yes | yes | yes | yes | yes |
 | `qvp_mask_options` | yes | yes | yes | yes | yes |
+| `qvp_mask_transition` | gap (issue (to open): a binding is owed; the fade landed on iOS first) | gap (issue (to open): a binding is owed; the fade landed on iOS first) | gap (issue (to open): a binding is owed; the fade landed on iOS first) | yes | gap (issue (to open): a binding is owed; the fade landed on iOS first) |
 | `qvp_mask_word` | yes | yes | yes | yes | yes |
 | `qvp_mask_words` | yes | yes | yes | yes | yes |
 | `qvp_name` | yes | yes | yes | yes | yes |

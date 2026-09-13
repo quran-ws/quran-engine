@@ -25,6 +25,8 @@ pub struct MaskState {
     pub pad_y: f32,
     pub radius: f32,
     pub reverse: bool,
+    /// `Hide` fade in ms when a word is hidden or revealed (0 = instant)
+    pub transition_ms: u32,
 }
 
 impl Default for MaskState {
@@ -38,6 +40,7 @@ impl Default for MaskState {
             pad_y: crate::defaults::MASK_PAD,
             radius: crate::defaults::MASK_RADIUS,
             reverse: false,
+            transition_ms: 0,
         }
     }
 }
@@ -172,6 +175,12 @@ impl Page {
         self.mask.pad_y = pad_y;
         self.mask.radius = radius;
         self.mask.reverse = reverse;
+    }
+    /// Fade `Hide` words in and out over `ms` on the engine clock (`tick`) instead of
+    /// switching at once. A hidden word fades to its ink at alpha 0, never through black.
+    /// Reset by `unmask`, like the other mask options.
+    pub fn set_mask_transition(&mut self, ms: u32) {
+        self.mask.transition_ms = ms;
     }
     pub fn mask_mode(&self) -> MaskMode {
         self.mask.mode

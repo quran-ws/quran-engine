@@ -1440,6 +1440,12 @@ pub unsafe extern "C" fn qvp_mask_options(
     })
 }
 #[no_mangle]
+pub unsafe extern "C" fn qvp_mask_transition(page: *mut Page, ms: u32) {
+    guard(|| {
+        (*page).set_mask_transition(ms);
+    })
+}
+#[no_mangle]
 pub unsafe extern "C" fn qvp_unmask_next(page: *mut Page, n: u32) -> u32 {
     guard(|| guard(|| (*page).unmask_next(n as usize) as u32))
 }

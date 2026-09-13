@@ -254,6 +254,8 @@ public final class QvpPage {
     public func mask(_ s: String, _ mode: MaskMode = .hide) { mask(target(s), mode) }
     public func maskFrom(_ wordIndex: Int, _ mode: MaskMode = .hide) { qvp_mask_from(p, UInt32(wordIndex), UInt8(mode.rawValue)) }
     public func maskOptions(blockColor: UInt32 = QvpDefaults.MASK_BLOCK, padX: Float = QvpDefaults.MASK_PAD, padY: Float = QvpDefaults.MASK_PAD, radius: Float = QvpDefaults.MASK_RADIUS, reverse: Bool = false) { qvp_mask_options(p, blockColor, padX, padY, radius, reverse ? 1 : 0) }
+    /// Fade `.hide` words in and out over `ms` on the engine clock (0 = instant). Reset by `unmask()`.
+    public func maskTransition(_ ms: Int) { qvp_mask_transition(p, UInt32(max(ms, 0))) }
     @discardableResult public func unmaskNext(_ n: Int = 1) -> Int { Int(qvp_unmask_next(p, UInt32(n))) }
     @discardableResult public func maskBack(_ n: Int = 1) -> Int { Int(qvp_mask_back(p, UInt32(n))) }
     @discardableResult public func unmaskWord(_ wordIndex: Int) -> Bool { qvp_unmask_word(p, UInt32(wordIndex)) != 0 }

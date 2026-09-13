@@ -201,6 +201,7 @@ void     qvp_selection_text(const QvpPage*, uint8_t form, uint8_t include_citati
 void     qvp_mask(QvpPage*, const QvpTarget*, uint8_t mode);
 void     qvp_mask_from(QvpPage*, uint32_t word_index, uint8_t mode);
 void     qvp_mask_options(QvpPage*, uint32_t block_color, float pad_x, float pad_y, float radius, uint8_t reverse);
+void     qvp_mask_transition(QvpPage*, uint32_t ms);                        /* hide fade; 0 = instant; reset by unmask */
 uint32_t qvp_unmask_next(QvpPage*, uint32_t n);
 uint32_t qvp_mask_back(QvpPage*, uint32_t n);
 uint8_t  qvp_unmask_word(QvpPage*, uint32_t word_index);

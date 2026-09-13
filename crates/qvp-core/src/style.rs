@@ -236,6 +236,8 @@ pub(crate) struct PathAnim {
     pub t0: f64,
     pub dur: f64,
     pub cur: Rgba,
+    /// Ease in and out instead of out: a word fading under the mask.
+    pub smooth: bool,
 }
 
 impl Default for PathAnim {
@@ -248,6 +250,7 @@ impl Default for PathAnim {
             t0: 0.0,
             dur: 0.0,
             cur: DEFAULT_INK,
+            smooth: false,
         }
     }
 }
@@ -255,6 +258,13 @@ impl Default for PathAnim {
 pub(crate) fn ease_out(t: f64) -> f64 {
     let u = 1.0 - t.clamp(0.0, 1.0);
     1.0 - u * u * u
+}
+
+/// Smoothstep. A word fading in under an ease-out curve is most of the way to full ink in its
+/// first frames and then creeps, which reads as a jump to grey; this one starts and ends gently.
+pub(crate) fn ease_in_out(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 pub fn lerp_rgba(a: Rgba, b: Rgba, t: f64) -> Rgba {
@@ -297,7 +307,12 @@ impl Page {
     pub(crate) fn target_paint(&self, pi: u32) -> Paint {
         let c = &self.path_ctx[pi as usize];
         if c.word != NONE && self.mask.hidden.contains(&c.word) && self.mask.mode == crate::memorize::MaskMode::Hide {
-            return Paint::HIDDEN;
+            // a fade keeps the ink's colour and moves only its alpha; a reveal fades back
+            // because a transition runs at the longer of the old and new paint's durations
+            return match self.mask.transition_ms {
+                0 => Paint::HIDDEN,
+                ms => Paint::fade(self.styles.default_ink & 0xffff_ff00, ms),
+            };
         }
         if let Some(p) = self.rule_paint(pi) {
             return p;
@@ -322,7 +337,7 @@ impl Page {
                     a.cur = a.to;
                     a.dur = 0.0;
                 } else {
-                    a.cur = lerp_rgba(a.from, a.to, ease_out(t));
+                    a.cur = lerp_rgba(a.from, a.to, if a.smooth { ease_in_out(t) } else { ease_out(t) });
                     moving = true;
                 }
             }
@@ -337,8 +352,12 @@ impl Page {
         }
         self.styles.dirty = false;
         self.state_dirty = false;
+        // words under a fading mask (revealed ones included) ease in and out
+        let fading: std::collections::HashSet<u32> =
+            if self.mask.transition_ms > 0 { self.mask.words.iter().copied().collect() } else { Default::default() };
         for pi in 0..self.anim.len() {
             let p = self.target_paint(pi as u32);
+            let word = self.path_ctx[pi].word;
             let a = &mut self.anim[pi];
             if p.color != a.target {
                 let prev_ms = a.target_ms;
@@ -350,6 +369,7 @@ impl Page {
                     a.to = p.color;
                     a.t0 = self.clock_ms;
                     a.dur = ms;
+                    a.smooth = word != NONE && fading.contains(&word);
                 } else {
                     a.from = p.color;
                     a.to = p.color;
