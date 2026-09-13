@@ -13,12 +13,17 @@ pub struct LayoutSpec {
     pub pad_right: f32,
     /// Multiplier on the printed line pitch (1.0 = as printed). The printed
     /// positions are kept; the same delta `pitch·(line_spacing − 1)` is
-    /// added between every pair of consecutive lines.
+    /// added between every pair of consecutive lines. Leading only opens up:
+    /// below 1.0 acts as 1.0, the printed pitch is the floor.
     pub line_spacing: f32,
     /// Extra leading between lines in page units, added after the multiplier.
     pub line_gap: f32,
     /// Choose the delta so the page fills `viewport_h - pad_top - pad_bottom`
-    /// (overrides line_spacing / line_gap).
+    /// (overrides line_spacing / line_gap). A short page (fewer lines than
+    /// `nominal_lines`) has no height of its own to fill: it takes the rows a
+    /// full page gets, `(viewport_h - pads) / nominal_lines` each, centred.
+    /// Never below the printed pitch — a page that cannot fit at it reports a
+    /// `content_h` taller than the viewport.
     pub fill_height: bool,
     /// Line grid the mushaf is designed on (15 for KFGQPC Hafs). Short pages
     /// (fewer lines) stay centred, as printed.
@@ -41,7 +46,9 @@ pub struct Layout {
     /// Per-line vertical shift in page units.
     pub line_dy: Vec<f32>,
     /// Laid-out vertical extent of each line in viewport px: (top, bottom).
-    /// Boundaries sit halfway between neighbouring lines' laid-out centres.
+    /// Boundaries sit halfway between neighbouring lines' laid-out centres —
+    /// except beside a header line (surah name, basmalah), where a boundary
+    /// stops half a pitch from the centre. Slots never overlap.
     pub line_slots: Vec<(f32, f32)>,
     /// Total content height in viewport px including padding.
     pub content_h: f32,
@@ -95,41 +102,57 @@ impl Page {
         let n = self.data.lines.len();
         let nominal = spec.nominal_lines.max(n as u32).max(2) as f32;
         let natural = self.natural_pitch;
-        // never squeeze below 5% of the printed pitch
-        let min_delta = -0.95 * natural;
-        let delta = if spec.fill_height {
-            let avail_h = (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0);
-            ((avail_h / scale - ph) / (nominal - 1.0)).max(min_delta)
+        let avail_h = (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0);
+        // a short page has no height of its own to fill: it takes the rows a
+        // full page fills the viewport with
+        let on_grid = spec.fill_height && (n as f32) < nominal;
+        // leading only opens up: the printed pitch is the floor
+        let delta = if on_grid {
+            (avail_h / (nominal * scale) - natural).max(0.0)
+        } else if spec.fill_height {
+            ((avail_h / scale - ph) / (nominal - 1.0)).max(0.0)
         } else {
-            (natural * (spec.line_spacing - 1.0) + spec.line_gap).max(min_delta)
+            (natural * (spec.line_spacing - 1.0) + spec.line_gap).max(0.0)
         };
         let pitch = natural + delta;
+        // laid-out height in page units: the grid's rows, or the printed page
+        // with the leading added
+        let block_h = if on_grid { nominal * pitch } else { ph + (nominal - 1.0) * delta };
         // short pages: the printed page is already centred; centre the added
         // leading the same way so the page stays in the middle of the grid
         let slot0 = (nominal - n as f32) / 2.0;
-        let top_units = spec.pad_top / scale;
+        let top_units = spec.pad_top / scale + (block_h - ph - (nominal - 1.0) * delta) / 2.0;
         let mut line_dy = Vec::with_capacity(n);
         for l in self.data.lines.iter() {
             let k = slot0 + (l.line_no.max(1) as f32 - 1.0).min(n as f32 - 1.0);
             line_dy.push(top_units + k * delta);
         }
-        // laid-out centres in page units; slot boundaries halfway between neighbours
+        // laid-out centres in page units; slot boundaries halfway between neighbours — except
+        // beside a header line, where the printed gap (the opening pages' banner sits pitches
+        // above the text) is not the line's to claim: there a boundary stops half a pitch out
         let centres: Vec<f32> = (0..n).map(|i| self.line_centre[i] + line_dy[i]).collect();
+        let headers: Vec<bool> = (0..n).map(|i| self.line_is_header(i)).collect();
         let half = pitch / 2.0;
         let mut line_slots = Vec::with_capacity(n);
         for i in 0..n {
             let c = centres[i];
-            let top = match i.checked_sub(1).map(|j| centres[j]) {
-                Some(prev) if prev < c => (prev + c) / 2.0,
+            let top = match i.checked_sub(1) {
+                Some(j) if centres[j] < c => {
+                    let mid = (centres[j] + c) / 2.0;
+                    if headers[i] || headers[j] { mid.max(c - half) } else { mid }
+                }
                 _ => c - half,
             };
             let bottom = match centres.get(i + 1) {
-                Some(&next) if next > c => (c + next) / 2.0,
+                Some(&next) if next > c => {
+                    let mid = (c + next) / 2.0;
+                    if headers[i] || headers[i + 1] { mid.min(c + half) } else { mid }
+                }
                 _ => c + half,
             };
             line_slots.push((top * scale, bottom * scale));
         }
-        let content_h = spec.pad_top + (ph + (nominal - 1.0) * delta) * scale + spec.pad_bottom;
+        let content_h = spec.pad_top + block_h * scale + spec.pad_bottom;
         self.layout = Some(Layout { scale, ox: spec.pad_left, oy: 0.0, line_dy, line_slots, content_h, content_w: spec.viewport_w, pitch });
         self.layout.as_ref().unwrap()
     }

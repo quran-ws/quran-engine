@@ -112,18 +112,25 @@ re-spread onto a grid (printed lines are not equally tall or equally pitched, an
 crosses into neighbouring lines): every line keeps its printed position and the same
 delta is added between each pair of consecutive lines. `lineSpacing` sets that delta as
 a multiple of the printed pitch (`pitch·(lineSpacing−1)`), `lineGap` adds leading in page
-units, `fillHeight` picks the delta that makes the page fill the padded viewport
-(pages 1–2 stay centred). `slots[]` boundaries sit halfway between neighbouring lines.
+units, `fillHeight` picks the delta that makes the page fill the padded viewport. A short
+page (fewer lines than `nominalLines`, pages 1–2) has no height of its own to fill, so under
+`fillHeight` it takes the rows a full page gets — `(viewportH − pads)/nominalLines` each —
+centred. Leading only opens up: the printed pitch is the floor for all three, and a page
+that cannot fit at it reports a `contentH` taller than the viewport. `slots[]` boundaries
+sit halfway between neighbouring lines, except beside a header line (surah name, basmalah),
+where they stop half a pitch from the line's centre — the banner on pages 1–2 sits several
+pitches above the text, and that gap is not the first line's.
 Pure helpers:
 `engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` and `wastedFraction(...)`.
 `wordBoxView(i)` gives a word's box in viewport px for scroll-into-view.
 
 `nominalLines` is the grid the page is laid out *inside*, not the page's own line
 count: it defaults to 15 and is clamped up to `page.nLines`, never down. A short page
-laid out at 15 — al-Fatiha's 7 lines, say — is therefore centred in a full-page box and
-draws at under half the height, with the rest of the viewport left empty. That is the
-spec working, not a rendering bug. Pass `nominalLines: page.nLines` when you want the
-page to fill what you gave it, and keep 15 only when several pages must share one grid.
+laid out at 15 — al-Fatiha's 7 lines, say — is therefore centred in a full-page box:
+without `fillHeight` it draws at under half the height, with the rest of the viewport left
+empty; with it, its lines take full-page rows. That is the spec working, not a rendering
+bug. Pass `nominalLines: page.nLines` when you want the page to fill what you gave it, and
+keep 15 only when several pages must share one grid.
 
 ## Styles
 

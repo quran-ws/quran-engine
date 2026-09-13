@@ -104,7 +104,9 @@ view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.lineSpacing = 1; v
 view.paperColor = UIColor(...); view.selectionBand = 0x2d6fd640; view.hitOptions = QvpHitOptions(maxDistance: 6)
 view.onWordTap = { word, hit in }; view.onDecoTap = { deco, hit in }; view.onEmptyTap = { }; view.onSelectionChanged = { words in }
 view.onSwipe = { dir in }                 // horizontal swipe while not zoomed (+1 finger right, −1 left): flip pages; view.isZoomed
-view.onDoubleTap = { }                    // nil (default) resets the view; a host that repurposes it calls resetView() itself
+view.onDoubleTap = { hit in }              // nil (default) resets the view; a host that repurposes it calls resetView() itself
+view.onLongPress = { hit in }              // only while selectionEnabled is false; longPressDuration (0.35)
+view.zoomSpringsBack = true               // zoom lasts only while pinching: on release the page eases back to its fitted size
 view.page = page                          // lays out, fits and centres; setNeedsDisplay() after engine calls
 view.relayout(); view.resetView(); view.clearSelection(); view.lineTransform(line)
 view.lastBaseMs / lastOverlayMs / lastHitUs / lastBasePaths / lastOverlayPaths / lastBands / animating   // HUD stats
@@ -135,9 +137,18 @@ QvpPageCanvas(controller: controller)
 controller.page = page                    // relayouts, fits and centres
 controller.padTop = 12; controller.fillHeight = true; controller.paperColor = 0xfffdf7ff
 controller.onWordTap = { word, hit in }; controller.onDecoTap = { deco, hit in }; controller.onEmptyTap = { }
-controller.onDoubleTap = { }              // nil (default) resets the view
+controller.onDoubleTap = { hit in }        // nil (default) resets the view
+controller.onLongPress = { hit in }        // only while selectionEnabled is false — a UIKit recognizer on iOS, never takes a pager's swipe
+controller.zoomSpringsBack = true         // zoom lasts only while pinching, as on the UIKit view
 controller.invalidate()                   // after engine calls the controller cannot see (highlight, style, mask, …)
 controller.resetView(); controller.relayout(); controller.clearSelection(); controller.lineTransform(line); controller.isZoomed
+controller.cropLeft = box.x0; controller.cropRight = page.width - box.x1   // box = page.cropBox("page"): the ink spans the viewport
+
+// A pager over many pages: one PERMANENT controller per page; only page data loads, LRU-evicts
+// (never the current page ±1) and reattaches to the same controller — a view never holds a closed page.
+let cache = QvpPageCache(data: { n in /* the page's .qvp bytes */ }, configure: { page, controller in /* ink, crop, layout */ })
+QvpPageCanvas(controller: cache.controller(for: n))
+cache.setCurrentPage(n)                   // preload neighbours; cache.reconfigure() after a theme change
 ```
 
 SwiftUI has no `setNeedsDisplay()`, so the mutable surface lives on `QvpCanvasController`

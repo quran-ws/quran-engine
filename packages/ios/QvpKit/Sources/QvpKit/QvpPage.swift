@@ -61,6 +61,10 @@ public final class QvpPage {
     deinit { close() }
     /// Free the native page. Safe to call more than once.
     public func close() { if let p = h { qvp_page_free(p); h = nil } }
+    /// False once `close()` has run. A renderer racing a host's page teardown
+    /// must check this before calling into the engine — every engine call on
+    /// a closed page traps.
+    public var isOpen: Bool { h != nil }
     private var p: OpaquePointer { h! }
 
     // ── geometry ──

@@ -288,6 +288,11 @@ final class QvpKitTests: XCTestCase {
         c.onWordTap = { word, _ in tapped = word.idx }
         c.tap(pt)
         XCTAssertEqual(tapped, 0)
+        // double-tap carries the hit under it
+        var doubleTapped: Int? = nil
+        c.onDoubleTap = { hit in doubleTapped = hit?.word }
+        c.doubleTap(pt)
+        XCTAssertEqual(doubleTapped, 0)
         // pinch past the fitted scale flips isZoomed; resetView clears it
         c.pinch(2.0, at: CGPoint(x: 345, y: 550))
         XCTAssertTrue(c.isZoomed)
@@ -298,5 +303,83 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(c.lineSpacing, 1)
         c.lineSpacing = 1.5
         XCTAssertEqual(c.lineSpacing, 1.5)
+    }
+
+    /// zoomSpringsBack: a released pinch eases back to the fitted transform; without it the zoom stays.
+    @MainActor func testZoomSpringsBack() async throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        // the easing itself: starts where the pinch left off, arrives exactly, ease-out past halfway at half time
+        let s = QvpZoomSpring(from: (2, -100, -50), to: (1, 0, 10), start: 10)
+        XCTAssertEqual(s.value(at: 10).transform.scale, 2)
+        XCTAssertFalse(s.value(at: 10).done)
+        XCTAssertLessThan(s.value(at: 10 + QvpZoomSpring.duration / 2).transform.scale, 1.5)
+        let end = s.value(at: 10 + QvpZoomSpring.duration)
+        XCTAssertTrue(end.done)
+        XCTAssertEqual(end.transform.scale, 1, accuracy: 1e-9)
+        XCTAssertEqual(end.transform.oy, 10, accuracy: 1e-9)
+
+        let p = try QvpPage(bytes: try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp")))
+        defer { p.close() }
+        let c = QvpCanvasController()
+        c.page = p
+        c.setBounds(CGSize(width: 690, height: 1100))
+        let fitted = (c.viewScale, c.viewOx, c.viewOy)
+        c.pinch(2.0, at: CGPoint(x: 345, y: 550)); c.pinchEnded()
+        XCTAssertTrue(c.isZoomed, "without zoomSpringsBack the zoom stays")
+        c.resetView()
+        c.zoomSpringsBack = true
+        c.pinch(2.0, at: CGPoint(x: 345, y: 550)); c.pinchEnded()
+        XCTAssertTrue(c.isZoomed, "the page eases back, it does not snap")
+        for _ in 0..<200 where abs(c.viewScale - fitted.0) > 1e-6 { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertFalse(c.isZoomed)
+        XCTAssertEqual(c.viewScale, fitted.0, accuracy: 1e-6)
+        XCTAssertEqual(c.viewOx, fitted.1, accuracy: 1e-3)
+        XCTAssertEqual(c.viewOy, fitted.2, accuracy: 1e-3)
+    }
+
+    /// Beside a header line a slot stops half a pitch out: page 1's first line does not claim the
+    /// gap under the banner. Body lines still share their boundaries, and slots never overlap.
+    func testSlotsStopAtHeaders() throws {
+        let p1 = try QvpPage(bytes: try Data(contentsOf: Self.pages.appendingPathComponent("001.qvp")))
+        defer { p1.close() }
+        let l = p1.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, fillHeight: true))
+        let pitch = l.pitch * l.scale
+        let first = try XCTUnwrap(p1.lines.firstIndex { !$0.isHeader })
+        XCTAssertGreaterThan(first, 0)
+        XCTAssertTrue(p1.lines[first - 1].isHeader)
+        XCTAssertLessThan(l.slotBottom[first] - l.slotTop[first], pitch * 1.1, "first line's slot is one row, not half the banner gap")
+        for i in 1..<l.slotTop.count { XCTAssertGreaterThanOrEqual(l.slotTop[i], l.slotBottom[i - 1] - 1e-3, "slots never overlap") }
+        let body = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true))
+        for i in 0..<(page.lines.count - 1) where !page.lines[i].isHeader && !page.lines[i + 1].isHeader {
+            XCTAssertEqual(body.slotBottom[i], body.slotTop[i + 1], accuracy: 1e-3, "body lines share a boundary")
+        }
+    }
+
+    /// QvpPageCache: one PERMANENT controller per page; page data cycles
+    /// through the LRU and reattaches to that same controller on return.
+    @MainActor func testPageCache() async throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCache needs macOS 14 / iOS 17") }
+        let bytes = try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp"))
+        var configured = 0
+        let cache = QvpPageCache(capacity: 4, data: { _ in bytes }, configure: { _, _ in configured += 1 })
+        func waitUntil(_ cond: @MainActor () -> Bool) async {
+            for _ in 0..<100 { if cond() { return }; try? await Task.sleep(nanoseconds: 10_000_000) }
+        }
+        cache.setCurrentPage(42)
+        let c42 = cache.controller(for: 42)
+        await waitUntil { c42.page != nil }
+        XCTAssertNotNil(c42.page)
+        XCTAssertTrue(cache.controller(for: 42) === c42, "controller must be permanent")
+        // move far and fill beyond capacity → 42's DATA evicts, controller survives detached
+        cache.setCurrentPage(100)
+        for n in [99, 100, 101, 102] { _ = cache.controller(for: n) }
+        await waitUntil { c42.page == nil }
+        XCTAssertNil(c42.page, "evicted page must be detached from its controller")
+        // come back → SAME controller, data reattached
+        cache.setCurrentPage(42)
+        await waitUntil { c42.page != nil }
+        XCTAssertNotNil(c42.page, "returning must reattach data to the permanent controller")
+        XCTAssertTrue(cache.controller(for: 42) === c42)
+        XCTAssertGreaterThanOrEqual(configured, 2, "configure runs on every (re)attach")
     }
 }

@@ -16,6 +16,9 @@
 #if canImport(SwiftUI)
 import SwiftUI
 import CoreGraphics
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Engine state + view state for one `QvpPageCanvas`. Create one per displayed page slot,
 /// assign `page`, and call `invalidate()` after engine calls that change what is drawn.
@@ -29,6 +32,12 @@ public final class QvpCanvasController {
     public var padTop: CGFloat = 0 { didSet { relayout() } }
     public var padBottom: CGFloat = 0 { didSet { relayout() } }
     public var padSide: CGFloat = 0 { didSet { relayout() } }
+    /// Crop the printed page's own horizontal margins (page units, ≥ 0): the
+    /// INK spans the padded viewport instead of the full viewBox — for hosts
+    /// replacing ink-cropped raster pages. Feed from `page.cropBox("page")`:
+    /// left = box.x0, right = page.width − box.x1.
+    public var cropLeft: Float = 0 { didSet { relayout() } }
+    public var cropRight: Float = 0 { didSet { relayout() } }
     /// Line spacing only opens up: the printed pitch is the floor, so values below 1 clamp to 1.
     /// (Explicit accessors — reassigning inside a `didSet` recurses under `@Observable`.)
     public var lineSpacing: Float {
@@ -48,10 +57,20 @@ public final class QvpCanvasController {
     public var onSelectionChanged: (([Int]) -> Void)?
     /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
     public var onSwipe: ((Int) -> Void)?
-    /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
-    /// can still call `resetView()` itself — `isZoomed` says when.
-    public var onDoubleTap: (() -> Void)?
+    /// Double-tap, with the gap-aware hit under it (nil off the page). nil (the default)
+    /// resets the view; a host that repurposes the gesture can still call `resetView()`
+    /// itself — `isZoomed` says when.
+    public var onDoubleTap: ((QvpHitEx?) -> Void)?
+    /// Long-press, with the gap-aware hit under the finger. Fires once, while the finger
+    /// is still down, and only while `selectionEnabled` is false — selection owns the
+    /// long-press otherwise. On iOS it is UIKit's recognizer, which fails on movement,
+    /// so it never takes a swipe from an enclosing pager.
+    public var onLongPress: ((QvpHitEx?) -> Void)?
+    public var longPressDuration: Double = 0.35
     public var zoomEnabled = true
+    /// Zoom lasts only while the fingers are down: on release the page eases back to its fitted
+    /// size — a peek, not a reading zoom — so a pinch never leaves the page holding a pager's swipe.
+    public var zoomSpringsBack = false
     public var selectionEnabled = true
     public var hitOptions = QvpHitOptions(maxDistance: 6)
 
@@ -80,6 +99,7 @@ public final class QvpCanvasController {
     @ObservationIgnored var pinching = false
     @ObservationIgnored var pinchStart: CGFloat = 1
     @ObservationIgnored var lastDrag = CGSize.zero
+    @ObservationIgnored private var springTask: Task<Void, Never>?
     /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
     public var isZoomed: Bool { viewScale > fitScale * 1.02 }
 
@@ -92,21 +112,33 @@ public final class QvpCanvasController {
 
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
-        guard let p = page, bounds.width > 0, bounds.height > 0 else { return }
+        guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
+        // The crop is expressed as negative pads: with
+        // padL = padSide − cropLeft·scale the engine's own formula
+        // scale = (viewportW − padL − padR)/pageW solves to
+        // scale = (viewportW − 2·padSide)/(pageW − cropLeft − cropRight).
+        let innerW = Float(bounds.width) - 2 * Float(padSide)
+        let scale = innerW / max(p.width - cropLeft - cropRight, 1)
         _ = p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height),
                                    padTop: Float(padTop), padBottom: Float(padBottom),
-                                   padLeft: Float(padSide), padRight: Float(padSide),
+                                   padLeft: Float(padSide) - cropLeft * scale,
+                                   padRight: Float(padSide) - cropRight * scale,
                                    lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight))
         cache.key = ""; invalidate()
     }
     /// Fit the content height and centre it.
     public func resetView() {
-        let l = page?.currentLayout
-        viewScale = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
-        fitScale = viewScale
-        viewOx = l.map { max((bounds.width - CGFloat($0.contentW) * viewScale) / 2, 0) } ?? 0
-        viewOy = l.map { max((bounds.height - CGFloat($0.contentH) * viewScale) / 2, 0) } ?? 0
+        springTask?.cancel(); springTask = nil
+        let f = fittedView()
+        viewScale = f.scale; fitScale = f.scale; viewOx = f.ox; viewOy = f.oy
         invalidate()
+    }
+    /// The transform `resetView()` applies: content height fitted, centred.
+    private func fittedView() -> QvpZoomSpring.ViewTransform {
+        let l = page?.currentLayout
+        let s = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
+        return (s, l.map { max((bounds.width - CGFloat($0.contentW) * s) / 2, 0) } ?? 0,
+                l.map { max((bounds.height - CGFloat($0.contentH) * s) / 2, 0) } ?? 0)
     }
     /// Clear the selection band and the engine selection.
     public func clearSelection() {
@@ -130,7 +162,7 @@ public final class QvpCanvasController {
         bounds = size; relayout(); resetView()
     }
     func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHitEx? {
-        guard let p = page else { return nil }
+        guard let p = page, p.isOpen else { return nil }
         let t0 = now()
         let h = p.hitTestViewEx(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
         lastHitUs = (now() - t0) * 1e6
@@ -143,15 +175,36 @@ public final class QvpCanvasController {
         else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
         else { onEmptyTap?() }
     }
-    func doubleTap() { if let cb = onDoubleTap { cb() } else { resetView() } }
+    func doubleTap(_ pt: CGPoint) { if let cb = onDoubleTap { cb(hitAt(pt)) } else { resetView() } }
+    func longPress(_ pt: CGPoint) { onLongPress?(hitAt(pt)) }
     func pinch(_ magnification: CGFloat, at focus: CGPoint) {
         guard zoomEnabled, !selecting else { return }
-        if !pinching { pinching = true; pinchStart = viewScale }
+        if !pinching { springTask?.cancel(); springTask = nil; pinching = true; pinchStart = viewScale }
         let ns = min(max(pinchStart * magnification, 0.5), 12); let k = ns / viewScale
         viewOx = focus.x - (focus.x - viewOx) * k; viewOy = focus.y - (focus.y - viewOy) * k; viewScale = ns
     }
+    func pinchEnded() {
+        pinching = false
+        if zoomSpringsBack { springBack() }
+    }
+    /// Ease from the released transform to the fitted one, one step per display frame or so.
+    private func springBack() {
+        let to = fittedView()
+        let spring = QvpZoomSpring(from: (viewScale, viewOx, viewOy), to: to, start: now())
+        fitScale = to.scale
+        springTask?.cancel()
+        springTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled {
+                let (v, done) = spring.value(at: self.now())
+                self.viewScale = v.scale; self.viewOx = v.ox; self.viewOy = v.oy
+                self.invalidate()
+                if done { self.springTask = nil; return }
+                try? await Task.sleep(nanoseconds: 8_000_000)
+            }
+        }
+    }
     func pan(_ translation: CGSize) {
-        guard zoomEnabled, !selecting, isZoomed else { return }
+        guard zoomEnabled, !selecting, isZoomed, springTask == nil else { return }
         viewOx += translation.width - lastDrag.width; viewOy += translation.height - lastDrag.height
         lastDrag = translation; invalidate()
     }
@@ -182,7 +235,7 @@ public final class QvpCanvasController {
 
     // ── frame (called from the Canvas renderer) ──
     func draw(in ctx: GraphicsContext, size: CGSize, displayScale: CGFloat) {
-        guard let p = page else { return }
+        guard let p = page, p.isOpen else { return }
         if p.currentLayout == nil { relayout() }
         guard let l = p.currentLayout else { return }
         let moving = p.tick(now() * 1000)
@@ -275,15 +328,21 @@ public struct QvpPageCanvas: View {
                     controller.draw(in: ctx, size: size, displayScale: displayScale)
                 }
             }
+            // `invalidate()` is this view's setNeedsDisplay(). Engine calls the controller cannot
+            // see (mask, reveal, style) leave SwiftUI nothing to diff, and on iOS a bumped revision
+            // alone did not repaint a canvas whose timeline was paused. A new identity per revision
+            // always repaints; `.identity` keeps the swap from fading inside an animated transaction.
+            .id(controller.revision)
+            .transition(.identity)
             .onAppear { controller.setBounds(geo.size) }
             .onChange(of: geo.size) { _, s in controller.setBounds(s) }
         }
         .contentShape(Rectangle())
-        .gesture(SpatialTapGesture(count: 2).onEnded { _ in controller.doubleTap() }
+        .gesture(SpatialTapGesture(count: 2).onEnded { v in controller.doubleTap(v.location) }
             .exclusively(before: SpatialTapGesture().onEnded { v in controller.tap(v.location) }))
         .gesture(MagnifyGesture()
             .onChanged { v in controller.pinch(v.magnification, at: v.startLocation) }
-            .onEnded { _ in controller.pinching = false },
+            .onEnded { _ in controller.pinchEnded() },
                  including: controller.zoomEnabled ? .all : .subviews)
         // detached at the fitted size when `onSwipe` is nil, so an enclosing pager keeps its swipe
         .highPriorityGesture(DragGesture(minimumDistance: 12)
@@ -295,6 +354,51 @@ public struct QvpPageCanvas: View {
             .onChanged { v in if case .second(true, let drag) = v, let d = drag { controller.selectTo(d.location) } }
             .onEnded { _ in controller.selectEnded() },
                  including: controller.selectionEnabled ? .all : .subviews)
+        .modifier(QvpLongPressAttachment(controller: controller))
     }
 }
+
+/// Attaches the long-press recognizer only when a host asked for the callback and
+/// selection does not own the gesture.
+@available(iOS 17.0, macOS 14.0, *)
+private struct QvpLongPressAttachment: ViewModifier {
+    let controller: QvpCanvasController
+
+    func body(content: Content) -> some View {
+        #if canImport(UIKit)
+        if #available(iOS 18.0, *), controller.onLongPress != nil, !controller.selectionEnabled {
+            content.gesture(QvpLongPressRecognizer(duration: controller.longPressDuration) { controller.longPress($0) })
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
+#if canImport(UIKit)
+/// UIKit's long-press: it knows where the finger is at recognition (SwiftUI's
+/// `LongPressGesture` does not) and fails on movement, so a pager's pan is never taken.
+@available(iOS 18.0, *)
+private struct QvpLongPressRecognizer: UIGestureRecognizerRepresentable {
+    let duration: Double
+    let action: (CGPoint) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let recognizer = UILongPressGestureRecognizer()
+        recognizer.minimumPressDuration = duration
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        recognizer.minimumPressDuration = duration
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        guard recognizer.state == .began else { return }
+        action(context.converter.localLocation)
+    }
+}
+#endif
 #endif

@@ -33,8 +33,16 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public var onSwipe: ((Int) -> Void)?
     /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
     /// (e.g. marking reading progress) can still call `resetView()` itself — `isZoomed` says when.
-    public var onDoubleTap: (() -> Void)?
+    public var onDoubleTap: ((QvpHitEx?) -> Void)?
+    /// Long-press, with the gap-aware hit under the finger. Fires once, on recognition,
+    /// only while `selectionEnabled` is false — selection owns the long-press otherwise.
+    public var onLongPress: ((QvpHitEx?) -> Void)?
+    public var longPressDuration: Double = 0.35 { didSet { longPressRecognizer?.minimumPressDuration = longPressDuration } }
+    private weak var longPressRecognizer: UILongPressGestureRecognizer?
     public var zoomEnabled = true
+    /// Zoom lasts only while the fingers are down: on release the page eases back to its fitted
+    /// size — a peek, not a reading zoom — so a pinch never leaves the page holding the pan.
+    public var zoomSpringsBack = false
     public var selectionEnabled = true
     public var hitOptions = QvpHitOptions(maxDistance: 6)
 
@@ -52,6 +60,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     private var selAnchor = -1
     private var selecting = false
     private var link: CADisplayLink?
+    private var spring: QvpZoomSpring?
+    private var springLink: CADisplayLink?
     private var pinchStart: CGFloat = 1
     private var fitScale: CGFloat = 1
     /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
@@ -68,11 +78,11 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         let tap = UITapGestureRecognizer(target: self, action: #selector(onTap)); tap.require(toFail: dbl)
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(onPinch))
         let pan = UIPanGestureRecognizer(target: self, action: #selector(onPan)); pan.maximumNumberOfTouches = 2
-        let long = UILongPressGestureRecognizer(target: self, action: #selector(onLongPress)); long.minimumPressDuration = 0.35
+        let long = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress)); long.minimumPressDuration = longPressDuration; longPressRecognizer = long
         pan.require(toFail: long)
         for g in [dbl, tap, pinch, pan, long] { g.delegate = self; addGestureRecognizer(g) }
     }
-    deinit { link?.invalidate() }
+    deinit { link?.invalidate(); springLink?.invalidate() }
 
     public func gestureRecognizer(_ a: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith b: UIGestureRecognizer) -> Bool {
         (a is UIPinchGestureRecognizer && b is UIPanGestureRecognizer) || (a is UIPanGestureRecognizer && b is UIPinchGestureRecognizer)
@@ -80,7 +90,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
 
     // ── gestures ──
     private func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHitEx? {
-        guard let p = page else { return nil }
+        guard let p = page, p.isOpen else { return nil }
         let t0 = CACurrentMediaTime()
         let h = p.hitTestViewEx(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
         lastHitUs = (CACurrentMediaTime() - t0) * 1e6
@@ -93,17 +103,18 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
         else { onEmptyTap?() }
     }
-    @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) { if let cb = onDoubleTap { cb() } else { resetView() } }
+    @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) { if let cb = onDoubleTap { cb(hitAt(g.location(in: self))) } else { resetView() } }
     @objc private func onPinch(_ g: UIPinchGestureRecognizer) {
         guard zoomEnabled, !selecting else { return }
-        if g.state == .began { pinchStart = viewScale }
+        if g.state == .began { stopSpring(); pinchStart = viewScale }
+        if zoomSpringsBack, [.ended, .cancelled, .failed].contains(g.state) { springBack(); return }
         let ns = min(max(pinchStart * g.scale, 0.5), 12); let k = ns / viewScale
         let f = g.location(in: self)
         viewOx = f.x - (f.x - viewOx) * k; viewOy = f.y - (f.y - viewOy) * k; viewScale = ns
         setNeedsDisplay()
     }
     @objc private func onPan(_ g: UIPanGestureRecognizer) {
-        guard zoomEnabled, !selecting else { return }
+        guard zoomEnabled, !selecting, spring == nil else { return }
         if !isZoomed, onSwipe != nil {
             if g.state == .ended {
                 let t = g.translation(in: self), v = g.velocity(in: self)
@@ -115,8 +126,12 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         viewOx += d.x; viewOy += d.y; g.setTranslation(.zero, in: self)
         setNeedsDisplay()
     }
-    @objc private func onLongPress(_ g: UILongPressGestureRecognizer) {
-        guard selectionEnabled, let p = page else { return }
+    @objc private func handleLongPress(_ g: UILongPressGestureRecognizer) {
+        if !selectionEnabled {
+            if g.state == .began { onLongPress?(hitAt(g.location(in: self))) }
+            return
+        }
+        guard let p = page else { return }
         let pt = g.location(in: self)
         switch g.state {
         case .began:
@@ -150,19 +165,39 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     private var lastSize = CGSize.zero
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
-        guard let p = page, bounds.width > 0, bounds.height > 0 else { return }
+        guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
         p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight))
         baseKey = ""; setNeedsDisplay()
     }
     /// Fit the content height and centre it.
     public func resetView() {
-        let l = page?.currentLayout
-        viewScale = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
-        fitScale = viewScale
-        viewOx = l.map { max((bounds.width - CGFloat($0.contentW) * viewScale) / 2, 0) } ?? 0
-        viewOy = l.map { max((bounds.height - CGFloat($0.contentH) * viewScale) / 2, 0) } ?? 0
+        stopSpring()
+        let f = fittedView()
+        viewScale = f.scale; fitScale = f.scale; viewOx = f.ox; viewOy = f.oy
         setNeedsDisplay()
     }
+    /// The transform `resetView()` applies: content height fitted, centred.
+    private func fittedView() -> QvpZoomSpring.ViewTransform {
+        let l = page?.currentLayout
+        let s = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
+        return (s, l.map { max((bounds.width - CGFloat($0.contentW) * s) / 2, 0) } ?? 0,
+                l.map { max((bounds.height - CGFloat($0.contentH) * s) / 2, 0) } ?? 0)
+    }
+    /// Ease from the released transform to the fitted one on a display link of its own.
+    private func springBack() {
+        let to = fittedView()
+        fitScale = to.scale
+        spring = QvpZoomSpring(from: (viewScale, viewOx, viewOy), to: to, start: CACurrentMediaTime())
+        if springLink == nil { let l = CADisplayLink(target: self, selector: #selector(onSpringFrame)); l.add(to: .main, forMode: .common); springLink = l }
+    }
+    @objc private func onSpringFrame() {
+        guard let s = spring else { stopSpring(); return }
+        let (v, done) = s.value(at: CACurrentMediaTime())
+        viewScale = v.scale; viewOx = v.ox; viewOy = v.oy
+        setNeedsDisplay()
+        if done { stopSpring() }
+    }
+    private func stopSpring() { spring = nil; springLink?.invalidate(); springLink = nil }
     /// Page units of `line` → view points (engine layout + pan/zoom).
     public func lineTransform(_ line: Int) -> CGAffineTransform {
         let l = page?.currentLayout
@@ -190,7 +225,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
 
     // ── frame ──
     public override func draw(_ rect: CGRect) {
-        guard let p = page, let ctx = UIGraphicsGetCurrentContext() else { return }
+        guard let p = page, p.isOpen, let ctx = UIGraphicsGetCurrentContext() else { return }
         if p.currentLayout == nil { relayout() }
         guard let l = p.currentLayout else { return }
         let moving = p.tick(CACurrentMediaTime() * 1000)
