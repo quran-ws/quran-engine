@@ -201,13 +201,13 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
       highlights={nHighlights}
       mask={nMask}
       reveal={nReveal}
-      onWordTap={onWordTap ? e => onWordTap(e.nativeEvent) : undefined}
-      onDecoTap={onDecoTap ? e => onDecoTap(e.nativeEvent) : undefined}
+      onWordTap={onWordTap ? (e: NativeSyntheticEvent<{ word: Word; hit: Hit }>) => onWordTap(e.nativeEvent) : undefined}
+      onDecoTap={onDecoTap ? (e: NativeSyntheticEvent<{ deco: Deco; hit: Hit }>) => onDecoTap(e.nativeEvent) : undefined}
       onEmptyTap={onEmptyTap ? () => onEmptyTap() : undefined}
-      onSelectionChanged={onSelectionChanged ? e => onSelectionChanged(e.nativeEvent) : undefined}
-      onPageLoad={onPageLoad ? e => onPageLoad(e.nativeEvent) : undefined}
-      onRevealChanged={onRevealChanged ? e => onRevealChanged(e.nativeEvent) : undefined}
-      onError={onError ? e => onError(e.nativeEvent) : undefined}
+      onSelectionChanged={onSelectionChanged ? (e: NativeSyntheticEvent<SelectionInfo>) => onSelectionChanged(e.nativeEvent) : undefined}
+      onPageLoad={onPageLoad ? (e: NativeSyntheticEvent<PageInfo>) => onPageLoad(e.nativeEvent) : undefined}
+      onRevealChanged={onRevealChanged ? (e: NativeSyntheticEvent<{ steps: number; at: number | null }>) => onRevealChanged(e.nativeEvent) : undefined}
+      onError={onError ? (e: NativeSyntheticEvent<{ message: string }>) => onError(e.nativeEvent) : undefined}
     />
   );
 });
