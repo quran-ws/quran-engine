@@ -19,6 +19,9 @@ All notable changes to the engine and its packages. The format follows
 - iOS: six page-cache lifecycle tests.
 
 ### Changed
+- FFI: every `qvp_*` entry point catches a panic in the engine and returns its error value
+  (0, -1 or null) instead of aborting the host; the release profile no longer sets
+  `panic = "abort"`.
 - Every platform's demo app lives in `example/`: `packages/ios/example`,
   `packages/android/example` (Gradle module `:example`), `web/example/`. The web build
   writes `dist/web/` and reads pages from `dist/pages/`. The iOS README lives inside

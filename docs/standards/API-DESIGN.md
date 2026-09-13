@@ -96,7 +96,9 @@ that only resolves inside the monorepo is a bug.
 - Coordinates are page units unless the name says `view`.
 - Colours are `0xRRGGBBAA`. Alpha 0 means hidden or "leave alone".
 - `QVP_NONE` is the absent index. A function that can fail returns `0`/`-1`/`NULL` as its
-  header comment states. Nothing panics across the boundary.
+  header comment states. Every entry point catches a panic in the engine and returns that
+  error value; nothing unwinds across the boundary. On wasm there is no unwinding, so a
+  panic traps there.
 - Strings return as `QvpStr` (pointer, length, UTF-8, not NUL-terminated) and live until the
   next string-returning call on the same thread.
 - Array outputs take `(out, cap)` and return the total count.
