@@ -161,10 +161,12 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     }
 
     /** Recompute the engine layout for the current size/knobs. */
+    /** The spec `relayout()` hands the engine for the current size and knobs. */
+    fun layoutSpec() = QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, lineGap, fillHeight)
     fun relayout() {
         val p = page ?: return
         if (width == 0 || height == 0) return
-        p.layout(QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, lineGap, fillHeight))
+        p.layout(layoutSpec())
         baseKey = ""; invalidate()
     }
     fun resetView() {

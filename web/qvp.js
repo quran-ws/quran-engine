@@ -98,6 +98,11 @@
     kindName(k) { return this.nameOf('qvp_kind_name', k); }
     categoryName(c) { return this.nameOf('qvp_category_name', c); }
     markCategory(m) { return this.ex.qvp_mark_category(markId(m)); }
+    markFromName(s) { const [p, n] = this.putStr(s); return this.ex.qvp_mark_from_name(p, n); }
+    /** The page format version the engine reads. */
+    version() { return this.ex.qvp_version(); }
+    /** The engine's name, `qvp` (a NUL-terminated C string in wasm memory). */
+    engineName() { const p = this.ex.qvp_engine_name(), u = new Uint8Array(this.mem.buffer); let n = 0; while (u[p + n]) n++; return this.str(p, n); }
     /** Arabic text tools */
     strip(s) { return this._arabic(0, s); }
     fold(s) { return this._arabic(1, s); }
@@ -435,6 +440,10 @@
     surah(n) { return this.e.ex.qvp_atlas_surah(this.h, n, this.e.scratch) ? this._surah(this.e.scratch) : null; }
     surahs() { const n = this.e.ex.qvp_atlas_surahs(this.h), out = []; for (let i = 0; i < n; i++) { this.e.ex.qvp_atlas_surah_at(this.h, i, this.e.scratch); out.push(this._surah(this.e.scratch)); } return out; }
     pageOfSurah(n) { const s = this.surah(n); return s ? s.page : null; }
+    /** How many pages the atlas covers. */
+    pages() { return this.e.ex.qvp_atlas_pages(this.h); }
+    /** The whole atlas as JSON text. */
+    json() { this.e.ex.qvp_atlas_json(this.h, this.e.scratch); return this.e.qstr(this.e.scratch); }
     division(kind, n) { if (!this.e.ex.qvp_atlas_division(this.h, { juz: 0, hizb: 1, nisf: 2, rubu_al_hizb: 3 }[kind], n, this.e.scratch)) return null; const v = new Uint16Array(this.e.mem.buffer, this.e.scratch, 4); return { rubuAlHizb: v[0], surah: v[1], ayah: v[2], page: v[3], ayahKey: `${v[1]}:${v[2]}` }; }
     juz(n) { return this.division('juz', n); }
     hizb(n) { return this.division('hizb', n); }

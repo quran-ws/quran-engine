@@ -134,4 +134,5 @@ internal object QvpNative {
     @JvmStatic external fun name(table: Int, id: Int): String
     @JvmStatic external fun nameId(table: Int, name: String): Int
     @JvmStatic external fun version(): Int
+    @JvmStatic external fun engineName(): String
 }

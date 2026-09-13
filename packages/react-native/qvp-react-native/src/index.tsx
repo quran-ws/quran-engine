@@ -89,6 +89,8 @@ export interface Word {
 }
 export interface Deco { idx: number; kind: number; kindName: string; surah: number; ayah: number; line: number; x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number }
 export interface Hit { word: number; path: number; deco: number; line: number; distance: number; exact: boolean; wordKey: string | null; ayahKey: string | null }
+/** An exact outline hit: no line, distance or gap resolution. */
+export interface ExactHit { word: number; path: number; deco: number; wordKey: string | null; ayahKey: string | null }
 export interface Ayah { idx: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDeco: number; bbox: number[] }
 export interface Line { idx: number; lineNo: number; isHeader: boolean; firstWord: number; nWords: number; bbox: number[]; bandY0: number; bandY1: number; centre: number }
 export interface SelectionInfo { words: number[]; text: string; citation: string; textWithCitation: string }
@@ -111,7 +113,8 @@ export interface Highlight { id: string; target: Target; style?: HighlightStyle 
 /** One declarative style rule: `selector` (→ page.style) or `target` (→ page.styleTarget); `hide` → page.hide(selector). */
 export interface StyleRule { id: string; selector?: Selector; target?: Target; color?: Color; ms?: number; layer?: number; hide?: boolean }
 export interface Theme { ink?: Color; diacritics?: Color; dots?: Color; waqf?: Color; sifr?: Color; ayahMark?: Color; numeral?: Color; headers?: Color; marks?: Record<string, Color>; ms?: number }
-export interface Mask { target: Target; mode?: MaskMode; blockColor?: Color; padX?: number; padY?: number; radius?: number; reverse?: boolean }
+/** `from` masks every word from that index to the end of the page instead of `target`. */
+export interface Mask { target?: Target; from?: number; mode?: MaskMode; blockColor?: Color; padX?: number; padY?: number; radius?: number; reverse?: boolean }
 /** Greyed-page reveal: `revealStart(lit, byAyah, grey, ink, ayahMarks, ms)` then `revealGoto(at)` whenever `at` changes; null → revealStop. */
 export interface Reveal { lit?: number; byAyah?: boolean; grey?: Color; ink?: Color; ayahMarks?: boolean; ms?: number; at?: number }
 
@@ -212,6 +215,7 @@ const CATEGORY_NAMES: string[] = NAMES.categories ?? [];
 const DECO_NAMES: string[] = NAMES.decorations ?? [];
 export const MARKS: string[] = NAMES.marks ?? [];
 /** A name's id in a table; 255 when the table has no such name. */
+export type NameTable = 'marks' | 'kinds' | 'families' | 'categories' | 'decorations' | 'divisions' | 'places';
 const named = (v: string | number, names: string[]) => { if (typeof v === 'number') return v; const i = names.indexOf(v); return i < 0 ? 255 : i; };
 export function markId(name: string | number): number { return named(name, MARKS); }
 if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not linked (Android only for now; see README)');
@@ -247,7 +251,11 @@ export const Qvp = {
   text: (tag: number, target: Target = 'page', opts?: TextOptions): Promise<string> => M.text(tag, target, opts ?? null),
   search: (tag: number, query: string, opts?: SearchOptions): Promise<Match[]> => M.search(tag, query, opts ?? null),
   citation: (tag: number, words: number[]): Promise<string> => M.citation(tag, words),
+  hitTest: (tag: number, x: number, y: number): Promise<ExactHit | null> => M.hitTest(tag, x, y),
+  hitTestEx: (tag: number, x: number, y: number, opts?: HitOptions): Promise<Hit | null> => M.hitTestEx(tag, x, y, opts ?? null),
+  hitTestView: (tag: number, x: number, y: number): Promise<ExactHit | null> => M.hitTestView(tag, x, y),
   hitTestViewEx: (tag: number, x: number, y: number, opts?: HitOptions): Promise<Hit | null> => M.hitTestViewEx(tag, x, y, opts ?? null),
+  layoutGapToFill: (tag: number, max = 0): Promise<number> => M.layoutGapToFill(tag, max),
   wordBoxView: (tag: number, i: number): Promise<{ x0: number; y0: number; x1: number; y1: number } | null> => M.wordBoxView(tag, i),
   currentLayout: (tag: number): Promise<Layout | null> => M.currentLayout(tag),
   relayout: (tag: number): Promise<void> => M.relayout(tag),
@@ -279,6 +287,11 @@ export const Qvp = {
   arabic: (kind: 'strip' | 'fold' | 'normalize' | 'loose', s: string): Promise<string> => M.arabic(kind, s),
   gapToFill: (pageW: number, pageH: number, lines: number, viewW: number, viewH: number, max = 0): Promise<number> => M.gapToFill(pageW, pageH, lines, viewW, viewH, max),
   wastedFraction: (pageW: number, pageH: number, viewW: number, viewH: number): Promise<number> => M.wastedFraction(pageW, pageH, viewW, viewH),
+  markCategory: (m: number): Promise<number> => M.markCategory(m),
+  engineName: (): Promise<string> => M.engineName(),
+  /** How many ids a name table has, and a name's id in it (255 when absent); the tables come from the engine at start. */
+  nameCount: (table: NameTable): number => (NAMES[table] ?? []).length,
+  nameId: (table: NameTable, name: string): number => named(name, NAMES[table] ?? []),
   markName: (m: number): string => MARKS[m] ?? 'unknown',
   kindName: (k: number): string => KIND_NAMES[k] ?? 'other',
   categoryName: (c: number): string => CATEGORY_NAMES[c] ?? '',
@@ -323,7 +336,7 @@ export class QvpAtlas {
 }
 
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decos', 'findWord', 'resolve', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestViewEx', 'wordBoxView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'revealNext', 'hideBack', 'revealWord', 'hideWord', 'revealAll', 'hideAll', 'maskHidden', 'maskWords', 'revealSteps', 'revealAt', 'revealStepOf', 'cropBox', 'cropSvg'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decos', 'findWord', 'resolve', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTest', 'hitTestEx', 'hitTestView', 'hitTestViewEx', 'layoutGapToFill', 'wordBoxView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'revealNext', 'hideBack', 'revealWord', 'hideWord', 'revealAll', 'hideAll', 'maskHidden', 'maskWords', 'revealSteps', 'revealAt', 'revealStepOf', 'cropBox', 'cropSvg'] as const;
 type PageMethod = (typeof pageMethods)[number];
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {

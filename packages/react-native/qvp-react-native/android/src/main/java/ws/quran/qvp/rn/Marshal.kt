@@ -129,6 +129,10 @@ object Marshal {
     }
     fun deco(d: QvpDecoration): Map<String, Any?> = mapOf("idx" to d.idx, "kind" to d.kind, "kindName" to QvpEngine.decorationName(d.kind).ifEmpty { "other" },
         "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "x0" to d.x0, "y0" to d.y0, "x1" to d.x1, "y1" to d.y1, "text" to d.text, "firstPath" to d.firstPath, "nPaths" to d.nPaths)
+    fun hit(p: QvpPage, h: QvpHit): Map<String, Any?> {
+        val w = if (h.word >= 0) p.words[h.word] else null
+        return mapOf("word" to h.word, "path" to h.path, "deco" to h.deco, "wordKey" to w?.wordKey, "ayahKey" to w?.ayahKey)
+    }
     fun hit(p: QvpPage, h: QvpHitEx): Map<String, Any?> {
         val w = if (h.word >= 0) p.words[h.word] else null
         return mapOf("word" to h.word, "path" to h.path, "deco" to h.deco, "line" to h.line, "distance" to h.distance, "exact" to h.exact, "wordKey" to w?.wordKey, "ayahKey" to w?.ayahKey)

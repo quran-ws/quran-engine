@@ -189,7 +189,8 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         val m = maskProp ?: return
         val paper = Marshal.color(m["blockColor"], QvpDefaults.MASK_BLOCK)
         p.maskOptions(paper, (m["padX"] as? Number)?.toFloat() ?: QvpDefaults.MASK_PAD, (m["padY"] as? Number)?.toFloat() ?: QvpDefaults.MASK_PAD, (m["radius"] as? Number)?.toFloat() ?: QvpDefaults.MASK_RADIUS, m["reverse"] == true)
-        p.mask(Marshal.target(m["target"], p), Marshal.maskMode(m["mode"]))
+        val from = m["from"] as? Number
+        if (from != null) p.maskFrom(from.toInt(), Marshal.maskMode(m["mode"])) else p.mask(Marshal.target(m["target"], p), Marshal.maskMode(m["mode"]))
     }
     private fun applyReveal(p: QvpPage) {
         val r = revealProp
