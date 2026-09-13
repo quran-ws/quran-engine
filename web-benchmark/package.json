@@ -1,0 +1,13 @@
+{
+  "name": "qvp-render-benchmark",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check app.js && node --check geometry.js && node --check renderers.js && node --check server.mjs && node --check worker.js",
+    "export": "bash export.sh",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "libtess": "1.2.2"
+  }
+}

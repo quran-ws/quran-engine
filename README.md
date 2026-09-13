@@ -76,6 +76,7 @@ Everything about using it lives on the site. This repository is the source.
 | `crates/` | the Rust core: `qvp-format`, `qvp-core`, `qvp-convert`, `qvp-ffi` |
 | `packages/` | the thin platform wrappers — iOS, Android, Flutter, React Native |
 | `web/` | the reference web harness the browser demo runs on |
+| `web-benchmark/` | reproducible Canvas and WebGL renderer measurements |
 | `conformance/` | the gates that must stay green |
 | `scripts/` | build and packaging |
 | `docs/` | `HOW-IT-WORKS.md` (start here), the API, the standards, and the measured numbers |

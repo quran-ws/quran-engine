@@ -1,0 +1,132 @@
+{
+  "date": "2026-09-12T10:52:45.400Z",
+  "hardware": "Apple M3 Max",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+  "source": {
+    "repository": "git@github.com:nuqayah/muhaffidh.git",
+    "directory": "/Users/mustafaj/dev/muhaffidh",
+    "commit": "3e5ce60f7fca57800912a2c83c23c84abbce7da8",
+    "relevant_inputs_clean": true,
+    "mushaf": "dk-medina1441-hafs",
+    "surface_css_pixels": [
+      390,
+      620
+    ],
+    "tajweed": false
+  },
+  "method": {
+    "generation": "DigitalKhattPageRenderer update through FINISHED, including its cooperative animation-frame yields, with warmed HarfBuzz WASM and font, followed by a page bounding-box read",
+    "detached_parse": "Assign serialized generated page markup to a detached HTML template and query all descendants",
+    "parse_attach_geometry": "Assign markup to innerHTML, attach it to a 390x620 transparent on-screen container, call getBBox on every line SVG group, and read the host bounding box; paint is not forced",
+    "network_included": false,
+    "generation_warmup": 5,
+    "generation_repetitions": 20,
+    "parse_warmup": 5,
+    "parse_repetitions": 30
+  },
+  "rows": [
+    {
+      "page": 1,
+      "elements": 485,
+      "svg_elements": 7,
+      "path_elements": 354,
+      "word_groups": 36,
+      "detached_parse": {
+        "median_ms": 1.5999999046325684,
+        "p95_ms": 2
+      },
+      "parse_attach_geometry": {
+        "median_ms": 3.299999952316284,
+        "p95_ms": 3.9000000953674316
+      },
+      "digitalkhatt_completion": {
+        "median_ms": 10.899999856948853,
+        "p95_ms": 12.399999856948853
+      },
+      "markup_bytes": 485116,
+      "markup_gzip_bytes": 108070,
+      "markup_brotli_11_bytes": 51120,
+      "qvp_bytes": 38252,
+      "qvp_brotli_11_bytes": 20076,
+      "qvp_decode_path2d": {
+        "median_ms": 1,
+        "p95_ms": 4.599999904632568
+      }
+    },
+    {
+      "page": 42,
+      "elements": 1983,
+      "svg_elements": 15,
+      "path_elements": 1485,
+      "word_groups": 151,
+      "detached_parse": {
+        "median_ms": 6.400000095367432,
+        "p95_ms": 6.799999952316284
+      },
+      "parse_attach_geometry": {
+        "median_ms": 13.5,
+        "p95_ms": 14.799999952316284
+      },
+      "digitalkhatt_completion": {
+        "median_ms": 35.299999952316284,
+        "p95_ms": 40.89999985694885
+      },
+      "markup_bytes": 2091410,
+      "markup_gzip_bytes": 429029,
+      "markup_brotli_11_bytes": 96201,
+      "qvp_bytes": 141970,
+      "qvp_brotli_11_bytes": 62918,
+      "qvp_decode_path2d": {
+        "median_ms": 3.1000001430511475,
+        "p95_ms": 6.300000190734863
+      }
+    },
+    {
+      "page": 585,
+      "elements": 2057,
+      "svg_elements": 15,
+      "path_elements": 1506,
+      "word_groups": 167,
+      "detached_parse": {
+        "median_ms": 6.5,
+        "p95_ms": 7.099999904632568
+      },
+      "parse_attach_geometry": {
+        "median_ms": 13.700000047683716,
+        "p95_ms": 14.399999856948853
+      },
+      "digitalkhatt_completion": {
+        "median_ms": 37.799999952316284,
+        "p95_ms": 43.40000009536743
+      },
+      "markup_bytes": 2077674,
+      "markup_gzip_bytes": 425422,
+      "markup_brotli_11_bytes": 114204,
+      "qvp_bytes": 145949,
+      "qvp_brotli_11_bytes": 66312,
+      "qvp_decode_path2d": {
+        "median_ms": 3.5,
+        "p95_ms": 11.600000143051147
+      }
+    }
+  ],
+  "shared_digitalkhatt_assets": {
+    "harfbuzz_wasm_bytes": 345204,
+    "harfbuzz_wasm_brotli_11_bytes": 112820,
+    "font_bytes": 2396336,
+    "font_brotli_11_bytes": 343293
+  },
+  "limitations": [
+    "Muhaffidh generates line SVGs at runtime rather than loading a static SVG page file.",
+    "The serialized markup repeats glyph path strings and was not optimized as a purpose-built static SVG corpus.",
+    "QVP and DigitalKhatt are different outline sources, so matching page numbers do not imply identical path complexity or pixels.",
+    "These are warm desktop measurements and do not establish mobile performance.",
+    "The QVP preparation values come from a separate run in the same Chrome version and hardware class."
+  ],
+  "sha256": {
+    "benchmark": "d71932e709c0d87ec10acd6163ebc8677f09e0de82e5b76799d5e9c5b9f03064",
+    "muhaffidh_inputs": "c67e0fe4e419d12b1648331d9ea4207b7d664865da9848d88eabd7c1d75b4261",
+    "qvp_sdk": "e20610ed5aab190d06ba4dbe99ca79507efec668324a8e98eba35518c9dee53f",
+    "qvp_measurements": "63cf7c40fa06b4bed34a1c07087e1724fe784cff7b109bb93ad771adb07027ed"
+  }
+}

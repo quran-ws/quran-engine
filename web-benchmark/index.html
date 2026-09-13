@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QVP · Canvas / GPU benchmark</title>
+<link rel="icon" href="data:,">
+<style>
+  * { box-sizing: border-box }
+  body { margin: 0; background: #f3f1ec; color: #242b2b; font: 15px/1.5 system-ui, sans-serif }
+  main { max-width: 1260px; margin: auto; padding: 28px }
+  h1 { margin: 0 0 8px; font-size: 27px; font-weight: 650 }
+  p { max-width: 850px; margin: 8px 0 18px; color: #536060 }
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 18px 0 }
+  label { display: grid; gap: 5px; font-size: 12px; font-weight: 600 }
+  select, button { font: inherit; padding: 9px 12px; border: 1px solid #c6ceca; border-radius: 6px; background: white; color: inherit }
+  button { cursor: pointer; font-weight: 600 }
+  button.primary { background: #18574b; color: white; border-color: #18574b }
+  button:disabled { opacity: .5; cursor: wait }
+  #status { padding: 12px 16px; background: #e4eae5; border-radius: 6px; min-height: 46px; margin-bottom: 20px }
+  .workspace { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: start }
+  #stage { width: fit-content; max-width: 100%; overflow: hidden; background: #fffdf7; box-shadow: 0 3px 20px #172b2414 }
+  canvas { display: block; max-width: 100%; height: auto }
+  #details { font: 12px/1.6 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere }
+  .table-wrap { overflow-x: auto; margin-top: 24px }
+  table { border-collapse: collapse; width: 100%; background: white; font-size: 13px }
+  th, td { padding: 10px 12px; border-bottom: 1px solid #e0e5e1; text-align: left; white-space: nowrap }
+  th { background: #e6ebe6 }
+  #qa { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 18px }
+  #qa figure { margin: 0; max-width: 46%; font-size: 12px }
+  #qa img { width: 100%; display: block }
+  @media (max-width: 760px) { main { padding: 16px } .workspace { display: block } #details { margin-top: 16px } }
+</style>
+<main>
+  <h1>QVP · Canvas / GPU benchmark</h1>
+  <p>The same Quran outlines, rendered with cached Canvas 2D, direct Canvas 2D, and batched WebGL2. No browser WASM. Measurements use this device; a phone-sized surface does not emulate a phone processor.</p>
+  <div class="controls">
+    <label>Page<select id="page"></select></label>
+    <label>Renderer<select id="mode"><option value="cached">Canvas cached</option><option value="direct">Canvas direct · control</option><option value="gpu">WebGL triangles</option></select></label>
+    <label>Surface<select id="profile"><option value="phone">390 × 620 · DPR 3</option><option value="desktop">720 × 1100 · DPR 2</option><option value="device">390 × 620 · device DPR</option></select></label>
+    <label>Zoom<select id="zoom"><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+    <button id="preview">Preview</button>
+    <button id="validate">Compare pixels</button>
+    <button id="run" class="primary">Run full benchmark</button>
+    <button id="download" disabled>Download results</button>
+  </div>
+  <div id="status" role="status">Loading page selection…</div>
+  <div class="workspace"><div id="stage"></div><div>
+    <strong>What is measured</strong>
+    <p>Page preparation, draw submission time, animation-frame pacing, and known buffer sizes. GPU execution and total browser/GPU memory are not directly measured.</p>
+    <p>Preview zoom reuses Canvas pixels; sharp zoom redraws the curves. WebGL stays sharp in both. Highlight moves a background band; ink recolouring and text reflow are outside this test.</p>
+    <pre id="details"></pre>
+  </div></div>
+  <div class="table-wrap"><table><thead><tr><th>Page</th><th>Renderer</th><th>Workload</th><th>CPU p50</th><th>CPU p95</th><th>rAF p95</th><th>Late intervals</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div id="qa"></div>
+</main>
+<script type="module" src="./app.js"></script>
+</html>

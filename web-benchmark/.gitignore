@@ -1,0 +1,6 @@
+node_modules/
+.build/
+results/*.json
+!results/2026-09-12T04-44-17.818Z.json
+!results/summary.json
+!results/source-sha256.json

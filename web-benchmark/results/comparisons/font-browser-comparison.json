@@ -1,0 +1,217 @@
+{
+  "date": "2026-09-12T11:14:06.661Z",
+  "hardware": "Apple M3 Max",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+  "source": {
+    "application": "/Users/mustafaj/dev/muhaffidh",
+    "repository": "git@github.com:nuqayah/muhaffidh.git",
+    "commit": "3e5ce60f7fca57800912a2c83c23c84abbce7da8"
+  },
+  "method": {
+    "network_included": false,
+    "font_source": "FontFace constructed from an in-memory WOFF2 ArrayBuffer under a unique family name",
+    "layout": "Actual application page markup inserted at 355x574 CSS pixels, then every glyph bounding box read",
+    "raster": "Every page glyph drawn at its laid-out position into a 1170x1860 Canvas 2D surface, followed by a one-pixel synchronous readback",
+    "warmup": 5,
+    "repetitions": 20
+  },
+  "rows": [
+    {
+      "page": 42,
+      "fonts": [
+        4
+      ],
+      "glyphs": 170,
+      "font_construct": {
+        "median_ms": 16,
+        "p95_ms": 17.299999952316284
+      },
+      "font_load": {
+        "median_ms": 0,
+        "p95_ms": 0.10000014305114746
+      },
+      "font_total": {
+        "median_ms": 16.100000143051147,
+        "p95_ms": 17.40000009536743
+      },
+      "html_create": {
+        "median_ms": 0.7000000476837158,
+        "p95_ms": 1.2999999523162842
+      },
+      "layout": {
+        "median_ms": 2.0999999046325684,
+        "p95_ms": 4.5
+      },
+      "first_canvas_raster": {
+        "median_ms": 13.400000095367432,
+        "p95_ms": 18.5
+      },
+      "cached_canvas_raster": {
+        "median_ms": 8.5,
+        "p95_ms": 10.5
+      },
+      "font_files": [
+        {
+          "id": 4,
+          "filename": "QCF4_Hafs_04_W.woff2",
+          "bytes": 823860,
+          "sha256": "4dc0f8545c63e2fca495781f39d29220a1f6f9fb5c68cb3906e8038c3bc2b0d5"
+        }
+      ]
+    },
+    {
+      "page": 300,
+      "fonts": [
+        23
+      ],
+      "glyphs": 148,
+      "font_construct": {
+        "median_ms": 15.200000047683716,
+        "p95_ms": 18.799999952316284
+      },
+      "font_load": {
+        "median_ms": 0,
+        "p95_ms": 0.09999990463256836
+      },
+      "font_total": {
+        "median_ms": 15.200000047683716,
+        "p95_ms": 18.799999952316284
+      },
+      "html_create": {
+        "median_ms": 0.6000001430511475,
+        "p95_ms": 1
+      },
+      "layout": {
+        "median_ms": 2,
+        "p95_ms": 5.200000047683716
+      },
+      "first_canvas_raster": {
+        "median_ms": 12.799999952316284,
+        "p95_ms": 19.5
+      },
+      "cached_canvas_raster": {
+        "median_ms": 7.8999998569488525,
+        "p95_ms": 18.100000143051147
+      },
+      "font_files": [
+        {
+          "id": 23,
+          "filename": "QCF4_Hafs_23_W.woff2",
+          "bytes": 745628,
+          "sha256": "efa0dad6998783652e8932085d0f64c28ec32dbbd6ea9d2563935f13d9f6e350"
+        }
+      ]
+    },
+    {
+      "page": 585,
+      "fonts": [
+        0,
+        46
+      ],
+      "glyphs": 170,
+      "font_construct": {
+        "median_ms": 20.40000009536743,
+        "p95_ms": 27.399999856948853
+      },
+      "font_load": {
+        "median_ms": 0,
+        "p95_ms": 0.09999990463256836
+      },
+      "font_total": {
+        "median_ms": 20.5,
+        "p95_ms": 27.399999856948853
+      },
+      "html_create": {
+        "median_ms": 0.7000000476837158,
+        "p95_ms": 1.1000001430511475
+      },
+      "layout": {
+        "median_ms": 2.299999952316284,
+        "p95_ms": 3.8000001907348633
+      },
+      "first_canvas_raster": {
+        "median_ms": 13.099999904632568,
+        "p95_ms": 34.700000047683716
+      },
+      "cached_canvas_raster": {
+        "median_ms": 8,
+        "p95_ms": 21.09999990463257
+      },
+      "font_files": [
+        {
+          "id": 0,
+          "filename": "QCF4_QBSML.woff2",
+          "bytes": 612436,
+          "sha256": "d81253102b9afd182cec4ad0061cfc7473a746d16b1f9e0f22811a0246f79785"
+        },
+        {
+          "id": 46,
+          "filename": "QCF4_Hafs_46_W.woff2",
+          "bytes": 366284,
+          "sha256": "edfde745b1a9615e52b40f94ef40948f991e93ecc1dc04e330b1afb3cee53dd4"
+        }
+      ]
+    }
+  ],
+  "qvp": {
+    "url": "http://127.0.0.1:4186/",
+    "surface_backing_pixels": [
+      1170,
+      1860
+    ],
+    "warmup": 20,
+    "repetitions": 100,
+    "rows": [
+      {
+        "page": 42,
+        "prepare": {
+          "median_ms": 3.1999998092651367,
+          "p95_ms": 9.399999856948853
+        },
+        "first_draw": {
+          "median_ms": 2.4000000953674316,
+          "p95_ms": 3.5999999046325684
+        },
+        "cached_draw": {
+          "median_ms": 1.8999998569488525,
+          "p95_ms": 2.700000047683716
+        }
+      },
+      {
+        "page": 300,
+        "prepare": {
+          "median_ms": 3.200000047683716,
+          "p95_ms": 10.100000143051147
+        },
+        "first_draw": {
+          "median_ms": 2.5,
+          "p95_ms": 3.799999952316284
+        },
+        "cached_draw": {
+          "median_ms": 1.8999998569488525,
+          "p95_ms": 2.700000047683716
+        }
+      },
+      {
+        "page": 585,
+        "prepare": {
+          "median_ms": 3.700000047683716,
+          "p95_ms": 12.400000095367432
+        },
+        "first_draw": {
+          "median_ms": 2.8000001907348633,
+          "p95_ms": 3.799999952316284
+        },
+        "cached_draw": {
+          "median_ms": 2.200000047683716,
+          "p95_ms": 2.6000001430511475
+        }
+      }
+    ]
+  },
+  "limitations": [
+    "Repeated FontFace construction may benefit from browser-level caching of identical font bytes.",
+    "Canvas raster timing isolates glyph rasterization but is not a measurement of DOM paint or physical presentation.",
+    "These are warm desktop measurements and do not establish mobile performance."
+  ]
+}

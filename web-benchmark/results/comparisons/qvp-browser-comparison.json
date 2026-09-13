@@ -1,0 +1,32 @@
+{
+  "date": "2026-09-12",
+  "hardware": "Apple M3 Max",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+  "isolated": false,
+  "warmup": 20,
+  "repetitions": 100,
+  "pixel_checks": 9,
+  "path_count": 579840,
+  "rows": [
+    {
+      "page": 1,
+      "qvp": { "median_ms": 1, "p95_ms": 4.599999904632568 },
+      "qvb": { "median_ms": 0.20000004768371582, "p95_ms": 0.3000001907348633 }
+    },
+    {
+      "page": 42,
+      "qvp": { "median_ms": 3.1000001430511475, "p95_ms": 6.300000190734863 },
+      "qvb": { "median_ms": 0.5, "p95_ms": 0.5 }
+    },
+    {
+      "page": 585,
+      "qvp": { "median_ms": 3.5, "p95_ms": 11.600000143051147 },
+      "qvb": { "median_ms": 0.7999999523162842, "p95_ms": 0.9000000953674316 }
+    }
+  ],
+  "notes": "Both formats were already fetched. Times include decoding and construction of cached Path2D objects. Pixel checks compare direct QVP with native QVB1 exports at 1x, 2x, and 4x, including one highlighted word. High QVP p95 values occurred during repeated decode stress; medians repeated within 0.3 ms in a second run.",
+  "sha256": {
+    "web/qvp.js": "e20610ed5aab190d06ba4dbe99ca79507efec668324a8e98eba35518c9dee53f",
+    "web-benchmark/compare-qvp.js": "75f331c669a474dd7e334b22bdc83df03c83780a56f18fe9c6150c28573e0e78"
+  }
+}

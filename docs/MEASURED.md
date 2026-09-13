@@ -37,6 +37,15 @@ Run `scripts/sync-android-test-data.sh`, then
 `QvpAndroidBenchmarkTest` emits the raw JSON under the `QvpBenchmark` log tag. These are a
 development baseline, not physical-device numbers; comparisons need the same device and build.
 
+The [browser benchmark](../web-benchmark/README.md) compares cached Canvas 2D,
+direct Canvas 2D, and WebGL2 with the same decoded outlines. On an M3 Max at a
+1170 × 1860 backing resolution, cached Canvas prepared the sampled pages in
+4.5–7.6 ms, while the WebGL path took 28.9–78.4 ms, mostly in worker mesh
+generation. Frame callback pacing was similar. These desktop results exclude
+QVP decoding and network transfer; the harness records the raw observations and
+can be run on a physical phone. The [format investigation](qvp-format-investigation.md)
+separately compares browser QVP decoding, page fonts, and generated SVG markup.
+
 The reason for the engine is not this table. It is that a fully split page is
 hundreds of kilobytes of vector paths, and a phone cannot hold 604 of them in a
 DOM and stay responsive.

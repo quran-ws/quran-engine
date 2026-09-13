@@ -1,0 +1,86 @@
+{
+  "source": "results/2026-09-12T04-44-17.818Z.json",
+  "summary": [
+    {
+      "mode": "cached",
+      "scenario": "preview_zoom",
+      "cpu_p50": 0.029999971389770508,
+      "cpu_p95": 0.03500008583068848,
+      "raf_p95": 9.229999999995925,
+      "late": 2,
+      "count": 810
+    },
+    {
+      "mode": "cached",
+      "scenario": "sharp_zoom",
+      "cpu_p50": 0.27500009536743164,
+      "cpu_p95": 0.3450000286102295,
+      "raf_p95": 9.295000000001892,
+      "late": 0,
+      "count": 810
+    },
+    {
+      "mode": "cached",
+      "scenario": "highlight",
+      "cpu_p50": 0.029999971389770508,
+      "cpu_p95": 0.039999961853027344,
+      "raf_p95": 9.235000000000582,
+      "late": 0,
+      "count": 810
+    },
+    {
+      "mode": "direct",
+      "scenario": "preview_zoom",
+      "cpu_p50": 0.19500017166137695,
+      "cpu_p95": 0.22999978065490723,
+      "raf_p95": 9.170000000001892,
+      "late": 0,
+      "count": 810
+    },
+    {
+      "mode": "direct",
+      "scenario": "sharp_zoom",
+      "cpu_p50": 0.19999980926513672,
+      "cpu_p95": 0.2350001335144043,
+      "raf_p95": 9.220000000001164,
+      "late": 1,
+      "count": 810
+    },
+    {
+      "mode": "direct",
+      "scenario": "highlight",
+      "cpu_p50": 0.19499993324279785,
+      "cpu_p95": 0.21500015258789062,
+      "raf_p95": 9.279999999998836,
+      "late": 2,
+      "count": 810
+    },
+    {
+      "mode": "gpu",
+      "scenario": "preview_zoom",
+      "cpu_p50": 0.02499985694885254,
+      "cpu_p95": 0.03500008583068848,
+      "raf_p95": 9.12999999999738,
+      "late": 0,
+      "count": 810
+    },
+    {
+      "mode": "gpu",
+      "scenario": "sharp_zoom",
+      "cpu_p50": 0.02499985694885254,
+      "cpu_p95": 0.03500008583068848,
+      "raf_p95": 9.19999999999709,
+      "late": 2,
+      "count": 810
+    },
+    {
+      "mode": "gpu",
+      "scenario": "highlight",
+      "cpu_p50": 0.029999971389770508,
+      "cpu_p95": 0.039999961853027344,
+      "raf_p95": 9.139999999999418,
+      "late": 0,
+      "count": 810
+    }
+  ]
+}
