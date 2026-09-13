@@ -45,18 +45,18 @@ internal object QvpNative {
     @JvmStatic external fun attachWords(h: Long, json: ByteArray): Int
     @JvmStatic external fun hasForm(h: Long, form: Int): Boolean
     // hit testing
-    @JvmStatic external fun hitTest(h: Long, x: Float, y: Float): IntArray?
-    @JvmStatic external fun hitTestView(h: Long, x: Float, y: Float): IntArray?
-    @JvmStatic external fun hitTestEx(h: Long, x: Float, y: Float, maxDistance: Float, gapBias: Float, exactFirst: Boolean): FloatArray?
-    @JvmStatic external fun hitTestViewEx(h: Long, x: Float, y: Float, maxDistance: Float, gapBias: Float, exactFirst: Boolean): FloatArray?
+    @JvmStatic external fun hitTestExact(h: Long, x: Float, y: Float): FloatArray?
+    @JvmStatic external fun hitTestExactView(h: Long, x: Float, y: Float): FloatArray?
+    @JvmStatic external fun hitTest(h: Long, x: Float, y: Float, maxDistance: Float, gapBias: Float, preferExact: Boolean): FloatArray?
+    @JvmStatic external fun hitTestView(h: Long, x: Float, y: Float, maxDistance: Float, gapBias: Float, preferExact: Boolean): FloatArray?
     @JvmStatic external fun lineBands(h: Long): FloatArray
-    @JvmStatic external fun hitBoxes(h: Long, gapBias: Float): FloatArray
+    @JvmStatic external fun hitAreas(h: Long, gapBias: Float): FloatArray
     // layout
     @JvmStatic external fun layout(h: Long, spec: FloatArray): FloatArray
     @JvmStatic external fun layoutGapToFill(h: Long, spec: FloatArray, max: Float): Float
     @JvmStatic external fun gapToFill(pw: Float, ph: Float, lines: Int, vw: Float, vh: Float, max: Float): Float
     @JvmStatic external fun wastedFraction(pw: Float, ph: Float, vw: Float, vh: Float): Float
-    @JvmStatic external fun wordBoxView(h: Long, i: Int): FloatArray?
+    @JvmStatic external fun wordBoundsView(h: Long, i: Int): FloatArray?
     // styles
     @JvmStatic external fun styleAdd(h: Long, layer: Int, sel: IntArray, rgba: Int, ms: Int): Int
     @JvmStatic external fun styleAddTarget(h: Long, layer: Int, target: IntArray, rgba: Int, ms: Int): Int
@@ -81,8 +81,8 @@ internal object QvpNative {
     @JvmStatic external fun clearHighlights(h: Long)
     @JvmStatic external fun highlightHandles(h: Long): IntArray
     @JvmStatic external fun highlightWords(h: Long, handle: Int): IntArray
-    @JvmStatic external fun highlightBoxes(h: Long): IntArray
-    @JvmStatic external fun bandBoxes(h: Long, words: IntArray, height: Int, padX: Float, padY: Float): IntArray
+    @JvmStatic external fun highlightBoxesView(h: Long): IntArray
+    @JvmStatic external fun wordBands(h: Long, words: IntArray, height: Int, padX: Float, padY: Float): IntArray
     // selection
     @JvmStatic external fun select(h: Long, anchor: Int, focus: Int)
     @JvmStatic external fun selection(h: Long): IntArray
@@ -100,7 +100,7 @@ internal object QvpNative {
     @JvmStatic external fun unmask(h: Long)
     @JvmStatic external fun maskHidden(h: Long): IntArray
     @JvmStatic external fun maskWords(h: Long): IntArray
-    @JvmStatic external fun maskBoxes(h: Long): IntArray
+    @JvmStatic external fun maskBoxesView(h: Long): IntArray
     @JvmStatic external fun revealStart(h: Long, lit: Int, byAyah: Boolean, grey: Int, ink: Int, ayahMarks: Boolean, ms: Int): Int
     @JvmStatic external fun revealGoto(h: Long, at: Long): Boolean
     @JvmStatic external fun revealAt(h: Long): Long
@@ -108,7 +108,7 @@ internal object QvpNative {
     @JvmStatic external fun revealStepOf(h: Long, wi: Int): Long
     @JvmStatic external fun revealStop(h: Long)
     // crop
-    @JvmStatic external fun cropBox(h: Long, target: IntArray, pad: Float, keepAyahMarks: Boolean): FloatArray?
+    @JvmStatic external fun cropBounds(h: Long, target: IntArray, pad: Float, keepAyahMarks: Boolean): FloatArray?
     @JvmStatic external fun cropSvg(h: Long, target: IntArray, pad: Float, keepAyahMarks: Boolean, background: Int): String?
     // atlas
     @JvmStatic external fun atlasLoad(bytes: ByteArray): Long

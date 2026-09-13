@@ -131,12 +131,12 @@ fn page() -> Page {
 #[test]
 fn hit_testing() {
     let p = page();
-    assert_eq!(p.hit_test(15.0, 15.0), Some(Hit { word: 0, path: 0, deco: NONE }));
-    assert_eq!(p.hit_test(35.0, 15.0), Some(Hit { word: 1, path: 1, deco: NONE }));
-    assert_eq!(p.hit_test(33.0, 6.0), Some(Hit { word: 1, path: 2, deco: NONE }));
-    assert_eq!(p.hit_test(33.0, 8.5), Some(Hit { word: 1, path: NONE, deco: NONE }));
-    assert_eq!(p.hit_test(25.0, 15.0), None);
-    assert_eq!(p.hit_test(50.0, 50.0), None);
+    assert_eq!(p.hit_test_exact(15.0, 15.0), Some(HitExact { word: 0, path: 0, deco: NONE }));
+    assert_eq!(p.hit_test_exact(35.0, 15.0), Some(HitExact { word: 1, path: 1, deco: NONE }));
+    assert_eq!(p.hit_test_exact(33.0, 6.0), Some(HitExact { word: 1, path: 2, deco: NONE }));
+    assert_eq!(p.hit_test_exact(33.0, 8.5), Some(HitExact { word: 1, path: NONE, deco: NONE }));
+    assert_eq!(p.hit_test_exact(25.0, 15.0), None);
+    assert_eq!(p.hit_test_exact(50.0, 50.0), None);
     assert_eq!(p.word_text(1), "ٱلْكِتَٰبُ");
     assert_eq!(p.find_word(1, 1, 2), Some(1));
 }
@@ -146,16 +146,16 @@ fn gap_aware_hit_and_hit_boxes() {
     let p = page();
     let o = HitOptions::default();
     // in the gap between A (x 10-20) and B (x 30-40): gap 10, preceding = B (right) gets 60%
-    let h = p.hit_test_ex(25.0, 15.0, &o).unwrap();
-    assert_eq!((h.word, h.exact), (1, false), "x=25 is within B's 60% share (threshold 24)");
-    let h = p.hit_test_ex(22.0, 15.0, &o).unwrap();
-    assert_eq!((h.word, h.exact), (0, false));
+    let h = p.hit_test(25.0, 15.0, &o).unwrap();
+    assert_eq!((h.word, h.is_exact), (1, false), "x=25 is within B's 60% share (threshold 24)");
+    let h = p.hit_test(22.0, 15.0, &o).unwrap();
+    assert_eq!((h.word, h.is_exact), (0, false));
     assert!((h.distance - 2.0).abs() < 1e-4);
     // above the line but within its pitch band → still resolves
-    let h = p.hit_test_ex(15.0, 1.0, &o).unwrap();
+    let h = p.hit_test(15.0, 1.0, &o).unwrap();
     assert_eq!(h.word, 0);
-    assert!(p.hit_test_ex(15.0, 1.0, &HitOptions { max_distance: 5.0, ..o }).is_none());
-    let hb = p.hit_boxes(0.6);
+    assert!(p.hit_test(15.0, 1.0, &HitOptions { max_distance: 5.0, ..o }).is_none());
+    let hb = p.hit_areas(0.6);
     assert_eq!(hb.len(), 3);
     assert!((hb[0].x1 - 24.0).abs() < 1e-4 && (hb[1].x0 - 24.0).abs() < 1e-4, "hit boxes meet at the gap split");
     let bands = p.line_bands();
@@ -316,7 +316,7 @@ fn mask_reveal_and_crop() {
     p.unstyle(h);
     p.reveal_stop();
     assert_eq!(p.color_of(1), DEFAULT_INK);
-    let cb = p.crop_box(&Target::Ayah(1, 1), 2.0, true).unwrap();
+    let cb = p.crop_bounds(&Target::Ayah(1, 1), 2.0, true).unwrap();
     assert!((cb.x0 - 8.0).abs() < 1e-4 && (cb.x1 - 42.0).abs() < 1e-4 && (cb.y0 - 3.0).abs() < 1e-4);
     let svg = p.crop_svg(&Target::Word(0), 1.0, false, Some(0xffffffff)).unwrap();
     assert!(svg.starts_with("<svg") && svg.contains("<rect") && svg.matches("<path").count() == 1);
@@ -350,10 +350,10 @@ fn layout_fill_height_and_view_hit() {
     assert!((l.line_slots[0].1 - mid).abs() < 1e-3 && (l.line_slots[1].0 - mid).abs() < 1e-3);
     let vx = l.ox + 15.0 * 2.0;
     let vy = l.oy + (15.0 + l.line_dy[0]) * 2.0;
-    assert_eq!(p.hit_test_view(vx, vy), Some(Hit { word: 0, path: 0, deco: NONE }));
-    assert_eq!(p.hit_test_view(vx, 5.0), None);
-    let g = p.hit_test_view_ex(l.ox + 25.0 * 2.0, vy, &HitOptions::default()).unwrap();
-    assert_eq!((g.word, g.exact), (1, false));
+    assert_eq!(p.hit_test_exact_view(vx, vy), Some(HitExact { word: 0, path: 0, deco: NONE }));
+    assert_eq!(p.hit_test_exact_view(vx, 5.0), None);
+    let g = p.hit_test_view(l.ox + 25.0 * 2.0, vy, &HitOptions::default()).unwrap();
+    assert_eq!((g.word, g.is_exact), (1, false));
     // rows shorter than the printed pitch: the print is the floor and the grid outgrows the viewport
     let tight = p.layout(&LayoutSpec { viewport_h: 1100.0, ..spec }).clone();
     assert!((tight.pitch - 40.0).abs() < 1e-3 && (tight.content_h - (100.0 + 15.0 * 40.0 * 2.0)).abs() < 1e-3);
@@ -386,7 +386,7 @@ fn layout_fill_height_and_view_hit() {
     assert!((gap_to_fill(345.0, 550.0, 15, 390.0, 844.0, f32::INFINITY) - 14.0).abs() < 0.1);
     assert_eq!(gap_to_fill(345.0, 550.0, 15, 820.0, 1180.0, 100.0), 0.0);
     assert!((wasted_fraction(345.0, 550.0, 390.0, 844.0) - 0.263).abs() < 0.01);
-    let wb = p.word_box_view(2);
+    let wb = p.word_bounds_view(2);
     assert!(wb.1 > 0.0);
 }
 

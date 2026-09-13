@@ -18,5 +18,5 @@ The three calls the app is built on, in `app.js`:
 ```js
 const page = engine.loadPage(bytes);               // load
 draw(page);                                         // render over page.paths
-const hit = page.hitTestViewEx(x, y);               // tap: the word under the finger
+const hit = page.hitTestView(x, y);               // tap: the word under the finger
 ```

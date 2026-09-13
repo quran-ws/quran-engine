@@ -193,7 +193,7 @@ function Demo() {
   const cropSelection = async () => {
     const target = selection && selection.words.length ? T.words(selection.words) : selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.word(selWord.idx) : null;
     if (!target) return;
-    const [svg, box] = await Promise.all([qvp.cropSvg(target, { pad: 3, keepAyahMarks: true, background: th.paper }), qvp.cropBox(target, { pad: 3, keepAyahMarks: true })]);
+    const [svg, box] = await Promise.all([qvp.cropSvg(target, { pad: 3, keepAyahMarks: true, background: th.paper }), qvp.cropBounds(target, { pad: 3, keepAyahMarks: true })]);
     if (svg && box) flash(`SVG ${(svg.length / 1024).toFixed(0)} KB · box ${(box.x1 - box.x0).toFixed(0)}×${(box.y1 - box.y0).toFixed(0)} units · ayahMark ${box.ayahMarkDeco >= 0 ? 'kept' : 'no'}`);
   };
   const clearAll = () => {

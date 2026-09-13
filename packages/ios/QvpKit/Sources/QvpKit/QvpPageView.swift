@@ -25,18 +25,18 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public var paperColor: UIColor? { didSet { setNeedsDisplay() } }
     /// 0xRRGGBBAA band colour of the drag selection.
     public var selectionBand: UInt32 = QvpDefaults.SELECTION_BAND
-    public var onWordTap: ((QvpWord, QvpHitEx) -> Void)?
-    public var onDecoTap: ((QvpDecoration, QvpHitEx) -> Void)?
+    public var onWordTap: ((QvpWord, QvpHit) -> Void)?
+    public var onDecoTap: ((QvpDecoration, QvpHit) -> Void)?
     public var onEmptyTap: (() -> Void)?
     public var onSelectionChanged: (([Int]) -> Void)?
     /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
     public var onSwipe: ((Int) -> Void)?
     /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
     /// (e.g. marking reading progress) can still call `resetView()` itself — `isZoomed` says when.
-    public var onDoubleTap: ((QvpHitEx?) -> Void)?
+    public var onDoubleTap: ((QvpHit?) -> Void)?
     /// Long-press, with the gap-aware hit under the finger. Fires once, on recognition,
     /// only while `selectionEnabled` is false — selection owns the long-press otherwise.
-    public var onLongPress: ((QvpHitEx?) -> Void)?
+    public var onLongPress: ((QvpHit?) -> Void)?
     public var longPressDuration: Double = 0.35 { didSet { longPressRecognizer?.minimumPressDuration = longPressDuration } }
     private weak var longPressRecognizer: UILongPressGestureRecognizer?
     public var zoomEnabled = true
@@ -89,10 +89,10 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     }
 
     // ── gestures ──
-    private func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHitEx? {
+    private func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHit? {
         guard let p = page, p.isOpen else { return nil }
         let t0 = CACurrentMediaTime()
-        let h = p.hitTestViewEx(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
+        let h = p.hitTestView(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
         lastHitUs = (CACurrentMediaTime() - t0) * 1e6
         return h
     }
@@ -240,7 +240,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
             ctx.setFillColor(paper.cgColor)
             ctx.fill(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale))
         }
-        let bands = p.highlightBoxes()
+        let bands = p.highlightBoxesView()
         drawBoxes(ctx, bands)
 
         if base == nil || key != baseKey || base!.width != W || base!.height != H, W > 0, H > 0 {
@@ -276,7 +276,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
             ctx.setFillColor(QvpColor.cgColor(col)); ctx.addPath(paths[pi]); ctx.fillPath(using: p.pathEvenOdd(pi) ? .evenOdd : .winding)
         }
         if cur >= 0 { ctx.restoreGState() }
-        drawBoxes(ctx, p.maskBoxes())
+        drawBoxes(ctx, p.maskBoxesView())
         lastOverlayMs = (CACurrentMediaTime() - t1) * 1000; lastOverlayPaths = styled.count; lastBands = bands.count
         setAnimating(moving)
     }

@@ -34,7 +34,7 @@ public final class QvpCanvasController {
     public var padSide: CGFloat = 0 { didSet { relayout() } }
     /// Crop the printed page's own horizontal margins (page units, ≥ 0): the
     /// INK spans the padded viewport instead of the full viewBox — for hosts
-    /// replacing ink-cropped raster pages. Feed from `page.cropBox("page")`:
+    /// replacing ink-cropped raster pages. Feed from `page.cropBounds("page")`:
     /// left = box.x0, right = page.width − box.x1.
     public var cropLeft: Float = 0 { didSet { relayout() } }
     public var cropRight: Float = 0 { didSet { relayout() } }
@@ -46,8 +46,8 @@ public final class QvpCanvasController {
     public var paperColor: UInt32?
     /// 0xRRGGBBAA band colour of the drag selection.
     public var selectionBand: UInt32 = QvpDefaults.SELECTION_BAND
-    public var onWordTap: ((QvpWord, QvpHitEx) -> Void)?
-    public var onDecoTap: ((QvpDecoration, QvpHitEx) -> Void)?
+    public var onWordTap: ((QvpWord, QvpHit) -> Void)?
+    public var onDecoTap: ((QvpDecoration, QvpHit) -> Void)?
     public var onEmptyTap: (() -> Void)?
     public var onSelectionChanged: (([Int]) -> Void)?
     /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
@@ -55,12 +55,12 @@ public final class QvpCanvasController {
     /// Double-tap, with the gap-aware hit under it (nil off the page). nil (the default)
     /// resets the view; a host that repurposes the gesture can still call `resetView()`
     /// itself — `isZoomed` says when.
-    public var onDoubleTap: ((QvpHitEx?) -> Void)?
+    public var onDoubleTap: ((QvpHit?) -> Void)?
     /// Long-press, with the gap-aware hit under the finger. Fires once, while the finger
     /// is still down, and only while `selectionEnabled` is false — selection owns the
     /// long-press otherwise. On iOS it is UIKit's recognizer, which fails on movement,
     /// so it never takes a swipe from an enclosing pager.
-    public var onLongPress: ((QvpHitEx?) -> Void)?
+    public var onLongPress: ((QvpHit?) -> Void)?
     public var longPressDuration: Double = 0.35
     public var zoomEnabled = true
     /// Zoom lasts only while the fingers are down: on release the page eases back to its fitted
@@ -148,10 +148,10 @@ public final class QvpCanvasController {
         guard size != bounds else { return }
         bounds = size; relayout(); resetView()
     }
-    func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHitEx? {
+    func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHit? {
         guard let p = page, p.isOpen else { return nil }
         let t0 = now()
-        let h = p.hitTestViewEx(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
+        let h = p.hitTestView(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
         lastHitUs = (now() - t0) * 1e6
         return h
     }
@@ -238,7 +238,7 @@ public final class QvpCanvasController {
             ctx.fill(Path(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale)),
                      with: .color(color(paper)))
         }
-        let bands = p.highlightBoxes()
+        let bands = p.highlightBoxesView()
         drawBoxes(ctx, bands)
 
         if cache.image == nil || key != cache.key || cache.image!.width != W || cache.image!.height != H, W > 0, H > 0 {
@@ -269,7 +269,7 @@ public final class QvpCanvasController {
             c.concatenate(lineTransform(p.pathLine(pi)))
             c.fill(Path(paths[pi]), with: .color(color(col)), style: FillStyle(eoFill: p.pathEvenOdd(pi)))
         }
-        drawBoxes(ctx, p.maskBoxes())
+        drawBoxes(ctx, p.maskBoxesView())
         lastOverlayMs = (now() - t1) * 1000; lastOverlayPaths = styled.count; lastBands = bands.count
         if moving != animating {
             Task { @MainActor [weak self] in if let self, moving != self.animating { self.animating = moving; self.invalidate() } }

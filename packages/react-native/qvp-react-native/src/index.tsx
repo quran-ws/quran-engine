@@ -88,9 +88,8 @@ export interface Word {
   wordKey: string; ayahKey: string; forms: Partial<Record<Form, string>>; label: string; paths: WordPath[];
 }
 export interface Deco { idx: number; kind: number; kindName: string; surah: number; ayah: number; line: number; x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number }
-export interface Hit { word: number; path: number; deco: number; line: number; distance: number; exact: boolean; wordKey: string | null; ayahKey: string | null }
-/** An exact outline hit: no line, distance or gap resolution. */
-export interface ExactHit { word: number; path: number; deco: number; wordKey: string | null; ayahKey: string | null }
+/** The one hit shape for every hit test; the exact variants report distance 0 and `isExact`. */
+export interface Hit { word: number; path: number; deco: number; line: number; distance: number; isExact: boolean; wordKey: string | null; ayahKey: string | null }
 export interface Ayah { idx: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDeco: number; bbox: number[] }
 export interface Line { idx: number; lineNo: number; isHeader: boolean; firstWord: number; nWords: number; bbox: number[]; bandY0: number; bandY1: number; centre: number }
 export interface SelectionInfo { words: number[]; text: string; citation: string; textWithCitation: string }
@@ -223,7 +222,7 @@ if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not
 export interface SearchOptions { form?: Form; mode?: 'includes' | 'exact' | 'prefix'; normalize?: boolean; loose?: boolean; limit?: number }
 export interface TextOptions { form?: Form; wordSep?: string; lineSep?: string }
 export interface CropOptions { pad?: number; keepAyahMarks?: boolean; background?: Color }
-export interface HitOptions { maxDistance?: number; gapBias?: number; exactFirst?: boolean }
+export interface HitOptions { maxDistance?: number; gapBias?: number; preferExact?: boolean }
 
 /** Page-bound queries; `tag` is the react tag of a mounted `<QvpPageView />` (`findNodeHandle`). */
 export const Qvp = {
@@ -251,12 +250,12 @@ export const Qvp = {
   text: (tag: number, target: Target = 'page', opts?: TextOptions): Promise<string> => M.text(tag, target, opts ?? null),
   search: (tag: number, query: string, opts?: SearchOptions): Promise<Match[]> => M.search(tag, query, opts ?? null),
   citation: (tag: number, words: number[]): Promise<string> => M.citation(tag, words),
-  hitTest: (tag: number, x: number, y: number): Promise<ExactHit | null> => M.hitTest(tag, x, y),
-  hitTestEx: (tag: number, x: number, y: number, opts?: HitOptions): Promise<Hit | null> => M.hitTestEx(tag, x, y, opts ?? null),
-  hitTestView: (tag: number, x: number, y: number): Promise<ExactHit | null> => M.hitTestView(tag, x, y),
-  hitTestViewEx: (tag: number, x: number, y: number, opts?: HitOptions): Promise<Hit | null> => M.hitTestViewEx(tag, x, y, opts ?? null),
+  hitTestExact: (tag: number, x: number, y: number): Promise<Hit | null> => M.hitTestExact(tag, x, y),
+  hitTest: (tag: number, x: number, y: number, opts?: HitOptions): Promise<Hit | null> => M.hitTest(tag, x, y, opts ?? null),
+  hitTestExactView: (tag: number, x: number, y: number): Promise<Hit | null> => M.hitTestExactView(tag, x, y),
+  hitTestView: (tag: number, x: number, y: number, opts?: HitOptions): Promise<Hit | null> => M.hitTestView(tag, x, y, opts ?? null),
   layoutGapToFill: (tag: number, max = 0): Promise<number> => M.layoutGapToFill(tag, max),
-  wordBoxView: (tag: number, i: number): Promise<{ x0: number; y0: number; x1: number; y1: number } | null> => M.wordBoxView(tag, i),
+  wordBoundsView: (tag: number, i: number): Promise<{ x0: number; y0: number; x1: number; y1: number } | null> => M.wordBoundsView(tag, i),
   currentLayout: (tag: number): Promise<Layout | null> => M.currentLayout(tag),
   relayout: (tag: number): Promise<void> => M.relayout(tag),
   resetView: (tag: number): Promise<void> => M.resetView(tag),
@@ -276,7 +275,7 @@ export const Qvp = {
   revealSteps: (tag: number): Promise<number> => M.revealSteps(tag),
   revealAt: (tag: number): Promise<number | null> => M.revealAt(tag),
   revealStepOf: (tag: number, i: number): Promise<number> => M.revealStepOf(tag, i),
-  cropBox: (tag: number, target: Target, opts?: CropOptions): Promise<CropBox | null> => M.cropBox(tag, target, opts ?? null),
+  cropBounds: (tag: number, target: Target, opts?: CropOptions): Promise<CropBox | null> => M.cropBounds(tag, target, opts ?? null),
   cropSvg: (tag: number, target: Target, opts?: CropOptions): Promise<string | null> => M.cropSvg(tag, target, opts ? { ...opts, background: css(opts.background) } : null),
 
   // engine-wide
@@ -336,7 +335,7 @@ export class QvpAtlas {
 }
 
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decos', 'findWord', 'resolve', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTest', 'hitTestEx', 'hitTestView', 'hitTestViewEx', 'layoutGapToFill', 'wordBoxView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'revealNext', 'hideBack', 'revealWord', 'hideWord', 'revealAll', 'hideAll', 'maskHidden', 'maskWords', 'revealSteps', 'revealAt', 'revealStepOf', 'cropBox', 'cropSvg'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decos', 'findWord', 'resolve', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutGapToFill', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'revealNext', 'hideBack', 'revealWord', 'hideWord', 'revealAll', 'hideAll', 'maskHidden', 'maskWords', 'revealSteps', 'revealAt', 'revealStepOf', 'cropBounds', 'cropSvg'] as const;
 type PageMethod = (typeof pageMethods)[number];
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {

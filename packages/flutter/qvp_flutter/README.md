@@ -44,22 +44,22 @@ page.resolve('2:255');                                  // targets: 'page' | '2:
 page.surahs(); page.divisions(); page.ayahMarks(); page.rosettes(); page.sajdahs(); page.ayahKeys();
 page.ayahWordCount(2, 255); page.reciteMap(2, 255, 4); page.wordLabel(i); page.ayahLabel(ai);
 page.text('2:255'); page.search('الله', mode: 'includes'); page.citation(words); page.attachWords(json); page.hasForm('qpc');
-page.hitTest(x, y); page.hitTestEx(x, y, QvpHitOptions(maxDistance: 6));         // page units, exact / gap-aware
-page.hitTestView(vx, vy); page.hitTestViewEx(vx, vy);                             // viewport px through the layout
-page.lineBands(); page.hitBoxes();
+page.hitTestExact(x, y); page.hitTest(x, y, QvpHitOptions(maxDistance: 6));         // page units, exact / gap-aware
+page.hitTestExactView(vx, vy); page.hitTestView(vx, vy);                             // viewport px through the layout
+page.lineBands(); page.hitAreas();
 final l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true)); // l.scale, l.lineDy[line]
-page.wordBoxView(i);
+page.wordBoundsView(i);
 final h = page.style(Sel.wordMark(w, 1), '#ef6c00', ms: 200, layer: QvpLayer.top);  // Sel.path/word/ayah/line/mark/category/family/kind/deco…
 page.styleTarget('2:255', color); page.restyle(h, color); page.unstyle(h); page.hide(Sel.kind(QvpKind.mark));
 page.theme(QvpTheme(diacritics: '#1a73e8', marks: {'shaddah': '#0a7d32'})); page.setDefaultInk('#231f20'); page.clearStyles(); page.clearLayer(QvpLayer.theme);
 page.tick(nowMs);                                       // true while animating — keep drawing frames
 page.paint(); page.styled(); page.colorOf(i);            // display list (per-path colours)
 final hl = page.highlight('2:255', QvpHighlightStyle(mode: 'both', ms: 200)); page.rehighlight(hl, T.word(3)); page.unhighlight(hl);
-page.highlightBoxes(); page.bandBoxes(words);            // viewport px; draw each id as one nonzero path behind the ink
+page.highlightBoxesView(); page.wordBands(words);            // viewport px; draw each id as one nonzero path behind the ink
 page.select(anchor, focus); page.selection(); page.selectionText('rasm_uthmani', true); page.clearSelection();
-page.mask('2:255', 'hide'); page.revealNext(); page.hideBack(); page.unmask(); page.maskHidden(); page.maskBoxes();
+page.mask('2:255', 'hide'); page.revealNext(); page.hideBack(); page.unmask(); page.maskHidden(); page.maskBoxesView();
 page.revealStart(lit: 2); page.revealGoto(3); page.revealAt(); page.revealSteps(); page.revealStop();
-page.cropBox('2:255'); page.cropSvg('2:255:1', background: '#fffdf7');
+page.cropBounds('2:255'); page.cropSvg('2:255:1', background: '#fffdf7');
 page.dispose();                                          // frees the native page
 
 final atlas = engine.loadAtlas(atlasBytes);
@@ -85,7 +85,7 @@ Draw order per frame: highlight bands → cached base ink (image of every
 non-styled path at the current transform; rebuilt only when the styled set,
 layout or transform changes) → styled paths → mask boxes. Each frame calls
 `page.tick()` first and keeps a `Ticker` running while it returns true. Tap →
-`hitTestViewEx` (gap-aware); long-press-drag → whole-word selection via
+`hitTestView` (gap-aware); long-press-drag → whole-word selection via
 `page.select` with a band highlight in `QvpLayer.selection`; pinch / pan on
 top of the engine layout; double-tap fits.
 

@@ -253,7 +253,7 @@ impl Page {
     }
 
     /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).
-    pub fn word_box_view(&self, wi: u32) -> (f32, f32, f32, f32) {
+    pub fn word_bounds_view(&self, wi: u32) -> (f32, f32, f32, f32) {
         let q = self.quant();
         let w = &self.data.words[wi as usize];
         let (x0, y0, x1, y1) = (w.bbox.x0 as f32 / q, w.bbox.y0 as f32 / q, w.bbox.x1 as f32 / q, w.bbox.y1 as f32 / q);

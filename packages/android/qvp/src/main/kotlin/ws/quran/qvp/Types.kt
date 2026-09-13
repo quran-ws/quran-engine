@@ -101,11 +101,11 @@ data class QvpLine(val idx: Int, val lineNo: Int, val isHeader: Boolean, val fir
 data class QvpDecoration(val idx: Int, val kind: Int, val surah: Int, val ayah: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
                          val text: String, val firstPath: Int, val nPaths: Int)
 /** Indices are -1 when absent. */
-data class QvpHit(val word: Int, val path: Int, val deco: Int)
-data class QvpHitEx(val word: Int, val path: Int, val deco: Int, val line: Int, val distance: Float, val exact: Boolean)
-data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = QvpDefaults.GAP_BIAS, val exactFirst: Boolean = true)
+/** The one hit shape for every hit test; the exact variants report distance 0 and `isExact`. Indices are -1 when absent. */
+data class QvpHit(val word: Int, val path: Int, val deco: Int, val line: Int, val distance: Float, val isExact: Boolean)
+data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = QvpDefaults.GAP_BIAS, val preferExact: Boolean = true)
 data class QvpBox(val id: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val color: Int, val radius: Float)
-data class QvpHitBox(val word: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val inkX0: Float, val inkY0: Float, val inkX1: Float, val inkY1: Float)
+data class QvpHitArea(val word: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val inkX0: Float, val inkY0: Float, val inkX1: Float, val inkY1: Float)
 data class QvpLineBand(val line: Int, val lineNo: Int, val y0: Float, val y1: Float, val mid: Float, val inkY0: Float, val inkY1: Float)
 /** Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine. */
 data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop: Float = 0f, val padBottom: Float = 0f, val padLeft: Float = 0f, val padRight: Float = 0f,
@@ -132,6 +132,6 @@ data class QvpAyahMark(val deco: Int, val surah: Int, val ayah: Int, val line: I
 data class QvpRosette(val deco: Int, val surah: Int, val ayah: Int, val juz: Int, val hizb: Int, val nisf: Int, val rubuAlHizb: Int, val rubuAlHizbInHizb: Int)
 data class QvpSajdah(val deco: Int, val surah: Int, val ayah: Int, val signPath: Int)
 data class QvpMatch(val word: Int, val index: Int, val loose: Boolean, val wordKey: String, val text: String)
-data class QvpCropBox(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val nWords: Int, val ayahMarkDeco: Int)
+data class QvpCropBounds(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val nWords: Int, val ayahMarkDeco: Int)
 data class QvpAtlasSurah(val n: Int, val page: Int, val ayahCount: Int, val place: String, val arabic: String, val latin: String, val english: String)
 data class QvpAtlasRubuAlHizb(val rubuAlHizb: Int, val surah: Int, val ayah: Int, val page: Int) { val ayahKey get() = "$surah:$ayah" }

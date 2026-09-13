@@ -67,22 +67,22 @@ page.resolve("2:255")                                   // "page" | "2:255" | "2
 page.surahs(); page.divisions(); page.ayahMarks(); page.rosettes(); page.sajdahs(); page.ayahKeys()
 page.ayahWordCount(2, 255); page.reciteMap(2, 255, nSegments: 4); page.wordLabel(i); page.ayahLabel(ai)
 page.text("2:255"); page.search("الله", mode: .includes); page.citation(words); page.attachWords(json); page.hasForm(.qpc)
-page.hitTest(x, y); page.hitTestEx(x, y, QvpHitOptions(maxDistance: 6))                        // page units, exact / gap-aware
-page.hitTestView(vx, vy); page.hitTestViewEx(vx, vy)                                            // viewport px through the layout
-page.lineBands(); page.hitBoxes()
+page.hitTestExact(x, y); page.hitTest(x, y, QvpHitOptions(maxDistance: 6))                        // page units, exact / gap-aware
+page.hitTestExactView(vx, vy); page.hitTestView(vx, vy)                                            // viewport px through the layout
+page.lineBands(); page.hitAreas()
 let l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true))  // l.scale, l.lineDy[line]
-page.wordBoxView(i)
+page.wordBoundsView(i)
 let h = page.style(Selector.wordMark(w, 1), 0xef6c00ff, transitionMs: 200, layer: QvpLayer.TOP)   // Selector.path/word/ayah/line/mark/category/family/kind/deco…
 page.styleTarget("2:255", rgba); page.restyle(h, rgba); page.unstyle(h); page.hide(Selector.kind(QvpKind.MARK))
 page.theme(QvpTheme(diacritics: 0x1a73e8ff, marks: ["shaddah": 0x0a7d32ff])); page.setDefaultInk(0x231f20ff); page.clearStyles(); page.clearLayer(QvpLayer.THEME)
 page.tick(nowMs)                                        // true while animating — keep drawing frames
 page.paint(); page.styled(); page.colorOf(i)             // display list (per-path colours)
 let hl = page.highlight("2:255", QvpHighlightStyle(mode: .both, transitionMs: 200)); page.rehighlight(hl, Target.word(3)); page.unhighlight(hl)
-page.highlightBoxes(); page.bandBoxes(words)             // viewport px; draw each id as one nonzero path behind the ink
+page.highlightBoxesView(); page.wordBands(words)             // viewport px; draw each id as one nonzero path behind the ink
 page.select(anchor, focus); page.selection(); page.selectionText(.rasmUthmani, citation: true); page.clearSelection()
-page.mask("2:255", .hide); page.revealNext(); page.hideBack(); page.unmask(); page.maskHidden(); page.maskBoxes()
+page.mask("2:255", .hide); page.revealNext(); page.hideBack(); page.unmask(); page.maskHidden(); page.maskBoxesView()
 page.revealStart(lit: 2); page.revealGoto(3); page.revealAt(); page.revealSteps(); page.revealStop()
-page.cropBox("2:255"); page.cropSvg("2:255:1", background: 0xfffdf7ff)
+page.cropBounds("2:255"); page.cropSvg("2:255:1", background: 0xfffdf7ff)
 page.close()                                             // frees the native page (also on deinit)
 
 let atlas = try QvpAtlas(bytes: atlasData)
@@ -113,12 +113,12 @@ view.relayout(); view.resetView(); view.clearSelection(); view.lineTransform(lin
 view.lastBaseMs / lastOverlayMs / lastHitUs / lastBasePaths / lastOverlayPaths / lastBands / animating   // HUD stats
 ```
 
-Draw order per frame: `highlightBoxes()` (one nonzero path per highlight id, behind the ink) →
+Draw order per frame: `highlightBoxesView()` (one nonzero path per highlight id, behind the ink) →
 cached base ink (a bitmap of every non-styled path at the current per-line transform, rebuilt only
-when the styled set, layout or pan/zoom changes) → `styled()` paths → `maskBoxes()`. Per-line
+when the styled set, layout or pan/zoom changes) → `styled()` paths → `maskBoxesView()`. Per-line
 transform: `vx = ox + x·scale`, `vy = oy + (y + lineDy[line])·scale`, with pinch/pan on top. Each
 frame calls `page.tick(now)`; a `CADisplayLink` keeps running while it returns true. Tap → gap-aware
-`hitTestViewEx` (max distance 6) → `onWordTap` / `onDecoTap` / `onEmptyTap`; long-press + drag →
+`hitTestView` (max distance 6) → `onWordTap` / `onDecoTap` / `onEmptyTap`; long-press + drag →
 whole-word selection through `page.select` with a band highlight in `QvpLayer.SELECTION`
 (`selectionEnabled = false` turns it off); a horizontal pan while the page is at its fitted size is reported
 through `onSwipe` instead of panning, so the host can flip pages; double-tap resets the view (or runs
@@ -143,7 +143,7 @@ controller.onLongPress = { hit in }        // only while selectionEnabled is fal
 controller.zoomSpringsBack = true         // zoom lasts only while pinching, as on the UIKit view
 controller.invalidate()                   // after engine calls the controller cannot see (highlight, style, mask, …)
 controller.resetView(); controller.relayout(); controller.clearSelection(); controller.lineTransform(line); controller.isZoomed
-controller.cropLeft = box.x0; controller.cropRight = page.width - box.x1   // box = page.cropBox("page"): the ink spans the viewport
+controller.cropLeft = box.x0; controller.cropRight = page.width - box.x1   // box = page.cropBounds("page"): the ink spans the viewport
 
 // A pager over many pages: one PERMANENT controller per page; only page data loads, LRU-evicts
 // (never the current page ±1) and reattaches to the same controller — a view never holds a closed page.

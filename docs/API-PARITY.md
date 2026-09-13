@@ -36,11 +36,11 @@ is owed.
 | `qvp_paint` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_styled` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_color_of` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
-| `qvp_highlight_boxes` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
-| `qvp_mask_boxes` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
-| `qvp_hit_boxes` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_highlight_boxes_view` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_mask_boxes_view` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_hit_areas` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_line_bands` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
-| `qvp_band_boxes` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_word_bands` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_style_add` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_style_add_target` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_style_remove` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
@@ -202,7 +202,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | zoomed threshold and swipe classifier | iOS, `QvpViewPolicy` | a pinch settled within 2% of the fitted scale is not a zoom; a mostly horizontal drag longer than 40 pt or faster than 500 pt/s is a page swipe |
 | zoom spring | iOS, `QvpZoomSpring` | eases a released pinch back to the fitted transform on a display link of its own |
 | page cache | iOS, `QvpPageCache` | the policy in `docs/EXAMPLE-APP.md`; the other platforms follow it in their examples |
-| long press, double tap, tap callbacks | every page view | gesture recognition only; the hit comes from `qvp_hit_test_ex` |
+| long press, double tap, tap callbacks | every page view | gesture recognition only; the hit comes from `qvp_hit_test` |
 
 ## Matrix
 
@@ -232,12 +232,11 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_ayah_label` | yes | yes | yes | yes | yes |
 | `qvp_ayah_marks` | yes | yes | yes | yes | yes |
 | `qvp_ayah_word_count` | yes | yes | yes | yes | yes |
-| `qvp_band_boxes` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_category_name` | yes | yes | yes | yes | yes |
 | `qvp_citation` | yes | yes | yes | yes | yes |
 | `qvp_clear_highlights` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_color_of` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_crop_box` | yes | yes | yes | yes | yes |
+| `qvp_crop_bounds` | yes | yes | yes | yes | yes |
 | `qvp_crop_svg` | yes | yes | yes | yes | yes |
 | `qvp_dealloc` | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) |
 | `qvp_deco_info` | yes | yes | yes | yes | gap (list form: bound as `decos()`) |
@@ -253,14 +252,14 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_hide_back` | yes | yes | yes | yes | yes |
 | `qvp_hide_word` | yes | yes | yes | yes | yes |
 | `qvp_highlight` | yes | yes | yes | yes | yes |
-| `qvp_highlight_boxes` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_highlight_boxes_view` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_highlight_handles` | yes | yes | yes | yes | yes |
 | `qvp_highlight_words` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
-| `qvp_hit_boxes` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_hit_areas` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_hit_test` | yes | yes | yes | yes | yes |
-| `qvp_hit_test_ex` | yes | yes | yes | yes | yes |
+| `qvp_hit_test_exact` | yes | yes | yes | yes | yes |
+| `qvp_hit_test_exact_view` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_view` | yes | yes | yes | yes | yes |
-| `qvp_hit_test_view_ex` | yes | yes | yes | yes | yes |
 | `qvp_kind_name` | yes | yes | yes | yes | yes |
 | `qvp_layout` | yes | yes | yes | yes | yes |
 | `qvp_layout_gap_to_fill` | yes | yes | yes | yes | yes |
@@ -270,7 +269,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_mark_from_name` | yes | yes | yes | yes | yes |
 | `qvp_mark_name` | yes | yes | yes | yes | yes |
 | `qvp_mask` | yes | yes | yes | yes | yes |
-| `qvp_mask_boxes` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_mask_boxes_view` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_mask_from` | yes | yes | yes | yes | yes |
 | `qvp_mask_hidden` | yes | yes | yes | yes | yes |
 | `qvp_mask_options` | yes | yes | yes | yes | yes |
@@ -321,7 +320,8 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_unmask` | yes | yes | yes | yes | yes |
 | `qvp_version` | yes | yes | yes | yes | yes |
 | `qvp_wasted_fraction` | yes | yes | yes | yes | yes |
-| `qvp_word_box_view` | yes | yes | yes | yes | yes |
+| `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_word_bounds_view` | yes | yes | yes | yes | yes |
 | `qvp_word_form` | yes | yes | yes | yes | yes |
 | `qvp_word_info` | yes | yes | yes | yes | gap (list form: bound as `word(i)` and `words()`) |
 | `qvp_word_label` | yes | yes | yes | yes | yes |

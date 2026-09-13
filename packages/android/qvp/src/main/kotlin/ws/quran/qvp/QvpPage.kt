@@ -133,15 +133,14 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun ayahLabel(i: Int) = QvpNative.ayahLabel(h, i)
 
     // ── hit testing ──
-    private fun hit(v: IntArray?) = v?.let { QvpHit(it[0], it[1], it[2]) }
-    private fun hitEx(v: FloatArray?) = v?.let { QvpHitEx(it[0].toInt(), it[1].toInt(), it[2].toInt(), it[3].toInt(), it[4], it[5] > 0.5f) }
-    fun hitTest(x: Float, y: Float) = hit(QvpNative.hitTest(h, x, y))
-    fun hitTestView(vx: Float, vy: Float) = hit(QvpNative.hitTestView(h, vx, vy))
+    private fun hit(v: FloatArray?) = v?.let { QvpHit(it[0].toInt(), it[1].toInt(), it[2].toInt(), it[3].toInt(), it[4], it[5] > 0.5f) }
+    fun hitTestExact(x: Float, y: Float) = hit(QvpNative.hitTestExact(h, x, y))
+    fun hitTestExactView(vx: Float, vy: Float) = hit(QvpNative.hitTestExactView(h, vx, vy))
     /** gap-aware: every point on a printed line resolves to the word the reader meant */
-    fun hitTestEx(x: Float, y: Float, o: QvpHitOptions = QvpHitOptions()) = hitEx(QvpNative.hitTestEx(h, x, y, o.maxDistance, o.gapBias, o.exactFirst))
-    fun hitTestViewEx(vx: Float, vy: Float, o: QvpHitOptions = QvpHitOptions()) = hitEx(QvpNative.hitTestViewEx(h, vx, vy, o.maxDistance, o.gapBias, o.exactFirst))
+    fun hitTest(x: Float, y: Float, o: QvpHitOptions = QvpHitOptions()) = hit(QvpNative.hitTest(h, x, y, o.maxDistance, o.gapBias, o.preferExact))
+    fun hitTestView(vx: Float, vy: Float, o: QvpHitOptions = QvpHitOptions()) = hit(QvpNative.hitTestView(h, vx, vy, o.maxDistance, o.gapBias, o.preferExact))
     fun lineBands(): List<QvpLineBand> { val v = QvpNative.lineBands(h); return List(v.size / 7) { k -> val o = k * 7; QvpLineBand(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6]) } }
-    fun hitBoxes(gapBias: Float = QvpDefaults.GAP_BIAS): List<QvpHitBox> { val v = QvpNative.hitBoxes(h, gapBias); return List(v.size / 10) { k -> val o = k * 10; QvpHitBox(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9]) } }
+    fun hitAreas(gapBias: Float = QvpDefaults.GAP_BIAS): List<QvpHitArea> { val v = QvpNative.hitAreas(h, gapBias); return List(v.size / 10) { k -> val o = k * 10; QvpHitArea(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9]) } }
 
     // ── layout ──
     fun layout(spec: QvpLayoutSpec): QvpLayout {
@@ -151,7 +150,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     }
     /** Leading (page units) that makes this page fill the padded viewport of [spec]; max 0 = unlimited. */
     fun layoutGapToFill(spec: QvpLayoutSpec, max: Float = 0f): Float = QvpNative.layoutGapToFill(h, spec.floats(), max)
-    fun wordBoxView(i: Int): FloatArray? = QvpNative.wordBoxView(h, i)
+    fun wordBoundsView(i: Int): FloatArray? = QvpNative.wordBoundsView(h, i)
 
     // ── styles (handles undo exactly) ──
     fun style(sel: Selector, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAdd(h, layer, sel.arr, rgba, transitionMs)
@@ -189,8 +188,8 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun highlightWords(handle: Int): IntArray = QvpNative.highlightWords(h, handle)
     private fun boxes(v: IntArray): List<QvpBox> = List(v.size / 8) { k -> val o = k * 8; QvpBox(v[o], v[o + 1], Float.fromBits(v[o + 2]), Float.fromBits(v[o + 3]), Float.fromBits(v[o + 4]), Float.fromBits(v[o + 5]), v[o + 6], Float.fromBits(v[o + 7])) }
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
-    fun highlightBoxes(): List<QvpBox> = boxes(QvpNative.highlightBoxes(h))
-    fun bandBoxes(ws: IntArray, height: BandHeight = BandHeight.PITCH, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) = boxes(QvpNative.bandBoxes(h, ws, height.id, padX, padY))
+    fun highlightBoxesView(): List<QvpBox> = boxes(QvpNative.highlightBoxesView(h))
+    fun wordBands(ws: IntArray, height: BandHeight = BandHeight.PITCH, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) = boxes(QvpNative.wordBands(h, ws, height.id, padX, padY))
 
     // ── selection ──
     fun select(anchor: Int, focus: Int = anchor) = QvpNative.select(h, anchor, focus)
@@ -211,7 +210,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun unmask() = QvpNative.unmask(h)
     fun maskHidden(): IntArray = QvpNative.maskHidden(h)
     fun maskWords(): IntArray = QvpNative.maskWords(h)
-    fun maskBoxes(): List<QvpBox> = boxes(QvpNative.maskBoxes(h))
+    fun maskBoxesView(): List<QvpBox> = boxes(QvpNative.maskBoxesView(h))
     /** greyed page with a lit window; returns steps */
     fun revealStart(lit: Int = QvpDefaults.REVEAL_LIT, byAyah: Boolean = false, grey: Int = QvpDefaults.REVEAL_GREY, ink: Int = QvpDefaults.INK, ayahMarks: Boolean = true, transitionMs: Int = 0) = QvpNative.revealStart(h, lit, byAyah, grey, ink, ayahMarks, transitionMs)
     fun revealGoto(at: Long) = QvpNative.revealGoto(h, at)
@@ -221,7 +220,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun revealStop() = QvpNative.revealStop(h)
 
     // ── crop ──
-    fun cropBox(t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Boolean = true): QvpCropBox? = QvpNative.cropBox(h, t.arr, pad, keepAyahMarks)?.let { QvpCropBox(it[0], it[1], it[2], it[3], it[4].toInt(), it[5].toInt()) }
+    fun cropBounds(t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Boolean = true): QvpCropBounds? = QvpNative.cropBounds(h, t.arr, pad, keepAyahMarks)?.let { QvpCropBounds(it[0], it[1], it[2], it[3], it[4].toInt(), it[5].toInt()) }
     /** standalone SVG with the current colours; background alpha 0 = transparent */
     fun cropSvg(t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Boolean = true, background: Int = 0): String? = QvpNative.cropSvg(h, t.arr, pad, keepAyahMarks, background)
 

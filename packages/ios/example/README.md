@@ -14,5 +14,5 @@ The three calls the app is built on, in `Sources/DemoModel.swift`:
 ```swift
 let page = try QvpPage(bytes: data)                 // load
 canvas.page = page                                  // render: QvpPageCanvas draws it
-let hit = page.hitTestViewEx(x, y)                  // tap: the word under the finger
+let hit = page.hitTestView(x, y)                  // tap: the word under the finger
 ```

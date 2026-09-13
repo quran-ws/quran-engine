@@ -316,36 +316,28 @@ final class QvpDecoInfo {
   final String text;
 }
 
-/// Exact hit (`QvpHit`); indices are -1 when absent.
+/// The one hit shape for every hit test (`QvpHit`); the exact variants report distance 0 and
+/// `isExact`. Indices are -1 when absent.
 @immutable
 final class QvpHit {
-  const QvpHit({required this.word, required this.path, required this.deco});
-  final int word, path, deco;
-  @override
-  String toString() => 'QvpHit(word: $word, path: $path, deco: $deco)';
-}
-
-/// Gap-aware hit (`QvpHitEx`); indices are -1 when absent.
-@immutable
-final class QvpHitEx {
-  const QvpHitEx({required this.word, required this.path, required this.deco, required this.line, required this.distance, required this.exact, this.wordKey, this.ayahKey});
+  const QvpHit({required this.word, required this.path, required this.deco, required this.line, required this.distance, required this.isExact, this.wordKey, this.ayahKey});
   final int word, path, deco, line;
   final double distance;
-  final bool exact;
+  final bool isExact;
   final String? wordKey, ayahKey;
   @override
-  String toString() => 'QvpHitEx(word: $word, path: $path, deco: $deco, line: $line, distance: $distance, exact: $exact)';
+  String toString() => 'QvpHit(word: $word, path: $path, deco: $deco, line: $line, distance: $distance, isExact: $isExact)';
 }
 
 /// Options of the gap-aware hit test.
 @immutable
 final class QvpHitOptions {
-  const QvpHitOptions({this.maxDistance = 0, this.gapBias = QvpDefaults.gapBias, this.exactFirst = true});
+  const QvpHitOptions({this.maxDistance = 0, this.gapBias = QvpDefaults.gapBias, this.preferExact = true});
 
   /// Page units; <= 0 unlimited.
   final double maxDistance;
   final double gapBias;
-  final bool exactFirst;
+  final bool preferExact;
 }
 
 /// A band / mask box in layout viewport px (`QvpBox`).
@@ -357,8 +349,8 @@ final class QvpBox {
 }
 
 @immutable
-final class QvpHitBox {
-  const QvpHitBox({required this.word, required this.line, required this.x0, required this.y0, required this.x1, required this.y1, required this.inkX0, required this.inkY0, required this.inkX1, required this.inkY1});
+final class QvpHitArea {
+  const QvpHitArea({required this.word, required this.line, required this.x0, required this.y0, required this.x1, required this.y1, required this.inkX0, required this.inkY0, required this.inkX1, required this.inkY1});
   final int word, line;
   final double x0, y0, x1, y1, inkX0, inkY0, inkX1, inkY1;
 }
@@ -550,8 +542,8 @@ final class QvpMatch {
 }
 
 @immutable
-final class QvpCropBox {
-  const QvpCropBox({required this.x0, required this.y0, required this.x1, required this.y1, required this.nWords, required this.ayahMarkDeco});
+final class QvpCropBounds {
+  const QvpCropBounds({required this.x0, required this.y0, required this.x1, required this.y1, required this.nWords, required this.ayahMarkDeco});
   final double x0, y0, x1, y1;
   final int nWords, ayahMarkDeco;
 }
@@ -591,8 +583,7 @@ class QvpEngine {
     _layout = pffi.calloc<QvpLayoutC>();
     _hitOpt = pffi.calloc<QvpHitOptionsC>();
     _hit = pffi.calloc<QvpHitC>();
-    _hitEx = pffi.calloc<QvpHitExC>();
-    _crop = pffi.calloc<QvpCropBoxC>();
+    _crop = pffi.calloc<QvpCropBoundsC>();
   }
 
   /// Opens the engine library: [path] if given, else `libqvp_ffi.so` from the
@@ -624,8 +615,7 @@ class QvpEngine {
   late final ffi.Pointer<QvpLayoutC> _layout;
   late final ffi.Pointer<QvpHitOptionsC> _hitOpt;
   late final ffi.Pointer<QvpHitC> _hit;
-  late final ffi.Pointer<QvpHitExC> _hitEx;
-  late final ffi.Pointer<QvpCropBoxC> _crop;
+  late final ffi.Pointer<QvpCropBoundsC> _crop;
   bool _disposed = false;
 
   /// Format version the library was built for.
@@ -720,7 +710,7 @@ class QvpEngine {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    for (final p in <ffi.Pointer>[_scratch, _str, _target, _sel, _hl, _theme, _spec, _layout, _hitOpt, _hit, _hitEx, _crop]) {
+    for (final p in <ffi.Pointer>[_scratch, _str, _target, _sel, _hl, _theme, _spec, _layout, _hitOpt, _hit, _crop]) {
       pffi.calloc.free(p);
     }
   }
@@ -1151,47 +1141,41 @@ class QvpPage extends ChangeNotifier {
   // ── hit testing ──
   static int _idx(int v) => v == qvpNone ? -1 : v;
 
-  QvpHit? _readHit(int ok) {
-    if (ok == 0) return null;
-    final h = _e._hit.ref;
-    return QvpHit(word: _idx(h.word), path: _idx(h.path), deco: _idx(h.deco));
-  }
-
   /// Exact outline hit, page units.
-  QvpHit? hitTest(double x, double y) => _readHit(_b.hitTest(_p, x, y, _e._hit));
+  QvpHit? hitTestExact(double x, double y) => _readHit(_b.hitTestExact(_p, x, y, _e._hit));
 
   /// Exact outline hit, viewport px through the current layout.
-  QvpHit? hitTestView(double vx, double vy) => _readHit(_b.hitTestView(_p, vx, vy, _e._hit));
+  QvpHit? hitTestExactView(double vx, double vy) => _readHit(_b.hitTestExactView(_p, vx, vy, _e._hit));
 
   ffi.Pointer<QvpHitOptionsC> _opt(QvpHitOptions o) {
     final r = _e._hitOpt.ref;
     r.maxDistance = o.maxDistance;
     r.gapBias = o.gapBias;
-    r.exactFirst = o.exactFirst ? 1 : 0;
+    r.preferExact = o.preferExact ? 1 : 0;
     return _e._hitOpt;
   }
 
-  QvpHitEx? _readHitEx(int ok) {
+  QvpHit? _readHit(int ok) {
     if (ok == 0) return null;
-    final h = _e._hitEx.ref;
+    final h = _e._hit.ref;
     final w = _idx(h.word);
-    return QvpHitEx(
+    return QvpHit(
       word: w,
       path: _idx(h.path),
       deco: _idx(h.deco),
       line: h.line,
       distance: h.distance,
-      exact: h.exact != 0,
+      isExact: h.isExact != 0,
       wordKey: w >= 0 ? words[w].wordKey : null,
       ayahKey: w >= 0 ? words[w].ayahKey : null,
     );
   }
 
   /// Gap-aware: every point on a printed line resolves to the word the user meant. Page units.
-  QvpHitEx? hitTestEx(double x, double y, [QvpHitOptions opt = const QvpHitOptions()]) => _readHitEx(_b.hitTestEx(_p, x, y, _opt(opt), _e._hitEx));
+  QvpHit? hitTest(double x, double y, [QvpHitOptions opt = const QvpHitOptions()]) => _readHit(_b.hitTest(_p, x, y, _opt(opt), _e._hit));
 
   /// Gap-aware, viewport px through the current layout.
-  QvpHitEx? hitTestViewEx(double vx, double vy, [QvpHitOptions opt = const QvpHitOptions()]) => _readHitEx(_b.hitTestViewEx(_p, vx, vy, _opt(opt), _e._hitEx));
+  QvpHit? hitTestView(double vx, double vy, [QvpHitOptions opt = const QvpHitOptions()]) => _readHit(_b.hitTestView(_p, vx, vy, _opt(opt), _e._hit));
 
   List<QvpLineBand> lineBands() {
     final o = _e._out<QvpLineBandC>(), cap = _e._cap(ffi.sizeOf<QvpLineBandC>());
@@ -1202,12 +1186,12 @@ class QvpPage extends ChangeNotifier {
     }, growable: false);
   }
 
-  List<QvpHitBox> hitBoxes([double gapBias = QvpDefaults.gapBias]) {
-    final o = _e._out<QvpHitBoxC>(), cap = _e._cap(ffi.sizeOf<QvpHitBoxC>());
-    final n = _b.hitBoxes(_p, gapBias, o, cap).clamp(0, cap);
+  List<QvpHitArea> hitAreas([double gapBias = QvpDefaults.gapBias]) {
+    final o = _e._out<QvpHitAreaC>(), cap = _e._cap(ffi.sizeOf<QvpHitAreaC>());
+    final n = _b.hitAreas(_p, gapBias, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final h = (o + i).ref;
-      return QvpHitBox(word: h.word, line: h.line, x0: h.x0, y0: h.y0, x1: h.x1, y1: h.y1, inkX0: h.inkX0, inkY0: h.inkY0, inkX1: h.inkX1, inkY1: h.inkY1);
+      return QvpHitArea(word: h.word, line: h.line, x0: h.x0, y0: h.y0, x1: h.x1, y1: h.y1, inkX0: h.inkX0, inkY0: h.inkY0, inkX1: h.inkX1, inkY1: h.inkY1);
     }, growable: false);
   }
 
@@ -1263,9 +1247,9 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Word bbox in viewport px through the current layout.
-  ({double x0, double y0, double x1, double y1}) wordBoxView(int i) {
+  ({double x0, double y0, double x1, double y1}) wordBoundsView(int i) {
     final o = _e._out<ffi.Float>();
-    _b.wordBoxView(_p, i, o);
+    _b.wordBoundsView(_p, i, o);
     final f = o.asTypedList(4);
     return (x0: f[0], y0: f[1], x1: f[2], y1: f[3]);
   }
@@ -1421,10 +1405,10 @@ class QvpPage extends ChangeNotifier {
   List<int> highlightWords(int handle) => _u32(_b.highlightWords(_p, handle, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>())));
 
   /// Animated band boxes in layout viewport px; draw each id as one nonzero path behind the ink.
-  List<QvpBox> highlightBoxes() => _boxes(_b.highlightBoxes(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
+  List<QvpBox> highlightBoxesView() => _boxes(_b.highlightBoxesView(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
 
   /// Static band boxes for a word list (no highlight state involved).
-  List<QvpBox> bandBoxes(List<int> ws, {String height = 'pitch', double padX = QvpDefaults.highlightPadX, double padY = QvpDefaults.highlightPadY}) => _e.withU32(ws, (p, n) => _boxes(_b.bandBoxes(_p, p, n, height == 'ink' ? 1 : 0, padX, padY, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>()))));
+  List<QvpBox> wordBands(List<int> ws, {String height = 'pitch', double padX = QvpDefaults.highlightPadX, double padY = QvpDefaults.highlightPadY}) => _e.withU32(ws, (p, n) => _boxes(_b.wordBands(_p, p, n, height == 'ink' ? 1 : 0, padX, padY, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>()))));
 
   // ── selection ──
   void select(int anchor, [int? focus]) {
@@ -1501,7 +1485,7 @@ class QvpPage extends ChangeNotifier {
   List<int> maskWords() => _u32(_b.maskWords(_p, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>())));
 
   /// Block / blur boxes in layout viewport px (drawn last).
-  List<QvpBox> maskBoxes() => _boxes(_b.maskBoxes(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
+  List<QvpBox> maskBoxesView() => _boxes(_b.maskBoxesView(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
 
   /// Greyed page with a lit window → steps.
   int revealStart({int lit = QvpDefaults.revealLit, bool byAyah = false, Object grey = QvpDefaults.revealGrey, Object ink = QvpDefaults.ink, bool ayahMarks = true, int ms = 0}) {
@@ -1531,11 +1515,11 @@ class QvpPage extends ChangeNotifier {
   }
 
   // ── crop ──
-  QvpCropBox? cropBox(Object target, {double pad = QvpDefaults.cropPad, bool keepAyahMarks = true}) {
-    final ok = _t(target, (t) => _b.cropBox(_p, t, pad, keepAyahMarks ? 1 : 0, _e._crop));
+  QvpCropBounds? cropBounds(Object target, {double pad = QvpDefaults.cropPad, bool keepAyahMarks = true}) {
+    final ok = _t(target, (t) => _b.cropBounds(_p, t, pad, keepAyahMarks ? 1 : 0, _e._crop));
     if (ok == 0) return null;
     final c = _e._crop.ref;
-    return QvpCropBox(x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, nWords: c.nWords, ayahMarkDeco: c.ayahMarkDeco);
+    return QvpCropBounds(x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, nWords: c.nWords, ayahMarkDeco: c.ayahMarkDeco);
   }
 
   /// Standalone SVG of a target (current colours), or null.

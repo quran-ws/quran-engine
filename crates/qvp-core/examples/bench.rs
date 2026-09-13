@@ -32,7 +32,7 @@ fn main() {
     let mut exact = 0;
     for _ in 0..100 {
         for &(x, y) in &centres {
-            if let Some(h) = page.hit_test(x, y) {
+            if let Some(h) = page.hit_test_exact(x, y) {
                 hits += 1;
                 if h.path != NONE {
                     exact += 1;
@@ -75,11 +75,11 @@ fn main() {
     let m = page.search("الله", &SearchOptions::default());
     println!("search 'الله': {} matches in {:?}", m.len(), t.elapsed());
     let t = Instant::now();
-    let hb = page.hit_boxes(0.6);
+    let hb = page.hit_areas(0.6);
     println!("hit boxes: {} in {:?}", hb.len(), t.elapsed());
     let t = Instant::now();
     for _ in 0..100 {
-        let _ = page.hit_test_ex(100.0, 300.0, &HitOptions::default());
+        let _ = page.hit_test(100.0, 300.0, &HitOptions::default());
     }
     println!("gap-aware hit-test: {:?}", t.elapsed() / 100);
     let surah = page.data().words[0].surah;

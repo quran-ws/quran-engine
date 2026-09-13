@@ -10,6 +10,15 @@ All notable changes to the engine and its packages. The format follows
 - The header is renamed to the naming standard. The old → new table is the "Renames for
   0.2" section of `docs/API-PARITY.md`; no old name is kept as an alias. Each cluster's
   entry follows here as it lands.
+- Hit tests: `qvp_hit_test` and `qvp_hit_test_view` are the gap-aware calls (formerly `_ex`);
+  the exact-outline variants are `qvp_hit_test_exact` and `qvp_hit_test_exact_view`. One
+  `QvpHit` struct for all four (`word, path, deco, line, distance, is_exact`); the exact
+  variants fill `line` and report `is_exact` 1. `QvpHitOptions.exact_first` is `prefer_exact`.
+  Wrappers: `hitTest`, `hitTestView`, `hitTestExact`, `hitTestExactView`, `preferExact`, `isExact`.
+- Rectangles: `qvp_hit_areas` (was `hit_boxes`, type `QvpHitArea`), `qvp_highlight_boxes_view`,
+  `qvp_mask_boxes_view`, `qvp_word_bands` (was `band_boxes`), `qvp_crop_bounds` (type
+  `QvpCropBounds`), `qvp_word_bounds_view`. Wrappers: `hitAreas`, `highlightBoxesView`,
+  `maskBoxesView`, `wordBands`, `cropBounds`, `wordBoundsView`.
 
 ### Added
 - `QvpViewPolicy` in QvpKit: the zoom limits, zoomed threshold and swipe classifier both iOS

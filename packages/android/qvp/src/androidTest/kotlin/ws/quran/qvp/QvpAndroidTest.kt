@@ -30,7 +30,7 @@ class QvpAndroidTest {
             assertEquals(page.nWords, page.words.size)
             assertEquals(page.nPaths * 8, page.table.size)
             assertEquals(page.nWords, page.resolve(Target.page()).size)
-            assertEquals(page.nWords, page.hitBoxes().size)
+            assertEquals(page.nWords, page.hitAreas().size)
 
             val paths = page.buildPaths()
             assertEquals(page.nPaths, paths.size)

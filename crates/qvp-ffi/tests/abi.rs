@@ -43,8 +43,8 @@ fn abi_end_to_end() {
         qvp_text_target(page, &tg, 0, b" ".as_ptr(), 1, b"\n".as_ptr(), 1, &mut t);
         assert!(s(&t).contains(' '));
         // gap-aware hit at the centre of word 0's line but between words: always resolves
-        let mut hx = std::mem::zeroed::<QvpHitEx>();
-        assert_eq!(qvp_hit_test_ex(page, (w.x0 + w.x1) / 2.0, (w.y0 + w.y1) / 2.0, std::ptr::null(), &mut hx), 1);
+        let mut hx = std::mem::zeroed::<QvpHit>();
+        assert_eq!(qvp_hit_test(page, (w.x0 + w.x1) / 2.0, (w.y0 + w.y1) / 2.0, std::ptr::null(), &mut hx), 1);
         assert_eq!(hx.word, 0);
         // layout + view hit
         let spec = QvpLayoutSpec {
@@ -67,9 +67,9 @@ fn abi_end_to_end() {
         assert_eq!(lay.n_lines, 15);
         assert!((lay.scale - 2.0).abs() < 1e-5);
         let mut wb = [0f32; 4];
-        assert_eq!(qvp_word_box_view(page, 0, wb.as_mut_ptr()), 1);
-        let mut h = QvpHit { word: 0, path: 0, deco: 0 };
-        assert_eq!(qvp_hit_test_view(page, (wb[0] + wb[2]) / 2.0, (wb[1] + wb[3]) / 2.0, &mut h), 1);
+        assert_eq!(qvp_word_bounds_view(page, 0, wb.as_mut_ptr()), 1);
+        let mut h = std::mem::zeroed::<QvpHit>();
+        assert_eq!(qvp_hit_test_exact_view(page, (wb[0] + wb[2]) / 2.0, (wb[1] + wb[3]) / 2.0, &mut h), 1);
         assert_eq!(h.word, 0);
         // styles + highlight + tick
         let sel = QvpSelector { kind: 3, a: 0, b: 0, c: 0 }; // first mark of word 0
@@ -95,7 +95,7 @@ fn abi_end_to_end() {
         assert!(hh > 0);
         assert_eq!(qvp_tick(page, 100.0), 1, "animating");
         let mut boxes = [QvpBox { id: 0, line: 0, x0: 0.0, y0: 0.0, x1: 0.0, y1: 0.0, color: 0, radius: 0.0 }; 32];
-        let nb = qvp_highlight_boxes(page, boxes.as_mut_ptr(), 32);
+        let nb = qvp_highlight_boxes_view(page, boxes.as_mut_ptr(), 32);
         assert!((1..=15).contains(&nb));
         assert_eq!(qvp_tick(page, 1000.0), 0);
         qvp_unhighlight(page, hh);

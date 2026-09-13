@@ -195,15 +195,14 @@ jint FN(attachWords)(JNIEnv* env, jclass c, jlong h, jbyteArray json) {
 jboolean FN(hasForm)(JNIEnv* env, jclass c, jlong h, jint form) { return qvp_has_form(PG(h), (uint8_t)form) ? JNI_TRUE : JNI_FALSE; }
 
 /* ───────── hit testing ───────── */
-static jintArray hit_out(JNIEnv* env, int ok, QvpHit* hit) { if (!ok) return NULL; jint v[3] = { hit->word == QVP_NONE ? -1 : (jint)hit->word, hit->path == QVP_NONE ? -1 : (jint)hit->path, hit->deco == QVP_NONE ? -1 : (jint)hit->deco }; return ints(env, v, 3); }
-jintArray FN(hitTest)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y) { QvpHit hit; return hit_out(env, qvp_hit_test(PG(h), x, y, &hit), &hit); }
-jintArray FN(hitTestView)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y) { QvpHit hit; return hit_out(env, qvp_hit_test_view(PG(h), x, y, &hit), &hit); }
-/* {word(-1), path(-1), deco(-1), line, distance, exact} */
-static jfloatArray hitex_out(JNIEnv* env, int ok, QvpHitEx* h) {
-    if (!ok) return NULL; float v[6] = { h->word == QVP_NONE ? -1.f : (float)h->word, h->path == QVP_NONE ? -1.f : (float)h->path, h->deco == QVP_NONE ? -1.f : (float)h->deco, (float)h->line, h->distance, (float)h->exact }; return floats(env, v, 6);
+/* {word(-1), path(-1), deco(-1), line, distance, is_exact}: the one hit shape for every hit test */
+static jfloatArray hit_out(JNIEnv* env, int ok, QvpHit* h) {
+    if (!ok) return NULL; float v[6] = { h->word == QVP_NONE ? -1.f : (float)h->word, h->path == QVP_NONE ? -1.f : (float)h->path, h->deco == QVP_NONE ? -1.f : (float)h->deco, (float)h->line, h->distance, (float)h->is_exact }; return floats(env, v, 6);
 }
-jfloatArray FN(hitTestEx)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y, jfloat maxDist, jfloat gapBias, jboolean exactFirst) { QvpHitOptions o = { maxDist, gapBias, exactFirst ? 1u : 0u }; QvpHitEx r; return hitex_out(env, qvp_hit_test_ex(PG(h), x, y, &o, &r), &r); }
-jfloatArray FN(hitTestViewEx)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y, jfloat maxDist, jfloat gapBias, jboolean exactFirst) { QvpHitOptions o = { maxDist, gapBias, exactFirst ? 1u : 0u }; QvpHitEx r; return hitex_out(env, qvp_hit_test_view_ex(PG(h), x, y, &o, &r), &r); }
+jfloatArray FN(hitTestExact)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y) { QvpHit r; return hit_out(env, qvp_hit_test_exact(PG(h), x, y, &r), &r); }
+jfloatArray FN(hitTestExactView)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y) { QvpHit r; return hit_out(env, qvp_hit_test_exact_view(PG(h), x, y, &r), &r); }
+jfloatArray FN(hitTest)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y, jfloat maxDist, jfloat gapBias, jboolean preferExact) { QvpHitOptions o = { maxDist, gapBias, preferExact ? 1u : 0u }; QvpHit r; return hit_out(env, qvp_hit_test(PG(h), x, y, &o, &r), &r); }
+jfloatArray FN(hitTestView)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y, jfloat maxDist, jfloat gapBias, jboolean preferExact) { QvpHitOptions o = { maxDist, gapBias, preferExact ? 1u : 0u }; QvpHit r; return hit_out(env, qvp_hit_test_view(PG(h), x, y, &o, &r), &r); }
 /* 7 per: line, lineNo, y0, y1, mid, inkY0, inkY1 */
 jfloatArray FN(lineBands)(JNIEnv* env, jclass c, jlong h) {
     QvpLineBand b[64]; uint32_t n = qvp_line_bands(PG(h), b, 64); if (n > 64) n = 64;
@@ -211,8 +210,8 @@ jfloatArray FN(lineBands)(JNIEnv* env, jclass c, jlong h) {
     return floats(env, v, n * 7);
 }
 /* 10 per: word, line, x0, y0, x1, y1, inkX0, inkY0, inkX1, inkY1 */
-jfloatArray FN(hitBoxes)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) {
-    uint32_t n = qvp_hit_boxes(PG(h), gapBias, NULL, 0); QvpHitBox* b = (QvpHitBox*)malloc((n ? n : 1) * sizeof(QvpHitBox)); qvp_hit_boxes(PG(h), gapBias, b, n);
+jfloatArray FN(hitAreas)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) {
+    uint32_t n = qvp_hit_areas(PG(h), gapBias, NULL, 0); QvpHitArea* b = (QvpHitArea*)malloc((n ? n : 1) * sizeof(QvpHitArea)); qvp_hit_areas(PG(h), gapBias, b, n);
     float* v = (float*)malloc((n ? n : 1) * 10 * sizeof(float));
     for (uint32_t i = 0; i < n; i++) { float* o = v + i * 10; o[0] = (float)b[i].word; o[1] = (float)b[i].line; o[2] = b[i].x0; o[3] = b[i].y0; o[4] = b[i].x1; o[5] = b[i].y1; o[6] = b[i].ink_x0; o[7] = b[i].ink_y0; o[8] = b[i].ink_x1; o[9] = b[i].ink_y1; }
     jfloatArray a = floats(env, v, n * 10); free(v); free(b); return a;
@@ -241,7 +240,7 @@ jfloat FN(layoutGapToFill)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfl
 }
 jfloat FN(gapToFill)(JNIEnv* env, jclass c, jfloat pw, jfloat ph, jint lines, jfloat vw, jfloat vh, jfloat max) { return qvp_gap_to_fill(pw, ph, (uint32_t)lines, vw, vh, max); }
 jfloat FN(wastedFraction)(JNIEnv* env, jclass c, jfloat pw, jfloat ph, jfloat vw, jfloat vh) { return qvp_wasted_fraction(pw, ph, vw, vh); }
-jfloatArray FN(wordBoxView)(JNIEnv* env, jclass c, jlong h, jint i) { float v[4]; if (!qvp_word_box_view(PG(h), i, v)) return NULL; return floats(env, v, 4); }
+jfloatArray FN(wordBoundsView)(JNIEnv* env, jclass c, jlong h, jint i) { float v[4]; if (!qvp_word_bounds_view(PG(h), i, v)) return NULL; return floats(env, v, 4); }
 
 /* ───────── styles ───────── */
 jint FN(styleAdd)(JNIEnv* env, jclass c, jlong h, jint layer, jintArray sel, jint rgba, jint ms) { QvpSelector s = sel_in(env, sel); return (jint)qvp_style_add(PG(h), layer, &s, (uint32_t)rgba, (uint32_t)ms); }
@@ -275,10 +274,10 @@ void FN(clearHighlights)(JNIEnv* env, jclass c, jlong h) { qvp_clear_highlights(
 jintArray FN(highlightHandles)(JNIEnv* env, jclass c, jlong h) { uint32_t b[1024]; uint32_t n = qvp_highlight_handles(PG(h), b, 1024); if (n > 1024) n = 1024; return ints(env, (const jint*)b, n); }
 jintArray FN(highlightWords)(JNIEnv* env, jclass c, jlong h, jint handle) { uint32_t n = qvp_highlight_words(PG(h), (uint32_t)handle, NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 4); qvp_highlight_words(PG(h), (uint32_t)handle, b, n); jintArray a = ints(env, (const jint*)b, n); free(b); return a; }
 /* boxes: 8 ints per box: id, line, x0, y0, x1, y1 (float bits), color, radius (float bits) */
-jintArray FN(highlightBoxes)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_highlight_boxes(PG(h), NULL, 0); QvpBox* b = (QvpBox*)malloc((n ? n : 1) * sizeof(QvpBox)); qvp_highlight_boxes(PG(h), b, n); jintArray a = boxes_out(env, b, n); free(b); return a; }
-jintArray FN(bandBoxes)(JNIEnv* env, jclass c, jlong h, jintArray words, jint height, jfloat padX, jfloat padY) {
+jintArray FN(highlightBoxesView)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_highlight_boxes_view(PG(h), NULL, 0); QvpBox* b = (QvpBox*)malloc((n ? n : 1) * sizeof(QvpBox)); qvp_highlight_boxes_view(PG(h), b, n); jintArray a = boxes_out(env, b, n); free(b); return a; }
+jintArray FN(wordBands)(JNIEnv* env, jclass c, jlong h, jintArray words, jint height, jfloat padX, jfloat padY) {
     jsize n = (*env)->GetArrayLength(env, words); jint* w = (*env)->GetIntArrayElements(env, words, NULL);
-    QvpBox b[64]; uint32_t k = qvp_band_boxes(PG(h), (const uint32_t*)w, (uint32_t)n, (uint8_t)height, padX, padY, b, 64); if (k > 64) k = 64;
+    QvpBox b[64]; uint32_t k = qvp_word_bands(PG(h), (const uint32_t*)w, (uint32_t)n, (uint8_t)height, padX, padY, b, 64); if (k > 64) k = 64;
     (*env)->ReleaseIntArrayElements(env, words, w, JNI_ABORT); return boxes_out(env, b, k);
 }
 
@@ -300,7 +299,7 @@ void FN(hideAll)(JNIEnv* env, jclass c, jlong h) { qvp_hide_all(PG(h)); }
 void FN(unmask)(JNIEnv* env, jclass c, jlong h) { qvp_unmask(PG(h)); }
 jintArray FN(maskHidden)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_mask_hidden(PG(h), NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 4); qvp_mask_hidden(PG(h), b, n); jintArray a = ints(env, (const jint*)b, n); free(b); return a; }
 jintArray FN(maskWords)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_mask_words(PG(h), NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 4); qvp_mask_words(PG(h), b, n); jintArray a = ints(env, (const jint*)b, n); free(b); return a; }
-jintArray FN(maskBoxes)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_mask_boxes(PG(h), NULL, 0); QvpBox* b = (QvpBox*)malloc((n ? n : 1) * sizeof(QvpBox)); qvp_mask_boxes(PG(h), b, n); jintArray a = boxes_out(env, b, n); free(b); return a; }
+jintArray FN(maskBoxesView)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_mask_boxes_view(PG(h), NULL, 0); QvpBox* b = (QvpBox*)malloc((n ? n : 1) * sizeof(QvpBox)); qvp_mask_boxes_view(PG(h), b, n); jintArray a = boxes_out(env, b, n); free(b); return a; }
 jint FN(revealStart)(JNIEnv* env, jclass c, jlong h, jint lit, jboolean byAyah, jint grey, jint ink, jboolean ayahMarks, jint ms) { return (jint)qvp_reveal_start(PG(h), (uint32_t)lit, byAyah ? 1 : 0, (uint32_t)grey, (uint32_t)ink, ayahMarks ? 1 : 0, (uint32_t)ms); }
 jboolean FN(revealGoto)(JNIEnv* env, jclass c, jlong h, jlong at) { return qvp_reveal_goto(PG(h), (int64_t)at) ? JNI_TRUE : JNI_FALSE; }
 jlong FN(revealAt)(JNIEnv* env, jclass c, jlong h) { return (jlong)qvp_reveal_at(PG(h)); }
@@ -310,8 +309,8 @@ void FN(revealStop)(JNIEnv* env, jclass c, jlong h) { qvp_reveal_stop(PG(h)); }
 
 /* ───────── crop ───────── */
 /* {x0, y0, x1, y1, nWords, ayahMarkDeco(-1)} */
-jfloatArray FN(cropBox)(JNIEnv* env, jclass c, jlong h, jintArray t, jfloat pad, jboolean keep) {
-    TargetIn ti = target_in(env, t); QvpCropBox cb; int ok = qvp_crop_box(PG(h), &ti.t, pad, keep ? 1 : 0, &cb); target_done(env, &ti);
+jfloatArray FN(cropBounds)(JNIEnv* env, jclass c, jlong h, jintArray t, jfloat pad, jboolean keep) {
+    TargetIn ti = target_in(env, t); QvpCropBounds cb; int ok = qvp_crop_bounds(PG(h), &ti.t, pad, keep ? 1 : 0, &cb); target_done(env, &ti);
     if (!ok) return NULL; float v[6] = { cb.x0, cb.y0, cb.x1, cb.y1, (float)cb.n_words, cb.ayah_mark_deco == QVP_NONE ? -1.f : (float)cb.ayah_mark_deco }; return floats(env, v, 6);
 }
 jstring FN(cropSvg)(JNIEnv* env, jclass c, jlong h, jintArray t, jfloat pad, jboolean keep, jint bg) {
