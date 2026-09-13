@@ -382,4 +382,20 @@ final class QvpKitTests: XCTestCase {
         XCTAssertTrue(cache.controller(for: 42) === c42)
         XCTAssertGreaterThanOrEqual(configured, 2, "configure runs on every (re)attach")
     }
+
+    /// Loading past capacity BEFORE the pager has reported a current page must
+    /// evict normally, not trap on the distance to an unset page.
+    @MainActor func testPageCacheEvictsBeforeCurrentPageIsSet() async throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCache needs macOS 14 / iOS 17") }
+        let bytes = try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp"))
+        let cache = QvpPageCache(capacity: 4, data: { _ in bytes })
+        let controllers = (1...5).map { cache.controller(for: $0) }
+        for _ in 0..<100 {
+            if controllers.filter({ $0.page != nil }).count == 4 { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let live = (1...5).filter { cache.page(for: $0) != nil }
+        XCTAssertEqual(live.count, 4, "five loads into a cache of four keep exactly four live pages")
+        XCTAssertNil(cache.page(for: 1), "the oldest page is the one evicted")
+    }
 }

@@ -26,7 +26,9 @@ public final class QvpPageCache {
     @ObservationIgnored private var loads: [Int: Task<Void, Never>] = [:]
     /// LRU order of page numbers, freshest last.
     @ObservationIgnored private var recency: [Int] = []
-    @ObservationIgnored private var currentPage = Int.min
+    /// Where the pager is, once the host has said; nil until then, so nothing is
+    /// protected from eviction and no distance is ever computed against a sentinel.
+    @ObservationIgnored private var currentPage: Int? = nil
 
     @ObservationIgnored private let capacity: Int
     @ObservationIgnored private let pageRange: ClosedRange<Int>
@@ -122,11 +124,17 @@ public final class QvpPageCache {
         recency.append(pageNumber)
     }
 
+    /// The current page and its immediate neighbors are never evicted.
+    private func isProtected(_ pageNumber: Int) -> Bool {
+        guard let current = currentPage else { return false }
+        return pageNumber >= current - 1 && pageNumber <= current + 1
+    }
+
     /// Close least-recently-used pages beyond capacity. Never the current
     /// page or its immediate neighbors.
     private func trim() {
         while pages.count > capacity {
-            guard let victim = recency.first(where: { abs($0 - currentPage) > 1 && pages[$0] != nil }),
+            guard let victim = recency.first(where: { !isProtected($0) && pages[$0] != nil }),
                   let evicted = pages.removeValue(forKey: victim) else { return }
             // DETACH before closing: the permanent controller stays with any
             // view that holds it; its canvas draws nothing until the page is
