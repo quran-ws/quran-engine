@@ -328,6 +328,12 @@ public struct QvpPageCanvas: View {
                     controller.draw(in: ctx, size: size, displayScale: displayScale)
                 }
             }
+            // `invalidate()` is this view's setNeedsDisplay(). Engine calls the controller cannot
+            // see (mask, reveal, style) leave SwiftUI nothing to diff, and on iOS a bumped revision
+            // alone did not repaint a canvas whose timeline was paused. A new identity per revision
+            // always repaints; `.identity` keeps the swap from fading inside an animated transaction.
+            .id(controller.revision)
+            .transition(.identity)
             .onAppear { controller.setBounds(geo.size) }
             .onChange(of: geo.size) { _, s in controller.setBounds(s) }
         }
