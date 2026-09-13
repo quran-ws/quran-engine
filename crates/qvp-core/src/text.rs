@@ -160,7 +160,13 @@ pub struct SearchOptions {
 
 impl Default for SearchOptions {
     fn default() -> Self {
-        SearchOptions { form: Form::Search, mode: SearchMode::Includes, normalize: true, loose: true, limit: usize::MAX }
+        SearchOptions {
+            form: Form::Search,
+            mode: SearchMode::Includes,
+            normalize: true,
+            loose: true,
+            limit: usize::MAX,
+        }
     }
 }
 
@@ -218,7 +224,13 @@ impl Page {
         let pass = |q: &str, loose: bool, out: &mut Vec<Match>| {
             for wi in 0..self.data().words.len() as u32 {
                 let raw = self.word_form(wi, opt.form);
-                let v: String = if loose { loose_key(raw) } else if opt.normalize { normalize_query(raw) } else { raw.to_owned() };
+                let v: String = if loose {
+                    loose_key(raw)
+                } else if opt.normalize {
+                    normalize_query(raw)
+                } else {
+                    raw.to_owned()
+                };
                 let hit = match opt.mode {
                     SearchMode::Exact => (v == q).then_some(0),
                     SearchMode::Prefix => v.starts_with(q).then_some(0),

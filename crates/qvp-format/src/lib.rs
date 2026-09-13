@@ -201,6 +201,7 @@ marks! {
 /// Non-word groups on a page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum DecoKind {
     AyahMark = 0,
     SurahName = 1,
@@ -209,6 +210,7 @@ pub enum DecoKind {
     SajdahMark = 4,
     PageNumber = 5,
     RunningHead = 6,
+    #[default]
     Other = 255,
 }
 
@@ -260,7 +262,7 @@ pub const AF_NISF_START: u8 = 8;
 // ───────────────────────────── records ─────────────────────────────
 
 /// Integer bbox in quantised page units, inclusive min / exclusive max not
-/// enforced — treat as [x0,x1]×[y0,y1].
+/// enforced. Treat it as the rectangle `[x0, x1] × [y0, y1]`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct IBox {
     pub x0: i32,
@@ -372,12 +374,6 @@ pub struct DecoRec {
     /// Line the decoration sits in (surah header, basmalah, hizb mark), or NONE_U16.
     pub line: u16,
     pub bbox: IBox,
-}
-
-impl Default for DecoKind {
-    fn default() -> Self {
-        DecoKind::Other
-    }
 }
 
 /// Shared outline, stored once per page in glyph space (origin 0,0, same
@@ -677,7 +673,6 @@ impl PageData {
     }
 }
 
-
 /// Format quantised commands as an SVG `d` string (exact decimals, trimmed).
 pub fn svg_path_d(cmds: &[Cmd], quant: u16) -> String {
     use std::fmt::Write;
@@ -785,7 +780,9 @@ impl Mark {
             Dot | TwoDots | ThreeDots => Category::LetterDot,
             Hamzah | HamzatAlWasl | OmittedAlif | Maddah | SmallWaw | SmallYaa | SmallNoon => Category::Orthographic,
             RoundedZero | RectangularZero | SmallMeem => Category::Dabt,
-            WaqfJaizMustawiAlTarafayn | WaqfJaizWaslAwla | WaqfJaizWaqfAwla | WaqfLazim | WaqfAlMuanaqah => Category::Waqf,
+            WaqfJaizMustawiAlTarafayn | WaqfJaizWaslAwla | WaqfJaizWaqfAwla | WaqfLazim | WaqfAlMuanaqah => {
+                Category::Waqf
+            }
             Saktah | SeenAlQiraah | Imalah | Ishmam | Tashil => Category::ReadingSign,
             SajdahMark | SajdahLine | Sajdah | Hizb => Category::Standalone,
             None | Unknown => Category::None,
@@ -854,20 +851,84 @@ mod tests {
         let p = PageData {
             header: Header { version: VERSION, quant: 100, page: 7, flags: 0, width: 345.0, height: 550.0 },
             lines: vec![LineRec { line_no: 1, first_word: 0, n_words: 1, bbox: bb }],
-            ayahs: vec![AyahRec { surah: 2, ayah: 3, fragment: 1, fragments: 1, flags: AF_RUBU_AL_HIZB_START, first_word: 0, n_words: 1, ayah_mark_deco: 0, rubu_al_hizb: 5, bbox: bb }],
-            words: vec![WordRec { surah: 2, ayah: 3, word: 1, line_idx: 0, ayah_idx: 0, text: 0, rasm_imlai: NONE_U16, qpc: NONE_U16, rasm: NONE_U16, search: 0, first_path: 0, n_paths: 1, bbox: bb }],
+            ayahs: vec![AyahRec {
+                surah: 2,
+                ayah: 3,
+                fragment: 1,
+                fragments: 1,
+                flags: AF_RUBU_AL_HIZB_START,
+                first_word: 0,
+                n_words: 1,
+                ayah_mark_deco: 0,
+                rubu_al_hizb: 5,
+                bbox: bb,
+            }],
+            words: vec![WordRec {
+                surah: 2,
+                ayah: 3,
+                word: 1,
+                line_idx: 0,
+                ayah_idx: 0,
+                text: 0,
+                rasm_imlai: NONE_U16,
+                qpc: NONE_U16,
+                rasm: NONE_U16,
+                search: 0,
+                first_path: 0,
+                n_paths: 1,
+                bbox: bb,
+            }],
             paths: vec![
-                PathRec { kind: PathKind::Body, mark: Mark::None, family: Family::None, flags: PF_EVENODD, ox: 500, oy: 600, op_off: 0, op_len: ops.len() as u32, bbox: bb },
-                PathRec { kind: PathKind::AyahMarkOrnament, mark: Mark::None, family: Family::None, flags: 0, ox: 500, oy: 600, op_off: 0, op_len: ops.len() as u32, bbox: bb },
+                PathRec {
+                    kind: PathKind::Body,
+                    mark: Mark::None,
+                    family: Family::None,
+                    flags: PF_EVENODD,
+                    ox: 500,
+                    oy: 600,
+                    op_off: 0,
+                    op_len: ops.len() as u32,
+                    bbox: bb,
+                },
+                PathRec {
+                    kind: PathKind::AyahMarkOrnament,
+                    mark: Mark::None,
+                    family: Family::None,
+                    flags: 0,
+                    ox: 500,
+                    oy: 600,
+                    op_off: 0,
+                    op_len: ops.len() as u32,
+                    bbox: bb,
+                },
             ],
-            decos: vec![DecoRec { kind: DecoKind::AyahMark, surah: 2, ayah: 3, text: NONE_U16, first_path: 1, n_paths: 1, line: 0, bbox: bb }],
+            decos: vec![DecoRec {
+                kind: DecoKind::AyahMark,
+                surah: 2,
+                ayah: 3,
+                text: NONE_U16,
+                first_path: 1,
+                n_paths: 1,
+                line: 0,
+                bbox: bb,
+            }],
             glyphs: vec![GlyphRec { op_off: 0, op_len: ops.len() as u32, bbox: bb }],
             insts: vec![InstRec { glyph: 0, a: 2.0, b: 0.0, c: 0.0, d: 2.0, e: 10.0, f: 20.0 }],
             ops,
             strings: vec!["ذَٰلِكَ".to_owned()],
         };
         let mut p = p;
-        p.paths.push(PathRec { kind: PathKind::AyahMarkOrnament, mark: Mark::None, family: Family::None, flags: PF_GLYPH, ox: 0, oy: 0, op_off: 0, op_len: 0, bbox: bb });
+        p.paths.push(PathRec {
+            kind: PathKind::AyahMarkOrnament,
+            mark: Mark::None,
+            family: Family::None,
+            flags: PF_GLYPH,
+            ox: 0,
+            oy: 0,
+            op_off: 0,
+            op_len: 0,
+            bbox: bb,
+        });
         // `encode` expects converter-shaped input: one contiguous run per path.
         p.canonicalize_ops();
         let bytes = encode(&p);

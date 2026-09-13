@@ -39,7 +39,18 @@ pub struct HighlightStyle {
 
 impl Default for HighlightStyle {
     fn default() -> Self {
-        HighlightStyle { mode: HighlightMode::Band, ink: 0x1a73e8ff, band: 0xd6a3264d, height: BandHeight::Pitch, pad_x: 1.2, pad_y: 0.0, radius: 0.0, seam: 0.25, transition_ms: 0, layer: LAYER_HIGHLIGHT }
+        HighlightStyle {
+            mode: HighlightMode::Band,
+            ink: 0x1a73e8ff,
+            band: 0xd6a3264d,
+            height: BandHeight::Pitch,
+            pad_x: 1.2,
+            pad_y: 0.0,
+            radius: 0.0,
+            seam: 0.25,
+            transition_ms: 0,
+            layer: LAYER_HIGHLIGHT,
+        }
     }
 }
 
@@ -123,9 +134,29 @@ impl Page {
         if matches!(style.mode, HighlightMode::Band | HighlightMode::Both) {
             let boxes = self.band_boxes(&words, style.height, style.pad_x, style.pad_y);
             let from = style.band & !0xff; // fade in from transparent when animated
-            self.highlights.push(Highlight { handle: h, words, style, boxes, prev_boxes: vec![], t0: self.clock_ms, color_from: from, color_to: style.band, removing: false });
+            self.highlights.push(Highlight {
+                handle: h,
+                words,
+                style,
+                boxes,
+                prev_boxes: vec![],
+                t0: self.clock_ms,
+                color_from: from,
+                color_to: style.band,
+                removing: false,
+            });
         } else {
-            self.highlights.push(Highlight { handle: h, words, style, boxes: vec![], prev_boxes: vec![], t0: self.clock_ms, color_from: style.band, color_to: style.band, removing: false });
+            self.highlights.push(Highlight {
+                handle: h,
+                words,
+                style,
+                boxes: vec![],
+                prev_boxes: vec![],
+                t0: self.clock_ms,
+                color_from: style.band,
+                color_to: style.band,
+                removing: false,
+            });
         }
     }
 
@@ -138,7 +169,12 @@ impl Page {
         self.styles.remove(handle);
         if matches!(style.mode, HighlightMode::Ink | HighlightMode::Both) {
             for &w in &words {
-                self.styles.push_under(handle, style.layer, Selector::Word(w), Paint::fade(style.ink, style.transition_ms));
+                self.styles.push_under(
+                    handle,
+                    style.layer,
+                    Selector::Word(w),
+                    Paint::fade(style.ink, style.transition_ms),
+                );
             }
         }
         let hl = &mut self.highlights[i];
@@ -164,11 +200,20 @@ impl Page {
         self.styles.remove(handle);
         if matches!(style.mode, HighlightMode::Ink | HighlightMode::Both) {
             for &w in &words {
-                self.styles.push_under(handle, style.layer, Selector::Word(w), Paint::fade(style.ink, style.transition_ms));
+                self.styles.push_under(
+                    handle,
+                    style.layer,
+                    Selector::Word(w),
+                    Paint::fade(style.ink, style.transition_ms),
+                );
             }
         }
         let now = self.clock_ms;
-        let boxes = if matches!(style.mode, HighlightMode::Band | HighlightMode::Both) { self.band_boxes(&words, style.height, style.pad_x, style.pad_y) } else { vec![] };
+        let boxes = if matches!(style.mode, HighlightMode::Band | HighlightMode::Both) {
+            self.band_boxes(&words, style.height, style.pad_x, style.pad_y)
+        } else {
+            vec![]
+        };
         let hl = &mut self.highlights[i];
         hl.prev_boxes = current_boxes(hl, now);
         hl.color_from = current_color(hl, now);
@@ -247,7 +292,16 @@ impl Page {
                 .map(|b| {
                     let li = b.line as usize;
                     let d = dy.get(li).copied().unwrap_or(0.0);
-                    ViewBox { highlight: h.handle, line: b.line, x0: ox + b.x0 * scale, y0: oy + (b.y0 + d) * scale, x1: ox + b.x1 * scale, y1: oy + (b.y1 + d) * scale, color, radius: h.style.radius * scale }
+                    ViewBox {
+                        highlight: h.handle,
+                        line: b.line,
+                        x0: ox + b.x0 * scale,
+                        y0: oy + (b.y0 + d) * scale,
+                        x1: ox + b.x1 * scale,
+                        y1: oy + (b.y1 + d) * scale,
+                        color,
+                        radius: h.style.radius * scale,
+                    }
                 })
                 .collect();
             view.sort_by(|a, b| a.y0.partial_cmp(&b.y0).unwrap());
@@ -275,7 +329,18 @@ fn current_color(h: &Highlight, now: f64) -> Rgba {
 fn current_boxes(h: &Highlight, now: f64) -> Vec<BandBox> {
     let dur = h.style.transition_ms as f64;
     if dur <= 0.0 || h.prev_boxes.is_empty() || now - h.t0 >= dur {
-        return if h.removing { h.prev_boxes.clone().into_iter().chain(h.boxes.clone()).collect::<Vec<_>>().into_iter().take(h.prev_boxes.len().max(h.boxes.len())).collect() } else { h.boxes.clone() };
+        return if h.removing {
+            h.prev_boxes
+                .clone()
+                .into_iter()
+                .chain(h.boxes.clone())
+                .collect::<Vec<_>>()
+                .into_iter()
+                .take(h.prev_boxes.len().max(h.boxes.len()))
+                .collect()
+        } else {
+            h.boxes.clone()
+        };
     }
     let t = ease_out((now - h.t0) / dur) as f32;
     // pair boxes by order (top to bottom); unmatched ones lerp from/to a collapsed box
@@ -285,7 +350,13 @@ fn current_boxes(h: &Highlight, now: f64) -> Vec<BandBox> {
         let a = h.prev_boxes.get(i).or_else(|| h.boxes.get(i)).copied().unwrap();
         let b = h.boxes.get(i).or_else(|| h.prev_boxes.get(i)).copied().unwrap();
         let l = |p: f32, q: f32| p + (q - p) * t;
-        out.push(BandBox { line: if t < 0.5 { a.line } else { b.line }, x0: l(a.x0, b.x0), y0: l(a.y0, b.y0), x1: l(a.x1, b.x1), y1: l(a.y1, b.y1) });
+        out.push(BandBox {
+            line: if t < 0.5 { a.line } else { b.line },
+            x0: l(a.x0, b.x0),
+            y0: l(a.y0, b.y0),
+            x1: l(a.x1, b.x1),
+            y1: l(a.y1, b.y1),
+        });
     }
     out
 }

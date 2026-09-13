@@ -24,10 +24,14 @@ pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
 pub use qvp_format;
 pub use qvp_format::atlas::Atlas;
 pub use selection::Selection;
-pub use style::{Handle, Paint, Selector, StyleEngine, Theme, LAYER_BASE, LAYER_HIGHLIGHT, LAYER_SELECTION, LAYER_THEME, LAYER_TOP};
+pub use style::{
+    Handle, Paint, Selector, StyleEngine, Theme, LAYER_BASE, LAYER_HIGHLIGHT, LAYER_SELECTION, LAYER_THEME, LAYER_TOP,
+};
 pub use target::Target;
-pub use text::{fold, is_mark, loose_key, normalize_query, parse_words_sidecar, search_key,
-               search_variants, strip_marks, Form, Match, SearchMode, SearchOptions, WordForms};
+pub use text::{
+    fold, is_mark, loose_key, normalize_query, parse_words_sidecar, search_key, search_variants, strip_marks, Form,
+    Match, SearchMode, SearchOptions, WordForms,
+};
 
 use qvp_format::*;
 use std::collections::HashMap;
@@ -137,7 +141,11 @@ impl Page {
         let natural_pitch = {
             let mut d: Vec<f32> = line_centre.windows(2).map(|w| (w[1] - w[0]).abs()).filter(|v| *v > 1.0).collect();
             d.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            if d.is_empty() { data.header.height / 15.0 } else { d[d.len() / 2] }
+            if d.is_empty() {
+                data.header.height / 15.0
+            } else {
+                d[d.len() / 2]
+            }
         };
         let nearest_line = |y: f32| -> u32 {
             let mut best = 0usize;
@@ -158,7 +166,11 @@ impl Page {
                 data.words[wi as usize].line_idx as u32
             } else if path_deco[i] != NONE {
                 let d = &data.decos[path_deco[i] as usize];
-                if d.line != NONE_U16 && (d.line as usize) < data.lines.len() { d.line as u32 } else { nearest_line((d.bbox.y0 + d.bbox.y1) as f32 / 2.0 / q) }
+                if d.line != NONE_U16 && (d.line as usize) < data.lines.len() {
+                    d.line as u32
+                } else {
+                    nearest_line((d.bbox.y0 + d.bbox.y1) as f32 / 2.0 / q)
+                }
             } else {
                 0
             };
@@ -220,7 +232,10 @@ impl Page {
             if let Some(inst) = data.path_inst(i) {
                 let m = |x: i32, y: i32| -> (f32, f32) {
                     let (gx, gy) = (x as f64 / q as f64, y as f64 / q as f64);
-                    ((inst.a as f64 * gx + inst.c as f64 * gy + inst.e as f64) as f32, (inst.b as f64 * gx + inst.d as f64 * gy + inst.f as f64) as f32)
+                    (
+                        (inst.a as f64 * gx + inst.c as f64 * gy + inst.e as f64) as f32,
+                        (inst.b as f64 * gx + inst.d as f64 * gy + inst.f as f64) as f32,
+                    )
                 };
                 for c in data.glyph_cmds(inst.glyph as usize).unwrap_or_default() {
                     emit(&mut geom.ops, &mut push, c, m);
@@ -242,12 +257,16 @@ impl Page {
                 flags: p.kind as u32 | (p.mark as u32) << 8 | (p.family as u32) << 16 | (evenodd | inst << 1) << 24,
                 word: path_word[i],
                 line: path_line[i],
-                extra: c.category as u32 | (c.nth_in_word as u32 & 0xff) << 8 | ((if c.nth_mark == u16::MAX { 0xff } else { c.nth_mark as u32 }) & 0xff) << 16,
+                extra: c.category as u32
+                    | (c.nth_in_word as u32 & 0xff) << 8
+                    | ((if c.nth_mark == u16::MAX { 0xff } else { c.nth_mark as u32 }) & 0xff) << 16,
             });
         }
         let mut line_words = Vec::with_capacity(data.lines.len());
         for l in &data.lines {
-            let mut v: Vec<(i32, u32)> = (l.first_word..l.first_word + l.n_words).map(|wi| (data.words[wi as usize].bbox.x0, wi as u32)).collect();
+            let mut v: Vec<(i32, u32)> = (l.first_word..l.first_word + l.n_words)
+                .map(|wi| (data.words[wi as usize].bbox.x0, wi as u32))
+                .collect();
             v.sort_unstable();
             line_words.push(v);
         }
@@ -309,7 +328,11 @@ impl Page {
     }
     pub fn deco_text(&self, di: u32) -> &str {
         let d = &self.data.decos[di as usize];
-        if d.text == NONE_U16 { "" } else { &self.data.strings[d.text as usize] }
+        if d.text == NONE_U16 {
+            ""
+        } else {
+            &self.data.strings[d.text as usize]
+        }
     }
     pub fn find_word(&self, surah: u16, ayah: u16, word: u16) -> Option<u32> {
         self.word_index.get(&(surah, ayah, word)).copied()
@@ -432,7 +455,10 @@ impl Page {
         for pass in 0..2 {
             for pi in first..first + n {
                 let p = &self.data.paths[pi as usize];
-                let is_body = matches!(p.kind, PathKind::Body | PathKind::HeaderInk | PathKind::AyahMarkOrnament | PathKind::AyahNumber);
+                let is_body = matches!(
+                    p.kind,
+                    PathKind::Body | PathKind::HeaderInk | PathKind::AyahMarkOrnament | PathKind::AyahNumber
+                );
                 if (pass == 0) != is_body || !p.bbox.contains(qx, qy) {
                     continue;
                 }
@@ -528,7 +554,11 @@ impl Page {
         if (cx, cy) != (sx, sy) {
             seg(cx, cy, sx, sy);
         }
-        if evenodd { crossings % 2 == 1 } else { wn != 0 }
+        if evenodd {
+            crossings % 2 == 1
+        } else {
+            wn != 0
+        }
     }
 
     /// Drive a renderer over the whole page (bands first, then ink).

@@ -90,7 +90,12 @@ impl Atlas {
         let nr = v(&mut pos)? as usize;
         let mut pages = Vec::with_capacity(np);
         for _ in 0..np {
-            pages.push(AtlasPage { page: v(&mut pos)?, first: (v(&mut pos)?, v(&mut pos)?), last: (v(&mut pos)?, v(&mut pos)?), n_words: v(&mut pos)? });
+            pages.push(AtlasPage {
+                page: v(&mut pos)?,
+                first: (v(&mut pos)?, v(&mut pos)?),
+                last: (v(&mut pos)?, v(&mut pos)?),
+                n_words: v(&mut pos)?,
+            });
         }
         let mut surahs = Vec::with_capacity(ns);
         for _ in 0..ns {
@@ -114,7 +119,12 @@ impl Atlas {
         }
         let mut rubu_al_hizbs = Vec::with_capacity(nr);
         for _ in 0..nr {
-            rubu_al_hizbs.push(AtlasRubuAlHizb { rubu_al_hizb: v(&mut pos)?, surah: v(&mut pos)?, ayah: v(&mut pos)?, page: v(&mut pos)? });
+            rubu_al_hizbs.push(AtlasRubuAlHizb {
+                rubu_al_hizb: v(&mut pos)?,
+                surah: v(&mut pos)?,
+                ayah: v(&mut pos)?,
+                page: v(&mut pos)?,
+            });
         }
         Ok(Atlas { pages, surahs, rubu_al_hizbs })
     }
@@ -178,7 +188,11 @@ impl Atlas {
                 // the next juz starts on `next.page`; if it starts at the top of that page the
                 // previous juz ends on the page before
                 let first_on_page = self.pages.iter().find(|p| p.page == next.page).map(|p| p.first);
-                if first_on_page == Some((next.surah, next.ayah)) { next.page - 1 } else { next.page }
+                if first_on_page == Some((next.surah, next.ayah)) {
+                    next.page - 1
+                } else {
+                    next.page
+                }
             }
             None => self.pages.last()?.page,
         };
@@ -192,7 +206,12 @@ impl Atlas {
         }
         self.surahs
             .iter()
-            .filter(|s| s.arabic.contains(&t) || s.latin.to_lowercase().contains(&t) || s.english.to_lowercase().contains(&t) || s.n.to_string() == t)
+            .filter(|s| {
+                s.arabic.contains(&t)
+                    || s.latin.to_lowercase().contains(&t)
+                    || s.english.to_lowercase().contains(&t)
+                    || s.n.to_string() == t
+            })
             .collect()
     }
     pub fn to_json(&self) -> String {
@@ -202,7 +221,10 @@ impl Atlas {
             if i > 0 {
                 j.push(',');
             }
-            j.push_str(&format!("[{},\"{}:{}\",\"{}:{}\",{}]", p.page, p.first.0, p.first.1, p.last.0, p.last.1, p.n_words));
+            j.push_str(&format!(
+                "[{},\"{}:{}\",\"{}:{}\",{}]",
+                p.page, p.first.0, p.first.1, p.last.0, p.last.1, p.n_words
+            ));
         }
         j.push_str("],\"surahs\":[");
         for (i, s) in self.surahs.iter().enumerate() {
@@ -238,10 +260,29 @@ mod tests {
                 AtlasPage { page: 3, first: (2, 6), last: (2, 16), n_words: 100 },
             ],
             surahs: vec![
-                AtlasSurah { n: 1, first_page: 1, ayah_count: 7, place: 0, arabic: "الفاتحة".into(), latin: "Fatihah".into(), english: "The Opener".into() },
-                AtlasSurah { n: 2, first_page: 2, ayah_count: 286, place: 1, arabic: "البقرة".into(), latin: "Baqarah".into(), english: "The Cow".into() },
+                AtlasSurah {
+                    n: 1,
+                    first_page: 1,
+                    ayah_count: 7,
+                    place: 0,
+                    arabic: "الفاتحة".into(),
+                    latin: "Fatihah".into(),
+                    english: "The Opener".into(),
+                },
+                AtlasSurah {
+                    n: 2,
+                    first_page: 2,
+                    ayah_count: 286,
+                    place: 1,
+                    arabic: "البقرة".into(),
+                    latin: "Baqarah".into(),
+                    english: "The Cow".into(),
+                },
             ],
-            rubu_al_hizbs: vec![AtlasRubuAlHizb { rubu_al_hizb: 1, surah: 1, ayah: 1, page: 1 }, AtlasRubuAlHizb { rubu_al_hizb: 2, surah: 2, ayah: 26, page: 5 }],
+            rubu_al_hizbs: vec![
+                AtlasRubuAlHizb { rubu_al_hizb: 1, surah: 1, ayah: 1, page: 1 },
+                AtlasRubuAlHizb { rubu_al_hizb: 2, surah: 2, ayah: 26, page: 5 },
+            ],
         };
         let b = a.encode();
         let d = Atlas::decode(&b).unwrap();

@@ -94,6 +94,15 @@ fn selected_pages() -> Vec<String> {
 
 #[test]
 fn svg_qvp_svg_pixel_identity() {
+    if !pages_dir().join("001.svg").exists() {
+        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
+            panic!(
+                "pages/ (the source SVG bundle) is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh"
+            );
+        }
+        eprintln!("skip: pages/ is missing; run scripts/sync-test-data.sh to enable the identity gate");
+        return;
+    }
     let pages = selected_pages();
     let results: Vec<Outcome> = pages.par_iter().map(|p| check(p)).collect();
     let mut failed = Vec::new();

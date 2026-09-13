@@ -13,7 +13,13 @@ fn s(q: &QvpStr) -> String {
 
 #[test]
 fn abi_end_to_end() {
-    let Some(bytes) = page_bytes("036.qvp") else { eprintln!("skip: no dist/pages"); return };
+    let Some(bytes) = page_bytes("036.qvp") else {
+        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
+            panic!("dist/pages/036.qvp is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
+        }
+        eprintln!("skip: dist/pages/036.qvp is missing; run scripts/sync-test-data.sh to enable this test");
+        return;
+    };
     unsafe {
         let page = qvp_page_load(bytes.as_ptr(), bytes.len());
         assert!(!page.is_null());
@@ -41,7 +47,18 @@ fn abi_end_to_end() {
         assert_eq!(qvp_hit_test_ex(page, (w.x0 + w.x1) / 2.0, (w.y0 + w.y1) / 2.0, std::ptr::null(), &mut hx), 1);
         assert_eq!(hx.word, 0);
         // layout + view hit
-        let spec = QvpLayoutSpec { viewport_w: 690.0, viewport_h: 1100.0, pad_top: 20.0, pad_bottom: 20.0, pad_left: 0.0, pad_right: 0.0, line_spacing: 1.0, line_gap: 0.0, fill_height: 1, nominal_lines: 15 };
+        let spec = QvpLayoutSpec {
+            viewport_w: 690.0,
+            viewport_h: 1100.0,
+            pad_top: 20.0,
+            pad_bottom: 20.0,
+            pad_left: 0.0,
+            pad_right: 0.0,
+            line_spacing: 1.0,
+            line_gap: 0.0,
+            fill_height: 1,
+            nominal_lines: 15,
+        };
         let mut lay = std::mem::zeroed::<QvpLayout>();
         qvp_layout(page, &spec, &mut lay);
         assert_eq!(lay.n_lines, 15);
@@ -59,19 +76,40 @@ fn abi_end_to_end() {
         let n = qvp_styled(page, pairs.as_mut_ptr(), 2000);
         assert_eq!(n, 1);
         assert_eq!(qvp_style_remove(page, hd), 1);
-        let st = QvpHighlightStyle { mode: 2, height: 0, ink: 0x00aa00ff, band: 0xffcc0080, pad_x: 1.2, pad_y: 0.0, radius: 1.0, seam: 0.25, transition_ms: 200, layer: 50 };
+        let st = QvpHighlightStyle {
+            mode: 2,
+            height: 0,
+            ink: 0x00aa00ff,
+            band: 0xffcc0080,
+            pad_x: 1.2,
+            pad_y: 0.0,
+            radius: 1.0,
+            seam: 0.25,
+            transition_ms: 200,
+            layer: 50,
+        };
         let hh = qvp_highlight(page, &tg, &st);
         assert!(hh > 0);
         assert_eq!(qvp_tick(page, 100.0), 1, "animating");
         let mut boxes = [QvpBox { id: 0, line: 0, x0: 0.0, y0: 0.0, x1: 0.0, y1: 0.0, color: 0, radius: 0.0 }; 32];
         let nb = qvp_highlight_boxes(page, boxes.as_mut_ptr(), 32);
-        assert!(nb >= 1 && nb <= 15);
+        assert!((1..=15).contains(&nb));
         assert_eq!(qvp_tick(page, 1000.0), 0);
         qvp_unhighlight(page, hh);
         // metadata
         let mut d = [QvpDivision { kind: 0, line: 0, n: 0, surah: 0, ayah: 0, ayah_idx: 0 }; 8];
         let _ = qvp_divisions(page, d.as_mut_ptr(), 8);
-        let mut mk = [QvpAyahMark { deco: 0, surah: 0, ayah: 0, line: 0, cx: 0.0, cy: 0.0, r: 0.0, ornament_path: 0, numeral_path: 0 }; 32];
+        let mut mk = [QvpAyahMark {
+            deco: 0,
+            surah: 0,
+            ayah: 0,
+            line: 0,
+            cx: 0.0,
+            cy: 0.0,
+            r: 0.0,
+            ornament_path: 0,
+            numeral_path: 0,
+        }; 32];
         assert_eq!(qvp_ayah_marks(page, mk.as_mut_ptr(), 32), 6);
         // mask/reveal
         qvp_mask(page, &tg, 0);
@@ -132,11 +170,42 @@ fn taxonomy_names_are_the_pipeline_vocabulary() {
         assert_eq!(
             marks,
             [
-                "", "fathah", "kasrah", "dammah", "tanwin_al_fath", "tanwin_al_kasr", "tanwin_al_damm", "shaddah", "sukun", "maddah",
-                "hamzah", "hamzat_al_wasl", "omitted_alif", "small_waw", "small_yaa", "small_noon", "dot", "two_dots", "three_dots",
-                "rounded_zero", "rectangular_zero", "waqf_jaiz_mustawi_al_tarafayn", "waqf_jaiz_waqf_awla", "waqf_jaiz_wasl_awla",
-                "waqf_lazim", "waqf_al_muanaqah", "saktah", "small_meem", "hizb", "sajdah", "sajdah_mark", "sajdah_line",
-                "seen_al_qiraah", "tashil", "ishmam", "imalah",
+                "",
+                "fathah",
+                "kasrah",
+                "dammah",
+                "tanwin_al_fath",
+                "tanwin_al_kasr",
+                "tanwin_al_damm",
+                "shaddah",
+                "sukun",
+                "maddah",
+                "hamzah",
+                "hamzat_al_wasl",
+                "omitted_alif",
+                "small_waw",
+                "small_yaa",
+                "small_noon",
+                "dot",
+                "two_dots",
+                "three_dots",
+                "rounded_zero",
+                "rectangular_zero",
+                "waqf_jaiz_mustawi_al_tarafayn",
+                "waqf_jaiz_waqf_awla",
+                "waqf_jaiz_wasl_awla",
+                "waqf_lazim",
+                "waqf_al_muanaqah",
+                "saktah",
+                "small_meem",
+                "hizb",
+                "sajdah",
+                "sajdah_mark",
+                "sajdah_line",
+                "seen_al_qiraah",
+                "tashil",
+                "ishmam",
+                "imalah",
             ]
         );
         assert_eq!(name(qvp_mark_name, 255), "unknown");
@@ -157,7 +226,16 @@ fn taxonomy_names_are_the_pipeline_vocabulary() {
         let kinds: Vec<String> = (0u8..=7).map(|i| name(qvp_kind_name, i)).collect();
         assert_eq!(
             kinds,
-            ["body", "mark", "ayah_number", "ayah_mark_ornament", "header_ink", "ornament", "page_number", "running_head"]
+            [
+                "body",
+                "mark",
+                "ayah_number",
+                "ayah_mark_ornament",
+                "header_ink",
+                "ornament",
+                "page_number",
+                "running_head"
+            ]
         );
     }
 }

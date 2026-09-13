@@ -58,7 +58,12 @@ pub fn to_svg(p: &PageData) -> Result<String, Error> {
                 write!(s, "<g class=\"ayah-fragment\" data-ayah-key=\"{}:{}\" data-fragment=\"{}\" data-ayah-fragments=\"{}\">", a.surah, a.ayah, a.fragment, a.fragments).unwrap();
             }
             let text = if w.text == NONE_U16 { "" } else { &p.strings[w.text as usize] };
-            write!(s, "<g class=\"word\" data-word-key=\"{}:{}:{}\" data-rasm-uthmani=\"{}\">", w.surah, w.ayah, w.word, text).unwrap();
+            write!(
+                s,
+                "<g class=\"word\" data-word-key=\"{}:{}:{}\" data-rasm-uthmani=\"{}\">",
+                w.surah, w.ayah, w.word, text
+            )
+            .unwrap();
             for i in w.first_path..w.first_path + w.n_paths as u32 {
                 write_path(p, i as usize, &mut s)?;
             }
