@@ -1,6 +1,11 @@
+> **Historical record.** This is the design document the engine was built from on
+> 2026-09-04, kept as written. Its sizes, function counts and CI claim date from that
+> day and no longer match the code. `docs/HOW-IT-WORKS.md` and `docs/API.md`
+> describe the engine as it is.
+
 # Quran Vector Engine (QVP) — Design
 
-Date: 2026-09-04. Status: approved in chat, implemented in the same session.
+Date: 2026-09-04. Status: historical; superseded by the code and `docs/API.md`.
 
 ## Goal
 

@@ -17,9 +17,9 @@
     "**/node_modules/**",
     "**/package-lock.json",
     "**/assets/pages/**",
-    "docs/superpowers/**"
+    "docs/design/**"
   ],
-  "_exclude": "Data and build output, not code. pages/ and index/ are the quran-svg bundle verbatim; dist/ and web/pages/ are generated from it. docs/superpowers/ holds the dated design spec, a historical record that should keep its original wording.",
+  "_exclude": "Data and build output, not code. pages/ and index/ are the quran-svg bundle verbatim; dist/ and web/pages/ are generated from it. docs/design/ holds the dated design spec, a historical record that should keep its original wording.",
   "ignore_words": [
     "pos",
     "stop",
@@ -38,7 +38,7 @@
     "reading  — reading order in hit-testing and layout, not a qiraah.",
     "diacritics — the theme slot for the `diacritic` mark family, which is its real name; not a gloss of harakah.",
     "parts    — only survives inside Rust's from_raw_parts; every ayah `part` is now `fragment`.",
-    "part     — ordinary English: prose in the codec header, a Kotlin comment, and a loop variable in web/build.py splitting a page range; never the juz.",
+    "part     — ordinary English: prose in the codec header, a Kotlin comment, and a loop variable in web/example/build.py splitting a page range; never the juz.",
     "simple   — only inside SimplePathSegment (svgtypes) and android.R.layout.simple_spinner_*; not rasm imlai.",
     "timings  — recitation segment timings passed in by the host; the engine stores no ayah_timing.",
     "waqf_jaiz — audit false positive: it prefix-matches the CANONICAL `waqf_jaiz_mustawi_al_tarafayn`. The deprecated bare name is not used anywhere in this repo."

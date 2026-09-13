@@ -214,7 +214,7 @@ and `rehighlight` for word-by-word following.
 ## Selection
 
 `select(anchor, focus)` snaps to whole words; `selection()`, `selectionText(form, withCitation)`.
-Draw the band with a highlight in `LAYER.SELECTION`; see `web/app.js` for drag-to-select.
+Draw the band with a highlight in `LAYER.SELECTION`; see `web/example/app.js` for drag-to-select.
 
 ## Memorisation
 
