@@ -7,6 +7,10 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- The terminology audit passes with zero findings and CI fails on any new one. Code
+  comments and documents use the canonical spellings; the shared search-fold
+  specification and its fixtures are excluded with a written reason, since their case ids
+  belong to the cross-repository spec.
 - Names: `qvp_name(table, id)`, `qvp_name_id(table, name)`, `qvp_name_count(table)` over the
   mark, kind, family, category, decoration, division and place tables. Every wrapper reads
   its names from the engine at start-up; the five hand-written mark tables and the place,

@@ -34,8 +34,8 @@ impl Form {
     }
 }
 
-/// Everything that is not a letter: harakah, tanwin, the dagger alif, tatweel,
-/// the waqf and dabt signs, the rub el hizb and sajdah symbols, and the
+/// Everything that is not a letter: harakah, tanwin, the omitted alif, tatweel,
+/// the waqf and dabt signs, the rubu_al_hizb and sajdah symbols, and the
 /// bidi/joiner format characters.
 ///
 /// The set is exactly the characters in the Arabic blocks whose Unicode general
@@ -65,7 +65,7 @@ pub fn is_arabic_mark(c: char) -> bool {
 
 /// The stored key: letters only, nothing folded.
 ///
-/// Feed it the imlai spelling, never the uthmani — the uthmani writes long
+/// Feed it the rasm_imlai spelling, never the rasm_uthmani, which writes long
 /// vowels as combining marks, so stripping it deletes them outright
 /// (`ٱلۡعَٰلَمِينَ` -> `العلمين`, which nobody types). Elements' `search` field is
 /// already built this way, which is why [`Form::Search`] is the default.
@@ -117,12 +117,12 @@ pub fn loose_key(s: &str) -> String {
 }
 
 /// Every spelling a word might reasonably be typed as, for sources with no
-/// imlai spelling.
+/// rasm_imlai spelling.
 ///
-/// The uthmani alone cannot say whether a dagger alif is written out in modern
+/// The rasm_uthmani alone cannot say whether an omitted alif is written out in modern
 /// spelling (`مَٰلِكِ` -> `مالك`) or not (`ٱلرَّحۡمَٰنِ` -> `الرحمن`), so index both, and
 /// both hamzah conventions with them. Measured against Hafs, where the true
-/// imlai spelling is known, this set contains it for 97.83% of the 77,356
+/// rasm_imlai spelling is known, this set contains it for 97.83% of the 77,356
 /// words. See docs/SEARCH-FOLD.md §6.
 pub fn search_variants(s: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -469,8 +469,8 @@ pub fn parse_words_sidecar(json: &[u8]) -> Option<Vec<(String, WordForms)>> {
         let mut word_key = None;
         for (k, v) in kv {
             match k.as_str() {
-                "rasm_uthmani" | "uthmani" => f.rasm_uthmani = Some(v),
-                "rasm_imlai" | "imlaei" => f.rasm_imlai = Some(v),
+                "rasm_uthmani" | "uthmani" => f.rasm_uthmani = Some(v), // terminology: ignore, pre-1.0 sidecar key
+                "rasm_imlai" | "imlaei" => f.rasm_imlai = Some(v),      // terminology: ignore, pre-1.0 sidecar key
                 "qpc" => f.qpc = Some(v),
                 "rasm" => f.rasm = Some(v),
                 "search" => f.search = Some(v),

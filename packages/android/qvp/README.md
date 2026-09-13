@@ -75,6 +75,6 @@ cd packages/android
 ```
 
 `QvpAndroidBenchmarkTest` reports `QvpBenchmark` JSON containing median page-load, Android Path
-construction, first-draw, and cached-draw times. It deliberately has no timing threshold because
+construction, first-draw, and cached-draw times. It deliberately has no duration threshold because
 emulators and physical devices have different performance. Compare results on the same device and
 build type when evaluating a renderer change.

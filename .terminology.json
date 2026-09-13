@@ -17,9 +17,12 @@
     "**/node_modules/**",
     "**/package-lock.json",
     "**/assets/pages/**",
-    "docs/design/**"
+    "docs/design/**",
+    "docs/SEARCH-FOLD.md",
+    "conformance/search-fold.json",
+    "crates/qvp-core/tests/search_fold.rs"
   ],
-  "_exclude": "Data and build output, not code. pages/ and index/ are the quran-svg bundle verbatim; dist/ and web/pages/ are generated from it. docs/design/ holds the dated design spec, a historical record that should keep its original wording.",
+  "_exclude": "Data and build output, not code. pages/ and index/ are the quran-svg bundle verbatim; dist/ and web/pages/ are generated from it. docs/design/ holds the dated design spec, a historical record that should keep its original wording. docs/SEARCH-FOLD.md, conformance/search-fold.json and crates/qvp-core/tests/search_fold.rs are the search-fold specification shared with Quran Text and Quran SVG Elements: its case ids (hamza, wasla, uthmani-hafs.json, quran-tajweed) are the spec's own names and change in the spec first, then in every repository together.",
   "ignore_words": [
     "pos",
     "stop",
