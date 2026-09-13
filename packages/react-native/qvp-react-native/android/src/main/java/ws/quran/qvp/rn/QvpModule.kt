@@ -68,9 +68,9 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
         val o = opt(opts); p.text(tgt(target, p), Marshal.form(o["form"]), (o["wordSep"] as? String) ?: " ", (o["lineSep"] as? String) ?: "\n") }
     @ReactMethod fun search(tag: Int, query: String, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
         val o = opt(opts)
-        p.search(query, Marshal.form(o["form"], Form.SEARCH), Marshal.searchMode(o["mode"]), o["normalize"] != false, o["loose"] != false, (o["limit"] as? Number)?.toInt() ?: 0).map { Marshal.match(it) } }
+        p.search(query, Marshal.form(o["form"], Form.SEARCH), Marshal.searchMode(o["mode"]), o["normalize"] != false, o["looseMatch"] != false, (o["limit"] as? Number)?.toInt() ?: 0).map { Marshal.match(it) } }
     @ReactMethod fun citation(tag: Int, words: ReadableArray, promise: Promise) = withPage(tag, promise) { _, p -> p.citation(ints(words)) }
-    @ReactMethod fun arabic(kind: String, s: String, promise: Promise) = ui(promise) { when (kind) { "strip" -> QvpEngine.strip(s); "fold" -> QvpEngine.fold(s); "normalize" -> QvpEngine.normalize(s); "loose", "looseKey" -> QvpEngine.looseKey(s); else -> s } }
+    @ReactMethod fun arabic(op: String, s: String, promise: Promise) = ui(promise) { when (op) { "strip" -> QvpEngine.strip(s); "fold" -> QvpEngine.fold(s); "normalize" -> QvpEngine.normalize(s); "loose", "looseKey" -> QvpEngine.looseKey(s); else -> s } }
 
     // ── hit testing / layout (the view already does gestures; these are for scroll-into-view etc.) ──
     private fun hitOptions(o: Map<String, Any?>) = QvpHitOptions((o["maxDistance"] as? Number)?.toFloat() ?: QvpDefaults.TAP_DISTANCE, (o["gapBias"] as? Number)?.toFloat() ?: QvpDefaults.GAP_BIAS, o["preferExact"] != false)
@@ -142,8 +142,8 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun atlasSurah(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.surah(n)?.let { s -> Marshal.atlasSurah(s) } }
     @ReactMethod fun atlasSurahs(id: Int, promise: Promise) = withAtlas(id, promise) { it.surahs().map { s -> Marshal.atlasSurah(s) } }
     @ReactMethod fun atlasPageOfSurah(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.pageOfSurah(n) }
-    @ReactMethod fun atlasDivision(id: Int, kind: String, n: Int, promise: Promise) = withAtlas(id, promise) { it.division(Marshal.division(kind), n)?.let { r -> Marshal.atlasRubuAlHizb(r) } }
-    @ReactMethod fun atlasDivisionOf(id: Int, kind: String, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.divisionOf(Marshal.division(kind), s, a) }
+    @ReactMethod fun atlasDivision(id: Int, division: String, n: Int, promise: Promise) = withAtlas(id, promise) { it.division(Marshal.division(division), n)?.let { r -> Marshal.atlasRubuAlHizb(r) } }
+    @ReactMethod fun atlasDivisionOf(id: Int, division: String, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.divisionOf(Marshal.division(division), s, a) }
     @ReactMethod fun atlasJuzOf(id: Int, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.juzOf(s, a) }
     @ReactMethod fun atlasPagesOfJuz(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.pagesOfJuz(n)?.let { r -> listOf(r.first, r.second) } }
     @ReactMethod fun atlasSearchSurahs(id: Int, text: String, promise: Promise) = withAtlas(id, promise) { it.searchSurahs(text).map { s -> Marshal.atlasSurah(s) } }

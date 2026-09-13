@@ -219,7 +219,7 @@ struct SearchSheet: View {
                         Button { m.selectWord(r.word); dismiss() } label: {
                             HStack {
                                 Text(r.wordKey).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                                if r.loose { Text("≈").foregroundStyle(.secondary) }
+                                if r.isLooseMatch { Text("≈").foregroundStyle(.secondary) }
                                 Spacer()
                                 Text(r.text).font(.title3)
                             }

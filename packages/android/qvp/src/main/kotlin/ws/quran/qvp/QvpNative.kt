@@ -2,8 +2,8 @@ package ws.quran.qvp
 
 /**
  * Raw JNI surface over the QVP C ABI (qvp.h). Use [QvpPage] / [QvpAtlas] instead.
- * Record layouts (see qvp_jni.c): targets are IntArray {kind, a, b, c, words...};
- * selectors IntArray {kind, a, b, c}; boxes are 8 ints per box {id, line, x0, y0, x1, y1 (float bits), colour, radius (float bits)}.
+ * Record layouts (see qvp_jni.c): targets are IntArray {target, a, b, c, words...};
+ * selectors IntArray {selector, a, b, c}; boxes are 8 ints per box {id, line, x0, y0, x1, y1 (float bits), colour, radius (float bits)}.
  */
 internal object QvpNative {
     init { System.loadLibrary("qvp_jni") }
@@ -39,8 +39,8 @@ internal object QvpNative {
     @JvmStatic external fun ayahLabel(h: Long, i: Int): String
     // text & search
     @JvmStatic external fun text(h: Long, target: IntArray, form: Int, wordSep: String, lineSep: String): String
-    @JvmStatic external fun search(h: Long, query: String, form: Int, mode: Int, normalize: Boolean, loose: Boolean, limit: Int): IntArray
-    @JvmStatic external fun arabic(kind: Int, s: String): String
+    @JvmStatic external fun search(h: Long, query: String, form: Int, mode: Int, normalize: Boolean, looseMatch: Boolean, limit: Int): IntArray
+    @JvmStatic external fun arabic(op: Int, s: String): String
     @JvmStatic external fun citation(h: Long, words: IntArray): String
     @JvmStatic external fun attachWords(h: Long, json: ByteArray): Int
     @JvmStatic external fun hasForm(h: Long, form: Int): Boolean
@@ -119,8 +119,8 @@ internal object QvpNative {
     @JvmStatic external fun atlasSurahCount(h: Long): Int
     @JvmStatic external fun atlasSurah(h: Long, n: Int): Array<String>?
     @JvmStatic external fun atlasSurahAt(h: Long, i: Int): Array<String>?
-    @JvmStatic external fun atlasDivision(h: Long, kind: Int, n: Int): IntArray?
-    @JvmStatic external fun atlasDivisionOf(h: Long, kind: Int, s: Int, a: Int): Int
+    @JvmStatic external fun atlasDivision(h: Long, division: Int, n: Int): IntArray?
+    @JvmStatic external fun atlasDivisionOf(h: Long, division: Int, s: Int, a: Int): Int
     @JvmStatic external fun atlasPagesOfJuz(h: Long, n: Int): IntArray?
     @JvmStatic external fun atlasSearchSurahs(h: Long, text: String): IntArray
     // names

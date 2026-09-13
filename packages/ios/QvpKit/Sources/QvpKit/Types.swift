@@ -68,7 +68,7 @@ extension Int { func clamped(_ lo: Int, _ hi: Int) -> Int { Swift.min(Swift.max(
 /// What a style rule applies to (mirrors Sel in web/qvp.js and Selector in Kotlin).
 public struct Selector {
     let c: QvpSelector
-    init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ cc: Int = 0) { c = QvpSelector(kind: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(cc)) }
+    init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ cc: Int = 0) { c = QvpSelector(selector: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(cc)) }
     public static func page() -> Selector { Selector(0) }
     public static func path(_ i: Int) -> Selector { Selector(1, i) }
     public static func wordPath(_ w: Int, _ nth: Int) -> Selector { Selector(2, w, nth) }
@@ -119,7 +119,7 @@ public struct Target {
     /// Run `body` with a C QvpTarget whose `words` pointer is valid for the call.
     func withC<R>(_ body: (UnsafePointer<QvpTarget>) -> R) -> R {
         words.withUnsafeBufferPointer { wp in
-            var t = QvpTarget(kind: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(c), words: wp.baseAddress, n_words: UInt32(wp.count))
+            var t = QvpTarget(target: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(c), words: wp.baseAddress, n_words: UInt32(wp.count))
             return withUnsafePointer(to: &t, body)
         }
     }
@@ -141,7 +141,7 @@ public struct QvpLine: Equatable {
     public let x0: Float, y0: Float, x1: Float, y1: Float, bandY0: Float, bandY1: Float, centre: Float
 }
 public struct QvpDecoration: Equatable {
-    public let idx: Int, kind: Int, surah: Int, ayah: Int, line: Int
+    public let idx: Int, decoration: Int, surah: Int, ayah: Int, line: Int
     public let x0: Float, y0: Float, x1: Float, y1: Float
     public let text: String, firstPath: Int, nPaths: Int
 }
@@ -201,11 +201,11 @@ public struct QvpTheme: Equatable {
     }
 }
 public struct QvpSurah: Equatable { public let number: Int, ayahCount: Int, hasBanner: Bool, hasBasmalah: Bool, place: String, bannerDeco: Int, arabic: String, latin: String, english: String }
-public struct QvpDivision: Equatable { public let kind: Division, n: Int, surah: Int, ayah: Int, line: Int, ayahIdx: Int }
+public struct QvpDivision: Equatable { public let division: Division, n: Int, surah: Int, ayah: Int, line: Int, ayahIdx: Int }
 public struct QvpAyahMark: Equatable { public let deco: Int, surah: Int, ayah: Int, line: Int, cx: Float, cy: Float, r: Float, ornamentPath: Int, numeralPath: Int }
 public struct QvpRosette: Equatable { public let deco: Int, surah: Int, ayah: Int, juz: Int, hizb: Int, nisf: Int, rubuAlHizb: Int, rubuAlHizbInHizb: Int }
 public struct QvpSajdah: Equatable { public let deco: Int, surah: Int, ayah: Int, signPath: Int }
-public struct QvpMatch: Equatable { public let word: Int, index: Int, loose: Bool, wordKey: String, text: String }
+public struct QvpMatch: Equatable { public let word: Int, index: Int, isLooseMatch: Bool, wordKey: String, text: String }
 public struct QvpCropBounds: Equatable { public let x0: Float, y0: Float, x1: Float, y1: Float, nWords: Int, ayahMarkDeco: Int }
 public struct QvpAtlasSurah: Equatable { public let n: Int, page: Int, ayahCount: Int, place: String, arabic: String, latin: String, english: String }
 public struct QvpAtlasRubuAlHizb: Equatable { public let rubuAlHizb: Int, surah: Int, ayah: Int, page: Int; public var ayahKey: String { "\(surah):\(ayah)" } }

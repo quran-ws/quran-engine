@@ -674,7 +674,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
                     child: Row(children: [
                       Text(m.text, style: const TextStyle(fontSize: 18)),
                       const SizedBox(width: 8),
-                      Text('${m.wordKey}${m.loose ? ' ~' : ''}', style: TextStyle(color: pal.muted, fontSize: 12)),
+                      Text('${m.wordKey}${m.isLooseMatch ? ' ~' : ''}', style: TextStyle(color: pal.muted, fontSize: 12)),
                     ]),
                   ),
                 ),
@@ -912,7 +912,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     final su = p.surahs(), dv = p.divisions();
     final names = [for (final s in su) '${s.number}${s.latin.isNotEmpty ? ' ${s.latin}' : ''}${s.arabic.isNotEmpty ? ' ${s.arabic}' : ''}${s.hasBanner ? ' (banner)' : ''}'];
     var t = 'surahs: ${names.join(', ')}';
-    if (dv.isNotEmpty) t += '\nstarts here: ${dv.map((d) => '${d.kind} ${d.n} at ${d.surah}:${d.ayah}').join(', ')}';
+    if (dv.isNotEmpty) t += '\nstarts here: ${dv.map((d) => '${d.division} ${d.n} at ${d.surah}:${d.ayah}').join(', ')}';
     final a = atlas;
     if (a != null && p.words.isNotEmpty) {
       final j = a.juzOf(p.words.first.surah, p.words.first.ayah);

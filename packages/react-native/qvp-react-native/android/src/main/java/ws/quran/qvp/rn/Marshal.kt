@@ -13,8 +13,8 @@ import ws.quran.qvp.Target
  * styling decisions live here — every call goes to [QvpPage] / [QvpAtlas], which go to the engine.
  *
  * Targets from JS: "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | word index |
- * [word indices] | {kind, a, b, c, words} (kind = QVP_TARGET_* or its name).
- * Selectors from JS: {kind, a, b, c} (kind = QVP_SEL_* or its name). Colours: '#rgb' | '#rrggbb' | '#rrggbbaa'.
+ * [word indices] | {target, a, b, c, words} (target = QVP_TARGET_* or its name).
+ * Selectors from JS: {selector, a, b, c} (selector = QVP_SELECTOR_* or its name). Colours: '#rgb' | '#rrggbb' | '#rrggbbaa'.
  */
 object Marshal {
     // ── colours ──
@@ -53,7 +53,7 @@ object Marshal {
         is IntArray -> Target.words(v)
         is Map<*, *> -> {
             val a = num(v["a"]) ?: 0; val b = num(v["b"]) ?: 0; val c = num(v["c"]) ?: 0
-            when (kindOf(v["kind"], TARGET_KINDS)) {
+            when (kindOf(v["target"], TARGET_KINDS)) {
                 0 -> Target.page(); 1 -> Target.word(a); 2 -> Target.words(ints(v["words"] ?: v["a"]))
                 3 -> Target.ayah(a, b); 4 -> Target.ayahRange(a, b, c); 5 -> Target.line(a); 6 -> Target.surah(a); 7 -> Target.range(a, b)
                 else -> Target.words(IntArray(0))
@@ -62,11 +62,11 @@ object Marshal {
         else -> Target.words(IntArray(0))
     }
 
-    /** JS selector {kind, a, b, c} → [Selector], or null when malformed. */
+    /** JS selector {selector, a, b, c} → [Selector], or null when malformed. */
     fun selector(v: Any?): Selector? {
         val m = v as? Map<*, *> ?: return null
         val a = num(m["a"]) ?: 0; val b = num(m["b"]) ?: 0; val c = num(m["c"]) ?: 0
-        return when (kindOf(m["kind"], SEL_KINDS)) {
+        return when (kindOf(m["selector"], SEL_KINDS)) {
             0 -> Selector.page(); 1 -> Selector.path(a); 2 -> Selector.wordPath(a, b); 3 -> Selector.wordMark(a, b)
             4 -> Selector.wordMarkNamed(a, (m["mark"] as? String) ?: QvpEngine.markName(b), c)
             5 -> Selector.wordBody(a); 6 -> Selector.wordMarks(a); 7 -> Selector.word(a); 8 -> Selector.ayah(a, b); 9 -> Selector.line(a)
@@ -127,7 +127,7 @@ object Marshal {
             "x0" to w.x0, "y0" to w.y0, "x1" to w.x1, "y1" to w.y1, "text" to w.text, "firstPath" to w.firstPath, "nPaths" to w.nPaths,
             "wordKey" to w.wordKey, "ayahKey" to w.ayahKey, "forms" to forms, "label" to p.wordLabel(w.idx), "paths" to paths)
     }
-    fun deco(d: QvpDecoration): Map<String, Any?> = mapOf("idx" to d.idx, "kind" to d.kind, "kindName" to QvpEngine.decorationName(d.kind).ifEmpty { "other" },
+    fun deco(d: QvpDecoration): Map<String, Any?> = mapOf("idx" to d.idx, "decoration" to d.decoration, "decorationName" to QvpEngine.decorationName(d.decoration).ifEmpty { "other" },
         "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "x0" to d.x0, "y0" to d.y0, "x1" to d.x1, "y1" to d.y1, "text" to d.text, "firstPath" to d.firstPath, "nPaths" to d.nPaths)
     fun hit(p: QvpPage, h: QvpHit): Map<String, Any?> {
         val w = if (h.word >= 0) p.words[h.word] else null
@@ -139,11 +139,11 @@ object Marshal {
         "bandY0" to l.bandY0, "bandY1" to l.bandY1, "centre" to l.centre)
     fun surah(s: QvpSurah): Map<String, Any?> = mapOf("number" to s.number, "ayahCount" to s.ayahCount, "hasBanner" to s.hasBanner, "hasBasmalah" to s.hasBasmalah, "place" to s.place, "bannerDeco" to s.bannerDeco,
         "arabic" to s.arabic, "latin" to s.latin, "english" to s.english)
-    fun division(d: QvpDivision): Map<String, Any?> = mapOf("kind" to d.kind.name.lowercase(), "n" to d.n, "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "ayahIdx" to d.ayahIdx)
+    fun division(d: QvpDivision): Map<String, Any?> = mapOf("division" to d.division.name.lowercase(), "n" to d.n, "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "ayahIdx" to d.ayahIdx)
     fun ayahMark(m: QvpAyahMark): Map<String, Any?> = mapOf("deco" to m.deco, "surah" to m.surah, "ayah" to m.ayah, "line" to m.line, "cx" to m.cx, "cy" to m.cy, "r" to m.r, "ornamentPath" to m.ornamentPath, "numeralPath" to m.numeralPath)
     fun rosette(r: QvpRosette): Map<String, Any?> = mapOf("deco" to r.deco, "surah" to r.surah, "ayah" to r.ayah, "juz" to r.juz, "hizb" to r.hizb, "nisf" to r.nisf, "rubuAlHizb" to r.rubuAlHizb, "rubuAlHizbInHizb" to r.rubuAlHizbInHizb)
     fun sajdah(s: QvpSajdah): Map<String, Any?> = mapOf("deco" to s.deco, "surah" to s.surah, "ayah" to s.ayah, "signPath" to s.signPath)
-    fun match(m: QvpMatch): Map<String, Any?> = mapOf("word" to m.word, "index" to m.index, "loose" to m.loose, "wordKey" to m.wordKey, "text" to m.text)
+    fun match(m: QvpMatch): Map<String, Any?> = mapOf("word" to m.word, "index" to m.index, "isLooseMatch" to m.isLooseMatch, "wordKey" to m.wordKey, "text" to m.text)
     fun cropBounds(c: QvpCropBounds): Map<String, Any?> = mapOf("x0" to c.x0, "y0" to c.y0, "x1" to c.x1, "y1" to c.y1, "nWords" to c.nWords, "ayahMarkDeco" to c.ayahMarkDeco)
     fun atlasSurah(s: QvpAtlasSurah): Map<String, Any?> = mapOf("n" to s.n, "number" to s.n, "page" to s.page, "ayahCount" to s.ayahCount, "place" to s.place, "arabic" to s.arabic, "latin" to s.latin, "english" to s.english)
     fun atlasRubuAlHizb(r: QvpAtlasRubuAlHizb): Map<String, Any?> = mapOf("rubuAlHizb" to r.rubuAlHizb, "surah" to r.surah, "ayah" to r.ayah, "page" to r.page, "ayahKey" to r.ayahKey)

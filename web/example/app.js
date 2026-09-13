@@ -110,7 +110,7 @@
     const parts = [];
     for (const s of su) parts.push(`${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`);
     let t = `surahs: ${parts.join(', ')}`;
-    if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.kind} ${d.n} at ${d.surah}:${d.ayah}`).join(', ')}`;
+    if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.division} ${d.n} at ${d.surah}:${d.ayah}`).join(', ')}`;
     if (atlas) { const j = atlas.juzOf(p.words[0].surah, p.words[0].ayah); if (j) t += `\njuz ${j} · pages ${atlas.pagesOfJuz(j).join('–')}`; }
     t += `\nayahs: ${p.ayahKeys().map(([s, a]) => `${s}:${a}`).join(' ')}`;
     $('meta').textContent = t;
@@ -180,7 +180,7 @@
     if (!q) { draw(); return; }
     const m = p.search(q, { mode: $('qmode').value });
     if (m.length) S.hlSearch = p.highlight(T.words(m.map(x => x.word)), { mode: 'both', ink: '#c62828', band: rgba('#c62828', 0.12), height: 'ink', padY: 1, radius: 1, ms: S.hlMs });
-    box.innerHTML = m.length ? m.map(x => `<div data-w="${x.word}">${x.text} <span class="hint">${x.wordKey}${x.loose ? ' ~' : ''}</span></div>`).join('') : `<div class="hint">no match on this page${atlas ? ' — try the goto box for surah names' : ''}</div>`;
+    box.innerHTML = m.length ? m.map(x => `<div data-w="${x.word}">${x.text} <span class="hint">${x.wordKey}${x.isLooseMatch ? ' ~' : ''}</span></div>`).join('') : `<div class="hint">no match on this page${atlas ? ' — try the goto box for surah names' : ''}</div>`;
     box.querySelectorAll('[data-w]').forEach(el => el.onclick = () => selectWord(+el.dataset.w));
     draw();
   }

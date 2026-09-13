@@ -35,11 +35,12 @@ fn abi_end_to_end() {
         assert!(!s(&f).is_empty());
         // search + text
         let q = "الله";
-        let mut m = [QvpMatch { word: 0, index: 0, loose: 0 }; 64];
+        let mut m = [QvpMatch { word: 0, index: 0, is_loose_match: 0 }; 64];
         let n = qvp_search(page, q.as_ptr(), q.len() as u32, 4, 0, 1, 1, 0, m.as_mut_ptr(), 64);
         assert!(n > 0 && n < 64, "{n}");
         let mut t = QvpStr { ptr: std::ptr::null(), len: 0 };
-        let tg = QvpTarget { kind: 3, a: w.surah as u32, b: w.ayah as u32, c: 0, words: std::ptr::null(), n_words: 0 };
+        let tg =
+            QvpTarget { target: 3, a: w.surah as u32, b: w.ayah as u32, c: 0, words: std::ptr::null(), n_words: 0 };
         qvp_text(page, &tg, 0, b" ".as_ptr(), 1, b"\n".as_ptr(), 1, &mut t);
         assert!(s(&t).contains(' '));
         // gap-aware hit at the centre of word 0's line but between words: always resolves
@@ -72,7 +73,7 @@ fn abi_end_to_end() {
         assert_eq!(qvp_hit_test_exact_view(page, (wb[0] + wb[2]) / 2.0, (wb[1] + wb[3]) / 2.0, &mut h), 1);
         assert_eq!(h.word, 0);
         // styles + highlight + tick
-        let sel = QvpSelector { kind: 3, a: 0, b: 0, c: 0 }; // first mark of word 0
+        let sel = QvpSelector { selector: 3, a: 0, b: 0, c: 0 }; // first mark of word 0
         let hd = qvp_style_add(page, 0, &sel, 0xff0000ff, 0);
         assert!(hd > 0);
         let mut pairs = vec![0u32; 4000];
@@ -100,7 +101,7 @@ fn abi_end_to_end() {
         assert_eq!(qvp_tick(page, 1000.0), 0);
         qvp_highlight_remove(page, hh);
         // metadata
-        let mut d = [QvpDivision { kind: 0, line: 0, n: 0, surah: 0, ayah: 0, ayah_idx: 0 }; 8];
+        let mut d = [QvpDivision { division: 0, line: 0, n: 0, surah: 0, ayah: 0, ayah_idx: 0 }; 8];
         let _ = qvp_divisions(page, d.as_mut_ptr(), 8);
         let mut mk = [QvpAyahMark {
             deco: 0,

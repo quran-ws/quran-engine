@@ -202,7 +202,7 @@ class MainActivity : AppCompatActivity() {
     private fun showMeta() {
         val p = page ?: return
         val su = p.surahs().joinToString(", ") { "${it.number}${if (it.latin.isNotEmpty()) " " + it.latin else ""}${if (it.hasBanner) " (banner)" else ""}" }
-        val dv = p.divisions().joinToString(", ") { "${it.kind.name.lowercase()} ${it.n} at ${it.surah}:${it.ayah}" }
+        val dv = p.divisions().joinToString(", ") { "${it.division.name.lowercase()} ${it.n} at ${it.surah}:${it.ayah}" }
         val j = atlas?.juzOf(p.words[0].surah, p.words[0].ayah)
         meta.text = "surahs: $su" + (if (dv.isNotEmpty()) "\nstarts here: $dv" else "") + (if (j != null) "\njuz $j · pages ${atlas!!.pagesOfJuz(j)}" else "") + "\nayahs: " + p.ayahKeys().joinToString(" ") { "${it.first}:${it.second}" }
     }
@@ -272,7 +272,7 @@ class MainActivity : AppCompatActivity() {
         if (q.isEmpty()) { view.invalidate(); return }
         val m = p.search(q)
         if (m.isNotEmpty()) hlSearch = p.highlight(Target.words(m.map { it.word }), QvpHighlightStyle(mode = HighlightMode.BOTH, ink = 0xc62828ff.toInt(), band = QvpColor.withAlpha(0xc62828ff.toInt(), 0.12f), height = BandHeight.INK, padY = 1f, radius = 1f, transitionMs = hlMs))
-        for (x in m.take(8)) results.addView(TextView(this).apply { text = "${x.text}  ${x.wordKey}${if (x.loose) " ~" else ""}"; textDirection = View.TEXT_DIRECTION_RTL; textSize = 14f; setPadding(4, 2, 4, 2); setOnClickListener { selectWord(x.word) } })
+        for (x in m.take(8)) results.addView(TextView(this).apply { text = "${x.text}  ${x.wordKey}${if (x.isLooseMatch) " ~" else ""}"; textDirection = View.TEXT_DIRECTION_RTL; textSize = 14f; setPadding(4, 2, 4, 2); setOnClickListener { selectWord(x.word) } })
         if (m.isEmpty()) results.addView(TextView(this).apply { text = "no match on this page"; textSize = 11f; alpha = 0.6f })
         view.invalidate()
     }

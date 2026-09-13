@@ -129,7 +129,7 @@ function Demo() {
     setInfo(e); setSelWord(null); setSelAyah(null); setAyahInfo(null); setSelection(null); setPathOn(new Map()); setRevealOn(false); setRevealAt(-1); setMask(null);
     const [surahs, divisions, keys] = await Promise.all([qvp.surahs(), qvp.divisions(), qvp.ayahKeys()]);
     let t = 'surahs: ' + surahs.map(s => `${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`).join(', ');
-    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.kind} ${d.n} at ${d.surah}:${d.ayah}`).join(', ');
+    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.division} ${d.n} at ${d.surah}:${d.ayah}`).join(', ');
     if (atlas && keys.length) { const j = await atlas.juzOf(keys[0].surah, keys[0].ayah); if (j) { const pr = await atlas.pagesOfJuz(j); t += `\njuz ${j} · pages ${pr ? pr.join('–') : ''}`; } }
     t += '\nayahs: ' + keys.map(k => k.ayahKey).join(' ');
     setMeta(t);
@@ -257,7 +257,7 @@ function Demo() {
         <TextInput style={[st.input, { color: th.fg, borderColor: th.line, textAlign: 'right' }]} placeholder="الله · الرحمان" placeholderTextColor="#999" value={query} onChangeText={setQuery} />
         {query.trim() !== '' && matches.length === 0 && <Text style={[st.small, { color: th.fg, opacity: 0.6 }]}>no match on this page</Text>}
         {matches.slice(0, 8).map(m => (
-          <Pressable key={m.word} onPress={async () => selectWord((await qvp.word(m.word))!)}><Text style={[st.result, { color: th.fg }]}>{m.text}  <Text style={st.small}>{m.wordKey}{m.loose ? ' ~' : ''}</Text></Text></Pressable>
+          <Pressable key={m.word} onPress={async () => selectWord((await qvp.word(m.word))!)}><Text style={[st.result, { color: th.fg }]}>{m.text}  <Text style={st.small}>{m.wordKey}{m.isLooseMatch ? ' ~' : ''}</Text></Text></Pressable>
         ))}
 
         <Section title="Selection" fg={th.fg} />

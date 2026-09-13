@@ -35,35 +35,35 @@
 
   // Selectors (what a style rule applies to)
   const Sel = {
-    page: () => ({ kind: 0 }),
-    path: i => ({ kind: 1, a: i }),
-    wordPath: (w, n) => ({ kind: 2, a: w, b: n }),
-    wordMark: (w, n) => ({ kind: 3, a: w, b: n }),                    // nth mark of the word (0-based)
-    wordMarkNamed: (w, mark, n = 0) => ({ kind: 4, a: w, b: markId(mark), c: n }),
-    wordBody: w => ({ kind: 5, a: w }),
-    wordMarks: w => ({ kind: 6, a: w }),
-    word: w => ({ kind: 7, a: w }),
-    ayah: (s, a) => ({ kind: 8, a: s, b: a }),
-    line: n => ({ kind: 9, a: n }),
-    mark: m => ({ kind: 10, a: markId(m) }),
-    category: c => ({ kind: 11, a: idOf('category', c) }),
-    family: f => ({ kind: 12, a: idOf('family', f) }),
-    kind: k => ({ kind: 13, a: idOf('kind', k) }),
-    deco: k => ({ kind: 14, a: idOf('decoration', k) }),
-    decoIdx: i => ({ kind: 15, a: i }),
+    page: () => ({ selector: 0 }),
+    path: i => ({ selector: 1, a: i }),
+    wordPath: (w, n) => ({ selector: 2, a: w, b: n }),
+    wordMark: (w, n) => ({ selector: 3, a: w, b: n }),                    // nth mark of the word (0-based)
+    wordMarkNamed: (w, mark, n = 0) => ({ selector: 4, a: w, b: markId(mark), c: n }),
+    wordBody: w => ({ selector: 5, a: w }),
+    wordMarks: w => ({ selector: 6, a: w }),
+    word: w => ({ selector: 7, a: w }),
+    ayah: (s, a) => ({ selector: 8, a: s, b: a }),
+    line: n => ({ selector: 9, a: n }),
+    mark: m => ({ selector: 10, a: markId(m) }),
+    category: c => ({ selector: 11, a: idOf('category', c) }),
+    family: f => ({ selector: 12, a: idOf('family', f) }),
+    kind: k => ({ selector: 13, a: idOf('kind', k) }),
+    deco: k => ({ selector: 14, a: idOf('decoration', k) }),
+    decoIdx: i => ({ selector: 15, a: i }),
   };
   const markId = m => idOf('mark', m);
 
   // Targets (what resolves to a word list). Strings: 'page', '2:255', '2:255:3', '2:255-257', 'line:7', 'surah:2'
   const T = {
-    page: () => ({ kind: 0 }),
-    word: i => ({ kind: 1, a: i }),
-    words: ws => ({ kind: 2, words: ws }),
-    ayah: (s, a) => ({ kind: 3, a: s, b: a }),
-    ayahRange: (s, a, b) => ({ kind: 4, a: s, b: a, c: b }),
-    line: n => ({ kind: 5, a: n }),
-    surah: s => ({ kind: 6, a: s }),
-    range: (a, b) => ({ kind: 7, a, b }),
+    page: () => ({ target: 0 }),
+    word: i => ({ target: 1, a: i }),
+    words: ws => ({ target: 2, words: ws }),
+    ayah: (s, a) => ({ target: 3, a: s, b: a }),
+    ayahRange: (s, a, b) => ({ target: 4, a: s, b: a, c: b }),
+    line: n => ({ target: 5, a: n }),
+    surah: s => ({ target: 6, a: s }),
+    range: (a, b) => ({ target: 7, a, b }),
   };
 
   class QvpEngine {
@@ -108,7 +108,7 @@
     fold(s) { return this._arabic(1, s); }
     normalize(s) { return this._arabic(2, s); }
     looseKey(s) { return this._arabic(3, s); }
-    _arabic(kind, s) { const [p, n] = this.putStr(s); this.ex.qvp_arabic(kind, p, n, this.scratch); return this.qstr(this.scratch); }
+    _arabic(op, s) { const [p, n] = this.putStr(s); this.ex.qvp_arabic(op, p, n, this.scratch); return this.qstr(this.scratch); }
     loadPage(bytes) {
       const p = this.ex.qvp_alloc(bytes.length);
       new Uint8Array(this.mem.buffer, p, bytes.length).set(bytes);
@@ -133,7 +133,7 @@
   function writeTarget(e, at, t) {
     if (typeof t === 'string') t = parseTarget(t);
     const d = e.dv();
-    d.setUint8(at, t.kind); d.setUint32(at + 4, t.a >>> 0 || 0, true); d.setUint32(at + 8, t.b >>> 0 || 0, true); d.setUint32(at + 12, t.c >>> 0 || 0, true);
+    d.setUint8(at, t.target); d.setUint32(at + 4, t.a >>> 0 || 0, true); d.setUint32(at + 8, t.b >>> 0 || 0, true); d.setUint32(at + 12, t.c >>> 0 || 0, true);
     let wp = 0, wn = 0;
     if (t.words) { wp = e.putU32(Uint32Array.from(t.words), 1024); wn = t.words.length; }
     d.setUint32(at + 16, wp, true); d.setUint32(at + 20, wn, true);
@@ -145,13 +145,13 @@
     if ((m = /^line:(\d+)$/.exec(s))) return T.line(+m[1]);
     if ((m = /^surah:(\d+)$/.exec(s))) return T.surah(+m[1]);
     if ((m = /^(\d+):(\d+)-(\d+)$/.exec(s))) return T.ayahRange(+m[1], +m[2], +m[3]);
-    if ((m = /^(\d+):(\d+):(\d+)$/.exec(s))) return { kind: 1, wordKey: [+m[1], +m[2], +m[3]] };
+    if ((m = /^(\d+):(\d+):(\d+)$/.exec(s))) return { target: 1, wordKey: [+m[1], +m[2], +m[3]] };
     if ((m = /^(\d+):(\d+)$/.exec(s))) return T.ayah(+m[1], +m[2]);
     throw new Error('bad target ' + s);
   }
   function writeSel(e, at, s) {
     const d = e.dv();
-    d.setUint8(at, s.kind); d.setUint32(at + 4, s.a >>> 0 || 0, true); d.setUint32(at + 8, s.b >>> 0 || 0, true); d.setUint32(at + 12, s.c >>> 0 || 0, true);
+    d.setUint8(at, s.selector); d.setUint32(at + 4, s.a >>> 0 || 0, true); d.setUint32(at + 8, s.b >>> 0 || 0, true); d.setUint32(at + 12, s.c >>> 0 || 0, true);
     return at;
   }
   const HL_DEFAULT = { mode: 'band', height: 'pitch', ink: DEFAULTS.HIGHLIGHT_INK, band: DEFAULTS.HIGHLIGHT_BAND, padX: DEFAULTS.HIGHLIGHT_PAD_X, padY: DEFAULTS.HIGHLIGHT_PAD_Y, radius: 0, seam: DEFAULTS.HIGHLIGHT_SEAM, ms: 0, layer: LAYER.HIGHLIGHT };
@@ -248,7 +248,7 @@
     _deco(i) {
       const ex = this.e.ex, s = this.e.scratch; if (!ex.qvp_deco_info(this.h, i, s)) return null;
       const d = this.e.dv();
-      return { idx: i, kind: d.getUint8(s), surah: d.getUint16(s + 2, true), ayah: d.getUint16(s + 4, true), line: d.getUint32(s + 8, true), x0: d.getFloat32(s + 12, true), y0: d.getFloat32(s + 16, true), x1: d.getFloat32(s + 20, true), y1: d.getFloat32(s + 24, true),
+      return { idx: i, decoration: d.getUint8(s), surah: d.getUint16(s + 2, true), ayah: d.getUint16(s + 4, true), line: d.getUint32(s + 8, true), x0: d.getFloat32(s + 12, true), y0: d.getFloat32(s + 16, true), x1: d.getFloat32(s + 20, true), y1: d.getFloat32(s + 24, true),
         text: this.e.qstr(s + 28), firstPath: d.getUint32(s + 36, true), nPaths: d.getUint32(s + 40, true) };
     }
     wordForm(i, form = 'rasm_uthmani') { const s = this.e.scratch; if (!this.e.ex.qvp_word_form(this.h, i, FORM[form] ?? 0, s)) return ''; return this.e.qstr(s); }
@@ -270,7 +270,7 @@
     }
     divisions() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_divisions(this.h, s, 64), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 64); i++) { const o = s + i * 12; out.push({ kind: names('division')[d.getUint8(o)], line: d.getUint8(o + 1), n: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIdx: d.getUint32(o + 8, true) }); }
+      for (let i = 0; i < Math.min(n, 64); i++) { const o = s + i * 12; out.push({ division: names('division')[d.getUint8(o)], line: d.getUint8(o + 1), n: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIdx: d.getUint32(o + 8, true) }); }
       return out;
     }
     ayahMarks() {
@@ -301,11 +301,11 @@
       this.e.ex.qvp_text(this.h, this._target(target), FORM[form] ?? 0, wp, wn, lp, ln, this.e.scratch);
       return this.e.qstr(this.e.scratch);
     }
-    search(query, { form = 'search', mode = 'includes', normalize = true, loose = true, limit = 0 } = {}) {
+    search(query, { form = 'search', mode = 'includes', normalize = true, looseMatch = true, limit = 0 } = {}) {
       const [qp, qn] = this.e.putStr(query);
-      const n = this.e.ex.qvp_search(this.h, qp, qn, FORM[form] ?? 4, { includes: 0, exact: 1, prefix: 2 }[mode] ?? 0, normalize ? 1 : 0, loose ? 1 : 0, limit, this.e.scratch, 1024);
+      const n = this.e.ex.qvp_search(this.h, qp, qn, FORM[form] ?? 4, { includes: 0, exact: 1, prefix: 2 }[mode] ?? 0, normalize ? 1 : 0, looseMatch ? 1 : 0, limit, this.e.scratch, 1024);
       const d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 12; const w = d.getUint32(o, true); out.push({ word: w, index: d.getUint32(o + 4, true), loose: !!d.getUint32(o + 8, true), wordKey: this.wordKey(w), text: this.words[w].text }); }
+      for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 12; const w = d.getUint32(o, true); out.push({ word: w, index: d.getUint32(o + 4, true), isLooseMatch: !!d.getUint32(o + 8, true), wordKey: this.wordKey(w), text: this.words[w].text }); }
       return out;
     }
     wordKey(i) { const w = this.words[i]; return `${w.surah}:${w.ayah}:${w.word}`; }
