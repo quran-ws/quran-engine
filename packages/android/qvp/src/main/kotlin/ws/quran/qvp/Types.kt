@@ -97,6 +97,7 @@ data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = 0.6f,
 data class QvpBox(val id: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val color: Int, val radius: Float)
 data class QvpHitBox(val word: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val inkX0: Float, val inkY0: Float, val inkX1: Float, val inkY1: Float)
 data class QvpLineBand(val line: Int, val lineNo: Int, val y0: Float, val y1: Float, val mid: Float, val inkY0: Float, val inkY1: Float)
+/** Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine. */
 data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop: Float = 0f, val padBottom: Float = 0f, val padLeft: Float = 0f, val padRight: Float = 0f,
                          val lineSpacing: Float = 1f, val lineGap: Float = 0f, val fillHeight: Boolean = false, val nominalLines: Int = 15)
 /** Page → viewport: vx = ox + x*scale ; vy = oy + (y + lineDy[line])*scale. */

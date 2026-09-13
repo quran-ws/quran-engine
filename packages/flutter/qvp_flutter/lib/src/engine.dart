@@ -347,7 +347,8 @@ final class QvpLineBand {
   final double y0, y1, mid, inkY0, inkY1;
 }
 
-/// Input of [QvpPage.layout]; lengths in viewport px.
+/// Input of [QvpPage.layout]; lengths in viewport px. Spacing only opens up:
+/// `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
 @immutable
 final class QvpLayoutSpec {
   const QvpLayoutSpec({

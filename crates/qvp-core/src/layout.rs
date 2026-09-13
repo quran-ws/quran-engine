@@ -1,4 +1,9 @@
 //! Vertical layout: line spacing, leading that fills a screen, padding.
+//!
+//! The point of these knobs is a phone: a printed mushaf page fitted to the width of a
+//! tall screen leaves empty paper above and below, and the leading here spends it, so
+//! the page fills the screen. Expansion only — the printed pitch is the floor, and the
+//! text width is never a knob at all (the page is always fitted to the viewport width).
 use crate::Page;
 
 /// How to place lines vertically. All lengths in *viewport pixels* except
@@ -13,10 +18,11 @@ pub struct LayoutSpec {
     pub pad_right: f32,
     /// Multiplier on the printed line pitch (1.0 = as printed). The printed
     /// positions are kept; the same delta `pitch·(line_spacing − 1)` is
-    /// added between every pair of consecutive lines. Leading only opens up:
-    /// below 1.0 acts as 1.0, the printed pitch is the floor.
+    /// added between every pair of consecutive lines. Values below 1.0 are
+    /// clamped to 1.0: spacing only ever opens up, never tightens.
     pub line_spacing: f32,
     /// Extra leading between lines in page units, added after the multiplier.
+    /// Negative values are clamped to 0.
     pub line_gap: f32,
     /// Choose the delta so the page fills `viewport_h - pad_top - pad_bottom`
     /// (overrides line_spacing / line_gap). A short page (fewer lines than

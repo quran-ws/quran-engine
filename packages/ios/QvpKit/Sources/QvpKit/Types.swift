@@ -146,6 +146,7 @@ public struct QvpHitOptions: Equatable {
 public struct QvpBox: Equatable { public let id: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, color: UInt32, radius: Float }
 public struct QvpHitBox: Equatable { public let word: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, inkX0: Float, inkY0: Float, inkX1: Float, inkY1: Float }
 public struct QvpLineBand: Equatable { public let line: Int, lineNo: Int, y0: Float, y1: Float, mid: Float, inkY0: Float, inkY1: Float }
+/// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
 public struct QvpLayoutSpec: Equatable {
     public var viewportW: Float, viewportH: Float, padTop: Float, padBottom: Float, padLeft: Float, padRight: Float, lineSpacing: Float, lineGap: Float, fillHeight: Bool, nominalLines: Int
     public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, lineGap: Float = 0, fillHeight: Bool = false, nominalLines: Int = 15) {

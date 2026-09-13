@@ -47,6 +47,7 @@ const qvp = useQvp();
   wordsUri="asset://pages/042.words.json"                       // optional sidecar (rasm_imlai/qpc/rasm/search forms)
   padTop={12} padBottom={12} padSide={8}                        // dp
   lineSpacing={1} lineGap={0} fillHeight={false}                // engine layout knobs (page units for lineGap)
+  // spacing only opens up: lineSpacing < 1 and a negative lineGap are clamped to "as printed"
   paperColor="#fffdf7" defaultInk="#231f20"
   theme={{ diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', ms: 200 }}     // page.theme(...) — one handle
   styles={[

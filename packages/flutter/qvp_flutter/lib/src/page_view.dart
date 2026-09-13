@@ -17,6 +17,7 @@ import 'package:flutter/widgets.dart';
 import 'engine.dart';
 
 /// Layout parameters of [QvpPageView] (viewport size is taken from the widget's constraints).
+/// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
 @immutable
 class QvpViewLayout {
   const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.lineGap = 0, this.fillHeight = false, this.nominalLines = 15});

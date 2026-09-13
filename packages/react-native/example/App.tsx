@@ -309,7 +309,7 @@ function Demo() {
         </View>
 
         <Section title="Layout (engine)" fg={th.fg} />
-        <Slider label="line spacing" min={0.6} max={2.2} step={0.01} value={lineSpacing} onChange={v => { setLineSpacing(v); setLineGap(0); setFillHeight(false); }} fg={th.fg} fmt={v => '×' + v.toFixed(2)} />
+        <Slider label="line spacing" min={1} max={2.2} step={0.01} value={lineSpacing} onChange={v => { setLineSpacing(v); setLineGap(0); setFillHeight(false); }} fg={th.fg} fmt={v => '×' + v.toFixed(2)} />
         <Slider label="pad top" min={0} max={120} value={padTop} onChange={setPadTop} fg={th.fg} />
         <Slider label="pad bottom" min={0} max={120} value={padBottom} onChange={setPadBottom} fg={th.fg} />
         <View style={st.row}>

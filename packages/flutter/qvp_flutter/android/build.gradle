@@ -7,7 +7,7 @@
 // and copied into src/main/jniLibs.
 
 group = "ws.quran.qvp_flutter"
-version = "0.1.0"
+version = "0.1.1"
 
 buildscript {
     repositories {

@@ -75,6 +75,7 @@ QvpColor.toColor(0x1a73e8ff); QvpColor.fromColor(Colors.blue); rgba('#d6a326', 0
 QvpPageView(
   page: page,
   layout: QvpViewLayout(padTop: 24, padBottom: 24, padSide: 16, lineSpacing: 1, lineGap: 0, fillHeight: false),
+  // spacing only opens up: lineSpacing < 1 and a negative lineGap are clamped to "as printed"
   paper: Color(0xfffffdf7), defaultInk: '#231f20', controller: QvpViewController(),
   onWordTap: (word, hit) {}, onDecoTap: (deco) {}, onEmptyTap: () {}, onSelectionChanged: (words) {},
 )

@@ -101,6 +101,7 @@ printed viewBox (345 × 550, y down); anything `…View` is viewport px through 
 ```swift
 let view = QvpPageView()
 view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.lineSpacing = 1; view.lineGap = 0; view.fillHeight = false
+// lineSpacing < 1 / a negative lineGap are clamped by the engine: spacing only ever opens up
 view.paperColor = UIColor(...); view.selectionBand = 0x2d6fd640; view.hitOptions = QvpHitOptions(maxDistance: 6)
 view.onWordTap = { word, hit in }; view.onDecoTap = { deco, hit in }; view.onEmptyTap = { }; view.onSelectionChanged = { words in }
 view.onSwipe = { dir in }                 // horizontal swipe while not zoomed (+1 finger right, −1 left): flip pages; view.isZoomed
