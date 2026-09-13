@@ -43,6 +43,8 @@ jobs:
         run: scripts/sync-test-data.sh
       - name: Build the host engine library
         run: cargo build -p qvp-ffi --release
+      - name: Example assets (the analyzer checks the asset directory exists)
+        run: scripts/sync-example-data.sh flutter
       - name: Analyze
         working-directory: packages/flutter/qvp_flutter
         run: flutter pub get && flutter analyze

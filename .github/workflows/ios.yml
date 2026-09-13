@@ -49,6 +49,7 @@ jobs:
         working-directory: packages/ios/example
         run: |
           brew install xcodegen >/dev/null
+          ./sync-pages.sh            # example/pages from the cached dist/pages; xcodegen needs the directory
           xcodegen generate
           xcodebuild -scheme Demo -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath ../../../target/ios-build CODE_SIGNING_ALLOWED=NO build | tail -20
