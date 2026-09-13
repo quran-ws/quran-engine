@@ -28,7 +28,7 @@ takes the new number: its version means "binds header version X.Y.Z".
 - `vX.Y.Z` releases the code: every package at once.
 - `data-vX.Y.Z` releases the page data. The data has its own cadence and its own
   provenance (`VERSION.json` in the tarball). The first data release used the tag `v0.1.0`
-  before the two families existed. It stays as the one exception.
+  before the two families existed. It is the only exception.
 
 A wrapper declares the page format version it reads (`qvp_format_version()`), so an app
 with old data keeps working after an engine update.
@@ -38,7 +38,7 @@ with old data keeps working after an engine update.
 `CHANGELOG.md` at the root follows Keep a Changelog, one section per `vX.Y.Z`, with a
 per-package subsection when a package has something of its own to say. Each SDK package
 also carries a `CHANGELOG.md` because its registry requires one. Copy those entries
-from the root file. Never write them separately.
+from the root file rather than writing them separately.
 
 ## How it is checked
 

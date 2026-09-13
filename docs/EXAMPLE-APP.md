@@ -35,23 +35,29 @@ the same 29.
    | sepia | `#F3E7CF` | `#3B2A14` | `#E9DCC3` |
    | dark | `#1E2126` | `#E8E4DC` | `#15171B` |
 
-   Highlight ink `#1A73E8` (selection), `#0A7D32` (ayah), `#C62828` (search), band alpha
-   0.12 to 0.18. Mark colours: diacritics `#1A73E8`, dots `#C62828`, waqf `#0A7D32`, sifr
-   `#EF6C00`. Gold ayah markers `#B8860B`.
+      | use | colour |
+   |---|---|
+   | selection highlight | `#1A73E8` |
+   | ayah highlight | `#0A7D32` |
+   | search highlight | `#C62828` |
+   | band alpha | 0.12 to 0.18 |
+   | diacritics, dots, waqf, sifr | `#1A73E8`, `#C62828`, `#0A7D32`, `#EF6C00` |
+   | gold ayah markers | `#B8860B` |
 
 8. **Memorisation**: mask (hide, block, blur), reveal step by step, reveal all.
 9. **Layout**: sliders for line spacing and padding, a fill-height switch.
 10. **Crop**: crop the selection to SVG and share it.
 11. **Metadata and engine stats**: page info, surahs on the page, load and hit-test timing.
 
-Nothing else. A platform may add a feature only after adding it here and to the others.
+This list is closed: a platform may add a feature only after adding it here and to the
+other platforms.
 
 ## Page cache
 
 An example that pages through the mushaf keeps one permanent controller per page and
 cycles the page data through a least-recently-used cache. The current page and its two
-neighbours stay resident. This matches `QvpPageCache` on iOS. The other platforms
-implement the same policy.
+neighbours stay resident. `QvpPageCache` on iOS implements this policy and the other
+platforms follow it.
 
 ## Tests
 

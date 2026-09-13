@@ -15,8 +15,9 @@ The test every public member must pass:
   `NAMING.md` first.
 - **Read like a sentence at the call site.** `page.highlight(ayah)`, `layout.lineSpacing`,
   `atlas.pageOf(surah, ayah)`.
-- **Short common case, sensible defaults.** Load, draw, tap is three calls. Every option
-  defaults to the printed mushaf. A hit test needs no options object.
+- **Short common case, sensible defaults.** The common case is three calls: load a page,
+  render it, hit-test a point. Every option defaults to the printed mushaf, and a hit test
+  needs no options object.
 - **Progressive disclosure.** Styles, transitions, masks, reveal, crop and the atlas are
   reachable but invisible until needed. The first screen of a package README never mentions
   them.
@@ -44,7 +45,7 @@ The test every public member must pass:
 | layer | job | guessable? |
 |---|---|---|
 | `crates/qvp-core` | every computation: geometry, hit testing, layout, styles, highlights, selection, masks, search, crop, atlas | n/a, internal |
-| `crates/qvp-ffi/include/qvp.h` | the one contract. Flat, complete, predictable | no, and it need not be |
+| `crates/qvp-ffi/include/qvp.h` | the single contract; flat and complete | no, and it need not be |
 | `web/qvp.js` | the reference wrapper. Every other wrapper mirrors its names | yes |
 | Kotlin, Dart, Swift, TypeScript packages | the same surface in each language's idiom | yes |
 
@@ -82,7 +83,7 @@ A feature is done when it meets its tier's rule.
 
 ## The lite decoder
 
-`web/lite.mjs` is the one sanctioned reimplementation of the page format, for Canvas-only
+`web/lite.mjs` is the only sanctioned reimplementation of the page format, for Canvas-only
 readers that must not load wasm. The conformance fixtures that the Rust codec generates gate it, and it never grows engine logic: no layout, no hit testing beyond word bounds.
 
 ## Consumability

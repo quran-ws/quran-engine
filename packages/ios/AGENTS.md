@@ -2,7 +2,7 @@
 
 - Build the engine first: `scripts/build-engine-ios.sh` writes
   `packages/ios/QvpKit/QvpEngine.xcframework` (device, simulator, macOS). Rebuild it after
-  any change under `crates/`. Stale slices make Swift tests fail on core behaviour.
+  any change under `crates/`. A stale slice makes the Swift tests fail on core behaviour.
 - Test on the macOS slice: `cd packages/ios/QvpKit && swift test`.
 - xcodegen generates the demo project: `cd packages/ios/Demo && xcodegen generate` (Homebrew
   `xcodegen`). Git does not track `Demo.xcodeproj`. Page data: `Demo/sync-pages.sh`.

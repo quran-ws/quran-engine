@@ -1,8 +1,8 @@
 # Naming
 
-One word per concept. The noun that owns a value says which flavour it is. No
-abbreviations. No prefix encodes a type or an origin. The same operation has the same name
-in every language.
+Each concept has one word, and the noun that owns a value says which flavour of the value
+it is. Names carry no abbreviations and no prefix that encodes a type or an origin. The
+same operation has the same name in every language.
 
 ## Identity
 
@@ -73,9 +73,9 @@ Never `lineHeight`: printed lines are not equally tall, and the name would promi
 - Full words. The only abbreviations are `x0 y0 x1 y1`, `n_` for counts and `cap` for a
   buffer capacity. So `decoration` not `deco`, `index` not `idx`, `word_index` not `wi`,
   `offset_x` not `ox`, `view_x` not `vx`, `line_number` not `line_no`.
-- `surah, ayah, word` is always the key of a word. A page-local position is always
-  `_index` (0-based). A printed value is always `_number` (1-based). `page` is always the
-  mushaf page number.
+- `surah, ayah, word` is always the key of a word. A page-local position is
+  `_index` (0-based), a printed value is `_number` (1-based), and `page` is the mushaf
+  page number.
 - Array outputs keep the `(out, cap)` protocol and return the total count.
 
 ## Verbs, and what each one promises
@@ -116,8 +116,8 @@ Compose modifier) follow that platform's conventions and must not shadow an engi
 ## Pending renames
 
 The rename list that applies this standard to today's header lives in
-`docs/API-PARITY.md`. Pre-1.0, renames ship without aliases. The changelog carries the
-old → new table.
+`docs/API-PARITY.md`. Before 1.0, renames ship without aliases, and the changelog carries
+the old → new table.
 
 ## How it is checked
 

@@ -1,7 +1,7 @@
 # Testing
 
-One command, the same answer locally and in CI: `scripts/check.sh`. A pull request cannot
-merge without it.
+`scripts/check.sh` runs the same checks locally and in CI. A pull request cannot merge
+until it passes.
 
 ## What each layer tests
 
@@ -14,8 +14,8 @@ merge without it.
 | each example | one UI smoke test: open a page, tap a word, highlight | the example's page set |
 | `web/lite.mjs` | the conformance fixtures | `conformance/` |
 
-Data tests are honest. Without their data they skip locally and print a hint. In CI they
-fail, because `scripts/sync-test-data.sh` always provides the data there.
+Without their data, the data tests skip locally and print a hint. In CI they fail instead,
+because `scripts/sync-test-data.sh` provides the data there.
 
 ## Cross-wrapper scenarios
 

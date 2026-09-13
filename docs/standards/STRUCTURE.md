@@ -9,7 +9,7 @@ The layout is part of the public interface. A consumer reads paths. A contributo
 | engine logic | `crates/qvp-core` | the only place that computes geometry, layout or colours |
 | binary formats and codec | `crates/qvp-format` | no dependencies. `docs/FORMAT.md` specifies the formats |
 | converter and identity gate | `crates/qvp-convert` | the pipeline. Never consumed by an app |
-| the C ABI | `crates/qvp-ffi`, header at `include/qvp.h` | the one contract. the header is canonical and CI checks every copy against it |
+| the C ABI | `crates/qvp-ffi`, header at `include/qvp.h` | the single contract. The header is canonical and CI checks every copy against it |
 | reference wrapper | `web/qvp.js` with `index.mjs`, `lite.mjs` | published as `@quran.ws/engine` from the root `package.json` |
 | web demo | `web/example/` | build output goes to `dist/web/`, never into the source tree |
 | a platform SDK | `packages/<platform>/<package-name>/` | manifest, README, CHANGELOG and LICENSE inside the package directory |
@@ -27,7 +27,7 @@ The layout is part of the public interface. A consumer reads paths. A contributo
 | design history | `docs/design/` | dated, banner "historical", never edited to match current code |
 | standards | `docs/standards/` | this directory. Every document ends with how it is checked |
 | contributor rules | `CONTRIBUTING.md` | for humans. Links every standard. The layer-by-layer checklist lives here |
-| agent instructions | `AGENTS.md` at the root | the one vendor-neutral file. Only what an agent needs beyond the human docs. Never repeats a rule |
+| agent instructions | `AGENTS.md` at the root | the single vendor-neutral agent file. It holds only what an agent needs beyond the human docs and repeats no rule |
 | Claude entry | `CLAUDE.md` | an `@AGENTS.md` import and a short Claude-only section. Nothing else |
 | platform agent notes | `packages/<platform>/AGENTS.md` | only where the directory has its own toolchain |
 | local tool state | `.maestro/`, `.claude/`, `.codex/`, `.cursor/` | gitignored. Git tracks nothing session-derived |

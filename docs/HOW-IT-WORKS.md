@@ -6,12 +6,12 @@ the end.
 
 ## The one-paragraph version
 
-A mushaf page starts as a drawing: every letter, dot and mark is a vector outline. The
+A mushaf page starts as a drawing in which every letter, dot and mark is a vector outline. The
 converter turns that drawing into a small binary page file. The engine loads a page file,
 indexes the position of every word and mark, and computes answers from that index: the
 word under a touch point, the line positions that fill a tall screen, the colour of each
 outline at the current moment. Your app renders the outlines with its own graphics API and
-passes touch events to the engine. The engine computes geometry, layout and colours; the
+passes touch events to the engine. The engine computes geometry, layout and colours, and the
 app renders them.
 
 ## From a drawing to pixels
@@ -33,10 +33,10 @@ source SVG ──converter──▶ page file ──engine──▶ outlines + c
    which outline belongs to which word, which word to which line and ayah, and where each
    one sits on the page. A page is about 210 KB, a quarter of the SVG. Coordinates are
    *page units*: the printed page's own coordinate space, 345 by 550 for this mushaf.
-4. **The engine** (`crates/qvp-core`, written in Rust) loads a page file and holds the
-   whole picture in memory. It exposes about 110 functions through a C header, so the
-   same engine runs inside iOS, Android, Flutter, React Native and the browser (as
-   WebAssembly, "wasm", a binary format browsers can run).
+4. **The engine** (`crates/qvp-core`, written in Rust) loads a page file and holds its
+   tables and outlines in memory. It exposes about 110 functions through a C header, so
+   the same engine runs inside iOS, Android, Flutter and React Native, and in the browser
+   through WebAssembly.
 5. **The wrapper** is a thin layer in each language. It passes your calls to the engine,
    and it renders what the engine returns with the platform's own canvas. It computes
    nothing itself.
@@ -56,7 +56,7 @@ draw(page);                                    // your paint routine over page.p
 const hit = page.hitTestViewEx(x, y);          // the word under a finger, or null
 ```
 
-Everything below is optional and reachable from the same page object.
+The features below are optional and reachable from the same page object.
 
 ## What the engine computes
 
@@ -93,8 +93,8 @@ the dots red, the pause marks green.
 ### Following a recitation
 
 A **highlight** is a rule plus, optionally, a band: one shape behind the words that covers
-every line they occupy, with a small overlap at the seams so a six-line ayah reads as one
-band, not six stripes. Move a highlight to the next word and the band slides, the ink
+every line they occupy, with a small overlap at the seams so a six-line ayah renders as one
+continuous band. Move a highlight to the next word and the band slides, the ink
 cross-fades. A clock call each frame reports whether anything is still animating.
 
 ### Selecting
@@ -148,12 +148,9 @@ or the colour of an outline.
 | juz, hizb, rubu al-hizb | the mushaf's thirtieths, sixtieths and quarter-hizbs, marked in the margin |
 | ayah mark | the medallion that closes an ayah and carries its number |
 | decoration | any drawn element that is not a word: ayah marks, surah banners, basmalah, division rosettes, sajdah signs, page numbers |
-| vector outline | a shape described by lines and curves, so it stays sharp at any size |
 | page units | the printed page's coordinate space, 345 × 550 for this mushaf |
 | band | the horizontal strip a printed line occupies |
 | layer | a level in the style stack. Higher layers win |
 | handle | the number a style or highlight call returns. Removing it undoes that call |
 | atlas | the whole-mushaf index: pages, surahs, divisions |
 | words sidecar | the JSON file with each word's other spellings |
-| C ABI | the flat set of C functions every wrapper calls. The one contract |
-| wasm | WebAssembly, the binary the browser runs the engine as |

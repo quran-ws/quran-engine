@@ -1,10 +1,10 @@
 # Contributing
 
-Thank you for helping. This page tells you how the repository is organised, how to build
-and test it, and what a change must include. The rules live in `docs/standards/`. This
+This page describes how the repository is organised, how to build and test it, and what
+a change must include. The rules live in `docs/standards/`. This
 page links them and gives the short version.
 
-## The one idea
+## The architecture
 
 One Rust core computes everything: hit testing, layout, styles, highlights, selection,
 masks, search, crop, atlas. The C header `crates/qvp-ffi/include/qvp.h` is the only
@@ -92,8 +92,8 @@ pixel-diff gate against the source SVG. A source problem goes in
 ## Data is not code
 
 Packages ship code only. Apps load page data (`NNN.qvp`, `atlas.qva`, `NNN.words.json`).
-The built data is a GitHub release with a CDN mirror. Nobody commits it. Examples bundle a
-sample as gitignored assets.
+The built data is published as a GitHub release with a CDN mirror and is not committed.
+Examples bundle a sample as gitignored assets.
 
 ## Pull requests
 

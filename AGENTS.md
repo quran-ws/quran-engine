@@ -1,6 +1,6 @@
 # Agent notes for quran-engine
 
-Read `CONTRIBUTING.md` first. It has the rules. This file has only what an agent needs
+Read `CONTRIBUTING.md` first for the rules. This file holds only what an agent needs
 beyond them: exact commands, invariants that are easy to break, and where to look.
 
 ## Commands
