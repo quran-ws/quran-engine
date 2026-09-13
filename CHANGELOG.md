@@ -6,6 +6,11 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+### Changed (0.2.0, ABI-breaking)
+- The header is renamed to the naming standard. The old → new table is the "Renames for
+  0.2" section of `docs/API-PARITY.md`; no old name is kept as an alias. Each cluster's
+  entry follows here as it lands.
+
 ### Added
 - `QvpViewPolicy` in QvpKit: the zoom limits, zoomed threshold and swipe classifier both iOS
   renderers share. `docs/API-PARITY.md` lists every platform convenience.
