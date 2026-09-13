@@ -143,7 +143,7 @@ final class QvpSelector {
   const QvpSelector(this.selector, [this.a = 0, this.b = 0, this.c = 0]);
   final int selector, a, b, c;
   @override
-  String toString() => 'Sel(\$selector,\$a,\$b,\$c)';
+  String toString() => 'Sel($selector,$a,$b,$c)';
 }
 
 /// Selector constructors (same names as web/qvp.js `Sel`).
