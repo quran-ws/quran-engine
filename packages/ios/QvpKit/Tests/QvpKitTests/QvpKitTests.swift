@@ -382,4 +382,31 @@ final class QvpKitTests: XCTestCase {
         XCTAssertTrue(cache.controller(for: 42) === c42)
         XCTAssertGreaterThanOrEqual(configured, 2, "configure runs on every (re)attach")
     }
+
+    /// Every wrapper replays conformance/scenarios/layout.json and must match the engine's numbers.
+    func testLayoutScenariosMatchTheEngine() throws {
+        let url = Self.repo.appendingPathComponent("conformance/scenarios/layout.json")
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let tolerance = json["tolerance"] as! Double
+        let cases = json["cases"] as! [[String: Any]]
+        func close(_ a: Float, _ b: Double, _ what: String) {
+            XCTAssertLessThanOrEqual(abs(Double(a) - b), tolerance * max(1, abs(b)), "\(what): got \(a), engine says \(b)")
+        }
+        for c in cases {
+            let s = c["spec"] as! [String: Any], want = c["layout"] as! [String: Any]
+            let f: (String) -> Float = { Float((s[$0] as! NSNumber).doubleValue) }
+            let spec = QvpLayoutSpec(viewportW: f("viewportW"), viewportH: f("viewportH"), padTop: f("padTop"), padBottom: f("padBottom"), padLeft: f("padLeft"), padRight: f("padRight"),
+                                     lineSpacing: f("lineSpacing"), lineGap: f("lineGap"), fillHeight: s["fillHeight"] as! Bool, nominalLines: (s["nominalLines"] as! NSNumber).intValue,
+                                     cropLeft: f("cropLeft"), cropRight: f("cropRight"), maxAspectSlack: f("maxAspectSlack"))
+            let tag = "\(spec.viewportW)x\(spec.viewportH) fill=\(spec.fillHeight) slack=\(spec.maxAspectSlack) crop=\(spec.cropLeft)"
+            let l = Self.page.layout(spec)
+            let w: (String) -> Double = { (want[$0] as! NSNumber).doubleValue }
+            close(l.scale, w("scale"), "\(tag) scale"); close(l.ox, w("ox"), "\(tag) ox"); close(l.oy, w("oy"), "\(tag) oy")
+            close(l.contentW, w("contentW"), "\(tag) contentW"); close(l.contentH, w("contentH"), "\(tag) contentH"); close(l.pitch, w("pitch"), "\(tag) pitch")
+            close(l.fitScale, w("fitScale"), "\(tag) fitScale"); close(l.fitX, w("fitX"), "\(tag) fitX"); close(l.fitY, w("fitY"), "\(tag) fitY")
+            close(l.lineDy.first!, w("lineDy0"), "\(tag) lineDy[0]"); close(l.lineDy.last!, w("lineDyLast"), "\(tag) lineDy[last]")
+            close(Self.page.layoutGapToFill(spec), (c["gapToFill"] as! NSNumber).doubleValue, "\(tag) gapToFill")
+        }
+        XCTAssertEqual(cases.count, 40)
+    }
 }

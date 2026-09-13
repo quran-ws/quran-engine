@@ -411,3 +411,49 @@ fn renderer_draws_bands_ink_and_mask_boxes() {
     p.render(&mut c);
     assert_eq!((c.0, c.2), (4, 1), "hidden path skipped; one band box");
 }
+
+#[test]
+fn layout_fit_crop_and_aspect_bound() {
+    let mut p = page();
+    // as printed the content is 200 px tall at scale 2; a 150 px viewport shrinks and centres it
+    let l = p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 150.0, ..Default::default() }).clone();
+    assert!((l.fit_scale - 0.75).abs() < 1e-6 && (l.fit_x - 25.0).abs() < 1e-6 && l.fit_y.abs() < 1e-6, "{l:?}");
+    // a tall viewport never enlarges: scale 1, centred vertically
+    let l = p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, ..Default::default() }).clone();
+    assert!((l.fit_scale - 1.0).abs() < 1e-6 && l.fit_x.abs() < 1e-6 && (l.fit_y - 450.0).abs() < 1e-6);
+    // the aspect bound stops a wide viewport from stretching the lines: 100 px tall, 1:1 page,
+    // slack 1.15 -> the content is 115 px wide and sits in the middle of the 1000 px viewport
+    let l = p
+        .layout(&LayoutSpec { viewport_w: 1000.0, viewport_h: 100.0, max_aspect_slack: 1.15, ..Default::default() })
+        .clone();
+    assert!((l.content_w - 115.0).abs() < 1e-3 && (l.scale - 1.15).abs() < 1e-6, "{l:?}");
+    // 115 px of content in a 100 px viewport: the fit shrinks it and centres what remains
+    let fit = 100.0 / 115.0;
+    assert!((l.fit_scale - fit).abs() < 1e-6 && (l.fit_x - (1000.0 - 115.0 * fit) / 2.0).abs() < 1e-3, "{l:?}");
+    // cropping 10 units off each printed margin: 80 units fill the 200 px width, the origin
+    // moves left by the cropped margin
+    let l = p
+        .layout(&LayoutSpec {
+            viewport_w: 200.0,
+            viewport_h: 1100.0,
+            crop_left: 10.0,
+            crop_right: 10.0,
+            ..Default::default()
+        })
+        .clone();
+    assert!((l.scale - 2.5).abs() < 1e-6 && (l.ox + 25.0).abs() < 1e-6, "{l:?}");
+    // the spec-aware gap subtracts the padding once, in the engine
+    let spec = LayoutSpec {
+        viewport_w: 220.0,
+        viewport_h: 600.0,
+        pad_left: 10.0,
+        pad_right: 10.0,
+        pad_top: 25.0,
+        pad_bottom: 25.0,
+        nominal_lines: 15,
+        ..Default::default()
+    };
+    assert!(
+        (p.gap_to_fill(&spec, f32::INFINITY) - gap_to_fill(100.0, 100.0, 15, 200.0, 550.0, f32::INFINITY)).abs() < 1e-6
+    );
+}

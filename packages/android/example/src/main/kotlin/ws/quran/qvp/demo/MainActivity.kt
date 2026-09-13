@@ -149,7 +149,7 @@ class MainActivity : AppCompatActivity() {
         panel.addView(slider("pad bottom", 0, 120, 12) { v -> view.padBottom = v * d; view.relayout(); view.resetView(); hud() })
         val lrow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         lrow.addView(toggleButton("Fill screen height") { view.fillHeight = it; view.relayout(); view.resetView(); hud() })
-        lrow.addView(Button(this).apply { text = "Leading to fill"; setOnClickListener { page?.let { p -> view.fillHeight = false; view.lineSpacing = 1f; view.lineGap = QvpEngine.gapToFill(p.width, p.height, p.nLines, view.width - 2 * view.padSide, view.height - view.padTop - view.padBottom); view.relayout(); view.resetView(); hud() } } })
+        lrow.addView(Button(this).apply { text = "Leading to fill"; setOnClickListener { page?.let { p -> view.fillHeight = false; view.lineSpacing = 1f; view.lineGap = p.layoutGapToFill(QvpLayoutSpec(view.width.toFloat(), view.height.toFloat(), view.padTop, view.padBottom, view.padSide, view.padSide)); view.relayout(); view.resetView(); hud() } } })
         panel.addView(lrow)
         panel.addView(TextView(this).apply { textSize = 11f; text = "Leading only grows — the printed pitch is the floor, so the lines never close up — and the text width is always the screen's." })
 

@@ -179,9 +179,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     /// The transform `resetView()` applies: content height fitted, centred.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
-        let s = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
-        return (s, l.map { max((bounds.width - CGFloat($0.contentW) * s) / 2, 0) } ?? 0,
-                l.map { max((bounds.height - CGFloat($0.contentH) * s) / 2, 0) } ?? 0)
+        return (CGFloat(l?.fitScale ?? 1), CGFloat(l?.fitX ?? 0), CGFloat(l?.fitY ?? 0))
     }
     /// Ease from the released transform to the fitted one on a display link of its own.
     private func springBack() {

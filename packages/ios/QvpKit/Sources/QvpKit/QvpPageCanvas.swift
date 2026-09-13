@@ -113,17 +113,11 @@ public final class QvpCanvasController {
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
         guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
-        // The crop is expressed as negative pads: with
-        // padL = padSide − cropLeft·scale the engine's own formula
-        // scale = (viewportW − padL − padR)/pageW solves to
-        // scale = (viewportW − 2·padSide)/(pageW − cropLeft − cropRight).
-        let innerW = Float(bounds.width) - 2 * Float(padSide)
-        let scale = innerW / max(p.width - cropLeft - cropRight, 1)
         _ = p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height),
                                    padTop: Float(padTop), padBottom: Float(padBottom),
-                                   padLeft: Float(padSide) - cropLeft * scale,
-                                   padRight: Float(padSide) - cropRight * scale,
-                                   lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight))
+                                   padLeft: Float(padSide), padRight: Float(padSide),
+                                   lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight,
+                                   cropLeft: cropLeft, cropRight: cropRight))
         cache.key = ""; invalidate()
     }
     /// Fit the content height and centre it.
@@ -136,9 +130,7 @@ public final class QvpCanvasController {
     /// The transform `resetView()` applies: content height fitted, centred.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
-        let s = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
-        return (s, l.map { max((bounds.width - CGFloat($0.contentW) * s) / 2, 0) } ?? 0,
-                l.map { max((bounds.height - CGFloat($0.contentH) * s) / 2, 0) } ?? 0)
+        return (CGFloat(l?.fitScale ?? 1), CGFloat(l?.fitX ?? 0), CGFloat(l?.fitY ?? 0))
     }
     /// Clear the selection band and the engine selection.
     public func clearSelection() {

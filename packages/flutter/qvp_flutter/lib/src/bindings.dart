@@ -283,6 +283,12 @@ final class QvpLayoutSpecC extends ffi.Struct {
   external int fillHeight;
   @ffi.Uint32()
   external int nominalLines;
+  @ffi.Float()
+  external double cropLeft;
+  @ffi.Float()
+  external double cropRight;
+  @ffi.Float()
+  external double maxAspectSlack;
 }
 
 /// `{ float scale, ox, oy, content_w, content_h, pitch; uint32_t n_lines; const float* lines; }`
@@ -302,6 +308,12 @@ final class QvpLayoutC extends ffi.Struct {
   @ffi.Uint32()
   external int nLines;
   external ffi.Pointer<ffi.Float> lines;
+  @ffi.Float()
+  external double fitScale;
+  @ffi.Float()
+  external double fitX;
+  @ffi.Float()
+  external double fitY;
 }
 
 /// `{ uint8_t kind; uint32_t a, b, c; const uint32_t* words; uint32_t n_words; }`
@@ -640,6 +652,9 @@ final class QvpBindings {
   late final void Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, ffi.Pointer<QvpLayoutC>) layout = lib.lookupFunction<
       ffi.Void Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, ffi.Pointer<QvpLayoutC>),
       void Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, ffi.Pointer<QvpLayoutC>)>('qvp_layout');
+  late final double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, double) layoutGapToFill = lib.lookupFunction<
+      ffi.Float Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, ffi.Float),
+      double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, double)>('qvp_layout_gap_to_fill');
   late final double Function(double, double, int, double, double, double) gapToFill = lib.lookupFunction<
       ffi.Float Function(ffi.Float, ffi.Float, ffi.Uint32, ffi.Float, ffi.Float, ffi.Float),
       double Function(double, double, int, double, double, double)>('qvp_gap_to_fill');

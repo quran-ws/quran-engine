@@ -38,12 +38,8 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         inner.layout(0, 0, w, h)
         centre()
     }
-    /** Fit + centre: the library's resetView fits by height and pins the pan at x = 0; centre the pan horizontally (pan is host state). */
-    fun resetView() { inner.resetView(); centre() }
-    private fun centre() {
-        val l = page?.currentLayout ?: return
-        inner.viewOx = ((inner.width - l.contentW * inner.viewScale) / 2f).coerceAtLeast(0f); inner.invalidate()
-    }
+    /** Fit and centre, as the engine's layout says. */
+    fun resetView() { inner.resetView() }
 
     // ── desired props (set by the manager) ──
     var pageUri: String? = null

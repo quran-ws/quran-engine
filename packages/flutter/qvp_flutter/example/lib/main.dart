@@ -498,7 +498,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   void fitGap() {
     final p = page!;
     final vp = view.viewport;
-    final gap = engine!.gapToFill(p.width, p.height, p.nLines, vp.width - 2 * layout.padSide, vp.height - layout.padTop - layout.padBottom, 0);
+    final gap = p.layoutGapToFill(layout.toSpec(vp.width, vp.height));
     _setLayout(layout.copyWith(fillHeight: false, lineSpacing: 1, lineGap: gap));
   }
 

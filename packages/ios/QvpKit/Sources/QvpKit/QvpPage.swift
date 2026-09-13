@@ -173,13 +173,16 @@ public final class QvpPage {
     // ── layout ──
     @discardableResult
     public func layout(_ spec: QvpLayoutSpec) -> QvpLayout {
-        var s = QvpFFI.QvpLayoutSpec(viewport_w: spec.viewportW, viewport_h: spec.viewportH, pad_top: spec.padTop, pad_bottom: spec.padBottom, pad_left: spec.padLeft, pad_right: spec.padRight, line_spacing: spec.lineSpacing, line_gap: spec.lineGap, fill_height: spec.fillHeight ? 1 : 0, nominal_lines: UInt32(spec.nominalLines))
+        var s = spec.c
         var l = QvpFFI.QvpLayout(); qvp_layout(p, &s, &l)
         let n = Int(l.n_lines); let f = Array(UnsafeBufferPointer(start: l.lines, count: n * 3))
         let out = QvpLayout(scale: l.scale, ox: l.ox, oy: l.oy, contentW: l.content_w, contentH: l.content_h, pitch: l.pitch,
-                            lineDy: (0..<n).map { f[$0 * 3] }, slotTop: (0..<n).map { f[$0 * 3 + 1] }, slotBottom: (0..<n).map { f[$0 * 3 + 2] })
+                            lineDy: (0..<n).map { f[$0 * 3] }, slotTop: (0..<n).map { f[$0 * 3 + 1] }, slotBottom: (0..<n).map { f[$0 * 3 + 2] },
+                            fitScale: l.fit_scale, fitX: l.fit_x, fitY: l.fit_y)
         currentLayout = out; return out
     }
+    /// Leading (page units) that makes this page fill the padded viewport of `spec`; `max` 0 = unlimited.
+    public func layoutGapToFill(_ spec: QvpLayoutSpec, max: Float = 0) -> Float { var s = spec.c; return qvp_layout_gap_to_fill(p, &s, max) }
     /// A word's box in viewport px through the current layout (x0, y0, x1, y1).
     public func wordBoxView(_ i: Int) -> (x0: Float, y0: Float, x1: Float, y1: Float)? {
         var b: (Float, Float, Float, Float) = (0, 0, 0, 0)

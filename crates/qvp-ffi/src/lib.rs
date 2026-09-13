@@ -275,6 +275,9 @@ pub struct QvpLayoutSpec {
     pub line_gap: f32,
     pub fill_height: u32,
     pub nominal_lines: u32,
+    pub crop_left: f32,
+    pub crop_right: f32,
+    pub max_aspect_slack: f32,
 }
 
 #[repr(C)]
@@ -288,6 +291,11 @@ pub struct QvpLayout {
     pub n_lines: u32,
     /// n_lines × {dy, slot_top, slot_bottom}; valid until the next qvp_layout call on this thread
     pub lines: *const f32,
+    /// The view transform that shows the whole content: draw at fit_x + fit_scale·vx,
+    /// fit_y + fit_scale·vy; the host's pan and zoom go on top.
+    pub fit_scale: f32,
+    pub fit_x: f32,
+    pub fit_y: f32,
 }
 
 /// kind: 0 Page, 1 Word(a), 2 Words(words,n), 3 Ayah(a,b), 4 AyahRange(a,b,c), 5 Line(a), 6 Surah(a), 7 Range(a,b)
@@ -1118,6 +1126,9 @@ pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec,
             line_gap: s.line_gap,
             fill_height: s.fill_height != 0,
             nominal_lines: s.nominal_lines,
+            crop_left: s.crop_left,
+            crop_right: s.crop_right,
+            max_aspect_slack: s.max_aspect_slack,
         });
         let mut buf = Vec::with_capacity(l.line_dy.len() * 3);
         for (i, dy) in l.line_dy.iter().enumerate() {
@@ -1135,9 +1146,36 @@ pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec,
             pitch: l.pitch,
             n_lines: l.line_dy.len() as u32,
             lines,
+            fit_scale: l.fit_scale,
+            fit_x: l.fit_x,
+            fit_y: l.fit_y,
         };
         LAYOUT_BUF.with(|b| *b.borrow_mut() = buf);
         *out = res;
+    })
+}
+/// Leading (page units) that makes the page fill the padded viewport of `spec` when fitted to
+/// width; max <= 0 means unlimited. The padding is subtracted here, not by the host.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_gap_to_fill(page: *const Page, spec: *const QvpLayoutSpec, max: f32) -> f32 {
+    guard(|| {
+        let s = &*spec;
+        let spec = LayoutSpec {
+            viewport_w: s.viewport_w,
+            viewport_h: s.viewport_h,
+            pad_top: s.pad_top,
+            pad_bottom: s.pad_bottom,
+            pad_left: s.pad_left,
+            pad_right: s.pad_right,
+            line_spacing: s.line_spacing,
+            line_gap: s.line_gap,
+            fill_height: s.fill_height != 0,
+            nominal_lines: s.nominal_lines,
+            crop_left: s.crop_left,
+            crop_right: s.crop_right,
+            max_aspect_slack: s.max_aspect_slack,
+        };
+        (*page).gap_to_fill(&spec, if max <= 0.0 { f32::INFINITY } else { max })
     })
 }
 #[no_mangle]

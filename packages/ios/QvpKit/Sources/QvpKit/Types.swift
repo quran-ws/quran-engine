@@ -149,17 +149,30 @@ public struct QvpLineBand: Equatable { public let line: Int, lineNo: Int, y0: Fl
 /// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
 public struct QvpLayoutSpec: Equatable {
     public var viewportW: Float, viewportH: Float, padTop: Float, padBottom: Float, padLeft: Float, padRight: Float, lineSpacing: Float, lineGap: Float, fillHeight: Bool, nominalLines: Int
-    public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, lineGap: Float = 0, fillHeight: Bool = false, nominalLines: Int = 15) {
+    /// Printed side margins to cut, in page units (0 = keep the print's margins).
+    public var cropLeft: Float, cropRight: Float
+    /// The content is never wider than `viewportH · pageW / pageH · maxAspectSlack` (0 = no bound).
+    public var maxAspectSlack: Float
+    public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, lineGap: Float = 0, fillHeight: Bool = false, nominalLines: Int = 15,
+                cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0) {
         self.viewportW = viewportW; self.viewportH = viewportH; self.padTop = padTop; self.padBottom = padBottom; self.padLeft = padLeft; self.padRight = padRight
         self.lineSpacing = lineSpacing; self.lineGap = lineGap; self.fillHeight = fillHeight; self.nominalLines = nominalLines
+        self.cropLeft = cropLeft; self.cropRight = cropRight; self.maxAspectSlack = maxAspectSlack
+    }
+    var c: QvpFFI.QvpLayoutSpec {
+        QvpFFI.QvpLayoutSpec(viewport_w: viewportW, viewport_h: viewportH, pad_top: padTop, pad_bottom: padBottom, pad_left: padLeft, pad_right: padRight, line_spacing: lineSpacing, line_gap: lineGap,
+                             fill_height: fillHeight ? 1 : 0, nominal_lines: UInt32(nominalLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack)
     }
 }
-/// Page → viewport: vx = ox + x*scale ; vy = oy + (y + lineDy[line])*scale.
+/// Page → viewport: vx = ox + x*scale ; vy = oy + (y + lineDy[line])*scale. `fitScale`, `fitX`, `fitY` show the
+/// whole content in the viewport (shrink to height, never enlarge, centred); the host's pan and zoom go on top.
 public final class QvpLayout {
     public let scale: Float, ox: Float, oy: Float, contentW: Float, contentH: Float, pitch: Float
     public let lineDy: [Float], slotTop: [Float], slotBottom: [Float]
-    init(scale: Float, ox: Float, oy: Float, contentW: Float, contentH: Float, pitch: Float, lineDy: [Float], slotTop: [Float], slotBottom: [Float]) {
+    public let fitScale: Float, fitX: Float, fitY: Float
+    init(scale: Float, ox: Float, oy: Float, contentW: Float, contentH: Float, pitch: Float, lineDy: [Float], slotTop: [Float], slotBottom: [Float], fitScale: Float = 1, fitX: Float = 0, fitY: Float = 0) {
         self.scale = scale; self.ox = ox; self.oy = oy; self.contentW = contentW; self.contentH = contentH; self.pitch = pitch; self.lineDy = lineDy; self.slotTop = slotTop; self.slotBottom = slotBottom
+        self.fitScale = fitScale; self.fitX = fitX; self.fitY = fitY
     }
 }
 public struct QvpHighlightStyle: Equatable {

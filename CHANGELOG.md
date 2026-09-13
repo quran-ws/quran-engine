@@ -7,6 +7,12 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- Layout: `QvpLayout.fit_scale`, `fit_x`, `fit_y` (the view transform that shows the whole
+  content), `QvpLayoutSpec.crop_left`, `crop_right` (cut printed side margins) and
+  `max_aspect_slack` (bound the content width by the page aspect), and
+  `qvp_layout_gap_to_fill(page, spec, max)`. Every wrapper reads the fit from the engine
+  instead of computing it; `conformance/scenarios/layout.json` records the engine's answers
+  for 40 viewport cases and the wrapper tests replay them.
 - CI: `ios.yml`, `flutter.yml`, `react-native.yml` per platform; `nightly.yml` (all 604 pages,
   benchmark); `release.yml` on `vX.Y.Z` tags; `scripts/set-version.sh`, `scripts/package-data.sh`.
 - CI: `ci.yml` with the `engine`, `gates`, `standards` and `web` jobs; `scripts/check.sh`

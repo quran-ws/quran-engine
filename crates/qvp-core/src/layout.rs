@@ -34,6 +34,15 @@ pub struct LayoutSpec {
     /// Line grid the mushaf is designed on (15 for KFGQPC Hafs). Short pages
     /// (fewer lines) stay centred, as printed.
     pub nominal_lines: u32,
+    /// Printed side margins to cut, in page units (0 = keep the print's margins). The
+    /// ink then spans the padded viewport width instead of the full page width.
+    pub crop_left: f32,
+    pub crop_right: f32,
+    /// Upper bound on the content width as a multiple of the page's aspect ratio applied
+    /// to the viewport height: the page is never wider than
+    /// `viewport_h · page_w / page_h · max_aspect_slack`, so a landscape screen does not
+    /// stretch the lines to its full width. 0 turns the bound off.
+    pub max_aspect_slack: f32,
 }
 
 impl Default for LayoutSpec {
@@ -49,6 +58,9 @@ impl Default for LayoutSpec {
             line_gap: 0.0,
             fill_height: false,
             nominal_lines: 15,
+            crop_left: 0.0,
+            crop_right: 0.0,
+            max_aspect_slack: 0.0,
         }
     }
 }
@@ -73,6 +85,14 @@ pub struct Layout {
     pub content_w: f32,
     /// Effective line pitch in page units (printed pitch + the added delta).
     pub pitch: f32,
+    /// The view transform that shows the whole laid-out content inside the viewport:
+    /// shrink by `fit_scale` when the content is taller than the viewport (never enlarge),
+    /// then offset by `fit_x`, `fit_y` so the content is centred. A host draws at
+    /// `fit_x + fit_scale · vx`, `fit_y + fit_scale · vy`, and applies its own pan and
+    /// zoom on top.
+    pub fit_scale: f32,
+    pub fit_x: f32,
+    pub fit_y: f32,
 }
 
 /// Leading (page units, between consecutive lines) that makes a page fill a
@@ -111,11 +131,34 @@ impl Page {
     /// grid. Instead every line keeps its printed position and the *same* delta
     /// is inserted between each pair of consecutive lines: line `k` (0-based on
     /// the nominal grid) moves by `k·delta`. `delta = 0` reproduces the print.
+    /// Leading (page units) that makes this page fill the padded viewport of `spec` when
+    /// fitted to width; see [`gap_to_fill`].
+    pub fn gap_to_fill(&self, spec: &LayoutSpec, max: f32) -> f32 {
+        let view_w = spec.viewport_w - spec.pad_left - spec.pad_right;
+        let view_h = spec.viewport_h - spec.pad_top - spec.pad_bottom;
+        gap_to_fill(
+            self.width(),
+            self.height(),
+            spec.nominal_lines.max(self.data.lines.len() as u32),
+            view_w,
+            view_h,
+            max,
+        )
+    }
+
     pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
         let pw = self.width();
         let ph = self.height();
-        let avail_w = (spec.viewport_w - spec.pad_left - spec.pad_right).max(1.0);
-        let scale = avail_w / pw;
+        // The content width: the viewport, bounded by the page's aspect ratio when the
+        // host asks for it, so a wide screen does not stretch the lines.
+        let content_w = if spec.max_aspect_slack > 0.0 {
+            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
+        } else {
+            spec.viewport_w
+        };
+        let crop = (spec.crop_left.max(0.0), spec.crop_right.max(0.0));
+        let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
+        let scale = avail_w / (pw - crop.0 - crop.1).max(1.0);
         let n = self.data.lines.len();
         let nominal = spec.nominal_lines.max(n as u32).max(2) as f32;
         let natural = self.natural_pitch;
@@ -178,16 +221,30 @@ impl Page {
             line_slots.push((top * scale, bottom * scale));
         }
         let content_h = spec.pad_top + block_h * scale + spec.pad_bottom;
-        self.layout = Some(Layout {
+        let mut layout = Layout {
             scale,
-            ox: spec.pad_left,
+            ox: spec.pad_left - crop.0 * scale,
             oy: 0.0,
             line_dy,
             line_slots,
             content_h,
-            content_w: spec.viewport_w,
+            content_w,
+            fit_scale: 0.0,
+            fit_x: 0.0,
+            fit_y: 0.0,
             pitch,
-        });
+        };
+        // Fit: shrink to the viewport height when the content is taller, never enlarge;
+        // centre the result. Offsets are never negative.
+        let fit_scale = if layout.content_h > spec.viewport_h && layout.content_h > 0.0 {
+            spec.viewport_h / layout.content_h
+        } else {
+            1.0
+        };
+        layout.fit_scale = fit_scale;
+        layout.fit_x = ((spec.viewport_w - layout.content_w * fit_scale) / 2.0).max(0.0);
+        layout.fit_y = ((spec.viewport_h - layout.content_h * fit_scale) / 2.0).max(0.0);
+        self.layout = Some(layout);
         self.layout.as_ref().unwrap()
     }
 

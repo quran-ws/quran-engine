@@ -36,7 +36,6 @@ WRAPPERS = {
     "ios": ["packages/ios/QvpKit/Sources"],
     "react-native": ["packages/react-native/qvp-react-native/src", "packages/react-native/qvp-react-native/android/src"],
 }
-NOUNS = ("page", "atlas", "style", "highlight", "mask", "reveal", "layout", "hit", "word", "ayah", "line", "deco")
 
 
 def header_symbols() -> list[str]:
@@ -50,8 +49,9 @@ def rust_exports() -> list[str]:
 
 
 def camel(symbol: str, drop_noun: bool) -> str:
+    """qvp_atlas_page_of -> atlasPageOf, or pageOf when the receiver is the atlas object."""
     parts = symbol.split("_")[1:]
-    if drop_noun and parts and parts[0] in NOUNS and len(parts) > 1:
+    if drop_noun and parts and parts[0] == "atlas" and len(parts) > 1:
         parts = parts[1:]
     return parts[0] + "".join(p.capitalize() for p in parts[1:])
 

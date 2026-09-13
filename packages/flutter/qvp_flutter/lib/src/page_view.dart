@@ -6,7 +6,6 @@
 // widget only converts geometry into ui.Path objects once, caches the
 // unstyled ink as an image at the current transform, and forwards gestures
 // to the engine's hit test / selection.
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -46,6 +45,7 @@ class QvpViewLayout {
         lineGap: lineGap,
         fillHeight: fillHeight,
         nominalLines: nominalLines,
+        maxAspectSlack: 1.15,
       );
 
   @override
@@ -250,8 +250,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   // ── layout & fit (engine layout, then pan/zoom on top) ──
   void _relayout(Size size) {
     final p = page;
-    final maxW = math.min(size.width, size.height * p.width / p.height * 1.15);
-    p.layout(widget.layout.toSpec(maxW, size.height));
+    p.layout(widget.layout.toSpec(size.width, size.height));
     _laidOut = widget.layout;
     _size = size;
     _ctl.viewport = size;
@@ -259,10 +258,9 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
 
   void _fit(Size size) {
     final l = page.currentLayout!;
-    final s = math.min(1.0, size.height / l.contentH);
-    _ctl.scale = s;
-    _ctl.ox = (size.width - l.contentW * s) / 2;
-    _ctl.oy = (size.height - l.contentH * s) / 2;
+    _ctl.scale = l.fitScale;
+    _ctl.ox = l.fitX;
+    _ctl.oy = l.fitY;
     _ctl._fitRequested = false;
   }
 

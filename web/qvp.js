@@ -308,18 +308,27 @@
     hitBoxes(gapBias = 0.6) { const n = this.e.ex.qvp_hit_boxes(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
 
     // ── layout ──
-    layout(spec) {
-      const ex = this.e.ex, s = this.e.scratch; let d = this.e.dv();
+    /** Write a layout spec (QvpLayoutSpec, 52 bytes) at scratch offset `s`. */
+    _writeLayoutSpec(spec, s) {
+      const d = this.e.dv();
       d.setFloat32(s, spec.viewportW, true); d.setFloat32(s + 4, spec.viewportH, true); d.setFloat32(s + 8, spec.padTop || 0, true); d.setFloat32(s + 12, spec.padBottom || 0, true);
       d.setFloat32(s + 16, spec.padLeft || 0, true); d.setFloat32(s + 20, spec.padRight || 0, true); d.setFloat32(s + 24, spec.lineSpacing ?? 1, true); d.setFloat32(s + 28, spec.lineGap || 0, true);
       d.setUint32(s + 32, spec.fillHeight ? 1 : 0, true); d.setUint32(s + 36, spec.nominalLines || 15, true);
+      d.setFloat32(s + 40, spec.cropLeft || 0, true); d.setFloat32(s + 44, spec.cropRight || 0, true); d.setFloat32(s + 48, spec.maxAspectSlack || 0, true);
+    }
+    /** Leading (page units) that makes the page fill the padded viewport of `spec`; max 0 = unlimited. */
+    layoutGapToFill(spec, max = 0) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_gap_to_fill(this.h, s, max); }
+    layout(spec) {
+      const ex = this.e.ex, s = this.e.scratch; let d = this.e.dv();
+      this._writeLayoutSpec(spec, s);
       ex.qvp_layout(this.h, s, s + 64);
       d = this.e.dv(); const o = s + 64;
       const n = d.getUint32(o + 24, true), lp = d.getUint32(o + 28, true);
       const f = new Float32Array(this.e.mem.buffer.slice(lp, lp + n * 12));
       const lineDy = new Float32Array(n), slots = new Array(n);
       for (let i = 0; i < n; i++) { lineDy[i] = f[i * 3]; slots[i] = [f[i * 3 + 1], f[i * 3 + 2]]; }
-      return (this.currentLayout = { scale: d.getFloat32(o, true), ox: d.getFloat32(o + 4, true), oy: d.getFloat32(o + 8, true), contentW: d.getFloat32(o + 12, true), contentH: d.getFloat32(o + 16, true), pitch: d.getFloat32(o + 20, true), lineDy, slots });
+      return (this.currentLayout = { scale: d.getFloat32(o, true), ox: d.getFloat32(o + 4, true), oy: d.getFloat32(o + 8, true), contentW: d.getFloat32(o + 12, true), contentH: d.getFloat32(o + 16, true), pitch: d.getFloat32(o + 20, true), lineDy, slots,
+        fitScale: d.getFloat32(o + 32, true), fitX: d.getFloat32(o + 36, true), fitY: d.getFloat32(o + 40, true) });
     }
     wordBoxView(i) { this.e.ex.qvp_word_box_view(this.h, i, this.e.scratch); const f = new Float32Array(this.e.mem.buffer, this.e.scratch, 4); return { x0: f[0], y0: f[1], x1: f[2], y1: f[3] }; }
 

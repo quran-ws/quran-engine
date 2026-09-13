@@ -253,7 +253,7 @@ final class DemoModel: ObservableObject {
     func leadingToFill() {
         guard let p = page else { return }
         fillHeight = false; lineSpacing = 100; view.lineSpacing = 1
-        view.lineGap = QvpEngine.gapToFill(pageW: p.width, pageH: p.height, lines: p.nLines, viewW: Float(view.bounds.width - 2 * view.padSide), viewH: Float(view.bounds.height - view.padTop - view.padBottom))
+        view.lineGap = p.layoutGapToFill(QvpLayoutSpec(viewportW: Float(view.bounds.width), viewportH: Float(view.bounds.height), padTop: Float(view.padTop), padBottom: Float(view.padBottom), padLeft: Float(view.padSide), padRight: Float(view.padSide)))
         view.relayout(); view.resetView(); hud()
     }
 

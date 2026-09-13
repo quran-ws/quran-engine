@@ -362,10 +362,19 @@ final class QvpLayoutSpec {
     this.lineGap = 0,
     this.fillHeight = false,
     this.nominalLines = 15,
+    this.cropLeft = 0,
+    this.cropRight = 0,
+    this.maxAspectSlack = 0,
   });
   final double viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap;
   final bool fillHeight;
   final int nominalLines;
+
+  /// Printed side margins to cut, in page units (0 = keep the print's margins).
+  final double cropLeft, cropRight;
+
+  /// The content is never wider than `viewportH · pageW / pageH · maxAspectSlack` (0 = no bound).
+  final double maxAspectSlack;
 
   QvpLayoutSpec copyWith({
     double? viewportW,
@@ -378,6 +387,9 @@ final class QvpLayoutSpec {
     double? lineGap,
     bool? fillHeight,
     int? nominalLines,
+    double? cropLeft,
+    double? cropRight,
+    double? maxAspectSlack,
   }) =>
       QvpLayoutSpec(
         viewportW: viewportW ?? this.viewportW,
@@ -390,6 +402,9 @@ final class QvpLayoutSpec {
         lineGap: lineGap ?? this.lineGap,
         fillHeight: fillHeight ?? this.fillHeight,
         nominalLines: nominalLines ?? this.nominalLines,
+        cropLeft: cropLeft ?? this.cropLeft,
+        cropRight: cropRight ?? this.cropRight,
+        maxAspectSlack: maxAspectSlack ?? this.maxAspectSlack,
       );
 
   @override
@@ -404,17 +419,24 @@ final class QvpLayoutSpec {
       other.lineSpacing == lineSpacing &&
       other.lineGap == lineGap &&
       other.fillHeight == fillHeight &&
-      other.nominalLines == nominalLines;
+      other.nominalLines == nominalLines &&
+      other.cropLeft == cropLeft &&
+      other.cropRight == cropRight &&
+      other.maxAspectSlack == maxAspectSlack;
 
   @override
-  int get hashCode => Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, fillHeight, nominalLines);
+  int get hashCode => Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, fillHeight, nominalLines, cropLeft, cropRight, maxAspectSlack);
 }
 
 /// Output of [QvpPage.layout]. Page → viewport: `vx = ox + x*scale`, `vy = oy + (y + lineDy[line])*scale`.
 @immutable
 final class QvpLayout {
-  const QvpLayout({required this.scale, required this.ox, required this.oy, required this.contentW, required this.contentH, required this.pitch, required this.lineDy, required this.slots});
+  const QvpLayout({required this.scale, required this.ox, required this.oy, required this.contentW, required this.contentH, required this.pitch, required this.lineDy, required this.slots, this.fitScale = 1, this.fitX = 0, this.fitY = 0});
   final double scale, ox, oy, contentW, contentH, pitch;
+
+  /// The view transform that shows the whole content in the viewport (shrink to height, never
+  /// enlarge, centred). The host's pan and zoom go on top.
+  final double fitScale, fitX, fitY;
 
   /// Per-line vertical shift in page units (index = line record index).
   final Float32List lineDy;
@@ -1168,6 +1190,9 @@ class QvpPage extends ChangeNotifier {
     s.lineGap = spec.lineGap;
     s.fillHeight = spec.fillHeight ? 1 : 0;
     s.nominalLines = spec.nominalLines;
+    s.cropLeft = spec.cropLeft;
+    s.cropRight = spec.cropRight;
+    s.maxAspectSlack = spec.maxAspectSlack;
     _b.layout(_p, _e._spec, _e._layout);
     final o = _e._layout.ref;
     final n = o.nLines;
@@ -1177,10 +1202,29 @@ class QvpPage extends ChangeNotifier {
       lineDy[i] = f[i * 3];
       return (f[i * 3 + 1], f[i * 3 + 2]);
     }, growable: false);
-    final l = QvpLayout(scale: o.scale, ox: o.ox, oy: o.oy, contentW: o.contentW, contentH: o.contentH, pitch: o.pitch, lineDy: lineDy, slots: slots);
+    final l = QvpLayout(scale: o.scale, ox: o.ox, oy: o.oy, contentW: o.contentW, contentH: o.contentH, pitch: o.pitch, lineDy: lineDy, slots: slots, fitScale: o.fitScale, fitX: o.fitX, fitY: o.fitY);
     currentLayout = l;
     _touch();
     return l;
+  }
+
+  /// Leading (page units) that makes this page fill the padded viewport of [spec]; `max` 0 = unlimited.
+  double layoutGapToFill(QvpLayoutSpec spec, [double max = 0]) {
+    final s = _e._spec.ref;
+    s.viewportW = spec.viewportW;
+    s.viewportH = spec.viewportH;
+    s.padTop = spec.padTop;
+    s.padBottom = spec.padBottom;
+    s.padLeft = spec.padLeft;
+    s.padRight = spec.padRight;
+    s.lineSpacing = spec.lineSpacing;
+    s.lineGap = spec.lineGap;
+    s.fillHeight = spec.fillHeight ? 1 : 0;
+    s.nominalLines = spec.nominalLines;
+    s.cropLeft = spec.cropLeft;
+    s.cropRight = spec.cropRight;
+    s.maxAspectSlack = spec.maxAspectSlack;
+    return _b.layoutGapToFill(_p, _e._spec, max);
   }
 
   /// Word bbox in viewport px through the current layout.
