@@ -180,6 +180,16 @@ impl Page {
                 deco_line[di] = data.words[(a.first_word + a.n_words - 1) as usize].line_index as u32;
             }
         }
+        // The sajdah line is drawn over the sajdah word, which can sit lines above the
+        // sign that closes the ayah: it takes the line of the word directly below it.
+        let line_under = |pb: &IBox| -> Option<u32> {
+            let tol = (2.0 * q) as i32;
+            data.words
+                .iter()
+                .filter(|w| w.bbox.x0 < pb.x1 && w.bbox.x1 > pb.x0 && w.bbox.y0 >= pb.y0 - tol)
+                .min_by_key(|w| w.bbox.y0 - pb.y1)
+                .map(|w| w.line_index as u32)
+        };
         let mut path_line = vec![0u32; data.paths.len()];
         for i in 0..data.paths.len() {
             let wi = path_word[i];
@@ -187,7 +197,9 @@ impl Page {
                 data.words[wi as usize].line_index as u32
             } else if path_deco[i] != NONE {
                 let d = &data.decorations[path_deco[i] as usize];
-                if d.line != NONE_U16 && (d.line as usize) < data.lines.len() {
+                if data.paths[i].mark == Mark::SajdahLine && line_under(&data.paths[i].bbox).is_some() {
+                    line_under(&data.paths[i].bbox).unwrap()
+                } else if d.line != NONE_U16 && (d.line as usize) < data.lines.len() {
                     d.line as u32
                 } else if deco_line[path_deco[i] as usize] != NONE {
                     deco_line[path_deco[i] as usize]
