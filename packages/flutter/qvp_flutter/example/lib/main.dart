@@ -731,7 +731,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       final ws = p.targetWords(T.ayah(s, a));
       final c = p.ayahWordCount(s, a);
       big = p.text(T.ayah(s, a));
-      rows.add(('ayah', '$s:$a · ${c.count} words\${c.isComplete ? '' : ' (continues on another page)'}', false));
+      rows.add(('ayah', '$s:$a · ${c.count} words${c.isComplete ? '' : ' (continues on another page)'}', false));
       if (ws.isNotEmpty) rows.add(('label', p.ayahLabel(p.words[ws.first].ayahIndex), false));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
