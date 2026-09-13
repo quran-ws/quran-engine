@@ -167,7 +167,7 @@ void main() {
     expect(box.x1, greaterThan(viewX));
     expect(page.layoutLineSpacingToFill(const QvpLayoutSpec(viewportW: 600, viewportH: 1000)), greaterThanOrEqualTo(1));
     expect(page.grid.lines, 15);
-    expect(engine.layoutWastedFraction(page.width, page.height, 600, 1000), inInclusiveRange(0, 1));
+    expect(page.layoutWastedFraction(const QvpLayoutSpec(viewportW: 600, viewportH: 1000)), inInclusiveRange(0, 1));
   });
 
   test('style(Sel.wordMark(w,1), colour) → styledPaths() has exactly 1 path', () {
