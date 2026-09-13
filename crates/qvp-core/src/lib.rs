@@ -19,7 +19,7 @@ pub mod text;
 pub use crop::CropBounds;
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
 pub use hit::{Hit, HitArea, HitOptions, LineBand};
-pub use layout::{gap_to_fill, wasted_fraction, Layout, LayoutSpec};
+pub use layout::{Grid, Layout, LayoutSpec};
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
 pub use qvp_format;
@@ -80,7 +80,7 @@ pub struct Page {
     data: PageData,
     geom: Geometry,
     line_centre: Vec<f32>,
-    natural_pitch: f32,
+    line_spacing: f32,
     layout: Option<Layout>,
     /// words of each line sorted by bbox.x0 ascending: (x0, word idx)
     line_words: Vec<Vec<(i32, u32)>>,
@@ -139,7 +139,7 @@ impl Page {
             }
             line_centre[li] = if bb.is_empty() { 0.0 } else { (bb.y0 + bb.y1) as f32 / 2.0 / q };
         }
-        let natural_pitch = {
+        let line_spacing = {
             let mut d: Vec<f32> = line_centre.windows(2).map(|w| (w[1] - w[0]).abs()).filter(|v| *v > 1.0).collect();
             d.sort_by(|a, b| a.partial_cmp(b).unwrap());
             if d.is_empty() {
@@ -277,7 +277,7 @@ impl Page {
             data,
             geom,
             line_centre,
-            natural_pitch,
+            line_spacing,
             layout: None,
             line_words,
             path_deco,
@@ -392,8 +392,8 @@ impl Page {
     /// Exact hit-test in viewport px using the current layout.
     pub fn hit_test_exact_view(&self, vx: f32, vy: f32) -> Option<HitExact> {
         let Some(l) = &self.layout else { return self.hit_test_exact(vx, vy) };
-        let x = (vx - l.ox) / l.scale;
-        let y = (vy - l.oy) / l.scale;
+        let x = (vx - l.offset_x) / l.scale;
+        let y = (vy - l.offset_y) / l.scale;
         let q = self.quant();
         for (li, line) in self.data.lines.iter().enumerate() {
             let py = y - l.line_dy[li];

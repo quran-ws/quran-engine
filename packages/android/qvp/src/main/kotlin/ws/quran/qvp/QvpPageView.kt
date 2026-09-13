@@ -38,7 +38,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             invalidate()
         }
     // layout knobs (viewport size comes from the view)
-    var padTop = 0f; var padBottom = 0f; var padSide = 0f; var lineSpacing = 1f; var lineGap = 0f; var fillHeight = false
+    var padTop = 0f; var padBottom = 0f; var padSide = 0f; var lineSpacing = 1f; var fillHeight = false
     var paperColor: Int = Color.TRANSPARENT           // ARGB
     var selectionBand: Int = QvpDefaults.SELECTION_BAND  // 0xRRGGBBAA
     var onWordTap: ((QvpWord, QvpHit) -> Unit)? = null
@@ -162,7 +162,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
 
     /** Recompute the engine layout for the current size/knobs. */
     /** The spec `relayout()` hands the engine for the current size and knobs. */
-    fun layoutSpec() = QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, lineGap, fillHeight)
+    fun layoutSpec() = QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, fillHeight)
     fun relayout() {
         val p = page ?: return
         if (width == 0 || height == 0) return
@@ -177,7 +177,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     /** Matrix mapping page units of [line] to view px (layout + pan/zoom). */
     fun lineMatrix(line: Int, out: Matrix = m): Matrix {
         val l = page?.currentLayout
-        val ls = l?.scale ?: 1f; val lox = l?.ox ?: 0f; val loy = (l?.oy ?: 0f) + (l?.lineDy?.getOrNull(line) ?: 0f) * ls
+        val ls = l?.scale ?: 1f; val lox = l?.offsetX ?: 0f; val loy = (l?.offsetY ?: 0f) + (l?.lineDy?.getOrNull(line) ?: 0f) * ls
         out.reset(); out.setScale(viewScale * ls, viewScale * ls); out.postTranslate(viewOx + viewScale * lox, viewOy + viewScale * loy)
         return out
     }
@@ -209,7 +209,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             i += 2
         }
         val ink = p.defaultInk
-        val key = "$viewScale|$viewOx|$viewOy|$ink|${l.pitch}|${l.lineDy.contentHashCode()}|$styledKey|$width|$height"
+        val key = "$viewScale|$viewOx|$viewOy|$ink|${l.lineSpacing}|${l.lineDy.contentHashCode()}|$styledKey|$width|$height"
         if (paperColor != Color.TRANSPARENT) { paint.color = paperColor; canvas.drawRect(viewOx, viewOy, viewOx + l.contentW * viewScale, viewOy + l.contentH * viewScale, paint) }
         val bands = p.highlightBoxesView()
         drawBoxes(canvas, bands)

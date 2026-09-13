@@ -36,7 +36,7 @@ import 'package:qvp_flutter/qvp_flutter.dart';
 final engine = QvpEngine.open();                        // Android: libqvp_ffi.so from the plugin; host: $QVP_LIB or path:
 engine.markName(7); engine.kindName(QvpKind.mark); engine.categoryName(1); engine.familyName(1);
 engine.strip(s); engine.fold(s); engine.normalize(s); engine.looseKey(s);          // Arabic text tools
-engine.gapToFill(pw, ph, lines, vw, vh); engine.wastedFraction(pw, ph, vw, vh);
+page.layoutLineSpacingToFill(spec); page.layoutWastedFraction(spec); page.grid; page.lineSpacing;
 
 final page = engine.loadPage(bytes);                    // geometry copied once: page.ops / page.pts / page.table (stride 8)
 page.words / ayahs / lines / decorations;  page.wordForm(i, 'rasm_imlai');  page.findWord(2, 255, 3);
@@ -74,8 +74,8 @@ QvpColor.toColor(0x1a73e8ff); QvpColor.fromColor(Colors.blue); rgba('#d6a326', 0
 ```dart
 QvpPageView(
   page: page,
-  layout: QvpViewLayout(padTop: 24, padBottom: 24, padSide: 16, lineSpacing: 1, lineGap: 0, fillHeight: false),
-  // spacing only opens up: lineSpacing < 1 and a negative lineGap are clamped to "as printed"
+  layout: QvpViewLayout(padTop: 24, padBottom: 24, padSide: 16, lineSpacing: 1, fillHeight: false),
+  // spacing only opens up: lineSpacing < 1 is clamped to "as printed"
   paper: Color(0xfffffdf7), defaultInk: '#231f20', controller: QvpViewController(),
   onWordTap: (word, hit) {}, onDecorationTap: (decoration) {}, onEmptyTap: () {}, onSelectionChanged: (words) {},
 )

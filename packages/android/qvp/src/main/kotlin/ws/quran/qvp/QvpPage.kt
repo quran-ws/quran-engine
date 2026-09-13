@@ -27,8 +27,6 @@ object QvpEngine {
     fun fold(s: String) = QvpNative.arabic(1, s)
     fun normalize(s: String) = QvpNative.arabic(2, s)
     fun looseKey(s: String) = QvpNative.arabic(3, s)
-    fun gapToFill(pageW: Float, pageH: Float, lines: Int, viewW: Float, viewH: Float, max: Float = 0f) = QvpNative.gapToFill(pageW, pageH, lines, viewW, viewH, max)
-    fun wastedFraction(pageW: Float, pageH: Float, viewW: Float, viewH: Float) = QvpNative.wastedFraction(pageW, pageH, viewW, viewH)
 }
 
 /**
@@ -49,7 +47,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** stride 8 per path: opStart, opCount, ptStart, ptCount, flags, word, line, extra */
     val table: IntArray
     val words: List<QvpWord>; val ayahs: List<QvpAyah>; val lines: List<QvpLine>; val decorations: List<QvpDecoration>
-    val naturalPitch: Float
+    val lineSpacing: Float
     var currentLayout: QvpLayout? = null; private set
     var defaultInk: Int = QvpDefaults.INK; private set
     private var paths: Array<Path>? = null
@@ -62,7 +60,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
         ayahs = List(nAyahs) { k -> val v = QvpNative.ayahInfo(h, k)!!; QvpAyah(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4].toInt(), v[5].toInt(), v[6].toInt(), v[7].toInt(), v[8].toInt(), v[9], v[10], v[11], v[12]) }
         lines = List(nLines) { k -> val v = QvpNative.lineInfo(h, k)!!; QvpLine(k, v[0].toInt(), v[1] > 0.5f, v[2].toInt(), v[3].toInt(), v[4], v[5], v[6], v[7], v[8], v[9], v[10]) }
         decorations = List(nDecorations) { k -> val v = QvpNative.decorationInfo(h, k)!!; QvpDecoration(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4], v[5], v[6], v[7], QvpNative.decorationText(h, k) ?: "", v[8].toInt(), v[9].toInt()) }
-        naturalPitch = QvpNative.naturalPitch(h)
+        lineSpacing = QvpNative.pageLineSpacing(h)
     }
 
     // ── geometry ──
@@ -149,7 +147,11 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
         return QvpLayout(v[0], v[1], v[2], v[3], v[4], v[5], FloatArray(n) { v[10 + it * 3] }, FloatArray(n) { v[11 + it * 3] }, FloatArray(n) { v[12 + it * 3] }, v[7], v[8], v[9]).also { currentLayout = it }
     }
     /** Leading (page units) that makes this page fill the padded viewport of [spec]; max 0 = unlimited. */
-    fun layoutGapToFill(spec: QvpLayoutSpec, max: Float = 0f): Float = QvpNative.layoutGapToFill(h, spec.floats(), max)
+    fun layoutLineSpacingToFill(spec: QvpLayoutSpec, max: Float = 0f): Float = QvpNative.layoutLineSpacingToFill(h, spec.floats(), max)
+    /** The share of the padded viewport left empty when the page is fitted to width. */
+    fun layoutWastedFraction(spec: QvpLayoutSpec): Float = QvpNative.layoutWastedFraction(h, spec.floats())
+    /** The grid this page is laid out inside. */
+    val grid: QvpGrid get() = QvpNative.pageGrid(h).let { QvpGrid(it[0].toInt(), it[1]) }
     fun wordBoundsView(i: Int): FloatArray? = QvpNative.wordBoundsView(h, i)
 
     // ── styles (handles undo exactly) ──
@@ -189,7 +191,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     private fun boxes(v: IntArray): List<QvpBox> = List(v.size / 8) { k -> val o = k * 8; QvpBox(v[o], v[o + 1], Float.fromBits(v[o + 2]), Float.fromBits(v[o + 3]), Float.fromBits(v[o + 4]), Float.fromBits(v[o + 5]), v[o + 6], Float.fromBits(v[o + 7])) }
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
     fun highlightBoxesView(): List<QvpBox> = boxes(QvpNative.highlightBoxesView(h))
-    fun wordBands(ws: IntArray, height: BandHeight = BandHeight.PITCH, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) = boxes(QvpNative.wordBands(h, ws, height.id, padX, padY))
+    fun wordBands(ws: IntArray, height: BandHeight = BandHeight.LINE_SPACING, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) = boxes(QvpNative.wordBands(h, ws, height.id, padX, padY))
 
     // ── selection ──
     fun select(anchor: Int, focus: Int = anchor) = QvpNative.select(h, anchor, focus)

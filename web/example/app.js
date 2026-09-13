@@ -29,11 +29,11 @@
 
   const S = {
     page: null, bytes: 0, loadMs: 0, n: src.pages[0],
-    view: { scale: 1, ox: 0, oy: 0 },
+    view: { scale: 1, offsetX: 0, offsetY: 0 },
     selWord: -1, selAyah: null, hlSel: 0, hlAyah: 0, hlSearch: 0, hlPlay: 0, pathHandles: new Map(),
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
-    layout: { lineSpacing: 1, lineGap: 0, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
+    layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
     hlMode: 'both', hlMs: 250, revealOn: false,
   };
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
@@ -47,7 +47,7 @@
     const p = S.page; if (!p) return;
     S.animating = p.tick(now);
     const v = S.view, L = p.currentLayout;
-    paper.style.left = v.ox + 'px'; paper.style.top = v.oy + 'px';
+    paper.style.left = v.offsetX + 'px'; paper.style.top = v.offsetY + 'px';
     paper.style.width = (L ? L.contentW : p.width) * v.scale + 'px'; paper.style.height = (L ? L.contentH : p.height) * v.scale + 'px';
     renderer.draw(p, v, dpr);
     // hover: a cheap UI overlay, not engine state
@@ -67,7 +67,7 @@
   // ── view: engine layout + pan/zoom on top ──
   function layoutSpec() {
     const r = stage.getBoundingClientRect(), ls = S.layout;
-    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, lineGap: ls.lineGap, fillHeight: ls.fillHeight, nominalLines: QVP.DEFAULTS.NOMINAL_LINES, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK };
+    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK };
   }
   function relayout() {
     const p = S.page; if (!p) return null;
@@ -75,7 +75,7 @@
   }
   function fit(redraw = true) {
     const L = relayout(); if (!L) return;
-    S.view = { scale: L.fitScale, ox: L.fitX, oy: L.fitY };
+    S.view = { scale: L.fitScale, offsetX: L.fitX, offsetY: L.fitY };
     renderer.baseKey = '';
     if (redraw) draw();
   }
@@ -85,7 +85,7 @@
     canvas.style.width = r.width + 'px'; canvas.style.height = r.height + 'px';
     fit();
   }
-  const toView = (cx, cy) => [(cx - S.view.ox) / S.view.scale, (cy - S.view.oy) / S.view.scale];
+  const toView = (cx, cy) => [(cx - S.view.offsetX) / S.view.scale, (cy - S.view.offsetY) / S.view.scale];
 
   // ── page loading ──
   async function loadPage(n) {
@@ -204,10 +204,10 @@
     const r = stage.getBoundingClientRect(), [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
     const h = S.page.hitTestView(x, y, { maxDistance: 6 });
     if (pts.size === 1) {
-      drag = { x: e.clientX, y: e.clientY, ox: S.view.ox, oy: S.view.oy };
+      drag = { x: e.clientX, y: e.clientY, offsetX: S.view.offsetX, offsetY: S.view.offsetY };
       selecting = h && h.word >= 0 && (e.shiftKey || e.pointerType !== 'touch') ? { anchor: h.word, active: false } : null;
     }
-    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: S.view.scale, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, ox: S.view.ox, oy: S.view.oy }; drag = null; selecting = null; }
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: S.view.scale, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, offsetX: S.view.offsetX, offsetY: S.view.offsetY }; drag = null; selecting = null; }
   });
   stage.addEventListener('pointermove', e => {
     const r = stage.getBoundingClientRect();
@@ -215,7 +215,7 @@
     if (pinch && pts.size === 2) {
       const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
       const k = clampZoom(pinch.scale * d / pinch.d) / pinch.scale, cx = pinch.cx - r.left, cy = pinch.cy - r.top;
-      S.view = { scale: pinch.scale * k, ox: cx - (cx - pinch.ox) * k, oy: cy - (cy - pinch.oy) * k }; moved = true; draw(); return;
+      S.view = { scale: pinch.scale * k, offsetX: cx - (cx - pinch.offsetX) * k, offsetY: cy - (cy - pinch.offsetY) * k }; moved = true; draw(); return;
     }
     const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
     if (drag && selecting) {
@@ -234,7 +234,7 @@
     }
     if (drag) {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); S.view.ox = drag.ox + dx; S.view.oy = drag.oy + dy; draw(); }
+      if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); S.view.offsetX = drag.offsetX + dx; S.view.offsetY = drag.offsetY + dy; draw(); }
       return;
     }
     const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 4 }); S.lastHitUs = (performance.now() - t) * 1000;
@@ -263,7 +263,7 @@
     e.preventDefault(); const r = stage.getBoundingClientRect();
     const k = Math.exp(-e.deltaY * 0.0015), v = S.view, cx = e.clientX - r.left, cy = e.clientY - r.top;
     const ns = clampZoom(v.scale * k), kk = ns / v.scale;
-    S.view = { scale: ns, ox: cx - (cx - v.ox) * kk, oy: cy - (cy - v.oy) * kk }; draw();
+    S.view = { scale: ns, offsetX: cx - (cx - v.offsetX) * kk, offsetY: cy - (cy - v.offsetY) * kk }; draw();
   }, { passive: false });
   stage.addEventListener('dblclick', () => fit());
 
@@ -342,9 +342,9 @@
 
   // ── layout ──
   const relayoutUI = () => { $('spacingVal').textContent = '×' + S.layout.lineSpacing.toFixed(2); fit(); };
-  $('spacing').oninput = e => { S.layout.lineSpacing = +e.target.value; S.layout.lineGap = 0; S.layout.fillHeight = false; $('fillH').classList.remove('on'); relayoutUI(); };
+  $('spacing').oninput = e => { S.layout.lineSpacing = +e.target.value; S.layout.fillHeight = false; $('fillH').classList.remove('on'); relayoutUI(); };
   $('fillH').onclick = () => { S.layout.fillHeight = !S.layout.fillHeight; $('fillH').classList.toggle('on', S.layout.fillHeight); relayoutUI(); };
-  $('fitGap').onclick = () => { const p = S.page, r = stage.getBoundingClientRect(); S.layout.fillHeight = false; $('fillH').classList.remove('on'); S.layout.lineSpacing = 1; $('spacing').value = 1; S.layout.lineGap = p.layoutGapToFill(layoutSpec()); relayoutUI(); };
+  $('fitGap').onclick = () => { const p = S.page, r = stage.getBoundingClientRect(); S.layout.fillHeight = false; $('fillH').classList.remove('on'); S.layout.lineSpacing = p.layoutLineSpacingToFill(layoutSpec()); $('spacing').value = S.layout.lineSpacing; relayoutUI(); };
   $('padTop').oninput = e => { S.layout.padTop = +e.target.value; $('padTopVal').textContent = e.target.value; relayoutUI(); };
   $('padBottom').oninput = e => { S.layout.padBottom = +e.target.value; $('padBottomVal').textContent = e.target.value; relayoutUI(); };
 
@@ -366,7 +366,7 @@
       `overlay       ${s.overlayPaths} styled paths + ${s.bands} band boxes in ${s.overlayMs.toFixed(2)} ms\n` +
       `hit-test      ${S.lastHitUs.toFixed(1)} µs (gap-aware, wasm)\n` +
       `styles        ${p.styleHandles().length} handles · ${p.highlightHandles().length} highlights${S.animating ? ' · animating' : ''}\n` +
-      `layout        ${S.layout.fillHeight ? 'fill height' : S.layout.lineGap ? 'gap +' + S.layout.lineGap.toFixed(1) + ' u' : 'spacing ×' + S.layout.lineSpacing.toFixed(2)} · pitch ${(L ? L.pitch : 0).toFixed(1)} u · pad ${S.layout.padTop}/${S.layout.padBottom}\n` +
+      `layout        ${S.layout.fillHeight ? 'fill height' : 'spacing ×' + S.layout.lineSpacing.toFixed(2)} · lineSpacing ${(L ? L.lineSpacing : 0).toFixed(1)} u · pad ${S.layout.padTop}/${S.layout.padBottom}\n` +
       `zoom          ${(S.view.scale * (L ? L.scale : 1) * dpr).toFixed(2)}× device px per unit`;
   }
 

@@ -16,26 +16,25 @@ import 'package:flutter/widgets.dart';
 import 'engine.dart';
 
 /// Layout parameters of [QvpPageView] (viewport size is taken from the widget's constraints).
-/// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
+/// Spacing only opens up: `lineSpacing` < 1 is clamped by the engine.
 /// Pinch limits as multiples of the fitted scale; the same pair on every platform.
 const double kMinZoom = 0.5;
 const double kMaxZoom = 12;
 
 @immutable
 class QvpViewLayout {
-  const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.lineGap = 0, this.fillHeight = false, this.nominalLines = QvpDefaults.nominalLines});
-  final double padTop, padBottom, padSide, lineSpacing, lineGap;
+  const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.fillHeight = false, this.gridLines = 0});
+  final double padTop, padBottom, padSide, lineSpacing;
   final bool fillHeight;
-  final int nominalLines;
+  final int gridLines;
 
-  QvpViewLayout copyWith({double? padTop, double? padBottom, double? padSide, double? lineSpacing, double? lineGap, bool? fillHeight, int? nominalLines}) => QvpViewLayout(
+  QvpViewLayout copyWith({double? padTop, double? padBottom, double? padSide, double? lineSpacing, bool? fillHeight, int? gridLines}) => QvpViewLayout(
         padTop: padTop ?? this.padTop,
         padBottom: padBottom ?? this.padBottom,
         padSide: padSide ?? this.padSide,
         lineSpacing: lineSpacing ?? this.lineSpacing,
-        lineGap: lineGap ?? this.lineGap,
         fillHeight: fillHeight ?? this.fillHeight,
-        nominalLines: nominalLines ?? this.nominalLines,
+        gridLines: gridLines ?? this.gridLines,
       );
 
   QvpLayoutSpec toSpec(double viewportW, double viewportH) => QvpLayoutSpec(
@@ -46,9 +45,8 @@ class QvpViewLayout {
         padLeft: padSide,
         padRight: padSide,
         lineSpacing: lineSpacing,
-        lineGap: lineGap,
         fillHeight: fillHeight,
-        nominalLines: nominalLines,
+        gridLines: gridLines,
         maxAspectSlack: QvpDefaults.aspectSlack,
       );
 
@@ -59,26 +57,25 @@ class QvpViewLayout {
       other.padBottom == padBottom &&
       other.padSide == padSide &&
       other.lineSpacing == lineSpacing &&
-      other.lineGap == lineGap &&
       other.fillHeight == fillHeight &&
-      other.nominalLines == nominalLines;
+      other.gridLines == gridLines;
 
   @override
-  int get hashCode => Object.hash(padTop, padBottom, padSide, lineSpacing, lineGap, fillHeight, nominalLines);
+  int get hashCode => Object.hash(padTop, padBottom, padSide, lineSpacing, fillHeight, gridLines);
 }
 
-/// Pan / zoom on top of the engine layout. `view px = ox + layout px * scale`.
+/// Pan / zoom on top of the engine layout. `view px = offsetX + layout px * scale`.
 class QvpViewController extends ChangeNotifier {
-  double scale = 1, ox = 0, oy = 0;
+  double scale = 1, offsetX = 0, offsetY = 0;
   bool _fitRequested = true;
 
   /// Size of the last laid-out viewport (logical px).
   Size viewport = Size.zero;
 
-  void set({double? scale, double? ox, double? oy}) {
+  void set({double? scale, double? offsetX, double? offsetY}) {
     this.scale = scale ?? this.scale;
-    this.ox = ox ?? this.ox;
-    this.oy = oy ?? this.oy;
+    this.offsetX = offsetX ?? this.offsetX;
+    this.offsetY = offsetY ?? this.offsetY;
     notifyListeners();
   }
 
@@ -96,11 +93,11 @@ class QvpViewController extends ChangeNotifier {
     final c = around ?? Offset(viewport.width / 2, viewport.height / 2);
     final ns = (scale * factor).clamp(minScale, maxScale);
     final k = ns / scale;
-    set(scale: ns, ox: c.dx - (c.dx - ox) * k, oy: c.dy - (c.dy - oy) * k);
+    set(scale: ns, offsetX: c.dx - (c.dx - offsetX) * k, offsetY: c.dy - (c.dy - offsetY) * k);
   }
 
   /// Widget coordinates → layout viewport px (what the engine's `*View` calls take).
-  Offset toView(Offset local) => Offset((local.dx - ox) / scale, (local.dy - oy) / scale);
+  Offset toView(Offset local) => Offset((local.dx - offsetX) / scale, (local.dy - offsetY) / scale);
 }
 
 /// Renders a [QvpPage] with the engine's layout, animated highlights, masks,
@@ -263,8 +260,8 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   void _fit(Size size) {
     final l = page.currentLayout!;
     _ctl.scale = l.fitScale;
-    _ctl.ox = l.fitX;
-    _ctl.oy = l.fitY;
+    _ctl.offsetX = l.fitX;
+    _ctl.offsetY = l.fitY;
     _ctl._fitRequested = false;
   }
 
@@ -295,8 +292,8 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
 
   void _onScaleStart(ScaleStartDetails d) {
     _gScale = _ctl.scale;
-    _gOx = _ctl.ox;
-    _gOy = _ctl.oy;
+    _gOx = _ctl.offsetX;
+    _gOy = _ctl.offsetY;
     _gFocal = d.localFocalPoint;
   }
 
@@ -305,7 +302,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     final ns = (_gScale * d.scale).clamp(widget.minScale, widget.maxScale);
     final k = ns / _gScale;
     final f = d.localFocalPoint;
-    _ctl.set(scale: ns, ox: f.dx - (_gFocal.dx - _gOx) * k, oy: f.dy - (_gFocal.dy - _gOy) * k);
+    _ctl.set(scale: ns, offsetX: f.dx - (_gFocal.dx - _gOx) * k, offsetY: f.dy - (_gFocal.dy - _gOy) * k);
   }
 
   void _onLongPressStart(LongPressStartDetails d) {
@@ -471,15 +468,15 @@ class _QvpPainter extends CustomPainter {
 
   /// Transform of one line: (scale, tx, ty) in logical px.
   (double, double, double) _lineTf(QvpLayout? l, int line) {
-    final ls = l?.scale ?? 1, lox = l?.ox ?? 0, loy = l?.oy ?? 0;
+    final ls = l?.scale ?? 1, lox = l?.offsetX ?? 0, loy = l?.offsetY ?? 0;
     final dy = l != null && line < l.lineDy.length ? l.lineDy[line] : 0.0;
-    return (view.scale * ls, view.ox + view.scale * lox, view.oy + view.scale * (loy + dy * ls));
+    return (view.scale * ls, view.offsetX + view.scale * lox, view.offsetY + view.scale * (loy + dy * ls));
   }
 
   void _drawBoxes(ui.Canvas c, List<QvpBox> boxes) {
     if (boxes.isEmpty) return;
     c.save();
-    c.translate(view.ox, view.oy);
+    c.translate(view.offsetX, view.offsetY);
     c.scale(view.scale);
     ui.Path? cur;
     var id = -1, col = 0;
@@ -522,14 +519,14 @@ class _QvpPainter extends CustomPainter {
     // paper
     final paperColor = paper;
     if (paperColor != null) {
-      final rect = Rect.fromLTWH(view.ox, view.oy, (l?.contentW ?? page.width) * view.scale, (l?.contentH ?? page.height) * view.scale);
+      final rect = Rect.fromLTWH(view.offsetX, view.offsetY, (l?.contentW ?? page.width) * view.scale, (l?.contentH ?? page.height) * view.scale);
       if (paperShadow) canvas.drawShadow(ui.Path()..addRect(rect), const Color(0x66000000), 6, false);
       canvas.drawRect(rect, ui.Paint()..color = paperColor);
     }
 
     // base ink cache: every non-styled path at the current transform
     final ids = styledSet.toList()..sort();
-    final key = '${view.scale.toStringAsFixed(5)}|${view.ox.toStringAsFixed(2)}|${view.oy.toStringAsFixed(2)}|$dpr|$ink|${identityHashCode(l)}|${size.width}x${size.height}|${ids.join(',')}';
+    final key = '${view.scale.toStringAsFixed(5)}|${view.offsetX.toStringAsFixed(2)}|${view.offsetY.toStringAsFixed(2)}|$dpr|$ink|${identityHashCode(l)}|${size.width}x${size.height}|${ids.join(',')}';
     if (key != cache.key || (cache.image == null && cache.picture == null)) {
       final sw = Stopwatch()..start();
       final rec = ui.PictureRecorder();

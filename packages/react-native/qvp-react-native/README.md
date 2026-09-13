@@ -46,8 +46,8 @@ const qvp = useQvp();
   pageUri="asset://pages/042.qvp"
   wordsUri="asset://pages/042.words.json"                       // optional sidecar (rasm_imlai/qpc/rasm/search forms)
   padTop={12} padBottom={12} padSide={8}                        // dp
-  lineSpacing={1} lineGap={0} fillHeight={false}                // engine layout knobs (page units for lineGap)
-  // spacing only opens up: lineSpacing < 1 and a negative lineGap are clamped to "as printed"
+  lineSpacing={1} fillHeight={false}                            // engine layout knobs
+  // spacing only opens up: lineSpacing < 1 is clamped to "as printed"
   paperColor="#fffdf7" defaultInk="#231f20"
   theme={{ diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', ms: 200 }}     // page.theme(...) — one handle
   styles={[
@@ -108,11 +108,11 @@ await qvp.select(anchor, focus); qvp.clearSelection(); qvp.selection(); qvp.sele
 await qvp.unmaskNext(1); qvp.maskBack(1); qvp.unmaskWord(i); qvp.maskWord(i); qvp.unmaskAll(); qvp.maskAll();
 await qvp.maskHidden(); qvp.maskWords(); qvp.revealStepCount(); qvp.revealPosition(); qvp.revealStepOf(i);
 await qvp.hitTestView(x, y, { maxDistance: 6 }); qvp.hitTestExactView(x, y); qvp.hitTest(px, py); qvp.hitTestExact(px, py);   // view dp or page units
-await qvp.wordBoundsView(i); qvp.currentLayout(); qvp.layoutGapToFill(); qvp.relayout(); qvp.resetView(); qvp.stats();
+await qvp.wordBoundsView(i); qvp.currentLayout(); qvp.layoutLineSpacingToFill(); qvp.relayout(); qvp.resetView(); qvp.stats();
 
 // engine-wide (Qvp.*)
 await Qvp.strip(s); Qvp.fold(s); Qvp.normalize(s); Qvp.looseKey(s);       // = Qvp.arabic(kind, s)
-await Qvp.gapToFill(pageW, pageH, lines, viewW, viewH); Qvp.wastedFraction(...)
+await qvp.layoutLineSpacingToFill(); qvp.layoutWastedFraction(); qvp.grid()
 Qvp.markName(7); Qvp.kindName(1); Qvp.categoryName(1); Qvp.familyName(3); Qvp.nameId('marks', 'fathah'); Qvp.version; await Qvp.markCategory(7); Qvp.engineName()
 
 // atlas (cross-page)

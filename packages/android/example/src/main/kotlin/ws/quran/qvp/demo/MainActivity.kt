@@ -144,14 +144,14 @@ class MainActivity : AppCompatActivity() {
 
         // layout
         panel.addView(section("Layout (engine)"))
-        panel.addView(slider("line spacing ×100", 100, 220, 100) { v -> view.lineSpacing = v / 100f; view.lineGap = 0f; view.fillHeight = false; view.relayout(); view.resetView(); hud() })
+        panel.addView(slider("line spacing ×100", 100, 220, 100) { v -> view.lineSpacing = v / 100f; view.fillHeight = false; view.relayout(); view.resetView(); hud() })
         panel.addView(slider("pad top", 0, 120, 12) { v -> view.padTop = v * d; view.relayout(); view.resetView(); hud() })
         panel.addView(slider("pad bottom", 0, 120, 12) { v -> view.padBottom = v * d; view.relayout(); view.resetView(); hud() })
         val lrow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         lrow.addView(toggleButton("Fill screen height") { view.fillHeight = it; view.relayout(); view.resetView(); hud() })
-        lrow.addView(Button(this).apply { text = "Leading to fill"; setOnClickListener { page?.let { p -> view.fillHeight = false; view.lineSpacing = 1f; view.lineGap = p.layoutGapToFill(QvpLayoutSpec(view.width.toFloat(), view.height.toFloat(), view.padTop, view.padBottom, view.padSide, view.padSide)); view.relayout(); view.resetView(); hud() } } })
+        lrow.addView(Button(this).apply { text = "Leading to fill"; setOnClickListener { page?.let { p -> view.fillHeight = false; view.lineSpacing = p.layoutLineSpacingToFill(view.layoutSpec()); view.relayout(); view.resetView(); hud() } } })
         panel.addView(lrow)
-        panel.addView(TextView(this).apply { textSize = 11f; text = "Leading only grows — the printed pitch is the floor, so the lines never close up — and the text width is always the screen's." })
+        panel.addView(TextView(this).apply { textSize = 11f; text = "Leading only grows — the printed lineSpacing is the floor, so the lines never close up — and the text width is always the screen's." })
 
         panel.addView(section("Page")); meta = TextView(this).apply { textSize = 11f }; panel.addView(meta)
         panel.addView(section("Engine")); hud = TextView(this).apply { typeface = Typeface.MONOSPACE; textSize = 10.5f }; panel.addView(hud)
@@ -315,7 +315,7 @@ class MainActivity : AppCompatActivity() {
             "base layer    ${view.lastBasePaths} paths in %.2f ms (cached)\n".format(view.lastBaseMs) +
             "overlay       ${view.lastOverlayPaths} styled + ${view.lastBands} bands in %.2f ms\n".format(view.lastOverlayMs) +
             "hit-test      %.1f µs · %d handles · %d highlights\n".format(view.lastHitUs, p.styleHandles().size, p.highlightHandles().size) +
-            "layout        ${if (view.fillHeight) "fill height" else if (view.lineGap > 0) "gap +%.1f u".format(view.lineGap) else "spacing ×%.2f".format(view.lineSpacing)} · pitch %.1f u".format(l?.pitch ?: 0f)
+            "layout        ${if (view.fillHeight) "fill height" else "spacing ×%.2f".format(view.lineSpacing)} · lineSpacing %.1f u".format(l?.lineSpacing ?: 0f)
         handler.postDelayed({ hud() }, 1000)
     }
     override fun onDestroy() { stopPlay(); page?.close(); atlas?.close(); super.onDestroy() }

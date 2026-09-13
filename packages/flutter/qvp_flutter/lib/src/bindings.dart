@@ -251,7 +251,7 @@ final class QvpLineBandC extends ffi.Struct {
   external double inkY1;
 }
 
-/// `{ float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing, line_gap; uint32_t fill_height, nominal_lines; }`
+/// `{ float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing, line_gap; uint32_t fill_height, grid_lines; }`
 final class QvpLayoutSpecC extends ffi.Struct {
   @ffi.Float()
   external double viewportW;
@@ -267,12 +267,10 @@ final class QvpLayoutSpecC extends ffi.Struct {
   external double padRight;
   @ffi.Float()
   external double lineSpacing;
-  @ffi.Float()
-  external double lineGap;
   @ffi.Uint32()
   external int fillHeight;
   @ffi.Uint32()
-  external int nominalLines;
+  external int gridLines;
   @ffi.Float()
   external double cropLeft;
   @ffi.Float()
@@ -281,20 +279,28 @@ final class QvpLayoutSpecC extends ffi.Struct {
   external double maxAspectSlack;
 }
 
-/// `{ float scale, ox, oy, content_w, content_h, pitch; uint32_t n_lines; const float* lines; }`
+/// `{ uint32_t lines; float line_spacing; }`
+final class QvpGridC extends ffi.Struct {
+  @ffi.Uint32()
+  external int lines;
+  @ffi.Float()
+  external double lineSpacing;
+}
+
+/// `{ float scale, offset_x, offset_y, content_w, content_h, line_spacing; uint32_t n_lines; const float* lines; }`
 final class QvpLayoutC extends ffi.Struct {
   @ffi.Float()
   external double scale;
   @ffi.Float()
-  external double ox;
+  external double offsetX;
   @ffi.Float()
-  external double oy;
+  external double offsetY;
   @ffi.Float()
   external double contentW;
   @ffi.Float()
   external double contentH;
   @ffi.Float()
-  external double pitch;
+  external double lineSpacing;
   @ffi.Uint32()
   external int nLines;
   external ffi.Pointer<ffi.Float> lines;
@@ -579,7 +585,8 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint16, ffi.Uint16, ffi.Uint16), int Function(PtrPage, int, int, int)>('qvp_find_word');
   late final int Function(PtrPage, PtrTarget, PtrU32, int) targetWords =
       lib.lookupFunction<ffi.Uint32 Function(PtrPage, PtrTarget, PtrU32, ffi.Uint32), int Function(PtrPage, PtrTarget, PtrU32, int)>('qvp_target_words');
-  late final double Function(PtrPage) naturalPitch = lib.lookupFunction<ffi.Float Function(PtrPage), double Function(PtrPage)>('qvp_natural_pitch');
+  late final double Function(PtrPage) pageLineSpacing = lib.lookupFunction<ffi.Float Function(PtrPage), double Function(PtrPage)>('qvp_page_line_spacing');
+  late final void Function(PtrPage, ffi.Pointer<QvpGridC>) pageGrid = lib.lookupFunction<ffi.Void Function(PtrPage, ffi.Pointer<QvpGridC>), void Function(PtrPage, ffi.Pointer<QvpGridC>)>('qvp_page_grid');
 
   // metadata
   late final int Function(PtrPage) surahCount = lib.lookupFunction<ffi.Uint32 Function(PtrPage), int Function(PtrPage)>('qvp_surah_count');
@@ -639,14 +646,10 @@ final class QvpBindings {
   late final void Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, ffi.Pointer<QvpLayoutC>) layout = lib.lookupFunction<
       ffi.Void Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, ffi.Pointer<QvpLayoutC>),
       void Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, ffi.Pointer<QvpLayoutC>)>('qvp_layout');
-  late final double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, double) layoutGapToFill = lib.lookupFunction<
+  late final double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, double) layoutLineSpacingToFill = lib.lookupFunction<
       ffi.Float Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, ffi.Float),
-      double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, double)>('qvp_layout_gap_to_fill');
-  late final double Function(double, double, int, double, double, double) gapToFill = lib.lookupFunction<
-      ffi.Float Function(ffi.Float, ffi.Float, ffi.Uint32, ffi.Float, ffi.Float, ffi.Float),
-      double Function(double, double, int, double, double, double)>('qvp_gap_to_fill');
-  late final double Function(double, double, double, double) wastedFraction = lib.lookupFunction<
-      ffi.Float Function(ffi.Float, ffi.Float, ffi.Float, ffi.Float), double Function(double, double, double, double)>('qvp_wasted_fraction');
+      double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, double)>('qvp_layout_line_spacing_to_fill');
+  late final double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>) layoutWastedFraction = lib.lookupFunction<ffi.Float Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>), double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>)>('qvp_layout_wasted_fraction');
   late final int Function(PtrPage, int, PtrF32) wordBoundsView =
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, PtrF32), int Function(PtrPage, int, PtrF32)>('qvp_word_bounds_view');
 

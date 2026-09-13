@@ -147,10 +147,10 @@ object Marshal {
     fun cropBounds(c: QvpCropBounds): Map<String, Any?> = mapOf("x0" to c.x0, "y0" to c.y0, "x1" to c.x1, "y1" to c.y1, "nWords" to c.nWords, "ayahMarkDecoration" to c.ayahMarkDecoration)
     fun atlasSurah(s: QvpAtlasSurah): Map<String, Any?> = mapOf("number" to s.number, "page" to s.page, "ayahCount" to s.ayahCount, "place" to s.place, "arabic" to s.arabic, "latin" to s.latin, "english" to s.english)
     fun atlasRubuAlHizb(r: QvpAtlasRubuAlHizb): Map<String, Any?> = mapOf("rubuAlHizb" to r.rubuAlHizb, "surah" to r.surah, "ayah" to r.ayah, "page" to r.page, "ayahKey" to r.ayahKey)
-    fun layout(l: QvpLayout): Map<String, Any?> = mapOf("scale" to l.scale, "ox" to l.ox, "oy" to l.oy, "contentW" to l.contentW, "contentH" to l.contentH, "pitch" to l.pitch, "fitScale" to l.fitScale, "fitX" to l.fitX, "fitY" to l.fitY, "lineDy" to l.lineDy.toList(),
+    fun layout(l: QvpLayout): Map<String, Any?> = mapOf("scale" to l.scale, "offsetX" to l.offsetX, "offsetY" to l.offsetY, "contentW" to l.contentW, "contentH" to l.contentH, "lineSpacing" to l.lineSpacing, "fitScale" to l.fitScale, "fitX" to l.fitX, "fitY" to l.fitY, "lineDy" to l.lineDy.toList(),
         "slots" to l.slotTop.indices.map { listOf(l.slotTop[it], l.slotBottom[it]) })
     fun pageInfo(p: QvpPage): Map<String, Any?> = mapOf("page" to p.pageNo, "width" to p.width, "height" to p.height, "nLines" to p.nLines, "nAyahs" to p.nAyahs, "nWords" to p.nWords, "nPaths" to p.nPaths, "nDecorations" to p.nDecorations,
-        "naturalPitch" to p.naturalPitch, "forms" to Form.entries.filter { it == Form.RASM_UTHMANI || p.hasForm(it) }.map { it.name.lowercase() })
+        "lineSpacing" to p.lineSpacing, "forms" to Form.entries.filter { it == Form.RASM_UTHMANI || p.hasForm(it) }.map { it.name.lowercase() })
     fun selection(p: QvpPage): Map<String, Any?> {
         val ws = p.selection()
         return mapOf("words" to ws.toList(), "text" to (if (ws.isEmpty()) "" else p.text(Target.words(ws))), "citation" to (if (ws.isEmpty()) "" else p.citation(ws)),

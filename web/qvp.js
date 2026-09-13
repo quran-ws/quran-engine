@@ -8,7 +8,7 @@
   const NONE = 0xffffffff;
   /** The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). */
   const DEFAULTS = { INK: 0x231f20ff, HIGHLIGHT_INK: 0x1a73e8ff, HIGHLIGHT_BAND: 0xd6a3264d, HIGHLIGHT_PAD_X: 1.2, HIGHLIGHT_PAD_Y: 0, HIGHLIGHT_SEAM: 0.25,
-    SELECTION_BAND: 0x2d6fd640, GAP_BIAS: 0.6, TAP_DISTANCE: 6, NOMINAL_LINES: 15, ASPECT_SLACK: 1.15, MASK_BLOCK: 0xd9d4c8ff, MASK_PAD: 0.6, MASK_RADIUS: 0.8,
+    SELECTION_BAND: 0x2d6fd640, GAP_BIAS: 0.6, TAP_DISTANCE: 6, GRID_LINES: 15, ASPECT_SLACK: 1.15, MASK_BLOCK: 0xd9d4c8ff, MASK_PAD: 0.6, MASK_RADIUS: 0.8,
     REVEAL_LIT: 1, REVEAL_GREY: 0xc9c4b8ff, CROP_PAD: 2 };
   const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, ORNAMENT: 5, PAGE_NUMBER: 6, RUNNING_HEAD: 7, OTHER: 255 };
   const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 };
@@ -125,8 +125,6 @@
       if (!h) throw new Error('qvp_atlas_load failed');
       return new QvpAtlas(this, h);
     }
-    gapToFill(pageW, pageH, lines, viewW, viewH, max = 0) { return this.ex.qvp_gap_to_fill(pageW, pageH, lines, viewW, viewH, max); }
-    wastedFraction(pageW, pageH, viewW, viewH) { return this.ex.qvp_wasted_fraction(pageW, pageH, viewW, viewH); }
   }
 
   // struct writers (wasm32 layouts, see qvp.h)
@@ -154,7 +152,7 @@
     d.setUint8(at, s.selector); d.setUint32(at + 4, s.a >>> 0 || 0, true); d.setUint32(at + 8, s.b >>> 0 || 0, true); d.setUint32(at + 12, s.c >>> 0 || 0, true);
     return at;
   }
-  const HL_DEFAULT = { mode: 'band', height: 'pitch', ink: DEFAULTS.HIGHLIGHT_INK, band: DEFAULTS.HIGHLIGHT_BAND, padX: DEFAULTS.HIGHLIGHT_PAD_X, padY: DEFAULTS.HIGHLIGHT_PAD_Y, radius: 0, seam: DEFAULTS.HIGHLIGHT_SEAM, ms: 0, layer: LAYER.HIGHLIGHT };
+  const HL_DEFAULT = { mode: 'band', height: 'lineSpacing', ink: DEFAULTS.HIGHLIGHT_INK, band: DEFAULTS.HIGHLIGHT_BAND, padX: DEFAULTS.HIGHLIGHT_PAD_X, padY: DEFAULTS.HIGHLIGHT_PAD_Y, radius: 0, seam: DEFAULTS.HIGHLIGHT_SEAM, ms: 0, layer: LAYER.HIGHLIGHT };
   function writeHl(e, at, st) {
     st = { ...HL_DEFAULT, ...st };
     const d = e.dv();
@@ -189,7 +187,7 @@
       this.ayahs = Array.from({ length: this.nAyahs }, (_, i) => this._ayah(i));
       this.lines = Array.from({ length: this.nLines }, (_, i) => this._line(i));
       this.decorations = Array.from({ length: this.nDecorations }, (_, i) => this._deco(i));
-      this.naturalPitch = ex.qvp_natural_pitch(handle);
+      this.lineSpacing = ex.qvp_page_line_spacing(handle);
       this.currentLayout = null;
       this._defaultInk = DEFAULTS.INK;
     }
@@ -331,12 +329,16 @@
     _writeLayoutSpec(spec, s) {
       const d = this.e.dv();
       d.setFloat32(s, spec.viewportW, true); d.setFloat32(s + 4, spec.viewportH, true); d.setFloat32(s + 8, spec.padTop || 0, true); d.setFloat32(s + 12, spec.padBottom || 0, true);
-      d.setFloat32(s + 16, spec.padLeft || 0, true); d.setFloat32(s + 20, spec.padRight || 0, true); d.setFloat32(s + 24, spec.lineSpacing ?? 1, true); d.setFloat32(s + 28, spec.lineGap || 0, true);
-      d.setUint32(s + 32, spec.fillHeight ? 1 : 0, true); d.setUint32(s + 36, spec.nominalLines || DEFAULTS.NOMINAL_LINES, true);
-      d.setFloat32(s + 40, spec.cropLeft || 0, true); d.setFloat32(s + 44, spec.cropRight || 0, true); d.setFloat32(s + 48, spec.maxAspectSlack || 0, true);
+      d.setFloat32(s + 16, spec.padLeft || 0, true); d.setFloat32(s + 20, spec.padRight || 0, true); d.setFloat32(s + 24, spec.lineSpacing ?? 1, true);
+      d.setUint32(s + 28, spec.fillHeight ? 1 : 0, true); d.setUint32(s + 32, spec.gridLines || 0, true);
+      d.setFloat32(s + 36, spec.cropLeft || 0, true); d.setFloat32(s + 40, spec.cropRight || 0, true); d.setFloat32(s + 44, spec.maxAspectSlack || 0, true);
     }
     /** Leading (page units) that makes the page fill the padded viewport of `spec`; max 0 = unlimited. */
-    layoutGapToFill(spec, max = 0) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_gap_to_fill(this.h, s, max); }
+    layoutLineSpacingToFill(spec, max = 0) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_line_spacing_to_fill(this.h, s, max); }
+    /** the share of the padded viewport left empty when the page is fitted to width */
+    layoutWastedFraction(spec) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_wasted_fraction(this.h, s); }
+    /** the grid this page is laid out inside: the mushaf's line count and the printed line spacing */
+    get grid() { this.e.ex.qvp_page_grid(this.h, this.e.scratch); const d = this.e.dv(); return { lines: d.getUint32(this.e.scratch, true), lineSpacing: d.getFloat32(this.e.scratch + 4, true) }; }
     layout(spec) {
       const ex = this.e.ex, s = this.e.scratch; let d = this.e.dv();
       this._writeLayoutSpec(spec, s);
@@ -346,7 +348,7 @@
       const f = new Float32Array(this.e.mem.buffer.slice(lp, lp + n * 12));
       const lineDy = new Float32Array(n), slots = new Array(n);
       for (let i = 0; i < n; i++) { lineDy[i] = f[i * 3]; slots[i] = [f[i * 3 + 1], f[i * 3 + 2]]; }
-      return (this.currentLayout = { scale: d.getFloat32(o, true), ox: d.getFloat32(o + 4, true), oy: d.getFloat32(o + 8, true), contentW: d.getFloat32(o + 12, true), contentH: d.getFloat32(o + 16, true), pitch: d.getFloat32(o + 20, true), lineDy, slots,
+      return (this.currentLayout = { scale: d.getFloat32(o, true), offsetX: d.getFloat32(o + 4, true), offsetY: d.getFloat32(o + 8, true), contentW: d.getFloat32(o + 12, true), contentH: d.getFloat32(o + 16, true), lineSpacing: d.getFloat32(o + 20, true), lineDy, slots,
         fitScale: d.getFloat32(o + 32, true), fitX: d.getFloat32(o + 36, true), fitY: d.getFloat32(o + 40, true) });
     }
     wordBoundsView(i) { this.e.ex.qvp_word_bounds_view(this.h, i, this.e.scratch); const f = new Float32Array(this.e.mem.buffer, this.e.scratch, 4); return { x0: f[0], y0: f[1], x1: f[2], y1: f[3] }; }
@@ -386,7 +388,7 @@
     colorOf(i) { return this.e.ex.qvp_color_of(this.h, i) >>> 0; }
 
     // ── highlights ──
-    /** style: {mode:'ink'|'band'|'both', height:'pitch'|'ink', ink, band, padX, padY, radius, seam, ms, layer} */
+    /** style: {mode:'ink'|'band'|'both', height:'lineSpacing'|'ink', ink, band, padX, padY, radius, seam, ms, layer} */
     highlight(target, style = {}) { return this.e.ex.qvp_highlight_add(this.h, this._target(target), writeHl(this.e, this.e.scratch2 + 24576, style)); }
     moveHighlight(handle, target) { return !!this.e.ex.qvp_highlight_move(this.h, handle, this._target(target)); }
     restyleHighlight(handle, style) { return !!this.e.ex.qvp_highlight_restyle(this.h, handle, writeHl(this.e, this.e.scratch2 + 24576, style)); }
@@ -396,7 +398,7 @@
     highlightWords(h) { const n = this.e.ex.qvp_highlight_words(this.h, h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
     highlightBoxesView() { const n = this.e.ex.qvp_highlight_boxes_view(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
-    wordBands(words, { height = 'pitch', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_word_bands(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
+    wordBands(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_word_bands(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
 
     // ── selection ──
     select(anchor, focus = anchor) { this.e.ex.qvp_select(this.h, anchor < 0 ? NONE : anchor, focus < 0 ? NONE : focus); }
@@ -465,13 +467,13 @@
       this.stats = { baseMs: 0, overlayMs: 0, basePaths: 0, overlayPaths: 0, bands: 0 };
     }
     lineTransform(page, view, line, dpr) {
-      const L = page.currentLayout || { scale: 1, ox: 0, oy: 0, lineDy: null };
+      const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null };
       const s = dpr * view.scale * L.scale, dy = L.lineDy ? L.lineDy[line] : 0;
-      return [s, dpr * (view.ox + view.scale * L.ox), dpr * (view.oy + view.scale * (L.oy + dy * L.scale))];
+      return [s, dpr * (view.offsetX + view.scale * L.offsetX), dpr * (view.offsetY + view.scale * (L.offsetY + dy * L.scale))];
     }
     /** boxes are in layout viewport px; view adds pan/zoom on top */
     drawBoxes(c, boxes, view, dpr) {
-      c.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
+      c.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.offsetX, dpr * view.offsetY);
       let cur = null, col = 0;
       const flush = () => { if (cur) { c.fillStyle = css(col); c.fill(cur, 'nonzero'); cur = null; } };
       for (const b of boxes) {
@@ -484,9 +486,9 @@
       const paths = page.buildPaths();
       const styled = page.styledPaths();
       const styledSet = new Set(styled.map(s => s[0]));
-      const L = page.currentLayout || { scale: 1, ox: 0, oy: 0, lineDy: null, pitch: 0 };
+      const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null, lineSpacing: 0 };
       const ink = page.defaultInk;
-      const key = `${view.scale.toFixed(4)}|${view.ox.toFixed(1)}|${view.oy.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.pitch}|${L.lineDy ? L.lineDy[0] : ''}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
+      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${view.offsetY.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.lineSpacing}|${L.lineDy ? L.lineDy[0] : ''}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
       const W = this.canvas.width, H = this.canvas.height;
       const setTf = (c, line) => { const [s, tx, ty] = this.lineTransform(page, view, line, dpr); c.setTransform(s, 0, 0, s, tx, ty); };
       if (key !== this.baseKey || this.base.width !== W || this.base.height !== H) {

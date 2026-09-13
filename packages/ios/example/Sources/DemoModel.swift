@@ -40,7 +40,7 @@ final class DemoModel: ObservableObject {
     @Published var revealPos: Double = 0 { didSet { if revealOn, let p = page { p.revealGoto(Int(revealPos)); revealVal = "\(Int(revealPos) + 1)/\(p.revealStepCount())"; view.setNeedsDisplay() } } }
     @Published var revealMax: Double = 1
     @Published var revealVal = ""
-    @Published var lineSpacing: Double = 100 { didSet { if lineSpacing != oldValue { view.lineGap = 0; fillHeight = false; view.lineSpacing = Float(lineSpacing / 100); view.relayout(); view.resetView(); hud() } } }
+    @Published var lineSpacing: Double = 100 { didSet { if lineSpacing != oldValue { fillHeight = false; view.lineSpacing = Float(lineSpacing / 100); view.relayout(); view.resetView(); hud() } } }
     @Published var padTop: Double = 12 { didSet { if padTop != oldValue { view.padTop = CGFloat(padTop); view.relayout(); view.resetView(); hud() } } }
     @Published var padBottom: Double = 12 { didSet { if padBottom != oldValue { view.padBottom = CGFloat(padBottom); view.relayout(); view.resetView(); hud() } } }
     @Published var fillHeight = true { didSet { if fillHeight != oldValue { if fillHeight { controlsShown = false }; view.fillHeight = fillHeight; view.relayout(); view.resetView(); hud() } } }
@@ -252,8 +252,9 @@ final class DemoModel: ObservableObject {
     // ── layout ──
     func leadingToFill() {
         guard let p = page else { return }
-        fillHeight = false; lineSpacing = 100; view.lineSpacing = 1
-        view.lineGap = p.layoutGapToFill(QvpLayoutSpec(viewportW: Float(view.bounds.width), viewportH: Float(view.bounds.height), padTop: Float(view.padTop), padBottom: Float(view.padBottom), padLeft: Float(view.padSide), padRight: Float(view.padSide)))
+        fillHeight = false
+        let spacing = p.layoutLineSpacingToFill(QvpLayoutSpec(viewportW: Float(view.bounds.width), viewportH: Float(view.bounds.height), padTop: Float(view.padTop), padBottom: Float(view.padBottom), padLeft: Float(view.padSide), padRight: Float(view.padSide)))
+        lineSpacing = Double(spacing * 100); view.lineSpacing = spacing
         view.relayout(); view.resetView(); hud()
     }
 
@@ -284,14 +285,14 @@ final class DemoModel: ObservableObject {
     func hud() {
         guard let p = page else { return }
         let l = p.currentLayout
-        let layout = view.fillHeight ? "fill height" : view.lineGap > 0 ? String(format: "gap +%.1f u", view.lineGap) : String(format: "spacing ×%.2f", view.lineSpacing)
+        let layout = view.fillHeight ? "fill height" : String(format: "spacing ×%.2f", view.lineSpacing)
         hudText = "engine v\(QvpEngine.version()) · Swift over qvp.h\(atlas != nil ? " · atlas" : "")\n"
             + String(format: "page %03d      %d KB, load %.2f ms\n", pageNo, pageBytes / 1024, loadMs)
             + "content       \(p.nWords) words · \(p.nPaths) paths · \(p.nLines) lines\n"
             + String(format: "base layer    %d paths in %.2f ms (cached)\n", view.lastBasePaths, view.lastBaseMs)
             + String(format: "overlay       %d styled + %d bands in %.2f ms\n", view.lastOverlayPaths, view.lastBands, view.lastOverlayMs)
             + String(format: "hit-test      %.1f µs · %d handles · %d highlights\n", view.lastHitUs, p.styleHandles().count, p.highlightHandles().count)
-            + String(format: "layout        %@ · pitch %.1f u", layout, l?.pitch ?? 0)
+            + String(format: "layout        %@ · lineSpacing %.1f u", layout, l?.lineSpacing ?? 0)
     }
     func showToast(_ s: String) {
         toast = s

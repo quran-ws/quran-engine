@@ -41,7 +41,8 @@ page.attachWords(await fetchJson('pages/042.words.json'));               // opti
 page.free(); atlas.free();
 ```
 
-`page.width/height/page/nLines/nAyahs/nWords/nPaths/nDecorations`, `page.naturalPitch`.
+`page.width/height/page/nLines/nAyahs/nWords/nPaths/nDecorations`, `page.lineSpacing`,
+`page.grid`.
 
 ## Words, ayahs, lines, decorations
 
@@ -98,19 +99,22 @@ page.hitTestView(viewX, viewY, {maxDistance: 6, gapBias: 0.6})
 ```
 
 Exact outline first, then **nearest with direction**: the point is resolved to a line
-by its pitch band, then to a word, with a gap between two words split 60/40 towards the
+by its line spacing band, then to a word, with a gap between two words split 60/40 towards the
 preceding (right-hand) word — trailing ink is drawn *into* the following gap in this
 print. `hitAreas()` returns the same partition as boxes (no dead zones on a line);
-`lineBands()` the pitch bands. `hitTestExact`/`hitTestExactView` are the exact-only variants.
+`lineBands()` the line spacing bands. `hitTestExact`/`hitTestExactView` are the exact-only variants.
 
 ## Layout
 
 ```js
 const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRight,
-                       lineSpacing: 1.0, lineGap: 0, fillHeight: false, nominalLines: 15,
+                       lineSpacing: 1.0, fillHeight: false, gridLines: 0,
                        cropLeft: 0, cropRight: 0, maxAspectSlack: 0});
-// L = {scale, ox, oy, contentW, contentH, pitch, lineDy[], slots[], fitScale, fitX, fitY}
-page.layoutGapToFill(spec)   // leading (page units) that fills the padded viewport of spec
+// L = {scale, offsetX, offsetY, contentW, contentH, lineSpacing, lineDy[], slots[], fitScale, fitX, fitY}
+page.layoutLineSpacingToFill(spec)   // the lineSpacing multiplier that fills the padded viewport of spec
+page.layoutWastedFraction(spec)      // the share of the padded viewport left empty at fit-to-width
+page.grid                            // {lines, lineSpacing}: the mushaf's line count and the printed spacing
+page.lineSpacing                     // the printed line spacing of this page, in page units
 ```
 
 **The fit.** `fitScale`, `fitX`, `fitY` is the view transform that shows the whole laid-out
@@ -124,41 +128,42 @@ answers for forty viewport cases are in `conformance/scenarios/layout.json`.
 
 **What this is for.** A printed mushaf page is squatter than a phone screen: fitted to the
 width of a tall viewport it leaves a band of empty paper top and bottom. The layout knobs
-exist to spend that empty band on leading — the lines drift apart until the page fills the
-screen — and for nothing else. They are an *expansion* control, never a compression one.
+exist to fill that empty band with leading, so the lines drift apart until the page fills
+the screen, and for nothing else. They are an expansion control, never a compression one.
 
 Horizontal placement is as printed; each line moves by `lineDy[line]`. Lines are never
-re-spread onto a grid (printed lines are not equally tall or equally pitched, and ink
+re-spread onto a grid (printed lines are not equally tall or equally spaced, and ink
 crosses into neighbouring lines): every line keeps its printed position and the same
-delta is added between each pair of consecutive lines. `lineSpacing` sets that delta as
-a multiple of the printed pitch (`pitch·(lineSpacing−1)`), `lineGap` adds leading in page
-units, `fillHeight` picks the delta that makes the page fill the padded viewport. A short
-page (fewer lines than `nominalLines`, pages 1–2) has no height of its own to fill, so under
-`fillHeight` it takes the rows a full page gets — `(viewportH − pads)/nominalLines` each —
-centred. Leading only opens up: the printed pitch is the floor for all three, and a page
-that cannot fit at it reports a `contentH` taller than the viewport. `slots[]` boundaries
-sit halfway between neighbouring lines, except beside a header line (surah name, basmalah),
-where they stop half a pitch from the line's centre — the banner on pages 1–2 sits several
-pitches above the text, and that gap is not the first line's.
+delta is added between each pair of consecutive lines. One name covers the concept at
+every level: `page.lineSpacing` is the printed spacing, the spec's `lineSpacing` is the
+multiplier you ask for, `L.lineSpacing` is the spacing the layout produced. The delta is
+`page.lineSpacing·(lineSpacing − 1)`; `fillHeight` picks the delta that makes the page fill
+the padded viewport instead. A short page (fewer lines than the grid, pages 1 and 2) has no
+height of its own to fill, so under `fillHeight` it takes the rows a full page gets,
+`(viewportH − pads)/gridLines` each, centred. Leading only opens up: the printed spacing
+is the floor, and a page that cannot fit at it reports a `contentH` taller than the
+viewport. `slots[]` boundaries sit halfway between neighbouring lines, except beside a
+header line (surah name, basmalah), where they stop half a line spacing from the line's
+centre: the banner on pages 1 and 2 sits several line spacings above the text, and that
+gap is not the first line's.
 
-**Spacing only opens up.** The printed pitch is the floor: the delta is clamped at 0, so
-`lineSpacing < 1`, a negative `lineGap`, or a `fillHeight` that would need to tighten all
-lay the page out exactly as printed. Lines can never be pulled closer together than the
-mushaf prints them. The text width is not adjustable either: the page is always fitted to
-the padded viewport width (`scale = (viewportW − padLeft − padRight) / pageW`), so the
-only layout knob a reader gets is more leading, never a narrower or wider line.
+**Spacing only opens up.** The delta is clamped at 0, so `lineSpacing < 1` or a
+`fillHeight` that would need to tighten lays the page out exactly as printed. Lines can
+never be pulled closer together than the mushaf prints them. The text width is not
+adjustable either: the page is always fitted to the padded viewport width
+(`scale = (viewportW − padLeft − padRight) / pageW`), so the only layout knob a reader gets
+is more leading, never a narrower or wider line.
 
-Pure helpers:
-`engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` and `wastedFraction(...)`.
+`gridLines` is the grid the page is laid out inside, not the page's own line count. 0
+means the page's grid (`page.grid.lines`: 15 for this mushaf, or more when a page has
+more), clamped up to `page.nLines`, never down. A short page laid out on 15 lines,
+Fatihah's 7 for instance, is therefore centred in a full-page box: without `fillHeight` it
+draws at under half the height with the rest of the viewport left empty; with it, its lines
+take full-page rows. That is the spec working, not a rendering bug. Pass
+`gridLines: page.nLines` when you want the page to fill what you gave it, and keep the
+default only when several pages must share one grid.
+
 `wordBoundsView(i)` gives a word's box in viewport px for scroll-into-view.
-
-`nominalLines` is the grid the page is laid out *inside*, not the page's own line
-count: it defaults to 15 and is clamped up to `page.nLines`, never down. A short page
-laid out at 15 — Fatihah's 7 lines, say — is therefore centred in a full-page box:
-without `fillHeight` it draws at under half the height, with the rest of the viewport left
-empty; with it, its lines take full-page rows. That is the spec working, not a rendering
-bug. Pass `nominalLines: page.nLines` when you want the page to fill what you gave it, and
-keep 15 only when several pages must share one grid.
 
 ## Styles
 
@@ -215,7 +220,7 @@ repaints. `highlightBoxesView()` and `maskBoxesView()` are viewport-px rectangle
 
 ```js
 const h = page.highlight('2:255', {mode: 'both', ink: '#0a7d32', band: '#0a7d3224',
-                                   height: 'pitch', padX: 1.2, radius: 1.5, seam: 0.25, ms: 250});
+                                   height: 'lineSpacing', padX: 1.2, radius: 1.5, seam: 0.25, ms: 250});
 page.moveHighlight(h, '2:256');      // the band slides to the new words, ink cross-fades
 page.restyleHighlight(h, {...});   // recolour in place
 page.removeHighlight(h);               // fades out, then disappears
@@ -223,7 +228,7 @@ page.removeHighlight(h);               // fades out, then disappears
 
 `mode` is `ink`, `band` or `both`. A band is **one path per highlight** covering every
 printed line the words occupy, with a `seam` overlap so a six-line ayah reads as one
-shape and not six stripes; height is the line pitch or the words' ink. Use one handle
+shape and not six stripes; height is the line line spacing or the words' ink. Use one handle
 and `moveHighlight` for word-by-word following.
 
 ## Selection
@@ -297,7 +302,8 @@ says which wrapper binds which.
 | page | `qvp_decoration_info` | `page.decorations[i]` | Return one decoration: its `QVP_DECORATION_*` value, key, line, bounds, text and its path range. |
 | page | `qvp_find_word` | `page.findWord(surah, ayah, word)` | Return the page index of a word by its key, or −1 when the word is not on this page. |
 | page | `qvp_target_words` | `page.targetWords(target)` | Expand a target (page, word, ayah, range, line, surah) into word indices in reading order. |
-| page | `qvp_natural_pitch` | `page.naturalPitch` | Return the printed line spacing of this page, in page units. |
+| page | `qvp_page_line_spacing` | `page.lineSpacing` | Return the printed line spacing of this page, in page units. |
+| page | `qvp_page_grid` | `page.grid` | Return the grid the page is laid out inside: the mushaf's line count and the printed line spacing. |
 | metadata | `qvp_surah_count` | `page.surahs().length` | Return how many surahs have text on this page. |
 | metadata | `qvp_surah_at` | `page.surahs()[i]` | Return the i-th surah on the page: number, ayah count, banner and basmalah flags, place, names. |
 | metadata | `qvp_divisions` | `page.divisions()` | Return the juz, hizb, nisf and rubu_al_hizb divisions that start on this page. |
@@ -322,9 +328,8 @@ says which wrapper binds which.
 | hit testing | `qvp_line_bands` | `page.lineBands()` | Return every line's vertical band in page units. |
 | hit testing | `qvp_hit_areas` | `page.hitAreas(gapBias)` | Return the gap-aware rectangle of every word, a partition of each line with no dead zone. |
 | layout | `qvp_layout` | `page.layout(spec)` | Lay the page out for a viewport: scale, per-line shifts, slots, content size and the fit transform. |
-| layout | `qvp_gap_to_fill` | `engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` | Return the leading that fills a viewport when fitted to width, from raw dimensions. |
-| layout | `qvp_layout_gap_to_fill` | `page.layoutGapToFill(spec, max)` | The same from a layout spec; the padding is subtracted in the engine. |
-| layout | `qvp_wasted_fraction` | `engine.wastedFraction(pageW, pageH, viewW, viewH)` | Return the share of a viewport left empty when the page is fitted to width. |
+| layout | `qvp_layout_line_spacing_to_fill` | `page.layoutLineSpacingToFill(spec, max)` | Return the `lineSpacing` multiplier that fills the padded viewport of a spec when fitted to width. |
+| layout | `qvp_layout_wasted_fraction` | `page.layoutWastedFraction(spec)` | Return the share of the padded viewport of a spec left empty when the page is fitted to width. |
 | layout | `qvp_word_bounds_view` | `page.wordBoundsView(i)` | Return a word's bounds in viewport pixels through the current layout. |
 | styles | `qvp_style_add` | `page.style(selector, colour, ms, layer)` | Add a colour rule for a selector on a layer; returns a handle, 0 for a bad selector. |
 | styles | `qvp_style_add_target` | `page.styleTarget(target, colour, ms, layer)` | Add a colour rule for a target's words. |

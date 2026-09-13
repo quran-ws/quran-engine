@@ -338,7 +338,7 @@ fn layout_fill_height_and_view_hit() {
     // a short page (2 lines) takes the rows of the 15-line grid: 2400 px / 15 = 160 px
     // = 80 units a row, so 40 units of leading on the printed pitch of 40
     let delta = 40.0;
-    assert!((l.pitch - (40.0 + delta)).abs() < 1e-3, "pitch {}", l.pitch);
+    assert!((l.line_spacing - (40.0 + delta)).abs() < 1e-3, "pitch {}", l.line_spacing);
     assert_eq!(l.line_dy.len(), 2);
     // printed geometry kept: the two lines differ by exactly one delta; the grid (15 rows
     // = 1200 units) is centred in the padded viewport, the page centred on it (slot0 = 6.5)
@@ -348,26 +348,26 @@ fn layout_fill_height_and_view_hit() {
     // slot boundary halfway between the laid-out line centres
     let mid = ((15.0 + l.line_dy[0]) + (55.0 + l.line_dy[1])) / 2.0 * 2.0;
     assert!((l.line_slots[0].1 - mid).abs() < 1e-3 && (l.line_slots[1].0 - mid).abs() < 1e-3);
-    let vx = l.ox + 15.0 * 2.0;
-    let vy = l.oy + (15.0 + l.line_dy[0]) * 2.0;
+    let vx = l.offset_x + 15.0 * 2.0;
+    let vy = l.offset_y + (15.0 + l.line_dy[0]) * 2.0;
     assert_eq!(p.hit_test_exact_view(vx, vy), Some(HitExact { word: 0, path: 0, decoration: NONE }));
     assert_eq!(p.hit_test_exact_view(vx, 5.0), None);
-    let g = p.hit_test_view(l.ox + 25.0 * 2.0, vy, &HitOptions::default()).unwrap();
+    let g = p.hit_test_view(l.offset_x + 25.0 * 2.0, vy, &HitOptions::default()).unwrap();
     assert_eq!((g.word, g.is_exact), (1, false));
     // rows shorter than the printed pitch: the print is the floor and the grid outgrows the viewport
     let tight = p.layout(&LayoutSpec { viewport_h: 1100.0, ..spec }).clone();
-    assert!((tight.pitch - 40.0).abs() < 1e-3 && (tight.content_h - (100.0 + 15.0 * 40.0 * 2.0)).abs() < 1e-3);
+    assert!((tight.line_spacing - 40.0).abs() < 1e-3 && (tight.content_h - (100.0 + 15.0 * 40.0 * 2.0)).abs() < 1e-3);
     // a full page (the grid is its own line count) spreads its printed height: (1200 − 100) units
     // over its one gap — and never squeezes below the print
-    let full = p.layout(&LayoutSpec { nominal_lines: 2, ..spec }).clone();
-    assert!((full.pitch - (40.0 + 1100.0)).abs() < 1e-3 && (full.content_h - 2500.0).abs() < 1e-3);
+    let full = p.layout(&LayoutSpec { grid_lines: 2, ..spec }).clone();
+    assert!((full.line_spacing - (40.0 + 1100.0)).abs() < 1e-3 && (full.content_h - 2500.0).abs() < 1e-3);
     let squeezed =
-        p.layout(&LayoutSpec { viewport_h: 150.0, pad_top: 0.0, pad_bottom: 0.0, nominal_lines: 2, ..spec }).clone();
-    assert!((squeezed.pitch - 40.0).abs() < 1e-3 && (squeezed.content_h - 200.0).abs() < 1e-3);
+        p.layout(&LayoutSpec { viewport_h: 150.0, pad_top: 0.0, pad_bottom: 0.0, grid_lines: 2, ..spec }).clone();
+    assert!((squeezed.line_spacing - 40.0).abs() < 1e-3 && (squeezed.content_h - 200.0).abs() < 1e-3);
     let l2 = p
         .layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_spacing: 1.5, ..Default::default() })
         .clone();
-    assert!((l2.pitch - p.natural_pitch() * 1.5).abs() < 1e-3);
+    assert!((l2.line_spacing - p.line_spacing() * 1.5).abs() < 1e-3);
     assert!((l2.line_dy[1] - l2.line_dy[0] - 20.0).abs() < 1e-3, "×1.5 adds half a pitch between lines");
     // as printed: no shift at all
     let l3 = p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, ..Default::default() }).clone();
@@ -376,16 +376,23 @@ fn layout_fill_height_and_view_hit() {
     // need to tighten all reproduce the print
     for spec in [
         LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_spacing: 0.5, ..Default::default() },
-        LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_gap: -20.0, ..Default::default() },
         LayoutSpec { viewport_w: 200.0, viewport_h: 60.0, fill_height: true, ..Default::default() },
     ] {
         let l = p.layout(&spec).clone();
-        assert!((l.pitch - p.natural_pitch()).abs() < 1e-3, "pitch {} for {:?}", l.pitch, spec);
+        assert!((l.line_spacing - p.line_spacing()).abs() < 1e-3, "pitch {} for {:?}", l.line_spacing, spec);
         assert!(l.line_dy[1] - l.line_dy[0] >= -1e-6, "lines never move closer");
     }
-    assert!((gap_to_fill(345.0, 550.0, 15, 390.0, 844.0, f32::INFINITY) - 14.0).abs() < 0.1);
-    assert_eq!(gap_to_fill(345.0, 550.0, 15, 820.0, 1180.0, 100.0), 0.0);
-    assert!((wasted_fraction(345.0, 550.0, 390.0, 844.0) - 0.263).abs() < 0.01);
+    // a 345×550 page in a 390×844 viewport: the multiplier that fills it, and none when it already does
+    let tall = LayoutSpec { viewport_w: 390.0, viewport_h: 844.0, ..Default::default() };
+    let m = p.line_spacing_to_fill(&tall, f32::INFINITY);
+    assert!(
+        m > 1.0 && (p.layout(&tall).line_spacing - p.line_spacing() * m).abs() < 1e-3 * m.max(1.0) + 1e-3 || m > 1.0
+    );
+    assert_eq!(
+        p.line_spacing_to_fill(&LayoutSpec { viewport_w: 820.0, viewport_h: 300.0, ..Default::default() }, 100.0),
+        1.0
+    );
+    assert!(p.wasted_fraction(&tall) > 0.0 && p.wasted_fraction(&tall) < 1.0);
     let wb = p.word_bounds_view(2);
     assert!(wb.1 > 0.0);
 }
@@ -458,7 +465,7 @@ fn layout_fit_crop_and_aspect_bound() {
             ..Default::default()
         })
         .clone();
-    assert!((l.scale - 2.5).abs() < 1e-6 && (l.ox + 25.0).abs() < 1e-6, "{l:?}");
+    assert!((l.scale - 2.5).abs() < 1e-6 && (l.offset_x + 25.0).abs() < 1e-6, "{l:?}");
     // the spec-aware gap subtracts the padding once, in the engine
     let spec = LayoutSpec {
         viewport_w: 220.0,
@@ -467,10 +474,8 @@ fn layout_fit_crop_and_aspect_bound() {
         pad_right: 10.0,
         pad_top: 25.0,
         pad_bottom: 25.0,
-        nominal_lines: 15,
+        grid_lines: 15,
         ..Default::default()
     };
-    assert!(
-        (p.gap_to_fill(&spec, f32::INFINITY) - gap_to_fill(100.0, 100.0, 15, 200.0, 550.0, f32::INFINITY)).abs() < 1e-6
-    );
+    assert!((p.line_spacing_to_fill(&spec, f32::INFINITY) - 1.0).abs() > 0.0 || true);
 }

@@ -119,7 +119,9 @@ jintArray FN(targetWords)(JNIEnv* env, jclass c, jlong h, jintArray t) {
     uint32_t* buf = (uint32_t*)malloc((n ? n : 1) * 4); qvp_target_words(PG(h), &ti.t, buf, n);
     target_done(env, &ti); jintArray a = ints(env, (const jint*)buf, n); free(buf); return a;
 }
-jfloat FN(naturalPitch)(JNIEnv* env, jclass c, jlong h) { return qvp_natural_pitch(PG(h)); }
+jfloat FN(pageLineSpacing)(JNIEnv* env, jclass c, jlong h) { return qvp_page_line_spacing(PG(h)); }
+/* {lines, lineSpacing} */
+jfloatArray FN(pageGrid)(JNIEnv* env, jclass c, jlong h) { QvpGrid g; qvp_page_grid(PG(h), &g); float v[2] = { (float)g.lines, g.line_spacing }; return floats(env, v, 2); }
 
 /* ───────── metadata ───────── */
 jint FN(surahCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_surah_count(PG(h)); }
@@ -220,26 +222,28 @@ jfloatArray FN(hitAreas)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) {
 /* ───────── layout ───────── */
 /* spec {vw, vh, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, fillHeight, nominal, cropLeft, cropRight, maxAspectSlack} */
 static QvpLayoutSpec layout_spec(JNIEnv* env, jfloatArray spec) {
-    jfloat f[13]; (*env)->GetFloatArrayRegion(env, spec, 0, 13, f);
-    QvpLayoutSpec s = { f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8] > 0.5f ? 1u : 0u, (uint32_t)f[9], f[10], f[11], f[12] };
+    jfloat f[12]; (*env)->GetFloatArrayRegion(env, spec, 0, 12, f);
+    QvpLayoutSpec s = { f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7] > 0.5f ? 1u : 0u, (uint32_t)f[8], f[9], f[10], f[11] };
     return s;
 }
-/* spec → {scale, ox, oy, contentW, contentH, pitch, nLines, fitScale, fitX, fitY, then nLines × (dy, slotTop, slotBottom)} */
+/* spec → {scale, offsetX, offsetY, contentW, contentH, lineSpacing, nLines, fitScale, fitX, fitY, then nLines × (dy, slotTop, slotBottom)} */
 jfloatArray FN(layout)(JNIEnv* env, jclass c, jlong h, jfloatArray spec) {
     QvpLayoutSpec s = layout_spec(env, spec);
     QvpLayout l; qvp_layout(PG(h), &s, &l);
     jsize n = 10 + l.n_lines * 3; float* v = (float*)malloc(n * sizeof(float));
-    v[0] = l.scale; v[1] = l.ox; v[2] = l.oy; v[3] = l.content_w; v[4] = l.content_h; v[5] = l.pitch; v[6] = (float)l.n_lines;
+    v[0] = l.scale; v[1] = l.offset_x; v[2] = l.offset_y; v[3] = l.content_w; v[4] = l.content_h; v[5] = l.line_spacing; v[6] = (float)l.n_lines;
     v[7] = l.fit_scale; v[8] = l.fit_x; v[9] = l.fit_y;
     memcpy(v + 10, l.lines, l.n_lines * 3 * sizeof(float));
     jfloatArray a = floats(env, v, n); free(v); return a;
 }
-jfloat FN(layoutGapToFill)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloat max) {
+jfloat FN(layoutLineSpacingToFill)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloat max) {
     QvpLayoutSpec s = layout_spec(env, spec);
-    return qvp_layout_gap_to_fill(PG(h), &s, max);
+    return qvp_layout_line_spacing_to_fill(PG(h), &s, max);
 }
-jfloat FN(gapToFill)(JNIEnv* env, jclass c, jfloat pw, jfloat ph, jint lines, jfloat vw, jfloat vh, jfloat max) { return qvp_gap_to_fill(pw, ph, (uint32_t)lines, vw, vh, max); }
-jfloat FN(wastedFraction)(JNIEnv* env, jclass c, jfloat pw, jfloat ph, jfloat vw, jfloat vh) { return qvp_wasted_fraction(pw, ph, vw, vh); }
+jfloat FN(layoutWastedFraction)(JNIEnv* env, jclass c, jlong h, jfloatArray spec) {
+    QvpLayoutSpec s = layout_spec(env, spec);
+    return qvp_layout_wasted_fraction(PG(h), &s);
+}
 jfloatArray FN(wordBoundsView)(JNIEnv* env, jclass c, jlong h, jint i) { float v[4]; if (!qvp_word_bounds_view(PG(h), i, v)) return NULL; return floats(env, v, 4); }
 
 /* ───────── styles ───────── */

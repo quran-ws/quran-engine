@@ -31,7 +31,7 @@ The test every public member must pass:
 - **Distinguish meaning by name, never by argument.** `hitTestExact` vs `hitTestExact`, `find`
   vs `search`, `pageOf` (which page contains this) vs `pageAt` (the page at this index).
 - **No abbreviations, no jargon, no generic names.** `decoration` not `decoration`, `lineSpacing`
-  not `pitch`. Never `process`, `handle`, `data` or `info` as a whole name.
+  not `lineSpacing`. Never `process`, `handle`, `data` or `info` as a whole name.
 - **Fewest parameters.** Anything with an obvious default is optional. More than three
   parameters means an options object.
 - **Write the guess first.** Before adding a public member, write down what a developer

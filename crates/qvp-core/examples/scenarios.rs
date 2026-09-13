@@ -34,27 +34,27 @@ fn main() {
                 pad_left: 16.0,
                 pad_right: 16.0,
                 line_spacing: 1.0,
-                line_gap: 0.0,
                 fill_height: fill,
-                nominal_lines: 15,
+                grid_lines: 0,
                 crop_left: crop,
                 crop_right: crop,
                 max_aspect_slack: slack,
             };
-            let gap = page.gap_to_fill(&spec, f32::INFINITY);
+            let to_fill = page.line_spacing_to_fill(&spec, f32::INFINITY);
+            let wasted = page.wasted_fraction(&spec);
             let l = page.layout(&spec).clone();
             cases.push(format!(
                 concat!(
                     "    {{\"spec\": {{\"viewportW\": {}, \"viewportH\": {}, \"padTop\": 24, \"padBottom\": 24, \"padLeft\": 16, \"padRight\": 16, ",
-                    "\"lineSpacing\": 1, \"lineGap\": 0, \"fillHeight\": {}, \"nominalLines\": 15, \"cropLeft\": {}, \"cropRight\": {}, \"maxAspectSlack\": {}}},\n",
-                    "     \"layout\": {{\"scale\": {}, \"ox\": {}, \"oy\": {}, \"contentW\": {}, \"contentH\": {}, \"pitch\": {}, ",
+                    "\"lineSpacing\": 1, \"fillHeight\": {}, \"gridLines\": 0, \"cropLeft\": {}, \"cropRight\": {}, \"maxAspectSlack\": {}}},\n",
+                    "     \"layout\": {{\"scale\": {}, \"offsetX\": {}, \"offsetY\": {}, \"contentW\": {}, \"contentH\": {}, \"lineSpacing\": {}, ",
                     "\"fitScale\": {}, \"fitX\": {}, \"fitY\": {}, \"lineDy0\": {}, \"lineDyLast\": {}}},\n",
-                    "     \"gapToFill\": {}}}"
+                    "     \"lineSpacingToFill\": {}, \"wastedFraction\": {}}}"
                 ),
                 w, h, fill, crop, crop, slack,
-                l.scale, l.ox, l.oy, l.content_w, l.content_h, l.pitch,
+                l.scale, l.offset_x, l.offset_y, l.content_w, l.content_h, l.line_spacing,
                 l.fit_scale, l.fit_x, l.fit_y, l.line_dy[0], l.line_dy[l.line_dy.len() - 1],
-                gap
+                to_fill, wasted
             ));
         }
     }

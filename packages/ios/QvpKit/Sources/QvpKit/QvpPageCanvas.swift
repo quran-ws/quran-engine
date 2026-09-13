@@ -38,9 +38,8 @@ public final class QvpCanvasController {
     /// left = box.x0, right = page.width − box.x1.
     public var cropLeft: Float = 0 { didSet { relayout() } }
     public var cropRight: Float = 0 { didSet { relayout() } }
-    /// Line spacing only opens up; the engine clamps values below 1 to the printed pitch.
+    /// Line spacing only opens up; the engine clamps values below 1 to the printed lineSpacing.
     public var lineSpacing: Float = 1 { didSet { relayout() } }
-    public var lineGap: Float = 0 { didSet { relayout() } }
     public var fillHeight = false { didSet { relayout() } }
     /// Paper behind the page content, 0xRRGGBBAA (nil = transparent).
     public var paperColor: UInt32?
@@ -111,7 +110,7 @@ public final class QvpCanvasController {
         _ = p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height),
                                    padTop: Float(padTop), padBottom: Float(padBottom),
                                    padLeft: Float(padSide), padRight: Float(padSide),
-                                   lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight,
+                                   lineSpacing: lineSpacing, fillHeight: fillHeight,
                                    cropLeft: cropLeft, cropRight: cropRight))
         cache.key = ""; invalidate()
     }
@@ -119,7 +118,7 @@ public final class QvpCanvasController {
     public func resetView() {
         springTask?.cancel(); springTask = nil
         let f = fittedView()
-        viewScale = f.scale; fitScale = f.scale; viewOx = f.ox; viewOy = f.oy
+        viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
         invalidate()
     }
     /// The transform `resetView()` applies: content height fitted, centred.
@@ -136,9 +135,9 @@ public final class QvpCanvasController {
     /// Page units of `line` → view points (engine layout + pan/zoom).
     public func lineTransform(_ line: Int) -> CGAffineTransform {
         let l = page?.currentLayout
-        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.ox ?? 0)
+        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.offsetX ?? 0)
         let dy = (l.flatMap { line < $0.lineDy.count ? $0.lineDy[line] : nil }) ?? 0
-        let loy = CGFloat(l?.oy ?? 0) + CGFloat(dy) * ls
+        let loy = CGFloat(l?.offsetY ?? 0) + CGFloat(dy) * ls
         let s = viewScale * ls
         return CGAffineTransform(a: s, b: 0, c: 0, d: s, tx: viewOx + viewScale * lox, ty: viewOy + viewScale * loy)
     }
@@ -183,7 +182,7 @@ public final class QvpCanvasController {
         springTask = Task { @MainActor [weak self] in
             while let self, !Task.isCancelled {
                 let (v, done) = spring.value(at: self.now())
-                self.viewScale = v.scale; self.viewOx = v.ox; self.viewOy = v.oy
+                self.viewScale = v.scale; self.viewOx = v.offsetX; self.viewOy = v.offsetY
                 self.invalidate()
                 if done { self.springTask = nil; return }
                 try? await Task.sleep(nanoseconds: 8_000_000)
@@ -232,7 +231,7 @@ public final class QvpCanvasController {
         let ink = p.defaultInk
         let W = Int(size.width * displayScale), H = Int(size.height * displayScale)
         var hasher = Hasher(); hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
-        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.pitch)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
+        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
 
         if let paper = paperColor {
             ctx.fill(Path(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale)),

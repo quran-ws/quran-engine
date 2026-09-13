@@ -18,8 +18,8 @@ is owed.
   the app never needs it.
 - `declarative: …`: the wrapper exposes the behaviour through props that reconcile
   handles natively.
-- `list form: …` and `not applicable: …`: the same operation under another shape, or a
-  symbol that exists for one host only.
+- `list form: …`, `other shape: …` and `not applicable: …`: the same operation under
+  another shape, or a symbol that exists for one host only.
 
 | symbol | wrapper | why |
 |---|---|---|
@@ -29,6 +29,8 @@ is owed.
 | `qvp_dealloc` | android | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
 | `qvp_dealloc` | ios | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
 | `qvp_dealloc` | react-native | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
+| `qvp_page_grid` | react-native | other shape: bound as `grid()` |
+| `qvp_page_line_spacing` | react-native | other shape: `info().lineSpacing` |
 | `qvp_page_load` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript (`pageUri` prop) |
 | `qvp_page_free` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_geometry` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
@@ -169,7 +171,7 @@ to every language.
 | Info suffix | `QvpSurahInfo` | `QvpSurah` | a metadata record is a plain noun |
 | layout | `QvpLayout.pitch` | `QvpLayout.line_spacing` |  |
 | layout | `QvpLayoutSpec.line_gap` | (removed) | spacing is one multiplier |
-| layout | `QvpLayoutSpec.nominal_lines` | (removed) | the engine reads the grid from the page (`qvp_page_grid`) |
+| layout | `QvpLayoutSpec.nominal_lines` | `QvpLayoutSpec.grid_lines` | 0 means the page's own grid (`qvp_page_grid`); pass a count to lay a page out on another grid |
 | layout | `QVP_DEFAULT_NOMINAL_LINES` | `QVP_DEFAULT_GRID_LINES` |  |
 | booleans | every bool field and parameter | `uint8_t` | `fill_height`, `prefer_exact`, `is_exact`, `is_loose_match`, `normalize`, `loose_match`, `keep_ayah_marks`, `by_ayah`, `ayah_marks`, `reverse` |
 | booleans | `qvp_ayah_word_count(complete)` | `qvp_ayah_word_count(is_complete)` |  |
@@ -213,7 +215,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-113 symbols in the header, 113 Rust exports. web: 113 bound, android: 111 bound, flutter: 113 bound, ios: 111 bound, react-native: 77 bound.
+113 symbols in the header, 113 Rust exports. web: 113 bound, android: 111 bound, flutter: 113 bound, ios: 111 bound, react-native: 75 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -250,7 +252,6 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_engine_name` | yes | yes | yes | yes | yes |
 | `qvp_family_name` | yes | yes | yes | yes | yes |
 | `qvp_find_word` | yes | yes | yes | yes | yes |
-| `qvp_gap_to_fill` | yes | yes | yes | yes | yes |
 | `qvp_geometry` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_has_form` | yes | yes | yes | yes | yes |
 | `qvp_highlight_add` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
@@ -268,7 +269,8 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_hit_test_view` | yes | yes | yes | yes | yes |
 | `qvp_kind_name` | yes | yes | yes | yes | yes |
 | `qvp_layout` | yes | yes | yes | yes | yes |
-| `qvp_layout_gap_to_fill` | yes | yes | yes | yes | yes |
+| `qvp_layout_line_spacing_to_fill` | yes | yes | yes | yes | yes |
+| `qvp_layout_wasted_fraction` | yes | yes | yes | yes | yes |
 | `qvp_line_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_line_info` | yes | yes | yes | yes | gap (list form: bound as `lines()`) |
 | `qvp_mark_category` | yes | yes | yes | yes | yes |
@@ -286,9 +288,10 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_name` | yes | yes | yes | yes | yes |
 | `qvp_name_count` | yes | yes | yes | yes | yes |
 | `qvp_name_id` | yes | yes | yes | yes | yes |
-| `qvp_natural_pitch` | yes | yes | yes | yes | yes |
 | `qvp_page_free` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_page_grid` | yes | yes | yes | yes | gap (other shape: bound as `grid()`) |
 | `qvp_page_info` | yes | yes | yes | yes | yes |
+| `qvp_page_line_spacing` | yes | yes | yes | yes | gap (other shape: `info().lineSpacing`) |
 | `qvp_page_load` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript (`pageUri` prop)) |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |
 | `qvp_reveal_goto` | yes | yes | yes | yes | yes |
@@ -324,7 +327,6 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_unmask_next` | yes | yes | yes | yes | yes |
 | `qvp_unmask_word` | yes | yes | yes | yes | yes |
 | `qvp_version` | yes | yes | yes | yes | yes |
-| `qvp_wasted_fraction` | yes | yes | yes | yes | yes |
 | `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bounds_view` | yes | yes | yes | yes | yes |
 | `qvp_word_form` | yes | yes | yes | yes | yes |

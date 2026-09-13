@@ -85,7 +85,6 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     fun setPadBottomDp(v: Float) { inner.padBottom = v * density; layoutDirty = true }
     fun setPadSideDp(v: Float) { inner.padSide = v * density; layoutDirty = true }
     fun setLineSpacingProp(v: Float) { inner.lineSpacing = v; layoutDirty = true }
-    fun setLineGapProp(v: Float) { inner.lineGap = v; layoutDirty = true }
     fun setFillHeightProp(v: Boolean) { inner.fillHeight = v; layoutDirty = true }
 
     // ── bytes ──

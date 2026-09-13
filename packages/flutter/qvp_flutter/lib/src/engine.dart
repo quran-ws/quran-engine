@@ -64,7 +64,7 @@ abstract final class QvpLayer {
 abstract final class QvpDefaults {
   static const int ink = 0x231f20ff, highlightInk = 0x1a73e8ff, highlightBand = 0xd6a3264d, selectionBand = 0x2d6fd640, maskBlock = 0xd9d4c8ff, revealGrey = 0xc9c4b8ff;
   static const double highlightPadX = 1.2, highlightPadY = 0, highlightSeam = 0.25, gapBias = 0.6, tapDistance = 6, aspectSlack = 1.15, maskPad = 0.6, maskRadius = 0.8, cropPad = 2;
-  static const int nominalLines = 15, revealLit = 1;
+  static const int gridLines = 15, revealLit = 1;
 }
 
 /// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
@@ -363,7 +363,7 @@ final class QvpLineBand {
 }
 
 /// Input of [QvpPage.layout]; lengths in viewport px. Spacing only opens up:
-/// `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
+/// `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid.
 @immutable
 final class QvpLayoutSpec {
   const QvpLayoutSpec({
@@ -374,16 +374,15 @@ final class QvpLayoutSpec {
     this.padLeft = 0,
     this.padRight = 0,
     this.lineSpacing = 1,
-    this.lineGap = 0,
     this.fillHeight = false,
-    this.nominalLines = QvpDefaults.nominalLines,
+    this.gridLines = 0,
     this.cropLeft = 0,
     this.cropRight = 0,
     this.maxAspectSlack = 0,
   });
-  final double viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap;
+  final double viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing;
   final bool fillHeight;
-  final int nominalLines;
+  final int gridLines;
 
   /// Printed side margins to cut, in page units (0 = keep the print's margins).
   final double cropLeft, cropRight;
@@ -399,9 +398,8 @@ final class QvpLayoutSpec {
     double? padLeft,
     double? padRight,
     double? lineSpacing,
-    double? lineGap,
     bool? fillHeight,
-    int? nominalLines,
+    int? gridLines,
     double? cropLeft,
     double? cropRight,
     double? maxAspectSlack,
@@ -414,9 +412,8 @@ final class QvpLayoutSpec {
         padLeft: padLeft ?? this.padLeft,
         padRight: padRight ?? this.padRight,
         lineSpacing: lineSpacing ?? this.lineSpacing,
-        lineGap: lineGap ?? this.lineGap,
         fillHeight: fillHeight ?? this.fillHeight,
-        nominalLines: nominalLines ?? this.nominalLines,
+        gridLines: gridLines ?? this.gridLines,
         cropLeft: cropLeft ?? this.cropLeft,
         cropRight: cropRight ?? this.cropRight,
         maxAspectSlack: maxAspectSlack ?? this.maxAspectSlack,
@@ -432,22 +429,21 @@ final class QvpLayoutSpec {
       other.padLeft == padLeft &&
       other.padRight == padRight &&
       other.lineSpacing == lineSpacing &&
-      other.lineGap == lineGap &&
       other.fillHeight == fillHeight &&
-      other.nominalLines == nominalLines &&
+      other.gridLines == gridLines &&
       other.cropLeft == cropLeft &&
       other.cropRight == cropRight &&
       other.maxAspectSlack == maxAspectSlack;
 
   @override
-  int get hashCode => Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, fillHeight, nominalLines, cropLeft, cropRight, maxAspectSlack);
+  int get hashCode => Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft, cropRight, maxAspectSlack);
 }
 
-/// Output of [QvpPage.layout]. Page → viewport: `viewX = ox + x*scale`, `viewY = oy + (y + lineDy[line])*scale`.
+/// Output of [QvpPage.layout]. Page → viewport: `viewX = offsetX + x*scale`, `viewY = offsetY + (y + lineDy[line])*scale`.
 @immutable
 final class QvpLayout {
-  const QvpLayout({required this.scale, required this.ox, required this.oy, required this.contentW, required this.contentH, required this.pitch, required this.lineDy, required this.slots, this.fitScale = 1, this.fitX = 0, this.fitY = 0});
-  final double scale, ox, oy, contentW, contentH, pitch;
+  const QvpLayout({required this.scale, required this.offsetX, required this.offsetY, required this.contentW, required this.contentH, required this.lineSpacing, required this.lineDy, required this.slots, this.fitScale = 1, this.fitX = 0, this.fitY = 0});
+  final double scale, offsetX, offsetY, contentW, contentH, lineSpacing;
 
   /// The view transform that shows the whole content in the viewport (shrink to height, never
   /// enlarge, centred). The host's pan and zoom go on top.
@@ -465,7 +461,7 @@ final class QvpLayout {
 final class QvpHighlightStyle {
   const QvpHighlightStyle({
     this.mode = 'band',
-    this.height = 'pitch',
+    this.height = 'lineSpacing',
     this.ink = QvpDefaults.highlightInk,
     this.band = QvpDefaults.highlightBand,
     this.padX = QvpDefaults.highlightPadX,
@@ -479,7 +475,7 @@ final class QvpHighlightStyle {
   /// 'ink' | 'band' | 'both'
   final String mode;
 
-  /// 'pitch' | 'ink'
+  /// 'lineSpacing' | 'ink'
   final String height;
   final Object ink, band;
   final double padX, padY, radius, seam;
@@ -703,8 +699,6 @@ class QvpEngine {
     return QvpAtlas._(this, h);
   }
 
-  double gapToFill(double pageW, double pageH, int lines, double viewW, double viewH, [double max = 0]) => b.gapToFill(pageW, pageH, lines, viewW, viewH, max);
-  double wastedFraction(double pageW, double pageH, double viewW, double viewH) => b.wastedFraction(pageW, pageH, viewW, viewH);
 
   /// Releases the scratch memory. Free pages and atlases first.
   void dispose() {
@@ -776,13 +770,13 @@ class QvpPage extends ChangeNotifier {
     ayahs = List.generate(nAyahs, _ayah, growable: false);
     lines = List.generate(nLines, _line, growable: false);
     decorations = List.generate(nDecorations, _deco, growable: false);
-    naturalPitch = b.naturalPitch(_h);
+    lineSpacing = b.pageLineSpacing(_h);
   }
 
   final QvpEngine engine;
   ffi.Pointer<QvpPageC> _h;
 
-  late final double width, height, naturalPitch;
+  late final double width, height, lineSpacing;
   late final int page, nLines, nAyahs, nWords, nPaths, nDecorations;
 
   /// Opcode stream (see [QvpOp]).
@@ -1198,20 +1192,7 @@ class QvpPage extends ChangeNotifier {
   // ── layout ──
   /// Computes and stores an engine layout (also used by the *View hit tests and box outputs).
   QvpLayout layout(QvpLayoutSpec spec) {
-    final s = _e._spec.ref;
-    s.viewportW = spec.viewportW;
-    s.viewportH = spec.viewportH;
-    s.padTop = spec.padTop;
-    s.padBottom = spec.padBottom;
-    s.padLeft = spec.padLeft;
-    s.padRight = spec.padRight;
-    s.lineSpacing = spec.lineSpacing;
-    s.lineGap = spec.lineGap;
-    s.fillHeight = spec.fillHeight ? 1 : 0;
-    s.nominalLines = spec.nominalLines;
-    s.cropLeft = spec.cropLeft;
-    s.cropRight = spec.cropRight;
-    s.maxAspectSlack = spec.maxAspectSlack;
+    _writeSpec(spec);
     _b.layout(_p, _e._spec, _e._layout);
     final o = _e._layout.ref;
     final n = o.nLines;
@@ -1221,14 +1202,14 @@ class QvpPage extends ChangeNotifier {
       lineDy[i] = f[i * 3];
       return (f[i * 3 + 1], f[i * 3 + 2]);
     }, growable: false);
-    final l = QvpLayout(scale: o.scale, ox: o.ox, oy: o.oy, contentW: o.contentW, contentH: o.contentH, pitch: o.pitch, lineDy: lineDy, slots: slots, fitScale: o.fitScale, fitX: o.fitX, fitY: o.fitY);
+    final l = QvpLayout(scale: o.scale, offsetX: o.offsetX, offsetY: o.offsetY, contentW: o.contentW, contentH: o.contentH, lineSpacing: o.lineSpacing, lineDy: lineDy, slots: slots, fitScale: o.fitScale, fitX: o.fitX, fitY: o.fitY);
     currentLayout = l;
     _touch();
     return l;
   }
 
   /// Leading (page units) that makes this page fill the padded viewport of [spec]; `max` 0 = unlimited.
-  double layoutGapToFill(QvpLayoutSpec spec, [double max = 0]) {
+  void _writeSpec(QvpLayoutSpec spec) {
     final s = _e._spec.ref;
     s.viewportW = spec.viewportW;
     s.viewportH = spec.viewportH;
@@ -1237,13 +1218,33 @@ class QvpPage extends ChangeNotifier {
     s.padLeft = spec.padLeft;
     s.padRight = spec.padRight;
     s.lineSpacing = spec.lineSpacing;
-    s.lineGap = spec.lineGap;
     s.fillHeight = spec.fillHeight ? 1 : 0;
-    s.nominalLines = spec.nominalLines;
+    s.gridLines = spec.gridLines;
     s.cropLeft = spec.cropLeft;
     s.cropRight = spec.cropRight;
     s.maxAspectSlack = spec.maxAspectSlack;
-    return _b.layoutGapToFill(_p, _e._spec, max);
+  }
+
+  /// The grid this page is laid out inside: the mushaf's line count and the printed line spacing.
+  ({int lines, double lineSpacing}) get grid {
+    final g = pffi.calloc<QvpGridC>();
+    try {
+      _b.pageGrid(_p, g);
+      return (lines: g.ref.lines, lineSpacing: g.ref.lineSpacing);
+    } finally {
+      pffi.calloc.free(g);
+    }
+  }
+
+  /// The share of the padded viewport of [spec] left empty when the page is fitted to width.
+  double layoutWastedFraction(QvpLayoutSpec spec) {
+    _writeSpec(spec);
+    return _b.layoutWastedFraction(_p, _e._spec);
+  }
+
+  double layoutLineSpacingToFill(QvpLayoutSpec spec, [double max = 0]) {
+    _writeSpec(spec);
+    return _b.layoutLineSpacingToFill(_p, _e._spec, max);
   }
 
   /// Word bbox in viewport px through the current layout.
@@ -1408,7 +1409,7 @@ class QvpPage extends ChangeNotifier {
   List<QvpBox> highlightBoxesView() => _boxes(_b.highlightBoxesView(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
 
   /// Static band boxes for a word list (no highlight state involved).
-  List<QvpBox> wordBands(List<int> ws, {String height = 'pitch', double padX = QvpDefaults.highlightPadX, double padY = QvpDefaults.highlightPadY}) => _e.withU32(ws, (p, n) => _boxes(_b.wordBands(_p, p, n, height == 'ink' ? 1 : 0, padX, padY, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>()))));
+  List<QvpBox> wordBands(List<int> ws, {String height = 'lineSpacing', double padX = QvpDefaults.highlightPadX, double padY = QvpDefaults.highlightPadY}) => _e.withU32(ws, (p, n) => _boxes(_b.wordBands(_p, p, n, height == 'ink' ? 1 : 0, padX, padY, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>()))));
 
   // ── selection ──
   void select(int anchor, [int? focus]) {

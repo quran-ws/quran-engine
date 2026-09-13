@@ -7,7 +7,7 @@
  *    string-returning call on the same thread (QvpWordInfo.text / QvpDecorationInfo.text live as long as the page)
  *  - array outputs take (out, cap) and return the TOTAL count (may exceed cap: call again bigger)
  *  - coordinates are page units (viewBox space, y down) unless the name says "view" (viewport px
- *    through the current layout: view_x = ox + x*scale ; view_y = oy + (y + dy[line])*scale)
+ *    through the current layout: view_x = offset_x + x*scale ; view_y = offset_y + (y + dy[line])*scale)
  */
 #ifndef QVP_H
 #define QVP_H
@@ -29,7 +29,7 @@ extern "C" {
 #define QVP_DEFAULT_SELECTION_BAND 0x2d6fd640u
 #define QVP_DEFAULT_GAP_BIAS       0.6f
 #define QVP_DEFAULT_TAP_DISTANCE   6.0f
-#define QVP_DEFAULT_NOMINAL_LINES  15u
+#define QVP_DEFAULT_GRID_LINES     15u
 #define QVP_DEFAULT_ASPECT_SLACK   1.15f
 #define QVP_DEFAULT_MASK_BLOCK     0xd9d4c8ffu
 #define QVP_DEFAULT_MASK_PAD       0.6f
@@ -86,12 +86,15 @@ typedef struct { float max_distance /* <=0: unlimited */, gap_bias /* 0.6 */; ui
 typedef struct { uint32_t id, line; float x0, y0, x1, y1; uint32_t color; float radius; } QvpBox;
 typedef struct { uint32_t word, line; float x0, y0, x1, y1, ink_x0, ink_y0, ink_x1, ink_y1; } QvpHitArea;
 typedef struct { uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; } QvpLineBand;
-/* crop_left/right: printed side margins to cut (page units, 0 = none). max_aspect_slack: the content is never
-   wider than viewport_h·page_w/page_h·slack (0 = no bound). */
-typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing, line_gap; uint32_t fill_height, nominal_lines; float crop_left, crop_right, max_aspect_slack; } QvpLayoutSpec;
+/* line_spacing: a multiplier on the printed spacing (1 = as printed; below 1 clamps to 1). grid_lines: the grid to lay
+   the page out inside, 0 = the page's own (qvp_page_grid). crop_left/right: printed side margins to cut (page units,
+   0 = none). max_aspect_slack: the content is never wider than viewport_h·page_w/page_h·slack (0 = no bound). */
+typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint32_t fill_height, grid_lines; float crop_left, crop_right, max_aspect_slack; } QvpLayoutSpec;
+/* the grid a page is designed on: the mushaf's line count (15 here, or more when a page has more) and the printed spacing */
+typedef struct { uint32_t lines; float line_spacing; } QvpGrid;
 /* fit_*: the view transform that shows the whole content (shrink to the viewport height, never enlarge, centred):
    draw at fit_x + fit_scale·view_x, fit_y + fit_scale·view_y; the host's pan and zoom go on top. */
-typedef struct { float scale, ox, oy, content_w, content_h, pitch; uint32_t n_lines; const float* lines; /* n_lines × {dy, slot_top, slot_bottom} */ float fit_scale, fit_x, fit_y; } QvpLayout;
+typedef struct { float scale, offset_x, offset_y, content_w, content_h, line_spacing; uint32_t n_lines; const float* lines; /* n_lines × {dy, slot_top, slot_bottom} */ float fit_scale, fit_x, fit_y; } QvpLayout;
 typedef struct { uint8_t target /* QVP_TARGET_* */; uint32_t a, b, c; const uint32_t* words; uint32_t n_words; } QvpTarget;
 typedef struct { uint8_t selector /* QVP_SELECTOR_* */; uint32_t a, b, c; } QvpSelector;
 typedef struct { uint8_t mode, height; uint32_t ink, band; float pad_x, pad_y, radius, seam; uint32_t transition_ms; int32_t layer; } QvpHighlightStyle;
@@ -122,7 +125,8 @@ int      qvp_line_info(const QvpPage*, uint32_t index, QvpLineInfo* out);
 int      qvp_decoration_info(const QvpPage*, uint32_t index, QvpDecorationInfo* out);
 int32_t  qvp_find_word(const QvpPage*, uint16_t surah, uint16_t ayah, uint16_t word);   /* -1 = not on page */
 uint32_t qvp_target_words(const QvpPage*, const QvpTarget*, uint32_t* out, uint32_t cap);   /* → word indices */
-float    qvp_natural_pitch(const QvpPage*);
+float    qvp_page_line_spacing(const QvpPage*);                                     /* the printed line spacing, page units */
+void     qvp_page_grid(const QvpPage*, QvpGrid* out);
 
 /* metadata ------------------------------------------------------------------------------ */
 uint32_t qvp_surah_count(const QvpPage*);
@@ -155,9 +159,8 @@ uint32_t qvp_hit_areas(const QvpPage*, float gap_bias, QvpHitArea* out, uint32_t
 
 /* layout -------------------------------------------------------------------------------- */
 void     qvp_layout(QvpPage*, const QvpLayoutSpec*, QvpLayout* out);        /* out.lines valid until next call */
-float    qvp_gap_to_fill(float page_w, float page_h, uint32_t lines, float view_w, float view_h, float max /* <=0 unlimited */);
-float    qvp_layout_gap_to_fill(const QvpPage*, const QvpLayoutSpec*, float max /* <=0 unlimited */);   /* padding subtracted here */
-float    qvp_wasted_fraction(float page_w, float page_h, float view_w, float view_h);
+float    qvp_layout_line_spacing_to_fill(const QvpPage*, const QvpLayoutSpec*, float max /* <=0 unlimited */);   /* the multiplier that fills the padded viewport */
+float    qvp_layout_wasted_fraction(const QvpPage*, const QvpLayoutSpec*);       /* share of the padded viewport left empty at fit-to-width */
 int      qvp_word_bounds_view(const QvpPage*, uint32_t word_index, float out[4]);
 
 /* styles: layered rules, handles undo exactly ------------------------------------------ */

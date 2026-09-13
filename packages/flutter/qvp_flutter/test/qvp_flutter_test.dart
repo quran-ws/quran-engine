@@ -83,7 +83,7 @@ void main() {
     expect(w0.nPaths, greaterThan(0));
     expect(page.findWord(w0.surah, w0.ayah, w0.word), 0);
     expect(page.wordKey(0), w0.wordKey);
-    expect(page.naturalPitch, greaterThan(0));
+    expect(page.lineSpacing, greaterThan(0));
     expect(page.surahs().map((s) => s.number), contains(2));
     expect(page.ayahKeys(), contains((2, 255)));
     expect(page.wordLabel(0), isNotEmpty);
@@ -157,16 +157,17 @@ void main() {
     expect(l.slots.length, 15);
     expect(page.currentLayout, same(l));
     final w = page.words[0];
-    final viewX = l.ox + (w.x0 + w.x1) / 2 * l.scale;
-    final viewY = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale;
+    final viewX = l.offsetX + (w.x0 + w.x1) / 2 * l.scale;
+    final viewY = l.offsetY + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale;
     final h = page.hitTestView(viewX, viewY, const QvpHitOptions(maxDistance: 6));
     expect(h, isNotNull);
     expect(h!.word, 0);
     final box = page.wordBoundsView(0);
     expect(box.x0, lessThan(viewX));
     expect(box.x1, greaterThan(viewX));
-    expect(engine.gapToFill(page.width, page.height, page.nLines, 600, 1000), isA<double>());
-    expect(engine.wastedFraction(page.width, page.height, 600, 1000), inInclusiveRange(0, 1));
+    expect(page.layoutLineSpacingToFill(const QvpLayoutSpec(viewportW: 600, viewportH: 1000)), greaterThanOrEqualTo(1));
+    expect(page.grid.lines, 15);
+    expect(page.layoutWastedFraction(const QvpLayoutSpec(viewportW: 600, viewportH: 1000)), inInclusiveRange(0, 1));
   });
 
   test('style(Sel.wordMark(w,1), colour) → styledPaths() has exactly 1 path', () {
@@ -291,15 +292,16 @@ void main() {
       double f(String k) => (s[k] as num).toDouble();
       final spec = QvpLayoutSpec(
         viewportW: f('viewportW'), viewportH: f('viewportH'), padTop: f('padTop'), padBottom: f('padBottom'), padLeft: f('padLeft'), padRight: f('padRight'),
-        lineSpacing: f('lineSpacing'), lineGap: f('lineGap'), fillHeight: s['fillHeight'] as bool, nominalLines: s['nominalLines'] as int,
+        lineSpacing: f('lineSpacing'), fillHeight: s['fillHeight'] as bool, gridLines: s['gridLines'] as int,
         cropLeft: f('cropLeft'), cropRight: f('cropRight'), maxAspectSlack: f('maxAspectSlack'));
       final tag = '${spec.viewportW}x${spec.viewportH} fill=${spec.fillHeight} slack=${spec.maxAspectSlack} crop=${spec.cropLeft}';
       final l = page.layout(spec);
-      close(l.scale, want['scale'] as num, '$tag scale'); close(l.ox, want['ox'] as num, '$tag ox'); close(l.oy, want['oy'] as num, '$tag oy');
-      close(l.contentW, want['contentW'] as num, '$tag contentW'); close(l.contentH, want['contentH'] as num, '$tag contentH'); close(l.pitch, want['pitch'] as num, '$tag pitch');
+      close(l.scale, want['scale'] as num, '$tag scale'); close(l.offsetX, want['offsetX'] as num, '$tag offsetX'); close(l.offsetY, want['offsetY'] as num, '$tag offsetY');
+      close(l.contentW, want['contentW'] as num, '$tag contentW'); close(l.contentH, want['contentH'] as num, '$tag contentH'); close(l.lineSpacing, want['lineSpacing'] as num, '$tag lineSpacing');
       close(l.fitScale, want['fitScale'] as num, '$tag fitScale'); close(l.fitX, want['fitX'] as num, '$tag fitX'); close(l.fitY, want['fitY'] as num, '$tag fitY');
       close(l.lineDy.first, want['lineDy0'] as num, '$tag lineDy[0]'); close(l.lineDy.last, want['lineDyLast'] as num, '$tag lineDy[last]');
-      close(page.layoutGapToFill(spec), c['gapToFill'] as num, '$tag gapToFill');
+      close(page.layoutLineSpacingToFill(spec), c['lineSpacingToFill'] as num, '\$tag lineSpacingToFill');
+      close(page.layoutWastedFraction(spec), c['wastedFraction'] as num, '\$tag wastedFraction');
     }
     expect(cases.length, 40);
   });

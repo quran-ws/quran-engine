@@ -57,10 +57,10 @@ pub struct Hit {
 }
 
 impl Page {
-    /// Pitch-derived vertical bands of every printed line, in page units.
+    /// Line-spacing-derived vertical bands of every printed line, in page units.
     pub fn line_bands(&self) -> Vec<LineBand> {
         let q = self.quant();
-        let p = self.natural_pitch();
+        let p = self.line_spacing();
         self.data()
             .lines
             .iter()
@@ -238,8 +238,8 @@ impl Page {
     /// Gap-aware hit test in viewport px through the current layout.
     pub fn hit_test_view(&self, vx: f32, vy: f32, opt: &HitOptions) -> Option<Hit> {
         let Some(l) = self.current_layout() else { return self.hit_test(vx, vy, opt) };
-        let x = (vx - l.ox) / l.scale;
-        let y = (vy - l.oy) / l.scale;
+        let x = (vx - l.offset_x) / l.scale;
+        let y = (vy - l.offset_y) / l.scale;
         // exact first through the layout
         if opt.prefer_exact {
             if let Some(h) = self.hit_test_exact_view(vx, vy) {
