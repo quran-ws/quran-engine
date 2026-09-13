@@ -15,7 +15,7 @@ pub enum HighlightMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum BandHeight {
-    /// the line pitch (bands of adjacent lines meet)
+    /// the line spacing (bands of adjacent lines meet)
     LineSpacing = 0,
     /// the words' own ink height plus pad_y
     Ink = 1,

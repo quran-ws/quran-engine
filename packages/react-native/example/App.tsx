@@ -209,7 +209,7 @@ function Demo() {
   const selMain = selection && selection.words.length > 1 ? selection.text : selWord ? selWord.text : ayahInfo ? ayahInfo.text : '—';
   const selInfo = selection && selection.words.length > 1 ? `selection · ${selection.words.length} words · ${selection.citation}`
     : selWord ? `wordKey ${selWord.wordKey} · line ${selWord.line} · ${selWord.nPaths} paths\n${selWord.forms.rasmImlai ? `rasmImlai ${selWord.forms.rasmImlai} · search ${selWord.forms.search}\n` : ''}${selWord.label}`
-    : selAyah && ayahInfo ? `ayah ${selAyah[0]}:${selAyah[1]} · ${ayahInfo.count} words${ayahInfo.complete ? '' : ' (continues on another page)'}` : '';
+    : selAyah && ayahInfo ? `ayah ${selAyah[0]}:${selAyah[1]} · ${ayahInfo.count} words${ayahInfo.isComplete ? '' : ' (continues on another page)'}` : '';
 
   const hud = stats ? [
     `engine v${stats.engineVersion} · JNI over qvp.h${atlas ? ' · atlas' : ''}`,

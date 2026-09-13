@@ -4,7 +4,10 @@ import android.graphics.Path
 
 /** Engine-wide helpers (names, Arabic text tools, layout maths). */
 object QvpEngine {
+    /** The engine version, e.g. `0.2.0`. */
     fun version() = QvpNative.version()
+    /** The page format version the engine reads. */
+    fun formatVersion() = QvpNative.formatVersion()
     fun engineName() = QvpNative.engineName()
     fun markName(m: Int) = QvpNative.markName(m)
     fun familyName(f: Int) = QvpNative.familyName(f)
@@ -197,7 +200,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun select(anchor: Int, focus: Int = anchor) = QvpNative.select(h, anchor, focus)
     fun clearSelection() = QvpNative.select(h, -1, -1)
     fun selection(): IntArray = QvpNative.selection(h)
-    fun selectionText(form: Form = Form.RASM_UTHMANI, citation: Boolean = false) = QvpNative.selectionText(h, form.id, citation)
+    fun selectionText(form: Form = Form.RASM_UTHMANI, includeCitation: Boolean = false) = QvpNative.selectionText(h, form.id, includeCitation)
 
     // ── memorisation ──
     fun mask(t: Target, mode: MaskMode = MaskMode.HIDE) = QvpNative.mask(h, t.arr, mode.id)

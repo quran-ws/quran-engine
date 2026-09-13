@@ -99,8 +99,10 @@
     categoryName(c) { return this.nameOf('qvp_category_name', c); }
     markCategory(m) { return this.ex.qvp_mark_category(markId(m)); }
     markFromName(s) { const [p, n] = this.putStr(s); return this.ex.qvp_mark_from_name(p, n); }
+    /** The engine version, e.g. '0.2.0'. */
+    version() { this.ex.qvp_version(this.scratch); return this.qstr(this.scratch); }
     /** The page format version the engine reads. */
-    version() { return this.ex.qvp_version(); }
+    formatVersion() { return this.ex.qvp_format_version(); }
     /** The engine's name, `qvp` (a NUL-terminated C string in wasm memory). */
     engineName() { const p = this.ex.qvp_engine_name(), u = new Uint8Array(this.mem.buffer); let n = 0; while (u[p + n]) n++; return this.str(p, n); }
     /** Arabic text tools */
@@ -287,7 +289,7 @@
       return out;
     }
     ayahKeys() { const n = this.e.ex.qvp_ayah_keys(this.h, this.e.scratch, 256); const v = new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 256)); return Array.from(v, k => [k >>> 16, k & 0xffff]); }
-    ayahWordCount(surah, ayah) { const n = this.e.ex.qvp_ayah_word_count(this.h, surah, ayah, this.e.scratch); return { count: n, complete: !!this.e.dv().getUint32(this.e.scratch, true) }; }
+    ayahWordCount(surah, ayah) { const n = this.e.ex.qvp_ayah_word_count(this.h, surah, ayah, this.e.scratch); return { count: n, isComplete: !!this.e.dv().getUint8(this.e.scratch) }; }
     /** words for n recitation segments, or null when the counts disagree (follow the ayah whole) */
     reciteMap(surah, ayah, nSegments) { const n = this.e.ex.qvp_recite_map(this.h, surah, ayah, nSegments, this.e.scratch, 4096); return n < 0 ? null : Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, n)); }
     wordLabel(i) { this.e.ex.qvp_word_label(this.h, i, this.e.scratch); return this.e.qstr(this.e.scratch); }
@@ -303,7 +305,7 @@
       const [qp, qn] = this.e.putStr(query);
       const n = this.e.ex.qvp_search(this.h, qp, qn, FORM[form] ?? 4, { includes: 0, exact: 1, prefix: 2 }[mode] ?? 0, normalize ? 1 : 0, looseMatch ? 1 : 0, limit, this.e.scratch, 1024);
       const d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 12; const w = d.getUint32(o, true); out.push({ word: w, index: d.getUint32(o + 4, true), isLooseMatch: !!d.getUint32(o + 8, true), wordKey: this.wordKey(w), text: this.words[w].text }); }
+      for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 12; const w = d.getUint32(o, true); out.push({ word: w, index: d.getUint32(o + 4, true), isLooseMatch: !!d.getUint8(o + 8), wordKey: this.wordKey(w), text: this.words[w].text }); }
       return out;
     }
     wordKey(i) { const w = this.words[i]; return `${w.surah}:${w.ayah}:${w.word}`; }
@@ -315,9 +317,9 @@
     // ── hit testing ──
     hitTestExact(x, y) { return this.e.ex.qvp_hit_test_exact(this.h, x, y, this.e.scratch) ? this._hit(this.e.scratch) : null; }
     hitTestExactView(viewX, viewY) { return this.e.ex.qvp_hit_test_exact_view(this.h, viewX, viewY, this.e.scratch) ? this._hit(this.e.scratch) : null; }
-    _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o.maxDistance ?? 0, true); d.setFloat32(at + 4, o.gapBias ?? 0.6, true); d.setUint32(at + 8, o.preferExact === false ? 0 : 1, true); return at; }
+    _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o.maxDistance ?? 0, true); d.setFloat32(at + 4, o.gapBias ?? 0.6, true); d.setUint8(at + 8, o.preferExact === false ? 0 : 1); return at; }
     /** the one hit shape for every hit test; the exact variants report distance 0 and isExact */
-    _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), decoration: f(d.getUint32(s + 8, true)), line: f(d.getUint32(s + 12, true)), distance: d.getFloat32(s + 16, true), isExact: !!d.getUint32(s + 20, true) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
+    _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), decoration: f(d.getUint32(s + 8, true)), line: f(d.getUint32(s + 12, true)), distance: d.getFloat32(s + 16, true), isExact: !!d.getUint8(s + 20) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
     /** gap-aware: every point on a printed line resolves to the word the user meant */
     hitTest(x, y, opt = {}) { return this.e.ex.qvp_hit_test(this.h, x, y, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
     hitTestView(viewX, viewY, opt = {}) { return this.e.ex.qvp_hit_test_view(this.h, viewX, viewY, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
@@ -330,7 +332,7 @@
       const d = this.e.dv();
       d.setFloat32(s, spec.viewportW, true); d.setFloat32(s + 4, spec.viewportH, true); d.setFloat32(s + 8, spec.padTop || 0, true); d.setFloat32(s + 12, spec.padBottom || 0, true);
       d.setFloat32(s + 16, spec.padLeft || 0, true); d.setFloat32(s + 20, spec.padRight || 0, true); d.setFloat32(s + 24, spec.lineSpacing ?? 1, true);
-      d.setUint32(s + 28, spec.fillHeight ? 1 : 0, true); d.setUint32(s + 32, spec.gridLines || 0, true);
+      d.setUint8(s + 28, spec.fillHeight ? 1 : 0); d.setUint32(s + 32, spec.gridLines || 0, true);
       d.setFloat32(s + 36, spec.cropLeft || 0, true); d.setFloat32(s + 40, spec.cropRight || 0, true); d.setFloat32(s + 44, spec.maxAspectSlack || 0, true);
     }
     /** Leading (page units) that makes the page fill the padded viewport of `spec`; max 0 = unlimited. */
@@ -404,7 +406,7 @@
     select(anchor, focus = anchor) { this.e.ex.qvp_select(this.h, anchor < 0 ? NONE : anchor, focus < 0 ? NONE : focus); }
     clearSelection() { this.e.ex.qvp_select(this.h, NONE, NONE); }
     selection() { const n = this.e.ex.qvp_selection(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
-    selectionText(form = 'rasm_uthmani', citation = false) { this.e.ex.qvp_selection_text(this.h, FORM[form] ?? 0, citation ? 1 : 0, this.e.scratch); return this.e.qstr(this.e.scratch); }
+    selectionText(form = 'rasm_uthmani', includeCitation = false) { this.e.ex.qvp_selection_text(this.h, FORM[form] ?? 0, includeCitation ? 1 : 0, this.e.scratch); return this.e.qstr(this.e.scratch); }
 
     // ── memorisation ──
     mask(target, mode = 'hide') { this.e.ex.qvp_mask(this.h, this._target(target), { hide: 0, block: 1, blur: 2 }[mode] ?? 0); }

@@ -128,9 +128,9 @@
     }
     if (!w) {
       if (S.selAyah) {
-        const [s, a] = S.selAyah, ws = p.targetWords(T.ayah(s, a)), { count, complete } = p.ayahWordCount(s, a);
+        const [s, a] = S.selAyah, ws = p.targetWords(T.ayah(s, a)), { count, isComplete } = p.ayahWordCount(s, a);
         $('selWord').textContent = p.text(T.ayah(s, a));
-        info.innerHTML = `<b>ayah</b><span>${s}:${a} · ${count} words${complete ? '' : ' (continues on another page)'}</span><b>label</b><span>${p.ayahLabel(p.words[ws[0]].ayahIndex)}</span>`;
+        info.innerHTML = `<b>ayah</b><span>${s}:${a} · ${count} words${isComplete ? '' : ' (continues on another page)'}</span><b>label</b><span>${p.ayahLabel(p.words[ws[0]].ayahIndex)}</span>`;
       } else { $('selWord').textContent = '—'; }
       return;
     }

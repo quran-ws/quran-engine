@@ -1,7 +1,7 @@
 //! Line bands, hit boxes and gap-aware hit testing.
 use crate::{Page, NONE};
 
-/// Vertical band of a printed line (page units): pitch-derived, plus the ink extent.
+/// Vertical band of a printed line (page units): line-spacing-derived, plus the ink extent.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LineBand {
     pub line: u32,
@@ -158,10 +158,10 @@ impl Page {
         self.hit_test_gap(x, y, opt)
     }
 
-    /// Resolve a point to a line by its pitch band, then to a word with the gap split by `gap_bias`.
+    /// Resolve a point to a line by its line-spacing band, then to a word with the gap split by `gap_bias`.
     pub fn hit_test_gap(&self, x: f32, y: f32, opt: &HitOptions) -> Option<Hit> {
         let bands = self.line_bands();
-        // nearest band vertically (bands tile the page without gaps at natural pitch)
+        // nearest band vertically (bands tile the page without gaps at printed line spacing)
         let mut best_line = None;
         let mut best_dy = f32::MAX;
         for b in &bands {

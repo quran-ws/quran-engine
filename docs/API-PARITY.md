@@ -215,7 +215,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-113 symbols in the header, 113 Rust exports. web: 113 bound, android: 111 bound, flutter: 113 bound, ios: 111 bound, react-native: 75 bound.
+114 symbols in the header, 114 Rust exports. web: 114 bound, android: 112 bound, flutter: 114 bound, ios: 112 bound, react-native: 76 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -252,6 +252,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_engine_name` | yes | yes | yes | yes | yes |
 | `qvp_family_name` | yes | yes | yes | yes | yes |
 | `qvp_find_word` | yes | yes | yes | yes | yes |
+| `qvp_format_version` | yes | yes | yes | yes | yes |
 | `qvp_geometry` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_has_form` | yes | yes | yes | yes | yes |
 | `qvp_highlight_add` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |

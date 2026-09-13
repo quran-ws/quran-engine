@@ -28,7 +28,8 @@ final class QvpKitTests: XCTestCase {
     var page: QvpPage { Self.page }
 
     func testEngineVersionNamesArabicTools() {
-        XCTAssertGreaterThan(QvpEngine.version(), 0)
+        XCTAssertGreaterThan(QvpEngine.formatVersion(), 0)
+        XCTAssertTrue(QvpEngine.version().split(separator: ".").count == 3)
         XCTAssertEqual(QvpEngine.engineName(), "qvp")
         XCTAssertEqual(QvpEngine.kindName(QvpKind.MARK), "mark")
         XCTAssertEqual(QvpEngine.markName(1), "fathah")
@@ -232,7 +233,7 @@ final class QvpKitTests: XCTestCase {
     func testSelection() {
         page.select(0, 3)
         XCTAssertEqual(page.selection(), [0, 1, 2, 3])
-        XCTAssertTrue(page.selectionText(.rasmUthmani, citation: true).contains(":"))
+        XCTAssertTrue(page.selectionText(.rasmUthmani, includeCitation: true).contains(":"))
         page.clearSelection()
         XCTAssertTrue(page.selection().isEmpty)
     }

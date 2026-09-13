@@ -86,7 +86,7 @@ internal object QvpNative {
     // selection
     @JvmStatic external fun select(h: Long, anchor: Int, focus: Int)
     @JvmStatic external fun selection(h: Long): IntArray
-    @JvmStatic external fun selectionText(h: Long, form: Int, citation: Boolean): String
+    @JvmStatic external fun selectionText(h: Long, form: Int, includeCitation: Boolean): String
     // memorisation
     @JvmStatic external fun mask(h: Long, target: IntArray, mode: Int)
     @JvmStatic external fun maskFrom(h: Long, wordIndex: Int, mode: Int)
@@ -133,6 +133,7 @@ internal object QvpNative {
     @JvmStatic external fun nameCount(table: Int): Int
     @JvmStatic external fun name(table: Int, id: Int): String
     @JvmStatic external fun nameId(table: Int, name: String): Int
-    @JvmStatic external fun version(): Int
+    @JvmStatic external fun version(): String
+    @JvmStatic external fun formatVersion(): Int
     @JvmStatic external fun engineName(): String
 }
