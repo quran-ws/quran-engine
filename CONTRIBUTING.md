@@ -16,7 +16,7 @@ render results, and compute nothing themselves. Read `docs/HOW-IT-WORKS.md` firs
 ```sh
 git clone https://github.com/quran-ws/quran-engine.git && cd quran-engine
 scripts/check.sh test          # unit tests, no data needed
-scripts/sync-test-data.sh      # source SVG bundle + page data release
+scripts/sync-test-data.sh      # the quran-svg-elements bundle + the page data release
 scripts/check.sh gates         # identity gate, ABI test, conformance
 ```
 

@@ -8,17 +8,16 @@ until it passes.
 | layer | tests | data needed |
 |---|---|---|
 | `qvp-format`, `qvp-core` | unit tests on synthesised pages | none |
-| `qvp-convert` | the identity gate: SVG → QVP → SVG, rasterised at 4×, pixel-diffed. 8 pages on every PR, all 604 nightly | the source bundle (`pages/`) |
+| `qvp-convert` | the identity gate: SVG → QVP → SVG, rasterised at 4×, pixel-diffed. 8 pages on every PR, all 604 nightly | the `quran-svg-elements` bundle (`pages/`, `index/`) |
 | `qvp-ffi` | one ABI test per function family on a real page | the data release (`dist/pages/`) |
 | each wrapper | one binding test per C symbol on a known page, plus the shared scenarios | the data release |
 | each example | one UI smoke test: open a page, tap a word, highlight | the example's page set |
 | `web/lite.mjs` | the conformance fixtures | `conformance/` |
 
 Without their data, the data tests skip locally and print a hint. In CI they fail instead
-(`QVP_REQUIRE_DATA=1`), because `scripts/sync-test-data.sh` provides the data there. The
-source SVG bundle is not a public release asset yet, so the identity gate runs in CI only
-when the repository variable `QVP_SVG_BUNDLE_URL` points at it; until then the `gates`
-job prints a warning in its place.
+(`QVP_REQUIRE_DATA=1`), because `scripts/sync-test-data.sh` provides the data there: the
+page data release of this repository and the `quran-svg-elements` release (the source SVG
+bundle, with `pages/` and `index/`).
 
 ## Cross-wrapper scenarios
 

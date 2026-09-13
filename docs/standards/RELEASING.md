@@ -22,7 +22,7 @@ then the SwiftPM binary target. Until a target is live, its step is a no-op that
 
 ## A data release (`data-vX.Y.Z`)
 
-1. Unpack the source bundle (`pages/`, `index/`) at the repository root. Note its version.
+1. `scripts/sync-test-data.sh` fetches the `quran-svg-elements` bundle (`pages/`, `index/`); note its tag.
 2. `QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity`: all 604 pages
    must pass the pixel gate.
 3. `cargo run -p qvp-convert --release -- batch pages dist/pages`

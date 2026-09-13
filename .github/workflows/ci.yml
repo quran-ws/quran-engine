@@ -40,23 +40,14 @@ jobs:
             dist/pages
             pages
             index
-          key: test-data-${{ vars.QVP_DATA_TAG || 'v0.1.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+          key: test-data-${{ vars.QVP_DATA_TAG || 'v0.1.0' }}-${{ vars.QVP_SVG_TAG || 'v1.0.1' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
       - name: Fetch test data
         env:
           QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
-          QVP_SVG_BUNDLE_URL: ${{ vars.QVP_SVG_BUNDLE_URL }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.0.1' }}
         run: scripts/sync-test-data.sh
-      - name: ABI test and conformance (always)
-        run: |
-          QVP_REQUIRE_DATA=1 cargo test -p qvp-ffi --release --test abi
-          node web/lite.test.mjs
-      - name: Identity gate, 8 pages (when the source bundle is available)
-        run: |
-          if [ -f pages/001.svg ]; then
-            QVP_REQUIRE_DATA=1 cargo test -p qvp-convert --release --test identity
-          else
-            echo "::warning::identity gate skipped: QVP_SVG_BUNDLE_URL is not set as a repository variable"
-          fi
+      - name: Identity gate (8 pages), ABI test, conformance
+        run: scripts/check.sh gates
 
   standards:
     name: standards (parity, versions, terminology, structure)

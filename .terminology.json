@@ -55,8 +55,8 @@
     "pause\\.fill"
   ],
   "_external_names": [
-    "ayah_markers  — the id of the medallion layer in the quran-svg source SVG; a locator in their file, not our name.",
-    "data-*        — quran-svg attribute names, quoted from schema/FORMAT.md.",
+    "ayah_markers  — the id of the medallion layer in the quran-svg-elements source SVG; a locator in their file, not our name.",
+    "data-*        — quran-svg-elements attribute names, quoted from schema/FORMAT.md.",
     "Uthmani mushaf / word-by-word — prose describing the print, where the standard allows the established English.",
     "Ya-Sin, Al-Baqarah — surah labels quoted in a demo and a test fixture, display forms rather than identifiers.",
     "KFGQPC Uthmanic Script HAFS — a font family the demo asks the browser for; renaming it breaks the reference.",

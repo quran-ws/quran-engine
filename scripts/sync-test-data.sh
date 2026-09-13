@@ -3,13 +3,12 @@
 #
 #   dist/pages/   the built page data (NNN.qvp, atlas.qva, NNN.words.json) from the data
 #                 release on GitHub; needed by the ABI test and every wrapper test.
-#   pages/ index/ the source SVG bundle (quran-svg, hafs-kfgqpc); needed by the identity
-#                 gate. It is not published as a release asset yet, so it is fetched only
-#                 when QVP_SVG_BUNDLE_URL points at a tarball with pages/ and index/ inside.
+#   pages/ index/ the source SVG bundle from the quran-svg-elements release (hafs-kfgqpc);
+#                 needed by the identity gate.
 #
 # Environment:
-#   QVP_DATA_TAG        data release tag (default v0.1.0)
-#   QVP_SVG_BUNDLE_URL  URL of the source bundle tarball (optional)
+#   QVP_DATA_TAG   data release tag (default v0.1.0)
+#   QVP_SVG_TAG    quran-svg-elements release tag (default v1.0.1)
 # Output: the directories above; a line per artifact saying fetched, kept or skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -30,16 +29,21 @@ else
   echo "fetched  dist/pages ($tag, checksum verified)"
 fi
 
-if [ -f pages/001.svg ] && [ -d index/by-page ]; then
-  echo "kept     pages/ and index/"
-elif [ -n "${QVP_SVG_BUNDLE_URL:-}" ]; then
-  tmp="$(mktemp -t qvp-svg.XXXXXX)"
-  trap 'rm -f "$tmp"' EXIT
-  curl --fail --location --retry 3 --silent --show-error "$QVP_SVG_BUNDLE_URL" --output "$tmp"
-  rm -rf pages index
-  tar -xzf "$tmp" -C .
-  [ -f pages/001.svg ] || { echo "error: the bundle did not contain pages/001.svg" >&2; exit 1; }
-  echo "fetched  pages/ and index/ (source bundle)"
+svg_tag="${QVP_SVG_TAG:-v1.0.1}"
+svg_asset="quran-svg-elements-hafs-kfgqpc.tar.gz"
+svg_base="https://github.com/quran-ws/quran-svg-elements/releases/download/$svg_tag"
+
+if [ -f pages/001.svg ] && [ -d index/by-page ] && [ "$(cat pages/.tag 2>/dev/null)" = "$svg_tag" ]; then
+  echo "kept     pages/ and index/ ($svg_tag)"
 else
-  echo "skipped  pages/ and index/: set QVP_SVG_BUNDLE_URL to fetch the source bundle; the identity gate skips without it"
+  mkdir -p dist
+  curl --fail --location --retry 3 --silent --show-error "$svg_base/$svg_asset" --output "dist/$svg_asset"
+  curl --fail --location --retry 3 --silent --show-error "$svg_base/$svg_asset.sha256" --output "dist/$svg_asset.sha256"
+  (cd dist && shasum -a 256 -c "$svg_asset.sha256" >/dev/null)
+  rm -rf pages index
+  tar -xzf "dist/$svg_asset" -C . --strip-components=1 --include='*/pages/*' --include='*/index/*' 2>/dev/null \
+    || tar -xzf "dist/$svg_asset" -C . --strip-components=1 --wildcards '*/pages/*' '*/index/*'
+  [ -f pages/001.svg ] || { echo "error: the bundle did not contain pages/001.svg" >&2; exit 1; }
+  echo "$svg_tag" > pages/.tag
+  echo "fetched  pages/ and index/ ($svg_tag, checksum verified)"
 fi
