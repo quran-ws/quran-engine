@@ -76,7 +76,7 @@ final class QvpWordInfoC extends ffi.Struct {
   external int nPaths;
 }
 
-/// `{ uint16_t surah, ayah; uint8_t fragment, fragments, flags, _pad; uint16_t rubuAlHizb; uint32_t first_word, n_words, ayah_mark_decoration; float x0, y0, x1, y1; }`
+/// `{ uint16_t surah, ayah; uint8_t fragment, fragments, flags, _pad; uint16_t rubu_al_hizb; uint32_t first_word, n_words, ayah_mark_decoration; float x0, y0, x1, y1; }`
 final class QvpAyahInfoC extends ffi.Struct {
   @ffi.Uint16()
   external int surah;
@@ -163,7 +163,7 @@ final class QvpDecorationInfoC extends ffi.Struct {
   external int nPaths;
 }
 
-/// `{ uint32_t word, path, decoration, line; float distance; uint32_t is_exact; }`
+/// `{ uint32_t word, path, decoration, line; float distance; uint8_t is_exact; }`
 final class QvpHitC extends ffi.Struct {
   @ffi.Uint32()
   external int word;
@@ -179,7 +179,7 @@ final class QvpHitC extends ffi.Struct {
   external int isExact;
 }
 
-/// `{ float max_distance, gap_bias; uint32_t prefer_exact; }`
+/// `{ float max_distance, gap_bias; uint8_t prefer_exact; }`
 final class QvpHitOptionsC extends ffi.Struct {
   @ffi.Float()
   external double maxDistance;
@@ -251,7 +251,7 @@ final class QvpLineBandC extends ffi.Struct {
   external double inkY1;
 }
 
-/// `{ float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing, line_gap; uint32_t fill_height, grid_lines; }`
+/// `{ float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint8_t fill_height; uint32_t grid_lines; float crop_left, crop_right, max_aspect_slack; }`
 final class QvpLayoutSpecC extends ffi.Struct {
   @ffi.Float()
   external double viewportW;
@@ -287,7 +287,7 @@ final class QvpGridC extends ffi.Struct {
   external double lineSpacing;
 }
 
-/// `{ float scale, offset_x, offset_y, content_w, content_h, line_spacing; uint32_t n_lines; const float* lines; }`
+/// `{ float scale, offset_x, offset_y, content_w, content_h, line_spacing; uint32_t n_lines; const float* lines; float fit_scale, fit_x, fit_y; }`
 final class QvpLayoutC extends ffi.Struct {
   @ffi.Float()
   external double scale;
@@ -409,7 +409,7 @@ final class QvpSurahC extends ffi.Struct {
   external QvpStrC english;
 }
 
-/// `{ uint8_t division, line; uint16_t n, surah, ayah; uint32_t ayah_index; }`
+/// `{ uint8_t division, line; uint16_t number, surah, ayah; uint32_t ayah_index; }`
 final class QvpDivisionC extends ffi.Struct {
   @ffi.Uint8()
   external int division;
@@ -447,7 +447,7 @@ final class QvpAyahMarkC extends ffi.Struct {
   external int numeralPath;
 }
 
-/// `{ uint32_t decoration; uint16_t surah, ayah, juz, hizb, nisf, rubuAlHizb, rubu_al_hizb_in_hizb, _pad; }`
+/// `{ uint32_t decoration; uint16_t surah, ayah, juz, hizb, nisf, rubu_al_hizb, rubu_al_hizb_in_hizb, _pad; }`
 final class QvpRosetteC extends ffi.Struct {
   @ffi.Uint32()
   external int decoration;
@@ -481,7 +481,7 @@ final class QvpSajdahC extends ffi.Struct {
   external int signPath;
 }
 
-/// `{ uint32_t word, index, is_loose_match; }`
+/// `{ uint32_t word, index; uint8_t is_loose_match; }`
 final class QvpMatchC extends ffi.Struct {
   @ffi.Uint32()
   external int word;
@@ -507,7 +507,7 @@ final class QvpCropBoundsC extends ffi.Struct {
   external int ayahMarkDecoration;
 }
 
-/// `{ uint16_t n, first_page, ayah_count; uint8_t place, _pad; QvpStr arabic, latin, english; }`
+/// `{ uint16_t number, first_page, ayah_count; uint8_t place, _pad; QvpStr arabic, latin, english; }`
 final class QvpAtlasSurahC extends ffi.Struct {
   @ffi.Uint16()
   external int number;
@@ -524,7 +524,7 @@ final class QvpAtlasSurahC extends ffi.Struct {
   external QvpStrC english;
 }
 
-/// `{ uint16_t rubuAlHizb, surah, ayah, page; }`
+/// `{ uint16_t rubu_al_hizb, surah, ayah, page; }`
 final class QvpAtlasRubuAlHizbC extends ffi.Struct {
   @ffi.Uint16()
   external int rubuAlHizb;
