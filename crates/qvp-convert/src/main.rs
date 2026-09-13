@@ -60,7 +60,12 @@ fn main() {
                     for x in d.warnings {
                         eprintln!("warn: {x}");
                     }
-                    println!("{} → {} bytes ({:.1}x smaller)", d.svg_len, d.qvp_len, d.svg_len as f64 / d.qvp_len as f64);
+                    println!(
+                        "{} → {} bytes ({:.1}x smaller)",
+                        d.svg_len,
+                        d.qvp_len,
+                        d.svg_len as f64 / d.qvp_len as f64
+                    );
                 }
                 Err(e) => {
                     eprintln!("error: {e}");
@@ -92,7 +97,10 @@ fn main() {
             let words_index_dir = args.get(4).map(PathBuf::from).or_else(|| default_words_index(&svg_dir));
             match &words_index_dir {
                 Some(d) => println!("words index: {}", d.display()),
-                None => eprintln!("warn: no words index found next to {}; NNN.words.json will carry rasm_uthmani only", svg_dir.display()),
+                None => eprintln!(
+                    "warn: no words index found next to {}; NNN.words.json will carry rasm_uthmani only",
+                    svg_dir.display()
+                ),
             }
             let mut files: Vec<PathBuf> = fs::read_dir(&args[2])
                 .expect("read dir")
@@ -136,7 +144,12 @@ fn main() {
             let atlas = atlas.build();
             fs::write(out_dir.join("atlas.qva"), atlas.encode()).expect("write atlas");
             fs::write(out_dir.join("atlas.json"), atlas.to_json()).expect("write atlas json");
-            println!("atlas: {} pages, {} surahs, {} rubu_al_hizb boundaries → atlas.qva / atlas.json", atlas.pages.len(), atlas.surahs.len(), atlas.rubu_al_hizbs.len());
+            println!(
+                "atlas: {} pages, {} surahs, {} rubu_al_hizb boundaries → atlas.qva / atlas.json",
+                atlas.pages.len(),
+                atlas.surahs.len(),
+                atlas.rubu_al_hizbs.len()
+            );
             println!(
                 "pages={n} errors={errs} warnings={warns}\nsvg total {:.1} MB → qvp total {:.2} MB ({:.1}x)\nper page: min {} B, avg {} B, max {} B",
                 svg_total as f64 / 1e6,

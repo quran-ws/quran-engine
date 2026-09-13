@@ -235,9 +235,9 @@ pub fn encode(p: &PageData) -> Vec<u8> {
     let mut ri = 0usize;
     for x in &p.paths {
         if x.flags & PF_GLYPH != 0 {
-            vi(&mut t, x.op_off as u32); // instance index
+            vi(&mut t, x.op_off); // instance index
         } else {
-            vi(&mut t, runs[ri].n_ops as u32);
+            vi(&mut t, runs[ri].n_ops);
             ri += 1;
         }
     }
@@ -285,7 +285,8 @@ pub fn encode(p: &PageData) -> Vec<u8> {
     }
 
     // ── header ──
-    let mut o = Vec::with_capacity(HEADER_LEN + t.len() + opbits.len() + zs.len() + xs.len() + ys.len() + strings.len());
+    let mut o =
+        Vec::with_capacity(HEADER_LEN + t.len() + opbits.len() + zs.len() + xs.len() + ys.len() + strings.len());
     o.extend_from_slice(MAGIC);
     let u16v = |o: &mut Vec<u8>, v: u16| o.extend_from_slice(&v.to_le_bytes());
     u16v(&mut o, VERSION);
@@ -329,7 +330,8 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         width: f32::from_bits(u32a(12)),
         height: f32::from_bits(u32a(16)),
     };
-    let (n_lines, n_ayahs, n_words, n_decos) = (u16a(20) as usize, u16a(22) as usize, u16a(24) as usize, u16a(26) as usize);
+    let (n_lines, n_ayahs, n_words, n_decos) =
+        (u16a(20) as usize, u16a(22) as usize, u16a(24) as usize, u16a(26) as usize);
     let n_paths = u32a(28) as usize;
     let (n_strings, n_glyphs, n_insts) = (u16a(32) as usize, u16a(34) as usize, u16a(36) as usize);
     let mut at = HEADER_LEN;
@@ -423,7 +425,7 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
     for i in 0..n_paths {
         let flags = b[c_flags + i];
         let v = t.vi("path")?;
-        let (op_off, n_ops) = if flags & PF_GLYPH != 0 { (v as u32, 0) } else { (0, v as u32) };
+        let (op_off, n_ops) = if flags & PF_GLYPH != 0 { (v, 0) } else { (0, v) };
         n_ops_of.push(n_ops);
         paths.push(PathRec {
             kind: PathKind::from_u8(b[c_kind + i]),
@@ -596,11 +598,11 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         }
         bb
     };
-    for i in 0..words.len() {
-        words[i].bbox = set_origin(&mut paths, words[i].first_path, words[i].n_paths);
+    for w in words.iter_mut() {
+        w.bbox = set_origin(&mut paths, w.first_path, w.n_paths);
     }
-    for i in 0..decos.len() {
-        decos[i].bbox = set_origin(&mut paths, decos[i].first_path, decos[i].n_paths);
+    for d in decos.iter_mut() {
+        d.bbox = set_origin(&mut paths, d.first_path, d.n_paths);
     }
     let wbox = |first: u16, n: u16| {
         let mut bb = IBox::EMPTY;
@@ -629,10 +631,10 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         r.op_len = ops.len() as u32 - off;
     }
     let mut glyphs = Vec::with_capacity(n_glyphs);
-    for gi in 0..n_glyphs {
+    for (gi, bbox) in glyph_bbox.iter().enumerate().take(n_glyphs) {
         let off = ops.len() as u32;
         encode_cmds(run(n_inline + gi), 0, 0, &mut ops);
-        glyphs.push(GlyphRec { op_off: off, op_len: ops.len() as u32 - off, bbox: glyph_bbox[gi] });
+        glyphs.push(GlyphRec { op_off: off, op_len: ops.len() as u32 - off, bbox: *bbox });
     }
 
     if xr.pos != o_ys || yr.pos != o_str {

@@ -25,7 +25,8 @@ pub fn merge_words_index(words: &mut [WordText], json: &[u8], warnings: &mut Vec
         warnings.push("words index: not valid JSON, ignored".into());
         return 0;
     };
-    let index: std::collections::HashMap<&str, &qvp_core::text::WordForms> = forms.iter().map(|(k, f)| (k.as_str(), f)).collect();
+    let index: std::collections::HashMap<&str, &qvp_core::text::WordForms> =
+        forms.iter().map(|(k, f)| (k.as_str(), f)).collect();
     let mut n = 0;
     for w in words.iter_mut() {
         let Some(f) = index.get(w.word_key.as_str()) else {

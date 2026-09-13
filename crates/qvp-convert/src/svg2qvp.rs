@@ -71,12 +71,11 @@ pub fn convert(svg: &str) -> Result<Converted, String> {
             *d_count.entry(d).or_insert(0) += 1;
         }
     }
-    let shared_d: HashMap<&str, Option<u16>> = d_count.into_iter().filter(|(_, c)| *c > 1).map(|(d, _)| (d, None)).collect();
+    let shared_d: HashMap<&str, Option<u16>> =
+        d_count.into_iter().filter(|(_, c)| *c > 1).map(|(d, _)| (d, None)).collect();
     let vb = root.attribute("viewBox").ok_or("missing viewBox")?;
-    let vb: Vec<f64> = vb
-        .split_whitespace()
-        .map(|t| t.parse::<f64>().map_err(|e| e.to_string()))
-        .collect::<Result<_, _>>()?;
+    let vb: Vec<f64> =
+        vb.split_whitespace().map(|t| t.parse::<f64>().map_err(|e| e.to_string())).collect::<Result<_, _>>()?;
     if vb.len() != 4 {
         return Err("viewBox must have 4 numbers".into());
     }
@@ -86,7 +85,14 @@ pub fn convert(svg: &str) -> Result<Converted, String> {
         quant: quant as f64,
         page_tf: Affine::translate(-vb[0], -vb[1]),
         page: PageData {
-            header: Header { version: VERSION, quant, page: page_no, flags: 0, width: vb[2] as f32, height: vb[3] as f32 },
+            header: Header {
+                version: VERSION,
+                quant,
+                page: page_no,
+                flags: 0,
+                width: vb[2] as f32,
+                height: vb[3] as f32,
+            },
             lines: vec![],
             ayahs: vec![],
             words: vec![],
@@ -230,7 +236,18 @@ impl<'a> Ctx<'a> {
             Some(id) => self.intern(id) | 0x8000, // temp: string ref flagged
             None => NONE_U16,
         };
-        self.page.ayahs.push(AyahRec { surah, ayah, fragment, fragments, flags, first_word, n_words: 0, ayah_mark_deco, rubu_al_hizb, bbox: IBox::EMPTY });
+        self.page.ayahs.push(AyahRec {
+            surah,
+            ayah,
+            fragment,
+            fragments,
+            flags,
+            first_word,
+            n_words: 0,
+            ayah_mark_deco,
+            rubu_al_hizb,
+            bbox: IBox::EMPTY,
+        });
         self.ayah_children(n, tf, line_idx, ayah_idx, surah, ayah)?;
         let n_words = self.page.words.len() as u16 - first_word;
         let mut bb = IBox::EMPTY;
@@ -243,7 +260,15 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    fn ayah_children(&mut self, n: Node<'a, '_>, tf: Affine, line_idx: u16, ayah_idx: u16, surah: u16, ayah: u16) -> Result<(), String> {
+    fn ayah_children(
+        &mut self,
+        n: Node<'a, '_>,
+        tf: Affine,
+        line_idx: u16,
+        ayah_idx: u16,
+        surah: u16,
+        ayah: u16,
+    ) -> Result<(), String> {
         for c in n.children().filter(|c| c.is_element()) {
             let ctf = self.node_tf(c, tf)?;
             match (c.tag_name().name(), class(c)) {
@@ -271,7 +296,12 @@ impl<'a> Ctx<'a> {
         let text = if rasm_uthmani.is_empty() { NONE_U16 } else { self.intern(rasm_uthmani) };
         // Dev-profile pages carry the derived forms inline; production pages do not,
         // and `attach_words` fills them from `index/by-page/NNN.json` instead.
-        let form = |cx: &mut Self, a: &str| -> u16 { match n.attribute(a) { Some(v) if !v.is_empty() => cx.intern(v), _ => NONE_U16 } };
+        let form = |cx: &mut Self, a: &str| -> u16 {
+            match n.attribute(a) {
+                Some(v) if !v.is_empty() => cx.intern(v),
+                _ => NONE_U16,
+            }
+        };
         let rasm_imlai = form(self, "data-rasm-imlai");
         let qpc = form(self, "data-qpc");
         let rasm = form(self, "data-rasm");
@@ -285,7 +315,21 @@ impl<'a> Ctx<'a> {
             }
         }
         let (first_path, n_paths, bbox) = self.push_paths(raws);
-        self.page.words.push(WordRec { surah, ayah, word, line_idx, ayah_idx, text, rasm_imlai, qpc, rasm, search, first_path, n_paths, bbox });
+        self.page.words.push(WordRec {
+            surah,
+            ayah,
+            word,
+            line_idx,
+            ayah_idx,
+            text,
+            rasm_imlai,
+            qpc,
+            rasm,
+            search,
+            first_path,
+            n_paths,
+            bbox,
+        });
         Ok(())
     }
 
@@ -341,7 +385,15 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    fn push_deco_from_raw(&mut self, kind: DecoKind, surah: u16, ayah: u16, text: u16, line: u16, raws: Vec<RawPath>) -> u16 {
+    fn push_deco_from_raw(
+        &mut self,
+        kind: DecoKind,
+        surah: u16,
+        ayah: u16,
+        text: u16,
+        line: u16,
+        raws: Vec<RawPath>,
+    ) -> u16 {
         let (first_path, n_paths, bbox) = self.push_paths(raws);
         let idx = self.page.decos.len() as u16;
         self.page.decos.push(DecoRec { kind, surah, ayah, text, first_path, n_paths, line, bbox });
@@ -364,13 +416,33 @@ impl<'a> Ctx<'a> {
                     let op_off = self.page.ops.len() as u32;
                     let bbox = encode_cmds(&cmds, ox, oy, &mut self.page.ops);
                     let op_len = self.page.ops.len() as u32 - op_off;
-                    self.page.paths.push(PathRec { kind: r.kind, mark: r.mark, family: r.family, flags: r.flags, ox, oy, op_off, op_len, bbox });
+                    self.page.paths.push(PathRec {
+                        kind: r.kind,
+                        mark: r.mark,
+                        family: r.family,
+                        flags: r.flags,
+                        ox,
+                        oy,
+                        op_off,
+                        op_len,
+                        bbox,
+                    });
                 }
                 Geom::Instance { inst, cmds_page } => {
                     let bbox = cmds_bbox(&cmds_page);
                     let ii = self.page.insts.len() as u32;
                     self.page.insts.push(inst);
-                    self.page.paths.push(PathRec { kind: r.kind, mark: r.mark, family: r.family, flags: r.flags | PF_GLYPH, ox: 0, oy: 0, op_off: ii, op_len: 0, bbox });
+                    self.page.paths.push(PathRec {
+                        kind: r.kind,
+                        mark: r.mark,
+                        family: r.family,
+                        flags: r.flags | PF_GLYPH,
+                        ox: 0,
+                        oy: 0,
+                        op_off: ii,
+                        op_len: 0,
+                        bbox,
+                    });
                 }
             }
         }
@@ -460,7 +532,15 @@ impl<'a> Ctx<'a> {
                         gi
                     }
                 };
-                let inst = InstRec { glyph: gi, a: tf.a as f32, b: tf.b as f32, c: tf.c as f32, d: tf.d as f32, e: tf.e as f32, f: tf.f as f32 };
+                let inst = InstRec {
+                    glyph: gi,
+                    a: tf.a as f32,
+                    b: tf.b as f32,
+                    c: tf.c as f32,
+                    d: tf.d as f32,
+                    e: tf.e as f32,
+                    f: tf.f as f32,
+                };
                 Geom::Instance { inst, cmds_page: parse(&tf)? }
             }
             None => Geom::Inline(parse(&tf)?),
@@ -483,7 +563,9 @@ impl<'a> Ctx<'a> {
             }
         }
         if unresolved > 0 {
-            self.report.warnings.push(format!("{unresolved} ayah(s) reference an ayah-mark id that does not exist on the page"));
+            self.report
+                .warnings
+                .push(format!("{unresolved} ayah(s) reference an ayah-mark id that does not exist on the page"));
         }
     }
 }

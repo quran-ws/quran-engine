@@ -80,8 +80,16 @@ fn conformance_vector() {
 fn dagger_alif_is_a_mark_not_an_alif() {
     // The bug this spec exists to settle: quran-text used to expand U+0670 into
     // a full alif, so two blocks disagreed about one query.
-    assert_eq!(normalize_query("\u{0671}\u{0644}\u{0631}\u{0651}\u{064E}\u{062D}\u{06E1}\u{0645}\u{064E}\u{0670}\u{0646}\u{0650}"), "\u{0627}\u{0644}\u{0631}\u{062D}\u{0645}\u{0646}");
-    assert_eq!(loose_key("\u{0627}\u{0644}\u{0631}\u{062D}\u{0645}\u{0627}\u{0646}"), loose_key("\u{0627}\u{0644}\u{0631}\u{062D}\u{0645}\u{0646}"));
+    assert_eq!(
+        normalize_query(
+            "\u{0671}\u{0644}\u{0631}\u{0651}\u{064E}\u{062D}\u{06E1}\u{0645}\u{064E}\u{0670}\u{0646}\u{0650}"
+        ),
+        "\u{0627}\u{0644}\u{0631}\u{062D}\u{0645}\u{0646}"
+    );
+    assert_eq!(
+        loose_key("\u{0627}\u{0644}\u{0631}\u{062D}\u{0645}\u{0627}\u{0646}"),
+        loose_key("\u{0627}\u{0644}\u{0631}\u{062D}\u{0645}\u{0646}")
+    );
 }
 
 #[test]

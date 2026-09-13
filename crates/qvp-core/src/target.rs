@@ -23,13 +23,34 @@ impl Page {
         let n = d.words.len() as u32;
         let mut v: Vec<u32> = match t {
             Target::Page => (0..n).collect(),
-            Target::Word(w) => if *w < n { vec![*w] } else { vec![] },
+            Target::Word(w) => {
+                if *w < n {
+                    vec![*w]
+                } else {
+                    vec![]
+                }
+            }
             Target::Words(ws) => ws.iter().copied().filter(|w| *w < n).collect(),
-            Target::Ayah(s, a) => (0..n).filter(|&i| d.words[i as usize].surah == *s && d.words[i as usize].ayah == *a).collect(),
-            Target::AyahRange(s, a, b) => (0..n).filter(|&i| { let w = &d.words[i as usize]; w.surah == *s && w.ayah >= *a && w.ayah <= *b }).collect(),
-            Target::Line(l) => d.lines.iter().filter(|x| x.line_no == *l).flat_map(|x| x.first_word as u32..(x.first_word + x.n_words) as u32).collect(),
+            Target::Ayah(s, a) => {
+                (0..n).filter(|&i| d.words[i as usize].surah == *s && d.words[i as usize].ayah == *a).collect()
+            }
+            Target::AyahRange(s, a, b) => (0..n)
+                .filter(|&i| {
+                    let w = &d.words[i as usize];
+                    w.surah == *s && w.ayah >= *a && w.ayah <= *b
+                })
+                .collect(),
+            Target::Line(l) => d
+                .lines
+                .iter()
+                .filter(|x| x.line_no == *l)
+                .flat_map(|x| x.first_word as u32..(x.first_word + x.n_words) as u32)
+                .collect(),
             Target::Surah(s) => (0..n).filter(|&i| d.words[i as usize].surah == *s).collect(),
-            Target::Range(a, b) => { let (lo, hi) = (a.min(b), a.max(b)); (*lo..=(*hi).min(n.saturating_sub(1))).filter(|_| n > 0).collect() }
+            Target::Range(a, b) => {
+                let (lo, hi) = (a.min(b), a.max(b));
+                (*lo..=(*hi).min(n.saturating_sub(1))).filter(|_| n > 0).collect()
+            }
         };
         v.sort_unstable();
         v.dedup();

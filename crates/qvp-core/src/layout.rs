@@ -38,7 +38,18 @@ pub struct LayoutSpec {
 
 impl Default for LayoutSpec {
     fn default() -> Self {
-        LayoutSpec { viewport_w: 345.0, viewport_h: 550.0, pad_top: 0.0, pad_bottom: 0.0, pad_left: 0.0, pad_right: 0.0, line_spacing: 1.0, line_gap: 0.0, fill_height: false, nominal_lines: 15 }
+        LayoutSpec {
+            viewport_w: 345.0,
+            viewport_h: 550.0,
+            pad_top: 0.0,
+            pad_bottom: 0.0,
+            pad_left: 0.0,
+            pad_right: 0.0,
+            line_spacing: 1.0,
+            line_gap: 0.0,
+            fill_height: false,
+            nominal_lines: 15,
+        }
     }
 }
 
@@ -145,21 +156,38 @@ impl Page {
             let top = match i.checked_sub(1) {
                 Some(j) if centres[j] < c => {
                     let mid = (centres[j] + c) / 2.0;
-                    if headers[i] || headers[j] { mid.max(c - half) } else { mid }
+                    if headers[i] || headers[j] {
+                        mid.max(c - half)
+                    } else {
+                        mid
+                    }
                 }
                 _ => c - half,
             };
             let bottom = match centres.get(i + 1) {
                 Some(&next) if next > c => {
                     let mid = (c + next) / 2.0;
-                    if headers[i] || headers[i + 1] { mid.min(c + half) } else { mid }
+                    if headers[i] || headers[i + 1] {
+                        mid.min(c + half)
+                    } else {
+                        mid
+                    }
                 }
                 _ => c + half,
             };
             line_slots.push((top * scale, bottom * scale));
         }
         let content_h = spec.pad_top + block_h * scale + spec.pad_bottom;
-        self.layout = Some(Layout { scale, ox: spec.pad_left, oy: 0.0, line_dy, line_slots, content_h, content_w: spec.viewport_w, pitch });
+        self.layout = Some(Layout {
+            scale,
+            ox: spec.pad_left,
+            oy: 0.0,
+            line_dy,
+            line_slots,
+            content_h,
+            content_w: spec.viewport_w,
+            pitch,
+        });
         self.layout.as_ref().unwrap()
     }
 

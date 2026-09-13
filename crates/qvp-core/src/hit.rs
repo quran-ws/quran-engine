@@ -67,7 +67,15 @@ impl Page {
             .enumerate()
             .map(|(i, l)| {
                 let mid = self.line_centre(i);
-                LineBand { line: i as u32, line_no: l.line_no, y0: mid - p / 2.0, y1: mid + p / 2.0, mid, ink_y0: l.bbox.y0 as f32 / q, ink_y1: l.bbox.y1 as f32 / q }
+                LineBand {
+                    line: i as u32,
+                    line_no: l.line_no,
+                    y0: mid - p / 2.0,
+                    y1: mid + p / 2.0,
+                    mid,
+                    ink_y0: l.bbox.y0 as f32 / q,
+                    ink_y1: l.bbox.y1 as f32 / q,
+                }
             })
             .collect()
     }
@@ -86,17 +94,40 @@ impl Page {
                 let w = &d.words[wi as usize];
                 let (ix0, ix1) = (w.bbox.x0 as f32 / q, w.bbox.x1 as f32 / q);
                 // left neighbour = smaller x (next word in reading order); right = preceding
-                let x0 = if k == 0 { lx0.min(ix0) } else {
+                let x0 = if k == 0 {
+                    lx0.min(ix0)
+                } else {
                     let left = &d.words[ws[k - 1].1 as usize];
                     let gap = ix0 - left.bbox.x1 as f32 / q;
-                    if gap > 0.0 { ix0 - gap * gap_bias } else { ix0 }
+                    if gap > 0.0 {
+                        ix0 - gap * gap_bias
+                    } else {
+                        ix0
+                    }
                 };
-                let x1 = if k + 1 == ws.len() { lx1.max(ix1) } else {
+                let x1 = if k + 1 == ws.len() {
+                    lx1.max(ix1)
+                } else {
                     let right = &d.words[ws[k + 1].1 as usize];
                     let gap = right.bbox.x0 as f32 / q - ix1;
-                    if gap > 0.0 { ix1 + gap * (1.0 - gap_bias) } else { ix1 }
+                    if gap > 0.0 {
+                        ix1 + gap * (1.0 - gap_bias)
+                    } else {
+                        ix1
+                    }
                 };
-                out.push(HitBox { word: wi, line: li as u32, x0, y0: band.y0, x1, y1: band.y1, ink_x0: ix0, ink_y0: w.bbox.y0 as f32 / q, ink_x1: ix1, ink_y1: w.bbox.y1 as f32 / q });
+                out.push(HitBox {
+                    word: wi,
+                    line: li as u32,
+                    x0,
+                    y0: band.y0,
+                    x1,
+                    y1: band.y1,
+                    ink_x0: ix0,
+                    ink_y0: w.bbox.y0 as f32 / q,
+                    ink_x1: ix1,
+                    ink_y1: w.bbox.y1 as f32 / q,
+                });
             }
         }
         out.sort_by_key(|h| h.word);
@@ -108,8 +139,19 @@ impl Page {
         if opt.exact_first {
             if let Some(h) = self.hit_test(x, y) {
                 if h.path != NONE || h.deco != NONE {
-                    let line = if h.word != NONE { self.data().words[h.word as usize].line_idx as u32 } else { self.geometry().table[self.data().decos[h.deco as usize].first_path as usize].line };
-                    return Some(HitEx { word: h.word, path: h.path, deco: h.deco, line, distance: 0.0, exact: h.path != NONE });
+                    let line = if h.word != NONE {
+                        self.data().words[h.word as usize].line_idx as u32
+                    } else {
+                        self.geometry().table[self.data().decos[h.deco as usize].first_path as usize].line
+                    };
+                    return Some(HitEx {
+                        word: h.word,
+                        path: h.path,
+                        deco: h.deco,
+                        line,
+                        distance: 0.0,
+                        exact: h.path != NONE,
+                    });
                 }
             }
         }
@@ -126,7 +168,13 @@ impl Page {
             if self.data().lines[b.line as usize].n_words == 0 {
                 continue;
             }
-            let dy = if y < b.y0 { b.y0 - y } else if y > b.y1 { y - b.y1 } else { 0.0 };
+            let dy = if y < b.y0 {
+                b.y0 - y
+            } else if y > b.y1 {
+                y - b.y1
+            } else {
+                0.0
+            };
             if dy < best_dy {
                 best_dy = dy;
                 best_line = Some(b.line as usize);
@@ -164,9 +212,22 @@ impl Page {
             }
         }
         let w = &d.words[chosen as usize];
-        let (ix0, iy0, ix1, iy1) = (w.bbox.x0 as f32 / q, w.bbox.y0 as f32 / q, w.bbox.x1 as f32 / q, w.bbox.y1 as f32 / q);
-        let dx = if x < ix0 { ix0 - x } else if x > ix1 { x - ix1 } else { 0.0 };
-        let dy = if y < iy0 { iy0 - y } else if y > iy1 { y - iy1 } else { 0.0 };
+        let (ix0, iy0, ix1, iy1) =
+            (w.bbox.x0 as f32 / q, w.bbox.y0 as f32 / q, w.bbox.x1 as f32 / q, w.bbox.y1 as f32 / q);
+        let dx = if x < ix0 {
+            ix0 - x
+        } else if x > ix1 {
+            x - ix1
+        } else {
+            0.0
+        };
+        let dy = if y < iy0 {
+            iy0 - y
+        } else if y > iy1 {
+            y - iy1
+        } else {
+            0.0
+        };
         let distance = (dx * dx + dy * dy).sqrt();
         if distance > opt.max_distance {
             return None;
@@ -183,8 +244,19 @@ impl Page {
         if opt.exact_first {
             if let Some(h) = self.hit_test_view(vx, vy) {
                 if h.path != NONE || h.deco != NONE {
-                    let line = if h.word != NONE { self.data().words[h.word as usize].line_idx as u32 } else { self.geometry().table[self.data().decos[h.deco as usize].first_path as usize].line };
-                    return Some(HitEx { word: h.word, path: h.path, deco: h.deco, line, distance: 0.0, exact: h.path != NONE });
+                    let line = if h.word != NONE {
+                        self.data().words[h.word as usize].line_idx as u32
+                    } else {
+                        self.geometry().table[self.data().decos[h.deco as usize].first_path as usize].line
+                    };
+                    return Some(HitEx {
+                        word: h.word,
+                        path: h.path,
+                        deco: h.deco,
+                        line,
+                        distance: 0.0,
+                        exact: h.path != NONE,
+                    });
                 }
             }
         }

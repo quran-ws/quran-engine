@@ -21,8 +21,8 @@ source SVG ──converter──▶ page file ──engine──▶ outlines + c
                                                                       Skia, Canvas2D
 ```
 
-1. **The source.** One SVG per page from the Quran SVG project, the Madani mushaf in the
-   Hafs reading. Every word is a group of vector outlines (paths made of lines and curves)
+1. **The source.** One SVG per page from the `quran-svg-elements` release, the Madani
+   mushaf in the Hafs reading. Every word is a group of vector outlines (paths made of lines and curves)
    tagged with its key, `surah:ayah:word`. Marks such as vowels and pause signs are
    separate outlines with their own names.
 2. **The converter** (`crates/qvp-convert`) reads the SVG and writes a page file. It is

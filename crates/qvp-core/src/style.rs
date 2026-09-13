@@ -240,7 +240,15 @@ pub(crate) struct PathAnim {
 
 impl Default for PathAnim {
     fn default() -> Self {
-        PathAnim { target: DEFAULT_INK, target_ms: 0, from: DEFAULT_INK, to: DEFAULT_INK, t0: 0.0, dur: 0.0, cur: DEFAULT_INK }
+        PathAnim {
+            target: DEFAULT_INK,
+            target_ms: 0,
+            from: DEFAULT_INK,
+            to: DEFAULT_INK,
+            t0: 0.0,
+            dur: 0.0,
+            cur: DEFAULT_INK,
+        }
     }
 }
 

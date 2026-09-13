@@ -30,7 +30,10 @@ impl Page {
         }
         let mut ayah_mark = NONE;
         if keep_ayah_marks {
-            let (s, a) = { let w = &d.words[*words.last().unwrap() as usize]; (w.surah, w.ayah) };
+            let (s, a) = {
+                let w = &d.words[*words.last().unwrap() as usize];
+                (w.surah, w.ayah)
+            };
             let all: Vec<u32> = self.resolve(&Target::Ayah(s, a));
             let (_, complete) = self.ayah_word_count(s, a);
             if complete && all.iter().all(|w| words.contains(w)) {
@@ -40,12 +43,25 @@ impl Page {
                 }
             }
         }
-        Some(CropBox { x0: bb.x0 as f32 / q - pad, y0: bb.y0 as f32 / q - pad, x1: bb.x1 as f32 / q + pad, y1: bb.y1 as f32 / q + pad, n_words: words.len() as u32, ayah_mark_deco: ayah_mark })
+        Some(CropBox {
+            x0: bb.x0 as f32 / q - pad,
+            y0: bb.y0 as f32 / q - pad,
+            x1: bb.x1 as f32 / q + pad,
+            y1: bb.y1 as f32 / q + pad,
+            n_words: words.len() as u32,
+            ayah_mark_deco: ayah_mark,
+        })
     }
 
     /// Standalone SVG of a target with the current colours (mask/reveal/rules applied).
     /// `background` None = transparent.
-    pub fn crop_svg(&mut self, target: &Target, pad: f32, keep_ayah_marks: bool, background: Option<Rgba>) -> Option<String> {
+    pub fn crop_svg(
+        &mut self,
+        target: &Target,
+        pad: f32,
+        keep_ayah_marks: bool,
+        background: Option<Rgba>,
+    ) -> Option<String> {
         let cb = self.crop_box(target, pad, keep_ayah_marks)?;
         let words = self.resolve(target);
         let colors: Vec<Rgba> = self.paint().to_vec();
@@ -55,7 +71,16 @@ impl Page {
         let mut s = String::with_capacity(64 * 1024);
         write!(s, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"{:.2} {:.2} {:.2} {:.2}\" width=\"{:.2}\" height=\"{:.2}\">", cb.x0, cb.y0, w, h, w, h).unwrap();
         if let Some(bg) = background {
-            write!(s, "<rect x=\"{:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{:.2}\" fill=\"{}\"/>", cb.x0, cb.y0, w, h, css_hex(bg)).unwrap();
+            write!(
+                s,
+                "<rect x=\"{:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{:.2}\" fill=\"{}\"/>",
+                cb.x0,
+                cb.y0,
+                w,
+                h,
+                css_hex(bg)
+            )
+            .unwrap();
         }
         let mut path_ids: Vec<u32> = Vec::new();
         for &wi in &words {

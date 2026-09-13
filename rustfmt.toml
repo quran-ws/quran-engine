@@ -1,0 +1,5 @@
+# rustfmt settings. Width 120 with compact heuristics keeps the dense one-line records
+# the codec and FFI use; the edition matches Cargo.toml.
+edition = "2021"
+max_width = 120
+use_small_heuristics = "Max"

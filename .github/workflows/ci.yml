@@ -1,0 +1,116 @@
+# The checks every pull request must pass. Each job runs one subcommand of
+# scripts/check.sh, so a green run here and a green run locally mean the same thing.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to the same branch cancels the run for the previous commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Which parts changed. Documentation-only changes skip the compile jobs; a skipped
+  # required job counts as passing.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'crates/**'
+              - 'web/**'
+              - 'conformance/**'
+              - 'Cargo.*'
+              - 'rust-toolchain.toml'
+              - 'rustfmt.toml'
+              - 'package.json'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
+
+  engine:
+    name: engine (fmt, clippy, tests, rustdoc)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/check.sh fmt lint test docs
+
+  gates:
+    name: gates (identity, ABI, conformance)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - name: Cache test data
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist/pages
+            pages
+            index
+          key: test-data-${{ vars.QVP_DATA_TAG || 'v0.1.0' }}-${{ vars.QVP_SVG_TAG || 'v1.0.1' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      - name: Fetch test data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.0.1' }}
+        run: scripts/sync-test-data.sh
+      - name: Identity gate (8 pages), ABI test, conformance
+        run: scripts/check.sh gates
+
+  standards:
+    name: standards (parity, versions, terminology, structure)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python3 scripts/check-parity.py --check
+      - run: scripts/check-versions.sh
+      - run: scripts/check-structure.sh
+      - run: scripts/check-terminology.sh
+
+  web:
+    name: web (wasm, smoke, lite)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - run: scripts/check.sh web

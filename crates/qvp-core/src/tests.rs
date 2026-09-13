@@ -14,7 +14,17 @@ fn page() -> Page {
         let bb = cmds_bbox(cmds);
         let off = ops.len() as u32;
         encode_cmds(cmds, bb.x0, bb.y0, &mut ops);
-        paths.push(PathRec { kind, mark, family: fam, flags: PF_EVENODD, ox: bb.x0, oy: bb.y0, op_off: off, op_len: ops.len() as u32 - off, bbox: bb });
+        paths.push(PathRec {
+            kind,
+            mark,
+            family: fam,
+            flags: PF_EVENODD,
+            ox: bb.x0,
+            oy: bb.y0,
+            op_off: off,
+            op_len: ops.len() as u32 - off,
+            bbox: bb,
+        });
         bb
     };
     let a = add(&square(1000, 1000, 2000, 2000), PathKind::Body, Mark::None, Family::None);
@@ -24,19 +34,89 @@ fn page() -> Page {
     let c = add(&square(1000, 5000, 4000, 6000), PathKind::Body, Mark::None, Family::None);
     let mut l1 = a;
     l1.union(&b);
-    let mut st = |s: &str| { strings.push(s.to_owned()); (strings.len() - 1) as u16 };
+    let mut st = |s: &str| {
+        strings.push(s.to_owned());
+        (strings.len() - 1) as u16
+    };
     let (ta, ta_s, tb, tb_s, tc, tc_s) = (st("ذَٰلِكَ"), st("ذلك"), st("ٱلْكِتَٰبُ"), st("الكتاب"), st("لَا"), st("لا"));
     let data = PageData {
         header: Header { version: VERSION, quant: 100, page: 1, flags: 0, width: 100.0, height: 100.0 },
-        lines: vec![LineRec { line_no: 1, first_word: 0, n_words: 2, bbox: l1 }, LineRec { line_no: 2, first_word: 2, n_words: 1, bbox: c }],
+        lines: vec![
+            LineRec { line_no: 1, first_word: 0, n_words: 2, bbox: l1 },
+            LineRec { line_no: 2, first_word: 2, n_words: 1, bbox: c },
+        ],
         ayahs: vec![
-            AyahRec { surah: 1, ayah: 1, fragment: 1, fragments: 1, flags: AF_JUZ_START | AF_HIZB_START | AF_RUBU_AL_HIZB_START, first_word: 0, n_words: 2, ayah_mark_deco: NONE_U16, rubu_al_hizb: 1, bbox: l1 },
-            AyahRec { surah: 1, ayah: 2, fragment: 1, fragments: 1, flags: 0, first_word: 2, n_words: 1, ayah_mark_deco: NONE_U16, rubu_al_hizb: 0, bbox: c },
+            AyahRec {
+                surah: 1,
+                ayah: 1,
+                fragment: 1,
+                fragments: 1,
+                flags: AF_JUZ_START | AF_HIZB_START | AF_RUBU_AL_HIZB_START,
+                first_word: 0,
+                n_words: 2,
+                ayah_mark_deco: NONE_U16,
+                rubu_al_hizb: 1,
+                bbox: l1,
+            },
+            AyahRec {
+                surah: 1,
+                ayah: 2,
+                fragment: 1,
+                fragments: 1,
+                flags: 0,
+                first_word: 2,
+                n_words: 1,
+                ayah_mark_deco: NONE_U16,
+                rubu_al_hizb: 0,
+                bbox: c,
+            },
         ],
         words: vec![
-            WordRec { surah: 1, ayah: 1, word: 1, line_idx: 0, ayah_idx: 0, text: ta, rasm_imlai: ta, qpc: ta, rasm: ta_s, search: ta_s, first_path: 0, n_paths: 1, bbox: a },
-            WordRec { surah: 1, ayah: 1, word: 2, line_idx: 0, ayah_idx: 0, text: tb, rasm_imlai: tb, qpc: tb, rasm: tb_s, search: tb_s, first_path: 1, n_paths: 3, bbox: b },
-            WordRec { surah: 1, ayah: 2, word: 1, line_idx: 1, ayah_idx: 1, text: tc, rasm_imlai: tc, qpc: tc, rasm: tc_s, search: tc_s, first_path: 4, n_paths: 1, bbox: c },
+            WordRec {
+                surah: 1,
+                ayah: 1,
+                word: 1,
+                line_idx: 0,
+                ayah_idx: 0,
+                text: ta,
+                rasm_imlai: ta,
+                qpc: ta,
+                rasm: ta_s,
+                search: ta_s,
+                first_path: 0,
+                n_paths: 1,
+                bbox: a,
+            },
+            WordRec {
+                surah: 1,
+                ayah: 1,
+                word: 2,
+                line_idx: 0,
+                ayah_idx: 0,
+                text: tb,
+                rasm_imlai: tb,
+                qpc: tb,
+                rasm: tb_s,
+                search: tb_s,
+                first_path: 1,
+                n_paths: 3,
+                bbox: b,
+            },
+            WordRec {
+                surah: 1,
+                ayah: 2,
+                word: 1,
+                line_idx: 1,
+                ayah_idx: 1,
+                text: tc,
+                rasm_imlai: tc,
+                qpc: tc,
+                rasm: tc_s,
+                search: tc_s,
+                first_path: 4,
+                n_paths: 1,
+                bbox: c,
+            },
         ],
         paths,
         decos: vec![],
@@ -150,7 +230,13 @@ fn transitions_run_on_the_clock() {
 fn highlights_bands_and_animation() {
     let mut p = page();
     p.tick(0.0);
-    let st = HighlightStyle { mode: HighlightMode::Both, ink: 0x00aa00ff, band: 0xffcc0080, transition_ms: 100, ..Default::default() };
+    let st = HighlightStyle {
+        mode: HighlightMode::Both,
+        ink: 0x00aa00ff,
+        band: 0xffcc0080,
+        transition_ms: 100,
+        ..Default::default()
+    };
     let h = p.highlight(&Target::Ayah(1, 1), st);
     assert_eq!(p.color_of(0), DEFAULT_INK);
     p.tick(1000.0);
@@ -187,7 +273,11 @@ fn text_search_selection_citation() {
     assert_eq!(m.len(), 1);
     assert_eq!(m[0].word, 1);
     assert!(p.search("كتاب", &SearchOptions { mode: SearchMode::Exact, ..Default::default() }).is_empty());
-    assert_eq!(p.search("الكتب", &SearchOptions { loose: false, ..Default::default() }).len(), 0, "strict pass: different letters");
+    assert_eq!(
+        p.search("الكتب", &SearchOptions { loose: false, ..Default::default() }).len(),
+        0,
+        "strict pass: different letters"
+    );
     assert_eq!(p.search("الكتب", &SearchOptions::default()).len(), 1, "loose pass drops bare alef");
     assert_eq!(p.search("ذَلِكَ", &SearchOptions::default())[0].word, 0, "query is normalised");
     let s = Selection { anchor: Some(2), focus: Some(0) };
@@ -235,7 +325,14 @@ fn mask_reveal_and_crop() {
 #[test]
 fn layout_fill_height_and_view_hit() {
     let mut p = page();
-    let spec = LayoutSpec { viewport_w: 200.0, viewport_h: 2500.0, pad_top: 50.0, pad_bottom: 50.0, fill_height: true, ..Default::default() };
+    let spec = LayoutSpec {
+        viewport_w: 200.0,
+        viewport_h: 2500.0,
+        pad_top: 50.0,
+        pad_bottom: 50.0,
+        fill_height: true,
+        ..Default::default()
+    };
     let l = p.layout(&spec).clone();
     assert_eq!(l.scale, 2.0);
     // a short page (2 lines) takes the rows of the 15-line grid: 2400 px / 15 = 160 px
@@ -264,9 +361,12 @@ fn layout_fill_height_and_view_hit() {
     // over its one gap — and never squeezes below the print
     let full = p.layout(&LayoutSpec { nominal_lines: 2, ..spec }).clone();
     assert!((full.pitch - (40.0 + 1100.0)).abs() < 1e-3 && (full.content_h - 2500.0).abs() < 1e-3);
-    let squeezed = p.layout(&LayoutSpec { viewport_h: 150.0, pad_top: 0.0, pad_bottom: 0.0, nominal_lines: 2, ..spec }).clone();
+    let squeezed =
+        p.layout(&LayoutSpec { viewport_h: 150.0, pad_top: 0.0, pad_bottom: 0.0, nominal_lines: 2, ..spec }).clone();
     assert!((squeezed.pitch - 40.0).abs() < 1e-3 && (squeezed.content_h - 200.0).abs() < 1e-3);
-    let l2 = p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_spacing: 1.5, ..Default::default() }).clone();
+    let l2 = p
+        .layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_spacing: 1.5, ..Default::default() })
+        .clone();
     assert!((l2.pitch - p.natural_pitch() * 1.5).abs() < 1e-3);
     assert!((l2.line_dy[1] - l2.line_dy[0] - 20.0).abs() < 1e-3, "×1.5 adds half a pitch between lines");
     // as printed: no shift at all

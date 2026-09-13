@@ -29,7 +29,16 @@ pub struct MaskState {
 
 impl Default for MaskState {
     fn default() -> Self {
-        MaskState { words: vec![], hidden: BTreeSet::new(), mode: MaskMode::Hide, block_color: 0xd9d4c8ff, pad_x: 0.6, pad_y: 0.6, radius: 0.8, reverse: false }
+        MaskState {
+            words: vec![],
+            hidden: BTreeSet::new(),
+            mode: MaskMode::Hide,
+            block_color: 0xd9d4c8ff,
+            pad_x: 0.6,
+            pad_y: 0.6,
+            radius: 0.8,
+            reverse: false,
+        }
     }
 }
 
@@ -53,7 +62,11 @@ impl Reveal {
         let c = &page.path_ctx[pi as usize];
         let step = if c.word != NONE {
             self.step_of_word[c.word as usize] as i64
-        } else if self.ayah_marks && c.deco != NONE && c.ayah != 0 && page.data().decos[c.deco as usize].kind == qvp_format::DecoKind::AyahMark {
+        } else if self.ayah_marks
+            && c.deco != NONE
+            && c.ayah != 0
+            && page.data().decos[c.deco as usize].kind == qvp_format::DecoKind::AyahMark
+        {
             // a medallion lights with the ayah it closes: its last word's step
             match page.data().words.iter().rposition(|w| w.surah == c.surah && w.ayah == c.ayah) {
                 Some(wi) => self.step_of_word[wi] as i64,
@@ -92,7 +105,8 @@ impl Page {
     }
     /// Reveal the next `n` words in order (reverse order when `reverse`). Returns how many changed.
     pub fn reveal_next(&mut self, n: usize) -> usize {
-        let order: Vec<u32> = if self.mask.reverse { self.mask.words.iter().rev().copied().collect() } else { self.mask.words.clone() };
+        let order: Vec<u32> =
+            if self.mask.reverse { self.mask.words.iter().rev().copied().collect() } else { self.mask.words.clone() };
         let mut done = 0;
         for w in order {
             if done >= n {
@@ -109,7 +123,8 @@ impl Page {
     }
     /// Re-hide the last `n` revealed words.
     pub fn hide_back(&mut self, n: usize) -> usize {
-        let order: Vec<u32> = if self.mask.reverse { self.mask.words.clone() } else { self.mask.words.iter().rev().copied().collect() };
+        let order: Vec<u32> =
+            if self.mask.reverse { self.mask.words.clone() } else { self.mask.words.iter().rev().copied().collect() };
         let mut done = 0;
         for w in order {
             if done >= n {
@@ -193,7 +208,15 @@ impl Page {
     }
 
     /// Start the greyed-page reveal. Steps are words (or ayahs) in reading order.
-    pub fn reveal_start(&mut self, lit: u32, by_ayah: bool, grey: Rgba, ink: Rgba, ayah_marks: bool, transition_ms: u32) -> u32 {
+    pub fn reveal_start(
+        &mut self,
+        lit: u32,
+        by_ayah: bool,
+        grey: Rgba,
+        ink: Rgba,
+        ayah_marks: bool,
+        transition_ms: u32,
+    ) -> u32 {
         let d = self.data();
         let mut step_of_word = Vec::with_capacity(d.words.len());
         let mut steps = 0u32;
@@ -212,7 +235,17 @@ impl Page {
             }
         }
         steps = if by_ayah { steps + 1 } else { d.words.len() as u32 };
-        self.reveal = Some(Reveal { at: -1, lit: lit.max(1), by_ayah, grey, ink, ayah_marks, transition_ms, step_of_word, steps });
+        self.reveal = Some(Reveal {
+            at: -1,
+            lit: lit.max(1),
+            by_ayah,
+            grey,
+            ink,
+            ayah_marks,
+            transition_ms,
+            step_of_word,
+            steps,
+        });
         self.state_dirty = true;
         steps
     }

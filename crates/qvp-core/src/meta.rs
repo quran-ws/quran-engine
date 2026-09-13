@@ -61,7 +61,17 @@ impl Page {
         let mut out: Vec<SurahInfo> = Vec::new();
         for w in &d.words {
             if !out.iter().any(|s| s.number == w.surah) {
-                out.push(SurahInfo { number: w.surah, arabic: String::new(), latin: String::new(), english: String::new(), revelation_place: String::new(), ayah_count: 0, has_banner: false, has_basmalah: false, banner_deco: NONE });
+                out.push(SurahInfo {
+                    number: w.surah,
+                    arabic: String::new(),
+                    latin: String::new(),
+                    english: String::new(),
+                    revelation_place: String::new(),
+                    ayah_count: 0,
+                    has_banner: false,
+                    has_basmalah: false,
+                    banner_deco: NONE,
+                });
             }
         }
         for (di, dc) in d.decos.iter().enumerate() {
@@ -71,7 +81,17 @@ impl Page {
             let s = match out.iter_mut().find(|s| s.number == dc.surah) {
                 Some(s) => s,
                 None => {
-                    out.push(SurahInfo { number: dc.surah, arabic: String::new(), latin: String::new(), english: String::new(), revelation_place: String::new(), ayah_count: 0, has_banner: false, has_basmalah: false, banner_deco: NONE });
+                    out.push(SurahInfo {
+                        number: dc.surah,
+                        arabic: String::new(),
+                        latin: String::new(),
+                        english: String::new(),
+                        revelation_place: String::new(),
+                        ayah_count: 0,
+                        has_banner: false,
+                        has_basmalah: false,
+                        banner_deco: NONE,
+                    });
                     out.last_mut().unwrap()
                 }
             };
@@ -105,7 +125,9 @@ impl Page {
                 continue;
             }
             let line = d.lines[d.words.get(a.first_word as usize).map(|w| w.line_idx as usize).unwrap_or(0)].line_no;
-            let push = |out: &mut Vec<Division>, kind: u8, n: u16| out.push(Division { kind, n, surah: a.surah, ayah: a.ayah, line, ayah_idx: ai as u32 });
+            let push = |out: &mut Vec<Division>, kind: u8, n: u16| {
+                out.push(Division { kind, n, surah: a.surah, ayah: a.ayah, line, ayah_idx: ai as u32 })
+            };
             if a.flags & AF_JUZ_START != 0 {
                 push(&mut out, 0, (a.rubu_al_hizb - 1) / 8 + 1);
             }
@@ -130,7 +152,16 @@ impl Page {
             .enumerate()
             .filter(|(_, x)| x.kind == DecoKind::DivisionMark)
             .map(|(i, x)| {
-                let mut r = Rosette { deco: i as u32, surah: x.surah, ayah: x.ayah, juz: 0, hizb: 0, nisf: 0, rubu_al_hizb: 0, rubu_al_hizb_in_hizb: 0 };
+                let mut r = Rosette {
+                    deco: i as u32,
+                    surah: x.surah,
+                    ayah: x.ayah,
+                    juz: 0,
+                    hizb: 0,
+                    nisf: 0,
+                    rubu_al_hizb: 0,
+                    rubu_al_hizb_in_hizb: 0,
+                };
                 if x.text != NONE_U16 {
                     for kv in d.strings[x.text as usize].split(';') {
                         if let Some((k, v)) = kv.split_once('=') {
@@ -216,7 +247,10 @@ impl Page {
     /// True for banner lines (surah name / basmalah) that hold no words.
     pub fn line_is_header(&self, li: usize) -> bool {
         let d = self.data();
-        d.lines[li].n_words == 0 && d.decos.iter().any(|x| x.line as usize == li && matches!(x.kind, DecoKind::SurahName | DecoKind::Basmalah))
+        d.lines[li].n_words == 0
+            && d.decos
+                .iter()
+                .any(|x| x.line as usize == li && matches!(x.kind, DecoKind::SurahName | DecoKind::Basmalah))
     }
 
     /// Accessible label for a word: "text (s:a:w)".
@@ -227,7 +261,13 @@ impl Page {
     /// Accessible label for an ayah fragment.
     pub fn ayah_label(&self, ai: u32) -> String {
         let a = &self.data().ayahs[ai as usize];
-        let name = self.surahs().into_iter().find(|s| s.number == a.surah).map(|s| s.latin).filter(|s| !s.is_empty()).unwrap_or_else(|| format!("surah {}", a.surah));
+        let name = self
+            .surahs()
+            .into_iter()
+            .find(|s| s.number == a.surah)
+            .map(|s| s.latin)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("surah {}", a.surah));
         if a.fragments > 1 {
             format!("Ayah {} of {}, fragment {} of {}", a.ayah, name, a.fragment, a.fragments)
         } else {

@@ -8,7 +8,7 @@ beyond them: exact commands, invariants that are easy to break, and where to loo
 ```sh
 scripts/check.sh                      # everything CI runs
 scripts/check.sh test                 # unit tests, no data
-scripts/sync-test-data.sh             # pages/, index/, dist/pages/ from the releases
+scripts/sync-test-data.sh             # pages/, index/ (quran-svg-elements) and dist/pages/ (data release)
 scripts/check.sh gates                # identity gate (8 pages), ABI test, conformance
 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity   # all 604 pages
 cargo run -p qvp-convert --release -- batch pages dist/pages          # rebuild page data
@@ -22,7 +22,7 @@ scripts/check-parity.py               # header vs Rust vs every wrapper
 
 - The engine computes; wrappers marshal calls and render results. No formula in a wrapper
   (`docs/standards/API-DESIGN.md`).
-- `include/qvp.h` is hand-written and must match the `#[no_mangle]` set in
+- `crates/qvp-ffi/include/qvp.h` is hand-written and must match the `#[no_mangle]` set in
   `crates/qvp-ffi/src/lib.rs` exactly. `scripts/build-engine-android.sh` generates the Android copy at
   `packages/android/qvp/src/main/cpp/qvp.h`.
 - The codec (`crates/qvp-format/src/codec.rs`) derives boxes and offsets at load and needs

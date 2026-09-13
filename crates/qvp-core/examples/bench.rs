@@ -10,11 +10,22 @@ fn main() {
     let load = t.elapsed();
     let (first_surah, first_ayah) = (page.data().ayahs[0].surah, page.data().ayahs[0].ayah);
     let d = page.data();
-    println!("{path}: {} bytes, {} words, {} paths, {} pts; load {:?}", bytes.len(), d.words.len(), d.paths.len(), page.geometry().pts.len() / 2, load);
+    println!(
+        "{path}: {} bytes, {} words, {} paths, {} pts; load {:?}",
+        bytes.len(),
+        d.words.len(),
+        d.paths.len(),
+        page.geometry().pts.len() / 2,
+        load
+    );
 
     // hit-test every word's bbox centre plus a grid of misses
     let q = page.quant();
-    let centres: Vec<(f32, f32)> = d.words.iter().map(|w| ((w.bbox.x0 + w.bbox.x1) as f32 / 2.0 / q, (w.bbox.y0 + w.bbox.y1) as f32 / 2.0 / q)).collect();
+    let centres: Vec<(f32, f32)> = d
+        .words
+        .iter()
+        .map(|w| ((w.bbox.x0 + w.bbox.x1) as f32 / 2.0 / q, (w.bbox.y0 + w.bbox.y1) as f32 / 2.0 / q))
+        .collect();
     let n_words = d.words.len();
     let t = Instant::now();
     let mut hits = 0;
@@ -30,7 +41,13 @@ fn main() {
         }
     }
     let per = t.elapsed() / (100 * centres.len() as u32);
-    println!("hit-test: {:?} per query; {}/{} word centres hit ({} exact outline hits)", per, hits / 100, n_words, exact / 100);
+    println!(
+        "hit-test: {:?} per query; {}/{} word centres hit ({} exact outline hits)",
+        per,
+        hits / 100,
+        n_words,
+        exact / 100
+    );
 
     let t = Instant::now();
     for _ in 0..100 {
@@ -44,7 +61,11 @@ fn main() {
     for _ in 0..100 {
         let _ = page.paint();
     }
-    println!("paint (2 selectors): {:?} per full display list; styled paths = {}", t.elapsed() / 100, page.styled().len());
+    println!(
+        "paint (2 selectors): {:?} per full display list; styled paths = {}",
+        t.elapsed() / 100,
+        page.styled().len()
+    );
     let t = Instant::now();
     for _ in 0..100 {
         let _ = page.styled();
@@ -64,12 +85,18 @@ fn main() {
     let surah = page.data().words[0].surah;
     let ayah = page.data().words[0].ayah;
     let t = Instant::now();
-    let h = page.highlight(&Target::Ayah(surah, ayah), HighlightStyle { mode: HighlightMode::Both, transition_ms: 200, ..Default::default() });
+    let h = page.highlight(
+        &Target::Ayah(surah, ayah),
+        HighlightStyle { mode: HighlightMode::Both, transition_ms: 200, ..Default::default() },
+    );
     page.tick(100.0);
     let b = page.highlight_boxes_view();
     println!("highlight ayah {surah}:{ayah}: {} band boxes, tick+boxes {:?}", b.len(), t.elapsed());
     page.unhighlight(h);
-    println!("surahs: {:?}", page.surahs().iter().map(|s| (s.number, s.latin.clone(), s.has_banner)).collect::<Vec<_>>());
+    println!(
+        "surahs: {:?}",
+        page.surahs().iter().map(|s| (s.number, s.latin.clone(), s.has_banner)).collect::<Vec<_>>()
+    );
     println!("divisions: {:?}", page.divisions().iter().map(|d| (d.kind, d.n, d.surah, d.ayah)).collect::<Vec<_>>());
     println!("ayah_marks: {}", page.ayah_marks().len());
 }
