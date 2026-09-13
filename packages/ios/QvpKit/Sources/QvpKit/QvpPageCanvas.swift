@@ -83,6 +83,11 @@ public final class QvpCanvasController {
 
     /// Redraw epoch: bumped by `invalidate()`; the canvas body reads it.
     private(set) var revision = 0
+    /// Bumped every time the engine re-lays out the page (size, layout knobs, page data). A view
+    /// positioned from this controller's geometry (`lineTransform`, the layout's slots) reads it
+    /// beside `viewScale`, `viewOx` and `viewOy`: a re-layout that leaves the view transform
+    /// alone would otherwise leave that view on the layout the canvas has already replaced.
+    public private(set) var layoutRevision = 0
     /// Cached base-ink layer. A plain class so draw-time rebuilds don't re-enter observation.
     @ObservationIgnored private let cache = BaseCache()
     @ObservationIgnored private var bounds = CGSize.zero
@@ -125,6 +130,7 @@ public final class QvpCanvasController {
                                    padLeft: Float(padSide), padRight: Float(padSide),
                                    lineSpacing: lineSpacing, fillHeight: fillHeight,
                                    cropLeft: cropLeft, cropRight: cropRight))
+        layoutRevision &+= 1
         cache.key = ""; invalidate()
     }
     /// Fit the content height and centre it.

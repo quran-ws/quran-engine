@@ -6,7 +6,11 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- iOS: `QvpCanvasController.layoutRevision`, bumped on every re-layout. A view positioned from
+  the controller's geometry reads it beside `viewScale`, `viewOx` and `viewOy`; without it, a
+  re-layout that left the view transform alone kept such a view on the old layout until the
+  next zoom.
 
 ## [0.2.0] - 2026-09-13
 ### Changed

@@ -306,6 +306,10 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(p.currentLayout).lineSpacing, printed)
         c.lineSpacing = 1.5
         XCTAssertGreaterThan(try XCTUnwrap(p.currentLayout).lineSpacing, printed)
+        // a re-layout is visible to views drawn from the controller's geometry
+        let before = c.layoutRevision
+        c.fillHeight = true
+        XCTAssertGreaterThan(c.layoutRevision, before)
     }
 
     /// zoomSpringsBack: a released pinch eases back to the fitted transform; without it the zoom stays.

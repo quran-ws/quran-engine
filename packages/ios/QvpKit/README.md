@@ -143,6 +143,7 @@ controller.onDoubleTap = { hit in }        // nil (default) resets the view
 controller.onLongPress = { hit in }        // only while selectionEnabled is false — a UIKit recognizer on iOS, never takes a pager's swipe
 controller.zoomSpringsBack = true         // zoom lasts only while pinching, as on the UIKit view
 controller.invalidate()                   // after engine calls the controller cannot see (highlight, style, mask, …)
+controller.layoutRevision                 // bumped on every re-layout: overlays drawn from lineTransform read it with viewScale/viewOx/viewOy
 controller.resetView(); controller.relayout(); controller.clearSelection(); controller.lineTransform(line); controller.isZoomed
 controller.cropLeft = box.x0; controller.cropRight = page.width - box.x1   // box = page.cropBounds("page"): the ink spans the viewport
 
