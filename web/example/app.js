@@ -24,6 +24,8 @@
   const canvas = $('cv'), stage = $('stage'), paper = $('paper');
   const renderer = new CanvasRenderer(canvas);
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  // pinch limits as multiples of the fitted scale; the same pair on every platform
+  const clampZoom = s => Math.max(0.5, Math.min(12, s));
 
   const S = {
     page: null, bytes: 0, loadMs: 0, n: src.pages[0],
@@ -53,7 +55,9 @@
       const c = renderer.ctx, w = p.words[S.hover];
       const [s, tx, ty] = renderer.lineTransform(p, v, w.lineIdx, dpr);
       c.setTransform(s, 0, 0, s, tx, ty); c.globalCompositeOperation = 'destination-over';
-      c.fillStyle = getComputedStyle(document.body).getPropertyValue('--hover'); c.beginPath(); c.roundRect(w.x0 - 1.2, w.y0 - 1.2, w.x1 - w.x0 + 2.4, w.y1 - w.y0 + 2.4, 1.5); c.fill();
+      c.fillStyle = getComputedStyle(document.body).getPropertyValue('--hover'); c.beginPath();
+      for (const b of p.bandBoxes([S.hover], { height: 'ink', padX: 1.2, padY: 1.2 })) c.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 1.5);
+      c.fill();
       c.globalCompositeOperation = 'source-over';
     }
     hud();
@@ -210,7 +214,7 @@
     if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
     if (pinch && pts.size === 2) {
       const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      const k = Math.max(0.2, Math.min(40, pinch.scale * d / pinch.d)) / pinch.scale, cx = pinch.cx - r.left, cy = pinch.cy - r.top;
+      const k = clampZoom(pinch.scale * d / pinch.d) / pinch.scale, cx = pinch.cx - r.left, cy = pinch.cy - r.top;
       S.view = { scale: pinch.scale * k, ox: cx - (cx - pinch.ox) * k, oy: cy - (cy - pinch.oy) * k }; moved = true; draw(); return;
     }
     const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
@@ -258,7 +262,7 @@
   stage.addEventListener('wheel', e => {
     e.preventDefault(); const r = stage.getBoundingClientRect();
     const k = Math.exp(-e.deltaY * 0.0015), v = S.view, cx = e.clientX - r.left, cy = e.clientY - r.top;
-    const ns = Math.max(0.2, Math.min(40, v.scale * k)), kk = ns / v.scale;
+    const ns = clampZoom(v.scale * k), kk = ns / v.scale;
     S.view = { scale: ns, ox: cx - (cx - v.ox) * kk, oy: cy - (cy - v.oy) * kk }; draw();
   }, { passive: false });
   stage.addEventListener('dblclick', () => fit());

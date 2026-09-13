@@ -52,6 +52,16 @@ the same 29.
 This list is closed: a platform may add a feature only after adding it here and to the
 other platforms.
 
+## Shared behaviour
+
+- **Navigation**: a request for a page that is not in the bundled set opens the nearest
+  bundled page. An example that bundles every page clamps to the first and last page, which
+  is the same rule.
+- **Zoom**: pinch limits are 0.5 to 12 times the fitted scale on every platform. The
+  constants live in each package's page view, not in the example.
+- **Reveal slider**: the range is 0 to one less than the step count the engine returns from
+  `revealStart`; the slider is disabled when there is one step or none.
+
 ## Page cache
 
 An example that pages through the mushaf keeps one permanent controller per page and

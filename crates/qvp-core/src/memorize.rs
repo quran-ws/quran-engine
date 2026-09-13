@@ -201,7 +201,12 @@ impl Page {
                     x1: ox + (w.bbox.x1 as f32 / q + self.mask.pad_x) * scale,
                     y1: oy + (w.bbox.y1 as f32 / q + self.mask.pad_y + d) * scale,
                     color: self.mask.block_color,
-                    radius: self.mask.radius * scale,
+                    radius: crate::highlight::clamp_radius(
+                        self.mask.radius * scale,
+                        (w.bbox.x1 - w.bbox.x0) as f32 / q + 2.0 * self.mask.pad_x,
+                        (w.bbox.y1 - w.bbox.y0) as f32 / q + 2.0 * self.mask.pad_y,
+                        scale,
+                    ),
                 }
             })
             .collect()

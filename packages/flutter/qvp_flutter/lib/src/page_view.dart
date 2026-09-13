@@ -17,6 +17,10 @@ import 'engine.dart';
 
 /// Layout parameters of [QvpPageView] (viewport size is taken from the widget's constraints).
 /// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
+/// Pinch limits as multiples of the fitted scale; the same pair on every platform.
+const double kMinZoom = 0.5;
+const double kMaxZoom = 12;
+
 @immutable
 class QvpViewLayout {
   const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.lineGap = 0, this.fillHeight = false, this.nominalLines = QvpDefaults.nominalLines});
@@ -88,7 +92,7 @@ class QvpViewController extends ChangeNotifier {
   }
 
   /// Zooms by [factor] around a point in widget coordinates (default: centre).
-  void zoomBy(double factor, {Offset? around, double minScale = 0.2, double maxScale = 40}) {
+  void zoomBy(double factor, {Offset? around, double minScale = kMinZoom, double maxScale = kMaxZoom}) {
     final c = around ?? Offset(viewport.width / 2, viewport.height / 2);
     final ns = (scale * factor).clamp(minScale, maxScale);
     final k = ns / scale;
@@ -118,8 +122,8 @@ class QvpPageView extends StatefulWidget {
     this.panZoomEnabled = true,
     this.selectionBand = QvpDefaults.selectionBand,
     this.paperShadow = true,
-    this.minScale = 0.2,
-    this.maxScale = 40,
+    this.minScale = kMinZoom,
+    this.maxScale = kMaxZoom,
   });
 
   final QvpPage page;

@@ -78,6 +78,12 @@ pub struct ViewBox {
     pub radius: f32,
 }
 
+/// A corner radius never exceeds half the box's shorter side, so every renderer draws the same
+/// rounded rectangle (a Canvas or CoreGraphics call would otherwise clamp on its own terms).
+pub(crate) fn clamp_radius(radius: f32, w: f32, h: f32, scale: f32) -> f32 {
+    radius.min(w * scale / 2.0).min(h * scale / 2.0).max(0.0)
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Highlight {
     pub handle: Handle,
@@ -300,7 +306,7 @@ impl Page {
                         x1: ox + b.x1 * scale,
                         y1: oy + (b.y1 + d) * scale,
                         color,
-                        radius: h.style.radius * scale,
+                        radius: clamp_radius(h.style.radius * scale, b.x1 - b.x0, b.y1 - b.y0, scale),
                     }
                 })
                 .collect();

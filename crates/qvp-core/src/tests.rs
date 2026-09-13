@@ -413,6 +413,23 @@ fn renderer_draws_bands_ink_and_mask_boxes() {
 }
 
 #[test]
+fn box_corner_radius_never_exceeds_half_the_shorter_side() {
+    let mut p = page();
+    p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 200.0, ..Default::default() });
+    p.highlight(&Target::Word(0), HighlightStyle { radius: 1000.0, ..HighlightStyle::default() });
+    for b in p.highlight_boxes_view() {
+        let half = ((b.x1 - b.x0).min(b.y1 - b.y0)) / 2.0;
+        assert!(b.radius <= half + 1e-4 && b.radius > 0.0, "{b:?}");
+    }
+    p.mask(&Target::Word(1), MaskMode::Block);
+    p.set_mask_options(0xff, 0.0, 0.0, 1000.0, false);
+    for b in p.mask_boxes_view() {
+        let half = ((b.x1 - b.x0).min(b.y1 - b.y0)) / 2.0;
+        assert!(b.radius <= half + 1e-4 && b.radius > 0.0, "{b:?}");
+    }
+}
+
+#[test]
 fn layout_fit_crop_and_aspect_bound() {
     let mut p = page();
     // as printed the content is 200 px tall at scale 2; a 150 px viewport shrinks and centres it

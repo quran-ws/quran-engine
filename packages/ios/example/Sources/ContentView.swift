@@ -132,7 +132,7 @@ struct ReaderView: View {
     private var revealBar: some View {
         HStack {
             Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary)
-            Slider(value: $m.revealPos, in: 0...m.revealMax, step: 1)
+            Slider(value: $m.revealPos, in: 0...max(m.revealMax, 1), step: 1).disabled(m.revealMax < 1)
             Text(m.revealVal).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(minWidth: 44, alignment: .trailing)
         }
         .padding(.horizontal).padding(.vertical, 10)

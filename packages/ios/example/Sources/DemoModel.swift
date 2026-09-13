@@ -244,7 +244,7 @@ final class DemoModel: ObservableObject {
         guard let p = page else { return }
         if on {
             let steps = p.revealStart(lit: 2, grey: theme == "dark" ? 0x4a4f57ff : 0xc9c4b8ff, ink: themeSpec.ink, transitionMs: 150)
-            revealMax = Double(max(steps - 1, 1)); revealPos = 0; p.revealGoto(-1); revealVal = "0/\(steps)"
+            revealMax = Double(steps - 1); revealPos = 0; p.revealGoto(-1); revealVal = "0/\(steps)"
         } else { p.revealStop(); revealVal = "" }
         view.setNeedsDisplay()
     }
