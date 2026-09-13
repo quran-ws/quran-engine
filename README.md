@@ -18,7 +18,7 @@ Use it when building Quran applications for mobile or desktop and you need fast,
 | | |
 |---|---|
 | **Package** | `@quran.ws/engine` · `0.1.0` |
-| **Whole mushaf** | 38.9 MB brotli |
+| **Whole mushaf** | 26 MB as one bundle · 41.8 MB page by page · 92.6 MB raw |
 | **Wasm engine** | 311 KB |
 | **Licence** | MIT (the code) · source bundle terms (the data) |
 
@@ -36,6 +36,13 @@ import { loadPage } from '@quran.ws/engine/lite'
 const page = await loadPage('/pages/042.qvp')
 const canvas = document.querySelector('canvas')
 page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
+```
+
+Page files are served from `qvp.quran.ws` under immutable, versioned URLs, so a
+browser can load one page without shipping the data — `docs/CDN.md`:
+
+```js
+const page = await loadPage('https://qvp.quran.ws/v0.1.0/042.qvp')
 ```
 
 Decoded words include their `surah`, `ayah`, `word` and page-coordinate `box`.
