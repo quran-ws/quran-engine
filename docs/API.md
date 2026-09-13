@@ -59,7 +59,7 @@ page.free(); atlas.free();
 | `page.pathKind/Mark/Family/Category(p)`, `pathWord(p)`, `pathLine(p)`, `pathNthMark(p)` | per-path facts from the geometry table |
 
 An ayah is several fragments. `targetWords('2:255')` gives all its words on the page;
-`ayahWordCount(s,a)` returns `{count, complete}` — `complete` is false when the ayah
+`ayahWordCount(s,a)` returns `{count, isComplete}`; `isComplete` is false when the ayah
 continues on another page.
 
 **Word tokenization.** The mushaf holds **77,432** words, keyed `surah:ayah:word` — the
@@ -400,7 +400,8 @@ says which wrapper binds which.
 | names | `qvp_category_name` | `engine.categoryName(id)` | Return a mark category's name. |
 | names | `qvp_mark_from_name` | `engine.markFromName(name)` | Return a mark's id by name; 255 when unknown. |
 | names | `qvp_mark_category` | `engine.markCategory(id)` | Return the category a mark belongs to. |
-| names | `qvp_version` | `engine.version` | Return the page format version the engine reads. |
+| names | `qvp_version` | `engine.version()` | Return the engine version as a string, `0.2.0`. |
+| names | `qvp_format_version` | `engine.formatVersion()` | Return the page format version the engine reads. |
 | names | `qvp_engine_name` | `engine.engineName()` | Return the engine's name, `qvp`. |
 
 ## C ABI notes

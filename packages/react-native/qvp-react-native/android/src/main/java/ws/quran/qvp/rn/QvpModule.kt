@@ -58,7 +58,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun rosettes(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.rosettes().map { Marshal.rosette(it) } }
     @ReactMethod fun sajdahs(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.sajdahs().map { Marshal.sajdah(it) } }
     @ReactMethod fun ayahKeys(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahKeys().map { mapOf("surah" to it.first, "ayah" to it.second, "ayahKey" to "${it.first}:${it.second}") } }
-    @ReactMethod fun ayahWordCount(tag: Int, s: Int, a: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahWordCount(s, a).let { mapOf("count" to it.first, "complete" to it.second) } }
+    @ReactMethod fun ayahWordCount(tag: Int, s: Int, a: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahWordCount(s, a).let { mapOf("count" to it.first, "isComplete" to it.second) } }
     @ReactMethod fun reciteMap(tag: Int, s: Int, a: Int, n: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.reciteMap(s, a, n)?.toList() }
     @ReactMethod fun wordLabel(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.wordLabel(i) }
     @ReactMethod fun ayahLabel(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahLabel(i) }
@@ -100,7 +100,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun select(tag: Int, anchor: Int, focus: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.select(anchor, focus); v.inner.invalidate(); Marshal.selection(p) }
     @ReactMethod fun clearSelection(tag: Int, promise: Promise) = withPage(tag, promise) { v, _ -> v.inner.clearSelection(); null }
     @ReactMethod fun selection(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> Marshal.selection(p) }
-    @ReactMethod fun selectionText(tag: Int, form: String?, citation: Boolean, promise: Promise) = withPage(tag, promise) { _, p -> p.selectionText(Marshal.form(form), citation) }
+    @ReactMethod fun selectionText(tag: Int, form: String?, includeCitation: Boolean, promise: Promise) = withPage(tag, promise) { _, p -> p.selectionText(Marshal.form(form), includeCitation) }
 
     // ── memorisation (stepwise ops; `mask` / `reveal` props hold the declarative part) ──
     @ReactMethod fun unmaskNext(tag: Int, n: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.unmaskNext(n).also { v.inner.invalidate() } }
@@ -154,7 +154,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun markCategory(m: Int, promise: Promise) = ui(promise) { QvpEngine.markCategory(m) }
     @ReactMethod fun engineName(promise: Promise) = ui(promise) { QvpEngine.engineName() }
     /** Every name table, read from the engine; the JavaScript side resolves names with these. */
-    override fun getConstants(): Map<String, Any> = mapOf("version" to QvpEngine.version(),
+    override fun getConstants(): Map<String, Any> = mapOf("version" to QvpEngine.version(), "formatVersion" to QvpEngine.formatVersion(),
         "marks" to QvpEngine.names(QvpEngine.Names.MARK), "kinds" to QvpEngine.names(QvpEngine.Names.KIND),
         "families" to QvpEngine.names(QvpEngine.Names.FAMILY), "categories" to QvpEngine.names(QvpEngine.Names.CATEGORY),
         "decorations" to QvpEngine.names(QvpEngine.Names.DECORATION), "divisions" to QvpEngine.names(QvpEngine.Names.DIVISION),

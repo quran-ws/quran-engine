@@ -163,7 +163,7 @@ jintArray FN(sajdahs)(JNIEnv* env, jclass c, jlong h) {
     return ints(env, v, n * 4);
 }
 jintArray FN(ayahKeys)(JNIEnv* env, jclass c, jlong h) { uint32_t k[512]; uint32_t n = qvp_ayah_keys(PG(h), k, 512); if (n > 512) n = 512; return ints(env, (const jint*)k, n); }
-jintArray FN(ayahWordCount)(JNIEnv* env, jclass c, jlong h, jint s, jint a) { uint32_t complete = 0; uint32_t n = qvp_ayah_word_count(PG(h), (uint16_t)s, (uint16_t)a, &complete); jint v[2] = { (jint)n, (jint)complete }; return ints(env, v, 2); }
+jintArray FN(ayahWordCount)(JNIEnv* env, jclass c, jlong h, jint s, jint a) { uint8_t is_complete = 0; uint32_t n = qvp_ayah_word_count(PG(h), (uint16_t)s, (uint16_t)a, &is_complete); jint v[2] = { (jint)n, (jint)is_complete }; return ints(env, v, 2); }
 jintArray FN(reciteMap)(JNIEnv* env, jclass c, jlong h, jint s, jint a, jint nseg) {
     uint32_t buf[4096]; int32_t n = qvp_recite_map(PG(h), (uint16_t)s, (uint16_t)a, (uint32_t)nseg, buf, 4096);
     if (n < 0) return NULL; if (n > 4096) n = 4096; return ints(env, (const jint*)buf, n);
@@ -288,7 +288,7 @@ jintArray FN(wordBands)(JNIEnv* env, jclass c, jlong h, jintArray words, jint he
 /* ───────── selection ───────── */
 void FN(select)(JNIEnv* env, jclass c, jlong h, jint anchor, jint focus) { qvp_select(PG(h), anchor < 0 ? QVP_NONE : (uint32_t)anchor, focus < 0 ? QVP_NONE : (uint32_t)focus); }
 jintArray FN(selection)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_selection(PG(h), NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 4); qvp_selection(PG(h), b, n); jintArray a = ints(env, (const jint*)b, n); free(b); return a; }
-jstring FN(selectionText)(JNIEnv* env, jclass c, jlong h, jint form, jboolean cite) { QvpStr s; qvp_selection_text(PG(h), (uint8_t)form, cite ? 1 : 0, &s); return qstr(env, s); }
+jstring FN(selectionText)(JNIEnv* env, jclass c, jlong h, jint form, jboolean includeCitation) { QvpStr s; qvp_selection_text(PG(h), (uint8_t)form, includeCitation ? 1 : 0, &s); return qstr(env, s); }
 
 /* ───────── memorisation ───────── */
 void FN(mask)(JNIEnv* env, jclass c, jlong h, jintArray t, jint mode) { TargetIn ti = target_in(env, t); qvp_mask(PG(h), &ti.t, (uint8_t)mode); target_done(env, &ti); }
@@ -357,5 +357,6 @@ jint FN(markCategory)(JNIEnv* env, jclass c, jint m) { return qvp_mark_category(
 jint FN(nameCount)(JNIEnv* env, jclass c, jint table) { return (jint)qvp_name_count((uint8_t)table); }
 jstring FN(name)(JNIEnv* env, jclass c, jint table, jint id) { QvpStr s; qvp_name((uint8_t)table, (uint8_t)id, &s); return qstr(env, s); }
 jint FN(nameId)(JNIEnv* env, jclass c, jint table, jstring name) { uint32_t n; uint8_t* b = jbytes(env, name, &n); jint r = qvp_name_id((uint8_t)table, b, n); free(b); return r; }
-jint FN(version)(JNIEnv* env, jclass c) { return (jint)qvp_version(); }
+jstring FN(version)(JNIEnv* env, jclass c) { QvpStr s; qvp_version(&s); return qstr(env, s); }
+jint FN(formatVersion)(JNIEnv* env, jclass c) { return (jint)qvp_format_version(); }
 jstring FN(engineName)(JNIEnv* env, jclass c) { return (*env)->NewStringUTF(env, qvp_engine_name()); }

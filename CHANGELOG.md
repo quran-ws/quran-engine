@@ -54,6 +54,14 @@ All notable changes to the engine and its packages. The format follows
   `NOMINAL_LINES`. The free `qvp_gap_to_fill` is gone and `qvp_wasted_fraction` is
   `qvp_layout_wasted_fraction(page, spec)`. The page views drop `lineGap`; the conformance
   scenarios carry `lineSpacingToFill` and `wastedFraction`.
+- Booleans are one byte: `is_exact`, `prefer_exact`, `fill_height`, `is_loose_match` are
+  `uint8_t`, as are the boolean parameters (`normalize`, `loose_match`, `keep_ayah_marks`,
+  `by_ayah`, `ayah_marks`, `reverse`) and the boolean returns (`qvp_has_form`, `qvp_tick`,
+  `qvp_highlight_move` / `_restyle` / `_remove`, `qvp_mask_word`, `qvp_unmask_word`,
+  `qvp_reveal_goto`). `qvp_ayah_word_count` reports `is_complete`; `qvp_selection_text`
+  takes `include_citation`.
+- `qvp_version` returns the engine version as a string (`0.2.0`); `qvp_format_version`
+  returns the page format version. Wrappers: `engine.version()` and `engine.formatVersion()`.
 
 ### Added
 - `QvpViewPolicy` in QvpKit: the zoom limits, zoomed threshold and swipe classifier both iOS

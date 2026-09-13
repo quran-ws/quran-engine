@@ -46,7 +46,8 @@ void main() {
   });
 
   test('engine: version, names, arabic tools', () {
-    expect(engine.version, greaterThan(0));
+    expect(engine.formatVersion, greaterThan(0));
+    expect(engine.version, matches(RegExp(r'^\d+\.\d+\.\d+$')));
     expect(engine.engineName, 'qvp');
     expect(engine.kindName(QvpKind.mark), 'mark');
     expect(engine.markName(1), 'fathah');
@@ -300,8 +301,8 @@ void main() {
       close(l.contentW, want['contentW'] as num, '$tag contentW'); close(l.contentH, want['contentH'] as num, '$tag contentH'); close(l.lineSpacing, want['lineSpacing'] as num, '$tag lineSpacing');
       close(l.fitScale, want['fitScale'] as num, '$tag fitScale'); close(l.fitX, want['fitX'] as num, '$tag fitX'); close(l.fitY, want['fitY'] as num, '$tag fitY');
       close(l.lineDy.first, want['lineDy0'] as num, '$tag lineDy[0]'); close(l.lineDy.last, want['lineDyLast'] as num, '$tag lineDy[last]');
-      close(page.layoutLineSpacingToFill(spec), c['lineSpacingToFill'] as num, '\$tag lineSpacingToFill');
-      close(page.layoutWastedFraction(spec), c['wastedFraction'] as num, '\$tag wastedFraction');
+      close(page.layoutLineSpacingToFill(spec), c['lineSpacingToFill'] as num, '$tag lineSpacingToFill');
+      close(page.layoutWastedFraction(spec), c['wastedFraction'] as num, '$tag wastedFraction');
     }
     expect(cases.length, 40);
   });

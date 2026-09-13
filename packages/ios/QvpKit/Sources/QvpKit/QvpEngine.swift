@@ -3,7 +3,10 @@ import Foundation
 import QvpFFI
 
 public enum QvpEngine {
-    public static func version() -> Int { Int(qvp_version()) }
+    /// The engine version, e.g. `0.2.0`.
+    public static func version() -> String { var s = QvpStr(); qvp_version(&s); return s.string }
+    /// The page format version the engine reads.
+    public static func formatVersion() -> Int { Int(qvp_format_version()) }
     public static func engineName() -> String { String(cString: qvp_engine_name()) }
     public static func markName(_ m: Int) -> String { var s = QvpStr(); qvp_mark_name(UInt8(clamping: m), &s); return s.string }
     public static func familyName(_ f: Int) -> String { var s = QvpStr(); qvp_family_name(UInt8(clamping: f), &s); return s.string }

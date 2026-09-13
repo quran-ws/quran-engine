@@ -141,7 +141,7 @@ public final class QvpPage {
     public func sajdahs() -> [QvpSajdah] { collect(16) { o, c in qvp_sajdahs(p, o, c) }.map { (s: QvpFFI.QvpSajdah) in QvpSajdah(decoration: index(s.decoration), surah: Int(s.surah), ayah: Int(s.ayah), signPath: index(s.sign_path)) } }
     public func ayahKeys() -> [(Int, Int)] { collect(256) { o, c in qvp_ayah_keys(p, o, c) }.map { (k: UInt32) in (Int(k >> 16), Int(k & 0xffff)) } }
     /// (count on this page, whole ayah is here)
-    public func ayahWordCount(_ surah: Int, _ ayah: Int) -> (count: Int, complete: Bool) { var c: UInt32 = 0; let n = qvp_ayah_word_count(p, UInt16(surah), UInt16(ayah), &c); return (Int(n), c != 0) }
+    public func ayahWordCount(_ surah: Int, _ ayah: Int) -> (count: Int, isComplete: Bool) { var c: UInt8 = 0; let n = qvp_ayah_word_count(p, UInt16(surah), UInt16(ayah), &c); return (Int(n), c != 0) }
     /// Words for n recitation segments, or nil when the counts disagree (follow the ayah whole).
     public func reciteMap(_ surah: Int, _ ayah: Int, nSegments: Int) -> [Int]? {
         var buf = [UInt32](repeating: 0, count: Swift.max(nSegments, 1) * 4 + 16)
@@ -247,7 +247,7 @@ public final class QvpPage {
     public func select(_ anchor: Int, _ focus: Int? = nil) { qvp_select(p, anchor < 0 ? QVP_NONE : UInt32(anchor), (focus ?? anchor) < 0 ? QVP_NONE : UInt32(focus ?? anchor)) }
     public func clearSelection() { qvp_select(p, QVP_NONE, QVP_NONE) }
     public func selection() -> [Int] { collect(512) { o, c in qvp_selection(p, o, c) }.map { (w: UInt32) in Int(w) } }
-    public func selectionText(_ form: Form = .rasmUthmani, citation: Bool = false) -> String { var s = QvpStr(); qvp_selection_text(p, UInt8(form.rawValue), citation ? 1 : 0, &s); return s.string }
+    public func selectionText(_ form: Form = .rasmUthmani, includeCitation: Bool = false) -> String { var s = QvpStr(); qvp_selection_text(p, UInt8(form.rawValue), includeCitation ? 1 : 0, &s); return s.string }
 
     // ── memorisation ──
     public func mask(_ t: Target, _ mode: MaskMode = .hide) { t.withC { qvp_mask(p, $0, UInt8(mode.rawValue)) } }

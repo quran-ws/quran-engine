@@ -102,7 +102,7 @@ export interface Rosette { decoration: number; surah: number; ayah: number; juz:
 export interface Sajdah { decoration: number; surah: number; ayah: number; signPath: number }
 export interface CropBox { x0: number; y0: number; x1: number; y1: number; nWords: number; ayahMarkDecoration: number }
 export interface Layout { scale: number; offsetX: number; offsetY: number; contentW: number; contentH: number; lineSpacing: number; lineDy: number[]; slots: number[][] }
-export interface Stats { loadMs: number; bytes: number; baseMs: number; overlayMs: number; basePaths: number; overlayPaths: number; bands: number; hitUs: number; animating: boolean; styleHandles: number; highlightHandles: number; engineVersion: number; viewScale: number; layout: Layout | null }
+export interface Stats { loadMs: number; bytes: number; baseMs: number; overlayMs: number; basePaths: number; overlayPaths: number; bands: number; hitUs: number; animating: boolean; styleHandles: number; highlightHandles: number; engineVersion: string; viewScale: number; layout: Layout | null }
 export interface AtlasSurah { number: number; page: number; ayahCount: number; place: string; arabic: string; latin: string; english: string }
 export interface AtlasRubuAlHizb { rubuAlHizb: number; surah: number; ayah: number; page: number; ayahKey: string }
 
@@ -243,7 +243,7 @@ export const Qvp = {
   rosettes: (tag: number): Promise<Rosette[]> => M.rosettes(tag),
   sajdahs: (tag: number): Promise<Sajdah[]> => M.sajdahs(tag),
   ayahKeys: (tag: number): Promise<{ surah: number; ayah: number; ayahKey: string }[]> => M.ayahKeys(tag),
-  ayahWordCount: (tag: number, s: number, a: number): Promise<{ count: number; complete: boolean }> => M.ayahWordCount(tag, s, a),
+  ayahWordCount: (tag: number, s: number, a: number): Promise<{ count: number; isComplete: boolean }> => M.ayahWordCount(tag, s, a),
   reciteMap: (tag: number, s: number, a: number, nSegments: number): Promise<number[] | null> => M.reciteMap(tag, s, a, nSegments),
   wordLabel: (tag: number, i: number): Promise<string> => M.wordLabel(tag, i),
   ayahLabel: (tag: number, i: number): Promise<string> => M.ayahLabel(tag, i),
@@ -265,7 +265,7 @@ export const Qvp = {
   select: (tag: number, anchor: number, focus: number = anchor): Promise<SelectionInfo> => M.select(tag, anchor, focus),
   clearSelection: (tag: number): Promise<void> => M.clearSelection(tag),
   selection: (tag: number): Promise<SelectionInfo> => M.selection(tag),
-  selectionText: (tag: number, form: Form = 'rasmUthmani', citation = false): Promise<string> => M.selectionText(tag, form, citation),
+  selectionText: (tag: number, form: Form = 'rasmUthmani', includeCitation = false): Promise<string> => M.selectionText(tag, form, includeCitation),
   unmaskNext: (tag: number, n = 1): Promise<number> => M.unmaskNext(tag, n),
   maskBack: (tag: number, n = 1): Promise<number> => M.maskBack(tag, n),
   unmaskWord: (tag: number, i: number): Promise<boolean> => M.unmaskWord(tag, i),
@@ -295,7 +295,9 @@ export const Qvp = {
   kindName: (k: number): string => KIND_NAMES[k] ?? 'other',
   categoryName: (c: number): string => CATEGORY_NAMES[c] ?? '',
   familyName: (f: number): string => FAMILY_NAMES[f] ?? '',
-  version: (M.getConstants?.().version ?? 0) as number,
+  /** The engine version, e.g. '0.2.0', and the page format version it reads. */
+  version: (M.getConstants?.().version ?? '') as string,
+  formatVersion: (M.getConstants?.().formatVersion ?? 0) as number,
 
   // atlas
   loadAtlas: (uri: string): Promise<number> => M.loadAtlas(uri),

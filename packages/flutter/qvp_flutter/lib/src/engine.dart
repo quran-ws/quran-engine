@@ -615,7 +615,14 @@ class QvpEngine {
   bool _disposed = false;
 
   /// Format version the library was built for.
-  int get version => b.version();
+  /// The engine version, e.g. `0.2.0`.
+  String get version {
+    b.version(_str);
+    return _s();
+  }
+
+  /// The page format version the engine reads.
+  int get formatVersion => b.formatVersion();
 
   /// `qvp_engine_name()`
   String get engineName => b.engineName().cast<pffi.Utf8>().toDartString();
@@ -1070,10 +1077,10 @@ class QvpPage extends ChangeNotifier {
   List<(int, int)> ayahKeys() => _u32(_b.ayahKeys(_p, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>()))).map((k) => (k >> 16, k & 0xffff)).toList(growable: false);
 
   /// Words of an ayah on this page and whether the ayah is complete here.
-  ({int count, bool complete}) ayahWordCount(int surah, int ayah) {
-    final o = _e._out<ffi.Uint32>();
+  ({int count, bool isComplete}) ayahWordCount(int surah, int ayah) {
+    final o = _e._out<ffi.Uint8>();
     final n = _b.ayahWordCount(_p, surah, ayah, o);
-    return (count: n, complete: o.value != 0);
+    return (count: n, isComplete: o.value != 0);
   }
 
   /// Words for [nSegments] recitation segments, or null when the counts disagree (follow the ayah whole).
@@ -1419,8 +1426,8 @@ class QvpPage extends ChangeNotifier {
 
   void clearSelection() => select(-1, -1);
   List<int> selection() => _u32(_b.selection(_p, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>())));
-  String selectionText([Object form = 'rasmUthmani', bool citation = false]) {
-    _b.selectionText(_p, QvpForm.of(form), citation ? 1 : 0, _e._str);
+  String selectionText([Object form = 'rasmUthmani', bool includeCitation = false]) {
+    _b.selectionText(_p, QvpForm.of(form), includeCitation ? 1 : 0, _e._str);
     return _e._s();
   }
 
