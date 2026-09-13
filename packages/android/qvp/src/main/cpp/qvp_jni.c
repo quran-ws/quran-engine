@@ -113,7 +113,7 @@ jfloatArray FN(decoInfo)(JNIEnv* env, jclass c, jlong h, jint i) {
 }
 jstring FN(decoText)(JNIEnv* env, jclass c, jlong h, jint i) { QvpDecoInfo d; if (!qvp_deco_info(PG(h), i, &d)) return NULL; return qstr(env, d.text); }
 jint FN(findWord)(JNIEnv* env, jclass c, jlong h, jint s, jint a, jint w) { return qvp_find_word(PG(h), (uint16_t)s, (uint16_t)a, (uint16_t)w); }
-jintArray FN(resolve)(JNIEnv* env, jclass c, jlong h, jintArray t) {
+jintArray FN(targetWords)(JNIEnv* env, jclass c, jlong h, jintArray t) {
     TargetIn ti = target_in(env, t);
     uint32_t n = qvp_target_words(PG(h), &ti.t, NULL, 0);
     uint32_t* buf = (uint32_t*)malloc((n ? n : 1) * 4); qvp_target_words(PG(h), &ti.t, buf, n);

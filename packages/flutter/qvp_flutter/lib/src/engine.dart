@@ -1341,7 +1341,7 @@ class QvpPage extends ChangeNotifier {
   bool tick(double nowMs) => _b.tick(_p, nowMs) != 0;
 
   /// Full display list: one 0xRRGGBBAA per path (copy).
-  Uint32List colors() => Uint32List.fromList(_b.paint(_p).asTypedList(nPaths));
+  Uint32List colors() => Uint32List.fromList(_b.colors(_p).asTypedList(nPaths));
 
   /// Paths whose colour differs from the default ink (mid-transition values included).
   List<QvpStyledPath> styledPaths() {

@@ -577,7 +577,7 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpDecoInfoC>), int Function(PtrPage, int, ffi.Pointer<QvpDecoInfoC>)>('qvp_deco_info');
   late final int Function(PtrPage, int, int, int) findWord =
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint16, ffi.Uint16, ffi.Uint16), int Function(PtrPage, int, int, int)>('qvp_find_word');
-  late final int Function(PtrPage, PtrTarget, PtrU32, int) resolve =
+  late final int Function(PtrPage, PtrTarget, PtrU32, int) targetWords =
       lib.lookupFunction<ffi.Uint32 Function(PtrPage, PtrTarget, PtrU32, ffi.Uint32), int Function(PtrPage, PtrTarget, PtrU32, int)>('qvp_target_words');
   late final double Function(PtrPage) naturalPitch = lib.lookupFunction<ffi.Float Function(PtrPage), double Function(PtrPage)>('qvp_natural_pitch');
 

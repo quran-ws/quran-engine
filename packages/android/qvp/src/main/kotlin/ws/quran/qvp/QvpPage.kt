@@ -102,7 +102,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun wordForm(i: Int, form: Form = Form.RASM_UTHMANI): String = QvpNative.wordForm(h, i, form.id) ?: ""
     fun findWord(surah: Int, ayah: Int, word: Int): Int = QvpNative.findWord(h, surah, ayah, word)
     fun target(s: String) = Target.parse(s, this)
-    fun targetWords(t: Target): IntArray = QvpNative.resolve(h, t.arr)
+    fun targetWords(t: Target): IntArray = QvpNative.targetWords(h, t.arr)
     fun targetWords(s: String) = targetWords(target(s))
     fun text(t: Target, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n"): String = QvpNative.text(h, t.arr, form.id, wordSep, lineSep)
     fun text(s: String, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n") = text(target(s), form, wordSep, lineSep)
