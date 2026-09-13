@@ -14,8 +14,11 @@ until it passes.
 | each example | one UI smoke test: open a page, tap a word, highlight | the example's page set |
 | `web/lite.mjs` | the conformance fixtures | `conformance/` |
 
-Without their data, the data tests skip locally and print a hint. In CI they fail instead,
-because `scripts/sync-test-data.sh` provides the data there.
+Without their data, the data tests skip locally and print a hint. In CI they fail instead
+(`QVP_REQUIRE_DATA=1`), because `scripts/sync-test-data.sh` provides the data there. The
+source SVG bundle is not a public release asset yet, so the identity gate runs in CI only
+when the repository variable `QVP_SVG_BUNDLE_URL` points at it; until then the `gates`
+job prints a warning in its place.
 
 ## Cross-wrapper scenarios
 
@@ -41,7 +44,7 @@ wrapper into the core, it gets a scenario.
 |---|---|---|
 | `engine` | every PR | format check, clippy with warnings as errors, workspace tests, rustdoc |
 | `gates` | every PR | identity gate (8 pages), ABI test, conformance fixtures |
-| `standards` | every PR | parity, versions, terminology, structure, doc coverage, link check |
+| `standards` | every PR | parity, versions, terminology (a ratchet: the error count must not grow), structure |
 | `web` | every PR | wasm build, `smoke.mjs`, `lite.test.mjs` |
 | `android`, `ios`, `flutter`, `react-native` | PRs touching `crates/`, the header, or that package | build and the package's tests |
 | `nightly` | schedule | all 604 pages, simulator and emulator UI tests, benchmarks against `docs/MEASURED.md` |

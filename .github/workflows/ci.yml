@@ -1,0 +1,86 @@
+# The checks every pull request must pass. Each job runs one subcommand of
+# scripts/check.sh, so a green run here and a green run locally mean the same thing.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  engine:
+    name: engine (fmt, clippy, tests, rustdoc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/check.sh fmt lint test docs
+
+  gates:
+    name: gates (identity, ABI, conformance)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - name: Cache test data
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist/pages
+            pages
+            index
+          key: test-data-${{ vars.QVP_DATA_TAG || 'v0.1.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      - name: Fetch test data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
+          QVP_SVG_BUNDLE_URL: ${{ vars.QVP_SVG_BUNDLE_URL }}
+        run: scripts/sync-test-data.sh
+      - name: ABI test and conformance (always)
+        run: |
+          QVP_REQUIRE_DATA=1 cargo test -p qvp-ffi --release --test abi
+          node web/lite.test.mjs
+      - name: Identity gate, 8 pages (when the source bundle is available)
+        run: |
+          if [ -f pages/001.svg ]; then
+            QVP_REQUIRE_DATA=1 cargo test -p qvp-convert --release --test identity
+          else
+            echo "::warning::identity gate skipped: QVP_SVG_BUNDLE_URL is not set as a repository variable"
+          fi
+
+  standards:
+    name: standards (parity, versions, terminology, structure)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python3 scripts/check-parity.py --check
+      - run: scripts/check-versions.sh
+      - run: scripts/check-structure.sh
+      - run: scripts/check-terminology.sh
+
+  web:
+    name: web (wasm, smoke, lite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - run: scripts/check.sh web

@@ -1,0 +1,172 @@
+Copyright 2026 Quran.ws
+
+This work is dedicated as a waqf for the sake of Allah, seeking His pleasure
+through the benefit it brings to people. We publish it to enable the widest
+possible beneficial use, with as few restrictions as possible.
+
+Quran.ws publishes code under the MIT License, and data and content under the
+Creative Commons Attribution 4.0 International License,
+with a standing waiver of attribution for use inside a product.
+
+We license only what we have the right to license; third-party material keeps
+the licence and terms of its own rights holders.
+
+Full policy: https://github.com/quran-ws/guidelines
+
+
+═══════════════════════════════════════════════════════════════════════════════
+WHAT IS COVERED BY WHAT
+═══════════════════════════════════════════════════════════════════════════════
+
+  crates/   MIT
+  docs/     CC BY 4.0
+  packages/ MIT
+  scripts/  MIT
+  web/      MIT
+
+Where a directory or file carries its own LICENSE or NOTICE, that notice
+governs for that material. Names, logos and trademarks are not licensed.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ATTRIBUTION WAIVED FOR USE IN PRODUCTS
+═══════════════════════════════════════════════════════════════════════════════
+
+As rights holders of our original data and content, we grant a permanent,
+worldwide, royalty-free, irrevocable waiver of the attribution requirement of
+CC BY 4.0 (Section 3(a)) when the material is used within an application,
+website, service, API, bot, tool, research work, or product, whether free or
+commercial. This permission expands what you may do and adds no restriction to
+CC BY 4.0.
+
+Attribution is still required on republication — when the data or content
+itself is made available to others as a resource in its own right. The test:
+if a third party can obtain the data AS DATA from what you distribute, that is
+republication, and CC BY 4.0 attribution applies.
+
+Suggested attribution:
+
+  Data from [resource] by Quran.ws, licensed under CC BY 4.0.
+  Source: [canonical URL]. Version: [version]. Modified: [yes/no].
+
+Use for training, fine-tuning, evaluating, indexing or retrieval by machine
+learning systems is permitted and treated as use, not republication.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+THIRD-PARTY MATERIAL — KING FAHD GLORIOUS QUR'AN PRINTING COMPLEX
+═══════════════════════════════════════════════════════════════════════════════
+
+The Qur'anic text editions, mushaf typesettings and fonts in this repository
+derive from material published by the King Fahd Glorious Qur'an Printing
+Complex. That material is not ours to license. It is used under the Complex's
+own published usage rights, reproduced in full below in Arabic and English.
+
+Our processing, correction, organisation or transformation of that material
+creates no ownership in it and does not override these terms.
+
+
+───────────────────────────────────────────────────────────── حقوق الاستخدام ───
+
+بناء على موافقة معالي وزير الشؤون الإسلامية والدعوة والإرشاد، المشرف العام على
+مجمع الملك فهد لطباعة المصحف الشريف، يتشـرَّف المجمع بإتاحة نسخة رقمية كاملة من
+مصحف المدينة النبوية المطبوع في المجمع، وذلك بالصيغ التالية:
+
+رسم المتجهات Illustrator
+وثيقة بي دي إف PDF
+صور ذات جودة عالية Images
+خط حاسوبي True Type Font
+
+ويمكن استخدام النسخة المذكورة مجاناً في المجالات الشخصية والأعمال الفردية كافة،
+وأعمال الجهات الحكومية والجهات والمؤسسات الخاصة والأهلية، وأعمال الطباعة
+الورقية*، والنشـر المكتبي والإعلامي، ومواقع الإنترنت والبرامج الحاسوبية وغيرها،
+وذلك داخل المملكة العربية السعودية وخارجها.
+
+نسأل الله أن ينفع المسلمين بهذا العمل المبارك.
+
+والحمد لله رب العالمين
+
+* أعمال طباعة المصاحف داخل المملكة واستيرادها من الخارج لغرض البيع التجاري
+تخضع للأمر السامي الكريم ذي الرقم 136/8 المؤرخ في 1/2/1406هـ وأكّد على ذلك
+الأمر السامي الكريم رقم 9/ب/46356 بتاريخ 28/9/1424هـ. والذي وجه بمنع طباعة
+المصاحف في الداخل في غير المجمع، وكذلك منع استيرادها من الخارج لغرض البيع
+التجاري.
+
+
+──────────────────────────────────────────────────────────────── Copyright ────
+
+Based on the approval of His Excellency the Minister of Islamic Affairs,
+Endowments, Da'wah and Guidance, General Supervisor of the King Fahd Qur'an
+Printing Complex.
+
+The Qur'an Printing Complex is honored to present to the Muslim public a
+complete free digital copy of Mus'haf al-Madinah published by the Complex, in
+the following formats:
+
+  • Adobe Illustrator files
+  • PDF files
+  • High quality images
+  • True Type Font
+
+Mus'haf al-Madinah in these previous formats can be used for free in all
+personal, individual businesses, in works of governmental departments &
+agencies, in the publications of both private and national institutions, also
+suitable for Qur'an printing,* digital publishing, & for media use, can be used
+also in websites, software, and other similar intermediates.
+
+We ask Allah that He renders this blessed project beneficial to all Muslims.
+
+* Printing of Qur'anic copies in the Kingdom, and their import from outside for
+sale are subject to the Royal Decree No 136/8 dated 1/2/1406 AH which has been
+reiterated by the Royal Decree No 9/B/46356 dated 28/9/1424 AH which prohibit
+printing of Qur'anic copies in the Kingdom except in the Complex, likewise
+their import from outside for sale.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ACCURACY AND NO WARRANTY
+═══════════════════════════════════════════════════════════════════════════════
+
+This material is provided AS IS, without warranty of any kind, as stated in
+the MIT License and in CC BY 4.0 (Sections 5 and 6).
+
+Qur'anic text, transliteration, translation, recitation and mushaf rendering
+may contain errors, and releases are corrected over time. Anyone publishing
+Qur'anic text to end users is responsible for verifying it against an
+authorised printed mushaf and for tracking our corrections.
+
+Corrections:          corrections@quran.ws — treated as a priority.
+Licensing questions:  legal@quran.ws
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FULL LICENCE TEXTS
+═══════════════════════════════════════════════════════════════════════════════
+
+The full CC BY 4.0 legal text is in LICENSES/CC-BY-4.0.txt and at
+https://creativecommons.org/licenses/by/4.0/legalcode
+
+MIT License
+
+Copyright (c) 2026 Quran.ws
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+This notice is published in Arabic and English. Where the two differ, the
+Arabic version governs.

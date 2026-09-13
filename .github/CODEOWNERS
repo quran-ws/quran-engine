@@ -1,0 +1,5 @@
+# Changes to the contract, the FFI crate and the standards need a maintainer review.
+crates/qvp-ffi/**        @AbdullahObaid
+docs/standards/**        @AbdullahObaid
+docs/API-PARITY.md       @AbdullahObaid
+.github/**               @AbdullahObaid

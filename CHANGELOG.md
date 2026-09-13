@@ -7,6 +7,11 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- CI: `ci.yml` with the `engine`, `gates`, `standards` and `web` jobs; `scripts/check.sh`
+  runs the same checks locally; `scripts/sync-test-data.sh`, `check-parity.py`,
+  `check-versions.sh`, `check-structure.sh`, `check-terminology.sh`; `docs/API-PARITY.md`.
+- `rust-toolchain.toml`, `rustfmt.toml`, `.editorconfig`, `.mailmap`, `CODEOWNERS`, pull
+  request and issue templates, Dependabot.
 - `docs/standards/`: naming, API design, code style, structure, versioning, releasing and
   testing standards. `CONTRIBUTING.md`, `AGENTS.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`.
 - iOS: six page-cache lifecycle tests.
