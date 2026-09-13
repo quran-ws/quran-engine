@@ -1,7 +1,7 @@
 // SwiftUI renderer for a `QvpPage` — the same frame as QvpPageView (UIKit), drawn with
 // `Canvas`: highlight bands → cached base ink (a CGImage of every non-styled path at the
 // current per-line transform, rebuilt only when the styled set / layout / transform changes)
-// → styled ink from `styled()` → mask boxes. A `TimelineView(.animation)` runs frames only
+// → styled ink from `styledPaths()` → mask boxes. A `TimelineView(.animation)` runs frames only
 // while `page.tick(now)` reports a transition in flight.
 //
 // SwiftUI has no `setNeedsDisplay()`, so the mutable surface lives on `QvpCanvasController`
@@ -130,7 +130,7 @@ public final class QvpCanvasController {
     /// Clear the selection band and the engine selection.
     public func clearSelection() {
         guard let p = page, p.isOpen else { return }
-        p.clearSelection(); if selectionHandle != 0 { p.unhighlight(selectionHandle); selectionHandle = 0 }
+        p.clearSelection(); if selectionHandle != 0 { p.removeHighlight(selectionHandle); selectionHandle = 0 }
         onSelectionChanged?([]); invalidate()
     }
     /// Page units of `line` → view points (engine layout + pan/zoom).
@@ -215,7 +215,7 @@ public final class QvpCanvasController {
         guard let p = page, p.isOpen else { return }
         let ws = p.selection()
         let t = Target.words(ws)
-        if selectionHandle != 0 { p.rehighlight(selectionHandle, t) }
+        if selectionHandle != 0 { p.moveHighlight(selectionHandle, t) }
         else { selectionHandle = p.highlight(t, QvpHighlightStyle(mode: .band, band: selectionBand, padX: 0.6, layer: QvpLayer.SELECTION)) }
         onSelectionChanged?(ws); invalidate()
     }
@@ -227,7 +227,7 @@ public final class QvpCanvasController {
         guard let l = p.currentLayout else { return }
         let moving = p.tick(now() * 1000)
         let paths = p.buildPaths()
-        let styled = p.styled()
+        let styled = p.styledPaths()
         let styledSet = Set(styled.map { $0.path })
         let ink = p.defaultInk
         let W = Int(size.width * displayScale), H = Int(size.height * displayScale)

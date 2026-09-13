@@ -126,14 +126,14 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val p = page ?: return
         val ws = p.selection()
         val t = Target.words(ws)
-        if (selectionHandle != 0) p.rehighlight(selectionHandle, t)
+        if (selectionHandle != 0) p.moveHighlight(selectionHandle, t)
         else selectionHandle = p.highlight(t, QvpHighlightStyle(mode = HighlightMode.BAND, band = selectionBand, padX = 0.6f, layer = QvpLayer.SELECTION))
         onSelectionChanged?.invoke(ws); invalidate()
     }
     /** Clear the selection band and the engine selection. */
     fun clearSelection() {
         val p = page ?: return
-        p.clearSelection(); if (selectionHandle != 0) { p.unhighlight(selectionHandle); selectionHandle = 0 }
+        p.clearSelection(); if (selectionHandle != 0) { p.removeHighlight(selectionHandle); selectionHandle = 0 }
         onSelectionChanged?.invoke(IntArray(0)); invalidate()
     }
 
@@ -200,7 +200,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val l = p.currentLayout ?: return
         val moving = p.tick(System.nanoTime() / 1e6)
         val paths = p.buildPaths()
-        val styled = p.styled()
+        val styled = p.styledPaths()
         styledPaths.clear(); var i = 0; var styledKey = 1
         while (i < styled.size) {
             val pi = styled[i]

@@ -115,14 +115,14 @@ jstring FN(decoText)(JNIEnv* env, jclass c, jlong h, jint i) { QvpDecoInfo d; if
 jint FN(findWord)(JNIEnv* env, jclass c, jlong h, jint s, jint a, jint w) { return qvp_find_word(PG(h), (uint16_t)s, (uint16_t)a, (uint16_t)w); }
 jintArray FN(resolve)(JNIEnv* env, jclass c, jlong h, jintArray t) {
     TargetIn ti = target_in(env, t);
-    uint32_t n = qvp_resolve(PG(h), &ti.t, NULL, 0);
-    uint32_t* buf = (uint32_t*)malloc((n ? n : 1) * 4); qvp_resolve(PG(h), &ti.t, buf, n);
+    uint32_t n = qvp_target_words(PG(h), &ti.t, NULL, 0);
+    uint32_t* buf = (uint32_t*)malloc((n ? n : 1) * 4); qvp_target_words(PG(h), &ti.t, buf, n);
     target_done(env, &ti); jintArray a = ints(env, (const jint*)buf, n); free(buf); return a;
 }
 jfloat FN(naturalPitch)(JNIEnv* env, jclass c, jlong h) { return qvp_natural_pitch(PG(h)); }
 
 /* ───────── metadata ───────── */
-jint FN(surahsCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_surahs_count(PG(h)); }
+jint FN(surahCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_surah_count(PG(h)); }
 /* {number, ayahCount, hasBanner, hasBasmalah, place, bannerDeco(-1)} */
 jfloatArray FN(surahNums)(JNIEnv* env, jclass c, jlong h, jint i) {
     QvpSurahInfo s; if (!qvp_surah_at(PG(h), i, &s)) return NULL;
@@ -170,9 +170,9 @@ jstring FN(wordLabel)(JNIEnv* env, jclass c, jlong h, jint i) { QvpStr s; qvp_wo
 jstring FN(ayahLabel)(JNIEnv* env, jclass c, jlong h, jint i) { QvpStr s; qvp_ayah_label(PG(h), i, &s); return qstr(env, s); }
 
 /* ───────── text & search ───────── */
-jstring FN(textTarget)(JNIEnv* env, jclass c, jlong h, jintArray t, jint form, jstring wsep, jstring lsep) {
+jstring FN(text)(JNIEnv* env, jclass c, jlong h, jintArray t, jint form, jstring wsep, jstring lsep) {
     TargetIn ti = target_in(env, t); uint32_t wn, ln; uint8_t* w = jbytes(env, wsep, &wn); uint8_t* l = jbytes(env, lsep, &ln);
-    QvpStr s; qvp_text_target(PG(h), &ti.t, (uint8_t)form, w, wn, l, ln, &s);
+    QvpStr s; qvp_text(PG(h), &ti.t, (uint8_t)form, w, wn, l, ln, &s);
     jstring r = qstr(env, s); free(w); free(l); target_done(env, &ti); return r;
 }
 /* 3 per: word, index, loose */
@@ -246,11 +246,11 @@ jfloatArray FN(wordBoundsView)(JNIEnv* env, jclass c, jlong h, jint i) { float v
 jint FN(styleAdd)(JNIEnv* env, jclass c, jlong h, jint layer, jintArray sel, jint rgba, jint ms) { QvpSelector s = sel_in(env, sel); return (jint)qvp_style_add(PG(h), layer, &s, (uint32_t)rgba, (uint32_t)ms); }
 jint FN(styleAddTarget)(JNIEnv* env, jclass c, jlong h, jint layer, jintArray t, jint rgba, jint ms) { TargetIn ti = target_in(env, t); jint r = (jint)qvp_style_add_target(PG(h), layer, &ti.t, (uint32_t)rgba, (uint32_t)ms); target_done(env, &ti); return r; }
 jint FN(styleRemove)(JNIEnv* env, jclass c, jlong h, jint handle) { return (jint)qvp_style_remove(PG(h), (uint32_t)handle); }
-jint FN(styleRepaint)(JNIEnv* env, jclass c, jlong h, jint handle, jint rgba, jint ms) { return (jint)qvp_style_repaint(PG(h), (uint32_t)handle, (uint32_t)rgba, (uint32_t)ms); }
+jint FN(styleRecolor)(JNIEnv* env, jclass c, jlong h, jint handle, jint rgba, jint ms) { return (jint)qvp_style_recolor(PG(h), (uint32_t)handle, (uint32_t)rgba, (uint32_t)ms); }
 void FN(styleClear)(JNIEnv* env, jclass c, jlong h) { qvp_style_clear(PG(h)); }
 void FN(styleClearLayer)(JNIEnv* env, jclass c, jlong h, jint layer) { qvp_style_clear_layer(PG(h), layer); }
-void FN(styleDefault)(JNIEnv* env, jclass c, jlong h, jint rgba) { qvp_style_default(PG(h), (uint32_t)rgba); }
-jint FN(hide)(JNIEnv* env, jclass c, jlong h, jintArray sel) { QvpSelector s = sel_in(env, sel); return (jint)qvp_hide(PG(h), &s); }
+void FN(styleDefaultColor)(JNIEnv* env, jclass c, jlong h, jint rgba) { qvp_style_default_color(PG(h), (uint32_t)rgba); }
+jint FN(hide)(JNIEnv* env, jclass c, jlong h, jintArray sel) { QvpSelector s = sel_in(env, sel); return (jint)qvp_style_hide(PG(h), &s); }
 /* theme IntArray: {ink, diacritics, dots, waqf, sifr, ayahMark, numeral, headers, ms, (mark, colour)*} */
 jint FN(theme)(JNIEnv* env, jclass c, jlong h, jintArray arr) {
     jsize n = (*env)->GetArrayLength(env, arr); jint* v = (*env)->GetIntArrayElements(env, arr, NULL);
@@ -261,16 +261,16 @@ jintArray FN(styleHandles)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_st
 
 /* ───────── clock & display list ───────── */
 jboolean FN(tick)(JNIEnv* env, jclass c, jlong h, jdouble now) { return qvp_tick(PG(h), now) ? JNI_TRUE : JNI_FALSE; }
-jintArray FN(paint)(JNIEnv* env, jclass c, jlong h) { QvpPageInfo i; qvp_page_info(PG(h), &i); const uint32_t* col = qvp_paint(PG(h)); return ints(env, (const jint*)col, i.n_paths); }
-jintArray FN(styled)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_styled(PG(h), NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 8); qvp_styled(PG(h), b, n); jintArray a = ints(env, (const jint*)b, n * 2); free(b); return a; }
+jintArray FN(colors)(JNIEnv* env, jclass c, jlong h) { QvpPageInfo i; qvp_page_info(PG(h), &i); const uint32_t* col = qvp_colors(PG(h)); return ints(env, (const jint*)col, i.n_paths); }
+jintArray FN(styledPaths)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_styled_paths(PG(h), NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 8); qvp_styled_paths(PG(h), b, n); jintArray a = ints(env, (const jint*)b, n * 2); free(b); return a; }
 jint FN(colorOf)(JNIEnv* env, jclass c, jlong h, jint p) { return (jint)qvp_color_of(PG(h), (uint32_t)p); }
 
 /* ───────── highlights ───────── */
-jint FN(highlight)(JNIEnv* env, jclass c, jlong h, jintArray t, jintArray si, jfloatArray sf) { TargetIn ti = target_in(env, t); QvpHighlightStyle s = hl_in(env, si, sf); jint r = (jint)qvp_highlight(PG(h), &ti.t, &s); target_done(env, &ti); return r; }
-jboolean FN(rehighlight)(JNIEnv* env, jclass c, jlong h, jint handle, jintArray t) { TargetIn ti = target_in(env, t); uint32_t r = qvp_rehighlight(PG(h), (uint32_t)handle, &ti.t); target_done(env, &ti); return r ? JNI_TRUE : JNI_FALSE; }
-jboolean FN(restyleHighlight)(JNIEnv* env, jclass c, jlong h, jint handle, jintArray si, jfloatArray sf) { QvpHighlightStyle s = hl_in(env, si, sf); return qvp_restyle_highlight(PG(h), (uint32_t)handle, &s) ? JNI_TRUE : JNI_FALSE; }
-jboolean FN(unhighlight)(JNIEnv* env, jclass c, jlong h, jint handle) { return qvp_unhighlight(PG(h), (uint32_t)handle) ? JNI_TRUE : JNI_FALSE; }
-void FN(clearHighlights)(JNIEnv* env, jclass c, jlong h) { qvp_clear_highlights(PG(h)); }
+jint FN(highlight)(JNIEnv* env, jclass c, jlong h, jintArray t, jintArray si, jfloatArray sf) { TargetIn ti = target_in(env, t); QvpHighlightStyle s = hl_in(env, si, sf); jint r = (jint)qvp_highlight_add(PG(h), &ti.t, &s); target_done(env, &ti); return r; }
+jboolean FN(moveHighlight)(JNIEnv* env, jclass c, jlong h, jint handle, jintArray t) { TargetIn ti = target_in(env, t); uint32_t r = qvp_highlight_move(PG(h), (uint32_t)handle, &ti.t); target_done(env, &ti); return r ? JNI_TRUE : JNI_FALSE; }
+jboolean FN(restyleHighlight)(JNIEnv* env, jclass c, jlong h, jint handle, jintArray si, jfloatArray sf) { QvpHighlightStyle s = hl_in(env, si, sf); return qvp_highlight_restyle(PG(h), (uint32_t)handle, &s) ? JNI_TRUE : JNI_FALSE; }
+jboolean FN(removeHighlight)(JNIEnv* env, jclass c, jlong h, jint handle) { return qvp_highlight_remove(PG(h), (uint32_t)handle) ? JNI_TRUE : JNI_FALSE; }
+void FN(clearHighlights)(JNIEnv* env, jclass c, jlong h) { qvp_highlight_clear(PG(h)); }
 jintArray FN(highlightHandles)(JNIEnv* env, jclass c, jlong h) { uint32_t b[1024]; uint32_t n = qvp_highlight_handles(PG(h), b, 1024); if (n > 1024) n = 1024; return ints(env, (const jint*)b, n); }
 jintArray FN(highlightWords)(JNIEnv* env, jclass c, jlong h, jint handle) { uint32_t n = qvp_highlight_words(PG(h), (uint32_t)handle, NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 4); qvp_highlight_words(PG(h), (uint32_t)handle, b, n); jintArray a = ints(env, (const jint*)b, n); free(b); return a; }
 /* boxes: 8 ints per box: id, line, x0, y0, x1, y1 (float bits), color, radius (float bits) */
@@ -290,20 +290,20 @@ jstring FN(selectionText)(JNIEnv* env, jclass c, jlong h, jint form, jboolean ci
 void FN(mask)(JNIEnv* env, jclass c, jlong h, jintArray t, jint mode) { TargetIn ti = target_in(env, t); qvp_mask(PG(h), &ti.t, (uint8_t)mode); target_done(env, &ti); }
 void FN(maskFrom)(JNIEnv* env, jclass c, jlong h, jint wi, jint mode) { qvp_mask_from(PG(h), (uint32_t)wi, (uint8_t)mode); }
 void FN(maskOptions)(JNIEnv* env, jclass c, jlong h, jint color, jfloat px, jfloat py, jfloat radius, jboolean reverse) { qvp_mask_options(PG(h), (uint32_t)color, px, py, radius, reverse ? 1 : 0); }
-jint FN(revealNext)(JNIEnv* env, jclass c, jlong h, jint n) { return (jint)qvp_reveal_next(PG(h), (uint32_t)n); }
-jint FN(hideBack)(JNIEnv* env, jclass c, jlong h, jint n) { return (jint)qvp_hide_back(PG(h), (uint32_t)n); }
-jboolean FN(revealWord)(JNIEnv* env, jclass c, jlong h, jint wi) { return qvp_reveal_word(PG(h), (uint32_t)wi) ? JNI_TRUE : JNI_FALSE; }
-jboolean FN(hideWord)(JNIEnv* env, jclass c, jlong h, jint wi) { return qvp_hide_word(PG(h), (uint32_t)wi) ? JNI_TRUE : JNI_FALSE; }
-void FN(revealAll)(JNIEnv* env, jclass c, jlong h) { qvp_reveal_all(PG(h)); }
-void FN(hideAll)(JNIEnv* env, jclass c, jlong h) { qvp_hide_all(PG(h)); }
+jint FN(unmaskNext)(JNIEnv* env, jclass c, jlong h, jint n) { return (jint)qvp_unmask_next(PG(h), (uint32_t)n); }
+jint FN(maskBack)(JNIEnv* env, jclass c, jlong h, jint n) { return (jint)qvp_mask_back(PG(h), (uint32_t)n); }
+jboolean FN(unmaskWord)(JNIEnv* env, jclass c, jlong h, jint wi) { return qvp_unmask_word(PG(h), (uint32_t)wi) ? JNI_TRUE : JNI_FALSE; }
+jboolean FN(maskWord)(JNIEnv* env, jclass c, jlong h, jint wi) { return qvp_mask_word(PG(h), (uint32_t)wi) ? JNI_TRUE : JNI_FALSE; }
+void FN(unmaskAll)(JNIEnv* env, jclass c, jlong h) { qvp_unmask_all(PG(h)); }
+void FN(maskAll)(JNIEnv* env, jclass c, jlong h) { qvp_mask_all(PG(h)); }
 void FN(unmask)(JNIEnv* env, jclass c, jlong h) { qvp_unmask(PG(h)); }
 jintArray FN(maskHidden)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_mask_hidden(PG(h), NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 4); qvp_mask_hidden(PG(h), b, n); jintArray a = ints(env, (const jint*)b, n); free(b); return a; }
 jintArray FN(maskWords)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_mask_words(PG(h), NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 4); qvp_mask_words(PG(h), b, n); jintArray a = ints(env, (const jint*)b, n); free(b); return a; }
 jintArray FN(maskBoxesView)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_mask_boxes_view(PG(h), NULL, 0); QvpBox* b = (QvpBox*)malloc((n ? n : 1) * sizeof(QvpBox)); qvp_mask_boxes_view(PG(h), b, n); jintArray a = boxes_out(env, b, n); free(b); return a; }
 jint FN(revealStart)(JNIEnv* env, jclass c, jlong h, jint lit, jboolean byAyah, jint grey, jint ink, jboolean ayahMarks, jint ms) { return (jint)qvp_reveal_start(PG(h), (uint32_t)lit, byAyah ? 1 : 0, (uint32_t)grey, (uint32_t)ink, ayahMarks ? 1 : 0, (uint32_t)ms); }
 jboolean FN(revealGoto)(JNIEnv* env, jclass c, jlong h, jlong at) { return qvp_reveal_goto(PG(h), (int64_t)at) ? JNI_TRUE : JNI_FALSE; }
-jlong FN(revealAt)(JNIEnv* env, jclass c, jlong h) { return (jlong)qvp_reveal_at(PG(h)); }
-jint FN(revealSteps)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_reveal_steps(PG(h)); }
+jlong FN(revealPosition)(JNIEnv* env, jclass c, jlong h) { return (jlong)qvp_reveal_position(PG(h)); }
+jint FN(revealStepCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_reveal_step_count(PG(h)); }
 jlong FN(revealStepOf)(JNIEnv* env, jclass c, jlong h, jint wi) { return (jlong)qvp_reveal_step_of(PG(h), (uint32_t)wi); }
 void FN(revealStop)(JNIEnv* env, jclass c, jlong h) { qvp_reveal_stop(PG(h)); }
 
@@ -323,8 +323,8 @@ jlong FN(atlasLoad)(JNIEnv* env, jclass c, jbyteArray bytes) { jsize n = (*env)-
 void FN(atlasFree)(JNIEnv* env, jclass c, jlong h) { qvp_atlas_free(AT(h)); }
 jint FN(atlasPageOf)(JNIEnv* env, jclass c, jlong h, jint s, jint a) { return qvp_atlas_page_of(AT(h), (uint16_t)s, (uint16_t)a); }
 jintArray FN(atlasPageRange)(JNIEnv* env, jclass c, jlong h, jint page) { uint16_t o[4]; if (!qvp_atlas_page_range(AT(h), (uint16_t)page, o)) return NULL; jint v[4] = { o[0], o[1], o[2], o[3] }; return ints(env, v, 4); }
-jint FN(atlasPages)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_atlas_pages(AT(h)); }
-jint FN(atlasSurahs)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_atlas_surahs(AT(h)); }
+jint FN(atlasPageCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_atlas_page_count(AT(h)); }
+jint FN(atlasSurahCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_atlas_surah_count(AT(h)); }
 static jobjectArray atlas_surah_out(JNIEnv* env, QvpAtlasSurah* s) {
     /* Strings: n, firstPage, ayahCount, place, arabic, latin, english */
     jobjectArray arr = (*env)->NewObjectArray(env, 7, (*env)->FindClass(env, "java/lang/String"), NULL);
@@ -339,9 +339,9 @@ static jobjectArray atlas_surah_out(JNIEnv* env, QvpAtlasSurah* s) {
 jobjectArray FN(atlasSurah)(JNIEnv* env, jclass c, jlong h, jint n) { QvpAtlasSurah s; if (!qvp_atlas_surah(AT(h), (uint16_t)n, &s)) return NULL; return atlas_surah_out(env, &s); }
 jobjectArray FN(atlasSurahAt)(JNIEnv* env, jclass c, jlong h, jint i) { QvpAtlasSurah s; if (!qvp_atlas_surah_at(AT(h), (uint32_t)i, &s)) return NULL; return atlas_surah_out(env, &s); }
 jintArray FN(atlasDivision)(JNIEnv* env, jclass c, jlong h, jint kind, jint n) { QvpAtlasRubuAlHizb r; if (!qvp_atlas_division(AT(h), (uint8_t)kind, (uint16_t)n, &r)) return NULL; jint v[4] = { r.rubu_al_hizb, r.surah, r.ayah, r.page }; return ints(env, v, 4); }
-jint FN(atlasDivisionAt)(JNIEnv* env, jclass c, jlong h, jint kind, jint s, jint a) { return qvp_atlas_division_at(AT(h), (uint8_t)kind, (uint16_t)s, (uint16_t)a); }
+jint FN(atlasDivisionOf)(JNIEnv* env, jclass c, jlong h, jint kind, jint s, jint a) { return qvp_atlas_division_of(AT(h), (uint8_t)kind, (uint16_t)s, (uint16_t)a); }
 jintArray FN(atlasPagesOfJuz)(JNIEnv* env, jclass c, jlong h, jint n) { uint16_t o[2]; if (!qvp_atlas_pages_of_juz(AT(h), (uint16_t)n, o)) return NULL; jint v[2] = { o[0], o[1] }; return ints(env, v, 2); }
-jintArray FN(atlasFindSurah)(JNIEnv* env, jclass c, jlong h, jstring text) { uint32_t n; uint8_t* b = jbytes(env, text, &n); uint16_t o[128]; uint32_t k = qvp_atlas_find_surah(AT(h), b, n, o, 128); free(b); if (k > 128) k = 128; jint v[128]; for (uint32_t i = 0; i < k; i++) v[i] = o[i]; return ints(env, v, k); }
+jintArray FN(atlasSearchSurahs)(JNIEnv* env, jclass c, jlong h, jstring text) { uint32_t n; uint8_t* b = jbytes(env, text, &n); uint16_t o[128]; uint32_t k = qvp_atlas_search_surahs(AT(h), b, n, o, 128); free(b); if (k > 128) k = 128; jint v[128]; for (uint32_t i = 0; i < k; i++) v[i] = o[i]; return ints(env, v, k); }
 
 /* ───────── names ───────── */
 jstring FN(markName)(JNIEnv* env, jclass c, jint m) { QvpStr s; qvp_mark_name((uint8_t)m, &s); return qstr(env, s); }

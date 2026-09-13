@@ -18,7 +18,7 @@ impl Page {
     /// Box around a target (page units), `pad` all round. A medallion is kept only when
     /// the whole ayah it closes is inside the target.
     pub fn crop_bounds(&self, target: &Target, pad: f32, keep_ayah_marks: bool) -> Option<CropBounds> {
-        let words = self.resolve(target);
+        let words = self.target_words(target);
         if words.is_empty() {
             return None;
         }
@@ -34,7 +34,7 @@ impl Page {
                 let w = &d.words[*words.last().unwrap() as usize];
                 (w.surah, w.ayah)
             };
-            let all: Vec<u32> = self.resolve(&Target::Ayah(s, a));
+            let all: Vec<u32> = self.target_words(&Target::Ayah(s, a));
             let (_, complete) = self.ayah_word_count(s, a);
             if complete && all.iter().all(|w| words.contains(w)) {
                 if let Some(m) = self.marker_of(s, a) {
@@ -63,8 +63,8 @@ impl Page {
         background: Option<Rgba>,
     ) -> Option<String> {
         let cb = self.crop_bounds(target, pad, keep_ayah_marks)?;
-        let words = self.resolve(target);
-        let colors: Vec<Rgba> = self.paint().to_vec();
+        let words = self.target_words(target);
+        let colors: Vec<Rgba> = self.colors().to_vec();
         let d = self.data();
         let quant = d.header.quant;
         let (w, h) = (cb.x1 - cb.x0, cb.y1 - cb.y0);

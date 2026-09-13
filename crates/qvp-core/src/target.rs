@@ -18,7 +18,7 @@ pub enum Target {
 }
 
 impl Page {
-    pub fn resolve(&self, t: &Target) -> Vec<u32> {
+    pub fn target_words(&self, t: &Target) -> Vec<u32> {
         let d = self.data();
         let n = d.words.len() as u32;
         let mut v: Vec<u32> = match t {
@@ -85,7 +85,7 @@ impl Page {
         if !complete || count != n_segments {
             return None;
         }
-        Some(self.resolve(&Target::Ayah(surah, ayah)))
+        Some(self.target_words(&Target::Ayah(surah, ayah)))
     }
 
     pub fn next_word(&self, wi: u32) -> Option<u32> {

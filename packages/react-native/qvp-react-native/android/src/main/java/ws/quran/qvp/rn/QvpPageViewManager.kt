@@ -30,7 +30,7 @@ class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {
     @ReactProp(name = "lineGap", defaultFloat = 0f) fun setLineGap(v: QvpRnPageView, f: Float) = v.setLineGapProp(f)
     @ReactProp(name = "fillHeight", defaultBoolean = false) fun setFillHeight(v: QvpRnPageView, b: Boolean) = v.setFillHeightProp(b)
     @ReactProp(name = "paperColor") fun setPaperColor(v: QvpRnPageView, s: String?) { v.paperColor = if (s.isNullOrBlank()) 0 else QvpColor.argb(QvpColor.parse(s)); v.invalidate() }
-    @ReactProp(name = "defaultInk") fun setDefaultInk(v: QvpRnPageView, s: String?) { v.defaultInkProp = s }
+    @ReactProp(name = "defaultInk") fun setDefaultColor(v: QvpRnPageView, s: String?) { v.defaultInkProp = s }
     @ReactProp(name = "selectionBand") fun setSelectionBand(v: QvpRnPageView, s: String?) { if (!s.isNullOrBlank()) v.selectionBand = QvpColor.parse(s) }
     @ReactProp(name = "selectionEnabled", defaultBoolean = true) fun setSelectionEnabled(v: QvpRnPageView, b: Boolean) { v.selectionEnabled = b }
     @ReactProp(name = "zoomEnabled", defaultBoolean = true) fun setZoomEnabled(v: QvpRnPageView, b: Boolean) { v.zoomEnabled = b }

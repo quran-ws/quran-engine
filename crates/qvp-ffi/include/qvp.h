@@ -120,11 +120,11 @@ int      qvp_ayah_info(const QvpPage*, uint32_t idx, QvpAyahInfo* out);
 int      qvp_line_info(const QvpPage*, uint32_t idx, QvpLineInfo* out);
 int      qvp_deco_info(const QvpPage*, uint32_t idx, QvpDecoInfo* out);
 int32_t  qvp_find_word(const QvpPage*, uint16_t surah, uint16_t ayah, uint16_t word);   /* -1 = not on page */
-uint32_t qvp_resolve(const QvpPage*, const QvpTarget*, uint32_t* out, uint32_t cap);   /* → word indices */
+uint32_t qvp_target_words(const QvpPage*, const QvpTarget*, uint32_t* out, uint32_t cap);   /* → word indices */
 float    qvp_natural_pitch(const QvpPage*);
 
 /* metadata ------------------------------------------------------------------------------ */
-uint32_t qvp_surahs_count(const QvpPage*);
+uint32_t qvp_surah_count(const QvpPage*);
 int      qvp_surah_at(const QvpPage*, uint32_t i, QvpSurahInfo* out);
 uint32_t qvp_divisions(const QvpPage*, QvpDivision* out, uint32_t cap);   /* divisions that START on this page */
 uint32_t qvp_ayah_marks(const QvpPage*, QvpAyahMark* out, uint32_t cap);       /* real ayah medallions */
@@ -137,8 +137,7 @@ void     qvp_word_label(const QvpPage*, uint32_t wi, QvpStr* out);       /* acce
 void     qvp_ayah_label(const QvpPage*, uint32_t ai, QvpStr* out);
 
 /* text & search ------------------------------------------------------------------------- */
-void     qvp_text(const QvpPage*, const uint32_t* words /* NULL = page */, uint32_t n, uint8_t form, const uint8_t* word_sep, uint32_t word_sep_len, const uint8_t* line_sep, uint32_t line_sep_len, QvpStr* out);
-void     qvp_text_target(const QvpPage*, const QvpTarget*, uint8_t form, const uint8_t* word_sep, uint32_t word_sep_len, const uint8_t* line_sep, uint32_t line_sep_len, QvpStr* out);
+void     qvp_text(const QvpPage*, const QvpTarget* /* NULL = page */, uint8_t form, const uint8_t* word_sep, uint32_t word_sep_len, const uint8_t* line_sep, uint32_t line_sep_len, QvpStr* out);
 uint32_t qvp_search(const QvpPage*, const uint8_t* query, uint32_t query_len, uint8_t form, uint8_t mode, uint32_t normalize, uint32_t loose, uint32_t limit /* 0 = all */, QvpMatch* out, uint32_t cap);
 void     qvp_arabic(uint8_t kind /* 0 strip 1 fold 2 normalize 3 loose 4 search_key */, const uint8_t* s, uint32_t len, QvpStr* out);
 void     qvp_citation(const QvpPage*, const uint32_t* words, uint32_t n, QvpStr* out);   /* "2:255-257, 3:1" */
@@ -164,26 +163,26 @@ int      qvp_word_bounds_view(const QvpPage*, uint32_t wi, float out[4]);
 uint32_t qvp_style_add(QvpPage*, int32_t layer, const QvpSelector*, uint32_t rgba, uint32_t transition_ms);   /* → handle (0 = bad selector) */
 uint32_t qvp_style_add_target(QvpPage*, int32_t layer, const QvpTarget*, uint32_t rgba, uint32_t transition_ms);
 uint32_t qvp_style_remove(QvpPage*, uint32_t handle);                       /* rules removed */
-uint32_t qvp_style_repaint(QvpPage*, uint32_t handle, uint32_t rgba, uint32_t transition_ms);
+uint32_t qvp_style_recolor(QvpPage*, uint32_t handle, uint32_t rgba, uint32_t transition_ms);
 void     qvp_style_clear(QvpPage*);
 void     qvp_style_clear_layer(QvpPage*, int32_t layer);
-void     qvp_style_default(QvpPage*, uint32_t rgba);
-uint32_t qvp_hide(QvpPage*, const QvpSelector*);                            /* alpha-0 rule on the top layer */
+void     qvp_style_default_color(QvpPage*, uint32_t rgba);
+uint32_t qvp_style_hide(QvpPage*, const QvpSelector*);                            /* alpha-0 rule on the top layer */
 uint32_t qvp_theme(QvpPage*, const QvpTheme*);                              /* one handle for the whole theme */
 uint32_t qvp_style_handles(const QvpPage*, uint32_t* out, uint32_t cap);
 
 /* clock & display list ------------------------------------------------------------------ */
 uint32_t qvp_tick(QvpPage*, double now_ms);                                 /* 1 while animating: keep drawing frames */
-const uint32_t* qvp_paint(QvpPage*);                                       /* n_paths colours (current, mid-transition) */
-uint32_t qvp_styled(QvpPage*, uint32_t* out_pairs, uint32_t cap);          /* (path, colour) pairs ≠ default ink */
+const uint32_t* qvp_colors(QvpPage*);                                       /* n_paths colours (current, mid-transition) */
+uint32_t qvp_styled_paths(QvpPage*, uint32_t* out_pairs, uint32_t cap);          /* (path, colour) pairs ≠ default ink */
 uint32_t qvp_color_of(QvpPage*, uint32_t path);
 
 /* highlights: ink and/or animated bands ------------------------------------------------- */
-uint32_t qvp_highlight(QvpPage*, const QvpTarget*, const QvpHighlightStyle* /* NULL = default band */);   /* → handle */
-uint32_t qvp_rehighlight(QvpPage*, uint32_t handle, const QvpTarget*);     /* band slides, ink fades */
-uint32_t qvp_restyle_highlight(QvpPage*, uint32_t handle, const QvpHighlightStyle*);
-uint32_t qvp_unhighlight(QvpPage*, uint32_t handle);                       /* fades out over transition_ms */
-void     qvp_clear_highlights(QvpPage*);
+uint32_t qvp_highlight_add(QvpPage*, const QvpTarget*, const QvpHighlightStyle* /* NULL = default band */);   /* → handle */
+uint32_t qvp_highlight_move(QvpPage*, uint32_t handle, const QvpTarget*);     /* band slides, ink fades */
+uint32_t qvp_highlight_restyle(QvpPage*, uint32_t handle, const QvpHighlightStyle*);
+uint32_t qvp_highlight_remove(QvpPage*, uint32_t handle);                       /* fades out over transition_ms */
+void     qvp_highlight_clear(QvpPage*);
 uint32_t qvp_highlight_handles(const QvpPage*, uint32_t* out, uint32_t cap);
 uint32_t qvp_highlight_words(const QvpPage*, uint32_t handle, uint32_t* out, uint32_t cap);
 uint32_t qvp_highlight_boxes_view(const QvpPage*, QvpBox* out, uint32_t cap);   /* viewport px; draw each id as ONE nonzero path, behind the ink */
@@ -198,20 +197,20 @@ void     qvp_selection_text(const QvpPage*, uint8_t form, uint32_t citation, Qvp
 void     qvp_mask(QvpPage*, const QvpTarget*, uint8_t mode);
 void     qvp_mask_from(QvpPage*, uint32_t wi, uint8_t mode);
 void     qvp_mask_options(QvpPage*, uint32_t block_color, float pad_x, float pad_y, float radius, uint32_t reverse);
-uint32_t qvp_reveal_next(QvpPage*, uint32_t n);
-uint32_t qvp_hide_back(QvpPage*, uint32_t n);
-uint32_t qvp_reveal_word(QvpPage*, uint32_t wi);
-uint32_t qvp_hide_word(QvpPage*, uint32_t wi);
-void     qvp_reveal_all(QvpPage*);
-void     qvp_hide_all(QvpPage*);
+uint32_t qvp_unmask_next(QvpPage*, uint32_t n);
+uint32_t qvp_mask_back(QvpPage*, uint32_t n);
+uint32_t qvp_unmask_word(QvpPage*, uint32_t wi);
+uint32_t qvp_mask_word(QvpPage*, uint32_t wi);
+void     qvp_unmask_all(QvpPage*);
+void     qvp_mask_all(QvpPage*);
 void     qvp_unmask(QvpPage*);
 uint32_t qvp_mask_hidden(const QvpPage*, uint32_t* out, uint32_t cap);
 uint32_t qvp_mask_words(const QvpPage*, uint32_t* out, uint32_t cap);
 uint32_t qvp_mask_boxes_view(const QvpPage*, QvpBox* out, uint32_t cap);       /* block/blur boxes, viewport px */
 uint32_t qvp_reveal_start(QvpPage*, uint32_t lit, uint32_t by_ayah, uint32_t grey, uint32_t ink, uint32_t ayah_marks, uint32_t transition_ms); /* → steps */
 uint32_t qvp_reveal_goto(QvpPage*, int64_t at);                            /* -1 = nothing lit yet */
-int64_t  qvp_reveal_at(const QvpPage*);                                    /* -2 = no reveal running */
-uint32_t qvp_reveal_steps(const QvpPage*);
+int64_t  qvp_reveal_position(const QvpPage*);                                    /* -2 = no reveal running */
+uint32_t qvp_reveal_step_count(const QvpPage*);
 int64_t  qvp_reveal_step_of(const QvpPage*, uint32_t wi);
 void     qvp_reveal_stop(QvpPage*);
 
@@ -224,14 +223,14 @@ QvpAtlas* qvp_atlas_load(const uint8_t* bytes, size_t len);
 void      qvp_atlas_free(QvpAtlas*);
 int32_t   qvp_atlas_page_of(const QvpAtlas*, uint16_t surah, uint16_t ayah);
 int       qvp_atlas_page_range(const QvpAtlas*, uint16_t page, uint16_t out[4]);
-uint32_t  qvp_atlas_pages(const QvpAtlas*);
-uint32_t  qvp_atlas_surahs(const QvpAtlas*);
+uint32_t  qvp_atlas_page_count(const QvpAtlas*);
+uint32_t  qvp_atlas_surah_count(const QvpAtlas*);
 int       qvp_atlas_surah(const QvpAtlas*, uint16_t n, QvpAtlasSurah* out);
 int       qvp_atlas_surah_at(const QvpAtlas*, uint32_t i, QvpAtlasSurah* out);
 int       qvp_atlas_division(const QvpAtlas*, uint8_t kind, uint16_t n, QvpAtlasRubuAlHizb* out);
-int32_t   qvp_atlas_division_at(const QvpAtlas*, uint8_t kind, uint16_t surah, uint16_t ayah);
+int32_t   qvp_atlas_division_of(const QvpAtlas*, uint8_t kind, uint16_t surah, uint16_t ayah);
 int       qvp_atlas_pages_of_juz(const QvpAtlas*, uint16_t n, uint16_t out[2]);
-uint32_t  qvp_atlas_find_surah(const QvpAtlas*, const uint8_t* text, uint32_t len, uint16_t* out, uint32_t cap);
+uint32_t  qvp_atlas_search_surahs(const QvpAtlas*, const uint8_t* text, uint32_t len, uint16_t* out, uint32_t cap);
 void      qvp_atlas_json(const QvpAtlas*, QvpStr* out);
 
 /* names --------------------------------------------------------------------------------- */

@@ -52,12 +52,12 @@ page.free(); atlas.free();
 | `page.lines[i]` | `{lineNo, isHeader, firstWord, nWords, bbox, bandY0, bandY1, centre}` |
 | `page.decos[i]` | `{kind, surah, ayah, line, bbox, text, firstPath, nPaths}` — ayah marks, surah banners, basmalah, division rosettes, sajdah signs, page furniture |
 | `page.findWord(s,a,w)` | index or −1 |
-| `page.resolve(target)` | word indices in reading order |
+| `page.targetWords(target)` | word indices in reading order |
 | `page.wordForm(i, form)` | `'rasm_uthmani' \| 'rasm_imlai' \| 'qpc' \| 'rasm' \| 'search'` (derived forms need the sidecar; `hasForm(form)`) |
 | `page.attachWords(json)` | attach `NNN.words.json` (`{"s:a:w": {rasm_uthmani, rasm_imlai, qpc, rasm, search}}`); returns words updated |
 | `page.pathKind/Mark/Family/Category(p)`, `pathWord(p)`, `pathLine(p)`, `pathNthMark(p)` | per-path facts from the geometry table |
 
-An ayah is several fragments. `resolve('2:255')` gives all its words on the page;
+An ayah is several fragments. `targetWords('2:255')` gives all its words on the page;
 `ayahWordCount(s,a)` returns `{count, complete}` — `complete` is false when the ayah
 continues on another page.
 
@@ -73,7 +73,7 @@ compound written as one word split into two, or the reverse); map at the boundar
 `surahs()` → `{number, arabic, latin, english, place, ayahCount, hasBanner, hasBasmalah}`;
 `divisions()` → juz/hizb/nisf/`rubu_al_hizb` that **start** on the page; `rosettes()` (drawn division
 marks); `sajdahs()`; `ayahMarks()` → real ayah medallions with centre/radius and the
-ornament/numeral path indices (swap or restyle them); `ayahKeys()`; `wordLabel(i)`,
+ornament/numeral path indices (swap or recolorStyle them); `ayahKeys()`; `wordLabel(i)`,
 `ayahLabel(i)` for screen readers.
 
 ## Text and search
@@ -167,7 +167,7 @@ const h = page.style(Sel.wordMark(w, 1), '#1a73e8', {ms: 200});     // the 2nd d
 page.styleTarget('2:255', '#0a7d32', {layer: LAYER.HIGHLIGHT});
 page.hide(Sel.kind('mark'));                                          // reading view without tashkil
 page.theme({ink: '#e8e4dc', diacritics: '#7fb0e8', dots: '#ff8a80', ayahMark: '#b8860b', ms: 300});
-page.restyle(h, '#ff0000', 100); page.unstyle(h); page.setDefaultInk('#231f20');
+page.recolorStyle(h, '#ff0000', 100); page.removeStyle(h); page.setDefaultColor('#231f20');
 ```
 
 Rules live in **layers** (`LAYER.BASE 0`, `THEME 10`, `HIGHLIGHT 50`, `SELECTION 60`,
@@ -188,7 +188,7 @@ function frame(now) {
 
 `Renderer.draw()` calls `page.buildPaths()` for you, and `buildPaths()` memoises, so a
 consumer using the supplied renderer never calls it directly. Call it yourself only when
-you write your own renderer on top of `paint()`/`styled()`: it turns the page's op/point
+you write your own renderer on top of `colors()`/`styledPaths()`: it turns the page's op/point
 arrays into the path objects those lists index, and drawing without it has nothing to
 fill.
 
@@ -202,12 +202,12 @@ ReferenceError: Path2D is not defined
 ```
 
 Everything above drawing is pure wasm and runs anywhere: loading, `words`/`ayahs`/`lines`,
-hit-testing, `layout()`, styles, `paint()` and `styled()` themselves. So a server-side or
+hit-testing, `layout()`, styles, `colors()` and `styledPaths()` themselves. So a server-side or
 worker consumer can use the engine for everything except the final fill, and should stop
 at the display list. The native bindings build paths against their own platform types
 (`CGPath`, `android.graphics.Path`, `ui.Path`) and have no such restriction.
 
-`paint()` is the full display list (a colour per path); `styled()` lists only the
+`colors()` is the full display list (a colour per path); `styledPaths()` lists only the
 paths that differ from the default ink, which is what the cached-base-layer renderer
 repaints. `highlightBoxesView()` and `maskBoxesView()` are viewport-px rectangles.
 
@@ -216,15 +216,15 @@ repaints. `highlightBoxesView()` and `maskBoxesView()` are viewport-px rectangle
 ```js
 const h = page.highlight('2:255', {mode: 'both', ink: '#0a7d32', band: '#0a7d3224',
                                    height: 'pitch', padX: 1.2, radius: 1.5, seam: 0.25, ms: 250});
-page.rehighlight(h, '2:256');      // the band slides to the new words, ink cross-fades
+page.moveHighlight(h, '2:256');      // the band slides to the new words, ink cross-fades
 page.restyleHighlight(h, {...});   // recolour in place
-page.unhighlight(h);               // fades out, then disappears
+page.removeHighlight(h);               // fades out, then disappears
 ```
 
 `mode` is `ink`, `band` or `both`. A band is **one path per highlight** covering every
 printed line the words occupy, with a `seam` overlap so a six-line ayah reads as one
 shape and not six stripes; height is the line pitch or the words' ink. Use one handle
-and `rehighlight` for word-by-word following.
+and `moveHighlight` for word-by-word following.
 
 ## Selection
 
@@ -234,8 +234,8 @@ Draw the band with a highlight in `LAYER.SELECTION`; see `web/example/app.js` fo
 ## Memorisation
 
 ```js
-page.mask('2:255', 'hide' | 'block' | 'blur'); page.revealNext(1); page.hideBack(1);
-page.revealWord(i); page.revealAll(); page.hideAll(); page.unmask(); page.maskHidden()
+page.mask('2:255', 'hide' | 'block' | 'blur'); page.unmaskNext(1); page.maskBack(1);
+page.unmaskWord(i); page.unmaskAll(); page.maskAll(); page.unmask(); page.maskHidden()
 const steps = page.revealStart({lit: 2, byAyah: false, grey: '#c9c4b8', ink: '#231f20', ayahMarks: true, ms: 150});
 page.revealGoto(at); page.revealStop();
 ```
@@ -248,7 +248,7 @@ ending at `at`; a medallion lights with the ayah it closes.
 
 `reciteMap(s, a, nSegments)` returns the words to pair with `nSegments` timings, or
 `null` when the counts disagree — then follow the ayah whole rather than drift.
-Drive the highlight with `rehighlight(h, T.word(i))`.
+Drive the highlight with `moveHighlight(h, T.word(i))`.
 
 ## Crop and export
 
@@ -259,8 +259,8 @@ ink applied). The medallion is kept only when the whole ayah is inside the crop.
 ## Atlas (cross-page)
 
 `atlas.pageOf(s,a)`, `pageRange(page)`, `surah(n)`, `surahs()`, `pageOfSurah(n)`,
-`juz(n)/hizb(n)/rubuAlHizb(n)` → `{surah, ayah, page}`, `juzAt(s,a)`, `divisionAt(kind, s, a)`,
-`pagesOfJuz(n)`, `findSurah('cow' | 'البقرة' | '2')`.
+`juz(n)/hizb(n)/rubuAlHizb(n)` → `{surah, ayah, page}`, `juzOf(s,a)`, `divisionOf(kind, s, a)`,
+`pagesOfJuz(n)`, `searchSurahs('cow' | 'البقرة' | '2')`.
 
 ## Names
 
@@ -296,9 +296,9 @@ says which wrapper binds which.
 | page | `qvp_line_info` | `page.lines[i]` | Return one printed line: number, header flag, word range, bounds, band and centre. |
 | page | `qvp_deco_info` | `page.decos[i]` | Return one decoration: kind, key, line, bounds, text and its path range. |
 | page | `qvp_find_word` | `page.findWord(surah, ayah, word)` | Return the page index of a word by its key, or −1 when the word is not on this page. |
-| page | `qvp_resolve` | `page.resolve(target)` | Expand a target (page, word, ayah, range, line, surah) into word indices in reading order. |
+| page | `qvp_target_words` | `page.targetWords(target)` | Expand a target (page, word, ayah, range, line, surah) into word indices in reading order. |
 | page | `qvp_natural_pitch` | `page.naturalPitch` | Return the printed line spacing of this page, in page units. |
-| metadata | `qvp_surahs_count` | `page.surahs().length` | Return how many surahs have text on this page. |
+| metadata | `qvp_surah_count` | `page.surahs().length` | Return how many surahs have text on this page. |
 | metadata | `qvp_surah_at` | `page.surahs()[i]` | Return the i-th surah on the page: number, ayah count, banner and basmalah flags, place, names. |
 | metadata | `qvp_divisions` | `page.divisions()` | Return the juz, hizb, nisf and rubu_al_hizb divisions that start on this page. |
 | metadata | `qvp_ayah_marks` | `page.ayahMarks()` | Return the ayah-mark medallions on the page with their centres and radii. |
@@ -309,8 +309,7 @@ says which wrapper binds which.
 | metadata | `qvp_recite_map` | `page.reciteMap(surah, ayah, nSegments)` | Map an ayah's words onto `nSegments` recitation timings, or −1 when the counts disagree. |
 | metadata | `qvp_word_label` | `page.wordLabel(i)` | Return an accessibility label for a word. |
 | metadata | `qvp_ayah_label` | `page.ayahLabel(i)` | Return an accessibility label for an ayah fragment. |
-| text and search | `qvp_text` | `page.text(words, form, wordSep, lineSep)` | Return the text of a word list (or the page) in one form, with the given separators. |
-| text and search | `qvp_text_target` | `page.text(target, …)` | The same for a target. |
+| text and search | `qvp_text` | `page.text(target, form, wordSep, lineSep)` | Return the text of a target (the page by default) in one form, with the given separators. |
 | text and search | `qvp_search` | `page.search(query, …)` | Search the page's words in one text form with Arabic normalisation; returns matches with their word index. |
 | text and search | `qvp_arabic` | `engine.strip()`, `.fold()`, `.normalize()`, `.looseKey()`, `.searchKey()` | Apply one of the Arabic text transforms of the search fold to a string. |
 | text and search | `qvp_citation` | `page.citation(words)` | Return a citation such as `2:255-257, 3:1` for a word list. |
@@ -329,23 +328,23 @@ says which wrapper binds which.
 | layout | `qvp_word_bounds_view` | `page.wordBoundsView(i)` | Return a word's bounds in viewport pixels through the current layout. |
 | styles | `qvp_style_add` | `page.style(selector, colour, ms, layer)` | Add a colour rule for a selector on a layer; returns a handle, 0 for a bad selector. |
 | styles | `qvp_style_add_target` | `page.styleTarget(target, colour, ms, layer)` | Add a colour rule for a target's words. |
-| styles | `qvp_style_remove` | `page.unstyle(handle)` | Remove a rule by handle; returns how many rules were removed. |
-| styles | `qvp_style_repaint` | `page.restyle(handle, colour, ms)` | Change a rule's colour in place, with a transition. |
+| styles | `qvp_style_remove` | `page.removeStyle(handle)` | Remove a rule by handle; returns how many rules were removed. |
+| styles | `qvp_style_recolor` | `page.recolorStyle(handle, colour, ms)` | Change a rule's colour in place, with a transition. |
 | styles | `qvp_style_clear` | `page.clearStyles()` | Remove every rule. |
 | styles | `qvp_style_clear_layer` | `page.clearLayer(layer)` | Remove every rule on one layer. |
-| styles | `qvp_style_default` | `page.setDefaultInk(colour)` | Set the ink colour a path has when no rule applies. |
-| styles | `qvp_hide` | `page.hide(selector)` | Add an alpha-0 rule on the top layer; returns its handle. |
+| styles | `qvp_style_default_color` | `page.setDefaultColor(colour)` | Set the ink colour a path has when no rule applies. |
+| styles | `qvp_style_hide` | `page.hide(selector)` | Add an alpha-0 rule on the top layer; returns its handle. |
 | styles | `qvp_theme` | `page.theme(theme)` | Apply a theme (ink, mark families, headers) as one rule set with one handle. |
 | styles | `qvp_style_handles` | `page.styleHandles()` | Return the handles of every live rule. |
 | clock and colours | `qvp_tick` | `page.tick(nowMs)` | Advance transitions to a time; returns 1 while anything is still animating. |
-| clock and colours | `qvp_paint` | `page.paint()` | Return the current colour of every path, mid-transition included. |
-| clock and colours | `qvp_styled` | `page.styled()` | Return the (path, colour) pairs whose colour differs from the default ink. |
+| clock and colours | `qvp_colors` | `page.colors()` | Return the current colour of every path, mid-transition included. |
+| clock and colours | `qvp_styled_paths` | `page.styledPaths()` | Return the (path, colour) pairs whose colour differs from the default ink. |
 | clock and colours | `qvp_color_of` | `page.colorOf(path)` | Return one path's current colour. |
-| highlights | `qvp_highlight` | `page.highlight(target, style)` | Add a highlight (ink, band or both) for a target; returns a handle. |
-| highlights | `qvp_rehighlight` | `page.rehighlight(handle, target)` | Move a highlight to another target: the band slides, the ink cross-fades. |
-| highlights | `qvp_restyle_highlight` | `page.restyleHighlight(handle, style)` | Change a highlight's style in place. |
-| highlights | `qvp_unhighlight` | `page.unhighlight(handle)` | Fade a highlight out and remove it. |
-| highlights | `qvp_clear_highlights` | `page.clearHighlights()` | Remove every highlight. |
+| highlights | `qvp_highlight_add` | `page.highlight(target, style)` | Add a highlight (ink, band or both) for a target; returns a handle. |
+| highlights | `qvp_highlight_move` | `page.moveHighlight(handle, target)` | Move a highlight to another target: the band slides, the ink cross-fades. |
+| highlights | `qvp_highlight_restyle` | `page.restyleHighlight(handle, style)` | Change a highlight's style in place. |
+| highlights | `qvp_highlight_remove` | `page.removeHighlight(handle)` | Fade a highlight out and remove it. |
+| highlights | `qvp_highlight_clear` | `page.clearHighlights()` | Remove every highlight. |
 | highlights | `qvp_highlight_handles` | `page.highlightHandles()` | Return the handles of every live highlight. |
 | highlights | `qvp_highlight_words` | `page.highlightWords(handle)` | Return the words a highlight covers. |
 | highlights | `qvp_highlight_boxes_view` | `page.highlightBoxesView()` | Return every highlight's band rectangles in viewport pixels; draw each id as one nonzero path behind the ink. |
@@ -356,20 +355,20 @@ says which wrapper binds which.
 | memorisation | `qvp_mask` | `page.mask(target, mode)` | Mask a target's words: hide, block or blur. |
 | memorisation | `qvp_mask_from` | `page.maskFrom(word, mode)` | Mask every word from a word index to the end of the page. |
 | memorisation | `qvp_mask_options` | `page.maskOptions(options)` | Set the block colour, padding, radius and direction of the mask. |
-| memorisation | `qvp_reveal_next` | `page.revealNext(n)` | Unhide the next `n` masked words; returns how many are still hidden. |
-| memorisation | `qvp_hide_back` | `page.hideBack(n)` | Re-hide the last `n` revealed words. |
-| memorisation | `qvp_reveal_word` | `page.revealWord(i)` | Unhide one word. |
-| memorisation | `qvp_hide_word` | `page.hideWord(i)` | Hide one word again. |
-| memorisation | `qvp_reveal_all` | `page.revealAll()` | Unhide every masked word. |
-| memorisation | `qvp_hide_all` | `page.hideAll()` | Hide every word in the mask again. |
+| memorisation | `qvp_unmask_next` | `page.unmaskNext(n)` | Unhide the next `n` masked words; returns how many are still hidden. |
+| memorisation | `qvp_mask_back` | `page.maskBack(n)` | Re-hide the last `n` revealed words. |
+| memorisation | `qvp_unmask_word` | `page.unmaskWord(i)` | Unhide one word. |
+| memorisation | `qvp_mask_word` | `page.maskWord(i)` | Hide one word again. |
+| memorisation | `qvp_unmask_all` | `page.unmaskAll()` | Unhide every masked word. |
+| memorisation | `qvp_mask_all` | `page.maskAll()` | Hide every word in the mask again. |
 | memorisation | `qvp_unmask` | `page.unmask()` | Remove the mask. |
 | memorisation | `qvp_mask_hidden` | `page.maskHidden()` | Return the words currently hidden. |
 | memorisation | `qvp_mask_words` | `page.maskWords()` | Return the words in the mask's scope. |
 | memorisation | `qvp_mask_boxes_view` | `page.maskBoxesView()` | Return the block or blur rectangles in viewport pixels for the host to draw. |
 | memorisation | `qvp_reveal_start` | `page.revealStart(options)` | Grey the page and light a moving window of steps; returns the step count. |
 | memorisation | `qvp_reveal_goto` | `page.revealGoto(at)` | Light the window ending at a step; −1 when nothing is lit yet. |
-| memorisation | `qvp_reveal_at` | `page.revealAt()` | Return the current step, −2 when no reveal is running. |
-| memorisation | `qvp_reveal_steps` | `page.revealSteps()` | Return the number of steps in the running reveal. |
+| memorisation | `qvp_reveal_position` | `page.revealPosition()` | Return the current step, −2 when no reveal is running. |
+| memorisation | `qvp_reveal_step_count` | `page.revealStepCount()` | Return the number of steps in the running reveal. |
 | memorisation | `qvp_reveal_step_of` | `page.revealStepOf(i)` | Return the step that lights a word. |
 | memorisation | `qvp_reveal_stop` | `page.revealStop()` | End the reveal and restore the page. |
 | crop | `qvp_crop_bounds` | `page.cropBounds(target, options)` | Return the crop rectangle of a target with padding, and whether the ayah mark is inside it. |
@@ -378,14 +377,14 @@ says which wrapper binds which.
 | atlas | `qvp_atlas_free` | `atlas.free()` | Free the atlas. |
 | atlas | `qvp_atlas_page_of` | `atlas.pageOf(surah, ayah)` | Return the page an ayah is on. |
 | atlas | `qvp_atlas_page_range` | `atlas.pageRange(page)` | Return the first and last ayah keys of a page. |
-| atlas | `qvp_atlas_pages` | `atlas.pages()` | Return how many pages the atlas covers. |
-| atlas | `qvp_atlas_surahs` | `atlas.surahs()` | Return how many surahs the atlas covers. |
+| atlas | `qvp_atlas_page_count` | `atlas.pageCount()` | Return how many pages the atlas covers. |
+| atlas | `qvp_atlas_surah_count` | `atlas.surahs()` | Return how many surahs the atlas covers. |
 | atlas | `qvp_atlas_surah` | `atlas.surah(n)` | Return a surah by number: first page, ayah count, place, names. |
 | atlas | `qvp_atlas_surah_at` | `atlas.surahs()[i]` | Return the i-th surah record. |
 | atlas | `qvp_atlas_division` | `atlas.juz(n)`, `.hizb(n)`, `.nisf(n)`, `.rubuAlHizb(n)` | Return where a division starts: surah, ayah, page. |
-| atlas | `qvp_atlas_division_at` | `atlas.juzAt(surah, ayah)`, `.divisionAt(kind, surah, ayah)` | Return the number of the division that contains an ayah. |
+| atlas | `qvp_atlas_division_of` | `atlas.juzOf(surah, ayah)`, `.divisionOf(kind, surah, ayah)` | Return the number of the division that contains an ayah. |
 | atlas | `qvp_atlas_pages_of_juz` | `atlas.pagesOfJuz(n)` | Return the first and last page of a juz. |
-| atlas | `qvp_atlas_find_surah` | `atlas.findSurah(text)` | Search the surah names in Arabic, Latin or English, or by number. |
+| atlas | `qvp_atlas_search_surahs` | `atlas.searchSurahs(text)` | Search the surah names in Arabic, Latin or English, or by number. |
 | atlas | `qvp_atlas_json` | `atlas.json()` | Return the atlas as JSON. |
 | names | `qvp_name_count` | `engine.nameCount(table)` | Return how many ids a name table has. |
 | names | `qvp_name` | `engine.name(table, id)` | Return the name of an id in a table; empty outside the table. |

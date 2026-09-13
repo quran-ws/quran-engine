@@ -73,9 +73,9 @@ const qvp = useQvp();
 ```
 
 Reconciliation: each `highlights` entry maps to one engine handle. A new id → `highlight`; a changed
-`target` → `rehighlight` (the band slides); a changed `style` → `restyleHighlight`; a removed id →
-`unhighlight` (fades out). `styles` works the same over `style` / `styleTarget` / `hide` / `restyle` /
-`unstyle`; `theme` is one handle; `mask` re-applies `maskOptions` + `mask` when the object changes
+`target` → `moveHighlight` (the band slides); a changed `style` → `restyleHighlight`; a removed id →
+`removeHighlight` (fades out). `styles` works the same over `style` / `styleTarget` / `hide` / `recolorStyle` /
+`removeStyle`; `theme` is one handle; `mask` re-applies `maskOptions` + `mask` when the object changes
 (`null` → `unmask`); `reveal` calls `revealStart` when its config changes and `revealGoto` when `at`
 changes (`null` → `revealStop`). When `pageUri` changes, the old page is freed and every declarative
 prop is re-applied to the new page.
@@ -98,15 +98,15 @@ const qvp = useQvp();
 await qvp.info(); qvp.words(); qvp.word(i); qvp.ayahs(); qvp.lines(); qvp.decos();
 await qvp.search('الرحمان', { mode: 'includes' });     // [{word, wordKey, text, index, loose}]
 await qvp.text('2:255', { form: 'search', wordSep: ' ' });
-await qvp.resolve('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
+await qvp.targetWords('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
 await qvp.attachWords(jsonString);                      // when you do not use the wordsUri prop
 await qvp.surahs(); qvp.divisions(); qvp.ayahMarks(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
 await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ai);
 await qvp.citation([12, 13, 14]);
 await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' }); qvp.cropBounds(target);
 await qvp.select(anchor, focus); qvp.clearSelection(); qvp.selection(); qvp.selectionText('rasm_uthmani', true);
-await qvp.revealNext(1); qvp.hideBack(1); qvp.revealWord(i); qvp.hideWord(i); qvp.revealAll(); qvp.hideAll();
-await qvp.maskHidden(); qvp.maskWords(); qvp.revealSteps(); qvp.revealAt(); qvp.revealStepOf(i);
+await qvp.unmaskNext(1); qvp.maskBack(1); qvp.unmaskWord(i); qvp.maskWord(i); qvp.unmaskAll(); qvp.maskAll();
+await qvp.maskHidden(); qvp.maskWords(); qvp.revealStepCount(); qvp.revealPosition(); qvp.revealStepOf(i);
 await qvp.hitTestView(x, y, { maxDistance: 6 }); qvp.hitTestExactView(x, y); qvp.hitTest(px, py); qvp.hitTestExact(px, py);   // view dp or page units
 await qvp.wordBoundsView(i); qvp.currentLayout(); qvp.layoutGapToFill(); qvp.relayout(); qvp.resetView(); qvp.stats();
 
@@ -118,13 +118,13 @@ Qvp.markName(7); Qvp.kindName(1); Qvp.categoryName(1); Qvp.familyName(3); Qvp.na
 // atlas (cross-page)
 const atlas = await QvpAtlas.load('asset://pages/atlas.qva');
 await atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36);
-await atlas.juz(30); atlas.hizb(3); atlas.rubuAlHizb(7); atlas.juzAt(2, 255); atlas.divisionAt('hizb', 2, 255);
-await atlas.pagesOfJuz(30); atlas.findSurah('cow' | 'البقرة' | '2'); atlas.free();
-// tag-level equivalents: Qvp.atlasPageOf(id, s, a), Qvp.atlasFindSurah(id, text), Qvp.atlasPagesOfJuz(id, n), Qvp.atlasJuzAt(id, s, a), …
+await atlas.juz(30); atlas.hizb(3); atlas.rubuAlHizb(7); atlas.juzOf(2, 255); atlas.divisionOf('hizb', 2, 255);
+await atlas.pagesOfJuz(30); atlas.searchSurahs('cow' | 'البقرة' | '2'); atlas.free();
+// tag-level equivalents: Qvp.atlasPageOf(id, s, a), Qvp.atlasSearchSurahs(id, text), Qvp.atlasPagesOfJuz(id, n), Qvp.atlasJuzOf(id, s, a), …
 ```
 
 All page calls run on the UI thread (where the view draws), so the engine is never touched from two
-threads. Only `maskHidden`, `unmask` (via the `mask` prop), `revealNext` etc. mutate state; queries are
+threads. Only `maskHidden`, `unmask` (via the `mask` prop), `unmaskNext` etc. mutate state; queries are
 microseconds.
 
 ## Layout of this package

@@ -39,7 +39,7 @@ Sampled 87 pages: 891 `data-kind="ayah_number"` paths, **891 distinct outlines**
 each holding 1–5 subpaths (the digits) with no digit boundaries. Expected: one
 `<path>` per digit with a glyph id (e.g. `data-glyph="digit-3"`), so the engine
 can store ten digit glyphs once and place instances. Saves ~2–3 % of the mushaf
-and lets apps restyle or replace the numerals.
+and lets apps recolorStyle or replace the numerals.
 
 ### 3. Surah header and basmalah ink is baked per instance
 

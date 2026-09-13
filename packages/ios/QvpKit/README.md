@@ -1,7 +1,7 @@
 # QvpKit — Swift wrapper for the QVP vector mushaf engine
 
 A Swift package over the engine's C ABI (`crates/qvp-ffi/include/qvp.h`), plus a SwiftUI demo.
-The engine decides everything (layout, hit-testing, style resolution, highlights, masks,
+The engine computes everything (layout, hit-testing, style resolution, highlights, masks,
 search, text); the package only marshals the C structs and draws with CoreGraphics. Class and
 method names mirror the Kotlin wrapper (`packages/android/qvp`) and `web/qvp.js`, so
 `docs/API.md` applies one to one. The package ships **no page data**.
@@ -63,7 +63,7 @@ QvpEngine.gapToFill(pageW:pageH:lines:viewW:viewH:); QvpEngine.wastedFraction(pa
 
 let page = try QvpPage(bytes: data)                     // geometry copied once: page.ops / page.pts / page.table (stride 8)
 page.words / ayahs / lines / decos;  page.wordForm(i, .rasmImlai);  page.findWord(2, 255, 3);  page.buildPaths()  // [CGPath]
-page.resolve("2:255")                                   // "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | Target.word(i) | [w0, w1]
+page.targetWords("2:255")                                   // "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | Target.word(i) | [w0, w1]
 page.surahs(); page.divisions(); page.ayahMarks(); page.rosettes(); page.sajdahs(); page.ayahKeys()
 page.ayahWordCount(2, 255); page.reciteMap(2, 255, nSegments: 4); page.wordLabel(i); page.ayahLabel(ai)
 page.text("2:255"); page.search("الله", mode: .includes); page.citation(words); page.attachWords(json); page.hasForm(.qpc)
@@ -73,21 +73,21 @@ page.lineBands(); page.hitAreas()
 let l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true))  // l.scale, l.lineDy[line]
 page.wordBoundsView(i)
 let h = page.style(Selector.wordMark(w, 1), 0xef6c00ff, transitionMs: 200, layer: QvpLayer.TOP)   // Selector.path/word/ayah/line/mark/category/family/kind/deco…
-page.styleTarget("2:255", rgba); page.restyle(h, rgba); page.unstyle(h); page.hide(Selector.kind(QvpKind.MARK))
-page.theme(QvpTheme(diacritics: 0x1a73e8ff, marks: ["shaddah": 0x0a7d32ff])); page.setDefaultInk(0x231f20ff); page.clearStyles(); page.clearLayer(QvpLayer.THEME)
+page.styleTarget("2:255", rgba); page.recolorStyle(h, rgba); page.removeStyle(h); page.hide(Selector.kind(QvpKind.MARK))
+page.theme(QvpTheme(diacritics: 0x1a73e8ff, marks: ["shaddah": 0x0a7d32ff])); page.setDefaultColor(0x231f20ff); page.clearStyles(); page.clearLayer(QvpLayer.THEME)
 page.tick(nowMs)                                        // true while animating — keep drawing frames
-page.paint(); page.styled(); page.colorOf(i)             // display list (per-path colours)
-let hl = page.highlight("2:255", QvpHighlightStyle(mode: .both, transitionMs: 200)); page.rehighlight(hl, Target.word(3)); page.unhighlight(hl)
+page.colors(); page.styledPaths(); page.colorOf(i)             // display list (per-path colours)
+let hl = page.highlight("2:255", QvpHighlightStyle(mode: .both, transitionMs: 200)); page.moveHighlight(hl, Target.word(3)); page.removeHighlight(hl)
 page.highlightBoxesView(); page.wordBands(words)             // viewport px; draw each id as one nonzero path behind the ink
 page.select(anchor, focus); page.selection(); page.selectionText(.rasmUthmani, citation: true); page.clearSelection()
-page.mask("2:255", .hide); page.revealNext(); page.hideBack(); page.unmask(); page.maskHidden(); page.maskBoxesView()
-page.revealStart(lit: 2); page.revealGoto(3); page.revealAt(); page.revealSteps(); page.revealStop()
+page.mask("2:255", .hide); page.unmaskNext(); page.maskBack(); page.unmask(); page.maskHidden(); page.maskBoxesView()
+page.revealStart(lit: 2); page.revealGoto(3); page.revealPosition(); page.revealStepCount(); page.revealStop()
 page.cropBounds("2:255"); page.cropSvg("2:255:1", background: 0xfffdf7ff)
 page.close()                                             // frees the native page (also on deinit)
 
 let atlas = try QvpAtlas(bytes: atlasData)
 atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36)
-atlas.juz(30); atlas.hizb(1); atlas.rubuAlHizb(1); atlas.juzAt(2, 255); atlas.pagesOfJuz(30); atlas.findSurah("cow")
+atlas.juz(30); atlas.hizb(1); atlas.rubuAlHizb(1); atlas.juzOf(2, 255); atlas.pagesOfJuz(30); atlas.searchSurahs("cow")
 
 QvpColor.parse("#d6a326", alpha: 0.3)  // 0xd6a3264d
 QvpColor.withAlpha(rgba, 0.18); QvpColor.cgColor(rgba); QvpColor.rgba(cgColor)
@@ -115,7 +115,7 @@ view.lastBaseMs / lastOverlayMs / lastHitUs / lastBasePaths / lastOverlayPaths /
 
 Draw order per frame: `highlightBoxesView()` (one nonzero path per highlight id, behind the ink) →
 cached base ink (a bitmap of every non-styled path at the current per-line transform, rebuilt only
-when the styled set, layout or pan/zoom changes) → `styled()` paths → `maskBoxesView()`. Per-line
+when the styled set, layout or pan/zoom changes) → `styledPaths()` paths → `maskBoxesView()`. Per-line
 transform: `vx = ox + x·scale`, `vy = oy + (y + lineDy[line])·scale`, with pinch/pan on top. Each
 frame calls `page.tick(now)`; a `CADisplayLink` keeps running while it returns true. Tap → gap-aware
 `hitTestView` (max distance 6) → `onWordTap` / `onDecoTap` / `onEmptyTap`; long-press + drag →
@@ -210,7 +210,7 @@ cd ../Demo && xcodebuild test -scheme Demo -destination 'platform=iOS Simulator,
 ```
 
 `QvpKitTests` mirrors `packages/flutter/qvp_flutter/test/qvp_flutter_test.dart`: page 042 has 147
-words / 1061 paths / 15 lines, `search("الله")` → 7, `resolve("2:255")` → 50 words, layout
+words / 1061 paths / 15 lines, `search("الله")` → 7, `targetWords("2:255")` → 50 words, layout
 690×1100 fill-height → scale 2, highlight tick / 6 band boxes, mask / reveal, selection, crop,
 atlas `pageOf(2, 255)` = 42 and `pagesOfJuz(30)` = 582…604. It reads `dist/pages` from the repo
 (or `$QVP_REPO`).

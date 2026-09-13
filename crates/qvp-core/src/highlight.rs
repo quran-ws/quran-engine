@@ -122,10 +122,10 @@ impl Page {
         by_line.into_iter().flatten().collect()
     }
 
-    /// Add a highlight. Returns a handle; `unhighlight(handle)` removes it (animated when
+    /// Add a highlight. Returns a handle; `remove_highlight(handle)` removes it (animated when
     /// transition_ms > 0). Ink recolouring goes through the style engine under the same handle.
     pub fn highlight(&mut self, target: &Target, style: HighlightStyle) -> Handle {
-        let words = self.resolve(target);
+        let words = self.target_words(target);
         let h = self.styles.new_handle();
         self.install_highlight(h, words, style);
         h
@@ -167,8 +167,8 @@ impl Page {
     }
 
     /// Move an existing highlight to a new target (the band slides, ink fades).
-    pub fn rehighlight(&mut self, handle: Handle, target: &Target) -> bool {
-        let words = self.resolve(target);
+    pub fn move_highlight(&mut self, handle: Handle, target: &Target) -> bool {
+        let words = self.target_words(target);
         let Some(i) = self.highlights.iter().position(|x| x.handle == handle && !x.removing) else { return false };
         let style = self.highlights[i].style;
         // ink rules: replace under the same handle
@@ -231,7 +231,7 @@ impl Page {
     }
 
     /// Remove a highlight (fades out over its transition, then disappears).
-    pub fn unhighlight(&mut self, handle: Handle) -> bool {
+    pub fn remove_highlight(&mut self, handle: Handle) -> bool {
         self.styles.remove(handle);
         let Some(i) = self.highlights.iter().position(|x| x.handle == handle && !x.removing) else { return false };
         let now = self.clock_ms;

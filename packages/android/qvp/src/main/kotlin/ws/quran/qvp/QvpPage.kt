@@ -102,9 +102,9 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun wordForm(i: Int, form: Form = Form.RASM_UTHMANI): String = QvpNative.wordForm(h, i, form.id) ?: ""
     fun findWord(surah: Int, ayah: Int, word: Int): Int = QvpNative.findWord(h, surah, ayah, word)
     fun target(s: String) = Target.parse(s, this)
-    fun resolve(t: Target): IntArray = QvpNative.resolve(h, t.arr)
-    fun resolve(s: String) = resolve(target(s))
-    fun text(t: Target, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n"): String = QvpNative.textTarget(h, t.arr, form.id, wordSep, lineSep)
+    fun targetWords(t: Target): IntArray = QvpNative.resolve(h, t.arr)
+    fun targetWords(s: String) = targetWords(target(s))
+    fun text(t: Target, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n"): String = QvpNative.text(h, t.arr, form.id, wordSep, lineSep)
     fun text(s: String, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n") = text(target(s), form, wordSep, lineSep)
     fun search(query: String, form: Form = Form.SEARCH, mode: SearchMode = SearchMode.INCLUDES, normalize: Boolean = true, loose: Boolean = true, limit: Int = 0): List<QvpMatch> {
         val v = QvpNative.search(h, query, form.id, mode.id, normalize, loose, limit)
@@ -117,7 +117,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun hasForm(form: Form) = QvpNative.hasForm(h, form.id)
 
     // ── metadata ──
-    fun surahs(): List<QvpSurah> = List(QvpNative.surahsCount(h)) { i -> val n = QvpNative.surahNums(h, i)!!; val s = QvpNative.surahNames(h, i)!!
+    fun surahs(): List<QvpSurah> = List(QvpNative.surahCount(h)) { i -> val n = QvpNative.surahNums(h, i)!!; val s = QvpNative.surahNames(h, i)!!
         QvpSurah(n[0].toInt(), n[1].toInt(), n[2] > 0.5f, n[3] > 0.5f, QvpEngine.placeName(n[4].toInt()), n[5].toInt(), s[0], s[1], s[2]) }
     fun divisions(): List<QvpDivision> { val v = QvpNative.divisions(h); return List(v.size / 6) { k -> QvpDivision(Division.entries[v[k * 6]], v[k * 6 + 2], v[k * 6 + 3], v[k * 6 + 4], v[k * 6 + 1], v[k * 6 + 5]) } }
     fun ayahMarks(): List<QvpAyahMark> { val v = QvpNative.ayahMarks(h); return List(v.size / 9) { k -> val o = k * 9; QvpAyahMark(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3].toInt(), v[o + 4], v[o + 5], v[o + 6], v[o + 7].toInt(), v[o + 8].toInt()) } }
@@ -155,12 +155,12 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     // ── styles (handles undo exactly) ──
     fun style(sel: Selector, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAdd(h, layer, sel.arr, rgba, transitionMs)
     fun styleTarget(t: Target, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAddTarget(h, layer, t.arr, rgba, transitionMs)
-    fun unstyle(handle: Int) = QvpNative.styleRemove(h, handle)
-    fun restyle(handle: Int, rgba: Int, transitionMs: Int = 0) = QvpNative.styleRepaint(h, handle, rgba, transitionMs)
+    fun removeStyle(handle: Int) = QvpNative.styleRemove(h, handle)
+    fun recolorStyle(handle: Int, rgba: Int, transitionMs: Int = 0) = QvpNative.styleRecolor(h, handle, rgba, transitionMs)
     fun hide(sel: Selector): Int = QvpNative.hide(h, sel.arr)
     fun clearStyles() = QvpNative.styleClear(h)
     fun clearLayer(layer: Int) = QvpNative.styleClearLayer(h, layer)
-    fun setDefaultInk(rgba: Int) { defaultInk = rgba; QvpNative.styleDefault(h, rgba) }
+    fun setDefaultColor(rgba: Int) { defaultInk = rgba; QvpNative.styleDefaultColor(h, rgba) }
     fun theme(t: QvpTheme): Int {
         val z = { c: Int? -> c ?: 0 }
         val base = intArrayOf(z(t.ink), z(t.diacritics), z(t.dots), z(t.waqf), z(t.sifr), z(t.ayahMark), z(t.numeral), z(t.headers), t.transitionMs)
@@ -172,17 +172,17 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     // ── clock & display list ──
     /** advance animations; true while something is still moving */
     fun tick(nowMs: Double): Boolean = QvpNative.tick(h, nowMs)
-    fun paint(): IntArray = QvpNative.paint(h)
+    fun colors(): IntArray = QvpNative.colors(h)
     /** flat pairs [pathIdx, rgba, ...] for paths ≠ default ink */
-    fun styled(): IntArray = QvpNative.styled(h)
+    fun styledPaths(): IntArray = QvpNative.styledPaths(h)
     fun colorOf(path: Int) = QvpNative.colorOf(h, path)
 
     // ── highlights ──
     fun highlight(t: Target, style: QvpHighlightStyle = QvpHighlightStyle()): Int = QvpNative.highlight(h, t.arr, style.ints(), style.floats())
     fun highlight(s: String, style: QvpHighlightStyle = QvpHighlightStyle()) = highlight(target(s), style)
-    fun rehighlight(handle: Int, t: Target) = QvpNative.rehighlight(h, handle, t.arr)
+    fun moveHighlight(handle: Int, t: Target) = QvpNative.moveHighlight(h, handle, t.arr)
     fun restyleHighlight(handle: Int, style: QvpHighlightStyle) = QvpNative.restyleHighlight(h, handle, style.ints(), style.floats())
-    fun unhighlight(handle: Int) = QvpNative.unhighlight(h, handle)
+    fun removeHighlight(handle: Int) = QvpNative.removeHighlight(h, handle)
     fun clearHighlights() = QvpNative.clearHighlights(h)
     fun highlightHandles(): IntArray = QvpNative.highlightHandles(h)
     fun highlightWords(handle: Int): IntArray = QvpNative.highlightWords(h, handle)
@@ -201,12 +201,12 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun mask(t: Target, mode: MaskMode = MaskMode.HIDE) = QvpNative.mask(h, t.arr, mode.id)
     fun maskFrom(wi: Int, mode: MaskMode = MaskMode.HIDE) = QvpNative.maskFrom(h, wi, mode.id)
     fun maskOptions(blockColor: Int = QvpDefaults.MASK_BLOCK, padX: Float = QvpDefaults.MASK_PAD, padY: Float = QvpDefaults.MASK_PAD, radius: Float = QvpDefaults.MASK_RADIUS, reverse: Boolean = false) = QvpNative.maskOptions(h, blockColor, padX, padY, radius, reverse)
-    fun revealNext(n: Int = 1) = QvpNative.revealNext(h, n)
-    fun hideBack(n: Int = 1) = QvpNative.hideBack(h, n)
-    fun revealWord(wi: Int) = QvpNative.revealWord(h, wi)
-    fun hideWord(wi: Int) = QvpNative.hideWord(h, wi)
-    fun revealAll() = QvpNative.revealAll(h)
-    fun hideAll() = QvpNative.hideAll(h)
+    fun unmaskNext(n: Int = 1) = QvpNative.unmaskNext(h, n)
+    fun maskBack(n: Int = 1) = QvpNative.maskBack(h, n)
+    fun unmaskWord(wi: Int) = QvpNative.unmaskWord(h, wi)
+    fun maskWord(wi: Int) = QvpNative.maskWord(h, wi)
+    fun unmaskAll() = QvpNative.unmaskAll(h)
+    fun maskAll() = QvpNative.maskAll(h)
     fun unmask() = QvpNative.unmask(h)
     fun maskHidden(): IntArray = QvpNative.maskHidden(h)
     fun maskWords(): IntArray = QvpNative.maskWords(h)
@@ -214,8 +214,8 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** greyed page with a lit window; returns steps */
     fun revealStart(lit: Int = QvpDefaults.REVEAL_LIT, byAyah: Boolean = false, grey: Int = QvpDefaults.REVEAL_GREY, ink: Int = QvpDefaults.INK, ayahMarks: Boolean = true, transitionMs: Int = 0) = QvpNative.revealStart(h, lit, byAyah, grey, ink, ayahMarks, transitionMs)
     fun revealGoto(at: Long) = QvpNative.revealGoto(h, at)
-    fun revealAt(): Long? = QvpNative.revealAt(h).let { if (it == -2L) null else it }
-    fun revealSteps() = QvpNative.revealSteps(h)
+    fun revealPosition(): Long? = QvpNative.revealPosition(h).let { if (it == -2L) null else it }
+    fun revealStepCount() = QvpNative.revealStepCount(h)
     fun revealStepOf(wi: Int) = QvpNative.revealStepOf(h, wi)
     fun revealStop() = QvpNative.revealStop(h)
 
@@ -243,18 +243,18 @@ class QvpAtlas(bytes: ByteArray) : AutoCloseable {
     private fun surah(v: Array<String>?) = v?.let { QvpAtlasSurah(it[0].toInt(), it[1].toInt(), it[2].toInt(), QvpEngine.placeName(it[3].toIntOrNull() ?: 255), it[4], it[5], it[6]) }
     fun pageOf(surah: Int, ayah: Int): Int? = QvpNative.atlasPageOf(h, surah, ayah).let { if (it < 0) null else it }
     fun pageRange(page: Int): Pair<Pair<Int, Int>, Pair<Int, Int>>? = QvpNative.atlasPageRange(h, page)?.let { (it[0] to it[1]) to (it[2] to it[3]) }
-    fun pages() = QvpNative.atlasPages(h)
+    fun pageCount() = QvpNative.atlasPageCount(h)
     fun surah(n: Int) = surah(QvpNative.atlasSurah(h, n))
-    fun surahs(): List<QvpAtlasSurah> = List(QvpNative.atlasSurahs(h)) { surah(QvpNative.atlasSurahAt(h, it))!! }
+    fun surahs(): List<QvpAtlasSurah> = List(QvpNative.atlasSurahCount(h)) { surah(QvpNative.atlasSurahAt(h, it))!! }
     fun pageOfSurah(n: Int) = surah(n)?.page
     fun division(kind: Division, n: Int): QvpAtlasRubuAlHizb? = QvpNative.atlasDivision(h, kind.id, n)?.let { QvpAtlasRubuAlHizb(it[0], it[1], it[2], it[3]) }
     fun juz(n: Int) = division(Division.JUZ, n)
     fun hizb(n: Int) = division(Division.HIZB, n)
     fun rubuAlHizb(n: Int) = division(Division.RUBU_AL_HIZB, n)
-    fun divisionAt(kind: Division, surah: Int, ayah: Int): Int? = QvpNative.atlasDivisionAt(h, kind.id, surah, ayah).let { if (it < 0) null else it }
-    fun juzAt(surah: Int, ayah: Int) = divisionAt(Division.JUZ, surah, ayah)
+    fun divisionOf(kind: Division, surah: Int, ayah: Int): Int? = QvpNative.atlasDivisionOf(h, kind.id, surah, ayah).let { if (it < 0) null else it }
+    fun juzOf(surah: Int, ayah: Int) = divisionOf(Division.JUZ, surah, ayah)
     fun pagesOfJuz(n: Int): Pair<Int, Int>? = QvpNative.atlasPagesOfJuz(h, n)?.let { it[0] to it[1] }
-    fun findSurah(text: String): List<QvpAtlasSurah> = QvpNative.atlasFindSurah(h, text).toList().mapNotNull { n -> surah(n) }
+    fun searchSurahs(text: String): List<QvpAtlasSurah> = QvpNative.atlasSearchSurahs(h, text).toList().mapNotNull { n -> surah(n) }
     @Synchronized
     override fun close() {
         val handle = nativeHandle

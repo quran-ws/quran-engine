@@ -55,7 +55,7 @@ page.close()
 `QvpPage` and `QvpAtlas` are `AutoCloseable`. Closing either object is idempotent; engine operations
 after close throw `IllegalStateException`. Keep application-specific Compose surfaces,
 accessibility nodes, navigation, and state outside the SDK and use `QvpPage.buildPaths()`,
-`resolve()`, `cropBounds()`, `hitAreas()`, and the style/mask APIs as their data layer.
+`targetWords()`, `cropBounds()`, `hitAreas()`, and the style/mask APIs as their data layer.
 
 ## Verify and benchmark
 

@@ -132,7 +132,7 @@ class QvpPageView extends StatefulWidget {
   /// Paper colour behind the ink (null = transparent).
   final Color? paper;
 
-  /// Default ink; applied to the page with `setDefaultInk` when it changes. Anything [rgba] accepts.
+  /// Default ink; applied to the page with `setDefaultColor` when it changes. Anything [rgba] accepts.
   final Object? defaultInk;
   final QvpViewController? controller;
 
@@ -199,7 +199,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
 
   void _applyInk() {
     final ink = widget.defaultInk;
-    if (ink != null && rgba(ink) != widget.page.defaultInk) widget.page.setDefaultInk(ink);
+    if (ink != null && rgba(ink) != widget.page.defaultInk) widget.page.setDefaultColor(ink);
   }
 
   @override
@@ -229,8 +229,8 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     if (_selHandle != 0 && !_selecting && !page.isDisposed && page.selection().isEmpty) {
       final h = _selHandle;
       _selHandle = 0;
-      page.unhighlight(h);
-      return; // unhighlight notifies again
+      page.removeHighlight(h);
+      return; // removeHighlight notifies again
     }
     _ensureTicking();
   }
@@ -328,7 +328,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     page.select(_selAnchor, focus);
     final ws = page.selection();
     if (_selHandle != 0) {
-      page.rehighlight(_selHandle, T.words(ws));
+      page.moveHighlight(_selHandle, T.words(ws));
     } else {
       _selHandle = page.highlight(T.words(ws), QvpHighlightStyle(mode: 'band', band: widget.selectionBand, padX: 0.6, ms: 0, layer: QvpLayer.selection));
     }
@@ -343,7 +343,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   /// Clears the drag selection and its band.
   void clearSelection() {
     if (_selHandle != 0) {
-      page.unhighlight(_selHandle);
+      page.removeHighlight(_selHandle);
       _selHandle = 0;
     }
     page.clearSelection();
@@ -515,7 +515,7 @@ class _QvpPainter extends CustomPainter {
     if (page.isDisposed) return;
     final paths = cache.buildPaths(page);
     final l = page.currentLayout;
-    final styled = page.styled();
+    final styled = page.styledPaths();
     final styledSet = <int>{for (final s in styled) s.path};
     final ink = page.defaultInk;
 
