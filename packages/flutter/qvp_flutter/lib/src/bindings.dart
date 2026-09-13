@@ -779,6 +779,9 @@ final class QvpBindings {
   late final void Function(int, PtrStr) categoryName = lib.lookupFunction<ffi.Void Function(ffi.Uint8, PtrStr), void Function(int, PtrStr)>('qvp_category_name');
   late final int Function(PtrU8, int) markFromName = lib.lookupFunction<ffi.Uint8 Function(PtrU8, ffi.Uint32), int Function(PtrU8, int)>('qvp_mark_from_name');
   late final int Function(int) markCategory = lib.lookupFunction<ffi.Uint8 Function(ffi.Uint8), int Function(int)>('qvp_mark_category');
+  late final int Function(int) nameCount = lib.lookupFunction<ffi.Uint32 Function(ffi.Uint8), int Function(int)>('qvp_name_count');
+  late final void Function(int, int, PtrStr) name = lib.lookupFunction<ffi.Void Function(ffi.Uint8, ffi.Uint8, PtrStr), void Function(int, int, PtrStr)>('qvp_name');
+  late final int Function(int, PtrU8, int) nameId = lib.lookupFunction<ffi.Uint8 Function(ffi.Uint8, PtrU8, ffi.Uint32), int Function(int, PtrU8, int)>('qvp_name_id');
   late final int Function() version = lib.lookupFunction<ffi.Uint32 Function(), int Function()>('qvp_version');
   late final ffi.Pointer<ffi.Char> Function() engineName =
       lib.lookupFunction<ffi.Pointer<ffi.Char> Function(), ffi.Pointer<ffi.Char> Function()>('qvp_engine_name');

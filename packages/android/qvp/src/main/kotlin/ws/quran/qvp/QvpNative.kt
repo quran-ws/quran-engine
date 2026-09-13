@@ -130,5 +130,8 @@ internal object QvpNative {
     @JvmStatic external fun categoryName(c: Int): String
     @JvmStatic external fun markFromName(name: String): Int
     @JvmStatic external fun markCategory(m: Int): Int
+    @JvmStatic external fun nameCount(table: Int): Int
+    @JvmStatic external fun name(table: Int, id: Int): String
+    @JvmStatic external fun nameId(table: Int, name: String): Int
     @JvmStatic external fun version(): Int
 }

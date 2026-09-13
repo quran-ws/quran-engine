@@ -62,6 +62,9 @@ it. A second table lists platform-level gaps.
 | `qvp_style_remove` | react-native | untriaged |
 | `qvp_word_info` | react-native | untriaged |
 
+| `qvp_name_count` | react-native | untriaged (names reach JavaScript through the module's constants) |
+| `qvp_name_id` | react-native | untriaged (names reach JavaScript through the module's constants) |
+
 `untriaged` marks a gap found by the first parity run. Each one gets an issue or a binding
 in the wrapper audit.
 
@@ -76,7 +79,7 @@ in the wrapper audit.
 ## Matrix
 
 <!-- parity:begin -->
-111 symbols in the header, 111 Rust exports. web: 106 bound, android: 108 bound, flutter: 111 bound, ios: 109 bound, react-native: 73 bound.
+114 symbols in the header, 114 Rust exports. web: 109 bound, android: 111 bound, flutter: 114 bound, ios: 112 bound, react-native: 74 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -144,6 +147,9 @@ in the wrapper audit.
 | `qvp_mask_hidden` | yes | yes | yes | yes | yes |
 | `qvp_mask_options` | yes | yes | yes | yes | yes |
 | `qvp_mask_words` | yes | yes | yes | yes | yes |
+| `qvp_name` | yes | yes | yes | yes | yes |
+| `qvp_name_count` | yes | yes | yes | yes | gap (untriaged (names reach JavaScript through the module's constants)) |
+| `qvp_name_id` | yes | yes | yes | yes | gap (untriaged (names reach JavaScript through the module's constants)) |
 | `qvp_natural_pitch` | yes | yes | yes | yes | yes |
 | `qvp_page_free` | yes | yes | yes | yes | gap (untriaged) |
 | `qvp_page_info` | yes | yes | yes | yes | yes |

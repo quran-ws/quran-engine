@@ -68,7 +68,7 @@ object Marshal {
         val a = num(m["a"]) ?: 0; val b = num(m["b"]) ?: 0; val c = num(m["c"]) ?: 0
         return when (kindOf(m["kind"], SEL_KINDS)) {
             0 -> Selector.page(); 1 -> Selector.path(a); 2 -> Selector.wordPath(a, b); 3 -> Selector.wordMark(a, b)
-            4 -> Selector.wordMarkNamed(a, (m["mark"] as? String) ?: QVP_MARKS.getOrElse(b) { "" }, c)
+            4 -> Selector.wordMarkNamed(a, (m["mark"] as? String) ?: QvpEngine.markName(b), c)
             5 -> Selector.wordBody(a); 6 -> Selector.wordMarks(a); 7 -> Selector.word(a); 8 -> Selector.ayah(a, b); 9 -> Selector.line(a)
             10 -> (m["mark"] as? String)?.let { Selector.mark(it) } ?: Selector.mark(a)
             11 -> Selector.category(a); 12 -> Selector.family(a); 13 -> Selector.kind(a); 14 -> Selector.deco(a); 15 -> Selector.decoIdx(a)
@@ -127,7 +127,7 @@ object Marshal {
             "x0" to w.x0, "y0" to w.y0, "x1" to w.x1, "y1" to w.y1, "text" to w.text, "firstPath" to w.firstPath, "nPaths" to w.nPaths,
             "wordKey" to w.wordKey, "ayahKey" to w.ayahKey, "forms" to forms, "label" to p.wordLabel(w.idx), "paths" to paths)
     }
-    fun deco(d: QvpDecoration): Map<String, Any?> = mapOf("idx" to d.idx, "kind" to d.kind, "kindName" to listOf("ayah-ayahMark", "surah-name", "basmalah", "division-mark", "sajdah-mark").getOrElse(d.kind) { "other" },
+    fun deco(d: QvpDecoration): Map<String, Any?> = mapOf("idx" to d.idx, "kind" to d.kind, "kindName" to QvpEngine.decorationName(d.kind).ifEmpty { "other" },
         "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "x0" to d.x0, "y0" to d.y0, "x1" to d.x1, "y1" to d.y1, "text" to d.text, "firstPath" to d.firstPath, "nPaths" to d.nPaths)
     fun hit(p: QvpPage, h: QvpHitEx): Map<String, Any?> {
         val w = if (h.word >= 0) p.words[h.word] else null

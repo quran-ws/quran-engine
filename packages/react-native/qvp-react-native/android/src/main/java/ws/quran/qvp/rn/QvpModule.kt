@@ -141,8 +141,12 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     // ── names ──
     @ReactMethod fun markName(m: Int, promise: Promise) = ui(promise) { QvpEngine.markName(m) }
     @ReactMethod fun markFromName(s: String, promise: Promise) = ui(promise) { QvpEngine.markFromName(s) }
-    override fun getConstants(): Map<String, Any> = mapOf("version" to QvpEngine.version(), "marks" to QVP_MARKS,
-        "kinds" to (0..4).map { QvpEngine.kindName(it) }, "families" to (0..7).map { QvpEngine.familyName(it) }, "categories" to (0..8).map { QvpEngine.categoryName(it) })
+    /** Every name table, read from the engine; the JavaScript side resolves names with these. */
+    override fun getConstants(): Map<String, Any> = mapOf("version" to QvpEngine.version(),
+        "marks" to QvpEngine.names(QvpEngine.Names.MARK), "kinds" to QvpEngine.names(QvpEngine.Names.KIND),
+        "families" to QvpEngine.names(QvpEngine.Names.FAMILY), "categories" to QvpEngine.names(QvpEngine.Names.CATEGORY),
+        "decorations" to QvpEngine.names(QvpEngine.Names.DECORATION), "divisions" to QvpEngine.names(QvpEngine.Names.DIVISION),
+        "places" to QvpEngine.names(QvpEngine.Names.PLACE))
 
     override fun invalidate() { atlases.values.forEach { it.close() }; atlases.clear(); atlasByUri.clear(); super.invalidate() }
     companion object { const val NAME = "QvpModule" }

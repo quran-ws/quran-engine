@@ -351,4 +351,7 @@ jstring FN(kindName)(JNIEnv* env, jclass c, jint k) { QvpStr s; qvp_kind_name((u
 jstring FN(categoryName)(JNIEnv* env, jclass c, jint k) { QvpStr s; qvp_category_name((uint8_t)k, &s); return qstr(env, s); }
 jint FN(markFromName)(JNIEnv* env, jclass c, jstring name) { uint32_t n; uint8_t* b = jbytes(env, name, &n); jint r = qvp_mark_from_name(b, n); free(b); return r; }
 jint FN(markCategory)(JNIEnv* env, jclass c, jint m) { return qvp_mark_category((uint8_t)m); }
+jint FN(nameCount)(JNIEnv* env, jclass c, jint table) { return (jint)qvp_name_count((uint8_t)table); }
+jstring FN(name)(JNIEnv* env, jclass c, jint table, jint id) { QvpStr s; qvp_name((uint8_t)table, (uint8_t)id, &s); return qstr(env, s); }
+jint FN(nameId)(JNIEnv* env, jclass c, jint table, jstring name) { uint32_t n; uint8_t* b = jbytes(env, name, &n); jint r = qvp_name_id((uint8_t)table, b, n); free(b); return r; }
 jint FN(version)(JNIEnv* env, jclass c) { return (jint)qvp_version(); }

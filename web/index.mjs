@@ -11,7 +11,7 @@ if (!QVP) throw new Error('@quran.ws/engine: qvp.js did not define globalThis.QV
 
 export const {
   QvpEngine, QvpPage, QvpAtlas, CanvasRenderer,
-  Sel, T, KIND, FAMILY, CATEGORY, DECO, FORM, LAYER, MARK, MARKS, NONE,
+  Sel, T, KIND, FAMILY, CATEGORY, DECO, FORM, LAYER, NAMES_TABLE, NONE,
   css, rgba, parseTarget,
 } = QVP;
 

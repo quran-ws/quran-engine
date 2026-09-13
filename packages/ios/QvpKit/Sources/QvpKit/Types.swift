@@ -20,9 +20,8 @@ public enum BandHeight: Int { case pitch = 0, ink }
 public enum MaskMode: Int { case hide = 0, block, blur }
 public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rubuAlHizb }
 
-/// Mark ids by name (index = id; 255 = unknown).
-public let QVP_MARKS: [String] = ["", "fathah", "kasrah", "dammah", "tanwin_al_fath", "tanwin_al_kasr", "tanwin_al_damm", "shaddah", "sukun", "maddah", "hamzah", "hamzat_al_wasl", "omitted_alif", "small_waw", "small_yaa", "small_noon", "dot", "two_dots", "three_dots", "rounded_zero", "rectangular_zero", "waqf_jaiz_mustawi_al_tarafayn", "waqf_jaiz_waqf_awla", "waqf_jaiz_wasl_awla", "waqf_lazim", "waqf_al_muanaqah", "saktah", "small_meem", "hizb", "sajdah", "sajdah_mark", "sajdah_line", "seen_al_qiraah", "tashil", "ishmam", "imalah"]
-public func markId(_ name: String) -> Int { QVP_MARKS.firstIndex(of: name) ?? 255 }
+/// A mark id by its name, from the engine (255 = unknown).
+public func markId(_ name: String) -> Int { QvpEngine.markFromName(name) }
 
 /// 0xRRGGBBAA helpers.
 public enum QvpColor {
@@ -210,7 +209,7 @@ extension QvpStr {
     }
 }
 func idx(_ v: UInt32) -> Int { v == QVP_NONE ? -1 : Int(v) }
-func place(_ p: UInt8) -> String { p == 0 ? "makkah" : p == 1 ? "madinah" : "" }
+func place(_ p: UInt8) -> String { QvpEngine.placeName(Int(p)) }
 /// Call an `(out, cap) → total` C function, growing the buffer until everything fits.
 func collect<T>(_ initial: Int = 256, _ f: (UnsafeMutablePointer<T>, UInt32) -> UInt32) -> [T] {
     var cap = initial

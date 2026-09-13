@@ -7,6 +7,11 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- Names: `qvp_name(table, id)`, `qvp_name_id(table, name)`, `qvp_name_count(table)` over the
+  mark, kind, family, category, decoration, division and place tables. Every wrapper reads
+  its names from the engine at start-up; the five hand-written mark tables and the place,
+  division and decoration lists are gone. React Native's kind and decoration names now
+  match the engine's (`ayah_number`, `ayah-mark`); an unknown name resolves to 255, not 0.
 - Layout: `QvpLayout.fit_scale`, `fit_x`, `fit_y` (the view transform that shows the whole
   content), `QvpLayoutSpec.crop_left`, `crop_right` (cut printed side margins) and
   `max_aspect_slack` (bound the content width by the page aspect), and

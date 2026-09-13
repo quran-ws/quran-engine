@@ -5,7 +5,8 @@ the rule in `docs/standards/API-DESIGN.md`: a wrapper may convert units and trac
 and nothing else. This page records what the sweep found; `docs/API-PARITY.md` tracks what
 has moved into the engine since. Items 1 to 4 moved in the change that introduced this
 page (`QvpLayout.fit_*`, `QvpLayoutSpec.max_aspect_slack`, `crop_left`/`crop_right`,
-`qvp_layout_gap_to_fill`).
+`qvp_layout_gap_to_fill`). Item 5 followed: `qvp_name`, `qvp_name_id` and `qvp_name_count`
+cover every table, and no wrapper carries one.
 
 ## Computations that belong in the engine
 
