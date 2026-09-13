@@ -11,52 +11,52 @@ use qvp_core::{loose_key, normalize_query, search_key, search_variants};
 
 /// (input, search_key, match_fold, loose_key)
 const VECTORS: &[(&str, &str, &str, &str)] = &[
-    // dagger alif U+0670 is a MARK: stripped, never expanded
+    // omitted alif U+0670 is a MARK: stripped, never expanded
     //   source: quran-text hafs rasm_uthmani 1:1:3
     ("ٱلرَّحۡمَٰنِ", "ٱلرحمن", "الرحمن", "لرحمن"),
-    //   ...the same word's imlai, the search-key source
+    //   ...the same word's rasm_imlai, the search-key source
     //   source: quran-text hafs rasm_imlai 1:1:3
     ("الرحمن", "الرحمن", "الرحمن", "لرحمن"),
-    // dagger alif where imlai writes a FULL alif
+    // omitted alif where rasm_imlai writes a FULL alif
     //   source: quran-text hafs rasm_uthmani 1:2:4
     ("ٱلۡعَٰلَمِينَ", "ٱلعلمين", "العلمين", "لعلمين"),
-    //   ...its imlai
+    //   ...its rasm_imlai
     //   source: quran-text hafs rasm_imlai 1:2:4
     ("العالمين", "العالمين", "العالمين", "لعلمين"),
-    // alef wasla U+0671
+    // hamzat_al_wasl U+0671
     //   source: quran-text hafs rasm_uthmani
     ("ٱللَّهِ", "ٱلله", "الله", "لله"),
-    // hamza above U+0623
+    // hamzah above U+0623
     //   source: quran-text hafs rasm_uthmani
     ("أَنۡعَمۡتَ", "أنعمت", "انعمت", "نعمت"),
-    // madda U+0622
+    // maddah U+0622
     //   source: quran-text hafs rasm_uthmani
     ("ٱلضَّآلِّينَ", "ٱلضآلين", "الضالين", "لضلين"),
     // ta marbuta U+0629
     //   source: quran-text hafs rasm_uthmani
     ("ٱلصَّلَوٰةَ", "ٱلصلوة", "الصلوه", "لصلوه"),
-    // waw hamza U+0624
+    // waw hamzah U+0624
     //   source: quran-text hafs rasm_uthmani
     ("يُؤۡمِنُونَ", "يؤمنون", "يومنون", "يومنون"),
-    // yeh hamza U+0626
+    // yeh hamzah U+0626
     //   source: quran-text hafs rasm_uthmani
     ("أُوْلَٰٓئِكَ", "أولئك", "اوليك", "وليك"),
-    // bare hamza U+0621
+    // bare hamzah U+0621
     //   source: quran-text hafs rasm_uthmani
     ("سَوَآءٌ", "سوآء", "سواء", "سو"),
-    // shadda + tanwin
+    // shaddah + tanwin
     //   source: quran-text hafs rasm_uthmani
     ("رَغَدًا", "رغدا", "رغدا", "رغد"),
-    // tatweel-borne hamza: stripping the uthmani LOSES the consonant
+    // tatweel-borne hamzah: stripping the rasm_uthmani LOSES the consonant
     //   source: quran-text hafs rasm_uthmani 2:31
     ("أَنۢبُِٔونِي", "أنبوني", "انبوني", "نبوني"),
-    //   ...its imlai keeps it
+    //   ...its rasm_imlai keeps it
     //   source: quran-text hafs rasm_imlai 2:31
     ("أنبئوني", "أنبئوني", "انبيوني", "نبيوني"),
-    // rub el hizb U+06DE (category So)
+    // rubu_al_hizb U+06DE (category So)
     //   source: quran-tajweed uthmani-hafs.json 2:26
     ("۞ إِنَّ", "إن", "ان", "ن"),
-    // sajdah U+06E9 + small high madda U+06E4
+    // sajdah U+06E9 + small high maddah U+06E4
     //   source: quran-tajweed uthmani-hafs.json 13:15
     ("وَٱلۡأٓصَالِ۩", "وٱلأصال", "والاصال", "ولصل"),
     // waqf sign U+06D6 (category Mn)
@@ -77,7 +77,7 @@ fn conformance_vector() {
 }
 
 #[test]
-fn dagger_alif_is_a_mark_not_an_alif() {
+fn omitted_alif_is_a_mark_not_an_alif() {
     // The bug this spec exists to settle: quran-text used to expand U+0670 into
     // a full alif, so two blocks disagreed about one query.
     assert_eq!(
@@ -94,8 +94,8 @@ fn dagger_alif_is_a_mark_not_an_alif() {
 
 #[test]
 fn variants_cover_both_spellings() {
-    // مَٰلِكِ — uthmani with a dagger alif; modern spelling writes مالك.
+    // مَٰلِكِ — rasm_uthmani with an omitted alif; modern spelling writes مالك.
     let v = search_variants("\u{0645}\u{064E}\u{0670}\u{0644}\u{0650}\u{0643}\u{0650}");
     assert!(v.contains(&"\u{0645}\u{0644}\u{0643}".to_string()), "stripped spelling");
-    assert!(v.contains(&"\u{0645}\u{0627}\u{0644}\u{0643}".to_string()), "imlai spelling");
+    assert!(v.contains(&"\u{0645}\u{0627}\u{0644}\u{0643}".to_string()), "rasm_imlai spelling");
 }
