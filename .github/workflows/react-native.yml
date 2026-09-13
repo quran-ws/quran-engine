@@ -1,0 +1,34 @@
+# The React Native package: install, typecheck, and build the TypeScript output.
+# The example's Android build runs in the Android workflow's toolchain when it is wired
+# there; this job covers the JavaScript side.
+name: React Native
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/react-native.yml"
+      - "packages/react-native/**"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: react-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packages/react-native/qvp-react-native
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build

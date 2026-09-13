@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": false, "declaration": true, "outDir": "lib", "module": "CommonJS" },
+  "compilerOptions": { "noEmit": false, "declaration": true, "outDir": "lib" },
   "include": ["src"]
 }
