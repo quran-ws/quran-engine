@@ -8,8 +8,8 @@ homepage.workspace = true
 description = "SVG <-> QVP converter and identity test gate"
 
 [dependencies]
-qvp-format = { path = "../qvp-format", version = "0.1.0" }
-qvp-core = { path = "../qvp-core", version = "0.1.0" }
+qvp-format = { path = "../qvp-format", version = "0.2.0" }
+qvp-core = { path = "../qvp-core", version = "0.2.0" }
 roxmltree = "0.20"
 svgtypes = "0.15"
 rayon = "1.10"

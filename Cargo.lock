@@ -301,7 +301,7 @@ checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
 
 [[package]]
 name = "qvp-convert"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "qvp-core",
  "qvp-format",
@@ -315,21 +315,21 @@ dependencies = [
 
 [[package]]
 name = "qvp-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "qvp-format",
 ]
 
 [[package]]
 name = "qvp-ffi"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "qvp-core",
 ]
 
 [[package]]
 name = "qvp-format"
-version = "0.1.1"
+version = "0.2.0"
 
 [[package]]
 name = "rayon"

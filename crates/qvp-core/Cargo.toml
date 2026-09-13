@@ -8,4 +8,4 @@ homepage.workspace = true
 description = "QVP engine core: page loader, hit-testing, style state, display list"
 
 [dependencies]
-qvp-format = { path = "../qvp-format", version = "0.1.0" }
+qvp-format = { path = "../qvp-format", version = "0.2.0" }

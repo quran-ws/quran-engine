@@ -1,3 +1,9 @@
+## 0.2.0
+
+- ABI 0.2: the header and every wrapper follow the naming standard (hit tests, rectangles,
+  verbs, discriminators, full words, layout, one-byte booleans, the engine/format version split).
+  No alias is kept; the old → new table is in the root `CHANGELOG.md` and `docs/API-PARITY.md`.
+
 ## 0.1.1
 
 - Line spacing only ever opens up. The printed pitch is the floor: `lineSpacing` below 1,
