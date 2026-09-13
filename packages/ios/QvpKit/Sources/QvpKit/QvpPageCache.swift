@@ -145,8 +145,8 @@ public final class QvpPageCache {
         }
     }
 
-    deinit {
-        for page in pages.values { page.close() }
-    }
+    // No deinit close: `QvpPage` frees its native data when its last reference goes,
+    // so a controller retained by a surviving view keeps its page open after the
+    // cache itself is released.
 }
 #endif
