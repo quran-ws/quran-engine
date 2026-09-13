@@ -618,7 +618,7 @@ class QvpEngine {
   /// The engine version, e.g. `0.2.0`.
   String get version {
     b.version(_str);
-    return _str.ref.string;
+    return _s();
   }
 
   /// The page format version the engine reads.
