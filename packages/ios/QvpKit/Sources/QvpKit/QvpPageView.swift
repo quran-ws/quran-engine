@@ -65,7 +65,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     private var pinchStart: CGFloat = 1
     private var fitScale: CGFloat = 1
     /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
-    public var isZoomed: Bool { viewScale > fitScale * 1.02 }
+    public var isZoomed: Bool { viewScale > fitScale * QvpViewPolicy.zoomedThreshold }
 
     public override init(frame: CGRect) { super.init(frame: frame); setup() }
     public required init?(coder: NSCoder) { super.init(coder: coder); setup() }
@@ -108,7 +108,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         guard zoomEnabled, !selecting else { return }
         if g.state == .began { stopSpring(); pinchStart = viewScale }
         if zoomSpringsBack, [.ended, .cancelled, .failed].contains(g.state) { springBack(); return }
-        let ns = min(max(pinchStart * g.scale, 0.5), 12); let k = ns / viewScale
+        let ns = QvpViewPolicy.clampZoom(pinchStart * g.scale); let k = ns / viewScale
         let f = g.location(in: self)
         viewOx = f.x - (f.x - viewOx) * k; viewOy = f.y - (f.y - viewOy) * k; viewScale = ns
         setNeedsDisplay()
@@ -118,7 +118,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         if !isZoomed, onSwipe != nil {
             if g.state == .ended {
                 let t = g.translation(in: self), v = g.velocity(in: self)
-                if abs(t.x) > abs(t.y) * 1.5, abs(t.x) > 40 || abs(v.x) > 500 { onSwipe?(t.x > 0 ? 1 : -1) }
+                if let dir = QvpViewPolicy.swipeDirection(translation: CGSize(width: t.x, height: t.y), velocity: CGSize(width: v.x, height: v.y)) { onSwipe?(dir) }
             }
             return
         }

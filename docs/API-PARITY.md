@@ -76,6 +76,19 @@ in the wrapper audit.
 | iOS support (no podspec) | react-native | untriaged |
 | the npm tarball builds only inside this repository (`qvpAndroidDir` default) | react-native | untriaged |
 
+## Platform conveniences
+
+Members a wrapper adds in its own idiom. Each is view state or a host service; none of them
+makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the three tiers).
+
+| convenience | where | note |
+|---|---|---|
+| pan and pinch transform | every page view | zoom limits 0.5 to 12 times the fitted scale on every platform: `QvpViewPolicy` (iOS), `QvpPageView.MIN_ZOOM` (Android), `kMinZoom` (Flutter), `clampZoom` in the web example |
+| zoomed threshold and swipe classifier | iOS, `QvpViewPolicy` | a pinch settled within 2% of the fitted scale is not a zoom; a mostly horizontal drag longer than 40 pt or faster than 500 pt/s is a page swipe |
+| zoom spring | iOS, `QvpZoomSpring` | eases a released pinch back to the fitted transform on a display link of its own |
+| page cache | iOS, `QvpPageCache` | the policy in `docs/EXAMPLE-APP.md`; the other platforms follow it in their examples |
+| long press, double tap, tap callbacks | every page view | gesture recognition only; the hit comes from `qvp_hit_test_ex` |
+
 ## Matrix
 
 <!-- parity:begin -->

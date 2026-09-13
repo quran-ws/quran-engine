@@ -298,11 +298,12 @@ final class QvpKitTests: XCTestCase {
         XCTAssertTrue(c.isZoomed)
         c.resetView()
         XCTAssertFalse(c.isZoomed)
-        // line spacing only opens up: below 1 clamps to the printed pitch
+        // line spacing only opens up: the engine clamps values below 1 to the printed pitch
+        let printed = try XCTUnwrap(p.currentLayout).pitch
         c.lineSpacing = 0.5
-        XCTAssertEqual(c.lineSpacing, 1)
+        XCTAssertEqual(try XCTUnwrap(p.currentLayout).pitch, printed)
         c.lineSpacing = 1.5
-        XCTAssertEqual(c.lineSpacing, 1.5)
+        XCTAssertGreaterThan(try XCTUnwrap(p.currentLayout).pitch, printed)
     }
 
     /// zoomSpringsBack: a released pinch eases back to the fitted transform; without it the zoom stays.

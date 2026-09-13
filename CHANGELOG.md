@@ -7,6 +7,8 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- `QvpViewPolicy` in QvpKit: the zoom limits, zoomed threshold and swipe classifier both iOS
+  renderers share. `docs/API-PARITY.md` lists every platform convenience.
 - `docs/API.md` lists every C symbol with its reference-wrapper spelling and what it does;
   the 32 that no section named are documented.
 - Defaults: `QVP_DEFAULT_*` in the header, defined once in `crates/qvp-core/src/defaults.rs`
@@ -43,6 +45,10 @@ All notable changes to the engine and its packages. The format follows
 - iOS: six page-cache lifecycle tests.
 
 ### Changed
+- Highlight and mask boxes clamp their corner radius to half the box's shorter side in the
+  engine, so every renderer draws the same shape.
+- Zoom limits are 0.5 to 12 times the fitted scale on every platform (web and Flutter were
+  0.2 to 40).
 - FFI: every `qvp_*` entry point catches a panic in the engine and returns its error value
   (0, -1 or null) instead of aborting the host; the release profile no longer sets
   `panic = "abort"`.

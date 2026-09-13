@@ -75,7 +75,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(d: ScaleGestureDetector): Boolean {
             if (!zoomEnabled || selecting) return false
-            val ns = (viewScale * d.scaleFactor).coerceIn(0.5f, 12f); val kk = ns / viewScale
+            val ns = (viewScale * d.scaleFactor).coerceIn(MIN_ZOOM, MAX_ZOOM); val kk = ns / viewScale
             viewOx = d.focusX - (d.focusX - viewOx) * kk; viewOy = d.focusY - (d.focusY - viewOy) * kk; viewScale = ns
             invalidate(); return true
         }
@@ -244,5 +244,11 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         drawBoxes(canvas, p.maskBoxes())
         lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = styled.size / 2; lastBands = bands.size
         if (moving) { animating = true; Choreographer.getInstance().postFrameCallback(frameCb) }
+    }
+
+    companion object {
+        /** Pinch limits as multiples of the fitted scale; the same pair on every platform. */
+        const val MIN_ZOOM = 0.5f
+        const val MAX_ZOOM = 12f
     }
 }

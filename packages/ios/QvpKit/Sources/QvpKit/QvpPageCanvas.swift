@@ -38,13 +38,8 @@ public final class QvpCanvasController {
     /// left = box.x0, right = page.width − box.x1.
     public var cropLeft: Float = 0 { didSet { relayout() } }
     public var cropRight: Float = 0 { didSet { relayout() } }
-    /// Line spacing only opens up: the printed pitch is the floor, so values below 1 clamp to 1.
-    /// (Explicit accessors — reassigning inside a `didSet` recurses under `@Observable`.)
-    public var lineSpacing: Float {
-        get { lineSpacingRaw }
-        set { lineSpacingRaw = max(1, newValue); relayout() }
-    }
-    @ObservationIgnored private var lineSpacingRaw: Float = 1
+    /// Line spacing only opens up; the engine clamps values below 1 to the printed pitch.
+    public var lineSpacing: Float = 1 { didSet { relayout() } }
     public var lineGap: Float = 0 { didSet { relayout() } }
     public var fillHeight = false { didSet { relayout() } }
     /// Paper behind the page content, 0xRRGGBBAA (nil = transparent).
@@ -101,7 +96,7 @@ public final class QvpCanvasController {
     @ObservationIgnored var lastDrag = CGSize.zero
     @ObservationIgnored private var springTask: Task<Void, Never>?
     /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
-    public var isZoomed: Bool { viewScale > fitScale * 1.02 }
+    public var isZoomed: Bool { viewScale > fitScale * QvpViewPolicy.zoomedThreshold }
 
     final class BaseCache { var image: CGImage?; var key = "" }
 
@@ -172,7 +167,7 @@ public final class QvpCanvasController {
     func pinch(_ magnification: CGFloat, at focus: CGPoint) {
         guard zoomEnabled, !selecting else { return }
         if !pinching { springTask?.cancel(); springTask = nil; pinching = true; pinchStart = viewScale }
-        let ns = min(max(pinchStart * magnification, 0.5), 12); let k = ns / viewScale
+        let ns = QvpViewPolicy.clampZoom(pinchStart * magnification); let k = ns / viewScale
         viewOx = focus.x - (focus.x - viewOx) * k; viewOy = focus.y - (focus.y - viewOy) * k; viewScale = ns
     }
     func pinchEnded() {
@@ -203,7 +198,7 @@ public final class QvpCanvasController {
     func panEnded(_ t: CGSize, velocity v: CGSize) {
         lastDrag = .zero
         guard !isZoomed, !selecting, onSwipe != nil else { return }
-        if abs(t.width) > abs(t.height) * 1.5, abs(t.width) > 40 || abs(v.width) > 500 { onSwipe?(t.width > 0 ? 1 : -1) }
+        if let dir = QvpViewPolicy.swipeDirection(translation: t, velocity: v) { onSwipe?(dir) }
     }
     func selectTo(_ pt: CGPoint) {
         guard selectionEnabled, let p = page else { return }
@@ -289,7 +284,7 @@ public final class QvpCanvasController {
         for b in boxes {
             if b.id != curId || b.color != curColor { flush(); curId = b.id; curColor = b.color }
             let r = CGRect(x: CGFloat(b.x0), y: CGFloat(b.y0), width: CGFloat(b.x1 - b.x0), height: CGFloat(b.y1 - b.y0))
-            if b.radius > 0 { path.addRoundedRect(in: r, cornerSize: CGSize(width: min(CGFloat(b.radius), r.width / 2), height: min(CGFloat(b.radius), r.height / 2))) }
+            if b.radius > 0 { path.addRoundedRect(in: r, cornerSize: CGSize(width: CGFloat(b.radius), height: CGFloat(b.radius))) }
             else { path.addRect(r) }
         }
         flush()
