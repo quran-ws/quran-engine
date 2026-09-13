@@ -90,9 +90,9 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun relayout(tag: Int, promise: Promise) = withPage(tag, promise) { v, _ -> v.inner.relayout(); v.resetView(); null }
     @ReactMethod fun resetView(tag: Int, promise: Promise) = withPage(tag, promise) { v, _ -> v.resetView(); null }
     /** The leading that fills this view's viewport, from the spec the view lays out with. */
-    @ReactMethod fun layoutGapToFill(tag: Int, max: Double, promise: Promise) = withPage(tag, promise) { v, p -> p.layoutGapToFill(v.inner.layoutSpec(), max.toFloat()) }
-    @ReactMethod fun gapToFill(pw: Double, ph: Double, lines: Int, vw: Double, vh: Double, max: Double, promise: Promise) = ui(promise) { QvpEngine.gapToFill(pw.toFloat(), ph.toFloat(), lines, vw.toFloat(), vh.toFloat(), max.toFloat()) }
-    @ReactMethod fun wastedFraction(pw: Double, ph: Double, vw: Double, vh: Double, promise: Promise) = ui(promise) { QvpEngine.wastedFraction(pw.toFloat(), ph.toFloat(), vw.toFloat(), vh.toFloat()) }
+    @ReactMethod fun layoutLineSpacingToFill(tag: Int, max: Double, promise: Promise) = withPage(tag, promise) { v, p -> p.layoutLineSpacingToFill(v.inner.layoutSpec(), max.toFloat()) }
+    @ReactMethod fun layoutWastedFraction(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.layoutWastedFraction(v.inner.layoutSpec()) }
+    @ReactMethod fun grid(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> mapOf("lines" to p.grid.lines, "lineSpacing" to p.grid.lineSpacing) }
     @ReactMethod fun stats(tag: Int, promise: Promise) = ui(promise) { view(tag)?.stats() }
     @ReactMethod fun invalidate(tag: Int, promise: Promise) = ui(promise) { view(tag)?.inner?.invalidate(); null }
 

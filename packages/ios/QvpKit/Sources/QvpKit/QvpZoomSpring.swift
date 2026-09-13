@@ -5,7 +5,7 @@ import Foundation
 import CoreGraphics
 
 struct QvpZoomSpring {
-    typealias ViewTransform = (scale: CGFloat, ox: CGFloat, oy: CGFloat)
+    typealias ViewTransform = (scale: CGFloat, offsetX: CGFloat, offsetY: CGFloat)
     static let duration = 0.25
 
     let from: ViewTransform
@@ -17,6 +17,6 @@ struct QvpZoomSpring {
     func value(at now: Double) -> (transform: ViewTransform, done: Bool) {
         let t = min(max((now - start) / Self.duration, 0), 1)
         let e = CGFloat(1 - pow(1 - t, 3)) // ease-out cubic
-        return ((from.scale + (to.scale - from.scale) * e, from.ox + (to.ox - from.ox) * e, from.oy + (to.oy - from.oy) * e), t >= 1)
+        return ((from.scale + (to.scale - from.scale) * e, from.offsetX + (to.offsetX - from.offsetX) * e, from.offsetY + (to.offsetY - from.offsetY) * e), t >= 1)
     }
 }

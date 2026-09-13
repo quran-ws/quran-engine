@@ -84,7 +84,6 @@ function Demo() {
   const [revealPosition, setRevealAt] = useState(-1);
   const [revealStepCount, setRevealSteps] = useState(0);
   const [lineSpacing, setLineSpacing] = useState(1);
-  const [lineGap, setLineGap] = useState(0);
   const [fillHeight, setFillHeight] = useState(false);
   const [padTop, setPadTop] = useState(12);
   const [padBottom, setPadBottom] = useState(12);
@@ -203,7 +202,7 @@ function Demo() {
   const leadingToFill = async () => {
     if (!info) return;
     setFillHeight(false); setLineSpacing(1);
-    setLineGap(await Qvp.gapToFill(info.width, info.height, info.nLines, winW - 16, pageViewH.current - padTop - padBottom));
+    setLineSpacing(await qvp.layoutLineSpacingToFill());
   };
 
   // ── selection panel ──
@@ -219,7 +218,7 @@ function Demo() {
     `base layer    ${stats.basePaths} paths in ${stats.baseMs.toFixed(2)} ms (cached)`,
     `overlay       ${stats.overlayPaths} styled + ${stats.bands} bands in ${stats.overlayMs.toFixed(2)} ms`,
     `hit-test      ${stats.hitUs.toFixed(1)} µs · ${stats.styleHandles} handles · ${stats.highlightHandles} highlights`,
-    `layout        ${fillHeight ? 'fill height' : lineGap > 0 ? `gap +${lineGap.toFixed(1)} u` : `spacing ×${lineSpacing.toFixed(2)}`} · pitch ${(stats.layout?.pitch ?? 0).toFixed(1)} u`,
+    `layout        ${fillHeight ? 'fill height' : `spacing ×${lineSpacing.toFixed(2)}`} · lineSpacing ${(stats.layout?.lineSpacing ?? 0).toFixed(1)} u`,
   ].filter(Boolean).join('\n') : '';
 
   return (
@@ -239,7 +238,7 @@ function Demo() {
         pageUri={`asset://pages/${pad3(pageNo)}.qvp`}
         wordsUri={`asset://pages/${pad3(pageNo)}.words.json`}
         padTop={padTop} padBottom={padBottom} padSide={8}
-        lineSpacing={lineSpacing} lineGap={lineGap} fillHeight={fillHeight}
+        lineSpacing={lineSpacing} fillHeight={fillHeight}
         paperColor={th.paper} defaultInk={th.ink}
         theme={markTheme} styles={styles} highlights={highlights} mask={mask} reveal={reveal}
         onPageLoad={onPageLoad}

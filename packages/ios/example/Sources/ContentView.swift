@@ -260,7 +260,7 @@ struct SettingsSheet: View {
                     LabeledContent("Bottom padding") { Text("\(Int(m.padBottom)) pt").monospacedDigit() }
                     Slider(value: $m.padBottom, in: 0...120, step: 4) { Text("Bottom padding") }
                     Button("Add leading to fill the screen") { m.leadingToFill() }
-                    Text("Leading only grows — the printed pitch is the floor, so the lines never close up — and the text width is always the screen's.")
+                    Text("Leading only grows — the printed lineSpacing is the floor, so the lines never close up — and the text width is always the screen's.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Highlights") {

@@ -23,7 +23,8 @@ internal object QvpNative {
     @JvmStatic external fun decorationText(h: Long, i: Int): String?
     @JvmStatic external fun findWord(h: Long, s: Int, a: Int, w: Int): Int
     @JvmStatic external fun targetWords(h: Long, target: IntArray): IntArray
-    @JvmStatic external fun naturalPitch(h: Long): Float
+    @JvmStatic external fun pageLineSpacing(h: Long): Float
+    @JvmStatic external fun pageGrid(h: Long): FloatArray
     // metadata
     @JvmStatic external fun surahCount(h: Long): Int
     @JvmStatic external fun surahNums(h: Long, i: Int): FloatArray?
@@ -53,9 +54,8 @@ internal object QvpNative {
     @JvmStatic external fun hitAreas(h: Long, gapBias: Float): FloatArray
     // layout
     @JvmStatic external fun layout(h: Long, spec: FloatArray): FloatArray
-    @JvmStatic external fun layoutGapToFill(h: Long, spec: FloatArray, max: Float): Float
-    @JvmStatic external fun gapToFill(pw: Float, ph: Float, lines: Int, vw: Float, vh: Float, max: Float): Float
-    @JvmStatic external fun wastedFraction(pw: Float, ph: Float, vw: Float, vh: Float): Float
+    @JvmStatic external fun layoutLineSpacingToFill(h: Long, spec: FloatArray, max: Float): Float
+    @JvmStatic external fun layoutWastedFraction(h: Long, spec: FloatArray): Float
     @JvmStatic external fun wordBoundsView(h: Long, i: Int): FloatArray?
     // styles
     @JvmStatic external fun styleAdd(h: Long, layer: Int, sel: IntArray, rgba: Int, ms: Int): Int

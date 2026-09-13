@@ -498,8 +498,8 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   void fitGap() {
     final p = page!;
     final vp = view.viewport;
-    final gap = p.layoutGapToFill(layout.toSpec(vp.width, vp.height));
-    _setLayout(layout.copyWith(fillHeight: false, lineSpacing: 1, lineGap: gap));
+    final spacing = p.layoutLineSpacingToFill(layout.toSpec(vp.width, vp.height));
+    _setLayout(layout.copyWith(fillHeight: false, lineSpacing: spacing));
   }
 
   // ═════════ UI ═════════
@@ -895,14 +895,14 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
           SizedBox(width: 44, child: Text(text, style: const TextStyle(fontSize: 12))),
         ]);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      row('line spacing', layout.lineSpacing, 1.0, 2.2, 24, '×${layout.lineSpacing.toStringAsFixed(2)}', (v) => _setLayout(layout.copyWith(lineSpacing: v, lineGap: 0, fillHeight: false))),
+      row('line spacing', layout.lineSpacing, 1.0, 2.2, 24, '×${layout.lineSpacing.toStringAsFixed(2)}', (v) => _setLayout(layout.copyWith(lineSpacing: v, fillHeight: false))),
       row('pad top', layout.padTop, 0, 120, 30, '${layout.padTop.round()}', (v) => _setLayout(layout.copyWith(padTop: v))),
       row('pad bottom', layout.padBottom, 0, 120, 30, '${layout.padBottom.round()}', (v) => _setLayout(layout.copyWith(padBottom: v))),
       Wrap(spacing: 6, children: [
         FilterChip(label: const Text('Fill screen height'), selected: layout.fillHeight, onSelected: (_) => _setLayout(layout.copyWith(fillHeight: !layout.fillHeight))),
         ActionChip(label: const Text('Leading to fill'), onPressed: fitGap),
       ]),
-      _hint('Layout is computed by the engine (per-line dy, pitch, scale); the view only applies pan and zoom on top. Double-tap the page to fit. Leading only grows — the printed pitch is the floor — and the text width is always the viewport\'s.'),
+      _hint('Layout is computed by the engine (per-line dy, lineSpacing, scale); the view only applies pan and zoom on top. Double-tap the page to fit. Leading only grows — the printed lineSpacing is the floor — and the text width is always the viewport\'s.'),
     ]);
   }
 
@@ -944,7 +944,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
             'overlay       ${st?.overlayPaths ?? 0} styled paths + ${st?.bands ?? 0} band boxes in ${(st?.overlayMs ?? 0).toStringAsFixed(2)} ms\n'
             'hit-test      gap-aware, engine (last distance ${lastHitUs.toStringAsFixed(2)} u)\n'
             'styles        ${p.styleHandles().length} handles · ${p.highlightHandles().length} highlights${anim ? ' · animating' : ''}\n'
-            'layout        ${layout.fillHeight ? 'fill height' : layout.lineGap != 0 ? 'gap +${layout.lineGap.toStringAsFixed(1)} u' : 'spacing ×${layout.lineSpacing.toStringAsFixed(2)}'} · pitch ${(l?.pitch ?? 0).toStringAsFixed(1)} u · pad ${layout.padTop.round()}/${layout.padBottom.round()}\n'
+            'layout        ${layout.fillHeight ? 'fill height' : 'spacing ×${layout.lineSpacing.toStringAsFixed(2)}'} · lineSpacing ${(l?.lineSpacing ?? 0).toStringAsFixed(1)} u · pad ${layout.padTop.round()}/${layout.padBottom.round()}\n'
             'zoom          ${(view.scale * (l?.scale ?? 1) * dpr).toStringAsFixed(2)}× device px per unit';
         return Text(text, style: TextStyle(fontFamily: 'monospace', fontSize: 11, height: 1.6, color: pal.muted));
       },

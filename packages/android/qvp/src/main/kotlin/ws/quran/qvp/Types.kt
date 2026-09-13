@@ -9,7 +9,7 @@ object QvpLayer { const val BASE = 0; const val THEME = 10; const val HIGHLIGHT 
 enum class Form(val id: Int) { RASM_UTHMANI(0), RASM_IMLAI(1), QPC(2), RASM(3), SEARCH(4) }
 enum class SearchMode(val id: Int) { INCLUDES(0), EXACT(1), PREFIX(2) }
 enum class HighlightMode(val id: Int) { INK(0), BAND(1), BOTH(2) }
-enum class BandHeight(val id: Int) { PITCH(0), INK(1) }
+enum class BandHeight(val id: Int) { LINE_SPACING(0), INK(1) }
 enum class MaskMode(val id: Int) { HIDE(0), BLOCK(1), BLUR(2) }
 enum class Division(val id: Int) { JUZ(0), HIZB(1), NISF(2), RUBU_AL_HIZB(3) }
 
@@ -18,7 +18,7 @@ object QvpDefaults {
     const val INK = 0x231f20ff.toInt(); const val HIGHLIGHT_INK = 0x1a73e8ff.toInt(); const val HIGHLIGHT_BAND = 0xd6a3264d.toInt()
     const val HIGHLIGHT_PAD_X = 1.2f; const val HIGHLIGHT_PAD_Y = 0f; const val HIGHLIGHT_SEAM = 0.25f
     const val SELECTION_BAND = 0x2d6fd640; const val GAP_BIAS = 0.6f; const val TAP_DISTANCE = 6f
-    const val NOMINAL_LINES = 15; const val ASPECT_SLACK = 1.15f
+    const val GRID_LINES = 15; const val ASPECT_SLACK = 1.15f
     const val MASK_BLOCK = 0xd9d4c8ff.toInt(); const val MASK_PAD = 0.6f; const val MASK_RADIUS = 0.8f
     const val REVEAL_LIT = 1; const val REVEAL_GREY = 0xc9c4b8ff.toInt(); const val CROP_PAD = 2f
 }
@@ -107,18 +107,20 @@ data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = QvpDe
 data class QvpBox(val id: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val color: Int, val radius: Float)
 data class QvpHitArea(val word: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val inkX0: Float, val inkY0: Float, val inkX1: Float, val inkY1: Float)
 data class QvpLineBand(val line: Int, val lineNumber: Int, val y0: Float, val y1: Float, val mid: Float, val inkY0: Float, val inkY1: Float)
-/** Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine. */
+/** Spacing only opens up: `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid. */
 data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop: Float = 0f, val padBottom: Float = 0f, val padLeft: Float = 0f, val padRight: Float = 0f,
-                         val lineSpacing: Float = 1f, val lineGap: Float = 0f, val fillHeight: Boolean = false, val nominalLines: Int = QvpDefaults.NOMINAL_LINES,
+                         val lineSpacing: Float = 1f, val fillHeight: Boolean = false, val gridLines: Int = 0,
                          /** Printed side margins to cut, page units (0 = keep). */ val cropLeft: Float = 0f, val cropRight: Float = 0f,
                          /** The content is never wider than viewportH·pageW/pageH·slack (0 = no bound). */ val maxAspectSlack: Float = 0f) {
-    internal fun floats() = floatArrayOf(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, if (fillHeight) 1f else 0f, nominalLines.toFloat(), cropLeft, cropRight, maxAspectSlack)
+    internal fun floats() = floatArrayOf(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, if (fillHeight) 1f else 0f, gridLines.toFloat(), cropLeft, cropRight, maxAspectSlack)
 }
-/** Page → viewport: viewX = ox + x*scale ; viewY = oy + (y + lineDy[line])*scale. [fitScale], [fitX], [fitY] show the
+/** The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units). */
+data class QvpGrid(val lines: Int, val lineSpacing: Float)
+/** Page → viewport: viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. [fitScale], [fitX], [fitY] show the
  *  whole content in the viewport (shrink to height, never enlarge, centred): the host's pan and zoom go on top. */
-class QvpLayout(val scale: Float, val ox: Float, val oy: Float, val contentW: Float, val contentH: Float, val pitch: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray,
+class QvpLayout(val scale: Float, val offsetX: Float, val offsetY: Float, val contentW: Float, val contentH: Float, val lineSpacing: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray,
                 val fitScale: Float = 1f, val fitX: Float = 0f, val fitY: Float = 0f)
-data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val ink: Int = QvpDefaults.HIGHLIGHT_INK, val band: Int = QvpDefaults.HIGHLIGHT_BAND, val height: BandHeight = BandHeight.PITCH,
+data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val ink: Int = QvpDefaults.HIGHLIGHT_INK, val band: Int = QvpDefaults.HIGHLIGHT_BAND, val height: BandHeight = BandHeight.LINE_SPACING,
                              val padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, val padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y, val radius: Float = 0f, val seam: Float = QvpDefaults.HIGHLIGHT_SEAM, val transitionMs: Int = 0, val layer: Int = QvpLayer.HIGHLIGHT) {
     internal fun ints() = intArrayOf(mode.id, height.id, ink, band, transitionMs, layer)
     internal fun floats() = floatArrayOf(padX, padY, radius, seam)

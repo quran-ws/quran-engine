@@ -13,7 +13,7 @@ packages/ios/
 │   ├── QvpEngine.xcframework/      built by scripts/build-engine-ios.sh (gitignored)
 │   ├── Sources/QvpKit/
 │   │   ├── Types.swift             constants, Selector, Target, QvpColor, records, QvpHighlightStyle, QvpTheme, QvpLayoutSpec
-│   │   ├── QvpEngine.swift         names, Arabic tools, gapToFill / wastedFraction
+│   │   ├── QvpEngine.swift         names, Arabic tools
 │   │   ├── QvpPage.swift           QvpPage (geometry copied once, CGPath per path built once) and QvpAtlas
 │   │   ├── QvpPageView.swift       UIView renderer: bands → cached base ink → styled ink → mask boxes; gestures; CADisplayLink
 │   │   └── QvpPageCanvas.swift     the same frame as SwiftUI Canvas (iOS 17+): QvpCanvasController + QvpPageCanvas
@@ -59,7 +59,7 @@ import QvpKit
 
 QvpEngine.version(); QvpEngine.markName(7); QvpEngine.kindName(QvpKind.MARK); QvpEngine.markFromName("shaddah")
 QvpEngine.strip(s); QvpEngine.fold(s); QvpEngine.normalize(s); QvpEngine.looseKey(s)          // Arabic text tools
-QvpEngine.gapToFill(pageW:pageH:lines:viewW:viewH:); QvpEngine.wastedFraction(pageW:pageH:viewW:viewH:)
+page.layoutLineSpacingToFill(spec); page.layoutWastedFraction(spec); page.grid; page.lineSpacing
 
 let page = try QvpPage(bytes: data)                     // geometry copied once: page.ops / page.pts / page.table (stride 8)
 page.words / ayahs / lines / decorations;  page.wordForm(i, .rasmImlai);  page.findWord(2, 255, 3);  page.buildPaths()  // [CGPath]
@@ -100,8 +100,8 @@ printed viewBox (345 × 550, y down); anything `…View` is viewport px through 
 
 ```swift
 let view = QvpPageView()
-view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.lineSpacing = 1; view.lineGap = 0; view.fillHeight = false
-// lineSpacing < 1 / a negative lineGap are clamped by the engine: spacing only ever opens up
+view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.lineSpacing = 1; view.fillHeight = false
+// lineSpacing < 1 is clamped by the engine: spacing only ever opens up
 view.paperColor = UIColor(...); view.selectionBand = 0x2d6fd640; view.hitOptions = QvpHitOptions(maxDistance: 6)
 view.onWordTap = { word, hit in }; view.onDecorationTap = { decoration, hit in }; view.onEmptyTap = { }; view.onSelectionChanged = { words in }
 view.onSwipe = { dir in }                 // horizontal swipe while not zoomed (+1 finger right, −1 left): flip pages; view.isZoomed
@@ -155,7 +155,7 @@ cache.setCurrentPage(n)                   // preload neighbours; cache.reconfigu
 SwiftUI has no `setNeedsDisplay()`, so the mutable surface lives on `QvpCanvasController`
 (`@Observable`): the knobs, callbacks, transform state and HUD stats carry the exact names the
 UIKit view has, and `invalidate()` is the redraw call. `lineSpacing` only opens up — the
-printed pitch is the floor, values below 1 clamp to 1. Gesture differences from UIKit, both
+printed line spacing is the floor, values below 1 clamp to 1. Gesture differences from UIKit, both
 deliberate: when the page is not zoomed and `onSwipe` is nil the drag gesture is detached
 entirely, so an enclosing pager (`TabView`, `ScrollView`) keeps its own swipe; and drag-selection
 begins on the first finger movement after the long press rather than at the press itself

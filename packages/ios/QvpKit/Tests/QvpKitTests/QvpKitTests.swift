@@ -69,7 +69,7 @@ final class QvpKitTests: XCTestCase {
         XCTAssertGreaterThan(w0.nPaths, 0)
         XCTAssertEqual(page.findWord(w0.surah, w0.ayah, w0.word), 0)
         XCTAssertEqual(page.wordKey(0), w0.wordKey)
-        XCTAssertGreaterThan(page.naturalPitch, 0)
+        XCTAssertGreaterThan(page.lineSpacing, 0)
         XCTAssertTrue(page.surahs().map { $0.number }.contains(2))
         XCTAssertTrue(page.ayahKeys().contains { $0 == (2, 255) })
         XCTAssertFalse(page.wordLabel(0).isEmpty)
@@ -137,16 +137,17 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(l.slotTop.count, 15)
         XCTAssertTrue(page.currentLayout === l)
         let w = page.words[0]
-        let viewX = l.ox + (w.x0 + w.x1) / 2 * l.scale
-        let viewY = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale
+        let viewX = l.offsetX + (w.x0 + w.x1) / 2 * l.scale
+        let viewY = l.offsetY + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale
         let h = page.hitTestView(viewX, viewY, QvpHitOptions(maxDistance: 6))
         XCTAssertEqual(h?.word, 0)
         let box = page.wordBoundsView(0)
         XCTAssertNotNil(box)
         XCTAssertLessThan(box!.x0, viewX)
         XCTAssertGreaterThan(box!.x1, viewX)
-        _ = QvpEngine.gapToFill(pageW: page.width, pageH: page.height, lines: page.nLines, viewW: 600, viewH: 1000)
-        let wf = QvpEngine.wastedFraction(pageW: page.width, pageH: page.height, viewW: 600, viewH: 1000)
+        XCTAssertGreaterThanOrEqual(page.layoutLineSpacingToFill(QvpLayoutSpec(viewportW: 600, viewportH: 1000)), 1)
+        XCTAssertEqual(page.grid.lines, 15)
+        let wf = page.layoutWastedFraction(QvpLayoutSpec(viewportW: 600, viewportH: 1000))
         XCTAssertTrue(wf >= 0 && wf <= 1)
     }
 
@@ -298,12 +299,12 @@ final class QvpKitTests: XCTestCase {
         XCTAssertTrue(c.isZoomed)
         c.resetView()
         XCTAssertFalse(c.isZoomed)
-        // line spacing only opens up: the engine clamps values below 1 to the printed pitch
-        let printed = try XCTUnwrap(p.currentLayout).pitch
+        // line spacing only opens up: the engine clamps values below 1 to the printed lineSpacing
+        let printed = try XCTUnwrap(p.currentLayout).lineSpacing
         c.lineSpacing = 0.5
-        XCTAssertEqual(try XCTUnwrap(p.currentLayout).pitch, printed)
+        XCTAssertEqual(try XCTUnwrap(p.currentLayout).lineSpacing, printed)
         c.lineSpacing = 1.5
-        XCTAssertGreaterThan(try XCTUnwrap(p.currentLayout).pitch, printed)
+        XCTAssertGreaterThan(try XCTUnwrap(p.currentLayout).lineSpacing, printed)
     }
 
     /// zoomSpringsBack: a released pinch eases back to the fitted transform; without it the zoom stays.
@@ -317,7 +318,7 @@ final class QvpKitTests: XCTestCase {
         let end = s.value(at: 10 + QvpZoomSpring.duration)
         XCTAssertTrue(end.done)
         XCTAssertEqual(end.transform.scale, 1, accuracy: 1e-9)
-        XCTAssertEqual(end.transform.oy, 10, accuracy: 1e-9)
+        XCTAssertEqual(end.transform.offsetY, 10, accuracy: 1e-9)
 
         let p = try QvpPage(bytes: try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp")))
         defer { p.close() }
@@ -338,17 +339,17 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(c.viewOy, fitted.2, accuracy: 1e-3)
     }
 
-    /// Beside a header line a slot stops half a pitch out: page 1's first line does not claim the
+    /// Beside a header line a slot stops half a lineSpacing out: page 1's first line does not claim the
     /// gap under the banner. Body lines still share their boundaries, and slots never overlap.
     func testSlotsStopAtHeaders() throws {
         let p1 = try QvpPage(bytes: try Data(contentsOf: Self.pages.appendingPathComponent("001.qvp")))
         defer { p1.close() }
         let l = p1.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, fillHeight: true))
-        let pitch = l.pitch * l.scale
+        let lineSpacing = l.lineSpacing * l.scale
         let first = try XCTUnwrap(p1.lines.firstIndex { !$0.isHeader })
         XCTAssertGreaterThan(first, 0)
         XCTAssertTrue(p1.lines[first - 1].isHeader)
-        XCTAssertLessThan(l.slotBottom[first] - l.slotTop[first], pitch * 1.1, "first line's slot is one row, not half the banner gap")
+        XCTAssertLessThan(l.slotBottom[first] - l.slotTop[first], lineSpacing * 1.1, "first line's slot is one row, not half the banner gap")
         for i in 1..<l.slotTop.count { XCTAssertGreaterThanOrEqual(l.slotTop[i], l.slotBottom[i - 1] - 1e-3, "slots never overlap") }
         let body = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true))
         for i in 0..<(page.lines.count - 1) where !page.lines[i].isHeader && !page.lines[i + 1].isHeader {
@@ -397,16 +398,17 @@ final class QvpKitTests: XCTestCase {
             let s = c["spec"] as! [String: Any], want = c["layout"] as! [String: Any]
             let f: (String) -> Float = { Float((s[$0] as! NSNumber).doubleValue) }
             let spec = QvpLayoutSpec(viewportW: f("viewportW"), viewportH: f("viewportH"), padTop: f("padTop"), padBottom: f("padBottom"), padLeft: f("padLeft"), padRight: f("padRight"),
-                                     lineSpacing: f("lineSpacing"), lineGap: f("lineGap"), fillHeight: s["fillHeight"] as! Bool, nominalLines: (s["nominalLines"] as! NSNumber).intValue,
+                                     lineSpacing: f("lineSpacing"), fillHeight: s["fillHeight"] as! Bool, gridLines: (s["gridLines"] as! NSNumber).intValue,
                                      cropLeft: f("cropLeft"), cropRight: f("cropRight"), maxAspectSlack: f("maxAspectSlack"))
             let tag = "\(spec.viewportW)x\(spec.viewportH) fill=\(spec.fillHeight) slack=\(spec.maxAspectSlack) crop=\(spec.cropLeft)"
             let l = Self.page.layout(spec)
             let w: (String) -> Double = { (want[$0] as! NSNumber).doubleValue }
-            close(l.scale, w("scale"), "\(tag) scale"); close(l.ox, w("ox"), "\(tag) ox"); close(l.oy, w("oy"), "\(tag) oy")
-            close(l.contentW, w("contentW"), "\(tag) contentW"); close(l.contentH, w("contentH"), "\(tag) contentH"); close(l.pitch, w("pitch"), "\(tag) pitch")
+            close(l.scale, w("scale"), "\(tag) scale"); close(l.offsetX, w("offsetX"), "\(tag) offsetX"); close(l.offsetY, w("offsetY"), "\(tag) offsetY")
+            close(l.contentW, w("contentW"), "\(tag) contentW"); close(l.contentH, w("contentH"), "\(tag) contentH"); close(l.lineSpacing, w("lineSpacing"), "\(tag) lineSpacing")
             close(l.fitScale, w("fitScale"), "\(tag) fitScale"); close(l.fitX, w("fitX"), "\(tag) fitX"); close(l.fitY, w("fitY"), "\(tag) fitY")
             close(l.lineDy.first!, w("lineDy0"), "\(tag) lineDy[0]"); close(l.lineDy.last!, w("lineDyLast"), "\(tag) lineDy[last]")
-            close(Self.page.layoutGapToFill(spec), (c["gapToFill"] as! NSNumber).doubleValue, "\(tag) gapToFill")
+            close(Self.page.layoutLineSpacingToFill(spec), (c["lineSpacingToFill"] as! NSNumber).doubleValue, "\(tag) lineSpacingToFill")
+            close(Self.page.layoutWastedFraction(spec), (c["wastedFraction"] as! NSNumber).doubleValue, "\(tag) wastedFraction")
         }
         XCTAssertEqual(cases.count, 40)
     }

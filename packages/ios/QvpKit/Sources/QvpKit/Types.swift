@@ -16,7 +16,7 @@ public enum QvpLayer { public static let BASE = 0, THEME = 10, HIGHLIGHT = 50, S
 public enum Form: Int { case rasmUthmani = 0, rasmImlai, qpc, rasm, search }
 public enum SearchMode: Int { case includes = 0, exact, prefix }
 public enum HighlightMode: Int { case ink = 0, band, both }
-public enum BandHeight: Int { case pitch = 0, ink }
+public enum BandHeight: Int { case lineSpacing = 0, ink }
 public enum MaskMode: Int { case hide = 0, block, blur }
 public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rubuAlHizb }
 
@@ -25,7 +25,7 @@ public enum QvpDefaults {
     public static let INK: UInt32 = 0x231f20ff, HIGHLIGHT_INK: UInt32 = 0x1a73e8ff, HIGHLIGHT_BAND: UInt32 = 0xd6a3264d
     public static let HIGHLIGHT_PAD_X: Float = 1.2, HIGHLIGHT_PAD_Y: Float = 0, HIGHLIGHT_SEAM: Float = 0.25
     public static let SELECTION_BAND: UInt32 = 0x2d6fd640, GAP_BIAS: Float = 0.6, TAP_DISTANCE: Float = 6
-    public static let NOMINAL_LINES = 15, ASPECT_SLACK: Float = 1.15
+    public static let GRID_LINES = 15, ASPECT_SLACK: Float = 1.15
     public static let MASK_BLOCK: UInt32 = 0xd9d4c8ff, MASK_PAD: Float = 0.6, MASK_RADIUS: Float = 0.8
     public static let REVEAL_LIT = 1, REVEAL_GREY: UInt32 = 0xc9c4b8ff, CROP_PAD: Float = 2
 }
@@ -154,38 +154,40 @@ public struct QvpHitOptions: Equatable {
 public struct QvpBox: Equatable { public let id: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, color: UInt32, radius: Float }
 public struct QvpHitArea: Equatable { public let word: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, inkX0: Float, inkY0: Float, inkX1: Float, inkY1: Float }
 public struct QvpLineBand: Equatable { public let line: Int, lineNumber: Int, y0: Float, y1: Float, mid: Float, inkY0: Float, inkY1: Float }
-/// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
+/// Spacing only opens up: `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid.
 public struct QvpLayoutSpec: Equatable {
-    public var viewportW: Float, viewportH: Float, padTop: Float, padBottom: Float, padLeft: Float, padRight: Float, lineSpacing: Float, lineGap: Float, fillHeight: Bool, nominalLines: Int
+    public var viewportW: Float, viewportH: Float, padTop: Float, padBottom: Float, padLeft: Float, padRight: Float, lineSpacing: Float, fillHeight: Bool, gridLines: Int
     /// Printed side margins to cut, in page units (0 = keep the print's margins).
     public var cropLeft: Float, cropRight: Float
     /// The content is never wider than `viewportH · pageW / pageH · maxAspectSlack` (0 = no bound).
     public var maxAspectSlack: Float
-    public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, lineGap: Float = 0, fillHeight: Bool = false, nominalLines: Int = QvpDefaults.NOMINAL_LINES,
+    public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, fillHeight: Bool = false, gridLines: Int = 0,
                 cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0) {
         self.viewportW = viewportW; self.viewportH = viewportH; self.padTop = padTop; self.padBottom = padBottom; self.padLeft = padLeft; self.padRight = padRight
-        self.lineSpacing = lineSpacing; self.lineGap = lineGap; self.fillHeight = fillHeight; self.nominalLines = nominalLines
+        self.lineSpacing = lineSpacing; self.fillHeight = fillHeight; self.gridLines = gridLines
         self.cropLeft = cropLeft; self.cropRight = cropRight; self.maxAspectSlack = maxAspectSlack
     }
     var c: QvpFFI.QvpLayoutSpec {
-        QvpFFI.QvpLayoutSpec(viewport_w: viewportW, viewport_h: viewportH, pad_top: padTop, pad_bottom: padBottom, pad_left: padLeft, pad_right: padRight, line_spacing: lineSpacing, line_gap: lineGap,
-                             fill_height: fillHeight ? 1 : 0, nominal_lines: UInt32(nominalLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack)
+        QvpFFI.QvpLayoutSpec(viewport_w: viewportW, viewport_h: viewportH, pad_top: padTop, pad_bottom: padBottom, pad_left: padLeft, pad_right: padRight, line_spacing: lineSpacing,
+                             fill_height: fillHeight ? 1 : 0, grid_lines: UInt32(gridLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack)
     }
 }
-/// Page → viewport: viewX = ox + x*scale ; viewY = oy + (y + lineDy[line])*scale. `fitScale`, `fitX`, `fitY` show the
+/// The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units).
+public struct QvpGrid: Equatable { public let lines: Int, lineSpacing: Float }
+/// Page → viewport: viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. `fitScale`, `fitX`, `fitY` show the
 /// whole content in the viewport (shrink to height, never enlarge, centred); the host's pan and zoom go on top.
 public final class QvpLayout {
-    public let scale: Float, ox: Float, oy: Float, contentW: Float, contentH: Float, pitch: Float
+    public let scale: Float, offsetX: Float, offsetY: Float, contentW: Float, contentH: Float, lineSpacing: Float
     public let lineDy: [Float], slotTop: [Float], slotBottom: [Float]
     public let fitScale: Float, fitX: Float, fitY: Float
-    init(scale: Float, ox: Float, oy: Float, contentW: Float, contentH: Float, pitch: Float, lineDy: [Float], slotTop: [Float], slotBottom: [Float], fitScale: Float = 1, fitX: Float = 0, fitY: Float = 0) {
-        self.scale = scale; self.ox = ox; self.oy = oy; self.contentW = contentW; self.contentH = contentH; self.pitch = pitch; self.lineDy = lineDy; self.slotTop = slotTop; self.slotBottom = slotBottom
+    init(scale: Float, offsetX: Float, offsetY: Float, contentW: Float, contentH: Float, lineSpacing: Float, lineDy: [Float], slotTop: [Float], slotBottom: [Float], fitScale: Float = 1, fitX: Float = 0, fitY: Float = 0) {
+        self.scale = scale; self.offsetX = offsetX; self.offsetY = offsetY; self.contentW = contentW; self.contentH = contentH; self.lineSpacing = lineSpacing; self.lineDy = lineDy; self.slotTop = slotTop; self.slotBottom = slotBottom
         self.fitScale = fitScale; self.fitX = fitX; self.fitY = fitY
     }
 }
 public struct QvpHighlightStyle: Equatable {
     public var mode: HighlightMode, ink: UInt32, band: UInt32, height: BandHeight, padX: Float, padY: Float, radius: Float, seam: Float, transitionMs: Int, layer: Int
-    public init(mode: HighlightMode = .band, ink: UInt32 = QvpDefaults.HIGHLIGHT_INK, band: UInt32 = QvpDefaults.HIGHLIGHT_BAND, height: BandHeight = .pitch, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y, radius: Float = 0, seam: Float = QvpDefaults.HIGHLIGHT_SEAM, transitionMs: Int = 0, layer: Int = QvpLayer.HIGHLIGHT) {
+    public init(mode: HighlightMode = .band, ink: UInt32 = QvpDefaults.HIGHLIGHT_INK, band: UInt32 = QvpDefaults.HIGHLIGHT_BAND, height: BandHeight = .lineSpacing, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y, radius: Float = 0, seam: Float = QvpDefaults.HIGHLIGHT_SEAM, transitionMs: Int = 0, layer: Int = QvpLayer.HIGHLIGHT) {
         self.mode = mode; self.ink = ink; self.band = band; self.height = height; self.padX = padX; self.padY = padY; self.radius = radius; self.seam = seam; self.transitionMs = transitionMs; self.layer = layer
     }
     var c: QvpFFI.QvpHighlightStyle {

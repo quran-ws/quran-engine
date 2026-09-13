@@ -184,7 +184,7 @@ impl Page {
         }
         let q = self.quant();
         let (scale, ox, oy, dy): (f32, f32, f32, Vec<f32>) = match self.current_layout() {
-            Some(l) => (l.scale, l.ox, l.oy, l.line_dy.clone()),
+            Some(l) => (l.scale, l.offset_x, l.offset_y, l.line_dy.clone()),
             None => (1.0, 0.0, 0.0, vec![0.0; self.data().lines.len()]),
         };
         self.mask

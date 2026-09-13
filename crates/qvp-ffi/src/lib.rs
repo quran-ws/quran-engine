@@ -264,22 +264,28 @@ pub struct QvpLayoutSpec {
     pub pad_left: f32,
     pub pad_right: f32,
     pub line_spacing: f32,
-    pub line_gap: f32,
     pub fill_height: u32,
-    pub nominal_lines: u32,
+    pub grid_lines: u32,
     pub crop_left: f32,
     pub crop_right: f32,
     pub max_aspect_slack: f32,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
+pub struct QvpGrid {
+    pub lines: u32,
+    pub line_spacing: f32,
+}
+
+#[repr(C)]
 pub struct QvpLayout {
     pub scale: f32,
-    pub ox: f32,
-    pub oy: f32,
+    pub offset_x: f32,
+    pub offset_y: f32,
     pub content_w: f32,
     pub content_h: f32,
-    pub pitch: f32,
+    pub line_spacing: f32,
     pub n_lines: u32,
     /// n_lines × {dy, slot_top, slot_bottom}; valid until the next qvp_layout call on this thread
     pub lines: *const f32,
@@ -495,7 +501,7 @@ unsafe fn hstyle(s: *const QvpHighlightStyle) -> HighlightStyle {
             2 => HighlightMode::Both,
             _ => HighlightMode::Band,
         },
-        height: if s.height == 1 { BandHeight::Ink } else { BandHeight::Pitch },
+        height: if s.height == 1 { BandHeight::Ink } else { BandHeight::LineSpacing },
         ink: s.ink,
         band: s.band,
         pad_x: s.pad_x,
@@ -654,7 +660,7 @@ pub unsafe extern "C" fn qvp_line_info(page: *const Page, index: u32, out: *mut 
         let p = &*page;
         let Some(l) = p.data().lines.get(index as usize) else { return 0 };
         let q = p.quant();
-        let pitch = p.natural_pitch();
+        let pitch = p.line_spacing();
         let c = p.line_centre(index as usize);
         *out = QvpLineInfo {
             line_number: l.line_number,
@@ -709,8 +715,16 @@ pub unsafe extern "C" fn qvp_target_words(page: *const Page, t: *const QvpTarget
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_natural_pitch(page: *const Page) -> f32 {
-    guard(|| guard(|| (*page).natural_pitch()))
+pub unsafe extern "C" fn qvp_page_line_spacing(page: *const Page) -> f32 {
+    guard(|| guard(|| (*page).line_spacing()))
+}
+/// The grid the page is laid out inside: the mushaf's line count and the printed line spacing.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_page_grid(page: *const Page, out: *mut QvpGrid) {
+    guard(|| {
+        let g = (*page).grid();
+        *out = QvpGrid { lines: g.lines, line_spacing: g.line_spacing };
+    })
 }
 
 // ───────────── metadata ─────────────
@@ -1088,25 +1102,27 @@ pub unsafe extern "C" fn qvp_hit_areas(page: *const Page, gap_bias: f32, out: *m
 
 // ───────────── layout ─────────────
 
+unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
+    let s = &*spec;
+    LayoutSpec {
+        viewport_w: s.viewport_w,
+        viewport_h: s.viewport_h,
+        pad_top: s.pad_top,
+        pad_bottom: s.pad_bottom,
+        pad_left: s.pad_left,
+        pad_right: s.pad_right,
+        line_spacing: s.line_spacing,
+        fill_height: s.fill_height != 0,
+        grid_lines: s.grid_lines,
+        crop_left: s.crop_left,
+        crop_right: s.crop_right,
+        max_aspect_slack: s.max_aspect_slack,
+    }
+}
 #[no_mangle]
 pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec, out: *mut QvpLayout) {
     guard(|| {
-        let s = &*spec;
-        let l = (*page).layout(&LayoutSpec {
-            viewport_w: s.viewport_w,
-            viewport_h: s.viewport_h,
-            pad_top: s.pad_top,
-            pad_bottom: s.pad_bottom,
-            pad_left: s.pad_left,
-            pad_right: s.pad_right,
-            line_spacing: s.line_spacing,
-            line_gap: s.line_gap,
-            fill_height: s.fill_height != 0,
-            nominal_lines: s.nominal_lines,
-            crop_left: s.crop_left,
-            crop_right: s.crop_right,
-            max_aspect_slack: s.max_aspect_slack,
-        });
+        let l = (*page).layout(&layout_spec(spec));
         let mut buf = Vec::with_capacity(l.line_dy.len() * 3);
         for (i, dy) in l.line_dy.iter().enumerate() {
             buf.push(*dy);
@@ -1116,11 +1132,11 @@ pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec,
         let lines = buf.as_ptr();
         let res = QvpLayout {
             scale: l.scale,
-            ox: l.ox,
-            oy: l.oy,
+            offset_x: l.offset_x,
+            offset_y: l.offset_y,
             content_w: l.content_w,
             content_h: l.content_h,
-            pitch: l.pitch,
+            line_spacing: l.line_spacing,
             n_lines: l.line_dy.len() as u32,
             lines,
             fit_scale: l.fit_scale,
@@ -1131,37 +1147,20 @@ pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec,
         *out = res;
     })
 }
-/// Leading (page units) that makes the page fill the padded viewport of `spec` when fitted to
-/// width; max <= 0 means unlimited. The padding is subtracted here, not by the host.
+/// The `line_spacing` multiplier that makes the page fill the padded viewport of `spec` when
+/// fitted to width; max <= 0 means unlimited. The padding is subtracted here, not by the host.
 #[no_mangle]
-pub unsafe extern "C" fn qvp_layout_gap_to_fill(page: *const Page, spec: *const QvpLayoutSpec, max: f32) -> f32 {
-    guard(|| {
-        let s = &*spec;
-        let spec = LayoutSpec {
-            viewport_w: s.viewport_w,
-            viewport_h: s.viewport_h,
-            pad_top: s.pad_top,
-            pad_bottom: s.pad_bottom,
-            pad_left: s.pad_left,
-            pad_right: s.pad_right,
-            line_spacing: s.line_spacing,
-            line_gap: s.line_gap,
-            fill_height: s.fill_height != 0,
-            nominal_lines: s.nominal_lines,
-            crop_left: s.crop_left,
-            crop_right: s.crop_right,
-            max_aspect_slack: s.max_aspect_slack,
-        };
-        (*page).gap_to_fill(&spec, if max <= 0.0 { f32::INFINITY } else { max })
-    })
+pub unsafe extern "C" fn qvp_layout_line_spacing_to_fill(
+    page: *const Page,
+    spec: *const QvpLayoutSpec,
+    max: f32,
+) -> f32 {
+    guard(|| (*page).line_spacing_to_fill(&layout_spec(spec), if max <= 0.0 { f32::INFINITY } else { max }))
 }
+/// The share of the padded viewport of `spec` left empty when the page is fitted to width.
 #[no_mangle]
-pub extern "C" fn qvp_gap_to_fill(page_w: f32, page_h: f32, lines: u32, view_w: f32, view_h: f32, max: f32) -> f32 {
-    guard(|| guard(|| gap_to_fill(page_w, page_h, lines, view_w, view_h, if max <= 0.0 { f32::INFINITY } else { max })))
-}
-#[no_mangle]
-pub extern "C" fn qvp_wasted_fraction(page_w: f32, page_h: f32, view_w: f32, view_h: f32) -> f32 {
-    guard(|| guard(|| wasted_fraction(page_w, page_h, view_w, view_h)))
+pub unsafe extern "C" fn qvp_layout_wasted_fraction(page: *const Page, spec: *const QvpLayoutSpec) -> f32 {
+    guard(|| (*page).wasted_fraction(&layout_spec(spec)))
 }
 /// out: x0,y0,x1,y1 in viewport px through the current layout
 #[no_mangle]
@@ -1363,7 +1362,7 @@ pub unsafe extern "C" fn qvp_word_bands(
     guard(|| {
         let ws = std::slice::from_raw_parts(words, n as usize);
         let v: Vec<QvpBox> = (*page)
-            .word_bands(ws, if height == 1 { BandHeight::Ink } else { BandHeight::Pitch }, pad_x, pad_y)
+            .word_bands(ws, if height == 1 { BandHeight::Ink } else { BandHeight::LineSpacing }, pad_x, pad_y)
             .iter()
             .map(|b| QvpBox { id: 0, line: b.line, x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, color: 0, radius: 0.0 })
             .collect();

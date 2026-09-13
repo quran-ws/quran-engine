@@ -20,7 +20,7 @@ public final class QvpPage {
     /// stride 8 per path: opStart, opCount, ptStart, ptCount, flags, word, line, extra
     public let table: [UInt32]
     public let words: [QvpWord], ayahs: [QvpAyah], lines: [QvpLine], decorations: [QvpDecoration]
-    public let naturalPitch: Float
+    public let lineSpacing: Float
     public private(set) var currentLayout: QvpLayout?
     public private(set) var defaultInk: UInt32 = QvpDefaults.INK
     private var paths: [CGPath]?
@@ -56,7 +56,7 @@ public final class QvpPage {
             return QvpDecoration(index: k, decoration: Int(d.decoration), surah: Int(d.surah), ayah: Int(d.ayah), line: Int(d.line), x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1,
                                  text: d.text.string, firstPath: Int(d.first_path), nPaths: Int(d.n_paths))
         }
-        naturalPitch = qvp_natural_pitch(h)
+        lineSpacing = qvp_page_line_spacing(h)
     }
     deinit { close() }
     /// Free the native page. Safe to call more than once.
@@ -177,13 +177,17 @@ public final class QvpPage {
         var s = spec.c
         var l = QvpFFI.QvpLayout(); qvp_layout(p, &s, &l)
         let n = Int(l.n_lines); let f = Array(UnsafeBufferPointer(start: l.lines, count: n * 3))
-        let out = QvpLayout(scale: l.scale, ox: l.ox, oy: l.oy, contentW: l.content_w, contentH: l.content_h, pitch: l.pitch,
+        let out = QvpLayout(scale: l.scale, offsetX: l.offset_x, offsetY: l.offset_y, contentW: l.content_w, contentH: l.content_h, lineSpacing: l.line_spacing,
                             lineDy: (0..<n).map { f[$0 * 3] }, slotTop: (0..<n).map { f[$0 * 3 + 1] }, slotBottom: (0..<n).map { f[$0 * 3 + 2] },
                             fitScale: l.fit_scale, fitX: l.fit_x, fitY: l.fit_y)
         currentLayout = out; return out
     }
-    /// Leading (page units) that makes this page fill the padded viewport of `spec`; `max` 0 = unlimited.
-    public func layoutGapToFill(_ spec: QvpLayoutSpec, max: Float = 0) -> Float { var s = spec.c; return qvp_layout_gap_to_fill(p, &s, max) }
+    /// The `lineSpacing` multiplier that makes this page fill the padded viewport of `spec`; `max` 0 = unlimited.
+    public func layoutLineSpacingToFill(_ spec: QvpLayoutSpec, max: Float = 0) -> Float { var s = spec.c; return qvp_layout_line_spacing_to_fill(p, &s, max) }
+    /// The share of the padded viewport of `spec` left empty when the page is fitted to width.
+    public func layoutWastedFraction(_ spec: QvpLayoutSpec) -> Float { var s = spec.c; return qvp_layout_wasted_fraction(p, &s) }
+    /// The grid this page is laid out inside: the mushaf's line count and the printed line spacing.
+    public var grid: QvpGrid { var g = QvpFFI.QvpGrid(); qvp_page_grid(p, &g); return QvpGrid(lines: Int(g.lines), lineSpacing: g.line_spacing) }
     /// A word's box in viewport px through the current layout (x0, y0, x1, y1).
     public func wordBoundsView(_ i: Int) -> (x0: Float, y0: Float, x1: Float, y1: Float)? {
         var b: (Float, Float, Float, Float) = (0, 0, 0, 0)
@@ -235,7 +239,7 @@ public final class QvpPage {
     private func boxes(_ v: [QvpFFI.QvpBox]) -> [QvpBox] { v.map { QvpBox(id: Int($0.id), line: Int($0.line), x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1, color: $0.color, radius: $0.radius) } }
     /// Animated band boxes in viewport px; draw each id as one nonzero path behind the ink.
     public func highlightBoxesView() -> [QvpBox] { boxes(collect(128) { o, c in qvp_highlight_boxes_view(p, o, c) }) }
-    public func wordBands(_ ws: [Int], height: BandHeight = .pitch, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) -> [QvpBox] {
+    public func wordBands(_ ws: [Int], height: BandHeight = .lineSpacing, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) -> [QvpBox] {
         ws.map { UInt32($0) }.withUnsafeBufferPointer { wb in boxes(collect(64) { o, c in qvp_word_bands(p, wb.baseAddress, UInt32(wb.count), UInt8(height.rawValue), padX, padY, o, c) }) }
     }
 

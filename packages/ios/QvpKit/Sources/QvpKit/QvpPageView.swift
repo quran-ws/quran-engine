@@ -19,7 +19,6 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public var padBottom: CGFloat = 0 { didSet { relayout() } }
     public var padSide: CGFloat = 0 { didSet { relayout() } }
     public var lineSpacing: Float = 1 { didSet { relayout() } }
-    public var lineGap: Float = 0 { didSet { relayout() } }
     public var fillHeight = false { didSet { relayout() } }
     /// Paper behind the page content (nil = transparent).
     public var paperColor: UIColor? { didSet { setNeedsDisplay() } }
@@ -166,14 +165,14 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
         guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
-        p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight))
+        p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, fillHeight: fillHeight))
         baseKey = ""; setNeedsDisplay()
     }
     /// Fit the content height and centre it.
     public func resetView() {
         stopSpring()
         let f = fittedView()
-        viewScale = f.scale; fitScale = f.scale; viewOx = f.ox; viewOy = f.oy
+        viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
         setNeedsDisplay()
     }
     /// The transform `resetView()` applies: content height fitted, centred.
@@ -191,7 +190,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     @objc private func onSpringFrame() {
         guard let s = spring else { stopSpring(); return }
         let (v, done) = s.value(at: CACurrentMediaTime())
-        viewScale = v.scale; viewOx = v.ox; viewOy = v.oy
+        viewScale = v.scale; viewOx = v.offsetX; viewOy = v.offsetY
         setNeedsDisplay()
         if done { stopSpring() }
     }
@@ -199,9 +198,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     /// Page units of `line` → view points (engine layout + pan/zoom).
     public func lineTransform(_ line: Int) -> CGAffineTransform {
         let l = page?.currentLayout
-        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.ox ?? 0)
+        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.offsetX ?? 0)
         let dy = (l.flatMap { line < $0.lineDy.count ? $0.lineDy[line] : nil }) ?? 0
-        let loy = CGFloat(l?.oy ?? 0) + CGFloat(dy) * ls
+        let loy = CGFloat(l?.offsetY ?? 0) + CGFloat(dy) * ls
         let s = viewScale * ls
         return CGAffineTransform(a: s, b: 0, c: 0, d: s, tx: viewOx + viewScale * lox, ty: viewOy + viewScale * loy)
     }
@@ -234,7 +233,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         let scale = window?.screen.scale ?? contentScaleFactor
         let W = Int(bounds.width * scale), H = Int(bounds.height * scale)
         var hasher = Hasher(); hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
-        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.pitch)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
+        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
 
         if let paper = paperColor {
             ctx.setFillColor(paper.cgColor)

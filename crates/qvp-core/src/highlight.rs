@@ -16,7 +16,7 @@ pub enum HighlightMode {
 #[repr(u8)]
 pub enum BandHeight {
     /// the line pitch (bands of adjacent lines meet)
-    Pitch = 0,
+    LineSpacing = 0,
     /// the words' own ink height plus pad_y
     Ink = 1,
 }
@@ -43,7 +43,7 @@ impl Default for HighlightStyle {
             mode: HighlightMode::Band,
             ink: crate::defaults::HIGHLIGHT_INK,
             band: crate::defaults::HIGHLIGHT_BAND,
-            height: BandHeight::Pitch,
+            height: BandHeight::LineSpacing,
             pad_x: crate::defaults::HIGHLIGHT_PAD_X,
             pad_y: crate::defaults::HIGHLIGHT_PAD_Y,
             radius: 0.0,
@@ -110,7 +110,7 @@ impl Page {
             let li = w.line_index as usize;
             let (x0, x1) = (w.bbox.x0 as f32 / q - pad_x, w.bbox.x1 as f32 / q + pad_x);
             let (y0, y1) = match height {
-                BandHeight::Pitch => (bands[li].y0, bands[li].y1),
+                BandHeight::LineSpacing => (bands[li].y0, bands[li].y1),
                 BandHeight::Ink => (w.bbox.y0 as f32 / q - pad_y, w.bbox.y1 as f32 / q + pad_y),
             };
             let b = by_line[li].get_or_insert(BandBox { line: li as u32, x0, y0, x1, y1 });
@@ -283,7 +283,7 @@ impl Page {
         let now = self.clock_ms;
         let mut out = Vec::new();
         let (scale, ox, oy, dy): (f32, f32, f32, Vec<f32>) = match self.current_layout() {
-            Some(l) => (l.scale, l.ox, l.oy, l.line_dy.clone()),
+            Some(l) => (l.scale, l.offset_x, l.offset_y, l.line_dy.clone()),
             None => (1.0, 0.0, 0.0, vec![0.0; self.data().lines.len()]),
         };
         for h in &self.highlights {

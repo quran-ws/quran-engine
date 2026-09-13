@@ -93,7 +93,7 @@ export interface Hit { word: number; path: number; decoration: number; line: num
 export interface Ayah { index: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDecoration: number; bbox: number[] }
 export interface Line { index: number; lineNumber: number; isHeader: boolean; firstWord: number; nWords: number; bbox: number[]; bandY0: number; bandY1: number; centre: number }
 export interface SelectionInfo { words: number[]; text: string; citation: string; textWithCitation: string }
-export interface PageInfo { page: number; width: number; height: number; nLines: number; nAyahs: number; nWords: number; nPaths: number; nDecorations: number; naturalPitch: number; forms: Form[]; loadMs: number; bytes: number; uri?: string }
+export interface PageInfo { page: number; width: number; height: number; nLines: number; nAyahs: number; nWords: number; nPaths: number; nDecorations: number; lineSpacing: number; forms: Form[]; loadMs: number; bytes: number; uri?: string }
 export interface Match { word: number; index: number; isLooseMatch: boolean; wordKey: string; text: string }
 export interface Surah { number: number; ayahCount: number; hasBanner: boolean; hasBasmalah: boolean; place: string; bannerDecoration: number; arabic: string; latin: string; english: string }
 export interface Division { division: DivisionKind; number: number; surah: number; ayah: number; line: number; ayahIndex: number }
@@ -101,12 +101,12 @@ export interface Marker { decoration: number; surah: number; ayah: number; line:
 export interface Rosette { decoration: number; surah: number; ayah: number; juz: number; hizb: number; nisf: number; rubuAlHizb: number; rubuAlHizbInHizb: number }
 export interface Sajdah { decoration: number; surah: number; ayah: number; signPath: number }
 export interface CropBox { x0: number; y0: number; x1: number; y1: number; nWords: number; ayahMarkDecoration: number }
-export interface Layout { scale: number; ox: number; oy: number; contentW: number; contentH: number; pitch: number; lineDy: number[]; slots: number[][] }
+export interface Layout { scale: number; offsetX: number; offsetY: number; contentW: number; contentH: number; lineSpacing: number; lineDy: number[]; slots: number[][] }
 export interface Stats { loadMs: number; bytes: number; baseMs: number; overlayMs: number; basePaths: number; overlayPaths: number; bands: number; hitUs: number; animating: boolean; styleHandles: number; highlightHandles: number; engineVersion: number; viewScale: number; layout: Layout | null }
 export interface AtlasSurah { number: number; page: number; ayahCount: number; place: string; arabic: string; latin: string; english: string }
 export interface AtlasRubuAlHizb { rubuAlHizb: number; surah: number; ayah: number; page: number; ayahKey: string }
 
-export interface HighlightStyle { mode?: HighlightMode; ink?: Color; band?: Color; height?: 'pitch' | 'ink'; padX?: number; padY?: number; radius?: number; seam?: number; ms?: number; layer?: number }
+export interface HighlightStyle { mode?: HighlightMode; ink?: Color; band?: Color; height?: 'lineSpacing' | 'ink'; padX?: number; padY?: number; radius?: number; seam?: number; ms?: number; layer?: number }
 /** One declarative highlight; the native side keeps id → handle and calls highlight / moveHighlight / restyleHighlight / removeHighlight on diff. */
 export interface Highlight { id: string; target: Target; style?: HighlightStyle }
 /** One declarative style rule: `selector` (→ page.style) or `target` (→ page.styleTarget); `hide` → page.hide(selector). */
@@ -125,8 +125,8 @@ export interface QvpPageViewProps extends ViewProps {
   /** optional NNN.words.json sidecar (derived forms), same URI schemes */
   wordsUri?: string;
   padTop?: number; padBottom?: number; padSide?: number;
-  /** spacing only opens up: lineSpacing < 1 and a negative lineGap are clamped by the engine */
-  lineSpacing?: number; lineGap?: number; fillHeight?: boolean;
+  /** spacing only opens up: lineSpacing < 1 is clamped by the engine */
+  lineSpacing?: number; fillHeight?: boolean;
   paperColor?: Color; defaultInk?: Color; selectionBand?: Color;
   selectionEnabled?: boolean; zoomEnabled?: boolean; hitMaxDistance?: number;
   theme?: Theme | null;
@@ -254,7 +254,9 @@ export const Qvp = {
   hitTest: (tag: number, x: number, y: number, opts?: HitOptions): Promise<Hit | null> => M.hitTest(tag, x, y, opts ?? null),
   hitTestExactView: (tag: number, x: number, y: number): Promise<Hit | null> => M.hitTestExactView(tag, x, y),
   hitTestView: (tag: number, x: number, y: number, opts?: HitOptions): Promise<Hit | null> => M.hitTestView(tag, x, y, opts ?? null),
-  layoutGapToFill: (tag: number, max = 0): Promise<number> => M.layoutGapToFill(tag, max),
+  layoutLineSpacingToFill: (tag: number, max = 0): Promise<number> => M.layoutLineSpacingToFill(tag, max),
+  layoutWastedFraction: (tag: number): Promise<number> => M.layoutWastedFraction(tag),
+  grid: (tag: number): Promise<{ lines: number; lineSpacing: number }> => M.grid(tag),
   wordBoundsView: (tag: number, i: number): Promise<{ x0: number; y0: number; x1: number; y1: number } | null> => M.wordBoundsView(tag, i),
   currentLayout: (tag: number): Promise<Layout | null> => M.currentLayout(tag),
   relayout: (tag: number): Promise<void> => M.relayout(tag),
@@ -284,8 +286,6 @@ export const Qvp = {
   normalize: (s: string): Promise<string> => M.arabic('normalize', s),
   looseKey: (s: string): Promise<string> => M.arabic('loose', s),
   arabic: (op: 'strip' | 'fold' | 'normalize' | 'loose', s: string): Promise<string> => M.arabic(op, s),
-  gapToFill: (pageW: number, pageH: number, lines: number, viewW: number, viewH: number, max = 0): Promise<number> => M.gapToFill(pageW, pageH, lines, viewW, viewH, max),
-  wastedFraction: (pageW: number, pageH: number, viewW: number, viewH: number): Promise<number> => M.wastedFraction(pageW, pageH, viewW, viewH),
   markCategory: (m: number): Promise<number> => M.markCategory(m),
   engineName: (): Promise<string> => M.engineName(),
   /** How many ids a name table has, and a name's id in it (255 when absent); the tables come from the engine at start. */
@@ -335,7 +335,7 @@ export class QvpAtlas {
 }
 
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutGapToFill', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg'] as const;
 type PageMethod = (typeof pageMethods)[number];
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {

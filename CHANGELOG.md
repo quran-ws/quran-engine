@@ -44,6 +44,16 @@ All notable changes to the engine and its packages. The format follows
   `QVP_SELECTOR_DECORATION_INDEX`. Wrappers: `decorations`, `nDecorations`, `decoration`,
   `ayahMarkDecoration`, `bannerDecoration`, `onDecorationTap`, `Sel.decoration`,
   `Sel.decorationIndex`, `index`, `lineNumber`, `ayahIndex`, `lineIndex`, `number`.
+- Layout: one name for one concept. `qvp_page_line_spacing` (was `natural_pitch`;
+  `page.lineSpacing`), `QvpLayout.line_spacing` (was `pitch`), `QvpLayout.offset_x` /
+  `offset_y` (were `ox` / `oy`), `QVP_BAND_LINE_SPACING` (was `QVP_BAND_PITCH`).
+  `QvpLayoutSpec.line_gap` is gone: leading is one multiplier, and
+  `qvp_layout_line_spacing_to_fill` (was `layout_gap_to_fill`) returns that multiplier.
+  `QvpLayoutSpec.nominal_lines` is `grid_lines` (0 = the page's grid) and `qvp_page_grid`
+  reports the grid (`QvpGrid {lines, line_spacing}`); `QVP_DEFAULT_GRID_LINES` was
+  `NOMINAL_LINES`. The free `qvp_gap_to_fill` is gone and `qvp_wasted_fraction` is
+  `qvp_layout_wasted_fraction(page, spec)`. The page views drop `lineGap`; the conformance
+  scenarios carry `lineSpacingToFill` and `wastedFraction`.
 
 ### Added
 - `QvpViewPolicy` in QvpKit: the zoom limits, zoomed threshold and swipe classifier both iOS
