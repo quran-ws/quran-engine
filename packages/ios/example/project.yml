@@ -1,5 +1,5 @@
 # xcodegen spec for the demo app: `xcodegen generate` writes Demo.xcodeproj, which is not committed.
-# Page data is NOT in git: Demo/pages/ is filled from dist/pages by sync-pages.sh (also run as a
+# Page data is NOT in git: example/pages/ is filled from dist/pages by sync-pages.sh (also run as a
 # pre-build step), and bundled as a folder reference under the app's Resources.
 name: Demo
 options:

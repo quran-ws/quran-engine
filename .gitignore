@@ -1,8 +1,8 @@
 target/
 dist/
 web/pages/
+dist/web/
 node_modules/
-web/index.html
 web/qvp_ffi.wasm
 .playwright-mcp/
 *.png
@@ -16,7 +16,7 @@ packages/android/**/.cxx/
 packages/android/local.properties
 packages/android/qvp/prebuilt/
 packages/android/qvp/src/androidTest/assets/
-packages/android/demo/src/main/assets/pages/
+packages/android/example/src/main/assets/pages/
 packages/flutter/**/android/src/main/jniLibs/
 packages/flutter/**/build/
 packages/flutter/**/.dart_tool/
@@ -40,9 +40,9 @@ packages/react-native/*.log
 packages/ios/QvpKit/QvpEngine.xcframework/
 packages/ios/QvpKit/.build/
 packages/ios/QvpKit/.swiftpm/
-packages/ios/Demo/pages/
-packages/ios/Demo/Demo.xcodeproj/
-packages/ios/Demo/build/
+packages/ios/example/pages/
+packages/ios/example/Demo.xcodeproj/
+packages/ios/example/build/
 packages/ios/**/xcuserdata/
 packages/ios/**/*.xcworkspace/xcshareddata/swiftpm/
 dist/ios/

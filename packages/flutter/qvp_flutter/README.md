@@ -98,7 +98,7 @@ cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target
 
 ## Example — Mushaf Vector Reader
 
-`qvp_flutter/example` reproduces `web/app.js`: page nav + goto (ayah key,
+`qvp_flutter/example` reproduces `web/example/app.js`: page nav + goto (ayah key,
 surah name, `juz N`), search, selection panel with per-path chips, copy with
 citation, crop → SVG, highlight modes + fade, follow-words, mark colours /
 hide marks / gold markers, themes, memorisation (mask, reveal, greyed page),

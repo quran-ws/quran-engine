@@ -17,6 +17,10 @@ All notable changes to the engine and its packages. The format follows
 - iOS: six page-cache lifecycle tests.
 
 ### Changed
+- Every platform's demo app lives in `example/`: `packages/ios/example`,
+  `packages/android/example` (Gradle module `:example`), `web/example/`. The web build
+  writes `dist/web/` and reads pages from `dist/pages/`. The iOS README lives inside
+  `QvpKit/`; the design spec lives in `docs/design/` with a historical banner.
 - iOS: a closed page is inert. A released cache leaves a retained controller's page open.
   The cache no longer traps when pages load before `setCurrentPage`.
 - Repository: one `.gitignore`; xcodegen generates `Demo.xcodeproj` and git no longer tracks it. The iOS demo

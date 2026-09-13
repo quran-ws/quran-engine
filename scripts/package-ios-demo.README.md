@@ -10,7 +10,7 @@ repository access.**
 
 ```
 QvpKit/       the SDK — a Swift package (Sources/) + QvpEngine.xcframework (the prebuilt engine)
-Demo/         a SwiftUI reader app built on QvpKit, with all 604 pages in Demo/pages/
+example/      a SwiftUI reader app built on QvpKit, with all 604 pages in example/pages/
 docs/API.md   the full engine API, one page, every call
 docs/qvp.h    the C ABI the SDK wraps — the contract, if you want to see underneath
 docs/ios.md   the iOS integration guide: architecture, the renderer, gestures, tests
@@ -21,7 +21,7 @@ docs/ios.md   the iOS integration guide: architecture, the renderer, gestures, t
 Requires **Xcode 15 or later**. Nothing else.
 
 ```sh
-open Demo/Demo.xcodeproj
+open example/Demo.xcodeproj
 ```
 
 Pick an iPhone simulator and hit Run. For a physical device, set your signing team first:
@@ -54,13 +54,13 @@ page.mask(Target.ayah(2, 255), .hide)                           // memorisation
 page.search("الله")                                             // normalised search
 ```
 
-`Demo/Sources/DemoModel.swift` is the honest reference: every visual state in the demo is engine
+`example/Sources/DemoModel.swift` is the honest reference: every visual state in the demo is engine
 state, and the view only paints. `docs/API.md` lists the rest — layout, selection, crop-to-SVG,
 the cross-page atlas.
 
 ## The page data
 
-`Demo/pages/` holds the whole mushaf, and your app needs the same files:
+`example/pages/` holds the whole mushaf, and your app needs the same files:
 
 | file | what |
 |---|---|

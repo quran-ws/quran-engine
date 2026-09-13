@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Fill Demo/pages/ with the complete mushaf (604 × .qvp + .words.json, plus atlas.qva), which the
-# app bundles as a folder reference. Demo/pages/ is a build artefact (gitignored); the Swift
+# Fill example/pages/ with the complete mushaf (604 × .qvp + .words.json, plus atlas.qva), which the
+# app bundles as a folder reference. example/pages/ is a build artefact (gitignored); the Swift
 # package ships no data.
 #
 # Source, in order:
