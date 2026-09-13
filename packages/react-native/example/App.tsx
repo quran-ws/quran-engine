@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
-  QvpPageView, QvpAtlas, Qvp, useQvp, Sel, T, KIND, DECO, LAYER, rgba,
+  QvpPageView, QvpAtlas, Qvp, useQvp, Sel, T, KIND, DECORATION, LAYER, rgba,
   type Word, type Deco, type Highlight, type StyleRule, type Theme, type Mask, type Reveal, type Match, type SelectionInfo, type PageInfo, type Stats, type HighlightMode, type Selector,
 } from '@quran.ws/qvp-react-native';
 
@@ -81,10 +81,9 @@ function Demo() {
   const [maskMode, setMaskMode] = useState<'hide' | 'block'>('hide');
   const [mask, setMask] = useState<Mask | null>(null);
   const [revealOn, setRevealOn] = useState(false);
-  const [revealAt, setRevealAt] = useState(-1);
-  const [revealSteps, setRevealSteps] = useState(0);
+  const [revealPosition, setRevealAt] = useState(-1);
+  const [revealStepCount, setRevealSteps] = useState(0);
   const [lineSpacing, setLineSpacing] = useState(1);
-  const [lineGap, setLineGap] = useState(0);
   const [fillHeight, setFillHeight] = useState(false);
   const [padTop, setPadTop] = useState(12);
   const [padBottom, setPadBottom] = useState(12);
@@ -110,13 +109,13 @@ function Demo() {
     let m: RegExpExecArray | null;
     if ((m = /^(\d+):(\d+)/.exec(s))) { const pg = await atlas.pageOf(+m[1], +m[2]); if (pg) { pendingAyah.current = [+m[1], +m[2]]; loadPage(pg); } return; }
     if ((m = /^juz\s*(\d+)/i.exec(s))) { const j = await atlas.juz(+m[1]); if (j) loadPage(j.page); return; }
-    const su = await atlas.findSurah(s); if (su.length) loadPage(su[0].page);
+    const su = await atlas.searchSurahs(s); if (su.length) loadPage(su[0].page);
   };
 
   // ── selection ──
   const selectWord = useCallback((w: Word | null) => {
     setSelAyah(null); setAyahInfo(null); setPathOn(new Map()); qvp.clearSelection().catch(() => {});
-    setSelWord(prev => (w == null || prev?.idx === w.idx ? null : w));
+    setSelWord(prev => (w == null || prev?.index === w.index ? null : w));
   }, [qvp]);
   const selectAyah = useCallback(async (s: number, a: number) => {
     setSelWord(null); setPathOn(new Map()); qvp.clearSelection().catch(() => {});
@@ -129,8 +128,8 @@ function Demo() {
     setInfo(e); setSelWord(null); setSelAyah(null); setAyahInfo(null); setSelection(null); setPathOn(new Map()); setRevealOn(false); setRevealAt(-1); setMask(null);
     const [surahs, divisions, keys] = await Promise.all([qvp.surahs(), qvp.divisions(), qvp.ayahKeys()]);
     let t = 'surahs: ' + surahs.map(s => `${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`).join(', ');
-    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.kind} ${d.n} at ${d.surah}:${d.ayah}`).join(', ');
-    if (atlas && keys.length) { const j = await atlas.juzAt(keys[0].surah, keys[0].ayah); if (j) { const pr = await atlas.pagesOfJuz(j); t += `\njuz ${j} · pages ${pr ? pr.join('–') : ''}`; } }
+    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.division} ${d.number} at ${d.surah}:${d.ayah}`).join(', ');
+    if (atlas && keys.length) { const j = await atlas.juzOf(keys[0].surah, keys[0].ayah); if (j) { const pr = await atlas.pagesOfJuz(j); t += `\njuz ${j} · pages ${pr ? pr.join('–') : ''}`; } }
     t += '\nayahs: ' + keys.map(k => k.ayahKey).join(' ');
     setMeta(t);
     if (query.trim()) setMatches(await qvp.search(query.trim()));
@@ -147,7 +146,7 @@ function Demo() {
     return () => { live = false; };
   }, [query, qvp]);
 
-  // ── follow words: one handle, rehighlight via the prop ──
+  // ── follow words: one handle, moveHighlight via the prop ──
   useEffect(() => {
     if (!playing) return;
     const id = setInterval(() => {
@@ -162,7 +161,7 @@ function Demo() {
   // ── declarative engine state ──
   const highlights = useMemo<Highlight[]>(() => {
     const out: Highlight[] = [];
-    if (selWord) out.push({ id: 'sel', target: T.word(selWord.idx), style: { mode: hlMode, ink: '#1a73e8', band: rgba('#1a73e8', 0.18), radius: 1.5, ms: hlMs, layer: LAYER.SELECTION } });
+    if (selWord) out.push({ id: 'sel', target: T.word(selWord.index), style: { mode: hlMode, ink: '#1a73e8', band: rgba('#1a73e8', 0.18), radius: 1.5, ms: hlMs, layer: LAYER.SELECTION } });
     if (selAyah) out.push({ id: 'ayah', target: T.ayah(selAyah[0], selAyah[1]), style: { mode: hlMode, ink: '#0a7d32', band: rgba('#0a7d32', 0.14), radius: 1.5, ms: hlMs, layer: LAYER.SELECTION } });
     if (matches.length) out.push({ id: 'search', target: T.words(matches.map(m => m.word)), style: { mode: 'both', ink: '#c62828', band: rgba('#c62828', 0.12), height: 'ink', padY: 1, radius: 1, ms: hlMs } });
     if (playing) out.push({ id: 'play', target: T.word(playIdx), style: { mode: hlMode, ink: '#d81b60', band: rgba('#d81b60', 0.14), radius: 1.5, ms: hlMs } });
@@ -171,12 +170,12 @@ function Demo() {
   const styles = useMemo<StyleRule[]>(() => {
     const out: StyleRule[] = [];
     if (hideMarks) out.push({ id: 'hide-marks', selector: Sel.kind(KIND.MARK), hide: true });
-    if (gold) out.push({ id: 'ayahMarks', selector: Sel.deco(DECO.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 });
+    if (gold) out.push({ id: 'ayahMarks', selector: Sel.decoration(DECORATION.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 });
     for (const [i, selector] of pathOn) out.push({ id: `path:${i}`, selector, color: '#ef6c00', ms: 200, layer: LAYER.TOP });
     return out;
   }, [hideMarks, gold, pathOn]);
   const markTheme = useMemo<Theme | null>(() => (tajwid ? { diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', sifr: '#ef6c00', ms: 200 } : null), [tajwid]);
-  const reveal = useMemo<Reveal | null>(() => (revealOn ? { lit: 2, grey: theme === 'dark' ? '#4a4f57' : '#c9c4b8', ink: th.ink, ms: 150, at: revealAt } : null), [revealOn, revealAt, theme, th.ink]);
+  const reveal = useMemo<Reveal | null>(() => (revealOn ? { lit: 2, grey: theme === 'dark' ? '#4a4f57' : '#c9c4b8', ink: th.ink, ms: 150, at: revealPosition } : null), [revealOn, revealPosition, theme, th.ink]);
 
   const maskAyah = () => {
     const target = selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.ayah(selWord.surah, selWord.ayah) : 'page';
@@ -186,15 +185,15 @@ function Demo() {
     let text: string;
     if (selection && selection.words.length) text = selection.textWithCitation;
     else if (selAyah && ayahInfo) text = `${ayahInfo.text} (${selAyah[0]}:${selAyah[1]})`;
-    else if (selWord) text = `${selWord.text} (${await qvp.citation([selWord.idx])})`;
+    else if (selWord) text = `${selWord.text} (${await qvp.citation([selWord.index])})`;
     else return;
     flash('copied: ' + text);
   };
   const cropSelection = async () => {
-    const target = selection && selection.words.length ? T.words(selection.words) : selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.word(selWord.idx) : null;
+    const target = selection && selection.words.length ? T.words(selection.words) : selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.word(selWord.index) : null;
     if (!target) return;
-    const [svg, box] = await Promise.all([qvp.cropSvg(target, { pad: 3, keepAyahMarks: true, background: th.paper }), qvp.cropBox(target, { pad: 3, keepAyahMarks: true })]);
-    if (svg && box) flash(`SVG ${(svg.length / 1024).toFixed(0)} KB · box ${(box.x1 - box.x0).toFixed(0)}×${(box.y1 - box.y0).toFixed(0)} units · ayahMark ${box.ayahMarkDeco >= 0 ? 'kept' : 'no'}`);
+    const [svg, box] = await Promise.all([qvp.cropSvg(target, { pad: 3, keepAyahMarks: true, background: th.paper }), qvp.cropBounds(target, { pad: 3, keepAyahMarks: true })]);
+    if (svg && box) flash(`SVG ${(svg.length / 1024).toFixed(0)} KB · box ${(box.x1 - box.x0).toFixed(0)}×${(box.y1 - box.y0).toFixed(0)} units · ayahMark ${box.ayahMarkDecoration >= 0 ? 'kept' : 'no'}`);
   };
   const clearAll = () => {
     setTajwid(false); setHideMarks(false); setGold(false); setPlaying(false); setMask(null); setRevealOn(false); setRevealAt(-1);
@@ -203,14 +202,14 @@ function Demo() {
   const leadingToFill = async () => {
     if (!info) return;
     setFillHeight(false); setLineSpacing(1);
-    setLineGap(await Qvp.gapToFill(info.width, info.height, info.nLines, winW - 16, pageViewH.current - padTop - padBottom));
+    setLineSpacing(await qvp.layoutLineSpacingToFill());
   };
 
   // ── selection panel ──
   const selMain = selection && selection.words.length > 1 ? selection.text : selWord ? selWord.text : ayahInfo ? ayahInfo.text : '—';
   const selInfo = selection && selection.words.length > 1 ? `selection · ${selection.words.length} words · ${selection.citation}`
     : selWord ? `wordKey ${selWord.wordKey} · line ${selWord.line} · ${selWord.nPaths} paths\n${selWord.forms.rasmImlai ? `rasmImlai ${selWord.forms.rasmImlai} · search ${selWord.forms.search}\n` : ''}${selWord.label}`
-    : selAyah && ayahInfo ? `ayah ${selAyah[0]}:${selAyah[1]} · ${ayahInfo.count} words${ayahInfo.complete ? '' : ' (continues on another page)'}` : '';
+    : selAyah && ayahInfo ? `ayah ${selAyah[0]}:${selAyah[1]} · ${ayahInfo.count} words${ayahInfo.isComplete ? '' : ' (continues on another page)'}` : '';
 
   const hud = stats ? [
     `engine v${stats.engineVersion} · JNI over qvp.h${atlas ? ' · atlas' : ''}`,
@@ -219,7 +218,7 @@ function Demo() {
     `base layer    ${stats.basePaths} paths in ${stats.baseMs.toFixed(2)} ms (cached)`,
     `overlay       ${stats.overlayPaths} styled + ${stats.bands} bands in ${stats.overlayMs.toFixed(2)} ms`,
     `hit-test      ${stats.hitUs.toFixed(1)} µs · ${stats.styleHandles} handles · ${stats.highlightHandles} highlights`,
-    `layout        ${fillHeight ? 'fill height' : lineGap > 0 ? `gap +${lineGap.toFixed(1)} u` : `spacing ×${lineSpacing.toFixed(2)}`} · pitch ${(stats.layout?.pitch ?? 0).toFixed(1)} u`,
+    `layout        ${fillHeight ? 'fill height' : `spacing ×${lineSpacing.toFixed(2)}`} · lineSpacing ${(stats.layout?.lineSpacing ?? 0).toFixed(1)} u`,
   ].filter(Boolean).join('\n') : '';
 
   return (
@@ -239,12 +238,12 @@ function Demo() {
         pageUri={`asset://pages/${pad3(pageNo)}.qvp`}
         wordsUri={`asset://pages/${pad3(pageNo)}.words.json`}
         padTop={padTop} padBottom={padBottom} padSide={8}
-        lineSpacing={lineSpacing} lineGap={lineGap} fillHeight={fillHeight}
+        lineSpacing={lineSpacing} fillHeight={fillHeight}
         paperColor={th.paper} defaultInk={th.ink}
         theme={markTheme} styles={styles} highlights={highlights} mask={mask} reveal={reveal}
         onPageLoad={onPageLoad}
         onWordTap={e => selectWord(e.word)}
-        onDecoTap={(e: { deco: Deco }) => { if (e.deco.ayah) selectAyah(e.deco.surah, e.deco.ayah); }}
+        onDecorationTap={(e: { decoration: Deco }) => { if (e.decoration.ayah) selectAyah(e.decoration.surah, e.decoration.ayah); }}
         onEmptyTap={() => selectWord(null)}
         onSelectionChanged={e => { setSelection(e); if (e.words.length > 1) { setSelWord(null); setSelAyah(null); setAyahInfo(null); } }}
         onRevealChanged={e => setRevealSteps(e.steps)}
@@ -257,7 +256,7 @@ function Demo() {
         <TextInput style={[st.input, { color: th.fg, borderColor: th.line, textAlign: 'right' }]} placeholder="الله · الرحمان" placeholderTextColor="#999" value={query} onChangeText={setQuery} />
         {query.trim() !== '' && matches.length === 0 && <Text style={[st.small, { color: th.fg, opacity: 0.6 }]}>no match on this page</Text>}
         {matches.slice(0, 8).map(m => (
-          <Pressable key={m.word} onPress={async () => selectWord((await qvp.word(m.word))!)}><Text style={[st.result, { color: th.fg }]}>{m.text}  <Text style={st.small}>{m.wordKey}{m.loose ? ' ~' : ''}</Text></Text></Pressable>
+          <Pressable key={m.word} onPress={async () => selectWord((await qvp.word(m.word))!)}><Text style={[st.result, { color: th.fg }]}>{m.text}  <Text style={st.small}>{m.wordKey}{m.isLooseMatch ? ' ~' : ''}</Text></Text></Pressable>
         ))}
 
         <Section title="Selection" fg={th.fg} />
@@ -267,8 +266,8 @@ function Demo() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 4 }}>
             {selWord.paths.map(p => {
               const label = p.kind === KIND.MARK ? `${p.markName} #${p.nthMark}` : p.kindName;
-              const sel = p.kind === KIND.MARK && p.nthMark >= 0 ? Sel.wordMark(selWord.idx, p.nthMark) : Sel.path(p.idx);
-              return <Btn key={p.idx} small label={label} on={pathOn.has(p.idx)} onPress={() => setPathOn(prev => { const m = new Map(prev); if (m.has(p.idx)) m.delete(p.idx); else m.set(p.idx, sel); return m; })} />;
+              const sel = p.kind === KIND.MARK && p.nthMark >= 0 ? Sel.wordMark(selWord.index, p.nthMark) : Sel.path(p.index);
+              return <Btn key={p.index} small label={label} on={pathOn.has(p.index)} onPress={() => setPathOn(prev => { const m = new Map(prev); if (m.has(p.index)) m.delete(p.index); else m.set(p.index, sel); return m; })} />;
             })}
           </ScrollView>
         )}
@@ -278,7 +277,7 @@ function Demo() {
         <Section title="Highlights (engine-animated)" fg={th.fg} />
         <View style={st.row}>
           {(['both', 'band', 'ink'] as HighlightMode[]).map(m => <Btn key={m} small label={m === 'both' ? 'band + ink' : m} on={hlMode === m} onPress={() => setHlMode(m)} />)}
-          <Btn label={playing ? '■ Stop' : '▶ Follow words'} on={playing} onPress={() => { if (!playing) setPlayIdx(selWord ? selWord.idx : 0); setPlaying(!playing); }} />
+          <Btn label={playing ? '■ Stop' : '▶ Follow words'} on={playing} onPress={() => { if (!playing) setPlayIdx(selWord ? selWord.index : 0); setPlaying(!playing); }} />
         </View>
         <Slider label="fade ms" min={0} max={800} value={hlMs} step={10} onChange={setHlMs} fg={th.fg} />
 
@@ -299,13 +298,13 @@ function Demo() {
           <Btn label="Mask ayah" onPress={maskAyah} />
           <Btn small label="hide" on={maskMode === 'hide'} onPress={() => setMaskMode('hide')} />
           <Btn small label="block" on={maskMode === 'block'} onPress={() => setMaskMode('block')} />
-          <Btn label="Reveal" onPress={() => qvp.revealNext(1)} />
-          <Btn label="Hide back" onPress={() => qvp.hideBack(1)} />
+          <Btn label="Reveal" onPress={() => qvp.unmaskNext(1)} />
+          <Btn label="Hide back" onPress={() => qvp.maskBack(1)} />
           <Btn label="Unmask" onPress={() => setMask(null)} />
         </View>
         <View style={st.row}>
           <Btn label="Greyed page" on={revealOn} onPress={() => { setRevealAt(-1); setRevealOn(!revealOn); }} />
-          {revealOn && <Slider label="position" min={-1} max={Math.max(0, revealSteps - 1)} value={revealAt} onChange={setRevealAt} fg={th.fg} fmt={v => `${v + 1}/${revealSteps}`} />}
+          {revealOn && <Slider label="position" min={-1} max={Math.max(0, revealStepCount - 1)} value={revealPosition} onChange={setRevealAt} fg={th.fg} fmt={v => `${v + 1}/${revealStepCount}`} />}
         </View>
 
         <Section title="Layout (engine)" fg={th.fg} />

@@ -52,7 +52,7 @@ The whole common case in the reference web wrapper:
 ```js
 const page = engine.loadPage(bytes);          // a .qvp file's bytes
 draw(page);                                    // your paint routine over page.paths
-const hit = page.hitTestViewEx(x, y);          // the word under a finger, or null
+const hit = page.hitTestView(x, y);          // the word under a finger, or null
 ```
 
 The features below are optional and reachable from the same page object.
@@ -133,7 +133,7 @@ or the colour of an outline.
 
 - **Page units**: the printed page's space, y down. Every geometric answer is in page units
   unless the name says *view*.
-- **View**: viewport pixels through the current layout. `hitTestViewEx` takes them. The
+- **View**: viewport pixels through the current layout. `hitTestView` takes them. The
   highlight and mask boxes come back in them, ready to draw.
 
 ## Glossary

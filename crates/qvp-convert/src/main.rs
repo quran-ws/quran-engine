@@ -84,9 +84,9 @@ fn main() {
             let bytes = fs::read(&args[2]).expect("read qvp");
             let p = qvp_format::decode(&bytes).expect("decode");
             println!(
-                "page {} {}x{} quant=1/{} lines={} ayahs={} words={} paths={} decos={} glyphs={} insts={} ops={}B strings={} total={}B",
+                "page {} {}x{} quant=1/{} lines={} ayahs={} words={} paths={} decorations={} glyphs={} insts={} ops={}B strings={} total={}B",
                 p.header.page, p.header.width, p.header.height, p.header.quant,
-                p.lines.len(), p.ayahs.len(), p.words.len(), p.paths.len(), p.decos.len(), p.glyphs.len(), p.insts.len(), p.ops.len(), p.strings.len(), bytes.len()
+                p.lines.len(), p.ayahs.len(), p.words.len(), p.paths.len(), p.decorations.len(), p.glyphs.len(), p.insts.len(), p.ops.len(), p.strings.len(), bytes.len()
             );
         }
         "batch" => {

@@ -45,9 +45,9 @@ DOM and stay responsive.
 
 - `revealStart()` in `web/qvp.js` throws `ReferenceError: markers is not defined`
   on every call — the greyed-page reveal is unreachable from the web wrapper. The
-  rest of the memorisation surface (`mask`, `revealNext`, `revealWord`, `unmask`,
-  `maskHidden`, `maskBoxes`) works.
-- `surahs()` returns a `bannerDeco` field that `docs/API.md` does not list; it
-  indexes into `page.decos`.
+  rest of the memorisation surface (`mask`, `unmaskNext`, `unmaskWord`, `unmask`,
+  `maskHidden`, `maskBoxesView`) works.
+- `surahs()` returns a `bannerDecoration` field that `docs/API.md` does not list; it
+  indexes into `page.decorations`.
 - No package is published on a public registry. The Android build can produce a versioned AAR or
   publish `ws.quran:qvp-android` to Maven Local.

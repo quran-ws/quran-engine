@@ -5,9 +5,9 @@ import QuartzCore
 /// Host-canvas renderer for a `QvpPage` (CoreGraphics). Draw order per frame:
 /// highlight bands (one path per highlight id, nonzero, behind the ink) → cached base ink
 /// (a bitmap of every non-styled path at the current transform, rebuilt only when the styled
-/// set / layout / transform changes) → styled ink from `styled()` → mask boxes.
+/// set / layout / transform changes) → styled ink from `styledPaths()` → mask boxes.
 /// Each frame calls `page.tick(now)`; a CADisplayLink keeps running while the engine says so.
-/// Gestures: tap → gap-aware hit-test → `onWordTap` / `onDecoTap` / `onEmptyTap`; long-press +
+/// Gestures: tap → gap-aware hit-test → `onWordTap` / `onDecorationTap` / `onEmptyTap`; long-press +
 /// drag → whole-word selection (engine `select`, band in the selection layer); pinch / pan on
 /// top of the engine layout; double-tap resets the view (or runs `onDoubleTap` when set).
 public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
@@ -19,24 +19,23 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public var padBottom: CGFloat = 0 { didSet { relayout() } }
     public var padSide: CGFloat = 0 { didSet { relayout() } }
     public var lineSpacing: Float = 1 { didSet { relayout() } }
-    public var lineGap: Float = 0 { didSet { relayout() } }
     public var fillHeight = false { didSet { relayout() } }
     /// Paper behind the page content (nil = transparent).
     public var paperColor: UIColor? { didSet { setNeedsDisplay() } }
     /// 0xRRGGBBAA band colour of the drag selection.
     public var selectionBand: UInt32 = QvpDefaults.SELECTION_BAND
-    public var onWordTap: ((QvpWord, QvpHitEx) -> Void)?
-    public var onDecoTap: ((QvpDecoration, QvpHitEx) -> Void)?
+    public var onWordTap: ((QvpWord, QvpHit) -> Void)?
+    public var onDecorationTap: ((QvpDecoration, QvpHit) -> Void)?
     public var onEmptyTap: (() -> Void)?
     public var onSelectionChanged: (([Int]) -> Void)?
     /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
     public var onSwipe: ((Int) -> Void)?
     /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
     /// (e.g. marking reading progress) can still call `resetView()` itself — `isZoomed` says when.
-    public var onDoubleTap: ((QvpHitEx?) -> Void)?
+    public var onDoubleTap: ((QvpHit?) -> Void)?
     /// Long-press, with the gap-aware hit under the finger. Fires once, on recognition,
     /// only while `selectionEnabled` is false — selection owns the long-press otherwise.
-    public var onLongPress: ((QvpHitEx?) -> Void)?
+    public var onLongPress: ((QvpHit?) -> Void)?
     public var longPressDuration: Double = 0.35 { didSet { longPressRecognizer?.minimumPressDuration = longPressDuration } }
     private weak var longPressRecognizer: UILongPressGestureRecognizer?
     public var zoomEnabled = true
@@ -89,10 +88,10 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     }
 
     // ── gestures ──
-    private func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHitEx? {
+    private func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHit? {
         guard let p = page, p.isOpen else { return nil }
         let t0 = CACurrentMediaTime()
-        let h = p.hitTestViewEx(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
+        let h = p.hitTestView(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
         lastHitUs = (CACurrentMediaTime() - t0) * 1e6
         return h
     }
@@ -100,7 +99,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         guard let p = page else { return }
         let hit = hitAt(g.location(in: self))
         if let h = hit, h.word >= 0 { onWordTap?(p.words[h.word], h) }
-        else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
+        else if let h = hit, h.decoration >= 0 { onDecorationTap?(p.decorations[h.decoration], h) }
         else { onEmptyTap?() }
     }
     @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) { if let cb = onDoubleTap { cb(hitAt(g.location(in: self))) } else { resetView() } }
@@ -149,14 +148,14 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         guard let p = page else { return }
         let ws = p.selection()
         let t = Target.words(ws)
-        if selectionHandle != 0 { p.rehighlight(selectionHandle, t) }
+        if selectionHandle != 0 { p.moveHighlight(selectionHandle, t) }
         else { selectionHandle = p.highlight(t, QvpHighlightStyle(mode: .band, band: selectionBand, padX: 0.6, layer: QvpLayer.SELECTION)) }
         onSelectionChanged?(ws); setNeedsDisplay()
     }
     /// Clear the selection band and the engine selection.
     public func clearSelection() {
         guard let p = page else { return }
-        p.clearSelection(); if selectionHandle != 0 { p.unhighlight(selectionHandle); selectionHandle = 0 }
+        p.clearSelection(); if selectionHandle != 0 { p.removeHighlight(selectionHandle); selectionHandle = 0 }
         onSelectionChanged?([]); setNeedsDisplay()
     }
 
@@ -166,14 +165,14 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
         guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
-        p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight))
+        p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, fillHeight: fillHeight))
         baseKey = ""; setNeedsDisplay()
     }
     /// Fit the content height and centre it.
     public func resetView() {
         stopSpring()
         let f = fittedView()
-        viewScale = f.scale; fitScale = f.scale; viewOx = f.ox; viewOy = f.oy
+        viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
         setNeedsDisplay()
     }
     /// The transform `resetView()` applies: content height fitted, centred.
@@ -191,7 +190,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     @objc private func onSpringFrame() {
         guard let s = spring else { stopSpring(); return }
         let (v, done) = s.value(at: CACurrentMediaTime())
-        viewScale = v.scale; viewOx = v.ox; viewOy = v.oy
+        viewScale = v.scale; viewOx = v.offsetX; viewOy = v.offsetY
         setNeedsDisplay()
         if done { stopSpring() }
     }
@@ -199,9 +198,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     /// Page units of `line` → view points (engine layout + pan/zoom).
     public func lineTransform(_ line: Int) -> CGAffineTransform {
         let l = page?.currentLayout
-        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.ox ?? 0)
+        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.offsetX ?? 0)
         let dy = (l.flatMap { line < $0.lineDy.count ? $0.lineDy[line] : nil }) ?? 0
-        let loy = CGFloat(l?.oy ?? 0) + CGFloat(dy) * ls
+        let loy = CGFloat(l?.offsetY ?? 0) + CGFloat(dy) * ls
         let s = viewScale * ls
         return CGAffineTransform(a: s, b: 0, c: 0, d: s, tx: viewOx + viewScale * lox, ty: viewOy + viewScale * loy)
     }
@@ -228,19 +227,19 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         guard let l = p.currentLayout else { return }
         let moving = p.tick(CACurrentMediaTime() * 1000)
         let paths = p.buildPaths()
-        let styled = p.styled()
+        let styled = p.styledPaths()
         let styledSet = Set(styled.map { $0.path })
         let ink = p.defaultInk
         let scale = window?.screen.scale ?? contentScaleFactor
         let W = Int(bounds.width * scale), H = Int(bounds.height * scale)
         var hasher = Hasher(); hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
-        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.pitch)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
+        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
 
         if let paper = paperColor {
             ctx.setFillColor(paper.cgColor)
             ctx.fill(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale))
         }
-        let bands = p.highlightBoxes()
+        let bands = p.highlightBoxesView()
         drawBoxes(ctx, bands)
 
         if base == nil || key != baseKey || base!.width != W || base!.height != H, W > 0, H > 0 {
@@ -276,7 +275,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
             ctx.setFillColor(QvpColor.cgColor(col)); ctx.addPath(paths[pi]); ctx.fillPath(using: p.pathEvenOdd(pi) ? .evenOdd : .winding)
         }
         if cur >= 0 { ctx.restoreGState() }
-        drawBoxes(ctx, p.maskBoxes())
+        drawBoxes(ctx, p.maskBoxesView())
         lastOverlayMs = (CACurrentMediaTime() - t1) * 1000; lastOverlayPaths = styled.count; lastBands = bands.count
         setAnimating(moving)
     }

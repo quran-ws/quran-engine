@@ -1,13 +1,12 @@
 //! Vertical layout: line spacing, leading that fills a screen, padding.
 //!
 //! The point of these knobs is a phone: a printed mushaf page fitted to the width of a
-//! tall screen leaves empty paper above and below, and the leading here spends it, so
-//! the page fills the screen. Expansion only — the printed pitch is the floor, and the
+//! tall screen leaves empty paper above and below, and the leading here fills it, so
+//! the page fills the screen. Expansion only: the printed spacing is the floor, and the
 //! text width is never a knob at all (the page is always fitted to the viewport width).
 use crate::Page;
 
-/// How to place lines vertically. All lengths in *viewport pixels* except
-/// `line_gap` (page units).
+/// How to place lines vertically. All lengths in *viewport pixels*.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LayoutSpec {
     pub viewport_w: f32,
@@ -16,24 +15,22 @@ pub struct LayoutSpec {
     pub pad_bottom: f32,
     pub pad_left: f32,
     pub pad_right: f32,
-    /// Multiplier on the printed line pitch (1.0 = as printed). The printed
-    /// positions are kept; the same delta `pitch·(line_spacing − 1)` is
-    /// added between every pair of consecutive lines. Values below 1.0 are
+    /// Multiplier on the printed line spacing (1.0 = as printed). The printed
+    /// positions are kept; the same delta `line_spacing_printed·(line_spacing − 1)`
+    /// is added between every pair of consecutive lines. Values below 1.0 are
     /// clamped to 1.0: spacing only ever opens up, never tightens.
     pub line_spacing: f32,
-    /// Extra leading between lines in page units, added after the multiplier.
-    /// Negative values are clamped to 0.
-    pub line_gap: f32,
     /// Choose the delta so the page fills `viewport_h - pad_top - pad_bottom`
-    /// (overrides line_spacing / line_gap). A short page (fewer lines than
-    /// `nominal_lines`) has no height of its own to fill: it takes the rows a
-    /// full page gets, `(viewport_h - pads) / nominal_lines` each, centred.
-    /// Never below the printed pitch — a page that cannot fit at it reports a
-    /// `content_h` taller than the viewport.
+    /// (overrides line_spacing). A short page (fewer lines than the grid) has no
+    /// height of its own to fill: it takes the rows a full page gets,
+    /// `(viewport_h - pads) / grid_lines` each, centred. Never below the printed
+    /// spacing: a page that cannot fit at it reports a `content_h` taller than
+    /// the viewport.
     pub fill_height: bool,
-    /// Line grid the mushaf is designed on (15 for KFGQPC Hafs). Short pages
-    /// (fewer lines) stay centred, as printed.
-    pub nominal_lines: u32,
+    /// The line grid to lay the page out inside; 0 means the page's own grid
+    /// ([`Page::grid`], 15 lines for this mushaf). Pass the page's line count to
+    /// make a short page fill the viewport on its own.
+    pub grid_lines: u32,
     /// Printed side margins to cut, in page units (0 = keep the print's margins). The
     /// ink then spans the padded viewport width instead of the full page width.
     pub crop_left: f32,
@@ -55,9 +52,8 @@ impl Default for LayoutSpec {
             pad_left: 0.0,
             pad_right: 0.0,
             line_spacing: 1.0,
-            line_gap: 0.0,
             fill_height: false,
-            nominal_lines: crate::defaults::NOMINAL_LINES,
+            grid_lines: 0,
             crop_left: 0.0,
             crop_right: 0.0,
             max_aspect_slack: 0.0,
@@ -65,26 +61,33 @@ impl Default for LayoutSpec {
     }
 }
 
+/// The line grid a page is designed on: how many lines a full page has and the printed
+/// spacing between them, in page units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Grid {
+    pub lines: u32,
+    pub line_spacing: f32,
+}
 /// Result of [`Page::layout`]: page units → viewport px is
-/// `vx = ox + x*scale`, `vy = oy + (y + line_dy[line])*scale`.
+/// `view_x = offset_x + x*scale`, `view_y = offset_y + (y + line_dy[line])*scale`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Layout {
     pub scale: f32,
-    pub ox: f32,
-    pub oy: f32,
+    pub offset_x: f32,
+    pub offset_y: f32,
     /// Per-line vertical shift in page units.
     pub line_dy: Vec<f32>,
     /// Laid-out vertical extent of each line in viewport px: (top, bottom).
     /// Boundaries sit halfway between neighbouring lines' laid-out centres —
     /// except beside a header line (surah name, basmalah), where a boundary
-    /// stops half a pitch from the centre. Slots never overlap.
+    /// stops half a line spacing from the centre. Slots never overlap.
     pub line_slots: Vec<(f32, f32)>,
     /// Total content height in viewport px including padding.
     pub content_h: f32,
     /// Content width in viewport px (the padded page width).
     pub content_w: f32,
-    /// Effective line pitch in page units (printed pitch + the added delta).
-    pub pitch: f32,
+    /// The line spacing the layout produced, in page units (printed spacing + the added delta).
+    pub line_spacing: f32,
     /// The view transform that shows the whole laid-out content inside the viewport:
     /// shrink by `fit_scale` when the content is taller than the viewport (never enlarge),
     /// then offset by `fit_x`, `fit_y` so the content is centred. A host draws at
@@ -98,7 +101,7 @@ pub struct Layout {
 /// Leading (page units, between consecutive lines) that makes a page fill a
 /// viewport when fitted to width: `needed = pageW·viewH/viewW`,
 /// `gap = (needed − pageH)/(lines − 1)`, clamped at 0 and `max`.
-pub fn gap_to_fill(page_w: f32, page_h: f32, lines: u32, view_w: f32, view_h: f32, max: f32) -> f32 {
+fn gap_to_fill(page_w: f32, page_h: f32, lines: u32, view_w: f32, view_h: f32, max: f32) -> f32 {
     if lines < 2 || view_w <= 0.0 {
         return 0.0;
     }
@@ -107,7 +110,7 @@ pub fn gap_to_fill(page_w: f32, page_h: f32, lines: u32, view_w: f32, view_h: f3
 }
 
 /// Fraction of the viewport left empty when the page is fitted to width.
-pub fn wasted_fraction(page_w: f32, page_h: f32, view_w: f32, view_h: f32) -> f32 {
+fn wasted_fraction(page_w: f32, page_h: f32, view_w: f32, view_h: f32) -> f32 {
     if view_w <= 0.0 || view_h <= 0.0 {
         return 0.0;
     }
@@ -116,8 +119,21 @@ pub fn wasted_fraction(page_w: f32, page_h: f32, view_w: f32, view_h: f32) -> f3
 }
 
 impl Page {
-    pub fn natural_pitch(&self) -> f32 {
-        self.natural_pitch
+    /// The printed spacing between this page's lines, in page units.
+    pub fn line_spacing(&self) -> f32 {
+        self.line_spacing
+    }
+    /// The grid this page is laid out inside: the mushaf's line count (or this page's, when
+    /// it has more) and the printed line spacing.
+    pub fn grid(&self) -> Grid {
+        Grid { lines: crate::defaults::GRID_LINES.max(self.data.lines.len() as u32), line_spacing: self.line_spacing }
+    }
+    fn grid_lines(&self, spec: &LayoutSpec) -> u32 {
+        if spec.grid_lines > 0 {
+            spec.grid_lines
+        } else {
+            self.grid().lines
+        }
     }
     pub fn line_centre(&self, li: usize) -> f32 {
         self.line_centre[li]
@@ -131,19 +147,26 @@ impl Page {
     /// grid. Instead every line keeps its printed position and the *same* delta
     /// is inserted between each pair of consecutive lines: line `k` (0-based on
     /// the nominal grid) moves by `k·delta`. `delta = 0` reproduces the print.
-    /// Leading (page units) that makes this page fill the padded viewport of `spec` when
-    /// fitted to width; see [`gap_to_fill`].
-    pub fn gap_to_fill(&self, spec: &LayoutSpec, max: f32) -> f32 {
+    /// The `line_spacing` multiplier that makes this page fill the padded viewport of `spec`
+    /// when fitted to width; `max` bounds the multiplier (`INFINITY` for none). 1 when the
+    /// page already fills it.
+    pub fn line_spacing_to_fill(&self, spec: &LayoutSpec, max: f32) -> f32 {
         let view_w = spec.viewport_w - spec.pad_left - spec.pad_right;
         let view_h = spec.viewport_h - spec.pad_top - spec.pad_bottom;
-        gap_to_fill(
-            self.width(),
-            self.height(),
-            spec.nominal_lines.max(self.data.lines.len() as u32),
-            view_w,
-            view_h,
-            max,
-        )
+        let lines = self.grid_lines(spec).max(self.data.lines.len() as u32);
+        let max_gap = if max.is_finite() && max > 1.0 { (max - 1.0) * self.line_spacing } else { f32::INFINITY };
+        let gap = gap_to_fill(self.width(), self.height(), lines, view_w, view_h, max_gap);
+        if self.line_spacing > 0.0 {
+            1.0 + gap / self.line_spacing
+        } else {
+            1.0
+        }
+    }
+    /// The share of the padded viewport of `spec` left empty when the page is fitted to width.
+    pub fn wasted_fraction(&self, spec: &LayoutSpec) -> f32 {
+        let view_w = spec.viewport_w - spec.pad_left - spec.pad_right;
+        let view_h = spec.viewport_h - spec.pad_top - spec.pad_bottom;
+        wasted_fraction(self.width(), self.height(), view_w, view_h)
     }
 
     pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
@@ -160,39 +183,39 @@ impl Page {
         let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
         let scale = avail_w / (pw - crop.0 - crop.1).max(1.0);
         let n = self.data.lines.len();
-        let nominal = spec.nominal_lines.max(n as u32).max(2) as f32;
-        let natural = self.natural_pitch;
+        let nominal = self.grid_lines(spec).max(n as u32).max(2) as f32;
+        let natural = self.line_spacing;
         let avail_h = (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0);
         // a short page has no height of its own to fill: it takes the rows a
         // full page fills the viewport with
         let on_grid = spec.fill_height && (n as f32) < nominal;
-        // leading only opens up: the printed pitch is the floor
+        // leading only opens up: the printed line spacing is the floor
         let delta = if on_grid {
             (avail_h / (nominal * scale) - natural).max(0.0)
         } else if spec.fill_height {
             ((avail_h / scale - ph) / (nominal - 1.0)).max(0.0)
         } else {
-            (natural * (spec.line_spacing - 1.0) + spec.line_gap).max(0.0)
+            (natural * (spec.line_spacing - 1.0)).max(0.0)
         };
-        let pitch = natural + delta;
+        let line_spacing = natural + delta;
         // laid-out height in page units: the grid's rows, or the printed page
         // with the leading added
-        let block_h = if on_grid { nominal * pitch } else { ph + (nominal - 1.0) * delta };
+        let block_h = if on_grid { nominal * line_spacing } else { ph + (nominal - 1.0) * delta };
         // short pages: the printed page is already centred; centre the added
         // leading the same way so the page stays in the middle of the grid
         let slot0 = (nominal - n as f32) / 2.0;
         let top_units = spec.pad_top / scale + (block_h - ph - (nominal - 1.0) * delta) / 2.0;
         let mut line_dy = Vec::with_capacity(n);
         for l in self.data.lines.iter() {
-            let k = slot0 + (l.line_no.max(1) as f32 - 1.0).min(n as f32 - 1.0);
+            let k = slot0 + (l.line_number.max(1) as f32 - 1.0).min(n as f32 - 1.0);
             line_dy.push(top_units + k * delta);
         }
         // laid-out centres in page units; slot boundaries halfway between neighbours — except
         // beside a header line, where the printed gap (the opening pages' banner sits pitches
-        // above the text) is not the line's to claim: there a boundary stops half a pitch out
+        // above the text) is not the line's to claim: there a boundary stops half a line spacing out
         let centres: Vec<f32> = (0..n).map(|i| self.line_centre[i] + line_dy[i]).collect();
         let headers: Vec<bool> = (0..n).map(|i| self.line_is_header(i)).collect();
-        let half = pitch / 2.0;
+        let half = line_spacing / 2.0;
         let mut line_slots = Vec::with_capacity(n);
         for i in 0..n {
             let c = centres[i];
@@ -223,8 +246,8 @@ impl Page {
         let content_h = spec.pad_top + block_h * scale + spec.pad_bottom;
         let mut layout = Layout {
             scale,
-            ox: spec.pad_left - crop.0 * scale,
-            oy: 0.0,
+            offset_x: spec.pad_left - crop.0 * scale,
+            offset_y: 0.0,
             line_dy,
             line_slots,
             content_h,
@@ -232,7 +255,7 @@ impl Page {
             fit_scale: 0.0,
             fit_x: 0.0,
             fit_y: 0.0,
-            pitch,
+            line_spacing,
         };
         // Fit: shrink to the viewport height when the content is taller, never enlarge;
         // centre the result. Offsets are never negative.
@@ -253,14 +276,19 @@ impl Page {
     }
 
     /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).
-    pub fn word_box_view(&self, wi: u32) -> (f32, f32, f32, f32) {
+    pub fn word_bounds_view(&self, wi: u32) -> (f32, f32, f32, f32) {
         let q = self.quant();
         let w = &self.data.words[wi as usize];
         let (x0, y0, x1, y1) = (w.bbox.x0 as f32 / q, w.bbox.y0 as f32 / q, w.bbox.x1 as f32 / q, w.bbox.y1 as f32 / q);
         match &self.layout {
             Some(l) => {
-                let d = l.line_dy[w.line_idx as usize];
-                (l.ox + x0 * l.scale, l.oy + (y0 + d) * l.scale, l.ox + x1 * l.scale, l.oy + (y1 + d) * l.scale)
+                let d = l.line_dy[w.line_index as usize];
+                (
+                    l.offset_x + x0 * l.scale,
+                    l.offset_y + (y0 + d) * l.scale,
+                    l.offset_x + x1 * l.scale,
+                    l.offset_y + (y1 + d) * l.scale,
+                )
             }
             None => (x0, y0, x1, y1),
         }

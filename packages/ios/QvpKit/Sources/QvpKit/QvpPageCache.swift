@@ -13,7 +13,7 @@
 // cache never guesses at bundles), and `configure` applies host styling to a
 // freshly attached page (ink, crop, layout mode). Call `setCurrentPage` from
 // the pager so neighbors preload and stay off the eviction list; call
-// `reconfigure()` after a theme change to restyle every live page.
+// `reconfigure()` after a theme change to recolorStyle every live page.
 #if canImport(SwiftUI)
 import SwiftUI
 

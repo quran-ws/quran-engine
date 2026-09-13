@@ -4,12 +4,12 @@ package ws.quran.qvp
 object QvpKind { const val BODY = 0; const val MARK = 1; const val AYAH_NUMBER = 2; const val AYAH_MARK_ORNAMENT = 3; const val HEADER_INK = 4; const val ORNAMENT = 5; const val PAGE_NUMBER = 6; const val RUNNING_HEAD = 7; const val OTHER = 255 }
 object QvpFamily { const val NONE = 0; const val DIACRITIC = 1; const val TANWIN = 2; const val DOTS = 3; const val WAQF = 4; const val SIFR = 5; const val SAJDAH = 6; const val READING_SIGN = 7 }
 object QvpCategory { const val NONE = 0; const val HARAKAH = 1; const val TANWIN = 2; const val LETTER_DOT = 3; const val ORTHOGRAPHIC = 4; const val DABT = 5; const val WAQF = 6; const val READING_SIGN = 7; const val STANDALONE = 8 }
-object QvpDeco { const val AYAH_MARK = 0; const val SURAH_NAME = 1; const val BASMALAH = 2; const val DIVISION_MARK = 3; const val SAJDAH_MARK = 4; const val PAGE_NUMBER = 5; const val RUNNING_HEAD = 6; const val OTHER = 255 }
+object QvpDecorationKind { const val AYAH_MARK = 0; const val SURAH_NAME = 1; const val BASMALAH = 2; const val DIVISION_MARK = 3; const val SAJDAH_MARK = 4; const val PAGE_NUMBER = 5; const val RUNNING_HEAD = 6; const val OTHER = 255 }
 object QvpLayer { const val BASE = 0; const val THEME = 10; const val HIGHLIGHT = 50; const val SELECTION = 60; const val TOP = 100 }
 enum class Form(val id: Int) { RASM_UTHMANI(0), RASM_IMLAI(1), QPC(2), RASM(3), SEARCH(4) }
 enum class SearchMode(val id: Int) { INCLUDES(0), EXACT(1), PREFIX(2) }
 enum class HighlightMode(val id: Int) { INK(0), BAND(1), BOTH(2) }
-enum class BandHeight(val id: Int) { PITCH(0), INK(1) }
+enum class BandHeight(val id: Int) { LINE_SPACING(0), INK(1) }
 enum class MaskMode(val id: Int) { HIDE(0), BLOCK(1), BLUR(2) }
 enum class Division(val id: Int) { JUZ(0), HIZB(1), NISF(2), RUBU_AL_HIZB(3) }
 
@@ -18,7 +18,7 @@ object QvpDefaults {
     const val INK = 0x231f20ff.toInt(); const val HIGHLIGHT_INK = 0x1a73e8ff.toInt(); const val HIGHLIGHT_BAND = 0xd6a3264d.toInt()
     const val HIGHLIGHT_PAD_X = 1.2f; const val HIGHLIGHT_PAD_Y = 0f; const val HIGHLIGHT_SEAM = 0.25f
     const val SELECTION_BAND = 0x2d6fd640; const val GAP_BIAS = 0.6f; const val TAP_DISTANCE = 6f
-    const val NOMINAL_LINES = 15; const val ASPECT_SLACK = 1.15f
+    const val GRID_LINES = 15; const val ASPECT_SLACK = 1.15f
     const val MASK_BLOCK = 0xd9d4c8ff.toInt(); const val MASK_PAD = 0.6f; const val MASK_RADIUS = 0.8f
     const val REVEAL_LIT = 1; const val REVEAL_GREY = 0xc9c4b8ff.toInt(); const val CROP_PAD = 2f
 }
@@ -59,8 +59,8 @@ class Selector private constructor(internal val arr: IntArray) {
         fun category(c: Int) = Selector(intArrayOf(11, c, 0, 0))
         fun family(f: Int) = Selector(intArrayOf(12, f, 0, 0))
         fun kind(k: Int) = Selector(intArrayOf(13, k, 0, 0))
-        fun deco(k: Int) = Selector(intArrayOf(14, k, 0, 0))
-        fun decoIdx(i: Int) = Selector(intArrayOf(15, i, 0, 0))
+        fun decoration(k: Int) = Selector(intArrayOf(14, k, 0, 0))
+        fun decorationIndex(i: Int) = Selector(intArrayOf(15, i, 0, 0))
     }
 }
 
@@ -89,36 +89,38 @@ class Target private constructor(internal val arr: IntArray) {
     }
 }
 
-data class QvpWord(val idx: Int, val surah: Int, val ayah: Int, val word: Int, val line: Int, val ayahIdx: Int, val lineIdx: Int,
+data class QvpWord(val index: Int, val surah: Int, val ayah: Int, val word: Int, val line: Int, val ayahIndex: Int, val lineIndex: Int,
                    val x0: Float, val y0: Float, val x1: Float, val y1: Float, val text: String, val firstPath: Int, val nPaths: Int) {
     val wordKey get() = "$surah:$ayah:$word"
     val ayahKey get() = "$surah:$ayah"
 }
-data class QvpAyah(val idx: Int, val surah: Int, val ayah: Int, val fragment: Int, val fragments: Int, val flags: Int, val rubuAlHizb: Int, val firstWord: Int, val nWords: Int,
-                   val ayahMarkDeco: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
-data class QvpLine(val idx: Int, val lineNo: Int, val isHeader: Boolean, val firstWord: Int, val nWords: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
+data class QvpAyah(val index: Int, val surah: Int, val ayah: Int, val fragment: Int, val fragments: Int, val flags: Int, val rubuAlHizb: Int, val firstWord: Int, val nWords: Int,
+                   val ayahMarkDecoration: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
+data class QvpLine(val index: Int, val lineNumber: Int, val isHeader: Boolean, val firstWord: Int, val nWords: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
                    val bandY0: Float, val bandY1: Float, val centre: Float)
-data class QvpDecoration(val idx: Int, val kind: Int, val surah: Int, val ayah: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
+data class QvpDecoration(val index: Int, val decoration: Int, val surah: Int, val ayah: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
                          val text: String, val firstPath: Int, val nPaths: Int)
 /** Indices are -1 when absent. */
-data class QvpHit(val word: Int, val path: Int, val deco: Int)
-data class QvpHitEx(val word: Int, val path: Int, val deco: Int, val line: Int, val distance: Float, val exact: Boolean)
-data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = QvpDefaults.GAP_BIAS, val exactFirst: Boolean = true)
+/** The one hit shape for every hit test; the exact variants report distance 0 and `isExact`. Indices are -1 when absent. */
+data class QvpHit(val word: Int, val path: Int, val decoration: Int, val line: Int, val distance: Float, val isExact: Boolean)
+data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = QvpDefaults.GAP_BIAS, val preferExact: Boolean = true)
 data class QvpBox(val id: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val color: Int, val radius: Float)
-data class QvpHitBox(val word: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val inkX0: Float, val inkY0: Float, val inkX1: Float, val inkY1: Float)
-data class QvpLineBand(val line: Int, val lineNo: Int, val y0: Float, val y1: Float, val mid: Float, val inkY0: Float, val inkY1: Float)
-/** Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine. */
+data class QvpHitArea(val word: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val inkX0: Float, val inkY0: Float, val inkX1: Float, val inkY1: Float)
+data class QvpLineBand(val line: Int, val lineNumber: Int, val y0: Float, val y1: Float, val mid: Float, val inkY0: Float, val inkY1: Float)
+/** Spacing only opens up: `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid. */
 data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop: Float = 0f, val padBottom: Float = 0f, val padLeft: Float = 0f, val padRight: Float = 0f,
-                         val lineSpacing: Float = 1f, val lineGap: Float = 0f, val fillHeight: Boolean = false, val nominalLines: Int = QvpDefaults.NOMINAL_LINES,
+                         val lineSpacing: Float = 1f, val fillHeight: Boolean = false, val gridLines: Int = 0,
                          /** Printed side margins to cut, page units (0 = keep). */ val cropLeft: Float = 0f, val cropRight: Float = 0f,
                          /** The content is never wider than viewportH·pageW/pageH·slack (0 = no bound). */ val maxAspectSlack: Float = 0f) {
-    internal fun floats() = floatArrayOf(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, if (fillHeight) 1f else 0f, nominalLines.toFloat(), cropLeft, cropRight, maxAspectSlack)
+    internal fun floats() = floatArrayOf(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, if (fillHeight) 1f else 0f, gridLines.toFloat(), cropLeft, cropRight, maxAspectSlack)
 }
-/** Page → viewport: vx = ox + x*scale ; vy = oy + (y + lineDy[line])*scale. [fitScale], [fitX], [fitY] show the
+/** The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units). */
+data class QvpGrid(val lines: Int, val lineSpacing: Float)
+/** Page → viewport: viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. [fitScale], [fitX], [fitY] show the
  *  whole content in the viewport (shrink to height, never enlarge, centred): the host's pan and zoom go on top. */
-class QvpLayout(val scale: Float, val ox: Float, val oy: Float, val contentW: Float, val contentH: Float, val pitch: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray,
+class QvpLayout(val scale: Float, val offsetX: Float, val offsetY: Float, val contentW: Float, val contentH: Float, val lineSpacing: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray,
                 val fitScale: Float = 1f, val fitX: Float = 0f, val fitY: Float = 0f)
-data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val ink: Int = QvpDefaults.HIGHLIGHT_INK, val band: Int = QvpDefaults.HIGHLIGHT_BAND, val height: BandHeight = BandHeight.PITCH,
+data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val ink: Int = QvpDefaults.HIGHLIGHT_INK, val band: Int = QvpDefaults.HIGHLIGHT_BAND, val height: BandHeight = BandHeight.LINE_SPACING,
                              val padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, val padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y, val radius: Float = 0f, val seam: Float = QvpDefaults.HIGHLIGHT_SEAM, val transitionMs: Int = 0, val layer: Int = QvpLayer.HIGHLIGHT) {
     internal fun ints() = intArrayOf(mode.id, height.id, ink, band, transitionMs, layer)
     internal fun floats() = floatArrayOf(padX, padY, radius, seam)
@@ -126,12 +128,12 @@ data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val i
 /** Colours with alpha 0 (or null) leave that colour alone. */
 data class QvpTheme(val ink: Int? = null, val diacritics: Int? = null, val dots: Int? = null, val waqf: Int? = null, val sifr: Int? = null, val ayahMark: Int? = null, val numeral: Int? = null,
                     val headers: Int? = null, val marks: Map<String, Int> = emptyMap(), val transitionMs: Int = 0)
-data class QvpSurah(val number: Int, val ayahCount: Int, val hasBanner: Boolean, val hasBasmalah: Boolean, val place: String, val bannerDeco: Int, val arabic: String, val latin: String, val english: String)
-data class QvpDivision(val kind: Division, val n: Int, val surah: Int, val ayah: Int, val line: Int, val ayahIdx: Int)
-data class QvpAyahMark(val deco: Int, val surah: Int, val ayah: Int, val line: Int, val cx: Float, val cy: Float, val r: Float, val ornamentPath: Int, val numeralPath: Int)
-data class QvpRosette(val deco: Int, val surah: Int, val ayah: Int, val juz: Int, val hizb: Int, val nisf: Int, val rubuAlHizb: Int, val rubuAlHizbInHizb: Int)
-data class QvpSajdah(val deco: Int, val surah: Int, val ayah: Int, val signPath: Int)
-data class QvpMatch(val word: Int, val index: Int, val loose: Boolean, val wordKey: String, val text: String)
-data class QvpCropBox(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val nWords: Int, val ayahMarkDeco: Int)
-data class QvpAtlasSurah(val n: Int, val page: Int, val ayahCount: Int, val place: String, val arabic: String, val latin: String, val english: String)
+data class QvpSurah(val number: Int, val ayahCount: Int, val hasBanner: Boolean, val hasBasmalah: Boolean, val place: String, val bannerDecoration: Int, val arabic: String, val latin: String, val english: String)
+data class QvpDivision(val division: Division, val number: Int, val surah: Int, val ayah: Int, val line: Int, val ayahIndex: Int)
+data class QvpAyahMark(val decoration: Int, val surah: Int, val ayah: Int, val line: Int, val cx: Float, val cy: Float, val r: Float, val ornamentPath: Int, val numeralPath: Int)
+data class QvpRosette(val decoration: Int, val surah: Int, val ayah: Int, val juz: Int, val hizb: Int, val nisf: Int, val rubuAlHizb: Int, val rubuAlHizbInHizb: Int)
+data class QvpSajdah(val decoration: Int, val surah: Int, val ayah: Int, val signPath: Int)
+data class QvpMatch(val word: Int, val index: Int, val isLooseMatch: Boolean, val wordKey: String, val text: String)
+data class QvpCropBounds(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val nWords: Int, val ayahMarkDecoration: Int)
+data class QvpAtlasSurah(val number: Int, val page: Int, val ayahCount: Int, val place: String, val arabic: String, val latin: String, val english: String)
 data class QvpAtlasRubuAlHizb(val rubuAlHizb: Int, val surah: Int, val ayah: Int, val page: Int) { val ayahKey get() = "$surah:$ayah" }

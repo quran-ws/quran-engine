@@ -16,10 +16,10 @@ pub mod style;
 pub mod target;
 pub mod text;
 
-pub use crop::CropBox;
+pub use crop::CropBounds;
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
-pub use hit::{HitBox, HitEx, HitOptions, LineBand};
-pub use layout::{gap_to_fill, wasted_fraction, Layout, LayoutSpec};
+pub use hit::{Hit, HitArea, HitOptions, LineBand};
+pub use layout::{Grid, Layout, LayoutSpec};
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
 pub use qvp_format;
@@ -70,17 +70,17 @@ pub struct Geometry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Hit {
+pub struct HitExact {
     pub word: u32,
     pub path: u32,
-    pub deco: u32,
+    pub decoration: u32,
 }
 
 pub struct Page {
     data: PageData,
     geom: Geometry,
     line_centre: Vec<f32>,
-    natural_pitch: f32,
+    line_spacing: f32,
     layout: Option<Layout>,
     /// words of each line sorted by bbox.x0 ascending: (x0, word idx)
     line_words: Vec<Vec<(i32, u32)>>,
@@ -113,7 +113,7 @@ impl Page {
             }
         }
         let mut path_deco = vec![NONE; data.paths.len()];
-        for (di, d) in data.decos.iter().enumerate() {
+        for (di, d) in data.decorations.iter().enumerate() {
             for p in d.first_path..d.first_path + d.n_paths as u32 {
                 path_deco[p as usize] = di as u32;
             }
@@ -131,7 +131,7 @@ impl Page {
                     }
                 }
             }
-            for d in data.decos.iter().filter(|d| d.line as usize == li) {
+            for d in data.decorations.iter().filter(|d| d.line as usize == li) {
                 bb.union(&d.bbox);
             }
             if bb.is_empty() {
@@ -139,7 +139,7 @@ impl Page {
             }
             line_centre[li] = if bb.is_empty() { 0.0 } else { (bb.y0 + bb.y1) as f32 / 2.0 / q };
         }
-        let natural_pitch = {
+        let line_spacing = {
             let mut d: Vec<f32> = line_centre.windows(2).map(|w| (w[1] - w[0]).abs()).filter(|v| *v > 1.0).collect();
             d.sort_by(|a, b| a.partial_cmp(b).unwrap());
             if d.is_empty() {
@@ -164,9 +164,9 @@ impl Page {
         for i in 0..data.paths.len() {
             let wi = path_word[i];
             path_line[i] = if wi != NONE {
-                data.words[wi as usize].line_idx as u32
+                data.words[wi as usize].line_index as u32
             } else if path_deco[i] != NONE {
-                let d = &data.decos[path_deco[i] as usize];
+                let d = &data.decorations[path_deco[i] as usize];
                 if d.line != NONE_U16 && (d.line as usize) < data.lines.len() {
                     d.line as u32
                 } else {
@@ -191,20 +191,20 @@ impl Page {
                 named.clear();
             }
             let di = path_deco[i];
-            let (surah, ayah, line_no) = if wi != NONE {
+            let (surah, ayah, line_number) = if wi != NONE {
                 let w = &data.words[wi as usize];
-                (w.surah, w.ayah, data.lines[w.line_idx as usize].line_no)
+                (w.surah, w.ayah, data.lines[w.line_index as usize].line_number)
             } else if di != NONE {
-                let d = &data.decos[di as usize];
-                (d.surah, d.ayah, data.lines[path_line[i] as usize].line_no)
+                let d = &data.decorations[di as usize];
+                (d.surah, d.ayah, data.lines[path_line[i] as usize].line_number)
             } else {
                 (0, 0, 0)
             };
             let nm = *named.entry(p.mark).and_modify(|v| *v += 1).or_insert(0);
             path_ctx.push(PathCtx {
                 word: wi,
-                deco: di,
-                line_no,
+                decoration: di,
+                line_number,
                 surah,
                 ayah,
                 kind: p.kind,
@@ -214,7 +214,7 @@ impl Page {
                 nth_in_word,
                 nth_mark: if p.kind == PathKind::Mark { nth_mark } else { u16::MAX },
                 nth_mark_named: nm,
-                deco_kind: if di != NONE { data.decos[di as usize].kind } else { DecoKind::Other },
+                deco_kind: if di != NONE { data.decorations[di as usize].kind } else { DecoKind::Other },
             });
             if wi != NONE {
                 nth_in_word += 1;
@@ -277,7 +277,7 @@ impl Page {
             data,
             geom,
             line_centre,
-            natural_pitch,
+            line_spacing,
             layout: None,
             line_words,
             path_deco,
@@ -328,7 +328,7 @@ impl Page {
         self.word_form(wi, Form::RasmUthmani)
     }
     pub fn deco_text(&self, di: u32) -> &str {
-        let d = &self.data.decos[di as usize];
+        let d = &self.data.decorations[di as usize];
         if d.text == NONE_U16 {
             ""
         } else {
@@ -340,7 +340,7 @@ impl Page {
     }
     /// All word indices of an ayah on this page, in reading order.
     pub fn ayah_words(&self, surah: u16, ayah: u16) -> Vec<u32> {
-        self.resolve(&Target::Ayah(surah, ayah))
+        self.target_words(&Target::Ayah(surah, ayah))
     }
     pub fn path_deco(&self, pi: u32) -> u32 {
         self.path_deco[pi as usize]
@@ -352,7 +352,7 @@ impl Page {
     // ───────────── exact hit testing ─────────────
 
     /// Exact hit-test in page units (bbox → outline). Words first, then decorations.
-    pub fn hit_test(&self, x: f32, y: f32) -> Option<Hit> {
+    pub fn hit_test_exact(&self, x: f32, y: f32) -> Option<HitExact> {
         let q = self.quant();
         let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
         let mut bbox_only: Option<u32> = None;
@@ -373,27 +373,27 @@ impl Page {
                     bbox_only = Some(wi);
                 }
                 if let Some(pi) = self.exact_path_hit(w.first_path, w.n_paths as u32, x, y) {
-                    return Some(Hit { word: wi, path: pi, deco: NONE });
+                    return Some(HitExact { word: wi, path: pi, decoration: NONE });
                 }
             }
         }
         if let Some(wi) = bbox_only {
-            return Some(Hit { word: wi, path: NONE, deco: NONE });
+            return Some(HitExact { word: wi, path: NONE, decoration: NONE });
         }
-        for (di, d) in self.data.decos.iter().enumerate() {
+        for (di, d) in self.data.decorations.iter().enumerate() {
             if d.bbox.contains(qx, qy) {
                 let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, y).unwrap_or(NONE);
-                return Some(Hit { word: NONE, path: pi, deco: di as u32 });
+                return Some(HitExact { word: NONE, path: pi, decoration: di as u32 });
             }
         }
         None
     }
 
     /// Exact hit-test in viewport px using the current layout.
-    pub fn hit_test_view(&self, vx: f32, vy: f32) -> Option<Hit> {
-        let Some(l) = &self.layout else { return self.hit_test(vx, vy) };
-        let x = (vx - l.ox) / l.scale;
-        let y = (vy - l.oy) / l.scale;
+    pub fn hit_test_exact_view(&self, vx: f32, vy: f32) -> Option<HitExact> {
+        let Some(l) = &self.layout else { return self.hit_test_exact(vx, vy) };
+        let x = (vx - l.offset_x) / l.scale;
+        let y = (vy - l.offset_y) / l.scale;
         let q = self.quant();
         for (li, line) in self.data.lines.iter().enumerate() {
             let py = y - l.line_dy[li];
@@ -405,19 +405,19 @@ impl Page {
                 return Some(h);
             }
         }
-        for (di, d) in self.data.decos.iter().enumerate() {
+        for (di, d) in self.data.decorations.iter().enumerate() {
             let li = self.geom.table[d.first_path as usize].line as usize;
             let py = y - l.line_dy[li];
             let (qx, qy) = ((x * q).round() as i32, (py * q).round() as i32);
             if d.bbox.contains(qx, qy) {
                 let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, py).unwrap_or(NONE);
-                return Some(Hit { word: NONE, path: pi, deco: di as u32 });
+                return Some(HitExact { word: NONE, path: pi, decoration: di as u32 });
             }
         }
         None
     }
 
-    fn hit_test_in_line(&self, li: usize, x: f32, y: f32) -> Option<Hit> {
+    fn hit_test_in_line(&self, li: usize, x: f32, y: f32) -> Option<HitExact> {
         let q = self.quant();
         let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
         let ws = &self.line_words[li];
@@ -434,18 +434,18 @@ impl Page {
                 bbox_only = Some(wi);
             }
             if let Some(pi) = self.exact_path_hit(w.first_path, w.n_paths as u32, x, y) {
-                return Some(Hit { word: wi, path: pi, deco: NONE });
+                return Some(HitExact { word: wi, path: pi, decoration: NONE });
             }
         }
         if let Some(wi) = bbox_only {
-            return Some(Hit { word: wi, path: NONE, deco: NONE });
+            return Some(HitExact { word: wi, path: NONE, decoration: NONE });
         }
-        for (di, d) in self.data.decos.iter().enumerate() {
+        for (di, d) in self.data.decorations.iter().enumerate() {
             if self.geom.table[d.first_path as usize].line as usize != li || !d.bbox.contains(qx, qy) {
                 continue;
             }
             let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, y).unwrap_or(NONE);
-            return Some(Hit { word: NONE, path: pi, deco: di as u32 });
+            return Some(HitExact { word: NONE, path: pi, decoration: di as u32 });
         }
         None
     }
@@ -568,7 +568,7 @@ impl Page {
         for b in self.highlight_boxes_view() {
             r.fill_rect(b.x0, b.y0, b.x1, b.y1, b.radius, b.color);
         }
-        self.paint();
+        self.colors();
         for (i, g) in self.geom.table.iter().enumerate() {
             let c = self.colors[i];
             if c & 0xff == 0 {

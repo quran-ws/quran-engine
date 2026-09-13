@@ -36,7 +36,7 @@ impl Builder {
                 s.first_page = page;
             }
         }
-        for d in p.decos.iter().filter(|d| d.kind == DecoKind::SurahName && d.text != NONE_U16) {
+        for d in p.decorations.iter().filter(|d| d.kind == DecoKind::SurahName && d.text != NONE_U16) {
             let fragments: Vec<&str> = p.strings[d.text as usize].split('|').collect();
             if fragments.len() < 5 {
                 continue;

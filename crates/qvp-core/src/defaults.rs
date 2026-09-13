@@ -19,7 +19,7 @@ pub const GAP_BIAS: f32 = 0.6;
 /// How far (page units) a tap may land from the ink and still hit the nearest word.
 pub const TAP_DISTANCE: f32 = 6.0;
 /// The line grid this mushaf is designed on.
-pub const NOMINAL_LINES: u32 = 15;
+pub const GRID_LINES: u32 = 15;
 /// The content-width bound the examples pass as `max_aspect_slack`.
 pub const ASPECT_SLACK: f32 = 1.15;
 /// Mask block colour, padding and corner radius (page units).

@@ -199,7 +199,7 @@ impl Atlas {
         Some((start, end.max(start)))
     }
     /// Case-insensitive substring match on Arabic, Latin or English names.
-    pub fn find_surah(&self, text: &str) -> Vec<&AtlasSurah> {
+    pub fn search_surahs(&self, text: &str) -> Vec<&AtlasSurah> {
         let t = text.trim().to_lowercase();
         if t.is_empty() {
             return vec![];
@@ -294,7 +294,7 @@ mod tests {
         assert_eq!(d.page_of_surah(2), Some(2));
         assert_eq!(d.juz_at(2, 10), Some(1));
         assert_eq!(d.rubu_al_hizb_at(2, 30).map(|r| r.rubu_al_hizb), Some(2));
-        assert_eq!(d.find_surah("cow")[0].n, 2);
+        assert_eq!(d.search_surahs("cow")[0].n, 2);
         assert!(d.to_json().contains("\"latin\":\"Baqarah\""));
     }
 }

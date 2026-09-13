@@ -1,14 +1,14 @@
 // SwiftUI renderer for a `QvpPage` — the same frame as QvpPageView (UIKit), drawn with
 // `Canvas`: highlight bands → cached base ink (a CGImage of every non-styled path at the
 // current per-line transform, rebuilt only when the styled set / layout / transform changes)
-// → styled ink from `styled()` → mask boxes. A `TimelineView(.animation)` runs frames only
+// → styled ink from `styledPaths()` → mask boxes. A `TimelineView(.animation)` runs frames only
 // while `page.tick(now)` reports a transition in flight.
 //
 // SwiftUI has no `setNeedsDisplay()`, so the mutable surface lives on `QvpCanvasController`
 // (`@Observable`): set the page and the layout knobs there, call `invalidate()` after engine
 // calls the controller cannot see (`highlight`, `style`, `mask`, …), and pass the controller
 // to `QvpPageCanvas`. Gestures mirror QvpPageView and every one is a callback: tap →
-// gap-aware hit-test → `onWordTap` / `onDecoTap` / `onEmptyTap`; double-tap → `onDoubleTap`
+// gap-aware hit-test → `onWordTap` / `onDecorationTap` / `onEmptyTap`; double-tap → `onDoubleTap`
 // (nil resets the view); long-press + drag → whole-word selection; pinch / pan on top of the
 // engine layout, with a horizontal swipe at the fitted size reported through `onSwipe`.
 // When the page is not zoomed and `onSwipe` is nil the drag gesture is detached entirely,
@@ -34,20 +34,19 @@ public final class QvpCanvasController {
     public var padSide: CGFloat = 0 { didSet { relayout() } }
     /// Crop the printed page's own horizontal margins (page units, ≥ 0): the
     /// INK spans the padded viewport instead of the full viewBox — for hosts
-    /// replacing ink-cropped raster pages. Feed from `page.cropBox("page")`:
+    /// replacing ink-cropped raster pages. Feed from `page.cropBounds("page")`:
     /// left = box.x0, right = page.width − box.x1.
     public var cropLeft: Float = 0 { didSet { relayout() } }
     public var cropRight: Float = 0 { didSet { relayout() } }
-    /// Line spacing only opens up; the engine clamps values below 1 to the printed pitch.
+    /// Line spacing only opens up; the engine clamps values below 1 to the printed lineSpacing.
     public var lineSpacing: Float = 1 { didSet { relayout() } }
-    public var lineGap: Float = 0 { didSet { relayout() } }
     public var fillHeight = false { didSet { relayout() } }
     /// Paper behind the page content, 0xRRGGBBAA (nil = transparent).
     public var paperColor: UInt32?
     /// 0xRRGGBBAA band colour of the drag selection.
     public var selectionBand: UInt32 = QvpDefaults.SELECTION_BAND
-    public var onWordTap: ((QvpWord, QvpHitEx) -> Void)?
-    public var onDecoTap: ((QvpDecoration, QvpHitEx) -> Void)?
+    public var onWordTap: ((QvpWord, QvpHit) -> Void)?
+    public var onDecorationTap: ((QvpDecoration, QvpHit) -> Void)?
     public var onEmptyTap: (() -> Void)?
     public var onSelectionChanged: (([Int]) -> Void)?
     /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
@@ -55,12 +54,12 @@ public final class QvpCanvasController {
     /// Double-tap, with the gap-aware hit under it (nil off the page). nil (the default)
     /// resets the view; a host that repurposes the gesture can still call `resetView()`
     /// itself — `isZoomed` says when.
-    public var onDoubleTap: ((QvpHitEx?) -> Void)?
+    public var onDoubleTap: ((QvpHit?) -> Void)?
     /// Long-press, with the gap-aware hit under the finger. Fires once, while the finger
     /// is still down, and only while `selectionEnabled` is false — selection owns the
     /// long-press otherwise. On iOS it is UIKit's recognizer, which fails on movement,
     /// so it never takes a swipe from an enclosing pager.
-    public var onLongPress: ((QvpHitEx?) -> Void)?
+    public var onLongPress: ((QvpHit?) -> Void)?
     public var longPressDuration: Double = 0.35
     public var zoomEnabled = true
     /// Zoom lasts only while the fingers are down: on release the page eases back to its fitted
@@ -111,7 +110,7 @@ public final class QvpCanvasController {
         _ = p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height),
                                    padTop: Float(padTop), padBottom: Float(padBottom),
                                    padLeft: Float(padSide), padRight: Float(padSide),
-                                   lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight,
+                                   lineSpacing: lineSpacing, fillHeight: fillHeight,
                                    cropLeft: cropLeft, cropRight: cropRight))
         cache.key = ""; invalidate()
     }
@@ -119,7 +118,7 @@ public final class QvpCanvasController {
     public func resetView() {
         springTask?.cancel(); springTask = nil
         let f = fittedView()
-        viewScale = f.scale; fitScale = f.scale; viewOx = f.ox; viewOy = f.oy
+        viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
         invalidate()
     }
     /// The transform `resetView()` applies: content height fitted, centred.
@@ -130,15 +129,15 @@ public final class QvpCanvasController {
     /// Clear the selection band and the engine selection.
     public func clearSelection() {
         guard let p = page, p.isOpen else { return }
-        p.clearSelection(); if selectionHandle != 0 { p.unhighlight(selectionHandle); selectionHandle = 0 }
+        p.clearSelection(); if selectionHandle != 0 { p.removeHighlight(selectionHandle); selectionHandle = 0 }
         onSelectionChanged?([]); invalidate()
     }
     /// Page units of `line` → view points (engine layout + pan/zoom).
     public func lineTransform(_ line: Int) -> CGAffineTransform {
         let l = page?.currentLayout
-        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.ox ?? 0)
+        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.offsetX ?? 0)
         let dy = (l.flatMap { line < $0.lineDy.count ? $0.lineDy[line] : nil }) ?? 0
-        let loy = CGFloat(l?.oy ?? 0) + CGFloat(dy) * ls
+        let loy = CGFloat(l?.offsetY ?? 0) + CGFloat(dy) * ls
         let s = viewScale * ls
         return CGAffineTransform(a: s, b: 0, c: 0, d: s, tx: viewOx + viewScale * lox, ty: viewOy + viewScale * loy)
     }
@@ -148,10 +147,10 @@ public final class QvpCanvasController {
         guard size != bounds else { return }
         bounds = size; relayout(); resetView()
     }
-    func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHitEx? {
+    func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHit? {
         guard let p = page, p.isOpen else { return nil }
         let t0 = now()
-        let h = p.hitTestViewEx(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
+        let h = p.hitTestView(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
         lastHitUs = (now() - t0) * 1e6
         return h
     }
@@ -159,7 +158,7 @@ public final class QvpCanvasController {
         guard let p = page, p.isOpen else { return }
         let hit = hitAt(pt)
         if let h = hit, h.word >= 0 { onWordTap?(p.words[h.word], h) }
-        else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
+        else if let h = hit, h.decoration >= 0 { onDecorationTap?(p.decorations[h.decoration], h) }
         else { onEmptyTap?() }
     }
     func doubleTap(_ pt: CGPoint) { if let cb = onDoubleTap { cb(hitAt(pt)) } else { resetView() } }
@@ -183,7 +182,7 @@ public final class QvpCanvasController {
         springTask = Task { @MainActor [weak self] in
             while let self, !Task.isCancelled {
                 let (v, done) = spring.value(at: self.now())
-                self.viewScale = v.scale; self.viewOx = v.ox; self.viewOy = v.oy
+                self.viewScale = v.scale; self.viewOx = v.offsetX; self.viewOy = v.offsetY
                 self.invalidate()
                 if done { self.springTask = nil; return }
                 try? await Task.sleep(nanoseconds: 8_000_000)
@@ -215,7 +214,7 @@ public final class QvpCanvasController {
         guard let p = page, p.isOpen else { return }
         let ws = p.selection()
         let t = Target.words(ws)
-        if selectionHandle != 0 { p.rehighlight(selectionHandle, t) }
+        if selectionHandle != 0 { p.moveHighlight(selectionHandle, t) }
         else { selectionHandle = p.highlight(t, QvpHighlightStyle(mode: .band, band: selectionBand, padX: 0.6, layer: QvpLayer.SELECTION)) }
         onSelectionChanged?(ws); invalidate()
     }
@@ -227,18 +226,18 @@ public final class QvpCanvasController {
         guard let l = p.currentLayout else { return }
         let moving = p.tick(now() * 1000)
         let paths = p.buildPaths()
-        let styled = p.styled()
+        let styled = p.styledPaths()
         let styledSet = Set(styled.map { $0.path })
         let ink = p.defaultInk
         let W = Int(size.width * displayScale), H = Int(size.height * displayScale)
         var hasher = Hasher(); hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
-        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.pitch)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
+        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
 
         if let paper = paperColor {
             ctx.fill(Path(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale)),
                      with: .color(color(paper)))
         }
-        let bands = p.highlightBoxes()
+        let bands = p.highlightBoxesView()
         drawBoxes(ctx, bands)
 
         if cache.image == nil || key != cache.key || cache.image!.width != W || cache.image!.height != H, W > 0, H > 0 {
@@ -269,7 +268,7 @@ public final class QvpCanvasController {
             c.concatenate(lineTransform(p.pathLine(pi)))
             c.fill(Path(paths[pi]), with: .color(color(col)), style: FillStyle(eoFill: p.pathEvenOdd(pi)))
         }
-        drawBoxes(ctx, p.maskBoxes())
+        drawBoxes(ctx, p.maskBoxesView())
         lastOverlayMs = (now() - t1) * 1000; lastOverlayPaths = styled.count; lastBands = bands.count
         if moving != animating {
             Task { @MainActor [weak self] in if let self, moving != self.animating { self.animating = moving; self.invalidate() } }

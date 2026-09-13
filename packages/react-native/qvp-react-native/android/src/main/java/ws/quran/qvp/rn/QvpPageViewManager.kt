@@ -27,10 +27,9 @@ class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {
     @ReactProp(name = "padBottom", defaultFloat = 0f) fun setPadBottom(v: QvpRnPageView, f: Float) = v.setPadBottomDp(f)
     @ReactProp(name = "padSide", defaultFloat = 0f) fun setPadSide(v: QvpRnPageView, f: Float) = v.setPadSideDp(f)
     @ReactProp(name = "lineSpacing", defaultFloat = 1f) fun setLineSpacing(v: QvpRnPageView, f: Float) = v.setLineSpacingProp(f)
-    @ReactProp(name = "lineGap", defaultFloat = 0f) fun setLineGap(v: QvpRnPageView, f: Float) = v.setLineGapProp(f)
     @ReactProp(name = "fillHeight", defaultBoolean = false) fun setFillHeight(v: QvpRnPageView, b: Boolean) = v.setFillHeightProp(b)
     @ReactProp(name = "paperColor") fun setPaperColor(v: QvpRnPageView, s: String?) { v.paperColor = if (s.isNullOrBlank()) 0 else QvpColor.argb(QvpColor.parse(s)); v.invalidate() }
-    @ReactProp(name = "defaultInk") fun setDefaultInk(v: QvpRnPageView, s: String?) { v.defaultInkProp = s }
+    @ReactProp(name = "defaultInk") fun setDefaultColor(v: QvpRnPageView, s: String?) { v.defaultInkProp = s }
     @ReactProp(name = "selectionBand") fun setSelectionBand(v: QvpRnPageView, s: String?) { if (!s.isNullOrBlank()) v.selectionBand = QvpColor.parse(s) }
     @ReactProp(name = "selectionEnabled", defaultBoolean = true) fun setSelectionEnabled(v: QvpRnPageView, b: Boolean) { v.selectionEnabled = b }
     @ReactProp(name = "zoomEnabled", defaultBoolean = true) fun setZoomEnabled(v: QvpRnPageView, b: Boolean) { v.zoomEnabled = b }
@@ -43,6 +42,6 @@ class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {
 
     companion object {
         const val NAME = "QvpPageView"
-        val EVENTS = listOf("onWordTap", "onDecoTap", "onEmptyTap", "onSelectionChanged", "onPageLoad", "onRevealChanged", "onError")
+        val EVENTS = listOf("onWordTap", "onDecorationTap", "onEmptyTap", "onSelectionChanged", "onPageLoad", "onRevealChanged", "onError")
     }
 }

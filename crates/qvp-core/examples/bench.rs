@@ -32,7 +32,7 @@ fn main() {
     let mut exact = 0;
     for _ in 0..100 {
         for &(x, y) in &centres {
-            if let Some(h) = page.hit_test(x, y) {
+            if let Some(h) = page.hit_test_exact(x, y) {
                 hits += 1;
                 if h.path != NONE {
                     exact += 1;
@@ -51,7 +51,7 @@ fn main() {
 
     let t = Instant::now();
     for _ in 0..100 {
-        let _ = page.paint();
+        let _ = page.colors();
     }
     println!("paint (no styles): {:?} per full display list", t.elapsed() / 100);
 
@@ -59,27 +59,27 @@ fn main() {
     page.style(Selector::Ayah(first_surah, first_ayah), Paint::new(0x0a7d32ff));
     let t = Instant::now();
     for _ in 0..100 {
-        let _ = page.paint();
+        let _ = page.colors();
     }
     println!(
         "paint (2 selectors): {:?} per full display list; styled paths = {}",
         t.elapsed() / 100,
-        page.styled().len()
+        page.styled_paths().len()
     );
     let t = Instant::now();
     for _ in 0..100 {
-        let _ = page.styled();
+        let _ = page.styled_paths();
     }
-    println!("styled() overlay list: {:?}", t.elapsed() / 100);
+    println!("styled_paths() overlay list: {:?}", t.elapsed() / 100);
     let t = Instant::now();
     let m = page.search("الله", &SearchOptions::default());
     println!("search 'الله': {} matches in {:?}", m.len(), t.elapsed());
     let t = Instant::now();
-    let hb = page.hit_boxes(0.6);
+    let hb = page.hit_areas(0.6);
     println!("hit boxes: {} in {:?}", hb.len(), t.elapsed());
     let t = Instant::now();
     for _ in 0..100 {
-        let _ = page.hit_test_ex(100.0, 300.0, &HitOptions::default());
+        let _ = page.hit_test(100.0, 300.0, &HitOptions::default());
     }
     println!("gap-aware hit-test: {:?}", t.elapsed() / 100);
     let surah = page.data().words[0].surah;
@@ -92,7 +92,7 @@ fn main() {
     page.tick(100.0);
     let b = page.highlight_boxes_view();
     println!("highlight ayah {surah}:{ayah}: {} band boxes, tick+boxes {:?}", b.len(), t.elapsed());
-    page.unhighlight(h);
+    page.remove_highlight(h);
     println!(
         "surahs: {:?}",
         page.surahs().iter().map(|s| (s.number, s.latin.clone(), s.has_banner)).collect::<Vec<_>>()

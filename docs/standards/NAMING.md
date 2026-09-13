@@ -71,8 +71,8 @@ Never `lineHeight`: printed lines are not equally tall, and the name would promi
   name: a `kind` field holds a `QVP_KIND_*`, a `decoration` field a `QVP_DECORATION_*`, a
   `division` field a `QVP_DIVISION_*`. One enum name is never reused for another axis.
 - Full words. The only abbreviations are `x0 y0 x1 y1`, `n_` for counts and `cap` for a
-  buffer capacity. So `decoration` not `deco`, `index` not `idx`, `word_index` not `wi`,
-  `offset_x` not `ox`, `view_x` not `vx`, `line_number` not `line_no`.
+  buffer capacity. So `decoration` not `decoration`, `index` not `index`, `word_index` not `wordIndex`,
+  `offset_x` not `offsetX`, `view_x` not `viewX`, `line_number` not `line_number`.
 - `surah, ayah, word` is always the key of a word. A page-local position is
   `_index` (0-based), a printed value is `_number` (1-based), and `page` is the mushaf
   page number.
