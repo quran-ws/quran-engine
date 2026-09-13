@@ -1,0 +1,53 @@
+# The Flutter package: analyze, and run the dart:ffi tests against a host build of the
+# engine and the page data release.
+name: Flutter
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/flutter.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/**"
+      - "packages/flutter/**"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: flutter-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: analyze and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Cache test data
+        uses: actions/cache@v4
+        with:
+          path: dist/pages
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
+      - name: Fetch page data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.0.1' }}
+        run: scripts/sync-test-data.sh
+      - name: Build the host engine library
+        run: cargo build -p qvp-ffi --release
+      - name: Analyze
+        working-directory: packages/flutter/qvp_flutter
+        run: flutter pub get && flutter analyze
+      - name: Test
+        working-directory: packages/flutter/qvp_flutter
+        env:
+          QVP_LIB: ${{ github.workspace }}/target/release/libqvp_ffi.so
+        run: flutter test

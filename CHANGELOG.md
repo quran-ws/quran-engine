@@ -7,6 +7,8 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- CI: `ios.yml`, `flutter.yml`, `react-native.yml` per platform; `nightly.yml` (all 604 pages,
+  benchmark); `release.yml` on `vX.Y.Z` tags; `scripts/set-version.sh`, `scripts/package-data.sh`.
 - CI: `ci.yml` with the `engine`, `gates`, `standards` and `web` jobs; `scripts/check.sh`
   runs the same checks locally; `scripts/sync-test-data.sh`, `check-parity.py`,
   `check-versions.sh`, `check-structure.sh`, `check-terminology.sh`; `docs/API-PARITY.md`.

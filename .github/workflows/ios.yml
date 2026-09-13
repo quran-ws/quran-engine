@@ -1,0 +1,54 @@
+# The Swift package and the iOS example: build the engine XCFramework, run the Swift
+# tests on the macOS slice, generate and build the example for the simulator.
+name: iOS
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ios.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/**"
+      - "packages/ios/**"
+      - "scripts/build-engine-ios.sh"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: QvpKit tests and example build
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim, x86_64-apple-ios, aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache test data
+        uses: actions/cache@v4
+        with:
+          path: dist/pages
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
+      - name: Fetch page data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.0.1' }}
+        run: scripts/sync-test-data.sh
+      - name: Build QvpEngine.xcframework
+        run: scripts/build-engine-ios.sh
+      - name: Swift tests (macOS slice)
+        working-directory: packages/ios/QvpKit
+        run: swift test
+      - name: Generate and build the example for the simulator
+        working-directory: packages/ios/example
+        run: |
+          brew install xcodegen >/dev/null
+          xcodegen generate
+          xcodebuild -scheme Demo -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ../../../target/ios-build CODE_SIGNING_ALLOWED=NO build | tail -20

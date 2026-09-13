@@ -9,15 +9,17 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvp_flutter/qvp_flutter.dart';
 
-const _repo = '/home/abdullah/Dev/github.com/quran-ws/quran-engine';
-
+/// The repository root: `QVP_REPO` if set, else the nearest ancestor of the working
+/// directory that holds the engine header.
 String _findRepo() {
+  final env = Platform.environment['QVP_REPO'];
+  if (env != null) return env;
   var d = Directory.current;
   for (var i = 0; i < 6; i++) {
     if (File('${d.path}/crates/qvp-ffi/include/qvp.h').existsSync()) return d.path;
     d = d.parent;
   }
-  return _repo;
+  throw StateError('repository root not found; set QVP_REPO');
 }
 
 void main() {

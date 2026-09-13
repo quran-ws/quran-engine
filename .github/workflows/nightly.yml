@@ -1,0 +1,59 @@
+# Once a night: the identity gate over all 604 pages, and the benchmark numbers as an
+# artifact for comparison with docs/MEASURED.md.
+name: Nightly
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  identity-all-pages:
+    name: identity gate, all 604 pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache test data
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist/pages
+            pages
+            index
+          key: test-data-${{ vars.QVP_DATA_TAG || 'v0.1.0' }}-${{ vars.QVP_SVG_TAG || 'v1.0.1' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      - name: Fetch test data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.0.1' }}
+        run: scripts/sync-test-data.sh
+      - name: All pages
+        run: QVP_REQUIRE_DATA=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity -- --nocapture
+      - name: Diff images of failing pages
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: identity-diffs-${{ github.run_id }}
+          path: target/identity/
+
+  bench:
+    name: benchmark, page 042
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Fetch page data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.0.1' }}
+        run: scripts/sync-test-data.sh
+      - name: Run
+        run: cargo run -p qvp-core --release --example bench -- dist/pages/042.qvp | tee bench.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bench-${{ github.run_id }}
+          path: bench.txt
