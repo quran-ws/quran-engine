@@ -107,8 +107,8 @@ Examples bundle a sample as gitignored assets.
 
 ## Writing
 
-Docs, comments, changelog entries and PR text follow plain-writing rules: short sentences,
-active voice, one meaning per word, define a specialised term at first use. The
+Docs, comments, changelog entries and PR text use short sentences, active voice, one
+meaning per word, and define a project or domain term at first use. The
 `ste-plain-writing` linter (`python3 scripts/ste_lint.py <file>`) is the check.
 
 ## Reporting

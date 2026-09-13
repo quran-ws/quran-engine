@@ -1,8 +1,7 @@
 # How the engine works
 
-This page explains the whole system in plain words, for a developer who has not seen it
-before. It defines the specialised terms when they first appear. There is a glossary at
-the end.
+This page describes the engine's components and data flow for a developer who is new to
+the project. A glossary at the end defines the project and domain terms.
 
 ## The one-paragraph version
 

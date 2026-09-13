@@ -23,7 +23,7 @@ The layout is part of the public interface. A consumer reads paths. A contributo
 | API reference | `docs/API.md` | JavaScript notation, one section per object-model noun |
 | format specification | `docs/FORMAT.md` | byte layout of QVP1 and QVA1 |
 | data provenance and rights | `docs/DATA.md` | which mushaf, source bundle version, licence, where to download |
-| how it all works | `docs/HOW-IT-WORKS.md` | plain English, linked first from the README |
+| how it all works | `docs/HOW-IT-WORKS.md` | components and data flow for a developer new to the project; linked first from the README |
 | design history | `docs/design/` | dated, banner "historical", never edited to match current code |
 | standards | `docs/standards/` | this directory. Every document ends with how it is checked |
 | contributor rules | `CONTRIBUTING.md` | for humans. Links every standard. The layer-by-layer checklist lives here |
