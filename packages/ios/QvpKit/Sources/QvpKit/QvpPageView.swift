@@ -33,7 +33,12 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     public var onSwipe: ((Int) -> Void)?
     /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
     /// (e.g. marking reading progress) can still call `resetView()` itself — `isZoomed` says when.
-    public var onDoubleTap: (() -> Void)?
+    public var onDoubleTap: ((QvpHitEx?) -> Void)?
+    /// Long-press, with the gap-aware hit under the finger. Fires once, on recognition,
+    /// only while `selectionEnabled` is false — selection owns the long-press otherwise.
+    public var onLongPress: ((QvpHitEx?) -> Void)?
+    public var longPressDuration: Double = 0.35 { didSet { longPressRecognizer?.minimumPressDuration = longPressDuration } }
+    private weak var longPressRecognizer: UILongPressGestureRecognizer?
     public var zoomEnabled = true
     public var selectionEnabled = true
     public var hitOptions = QvpHitOptions(maxDistance: 6)
@@ -68,7 +73,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         let tap = UITapGestureRecognizer(target: self, action: #selector(onTap)); tap.require(toFail: dbl)
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(onPinch))
         let pan = UIPanGestureRecognizer(target: self, action: #selector(onPan)); pan.maximumNumberOfTouches = 2
-        let long = UILongPressGestureRecognizer(target: self, action: #selector(onLongPress)); long.minimumPressDuration = 0.35
+        let long = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress)); long.minimumPressDuration = longPressDuration; longPressRecognizer = long
         pan.require(toFail: long)
         for g in [dbl, tap, pinch, pan, long] { g.delegate = self; addGestureRecognizer(g) }
     }
@@ -80,7 +85,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
 
     // ── gestures ──
     private func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHitEx? {
-        guard let p = page else { return nil }
+        guard let p = page, p.isOpen else { return nil }
         let t0 = CACurrentMediaTime()
         let h = p.hitTestViewEx(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
         lastHitUs = (CACurrentMediaTime() - t0) * 1e6
@@ -93,7 +98,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
         else { onEmptyTap?() }
     }
-    @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) { if let cb = onDoubleTap { cb() } else { resetView() } }
+    @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) { if let cb = onDoubleTap { cb(hitAt(g.location(in: self))) } else { resetView() } }
     @objc private func onPinch(_ g: UIPinchGestureRecognizer) {
         guard zoomEnabled, !selecting else { return }
         if g.state == .began { pinchStart = viewScale }
@@ -115,8 +120,12 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         viewOx += d.x; viewOy += d.y; g.setTranslation(.zero, in: self)
         setNeedsDisplay()
     }
-    @objc private func onLongPress(_ g: UILongPressGestureRecognizer) {
-        guard selectionEnabled, let p = page else { return }
+    @objc private func handleLongPress(_ g: UILongPressGestureRecognizer) {
+        if !selectionEnabled {
+            if g.state == .began { onLongPress?(hitAt(g.location(in: self))) }
+            return
+        }
+        guard let p = page else { return }
         let pt = g.location(in: self)
         switch g.state {
         case .began:
@@ -150,7 +159,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     private var lastSize = CGSize.zero
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
-        guard let p = page, bounds.width > 0, bounds.height > 0 else { return }
+        guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
         p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, lineGap: lineGap, fillHeight: fillHeight))
         baseKey = ""; setNeedsDisplay()
     }
@@ -190,7 +199,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
 
     // ── frame ──
     public override func draw(_ rect: CGRect) {
-        guard let p = page, let ctx = UIGraphicsGetCurrentContext() else { return }
+        guard let p = page, p.isOpen, let ctx = UIGraphicsGetCurrentContext() else { return }
         if p.currentLayout == nil { relayout() }
         guard let l = p.currentLayout else { return }
         let moving = p.tick(CACurrentMediaTime() * 1000)

@@ -288,6 +288,11 @@ final class QvpKitTests: XCTestCase {
         c.onWordTap = { word, _ in tapped = word.idx }
         c.tap(pt)
         XCTAssertEqual(tapped, 0)
+        // double-tap carries the hit under it
+        var doubleTapped: Int? = nil
+        c.onDoubleTap = { hit in doubleTapped = hit?.word }
+        c.doubleTap(pt)
+        XCTAssertEqual(doubleTapped, 0)
         // pinch past the fitted scale flips isZoomed; resetView clears it
         c.pinch(2.0, at: CGPoint(x: 345, y: 550))
         XCTAssertTrue(c.isZoomed)
@@ -298,5 +303,33 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(c.lineSpacing, 1)
         c.lineSpacing = 1.5
         XCTAssertEqual(c.lineSpacing, 1.5)
+    }
+
+    /// QvpPageCache: one PERMANENT controller per page; page data cycles
+    /// through the LRU and reattaches to that same controller on return.
+    @MainActor func testPageCache() async throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCache needs macOS 14 / iOS 17") }
+        let bytes = try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp"))
+        var configured = 0
+        let cache = QvpPageCache(capacity: 4, data: { _ in bytes }, configure: { _, _ in configured += 1 })
+        func waitUntil(_ cond: @MainActor () -> Bool) async {
+            for _ in 0..<100 { if cond() { return }; try? await Task.sleep(nanoseconds: 10_000_000) }
+        }
+        cache.setCurrentPage(42)
+        let c42 = cache.controller(for: 42)
+        await waitUntil { c42.page != nil }
+        XCTAssertNotNil(c42.page)
+        XCTAssertTrue(cache.controller(for: 42) === c42, "controller must be permanent")
+        // move far and fill beyond capacity → 42's DATA evicts, controller survives detached
+        cache.setCurrentPage(100)
+        for n in [99, 100, 101, 102] { _ = cache.controller(for: n) }
+        await waitUntil { c42.page == nil }
+        XCTAssertNil(c42.page, "evicted page must be detached from its controller")
+        // come back → SAME controller, data reattached
+        cache.setCurrentPage(42)
+        await waitUntil { c42.page != nil }
+        XCTAssertNotNil(c42.page, "returning must reattach data to the permanent controller")
+        XCTAssertTrue(cache.controller(for: 42) === c42)
+        XCTAssertGreaterThanOrEqual(configured, 2, "configure runs on every (re)attach")
     }
 }

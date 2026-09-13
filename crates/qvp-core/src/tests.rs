@@ -235,18 +235,19 @@ fn mask_reveal_and_crop() {
 #[test]
 fn layout_fill_height_and_view_hit() {
     let mut p = page();
-    let spec = LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, pad_top: 50.0, pad_bottom: 50.0, fill_height: true, ..Default::default() };
+    let spec = LayoutSpec { viewport_w: 200.0, viewport_h: 2500.0, pad_top: 50.0, pad_bottom: 50.0, fill_height: true, ..Default::default() };
     let l = p.layout(&spec).clone();
     assert_eq!(l.scale, 2.0);
-    // uniform delta: (500 − 100) units spread over the 14 gaps of the 15-line grid
-    let delta = 400.0 / 14.0;
+    // a short page (2 lines) takes the rows of the 15-line grid: 2400 px / 15 = 160 px
+    // = 80 units a row, so 40 units of leading on the printed pitch of 40
+    let delta = 40.0;
     assert!((l.pitch - (40.0 + delta)).abs() < 1e-3, "pitch {}", l.pitch);
     assert_eq!(l.line_dy.len(), 2);
-    // printed geometry kept: the two lines differ by exactly one delta (plus the
-    // padding); the short page is centred on the grid (slot0 = 6.5)
+    // printed geometry kept: the two lines differ by exactly one delta; the grid (15 rows
+    // = 1200 units) is centred in the padded viewport, the page centred on it (slot0 = 6.5)
     assert!((l.line_dy[1] - l.line_dy[0] - delta).abs() < 1e-3);
-    assert!((l.line_dy[0] - (25.0 + 6.5 * delta)).abs() < 1e-3);
-    assert!((l.content_h - 1100.0).abs() < 1e-3);
+    assert!((l.line_dy[0] - (25.0 + (1200.0 - 100.0) / 2.0 - 7.0 * delta + 6.5 * delta)).abs() < 1e-3);
+    assert!((l.content_h - 2500.0).abs() < 1e-3);
     // slot boundary halfway between the laid-out line centres
     let mid = ((15.0 + l.line_dy[0]) + (55.0 + l.line_dy[1])) / 2.0 * 2.0;
     assert!((l.line_slots[0].1 - mid).abs() < 1e-3 && (l.line_slots[1].0 - mid).abs() < 1e-3);
@@ -256,6 +257,15 @@ fn layout_fill_height_and_view_hit() {
     assert_eq!(p.hit_test_view(vx, 5.0), None);
     let g = p.hit_test_view_ex(l.ox + 25.0 * 2.0, vy, &HitOptions::default()).unwrap();
     assert_eq!((g.word, g.exact), (1, false));
+    // rows shorter than the printed pitch: the print is the floor and the grid outgrows the viewport
+    let tight = p.layout(&LayoutSpec { viewport_h: 1100.0, ..spec }).clone();
+    assert!((tight.pitch - 40.0).abs() < 1e-3 && (tight.content_h - (100.0 + 15.0 * 40.0 * 2.0)).abs() < 1e-3);
+    // a full page (the grid is its own line count) spreads its printed height: (1200 − 100) units
+    // over its one gap — and never squeezes below the print
+    let full = p.layout(&LayoutSpec { nominal_lines: 2, ..spec }).clone();
+    assert!((full.pitch - (40.0 + 1100.0)).abs() < 1e-3 && (full.content_h - 2500.0).abs() < 1e-3);
+    let squeezed = p.layout(&LayoutSpec { viewport_h: 150.0, pad_top: 0.0, pad_bottom: 0.0, nominal_lines: 2, ..spec }).clone();
+    assert!((squeezed.pitch - 40.0).abs() < 1e-3 && (squeezed.content_h - 200.0).abs() < 1e-3);
     let l2 = p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_spacing: 1.5, ..Default::default() }).clone();
     assert!((l2.pitch - p.natural_pitch() * 1.5).abs() < 1e-3);
     assert!((l2.line_dy[1] - l2.line_dy[0] - 20.0).abs() < 1e-3, "×1.5 adds half a pitch between lines");

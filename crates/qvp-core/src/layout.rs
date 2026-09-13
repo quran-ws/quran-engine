@@ -13,12 +13,17 @@ pub struct LayoutSpec {
     pub pad_right: f32,
     /// Multiplier on the printed line pitch (1.0 = as printed). The printed
     /// positions are kept; the same delta `pitch·(line_spacing − 1)` is
-    /// added between every pair of consecutive lines.
+    /// added between every pair of consecutive lines. Leading only opens up:
+    /// below 1.0 acts as 1.0, the printed pitch is the floor.
     pub line_spacing: f32,
     /// Extra leading between lines in page units, added after the multiplier.
     pub line_gap: f32,
     /// Choose the delta so the page fills `viewport_h - pad_top - pad_bottom`
-    /// (overrides line_spacing / line_gap).
+    /// (overrides line_spacing / line_gap). A short page (fewer lines than
+    /// `nominal_lines`) has no height of its own to fill: it takes the rows a
+    /// full page gets, `(viewport_h - pads) / nominal_lines` each, centred.
+    /// Never below the printed pitch — a page that cannot fit at it reports a
+    /// `content_h` taller than the viewport.
     pub fill_height: bool,
     /// Line grid the mushaf is designed on (15 for KFGQPC Hafs). Short pages
     /// (fewer lines) stay centred, as printed.
@@ -95,19 +100,26 @@ impl Page {
         let n = self.data.lines.len();
         let nominal = spec.nominal_lines.max(n as u32).max(2) as f32;
         let natural = self.natural_pitch;
-        // never squeeze below 5% of the printed pitch
-        let min_delta = -0.95 * natural;
-        let delta = if spec.fill_height {
-            let avail_h = (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0);
-            ((avail_h / scale - ph) / (nominal - 1.0)).max(min_delta)
+        let avail_h = (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0);
+        // a short page has no height of its own to fill: it takes the rows a
+        // full page fills the viewport with
+        let on_grid = spec.fill_height && (n as f32) < nominal;
+        // leading only opens up: the printed pitch is the floor
+        let delta = if on_grid {
+            (avail_h / (nominal * scale) - natural).max(0.0)
+        } else if spec.fill_height {
+            ((avail_h / scale - ph) / (nominal - 1.0)).max(0.0)
         } else {
-            (natural * (spec.line_spacing - 1.0) + spec.line_gap).max(min_delta)
+            (natural * (spec.line_spacing - 1.0) + spec.line_gap).max(0.0)
         };
         let pitch = natural + delta;
+        // laid-out height in page units: the grid's rows, or the printed page
+        // with the leading added
+        let block_h = if on_grid { nominal * pitch } else { ph + (nominal - 1.0) * delta };
         // short pages: the printed page is already centred; centre the added
         // leading the same way so the page stays in the middle of the grid
         let slot0 = (nominal - n as f32) / 2.0;
-        let top_units = spec.pad_top / scale;
+        let top_units = spec.pad_top / scale + (block_h - ph - (nominal - 1.0) * delta) / 2.0;
         let mut line_dy = Vec::with_capacity(n);
         for l in self.data.lines.iter() {
             let k = slot0 + (l.line_no.max(1) as f32 - 1.0).min(n as f32 - 1.0);
@@ -129,7 +141,7 @@ impl Page {
             };
             line_slots.push((top * scale, bottom * scale));
         }
-        let content_h = spec.pad_top + (ph + (nominal - 1.0) * delta) * scale + spec.pad_bottom;
+        let content_h = spec.pad_top + block_h * scale + spec.pad_bottom;
         self.layout = Some(Layout { scale, ox: spec.pad_left, oy: 0.0, line_dy, line_slots, content_h, content_w: spec.viewport_w, pitch });
         self.layout.as_ref().unwrap()
     }
