@@ -323,6 +323,34 @@ fn mask_reveal_and_crop() {
 }
 
 #[test]
+fn mask_transition_fades_on_the_engine_clock() {
+    let mut p = page();
+    p.set_mask_transition(200);
+    p.mask(&Target::Word(0), MaskMode::Hide);
+    assert!(p.tick(1000.0), "hiding fades");
+    assert_eq!(p.color_of(0), DEFAULT_INK, "a fade starts from the ink");
+    p.tick(1100.0);
+    let mid = p.color_of(0);
+    assert!(mid & 0xff > 0 && mid & 0xff < 0xff, "half way: partly transparent, {mid:08x}");
+    assert_eq!(mid >> 8, DEFAULT_INK >> 8, "fades the ink's own colour, never through black");
+    assert!(!p.tick(1300.0));
+    assert_eq!(p.color_of(0), DEFAULT_INK & 0xffff_ff00);
+    assert!(p.reveal_word(0));
+    assert!(p.tick(2000.0), "revealing fades back in");
+    p.tick(2050.0);
+    let quarter = p.color_of(0) & 0xff;
+    assert!(quarter < 0x40, "a mask fade eases in: a quarter of the way it is still faint, {quarter:02x}");
+    assert!(!p.tick(2300.0));
+    assert_eq!(p.color_of(0), DEFAULT_INK);
+    // a style fade keeps easing out: a quarter of the way it has done most of its change
+    let _h = p.style(Selector::Word(1), Paint::fade(DEFAULT_INK & 0xffff_ff00, 200));
+    p.tick(3000.0);
+    p.tick(3050.0);
+    let style_quarter = p.color_of(1) & 0xff;
+    assert!(style_quarter < 0x80, "a style fade eases out, {style_quarter:02x}");
+}
+
+#[test]
 fn layout_fill_height_and_view_hit() {
     let mut p = page();
     let spec = LayoutSpec {

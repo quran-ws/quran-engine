@@ -108,7 +108,20 @@ public final class QvpCanvasController {
     public init() {}
 
     /// Redraw after engine calls the controller cannot see (`highlight`, `style`, `mask`, `theme`, …).
-    public func invalidate() { revision &+= 1 }
+    /// It also asks the engine clock whether frames must run, so a transition the call just began
+    /// animates from this same update — not one draw and a main-actor hop later, by which time a
+    /// short fade had already spent its first frames.
+    public func invalidate() {
+        revision &+= 1
+        _ = syncAnimating()
+    }
+    /// `animating` = the engine reports a transition in flight now. True when it changed.
+    private func syncAnimating() -> Bool {
+        let moving = page.map { $0.isOpen && $0.tick(now() * 1000) } ?? false
+        guard moving != animating else { return false }
+        animating = moving
+        return true
+    }
 
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
@@ -277,7 +290,9 @@ public final class QvpCanvasController {
         drawBoxes(ctx, p.maskBoxes())
         lastOverlayMs = (now() - t1) * 1000; lastOverlayPaths = styled.count; lastBands = bands.count
         if moving != animating {
-            Task { @MainActor [weak self] in if let self, moving != self.animating { self.animating = moving; self.invalidate() } }
+            // Ask the engine again at the hop rather than trusting this frame: a transition begun
+            // in between must not be paused by a stale "finished".
+            Task { @MainActor [weak self] in if let self, self.syncAnimating() { self.revision &+= 1 } }
         }
     }
     private func drawBoxes(_ ctx: GraphicsContext, _ boxes: [QvpBox]) {
@@ -315,8 +330,12 @@ public struct QvpPageCanvas: View {
         let _ = controller.revision
         let _ = controller.viewScale; let _ = controller.viewOx; let _ = controller.viewOy
         GeometryReader { geo in
-            TimelineView(.animation(minimumInterval: nil, paused: !controller.animating)) { _ in
+            TimelineView(.animation(minimumInterval: nil, paused: !controller.animating)) { timeline in
                 Canvas(opaque: false, rendersAsynchronously: false) { ctx, size in
+                    // The renderer reads the frame's date so every timeline tick is a different
+                    // canvas to SwiftUI. A renderer that captured only the controller looked
+                    // unchanged tick to tick, and on device a running transition drew no frames.
+                    _ = timeline.date
                     controller.draw(in: ctx, size: size, displayScale: displayScale)
                 }
             }

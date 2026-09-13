@@ -61,6 +61,10 @@ it. A second table lists platform-level gaps.
 | `qvp_style_default` | react-native | untriaged |
 | `qvp_style_remove` | react-native | untriaged |
 | `qvp_word_info` | react-native | untriaged |
+| `qvp_mask_transition` | web | not bound yet (added for iOS first) |
+| `qvp_mask_transition` | android | not bound yet (added for iOS first) |
+| `qvp_mask_transition` | flutter | not bound yet (added for iOS first) |
+| `qvp_mask_transition` | react-native | not bound yet (added for iOS first) |
 
 | `qvp_name_count` | react-native | untriaged (names reach JavaScript through the module's constants) |
 | `qvp_name_id` | react-native | untriaged (names reach JavaScript through the module's constants) |
@@ -79,7 +83,7 @@ in the wrapper audit.
 ## Matrix
 
 <!-- parity:begin -->
-114 symbols in the header, 114 Rust exports. web: 109 bound, android: 111 bound, flutter: 114 bound, ios: 112 bound, react-native: 74 bound.
+115 symbols in the header, 115 Rust exports. web: 109 bound, android: 111 bound, flutter: 114 bound, ios: 113 bound, react-native: 74 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -146,6 +150,7 @@ in the wrapper audit.
 | `qvp_mask_from` | yes | yes | yes | yes | gap (untriaged) |
 | `qvp_mask_hidden` | yes | yes | yes | yes | yes |
 | `qvp_mask_options` | yes | yes | yes | yes | yes |
+| `qvp_mask_transition` | gap (not bound yet (added for iOS first)) | gap (not bound yet (added for iOS first)) | gap (not bound yet (added for iOS first)) | yes | gap (not bound yet (added for iOS first)) |
 | `qvp_mask_words` | yes | yes | yes | yes | yes |
 | `qvp_name` | yes | yes | yes | yes | yes |
 | `qvp_name_count` | yes | yes | yes | yes | gap (untriaged (names reach JavaScript through the module's constants)) |

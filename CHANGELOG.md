@@ -7,6 +7,13 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- Mask: `qvp_mask_transition(page, ms)` (iOS `maskTransition`) fades `hide` words in and out
+  on the engine clock instead of switching at once; the ink keeps its colour and only its
+  alpha moves, on an ease-in-out curve (other colour transitions keep easing out). 0 (the
+  default) keeps the instant switch; `unmask` resets it. Bound on iOS; declared as a gap for
+  web, Android, Flutter and React Native in `docs/API-PARITY.md`. iOS: `QvpPageCanvas` starts
+  a transition's frames in the update that begins it, and its renderer reads the frame's date
+  so every timeline tick redraws.
 - Names: `qvp_name(table, id)`, `qvp_name_id(table, name)`, `qvp_name_count(table)` over the
   mark, kind, family, category, decoration, division and place tables. Every wrapper reads
   its names from the engine at start-up; the five hand-written mark tables and the place,

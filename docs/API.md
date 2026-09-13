@@ -237,7 +237,9 @@ page.revealGoto(at); page.revealStop();
 ```
 
 `hide` keeps the page's shape (ink alpha 0). `block`/`blur` keep the ink and hand the
-host `maskBoxes()` to draw over. The greyed-page reveal lights a window of `lit` steps
+host `maskBoxes()` to draw over. `qvp_mask_transition(ms)` (iOS `maskTransition`) fades
+`hide` words in and out on the engine clock instead of switching at once — the ink keeps
+its colour and only its alpha moves; `unmask()` resets it like the other mask options. The greyed-page reveal lights a window of `lit` steps
 ending at `at`; a medallion lights with the ayah it closes.
 
 ## Recitation

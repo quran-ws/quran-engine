@@ -81,6 +81,7 @@ let hl = page.highlight("2:255", QvpHighlightStyle(mode: .both, transitionMs: 20
 page.highlightBoxes(); page.bandBoxes(words)             // viewport px; draw each id as one nonzero path behind the ink
 page.select(anchor, focus); page.selection(); page.selectionText(.rasmUthmani, citation: true); page.clearSelection()
 page.mask("2:255", .hide); page.revealNext(); page.hideBack(); page.unmask(); page.maskHidden(); page.maskBoxes()
+page.maskTransition(200)                  // hide / reveal fade on the engine clock (ms; unmask() resets it)
 page.revealStart(lit: 2); page.revealGoto(3); page.revealAt(); page.revealSteps(); page.revealStop()
 page.cropBox("2:255"); page.cropSvg("2:255:1", background: 0xfffdf7ff)
 page.close()                                             // frees the native page (also on deinit)
