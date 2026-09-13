@@ -7,6 +7,10 @@ fn square(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<Cmd> {
 /// Two words on one line: A = [10,20]×[10,20] units (word 1:1:1), B = [30,40]×[10,20]
 /// (word 1:1:2) with two marks above it; plus a second line with word C (1:2:1).
 fn page() -> Page {
+    Page::load(&encode(&page_data())).unwrap()
+}
+
+fn page_data() -> PageData {
     let mut ops = Vec::new();
     let mut paths = Vec::new();
     let mut strings = vec![];
@@ -39,7 +43,7 @@ fn page() -> Page {
         (strings.len() - 1) as u16
     };
     let (ta, ta_s, tb, tb_s, tc, tc_s) = (st("ذَٰلِكَ"), st("ذلك"), st("ٱلْكِتَٰبُ"), st("الكتاب"), st("لَا"), st("لا"));
-    let data = PageData {
+    PageData {
         header: Header { version: VERSION, quant: 100, page: 1, flags: 0, width: 100.0, height: 100.0 },
         lines: vec![
             LineRec { line_number: 1, first_word: 0, n_words: 2, bbox: l1 },
@@ -124,8 +128,74 @@ fn page() -> Page {
         insts: vec![],
         ops,
         strings,
+    }
+}
+
+/// A tall sajdah sign on line 1 must not pull the line's centre. An ayah mark stored
+/// without a line takes the line of the ayah it closes, not the nearest centre.
+#[test]
+fn decorations_follow_their_line() {
+    let mut d = page_data();
+    let mut add = |cmds: &[Cmd], kind: PathKind| {
+        let bb = cmds_bbox(cmds);
+        let off = d.ops.len() as u32;
+        encode_cmds(cmds, bb.x0, bb.y0, &mut d.ops);
+        let idx = d.paths.len() as u32;
+        d.paths.push(PathRec {
+            kind,
+            mark: Mark::None,
+            family: Family::None,
+            flags: PF_EVENODD,
+            ox: bb.x0,
+            oy: bb.y0,
+            op_off: off,
+            op_len: d.ops.len() as u32 - off,
+            bbox: bb,
+        });
+        (idx, bb)
     };
-    Page::load(&encode(&data)).unwrap()
+    // the sign spans from above line 1 to the middle of line 2
+    let (sajdah, sb) = add(&square(200, 200, 400, 5500), PathKind::Other);
+    // the mark sits low: its centre (y=40) is nearer line 2 (55) than line 1 (15)
+    let (mark, mb) = add(&square(4200, 3800, 4600, 4200), PathKind::AyahMarkOrnament);
+    d.decorations = vec![
+        DecoRec {
+            kind: DecoKind::SajdahMark,
+            surah: 1,
+            ayah: 1,
+            text: NONE_U16,
+            first_path: sajdah,
+            n_paths: 1,
+            line: 0,
+            bbox: sb,
+        },
+        DecoRec {
+            kind: DecoKind::AyahMark,
+            surah: 1,
+            ayah: 1,
+            text: NONE_U16,
+            first_path: mark,
+            n_paths: 1,
+            line: NONE_U16,
+            bbox: mb,
+        },
+    ];
+    d.ayahs[0].ayah_mark_decoration = 1;
+    let mut p = Page::load(&encode(&d)).unwrap();
+    assert_eq!(p.line_centre(0), 15.0);
+    assert_eq!(p.line_centre(1), 55.0);
+    assert_eq!(p.geometry().table[sajdah as usize].line, 0);
+    assert_eq!(p.geometry().table[mark as usize].line, 0);
+    let l = p
+        .layout(&LayoutSpec {
+            viewport_w: 100.0,
+            viewport_h: 400.0,
+            fill_height: true,
+            grid_lines: 2,
+            ..Default::default()
+        })
+        .clone();
+    assert!(l.line_dy[1] > l.line_dy[0]);
 }
 
 #[test]

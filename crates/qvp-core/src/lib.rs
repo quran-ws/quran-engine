@@ -118,7 +118,10 @@ impl Page {
                 path_deco[p as usize] = di as u32;
             }
         }
-        // line reference centres from body ink (marks would wobble them)
+        // Line reference centres come from body ink. Diacritics would wobble them. A sajdah
+        // sign or a rosette on the line is taller than the ink and would pull the centre off
+        // the text. A header line (surah name, basmalah) has no words, so it uses its
+        // decoration.
         let mut line_centre = vec![0f32; data.lines.len()];
         for (li, l) in data.lines.iter().enumerate() {
             let mut bb = IBox::EMPTY;
@@ -131,8 +134,14 @@ impl Page {
                     }
                 }
             }
-            for d in data.decorations.iter().filter(|d| d.line as usize == li) {
-                bb.union(&d.bbox);
+            if bb.is_empty() {
+                for d in data
+                    .decorations
+                    .iter()
+                    .filter(|d| d.line as usize == li && matches!(d.kind, DecoKind::SurahName | DecoKind::Basmalah))
+                {
+                    bb.union(&d.bbox);
+                }
             }
             if bb.is_empty() {
                 bb = l.bbox;
@@ -160,6 +169,17 @@ impl Page {
             }
             best as u32
         };
+        // An ayah mark is stored without a line: the exporter keeps the marks outside the
+        // line groups. It takes the line of the last word of the ayah it closes, so it
+        // moves with that line under layout. Anything else without a line snaps to the
+        // nearest line centre.
+        let mut deco_line = vec![NONE; data.decorations.len()];
+        for a in data.ayahs.iter().filter(|a| a.fragment == a.fragments && a.n_words > 0) {
+            let di = a.ayah_mark_decoration as usize;
+            if di < data.decorations.len() {
+                deco_line[di] = data.words[(a.first_word + a.n_words - 1) as usize].line_index as u32;
+            }
+        }
         let mut path_line = vec![0u32; data.paths.len()];
         for i in 0..data.paths.len() {
             let wi = path_word[i];
@@ -169,6 +189,8 @@ impl Page {
                 let d = &data.decorations[path_deco[i] as usize];
                 if d.line != NONE_U16 && (d.line as usize) < data.lines.len() {
                     d.line as u32
+                } else if deco_line[path_deco[i] as usize] != NONE {
+                    deco_line[path_deco[i] as usize]
                 } else {
                     nearest_line((d.bbox.y0 + d.bbox.y1) as f32 / 2.0 / q)
                 }
