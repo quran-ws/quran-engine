@@ -10,7 +10,7 @@ and under what terms an app may use it.
 |---|---|
 | `NNN.qvp` | one printed page in the QVP1 format (`docs/FORMAT.md`): outlines, words, ayah fragments, lines, decorations |
 | `NNN.words.json` | that page's five text forms per word key: `rasm_uthmani`, `rasm_imlai`, `qpc`, `rasm`, `search` |
-| `atlas.qva` | the cross-page index in the QVA1 format: pages, surahs, the 240 rubu al-hizb boundaries |
+| `atlas.qva` | the cross-page index in the QVA1 format: pages, surahs, the 240 `rubu_al_hizb` boundaries |
 | `atlas.json` | the same atlas as JSON, for tooling |
 | `VERSION.json` | provenance: data version, source release, engine commit, format version, page count, a digest of every file |
 

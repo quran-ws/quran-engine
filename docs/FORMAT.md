@@ -73,12 +73,12 @@ it has one fragment per line):
 | surah | zigzag delta from the previous fragment |
 | ayah | zigzag delta from the previous fragment |
 | fragment index, fragment count | u8, u8 |
-| flags | u8: bit 0 juz starts here, bit 1 hizb, bit 2 rubu al-hizb, bit 3 nisf |
+| flags | u8: bit 0 juz starts here, bit 1 hizb, bit 2 `rubu_al_hizb`, bit 3 nisf |
 | word count | varint |
 | ayah-mark decoration | opt |
-| rubu al-hizb number | varint: 1 to 240 when a division starts at this ayah, else 0 |
+| `rubu_al_hizb` number | varint: 1 to 240 when a division starts at this ayah, else 0 |
 
-The juz, hizb and nisf numbers derive from the rubu al-hizb number:
+The juz, hizb and nisf numbers derive from the `rubu_al_hizb` number:
 `juz = (r − 1) / 8 + 1`, `hizb = (r − 1) / 4 + 1`, `nisf = (r − 1) / 2 + 1`.
 
 **Words**, one record per word in reading order:
@@ -88,7 +88,7 @@ The juz, hizb and nisf numbers derive from the rubu al-hizb number:
 | first path | zigzag delta from the previous word's end (`first + count`) |
 | surah, ayah, word | zigzag deltas from the previous word |
 | line index, ayah-fragment index | zigzag deltas from the previous word |
-| text, rasm imlai, qpc, rasm, search | five `opt` string indices; only the first is set in production data, the rest come from the words sidecar |
+| text, `rasm_imlai`, qpc, rasm, search | five `opt` string indices; only the first is set in production data, the rest come from the words sidecar |
 | path count | varint |
 
 **Paths**, stored column by column so that like bytes sit together:
@@ -164,10 +164,10 @@ length-prefixed string.
 | field | coding |
 |---|---|
 | magic | `QVA1` |
-| page count, surah count, rubu al-hizb count | three varints |
+| page count, surah count, `rubu_al_hizb` count | three varints |
 | pages, sorted by page | per page: page, first surah, first ayah, last surah, last ayah, word count (six varints) |
 | surahs, sorted by number | per surah: number, first page, ayah count, place (0 makkah, 1 madinah, 255 unknown), then the Arabic, Latin and English names, each a varint length and UTF-8 bytes |
-| rubu al-hizb boundaries, sorted | per boundary: rubu al-hizb number, surah, ayah, page (four varints) |
+| `rubu_al_hizb` boundaries, sorted | per boundary: `rubu_al_hizb` number, surah, ayah, page (four varints) |
 
 ## Versioning
 
