@@ -133,7 +133,7 @@ fn page_data() -> PageData {
 
 /// A tall sajdah sign on line 1 must not pull the line's centre. An ayah mark stored
 /// without a line takes the line of the ayah it closes, not the nearest centre. The
-/// sajdah overline takes the line of the word under it, not the sign's line.
+/// sajdah line takes the line of the word under it, not the sign's line.
 #[test]
 fn decorations_follow_their_line() {
     let mut d = page_data();
@@ -157,11 +157,11 @@ fn decorations_follow_their_line() {
     };
     // the sign spans from above line 1 to the middle of line 2
     let (sajdah, sb) = add(&square(200, 200, 400, 5500), PathKind::Other);
-    // the sajdah overline sits over word C on line 2, though its sign is on line 1
-    let (overline, ob) = add(&square(1500, 4900, 3500, 4950), PathKind::Mark);
+    // the sajdah line sits over word C on line 2, though its sign is on line 1
+    let (sajdah_line, ob) = add(&square(1500, 4900, 3500, 4950), PathKind::Mark);
     // the mark sits low: its centre (y=40) is nearer line 2 (55) than line 1 (15)
     let (mark, mb) = add(&square(4200, 3800, 4600, 4200), PathKind::AyahMarkOrnament);
-    d.paths[overline as usize].mark = Mark::SajdahLine;
+    d.paths[sajdah_line as usize].mark = Mark::SajdahLine;
     let mut sb2 = sb;
     sb2.union(&ob);
     d.decorations = vec![
@@ -191,7 +191,7 @@ fn decorations_follow_their_line() {
     assert_eq!(p.line_centre(0), 15.0);
     assert_eq!(p.line_centre(1), 55.0);
     assert_eq!(p.geometry().table[sajdah as usize].line, 0);
-    assert_eq!(p.geometry().table[overline as usize].line, 1);
+    assert_eq!(p.geometry().table[sajdah_line as usize].line, 1);
     assert_eq!(p.geometry().table[mark as usize].line, 0);
     let l = p
         .layout(&LayoutSpec {

@@ -1,10 +1,10 @@
 //! Data gate: every element moves with its line under layout.
 //!
 //! A path is shifted by the `line_dy` of the line index it is laid out with. So an ayah
-//! mark must carry the line of the ayah it closes, a sajdah overline the line of the word
+//! mark must carry the line of the ayah it closes, a sajdah line the line of the word
 //! it is drawn over, and a line's reference centre must come from its body ink alone. A
 //! sajdah sign is taller than the text and used to pull the centre, which snapped the
-//! ayah mark to the neighbouring line on five pages. The overline used to move with the
+//! ayah mark to the neighbouring line on five pages. The sajdah line used to move with the
 //! sign's line and dropped into the diacritics of the sajdah word.
 //! Needs dist/pages from scripts/sync-test-data.sh. Skipped when the data is missing
 //! unless QVP_REQUIRE_DATA is set.
@@ -27,7 +27,7 @@ fn ayah_marks_and_line_centres_follow_the_text() {
     }
     let mut failures = Vec::new();
     let mut marks = 0;
-    let mut overlines = 0;
+    let mut sajdah_lines = 0;
     for n in 1..=604u32 {
         let Ok(bytes) = std::fs::read(pages_dir().join(format!("{n:03}.qvp"))) else { continue };
         let p = Page::load(&bytes).expect("decode page");
@@ -50,9 +50,9 @@ fn ayah_marks_and_line_centres_follow_the_text() {
             }
         }
         for (pi, pr) in d.paths.iter().enumerate().filter(|(_, pr)| pr.mark == Mark::SajdahLine) {
-            overlines += 1;
+            sajdah_lines += 1;
             let line = g.table[pi].line;
-            // the word under the overline: same columns, top edge at or below the line
+            // the word under the sajdah line: same columns, top edge at or below the line
             let under = d
                 .words
                 .iter()
@@ -61,10 +61,10 @@ fn ayah_marks_and_line_centres_follow_the_text() {
             match under {
                 Some(w) if w.line_index as u32 == line => {}
                 Some(w) => failures.push(format!(
-                    "page {n:03} sajdah overline on line {line}, the word under it on line {}",
+                    "page {n:03} sajdah line on line {line}, the word under it on line {}",
                     w.line_index
                 )),
-                None => failures.push(format!("page {n:03} sajdah overline on line {line} with no word under it")),
+                None => failures.push(format!("page {n:03} sajdah line on line {line} with no word under it")),
             }
         }
         for (li, l) in d.lines.iter().enumerate() {
@@ -89,7 +89,7 @@ fn ayah_marks_and_line_centres_follow_the_text() {
         }
     }
     assert!(marks > 6000, "only {marks} ayah marks seen; is dist/pages complete?");
-    assert_eq!(overlines, 15, "the mushaf has 15 sajdah overlines");
+    assert_eq!(sajdah_lines, 15, "the mushaf has 15 sajdah lines");
     assert!(
         failures.is_empty(),
         "{} elements would not move with their line:\n{}",

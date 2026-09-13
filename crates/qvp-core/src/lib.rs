@@ -180,7 +180,7 @@ impl Page {
                 deco_line[di] = data.words[(a.first_word + a.n_words - 1) as usize].line_index as u32;
             }
         }
-        // The sajdah overline is drawn over the sajdah word, which can sit lines above the
+        // The sajdah line is drawn over the sajdah word, which can sit lines above the
         // sign that closes the ayah: it takes the line of the word directly below it.
         let line_under = |pb: &IBox| -> Option<u32> {
             let tol = (2.0 * q) as i32;
