@@ -329,7 +329,7 @@ static jobjectArray atlas_surah_out(JNIEnv* env, QvpAtlasSurah* s) {
     /* Strings: n, firstPage, ayahCount, place, arabic, latin, english */
     jobjectArray arr = (*env)->NewObjectArray(env, 7, (*env)->FindClass(env, "java/lang/String"), NULL);
     char buf[16];
-    snprintf(buf, sizeof buf, "%u", s->n); (*env)->SetObjectArrayElement(env, arr, 0, (*env)->NewStringUTF(env, buf));
+    snprintf(buf, sizeof buf, "%u", s->number); (*env)->SetObjectArrayElement(env, arr, 0, (*env)->NewStringUTF(env, buf));
     snprintf(buf, sizeof buf, "%u", s->first_page); (*env)->SetObjectArrayElement(env, arr, 1, (*env)->NewStringUTF(env, buf));
     snprintf(buf, sizeof buf, "%u", s->ayah_count); (*env)->SetObjectArrayElement(env, arr, 2, (*env)->NewStringUTF(env, buf));
     snprintf(buf, sizeof buf, "%u", s->place); (*env)->SetObjectArrayElement(env, arr, 3, (*env)->NewStringUTF(env, buf));
