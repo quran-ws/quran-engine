@@ -1,6 +1,6 @@
 # The Quran.ws search fold
 
-**Status:** proposed, one PR per repository, none merged.
+**Status:** adopted in Quran Engine (#5, `conformance/search-fold.json`); proposed for Quran Text and Quran SVG Elements.
 **Scope:** every block that answers a Qurʾānic text query — Quran Text, Quran SVG
 Elements, Quran Engine. Quran Tajweed is explicitly *out* of scope; see §7.
 

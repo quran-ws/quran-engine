@@ -13,6 +13,7 @@ cd "$(dirname "$0")/.."
 
 [ -d packages/ios/QvpKit/QvpEngine.xcframework ] || { echo "error: no QvpEngine.xcframework — run scripts/build-engine-ios.sh" >&2; exit 1; }
 packages/ios/Demo/sync-pages.sh
+(cd packages/ios/Demo && xcodegen generate >/dev/null)   # Demo.xcodeproj is generated, not committed
 
 STAGE=$(mktemp -d)/qvp-ios-demo
 trap 'rm -rf "$(dirname "$STAGE")"' EXIT
@@ -21,7 +22,7 @@ mkdir -p "$STAGE/docs"
 rsync -a --exclude 'build/' --exclude '.build/' --exclude '.swiftpm/' --exclude 'xcuserdata/' \
       --exclude '.DS_Store' packages/ios/QvpKit "$STAGE/"
 rsync -a --exclude 'build/' --exclude 'xcuserdata/' --exclude '.DS_Store' packages/ios/Demo "$STAGE/"
-cp docs/SHARE-IOS.md "$STAGE/README.md"
+cp scripts/package-ios-demo.README.md "$STAGE/README.md"
 cp docs/API.md "$STAGE/docs/API.md"
 cp crates/qvp-ffi/include/qvp.h "$STAGE/docs/qvp.h"
 cp packages/ios/README.md "$STAGE/docs/ios.md"
