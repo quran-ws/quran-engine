@@ -106,11 +106,12 @@
     <section>
       <h2>Layout (engine)</h2>
       <div class="grid3">
-        <b>line spacing</b><input id="spacing" type="range" min="0.6" max="2.2" step="0.05" value="1"><span id="spacingVal">×1.00</span>
+        <b>line spacing</b><input id="spacing" type="range" min="1" max="2.2" step="0.05" value="1"><span id="spacingVal">×1.00</span>
         <b>pad top</b><input id="padTop" type="range" min="0" max="120" step="4" value="24"><span id="padTopVal">24</span>
         <b>pad bottom</b><input id="padBottom" type="range" min="0" max="120" step="4" value="24"><span id="padBottomVal">24</span>
       </div>
       <div class="row" style="margin-top:6px"><button id="fillH">Fill screen height</button><button id="fitGap">Leading to fill</button></div>
+      <div class="hint">Leading only grows: the printed pitch is the floor, so the lines can never close up, and the text width is always the viewport's. The knobs spend the empty paper a tall screen leaves above and below the printed page.</div>
     </section>
     <section>
       <h2>Page</h2>

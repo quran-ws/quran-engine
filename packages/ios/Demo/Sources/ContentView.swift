@@ -254,12 +254,14 @@ struct SettingsSheet: View {
                 Section("Layout") {
                     Toggle("Fill screen height", isOn: $m.fillHeight)
                     LabeledContent("Line spacing") { Text(String(format: "×%.2f", m.lineSpacing / 100)).monospacedDigit() }
-                    Slider(value: $m.lineSpacing, in: 60...220, step: 5) { Text("Line spacing") }
+                    Slider(value: $m.lineSpacing, in: 100...220, step: 5) { Text("Line spacing") }
                     LabeledContent("Top padding") { Text("\(Int(m.padTop)) pt").monospacedDigit() }
                     Slider(value: $m.padTop, in: 0...120, step: 4) { Text("Top padding") }
                     LabeledContent("Bottom padding") { Text("\(Int(m.padBottom)) pt").monospacedDigit() }
                     Slider(value: $m.padBottom, in: 0...120, step: 4) { Text("Bottom padding") }
                     Button("Add leading to fill the screen") { m.leadingToFill() }
+                    Text("Leading only grows — the printed pitch is the floor, so the lines never close up — and the text width is always the screen's.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Highlights") {
                     Picker("Style", selection: $m.hlModeIdx) { Text("Band + ink").tag(0); Text("Band").tag(1); Text("Ink").tag(2) }

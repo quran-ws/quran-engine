@@ -142,7 +142,7 @@ public final class QvpCanvasController {
     }
     /// Clear the selection band and the engine selection.
     public func clearSelection() {
-        guard let p = page else { return }
+        guard let p = page, p.isOpen else { return }
         p.clearSelection(); if selectionHandle != 0 { p.unhighlight(selectionHandle); selectionHandle = 0 }
         onSelectionChanged?([]); invalidate()
     }
@@ -169,7 +169,7 @@ public final class QvpCanvasController {
         return h
     }
     func tap(_ pt: CGPoint) {
-        guard let p = page else { return }
+        guard let p = page, p.isOpen else { return }
         let hit = hitAt(pt)
         if let h = hit, h.word >= 0 { onWordTap?(p.words[h.word], h) }
         else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
@@ -225,7 +225,7 @@ public final class QvpCanvasController {
     }
     func selectEnded() { selecting = false }
     private func paintSelection() {
-        guard let p = page else { return }
+        guard let p = page, p.isOpen else { return }
         let ws = p.selection()
         let t = Target.words(ws)
         if selectionHandle != 0 { p.rehighlight(selectionHandle, t) }

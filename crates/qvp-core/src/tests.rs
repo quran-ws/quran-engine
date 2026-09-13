@@ -272,6 +272,17 @@ fn layout_fill_height_and_view_hit() {
     // as printed: no shift at all
     let l3 = p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, ..Default::default() }).clone();
     assert!(l3.line_dy.iter().all(|d| d.abs() < 1e-6) && (l3.content_h - 200.0).abs() < 1e-3);
+    // spacing only ever opens up: below 1.0, a negative gap, and a fill that would
+    // need to tighten all reproduce the print
+    for spec in [
+        LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_spacing: 0.5, ..Default::default() },
+        LayoutSpec { viewport_w: 200.0, viewport_h: 1100.0, line_gap: -20.0, ..Default::default() },
+        LayoutSpec { viewport_w: 200.0, viewport_h: 60.0, fill_height: true, ..Default::default() },
+    ] {
+        let l = p.layout(&spec).clone();
+        assert!((l.pitch - p.natural_pitch()).abs() < 1e-3, "pitch {} for {:?}", l.pitch, spec);
+        assert!(l.line_dy[1] - l.line_dy[0] >= -1e-6, "lines never move closer");
+    }
     assert!((gap_to_fill(345.0, 550.0, 15, 390.0, 844.0, f32::INFINITY) - 14.0).abs() < 0.1);
     assert_eq!(gap_to_fill(345.0, 550.0, 15, 820.0, 1180.0, 100.0), 0.0);
     assert!((wasted_fraction(345.0, 550.0, 390.0, 844.0) - 0.263).abs() < 0.01);

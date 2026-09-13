@@ -134,6 +134,7 @@ export interface QvpPageViewProps extends ViewProps {
   /** optional NNN.words.json sidecar (derived forms), same URI schemes */
   wordsUri?: string;
   padTop?: number; padBottom?: number; padSide?: number;
+  /** spacing only opens up: lineSpacing < 1 and a negative lineGap are clamped by the engine */
   lineSpacing?: number; lineGap?: number; fillHeight?: boolean;
   paperColor?: Color; defaultInk?: Color; selectionBand?: Color;
   selectionEnabled?: boolean; zoomEnabled?: boolean; hitMaxDistance?: number;

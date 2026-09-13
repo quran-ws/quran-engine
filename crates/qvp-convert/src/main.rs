@@ -36,13 +36,23 @@ fn one(svg_path: &Path, out: &Path, json: Option<&Path>, words_index: Option<&Pa
     Ok(Done { svg_len: svg.len(), qvp_len: bytes.len(), warnings: c.report.warnings, page: c.page })
 }
 
+/// Exit with usage unless the subcommand got between `min` and `max` arguments.
+fn expect_args(args: &[String], min: usize, max: usize) {
+    let n = args.len().saturating_sub(2);
+    if n < min || n > max {
+        eprintln!("error: `{}` takes {min}..={max} arguments, got {n}\n", args[1]);
+        usage();
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
         usage();
     }
     match args[1].as_str() {
-        "svg2qvp" if args.len() >= 4 => {
+        "svg2qvp" => {
+            expect_args(&args, 2, 4);
             let json = args.get(4).map(PathBuf::from);
             let words_index = args.get(5).map(PathBuf::from);
             match one(Path::new(&args[2]), Path::new(&args[3]), json.as_deref(), words_index.as_deref()) {
@@ -58,12 +68,14 @@ fn main() {
                 }
             }
         }
-        "qvp2svg" if args.len() >= 4 => {
+        "qvp2svg" => {
+            expect_args(&args, 2, 2);
             let bytes = fs::read(&args[2]).expect("read qvp");
             let page = qvp_format::decode(&bytes).expect("decode");
             fs::write(&args[3], to_svg(&page).expect("to_svg")).expect("write svg");
         }
         "info" => {
+            expect_args(&args, 1, 1);
             let bytes = fs::read(&args[2]).expect("read qvp");
             let p = qvp_format::decode(&bytes).expect("decode");
             println!(
@@ -72,7 +84,8 @@ fn main() {
                 p.lines.len(), p.ayahs.len(), p.words.len(), p.paths.len(), p.decos.len(), p.glyphs.len(), p.insts.len(), p.ops.len(), p.strings.len(), bytes.len()
             );
         }
-        "batch" if args.len() >= 4 => {
+        "batch" => {
+            expect_args(&args, 2, 3);
             let svg_dir = PathBuf::from(&args[2]);
             let out_dir = PathBuf::from(&args[3]);
             fs::create_dir_all(&out_dir).expect("mkdir");

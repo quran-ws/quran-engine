@@ -18,7 +18,7 @@ packages/ios/
 │   │   ├── QvpPageView.swift       UIView renderer: bands → cached base ink → styled ink → mask boxes; gestures; CADisplayLink
 │   │   └── QvpPageCanvas.swift     the same frame as SwiftUI Canvas (iOS 17+): QvpCanvasController + QvpPageCanvas
 │   └── Tests/QvpKitTests/          XCTest: the same assertions as the Flutter/Dart test (page 042, atlas)
-└── Demo/                           SwiftUI app (xcodegen project.yml → Demo.xcodeproj, committed)
+└── Demo/                           SwiftUI app (`xcodegen generate` → Demo.xcodeproj, not committed)
     ├── Sources/                    DemoModel (engine state, a port of the Android MainActivity) + ContentView (the reader UI)
     ├── UITests/                    XCUITest: tap, swipe page flip, pinch, search sheet on the real view
     ├── sync-pages.sh               fills pages/ with all 604 pages + atlas.qva, from the data release or dist/pages (pre-build step)
@@ -101,6 +101,7 @@ printed viewBox (345 × 550, y down); anything `…View` is viewport px through 
 ```swift
 let view = QvpPageView()
 view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.lineSpacing = 1; view.lineGap = 0; view.fillHeight = false
+// lineSpacing < 1 / a negative lineGap are clamped by the engine: spacing only ever opens up
 view.paperColor = UIColor(...); view.selectionBand = 0x2d6fd640; view.hitOptions = QvpHitOptions(maxDistance: 6)
 view.onWordTap = { word, hit in }; view.onDecoTap = { deco, hit in }; view.onEmptyTap = { }; view.onSelectionChanged = { words in }
 view.onSwipe = { dir in }                 // horizontal swipe while not zoomed (+1 finger right, −1 left): flip pages; view.isZoomed
@@ -170,7 +171,7 @@ xcodebuild -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 17' bui
 xcrun simctl install booted build/…/Demo.app && xcrun simctl launch booted ws.quran.qvp.demo
 ```
 
-Or open `Demo/Demo.xcodeproj` (regenerate with `xcodegen generate` after editing `project.yml`).
+Or run `xcodegen generate` in `Demo/` and open the `Demo.xcodeproj` it writes (it is not committed).
 The app bundles the complete mushaf — all 604 pages (`.qvp` + `.words.json`) and `atlas.qva`, about
 91 MB — put there by `sync-pages.sh` and never committed.
 

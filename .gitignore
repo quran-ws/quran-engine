@@ -22,15 +22,35 @@ packages/flutter/**/build/
 packages/flutter/**/.dart_tool/
 packages/flutter/**/assets/pages/
 # React Native
-packages/react-native/**/node_modules/
+packages/react-native/node_modules/
 packages/react-native/**/android/build/
 packages/react-native/**/android/.gradle/
+packages/react-native/**/android/app/build/
+packages/react-native/**/android/local.properties
+packages/react-native/**/android/app/src/main/assets/pages/
+packages/react-native/**/android/app/src/main/assets/index.android.bundle
+packages/react-native/**/android/app/src/main/res/drawable-*/
+packages/react-native/**/android/app/src/main/res/raw/
+packages/react-native/**/.cxx/
+packages/react-native/qvp-react-native/lib/
+packages/react-native/example/ios/Pods/
+packages/react-native/example/ios/build/
+packages/react-native/*.log
 # iOS
 packages/ios/QvpKit/QvpEngine.xcframework/
 packages/ios/QvpKit/.build/
 packages/ios/QvpKit/.swiftpm/
 packages/ios/Demo/pages/
+packages/ios/Demo/Demo.xcodeproj/
 packages/ios/Demo/build/
 packages/ios/**/xcuserdata/
 packages/ios/**/*.xcworkspace/xcshareddata/swiftpm/
 dist/ios/
+# local tooling state and OS noise
+.DS_Store
+.maestro/
+.claude/
+.codex/
+.cursor/
+*.qvo
+*.log

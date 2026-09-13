@@ -107,6 +107,11 @@ const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRigh
 // L = {scale, ox, oy, contentW, contentH, pitch, lineDy[], slots[]}
 ```
 
+**What this is for.** A printed mushaf page is squatter than a phone screen: fitted to the
+width of a tall viewport it leaves a band of empty paper top and bottom. The layout knobs
+exist to spend that empty band on leading — the lines drift apart until the page fills the
+screen — and for nothing else. They are an *expansion* control, never a compression one.
+
 Horizontal placement is as printed; each line moves by `lineDy[line]`. Lines are never
 re-spread onto a grid (printed lines are not equally tall or equally pitched, and ink
 crosses into neighbouring lines): every line keeps its printed position and the same
@@ -120,6 +125,14 @@ that cannot fit at it reports a `contentH` taller than the viewport. `slots[]` b
 sit halfway between neighbouring lines, except beside a header line (surah name, basmalah),
 where they stop half a pitch from the line's centre — the banner on pages 1–2 sits several
 pitches above the text, and that gap is not the first line's.
+
+**Spacing only opens up.** The printed pitch is the floor: the delta is clamped at 0, so
+`lineSpacing < 1`, a negative `lineGap`, or a `fillHeight` that would need to tighten all
+lay the page out exactly as printed. Lines can never be pulled closer together than the
+mushaf prints them. The text width is not adjustable either: the page is always fitted to
+the padded viewport width (`scale = (viewportW − padLeft − padRight) / pageW`), so the
+only layout knob a reader gets is more leading, never a narrower or wider line.
+
 Pure helpers:
 `engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` and `wastedFraction(...)`.
 `wordBoxView(i)` gives a word's box in viewport px for scroll-into-view.
