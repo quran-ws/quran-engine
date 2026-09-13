@@ -46,7 +46,8 @@ void main() {
   });
 
   test('engine: version, names, arabic tools', () {
-    expect(engine.version, greaterThan(0));
+    expect(engine.formatVersion, greaterThan(0));
+    expect(engine.version, matches(RegExp(r'^\d+\.\d+\.\d+$')));
     expect(engine.engineName, 'qvp');
     expect(engine.kindName(QvpKind.mark), 'mark');
     expect(engine.markName(1), 'fathah');
