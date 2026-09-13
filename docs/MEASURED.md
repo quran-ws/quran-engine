@@ -10,7 +10,7 @@ Page 042, release build, Apple silicon — run it yourself and expect different
 numbers on different hardware:
 
 ```sh
-cargo run -p qvp-core --release --example bench -- quran-engine-pages-hafs-kfgqpc/042.qvp
+cargo run -p qvp-core --release --example bench -- dist/pages/042.qvp
 ```
 
 | | |

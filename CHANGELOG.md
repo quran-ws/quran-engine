@@ -16,6 +16,9 @@ All notable changes to the engine and its packages. The format follows
   its names from the engine at start-up; the five hand-written mark tables and the place,
   division and decoration lists are gone. React Native's kind and decoration names now
   match the engine's (`ayah_number`, `ayah-mark`); an unknown name resolves to 255, not 0.
+- `docs/FORMAT.md` specifies the QVP1 page format and the QVA1 atlas byte by byte;
+  `docs/DATA.md` records which mushaf the data is, its source release, how it is built and
+  its terms. The format crate's top comment describes the on-disk layout correctly.
 - Layout: `QvpLayout.fit_scale`, `fit_x`, `fit_y` (the view transform that shows the whole
   content), `QvpLayoutSpec.crop_left`, `crop_right` (cut printed side margins) and
   `max_aspect_slack` (bound the content width by the page aspect), and
