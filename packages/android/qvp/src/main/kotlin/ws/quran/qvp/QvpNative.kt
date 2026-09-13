@@ -53,6 +53,7 @@ internal object QvpNative {
     @JvmStatic external fun hitBoxes(h: Long, gapBias: Float): FloatArray
     // layout
     @JvmStatic external fun layout(h: Long, spec: FloatArray): FloatArray
+    @JvmStatic external fun layoutGapToFill(h: Long, spec: FloatArray, max: Float): Float
     @JvmStatic external fun gapToFill(pw: Float, ph: Float, lines: Int, vw: Float, vh: Float, max: Float): Float
     @JvmStatic external fun wastedFraction(pw: Float, ph: Float, vw: Float, vh: Float): Float
     @JvmStatic external fun wordBoxView(h: Long, i: Int): FloatArray?

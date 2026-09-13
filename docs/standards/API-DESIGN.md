@@ -69,7 +69,10 @@ scale, a clamp, box mathematics, index mathematics or colour mathematics, is eng
 It belongs in the core, exposed through one symbol, and the wrapper calls it.
 
 When you find such a computation in a wrapper, move it to the core and add a scenario in
-`conformance/scenarios/`. Then no wrapper can reimplement it differently again.
+`conformance/scenarios/`. Then no wrapper can reimplement it differently again. The fit
+scale and the centred offsets were once computed six different ways across the wrappers;
+they are now `QvpLayout.fit_scale`, `fit_x`, `fit_y`, and `conformance/scenarios/layout.json`
+holds the engine's answers that every wrapper test replays.
 
 ## The three tiers of a feature
 

@@ -4,6 +4,7 @@
 // (build with `cargo build -p qvp-ffi --release`).
 // Data: <repo>/dist/pages/042.qvp, 042.words.json, atlas.qva
 // (`cargo run -p qvp-convert --release -- batch pages dist/pages`).
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -278,5 +279,28 @@ void main() {
     expect(atlas.juzAt(2, 255), 3);
     expect(atlas.pageRange(42)!.first.$1, 2);
     atlas.dispose();
+  });
+
+  test('layout scenarios match the engine (conformance/scenarios/layout.json)', () {
+    final json = jsonDecode(File('$repo/conformance/scenarios/layout.json').readAsStringSync()) as Map<String, dynamic>;
+    final tolerance = (json['tolerance'] as num).toDouble();
+    final cases = json['cases'] as List<dynamic>;
+    void close(double a, num b, String what) => expect((a - b).abs() <= tolerance * (b.abs() < 1 ? 1 : b.abs()), isTrue, reason: '$what: got $a, engine says $b');
+    for (final c in cases) {
+      final s = c['spec'] as Map<String, dynamic>, want = c['layout'] as Map<String, dynamic>;
+      double f(String k) => (s[k] as num).toDouble();
+      final spec = QvpLayoutSpec(
+        viewportW: f('viewportW'), viewportH: f('viewportH'), padTop: f('padTop'), padBottom: f('padBottom'), padLeft: f('padLeft'), padRight: f('padRight'),
+        lineSpacing: f('lineSpacing'), lineGap: f('lineGap'), fillHeight: s['fillHeight'] as bool, nominalLines: s['nominalLines'] as int,
+        cropLeft: f('cropLeft'), cropRight: f('cropRight'), maxAspectSlack: f('maxAspectSlack'));
+      final tag = '${spec.viewportW}x${spec.viewportH} fill=${spec.fillHeight} slack=${spec.maxAspectSlack} crop=${spec.cropLeft}';
+      final l = page.layout(spec);
+      close(l.scale, want['scale'] as num, '$tag scale'); close(l.ox, want['ox'] as num, '$tag ox'); close(l.oy, want['oy'] as num, '$tag oy');
+      close(l.contentW, want['contentW'] as num, '$tag contentW'); close(l.contentH, want['contentH'] as num, '$tag contentH'); close(l.pitch, want['pitch'] as num, '$tag pitch');
+      close(l.fitScale, want['fitScale'] as num, '$tag fitScale'); close(l.fitX, want['fitX'] as num, '$tag fitX'); close(l.fitY, want['fitY'] as num, '$tag fitY');
+      close(l.lineDy.first, want['lineDy0'] as num, '$tag lineDy[0]'); close(l.lineDy.last, want['lineDyLast'] as num, '$tag lineDy[last]');
+      close(page.layoutGapToFill(spec), c['gapToFill'] as num, '$tag gapToFill');
+    }
+    expect(cases.length, 40);
   });
 }

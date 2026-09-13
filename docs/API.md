@@ -22,8 +22,8 @@ Examples are JavaScript; read `page.hitTestEx(...)` as `page.hitTestEx(...)` in 
   `Sel.wordBody(i)`, `Sel.wordMarks(i)`, `Sel.wordMark(i, nth)`, `Sel.wordMarkNamed(i, 'fathah', nth)`,
   `Sel.wordPath(i, nth)`, `Sel.path(p)`, `Sel.mark('shaddah')`, `Sel.category('harakah')`,
   `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.deco('ayah-mark')`, `Sel.decoIdx(d)`.
-- **The engine decides, the host draws.** Hit-testing, layout, styling, highlight bands,
-  masks and search are engine calls. A wrapper only marshals and paints what it is told.
+- **The engine computes, the host renders.** Hit-testing, layout, styling, highlight bands,
+  masks and search are engine calls. A wrapper marshals the calls and renders the results.
 - **Data is separate from code.** Pages (`NNN.qvp`), the atlas (`atlas.qva`) and the
   optional text sidecars (`NNN.words.json`) are assets your app loads; no package bundles them.
 
@@ -103,9 +103,20 @@ print. `hitBoxes()` returns the same partition as boxes (no dead zones on a line
 
 ```js
 const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRight,
-                       lineSpacing: 1.0, lineGap: 0, fillHeight: false, nominalLines: 15});
-// L = {scale, ox, oy, contentW, contentH, pitch, lineDy[], slots[]}
+                       lineSpacing: 1.0, lineGap: 0, fillHeight: false, nominalLines: 15,
+                       cropLeft: 0, cropRight: 0, maxAspectSlack: 0});
+// L = {scale, ox, oy, contentW, contentH, pitch, lineDy[], slots[], fitScale, fitX, fitY}
+page.layoutGapToFill(spec)   // leading (page units) that fills the padded viewport of spec
 ```
+
+**The fit.** `fitScale`, `fitX`, `fitY` is the view transform that shows the whole laid-out
+content in the viewport: shrink by `fitScale` when the content is taller than the viewport
+(never enlarge), then centre. A host draws at `fitX + fitScale·vx`, `fitY + fitScale·vy`
+and applies its own pan and zoom on top. `maxAspectSlack` bounds the content width to
+`viewportH·pageW/pageH·slack` so a landscape screen does not stretch the lines (0 = no
+bound; the examples use 1.15). `cropLeft`/`cropRight` cut the printed side margins (page
+units) so the ink spans the padded width. Wrappers compute none of this; the engine's
+answers for forty viewport cases are in `conformance/scenarios/layout.json`.
 
 **What this is for.** A printed mushaf page is squatter than a phone screen: fitted to the
 width of a tall viewport it leaves a band of empty paper top and bottom. The layout knobs

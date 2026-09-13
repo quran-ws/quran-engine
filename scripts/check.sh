@@ -32,6 +32,10 @@ for check in "$@"; do
       QVP_REQUIRE_DATA=1 cargo test -p qvp-convert --release --test identity
       QVP_REQUIRE_DATA=1 cargo test -p qvp-ffi --release --test abi
       node web/lite.test.mjs
+      scripts/gen-conformance.sh --check
+      cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
+      cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm
+      node web/scenarios.test.mjs
       ;;
     parity)
       step "header vs Rust vs every wrapper"

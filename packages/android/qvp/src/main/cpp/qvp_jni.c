@@ -219,16 +219,25 @@ jfloatArray FN(hitBoxes)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) {
 }
 
 /* ───────── layout ───────── */
-/* spec {vw, vh, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, fillHeight, nominal}
-   → {scale, ox, oy, contentW, contentH, pitch, nLines, then nLines × (dy, slotTop, slotBottom)} */
+/* spec {vw, vh, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, fillHeight, nominal, cropLeft, cropRight, maxAspectSlack} */
+static QvpLayoutSpec layout_spec(JNIEnv* env, jfloatArray spec) {
+    jfloat f[13]; (*env)->GetFloatArrayRegion(env, spec, 0, 13, f);
+    QvpLayoutSpec s = { f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8] > 0.5f ? 1u : 0u, (uint32_t)f[9], f[10], f[11], f[12] };
+    return s;
+}
+/* spec → {scale, ox, oy, contentW, contentH, pitch, nLines, fitScale, fitX, fitY, then nLines × (dy, slotTop, slotBottom)} */
 jfloatArray FN(layout)(JNIEnv* env, jclass c, jlong h, jfloatArray spec) {
-    jfloat f[10]; (*env)->GetFloatArrayRegion(env, spec, 0, 10, f);
-    QvpLayoutSpec s = { f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8] > 0.5f ? 1u : 0u, (uint32_t)f[9] };
+    QvpLayoutSpec s = layout_spec(env, spec);
     QvpLayout l; qvp_layout(PG(h), &s, &l);
-    jsize n = 7 + l.n_lines * 3; float* v = (float*)malloc(n * sizeof(float));
+    jsize n = 10 + l.n_lines * 3; float* v = (float*)malloc(n * sizeof(float));
     v[0] = l.scale; v[1] = l.ox; v[2] = l.oy; v[3] = l.content_w; v[4] = l.content_h; v[5] = l.pitch; v[6] = (float)l.n_lines;
-    memcpy(v + 7, l.lines, l.n_lines * 3 * sizeof(float));
+    v[7] = l.fit_scale; v[8] = l.fit_x; v[9] = l.fit_y;
+    memcpy(v + 10, l.lines, l.n_lines * 3 * sizeof(float));
     jfloatArray a = floats(env, v, n); free(v); return a;
+}
+jfloat FN(layoutGapToFill)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloat max) {
+    QvpLayoutSpec s = layout_spec(env, spec);
+    return qvp_layout_gap_to_fill(PG(h), &s, max);
 }
 jfloat FN(gapToFill)(JNIEnv* env, jclass c, jfloat pw, jfloat ph, jint lines, jfloat vw, jfloat vh, jfloat max) { return qvp_gap_to_fill(pw, ph, (uint32_t)lines, vw, vh, max); }
 jfloat FN(wastedFraction)(JNIEnv* env, jclass c, jfloat pw, jfloat ph, jfloat vw, jfloat vh) { return qvp_wasted_fraction(pw, ph, vw, vh); }

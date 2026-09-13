@@ -66,8 +66,12 @@ typedef struct { float max_distance /* <=0: unlimited */, gap_bias /* 0.6 */; ui
 typedef struct { uint32_t id, line; float x0, y0, x1, y1; uint32_t color; float radius; } QvpBox;
 typedef struct { uint32_t word, line; float x0, y0, x1, y1, ink_x0, ink_y0, ink_x1, ink_y1; } QvpHitBox;
 typedef struct { uint32_t line, line_no; float y0, y1, mid, ink_y0, ink_y1; } QvpLineBand;
-typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing, line_gap; uint32_t fill_height, nominal_lines; } QvpLayoutSpec;
-typedef struct { float scale, ox, oy, content_w, content_h, pitch; uint32_t n_lines; const float* lines; /* n_lines × {dy, slot_top, slot_bottom} */ } QvpLayout;
+/* crop_left/right: printed side margins to cut (page units, 0 = none). max_aspect_slack: the content is never
+   wider than viewport_h·page_w/page_h·slack (0 = no bound). */
+typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing, line_gap; uint32_t fill_height, nominal_lines; float crop_left, crop_right, max_aspect_slack; } QvpLayoutSpec;
+/* fit_*: the view transform that shows the whole content (shrink to the viewport height, never enlarge, centred):
+   draw at fit_x + fit_scale·vx, fit_y + fit_scale·vy; the host's pan and zoom go on top. */
+typedef struct { float scale, ox, oy, content_w, content_h, pitch; uint32_t n_lines; const float* lines; /* n_lines × {dy, slot_top, slot_bottom} */ float fit_scale, fit_x, fit_y; } QvpLayout;
 typedef struct { uint8_t kind; uint32_t a, b, c; const uint32_t* words; uint32_t n_words; } QvpTarget;      /* see QVP_TARGET_* */
 typedef struct { uint8_t kind; uint32_t a, b, c; } QvpSelector;                                                /* see QVP_SEL_* */
 typedef struct { uint8_t mode, height; uint32_t ink, band; float pad_x, pad_y, radius, seam; uint32_t transition_ms; int32_t layer; } QvpHighlightStyle;
@@ -133,6 +137,7 @@ uint32_t qvp_hit_boxes(const QvpPage*, float gap_bias, QvpHitBox* out, uint32_t 
 /* layout -------------------------------------------------------------------------------- */
 void     qvp_layout(QvpPage*, const QvpLayoutSpec*, QvpLayout* out);        /* out.lines valid until next call */
 float    qvp_gap_to_fill(float page_w, float page_h, uint32_t lines, float view_w, float view_h, float max /* <=0 unlimited */);
+float    qvp_layout_gap_to_fill(const QvpPage*, const QvpLayoutSpec*, float max /* <=0 unlimited */);   /* padding subtracted here */
 float    qvp_wasted_fraction(float page_w, float page_h, float view_w, float view_h);
 int      qvp_word_box_view(const QvpPage*, uint32_t wi, float out[4]);
 

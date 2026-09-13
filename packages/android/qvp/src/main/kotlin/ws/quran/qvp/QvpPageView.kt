@@ -169,8 +169,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     }
     fun resetView() {
         val l = page?.currentLayout
-        viewScale = if (l != null && l.contentH > height) height / l.contentH else 1f
-        viewOx = 0f; viewOy = if (l != null) ((height - l.contentH * viewScale) / 2f).coerceAtLeast(0f) else 0f
+        viewScale = l?.fitScale ?: 1f; viewOx = l?.fitX ?: 0f; viewOy = l?.fitY ?: 0f
         invalidate()
     }
     /** Matrix mapping page units of [line] to view px (layout + pan/zoom). */

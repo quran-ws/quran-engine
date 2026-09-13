@@ -61,17 +61,17 @@
   }
 
   // ── view: engine layout + pan/zoom on top ──
+  function layoutSpec() {
+    const r = stage.getBoundingClientRect(), ls = S.layout;
+    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, lineGap: ls.lineGap, fillHeight: ls.fillHeight, nominalLines: 15, maxAspectSlack: 1.15 };
+  }
   function relayout() {
     const p = S.page; if (!p) return null;
-    const r = stage.getBoundingClientRect(), ls = S.layout;
-    const maxW = Math.min(r.width, r.height * p.width / p.height * 1.15);
-    return p.layout({ viewportW: maxW, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, lineGap: ls.lineGap, fillHeight: ls.fillHeight, nominalLines: 15 });
+    return p.layout(layoutSpec());
   }
   function fit(redraw = true) {
     const L = relayout(); if (!L) return;
-    const r = stage.getBoundingClientRect();
-    const s = Math.min(1, r.height / L.contentH);
-    S.view = { scale: s, ox: (r.width - L.contentW * s) / 2, oy: (r.height - L.contentH * s) / 2 };
+    S.view = { scale: L.fitScale, ox: L.fitX, oy: L.fitY };
     renderer.baseKey = '';
     if (redraw) draw();
   }
@@ -340,7 +340,7 @@
   const relayoutUI = () => { $('spacingVal').textContent = '×' + S.layout.lineSpacing.toFixed(2); fit(); };
   $('spacing').oninput = e => { S.layout.lineSpacing = +e.target.value; S.layout.lineGap = 0; S.layout.fillHeight = false; $('fillH').classList.remove('on'); relayoutUI(); };
   $('fillH').onclick = () => { S.layout.fillHeight = !S.layout.fillHeight; $('fillH').classList.toggle('on', S.layout.fillHeight); relayoutUI(); };
-  $('fitGap').onclick = () => { const p = S.page, r = stage.getBoundingClientRect(); S.layout.fillHeight = false; $('fillH').classList.remove('on'); S.layout.lineSpacing = 1; $('spacing').value = 1; S.layout.lineGap = engine.gapToFill(p.width, p.height, p.nLines, r.width - 2 * S.layout.padSide, r.height - S.layout.padTop - S.layout.padBottom, 0); relayoutUI(); };
+  $('fitGap').onclick = () => { const p = S.page, r = stage.getBoundingClientRect(); S.layout.fillHeight = false; $('fillH').classList.remove('on'); S.layout.lineSpacing = 1; $('spacing').value = 1; S.layout.lineGap = p.layoutGapToFill(layoutSpec()); relayoutUI(); };
   $('padTop').oninput = e => { S.layout.padTop = +e.target.value; $('padTopVal').textContent = e.target.value; relayoutUI(); };
   $('padBottom').oninput = e => { S.layout.padBottom = +e.target.value; $('padBottomVal').textContent = e.target.value; relayoutUI(); };
 

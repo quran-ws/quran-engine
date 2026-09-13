@@ -58,6 +58,9 @@ fn abi_end_to_end() {
             line_gap: 0.0,
             fill_height: 1,
             nominal_lines: 15,
+            crop_left: 0.0,
+            crop_right: 0.0,
+            max_aspect_slack: 0.0,
         };
         let mut lay = std::mem::zeroed::<QvpLayout>();
         qvp_layout(page, &spec, &mut lay);

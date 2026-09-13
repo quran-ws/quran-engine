@@ -99,9 +99,15 @@ data class QvpHitBox(val word: Int, val line: Int, val x0: Float, val y0: Float,
 data class QvpLineBand(val line: Int, val lineNo: Int, val y0: Float, val y1: Float, val mid: Float, val inkY0: Float, val inkY1: Float)
 /** Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine. */
 data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop: Float = 0f, val padBottom: Float = 0f, val padLeft: Float = 0f, val padRight: Float = 0f,
-                         val lineSpacing: Float = 1f, val lineGap: Float = 0f, val fillHeight: Boolean = false, val nominalLines: Int = 15)
-/** Page → viewport: vx = ox + x*scale ; vy = oy + (y + lineDy[line])*scale. */
-class QvpLayout(val scale: Float, val ox: Float, val oy: Float, val contentW: Float, val contentH: Float, val pitch: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray)
+                         val lineSpacing: Float = 1f, val lineGap: Float = 0f, val fillHeight: Boolean = false, val nominalLines: Int = 15,
+                         /** Printed side margins to cut, page units (0 = keep). */ val cropLeft: Float = 0f, val cropRight: Float = 0f,
+                         /** The content is never wider than viewportH·pageW/pageH·slack (0 = no bound). */ val maxAspectSlack: Float = 0f) {
+    internal fun floats() = floatArrayOf(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, if (fillHeight) 1f else 0f, nominalLines.toFloat(), cropLeft, cropRight, maxAspectSlack)
+}
+/** Page → viewport: vx = ox + x*scale ; vy = oy + (y + lineDy[line])*scale. [fitScale], [fitX], [fitY] show the
+ *  whole content in the viewport (shrink to height, never enlarge, centred): the host's pan and zoom go on top. */
+class QvpLayout(val scale: Float, val ox: Float, val oy: Float, val contentW: Float, val contentH: Float, val pitch: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray,
+                val fitScale: Float = 1f, val fitX: Float = 0f, val fitY: Float = 0f)
 data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val ink: Int = 0x1a73e8ff.toInt(), val band: Int = 0xd6a3264d.toInt(), val height: BandHeight = BandHeight.PITCH,
                              val padX: Float = 1.2f, val padY: Float = 0f, val radius: Float = 0f, val seam: Float = 0.25f, val transitionMs: Int = 0, val layer: Int = QvpLayer.HIGHLIGHT) {
     internal fun ints() = intArrayOf(mode.id, height.id, ink, band, transitionMs, layer)

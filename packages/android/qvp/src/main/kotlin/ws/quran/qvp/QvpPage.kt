@@ -133,10 +133,12 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
 
     // ── layout ──
     fun layout(spec: QvpLayoutSpec): QvpLayout {
-        val v = QvpNative.layout(h, floatArrayOf(spec.viewportW, spec.viewportH, spec.padTop, spec.padBottom, spec.padLeft, spec.padRight, spec.lineSpacing, spec.lineGap, if (spec.fillHeight) 1f else 0f, spec.nominalLines.toFloat()))
+        val v = QvpNative.layout(h, spec.floats())
         val n = v[6].toInt()
-        return QvpLayout(v[0], v[1], v[2], v[3], v[4], v[5], FloatArray(n) { v[7 + it * 3] }, FloatArray(n) { v[8 + it * 3] }, FloatArray(n) { v[9 + it * 3] }).also { currentLayout = it }
+        return QvpLayout(v[0], v[1], v[2], v[3], v[4], v[5], FloatArray(n) { v[10 + it * 3] }, FloatArray(n) { v[11 + it * 3] }, FloatArray(n) { v[12 + it * 3] }, v[7], v[8], v[9]).also { currentLayout = it }
     }
+    /** Leading (page units) that makes this page fill the padded viewport of [spec]; max 0 = unlimited. */
+    fun layoutGapToFill(spec: QvpLayoutSpec, max: Float = 0f): Float = QvpNative.layoutGapToFill(h, spec.floats(), max)
     fun wordBoxView(i: Int): FloatArray? = QvpNative.wordBoxView(h, i)
 
     // ── styles (handles undo exactly) ──
