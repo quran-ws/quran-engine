@@ -180,7 +180,7 @@
     if (!q) { draw(); return; }
     const m = p.search(q, { mode: $('qmode').value });
     if (m.length) S.hlSearch = p.highlight(T.words(m.map(x => x.word)), { mode: 'both', ink: '#c62828', band: rgba('#c62828', 0.12), height: 'ink', padY: 1, radius: 1, ms: S.hlMs });
-    box.innerHTML = m.length ? m.map(x => `<div data-w="${x.word}">${x.text} <span class="hint">${x.wordKey}${x.loose ? ' ~' : ''}</span></div>`).join('') : `<div class="hint">no match on this page${atlas ? ' — try the goto box for surah names' : ''}</div>`;
+    box.innerHTML = m.length ? m.map(x => `<div data-w="${x.word}">${x.text} <span class="hint">${x.wordKey}${x.isLooseMatch ? ' ~' : ''}</span></div>`).join('') : `<div class="hint">no match on this page${atlas ? ' — try the goto box for surah names' : ''}</div>`;
     box.querySelectorAll('[data-w]').forEach(el => el.onclick = () => selectWord(+el.dataset.w));
     draw();
   }

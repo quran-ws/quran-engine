@@ -674,7 +674,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
                     child: Row(children: [
                       Text(m.text, style: const TextStyle(fontSize: 18)),
                       const SizedBox(width: 8),
-                      Text('${m.wordKey}${m.loose ? ' ~' : ''}', style: TextStyle(color: pal.muted, fontSize: 12)),
+                      Text('${m.wordKey}${m.isLooseMatch ? ' ~' : ''}', style: TextStyle(color: pal.muted, fontSize: 12)),
                     ]),
                   ),
                 ),

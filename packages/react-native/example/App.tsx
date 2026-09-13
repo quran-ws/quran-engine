@@ -257,7 +257,7 @@ function Demo() {
         <TextInput style={[st.input, { color: th.fg, borderColor: th.line, textAlign: 'right' }]} placeholder="الله · الرحمان" placeholderTextColor="#999" value={query} onChangeText={setQuery} />
         {query.trim() !== '' && matches.length === 0 && <Text style={[st.small, { color: th.fg, opacity: 0.6 }]}>no match on this page</Text>}
         {matches.slice(0, 8).map(m => (
-          <Pressable key={m.word} onPress={async () => selectWord((await qvp.word(m.word))!)}><Text style={[st.result, { color: th.fg }]}>{m.text}  <Text style={st.small}>{m.wordKey}{m.loose ? ' ~' : ''}</Text></Text></Pressable>
+          <Pressable key={m.word} onPress={async () => selectWord((await qvp.word(m.word))!)}><Text style={[st.result, { color: th.fg }]}>{m.text}  <Text style={st.small}>{m.wordKey}{m.isLooseMatch ? ' ~' : ''}</Text></Text></Pressable>
         ))}
 
         <Section title="Selection" fg={th.fg} />
