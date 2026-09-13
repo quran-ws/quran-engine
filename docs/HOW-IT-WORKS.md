@@ -52,7 +52,7 @@ The whole common case in the reference web wrapper:
 ```js
 const page = engine.loadPage(bytes);          // a .qvp file's bytes
 draw(page);                                    // your paint routine over page.paths
-const hit = page.hitTestViewEx(x, y);          // the word under a finger, or null
+const hit = page.hitTestView(x, y);          // the word under a finger, or null
 ```
 
 The features below are optional and reachable from the same page object.
@@ -110,7 +110,7 @@ of words, step by step, ayah marks lighting with the ayah they close.
 ### Searching
 
 Search runs over the words on a page, in any of the stored spellings, with Arabic
-normalisation so a plain typed query matches the Uthmani script. Matches come back as word
+normalisation so a plain typed query matches the `rasm_uthmani` spelling. Matches come back as word
 indices, ready to highlight.
 
 ### Cutting out an ayah
@@ -133,7 +133,7 @@ or the colour of an outline.
 
 - **Page units**: the printed page's space, y down. Every geometric answer is in page units
   unless the name says *view*.
-- **View**: viewport pixels through the current layout. `hitTestViewEx` takes them. The
+- **View**: viewport pixels through the current layout. `hitTestView` takes them. The
   highlight and mask boxes come back in them, ready to draw.
 
 ## Glossary
@@ -141,10 +141,10 @@ or the colour of an outline.
 | term | meaning |
 |---|---|
 | mushaf | the Quran as a printed and bound volume. This engine renders the Madani mushaf, Hafs reading |
-| rasm | the letters of a word without vowels and marks. *Uthmani* is the Quranic spelling, *imlai* the modern one |
+| rasm | the letters of a word without vowels and marks. `rasm_uthmani` is the Quranic spelling, `rasm_imlai` the modern one |
 | mark | a vowel sign, a dot, a pause sign or a similar small outline attached to a word |
 | waqf | a pause sign in the text |
-| juz, hizb, rubu al-hizb | the mushaf's thirtieths, sixtieths and quarter-hizbs, marked in the margin |
+| juz, hizb, `rubu_al_hizb` | the mushaf's thirtieths, sixtieths and quarters of a hizb, marked in the margin |
 | ayah mark | the medallion that closes an ayah and carries its number |
 | decoration | any drawn element that is not a word: ayah marks, surah banners, basmalah, division rosettes, sajdah signs, page numbers |
 | page units | the printed page's coordinate space, 345 × 550 for this mushaf |

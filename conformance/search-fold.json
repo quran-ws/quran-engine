@@ -3,7 +3,7 @@
   "note": "Every input is copied from a real data file in the quran-ws repositories; none is typed by hand. Shared verbatim across quran-text, quran-svg-elements and quran-engine.",
   "vectors": [
     {
-      "note": "dagger alif U+0670 is a MARK: stripped, never expanded",
+      "note": "omitted alif U+0670 is a MARK: stripped, never expanded",
       "source": "quran-text hafs rasm_uthmani 1:1:3",
       "input": "ٱلرَّحۡمَٰنِ",
       "search_key": "ٱلرحمن",
@@ -11,7 +11,7 @@
       "loose_key": "لرحمن"
     },
     {
-      "note": "  ...the same word's imlai, the search-key source",
+      "note": "  ...the same word's rasm_imlai, the search-key source",
       "source": "quran-text hafs rasm_imlai 1:1:3",
       "input": "الرحمن",
       "search_key": "الرحمن",
@@ -19,7 +19,7 @@
       "loose_key": "لرحمن"
     },
     {
-      "note": "dagger alif where imlai writes a FULL alif",
+      "note": "omitted alif where rasm_imlai writes a FULL alif",
       "source": "quran-text hafs rasm_uthmani 1:2:4",
       "input": "ٱلۡعَٰلَمِينَ",
       "search_key": "ٱلعلمين",
@@ -27,7 +27,7 @@
       "loose_key": "لعلمين"
     },
     {
-      "note": "  ...its imlai",
+      "note": "  ...its rasm_imlai",
       "source": "quran-text hafs rasm_imlai 1:2:4",
       "input": "العالمين",
       "search_key": "العالمين",
@@ -35,7 +35,7 @@
       "loose_key": "لعلمين"
     },
     {
-      "note": "alef wasla U+0671",
+      "note": "hamzat_al_wasl U+0671",
       "source": "quran-text hafs rasm_uthmani",
       "input": "ٱللَّهِ",
       "search_key": "ٱلله",
@@ -43,7 +43,7 @@
       "loose_key": "لله"
     },
     {
-      "note": "hamza above U+0623",
+      "note": "hamzah above U+0623",
       "source": "quran-text hafs rasm_uthmani",
       "input": "أَنۡعَمۡتَ",
       "search_key": "أنعمت",
@@ -51,7 +51,7 @@
       "loose_key": "نعمت"
     },
     {
-      "note": "madda U+0622",
+      "note": "maddah U+0622",
       "source": "quran-text hafs rasm_uthmani",
       "input": "ٱلضَّآلِّينَ",
       "search_key": "ٱلضآلين",
@@ -67,7 +67,7 @@
       "loose_key": "لصلوه"
     },
     {
-      "note": "waw hamza U+0624",
+      "note": "waw hamzah U+0624",
       "source": "quran-text hafs rasm_uthmani",
       "input": "يُؤۡمِنُونَ",
       "search_key": "يؤمنون",
@@ -75,7 +75,7 @@
       "loose_key": "يومنون"
     },
     {
-      "note": "yeh hamza U+0626",
+      "note": "yeh hamzah U+0626",
       "source": "quran-text hafs rasm_uthmani",
       "input": "أُوْلَٰٓئِكَ",
       "search_key": "أولئك",
@@ -83,7 +83,7 @@
       "loose_key": "وليك"
     },
     {
-      "note": "bare hamza U+0621",
+      "note": "bare hamzah U+0621",
       "source": "quran-text hafs rasm_uthmani",
       "input": "سَوَآءٌ",
       "search_key": "سوآء",
@@ -91,7 +91,7 @@
       "loose_key": "سو"
     },
     {
-      "note": "shadda + tanwin",
+      "note": "shaddah + tanwin",
       "source": "quran-text hafs rasm_uthmani",
       "input": "رَغَدًا",
       "search_key": "رغدا",
@@ -99,7 +99,7 @@
       "loose_key": "رغد"
     },
     {
-      "note": "tatweel-borne hamza: stripping the uthmani LOSES the consonant",
+      "note": "tatweel-borne hamzah: stripping the rasm_uthmani LOSES the consonant",
       "source": "quran-text hafs rasm_uthmani 2:31",
       "input": "أَنۢبُِٔونِي",
       "search_key": "أنبوني",
@@ -107,7 +107,7 @@
       "loose_key": "نبوني"
     },
     {
-      "note": "  ...its imlai keeps it",
+      "note": "  ...its rasm_imlai keeps it",
       "source": "quran-text hafs rasm_imlai 2:31",
       "input": "أنبئوني",
       "search_key": "أنبئوني",
@@ -115,7 +115,7 @@
       "loose_key": "نبيوني"
     },
     {
-      "note": "rub el hizb U+06DE (category So)",
+      "note": "rubu_al_hizb U+06DE (category So)",
       "source": "quran-tajweed uthmani-hafs.json 2:26",
       "input": "۞ إِنَّ",
       "search_key": "إن",
@@ -123,7 +123,7 @@
       "loose_key": "ن"
     },
     {
-      "note": "sajdah U+06E9 + small high madda U+06E4",
+      "note": "sajdah U+06E9 + small high maddah U+06E4",
       "source": "quran-tajweed uthmani-hafs.json 13:15",
       "input": "وَٱلۡأٓصَالِ۩",
       "search_key": "وٱلأصال",

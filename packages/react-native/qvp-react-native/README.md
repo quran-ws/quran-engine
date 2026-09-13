@@ -37,7 +37,7 @@ URIs: `asset://pages/042.qvp`, `file:///…`, `/abs/path`, or `base64:…`.
 ## The view
 
 ```tsx
-import { QvpPageView, useQvp, Sel, T, LAYER, KIND, DECO, rgba } from '@quran.ws/qvp-react-native';
+import { QvpPageView, useQvp, Sel, T, LAYER, KIND, DECORATION, rgba } from '@quran.ws/qvp-react-native';
 
 const qvp = useQvp();
 <QvpPageView
@@ -46,13 +46,13 @@ const qvp = useQvp();
   pageUri="asset://pages/042.qvp"
   wordsUri="asset://pages/042.words.json"                       // optional sidecar (rasm_imlai/qpc/rasm/search forms)
   padTop={12} padBottom={12} padSide={8}                        // dp
-  lineSpacing={1} lineGap={0} fillHeight={false}                // engine layout knobs (page units for lineGap)
-  // spacing only opens up: lineSpacing < 1 and a negative lineGap are clamped to "as printed"
+  lineSpacing={1} fillHeight={false}                            // engine layout knobs
+  // spacing only opens up: lineSpacing < 1 is clamped to "as printed"
   paperColor="#fffdf7" defaultInk="#231f20"
   theme={{ diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', ms: 200 }}     // page.theme(...) — one handle
   styles={[
     { id: 'hide-marks', selector: Sel.kind(KIND.MARK), hide: true },                  // page.hide(sel)
-    { id: 'gold', selector: Sel.deco(DECO.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 },
+    { id: 'gold', selector: Sel.decoration(DECORATION.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 },
     { id: 'mark', selector: Sel.wordMark(12, 1), color: '#ef6c00', ms: 200, layer: LAYER.TOP },  // 2nd diacritic of word 12
     { id: 'ayah', target: '2:255', color: '#0a7d32' },                                 // page.styleTarget(...)
   ]}
@@ -62,31 +62,31 @@ const qvp = useQvp();
   ]}
   mask={{ target: '2:255', mode: 'hide' }}                       // or 'block' | 'blur' (+ blockColor, padX, padY, radius)
   reveal={{ lit: 2, grey: '#c9c4b8', ink: '#231f20', ms: 150, at: 3 }}   // greyed page; `at` drives revealGoto
-  onWordTap={({ word, hit }) => …}      // word: {idx, surah, ayah, word, line, …, text, wordKey, aid, forms, label, paths[]}
-  onDecoTap={({ deco, hit }) => …}      // ayah markers, banners, basmalah, rosettes, sajdah signs
+  onWordTap={({ word, hit }) => …}      // word: {index, surah, ayah, word, line, …, text, wordKey, aid, forms, label, paths[]}
+  onDecorationTap={({ decoration, hit }) => …}      // ayah markers, banners, basmalah, rosettes, sajdah signs
   onEmptyTap={() => …}
   onSelectionChanged={({ words, text, citation, textWithCitation }) => …}   // long-press-drag selection
-  onPageLoad={info => …}                // {page, width, height, nLines, nAyahs, nWords, nPaths, nDecos, forms, loadMs, bytes}
+  onPageLoad={info => …}                // {page, width, height, nLines, nAyahs, nWords, nPaths, nDecorations, forms, loadMs, bytes}
   onRevealChanged={({ steps, at }) => …}
   onError={({ message }) => …}
 />
 ```
 
 Reconciliation: each `highlights` entry maps to one engine handle. A new id → `highlight`; a changed
-`target` → `rehighlight` (the band slides); a changed `style` → `restyleHighlight`; a removed id →
-`unhighlight` (fades out). `styles` works the same over `style` / `styleTarget` / `hide` / `restyle` /
-`unstyle`; `theme` is one handle; `mask` re-applies `maskOptions` + `mask` when the object changes
+`target` → `moveHighlight` (the band slides); a changed `style` → `restyleHighlight`; a removed id →
+`removeHighlight` (fades out). `styles` works the same over `style` / `styleTarget` / `hide` / `recolorStyle` /
+`removeStyle`; `theme` is one handle; `mask` re-applies `maskOptions` + `mask` when the object changes
 (`null` → `unmask`); `reveal` calls `revealStart` when its config changes and `revealGoto` when `at`
 changes (`null` → `revealStop`). When `pageUri` changes, the old page is freed and every declarative
 prop is re-applied to the new page.
 
-Gestures are the Kotlin view's: tap → gap-aware `hitTestViewEx` → `onWordTap` / `onDecoTap` /
+Gestures are the Kotlin view's: tap → gap-aware `hitTestView` → `onWordTap` / `onDecorationTap` /
 `onEmptyTap`; long-press-drag → engine `select` with a band in `LAYER.SELECTION`; pinch / pan;
 double-tap resets. Props `selectionEnabled`, `zoomEnabled`, `hitMaxDistance`, `selectionBand`.
 
 Colours: `'#rgb' | '#rrggbb' | '#rrggbbaa' | 0xRRGGBBAA` (`css()` / `rgba(c, alpha)` helpers).
-Targets: `'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | wordIdx | [idx…] | T.*`.
-Selectors: `Sel.page/path/wordPath/wordMark/wordMarkNamed/wordBody/wordMarks/word/ayah/line/mark/category/family/kind/deco/decoIdx`.
+Targets: `'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | wordIdx | [index…] | T.*`.
+Selectors: `Sel.page/path/wordPath/wordMark/wordMarkNamed/wordBody/wordMarks/word/ayah/line/mark/category/family/kind/decoration/decorationIndex`.
 
 ## The module
 
@@ -95,35 +95,36 @@ Everything takes the view's react tag (`findNodeHandle`) — or use the bound fo
 
 ```ts
 const qvp = useQvp();
-await qvp.info(); qvp.words(); qvp.word(i); qvp.ayahs(); qvp.lines(); qvp.decos();
+await qvp.info(); qvp.words(); qvp.word(i); qvp.ayahs(); qvp.lines(); qvp.decorations();
 await qvp.search('الرحمان', { mode: 'includes' });     // [{word, wordKey, text, index, loose}]
 await qvp.text('2:255', { form: 'search', wordSep: ' ' });
-await qvp.resolve('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
+await qvp.targetWords('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
 await qvp.attachWords(jsonString);                      // when you do not use the wordsUri prop
-await qvp.surahs(); qvp.divisions(); qvp.markers(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
-await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ai);
+await qvp.surahs(); qvp.divisions(); qvp.ayahMarks(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
+await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ayahIndex);
 await qvp.citation([12, 13, 14]);
-await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' }); qvp.cropBox(target);
+await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' }); qvp.cropBounds(target);
 await qvp.select(anchor, focus); qvp.clearSelection(); qvp.selection(); qvp.selectionText('rasm_uthmani', true);
-await qvp.revealNext(1); qvp.hideBack(1); qvp.revealWord(i); qvp.hideWord(i); qvp.revealAll(); qvp.hideAll();
-await qvp.maskHidden(); qvp.maskWords(); qvp.revealSteps(); qvp.revealAt(); qvp.revealStepOf(i);
-await qvp.hitTestViewEx(x, y, { maxDistance: 6 }); qvp.wordBoxView(i); qvp.currentLayout(); qvp.relayout(); qvp.resetView(); qvp.stats();
+await qvp.unmaskNext(1); qvp.maskBack(1); qvp.unmaskWord(i); qvp.maskWord(i); qvp.unmaskAll(); qvp.maskAll();
+await qvp.maskHidden(); qvp.maskWords(); qvp.revealStepCount(); qvp.revealPosition(); qvp.revealStepOf(i);
+await qvp.hitTestView(x, y, { maxDistance: 6 }); qvp.hitTestExactView(x, y); qvp.hitTest(px, py); qvp.hitTestExact(px, py);   // view dp or page units
+await qvp.wordBoundsView(i); qvp.currentLayout(); qvp.layoutLineSpacingToFill(); qvp.relayout(); qvp.resetView(); qvp.stats();
 
 // engine-wide (Qvp.*)
 await Qvp.strip(s); Qvp.fold(s); Qvp.normalize(s); Qvp.looseKey(s);       // = Qvp.arabic(kind, s)
-await Qvp.gapToFill(pageW, pageH, lines, viewW, viewH); Qvp.wastedFraction(...)
-Qvp.markName(7); Qvp.kindName(1); Qvp.categoryName(1); Qvp.familyName(3); Qvp.version
+await qvp.layoutLineSpacingToFill(); qvp.layoutWastedFraction(); qvp.grid()
+Qvp.markName(7); Qvp.kindName(1); Qvp.categoryName(1); Qvp.familyName(3); Qvp.nameId('marks', 'fathah'); Qvp.version; await Qvp.markCategory(7); Qvp.engineName()
 
 // atlas (cross-page)
 const atlas = await QvpAtlas.load('asset://pages/atlas.qva');
 await atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36);
-await atlas.juz(30); atlas.hizb(3); atlas.rubuAlHizb(7); atlas.juzAt(2, 255); atlas.divisionAt('hizb', 2, 255);
-await atlas.pagesOfJuz(30); atlas.findSurah('cow' | 'البقرة' | '2'); atlas.free();
-// tag-level equivalents: Qvp.atlasPageOf(id, s, a), Qvp.atlasFindSurah(id, text), Qvp.atlasPagesOfJuz(id, n), Qvp.atlasJuzAt(id, s, a), …
+await atlas.juz(30); atlas.hizb(3); atlas.rubuAlHizb(7); atlas.juzOf(2, 255); atlas.divisionOf('hizb', 2, 255);
+await atlas.pagesOfJuz(30); atlas.searchSurahs('cow' | 'البقرة' | '2'); atlas.free();
+// tag-level equivalents: Qvp.atlasPageOf(id, s, a), Qvp.atlasSearchSurahs(id, text), Qvp.atlasPagesOfJuz(id, n), Qvp.atlasJuzOf(id, s, a), …
 ```
 
 All page calls run on the UI thread (where the view draws), so the engine is never touched from two
-threads. Only `maskHidden`, `unmask` (via the `mask` prop), `revealNext` etc. mutate state; queries are
+threads. Only `maskHidden`, `unmask` (via the `mask` prop), `unmaskNext` etc. mutate state; queries are
 microseconds.
 
 ## Layout of this package

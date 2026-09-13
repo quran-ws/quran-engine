@@ -15,8 +15,8 @@ pub enum HighlightMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum BandHeight {
-    /// the line pitch (bands of adjacent lines meet)
-    Pitch = 0,
+    /// the line spacing (bands of adjacent lines meet)
+    LineSpacing = 0,
     /// the words' own ink height plus pad_y
     Ink = 1,
 }
@@ -41,13 +41,13 @@ impl Default for HighlightStyle {
     fn default() -> Self {
         HighlightStyle {
             mode: HighlightMode::Band,
-            ink: 0x1a73e8ff,
-            band: 0xd6a3264d,
-            height: BandHeight::Pitch,
-            pad_x: 1.2,
-            pad_y: 0.0,
+            ink: crate::defaults::HIGHLIGHT_INK,
+            band: crate::defaults::HIGHLIGHT_BAND,
+            height: BandHeight::LineSpacing,
+            pad_x: crate::defaults::HIGHLIGHT_PAD_X,
+            pad_y: crate::defaults::HIGHLIGHT_PAD_Y,
             radius: 0.0,
-            seam: 0.25,
+            seam: crate::defaults::HIGHLIGHT_SEAM,
             transition_ms: 0,
             layer: LAYER_HIGHLIGHT,
         }
@@ -78,6 +78,12 @@ pub struct ViewBox {
     pub radius: f32,
 }
 
+/// A corner radius never exceeds half the box's shorter side, so every renderer draws the same
+/// rounded rectangle (a Canvas or CoreGraphics call would otherwise clamp on its own terms).
+pub(crate) fn clamp_radius(radius: f32, w: f32, h: f32, scale: f32) -> f32 {
+    radius.min(w * scale / 2.0).min(h * scale / 2.0).max(0.0)
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Highlight {
     pub handle: Handle,
@@ -94,17 +100,17 @@ pub(crate) struct Highlight {
 
 impl Page {
     /// Band boxes for a word list (page units, before seams).
-    pub fn band_boxes(&self, words: &[u32], height: BandHeight, pad_x: f32, pad_y: f32) -> Vec<BandBox> {
+    pub fn word_bands(&self, words: &[u32], height: BandHeight, pad_x: f32, pad_y: f32) -> Vec<BandBox> {
         let q = self.quant();
         let d = self.data();
         let bands = self.line_bands();
         let mut by_line: Vec<Option<BandBox>> = vec![None; d.lines.len()];
         for &wi in words {
             let w = &d.words[wi as usize];
-            let li = w.line_idx as usize;
+            let li = w.line_index as usize;
             let (x0, x1) = (w.bbox.x0 as f32 / q - pad_x, w.bbox.x1 as f32 / q + pad_x);
             let (y0, y1) = match height {
-                BandHeight::Pitch => (bands[li].y0, bands[li].y1),
+                BandHeight::LineSpacing => (bands[li].y0, bands[li].y1),
                 BandHeight::Ink => (w.bbox.y0 as f32 / q - pad_y, w.bbox.y1 as f32 / q + pad_y),
             };
             let b = by_line[li].get_or_insert(BandBox { line: li as u32, x0, y0, x1, y1 });
@@ -116,10 +122,10 @@ impl Page {
         by_line.into_iter().flatten().collect()
     }
 
-    /// Add a highlight. Returns a handle; `unhighlight(handle)` removes it (animated when
+    /// Add a highlight. Returns a handle; `remove_highlight(handle)` removes it (animated when
     /// transition_ms > 0). Ink recolouring goes through the style engine under the same handle.
     pub fn highlight(&mut self, target: &Target, style: HighlightStyle) -> Handle {
-        let words = self.resolve(target);
+        let words = self.target_words(target);
         let h = self.styles.new_handle();
         self.install_highlight(h, words, style);
         h
@@ -132,7 +138,7 @@ impl Page {
             }
         }
         if matches!(style.mode, HighlightMode::Band | HighlightMode::Both) {
-            let boxes = self.band_boxes(&words, style.height, style.pad_x, style.pad_y);
+            let boxes = self.word_bands(&words, style.height, style.pad_x, style.pad_y);
             let from = style.band & !0xff; // fade in from transparent when animated
             self.highlights.push(Highlight {
                 handle: h,
@@ -161,8 +167,8 @@ impl Page {
     }
 
     /// Move an existing highlight to a new target (the band slides, ink fades).
-    pub fn rehighlight(&mut self, handle: Handle, target: &Target) -> bool {
-        let words = self.resolve(target);
+    pub fn move_highlight(&mut self, handle: Handle, target: &Target) -> bool {
+        let words = self.target_words(target);
         let Some(i) = self.highlights.iter().position(|x| x.handle == handle && !x.removing) else { return false };
         let style = self.highlights[i].style;
         // ink rules: replace under the same handle
@@ -179,7 +185,7 @@ impl Page {
         }
         let hl = &mut self.highlights[i];
         if matches!(style.mode, HighlightMode::Band | HighlightMode::Both) {
-            let new_boxes = self.band_boxes(&words, style.height, style.pad_x, style.pad_y);
+            let new_boxes = self.word_bands(&words, style.height, style.pad_x, style.pad_y);
             let hl = &mut self.highlights[i];
             // snapshot the current interpolated boxes as the new "prev"
             hl.prev_boxes = current_boxes(hl, self.clock_ms);
@@ -210,7 +216,7 @@ impl Page {
         }
         let now = self.clock_ms;
         let boxes = if matches!(style.mode, HighlightMode::Band | HighlightMode::Both) {
-            self.band_boxes(&words, style.height, style.pad_x, style.pad_y)
+            self.word_bands(&words, style.height, style.pad_x, style.pad_y)
         } else {
             vec![]
         };
@@ -225,7 +231,7 @@ impl Page {
     }
 
     /// Remove a highlight (fades out over its transition, then disappears).
-    pub fn unhighlight(&mut self, handle: Handle) -> bool {
+    pub fn remove_highlight(&mut self, handle: Handle) -> bool {
         self.styles.remove(handle);
         let Some(i) = self.highlights.iter().position(|x| x.handle == handle && !x.removing) else { return false };
         let now = self.clock_ms;
@@ -277,7 +283,7 @@ impl Page {
         let now = self.clock_ms;
         let mut out = Vec::new();
         let (scale, ox, oy, dy): (f32, f32, f32, Vec<f32>) = match self.current_layout() {
-            Some(l) => (l.scale, l.ox, l.oy, l.line_dy.clone()),
+            Some(l) => (l.scale, l.offset_x, l.offset_y, l.line_dy.clone()),
             None => (1.0, 0.0, 0.0, vec![0.0; self.data().lines.len()]),
         };
         for h in &self.highlights {
@@ -300,7 +306,7 @@ impl Page {
                         x1: ox + b.x1 * scale,
                         y1: oy + (b.y1 + d) * scale,
                         color,
-                        radius: h.style.radius * scale,
+                        radius: clamp_radius(h.style.radius * scale, b.x1 - b.x0, b.y1 - b.y0, scale),
                     }
                 })
                 .collect();

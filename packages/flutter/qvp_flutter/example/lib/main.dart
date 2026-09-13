@@ -103,7 +103,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   int hlMs = 250;
   int ink = Palette.light.ink;
   bool revealOn = false;
-  int revealPos = -1, revealSteps = 0;
+  int revealPos = -1, revealStepCount = 0;
   String maskMode = 'hide';
   QvpViewLayout layout = const QvpViewLayout(padTop: 24, padBottom: 24, padSide: 16);
   final searchCtl = TextEditingController();
@@ -210,24 +210,24 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     selAyah = null;
     viewKey.currentState?.clearSelection();
     if (hlAyah != 0) {
-      p.unhighlight(hlAyah);
+      p.removeHighlight(hlAyah);
       hlAyah = 0;
     }
     for (final h in pathHandles.values) {
-      p.unstyle(h);
+      p.removeStyle(h);
     }
     pathHandles.clear();
     if (i < 0 || i == selWord) {
       selWord = -1;
       if (hlSel != 0) {
-        p.unhighlight(hlSel);
+        p.removeHighlight(hlSel);
         hlSel = 0;
       }
     } else {
       selWord = i;
       final st = QvpHighlightStyle(mode: hlMode, ink: '#1a73e8', band: rgba('#1a73e8', 0.18), radius: 1.5, ms: hlMs, layer: QvpLayer.selection);
       if (hlSel != 0) {
-        p.rehighlight(hlSel, T.word(i));
+        p.moveHighlight(hlSel, T.word(i));
       } else {
         hlSel = p.highlight(T.word(i), st);
       }
@@ -240,7 +240,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   void selectAyah(int s, int a) {
     final p = page!;
     if (hlSel != 0) {
-      p.unhighlight(hlSel);
+      p.removeHighlight(hlSel);
       hlSel = 0;
     }
     selWord = -1;
@@ -248,7 +248,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     selAyah = (s, a);
     final st = QvpHighlightStyle(mode: hlMode, ink: '#0a7d32', band: rgba('#0a7d32', 0.14), radius: 1.5, ms: hlMs, layer: QvpLayer.selection);
     if (hlAyah != 0) {
-      p.rehighlight(hlAyah, T.ayah(s, a));
+      p.moveHighlight(hlAyah, T.ayah(s, a));
     } else {
       hlAyah = p.highlight(T.ayah(s, a), st);
     }
@@ -261,11 +261,11 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     if (ws.isEmpty) return;
     final p = page!;
     if (hlSel != 0) {
-      p.unhighlight(hlSel);
+      p.removeHighlight(hlSel);
       hlSel = 0;
     }
     if (hlAyah != 0) {
-      p.unhighlight(hlAyah);
+      p.removeHighlight(hlAyah);
       hlAyah = 0;
     }
     selWord = -1;
@@ -281,7 +281,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     if (p == null) return;
     final q = searchCtl.text.trim();
     if (hlSearch != 0) {
-      p.unhighlight(hlSearch);
+      p.removeHighlight(hlSearch);
       hlSearch = 0;
     }
     if (q.isEmpty) {
@@ -306,7 +306,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       final pg = a.pageOf(s, ay);
       if (pg != null) {
         await loadPage(pg);
-        if (page!.resolve(T.ayah(s, ay)).isNotEmpty) selectAyah(s, ay);
+        if (page!.targetWords(T.ayah(s, ay)).isNotEmpty) selectAyah(s, ay);
       } else {
         _snack('no page for $s:$ay');
       }
@@ -317,7 +317,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       if (j != null) await loadPage(j.page);
       return;
     }
-    var su = a.findSurah(v);
+    var su = a.searchSurahs(v);
     if (su.isEmpty) {
       // UI nicety: loose latin spelling ("yasin" → "Ya-Sin") against the atlas list
       String fold(String t) => t.toLowerCase().replaceAll(RegExp('[^a-z0-9]'), '');
@@ -365,11 +365,11 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     if (t == null) return;
     final p = page!;
     final svg = p.cropSvg(t, pad: 3, keepAyahMarks: true, background: QvpColor.fromColor(pal.paper));
-    final box = p.cropBox(t, pad: 3);
+    final box = p.cropBounds(t, pad: 3);
     setState(() => cropInfo = svg == null || box == null
         ? 'crop failed'
         : 'SVG ${svg.length} chars · ${svg.substring(0, svg.indexOf('>') + 1).replaceAll(RegExp(r'\s+'), ' ')}\n'
-            'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.ayahMarkDeco != qvpNone ? ' · ayahMark' : ''}');
+            'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.ayahMarkDecoration != qvpNone ? ' · ayahMark' : ''}');
   }
 
   // ── follow words ──
@@ -377,7 +377,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     playing = false;
     playTimer?.cancel();
     playTimer = null;
-    if (hlPlay != 0 && page != null && !page!.isDisposed) page!.unhighlight(hlPlay);
+    if (hlPlay != 0 && page != null && !page!.isDisposed) page!.removeHighlight(hlPlay);
     hlPlay = 0;
     if (notify) setState(() {});
   }
@@ -408,7 +408,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
         }
         return;
       }
-      cur.rehighlight(hlPlay, T.word(playIdx));
+      cur.moveHighlight(hlPlay, T.word(playIdx));
     });
     setState(() {});
   }
@@ -418,22 +418,22 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     final p = page;
     if (p == null) return;
     if (tajwidHandle != 0) {
-      p.unstyle(tajwidHandle);
+      p.removeStyle(tajwidHandle);
       tajwidHandle = 0;
     }
     if (tajwid) {
       tajwidHandle = p.theme(QvpTheme(diacritics: kPalette[QvpCategory.harakah], dots: kPalette[QvpCategory.letterDot], waqf: kPalette[QvpCategory.waqf], sifr: kPalette[QvpCategory.dabt], ms: 200));
     }
     if (hideHandle != 0) {
-      p.unstyle(hideHandle);
+      p.removeStyle(hideHandle);
       hideHandle = 0;
     }
     if (hideMarks) hideHandle = p.hide(Sel.kind(QvpKind.mark));
     if (ayahMarksHandle != 0) {
-      p.unstyle(ayahMarksHandle);
+      p.removeStyle(ayahMarksHandle);
       ayahMarksHandle = 0;
     }
-    if (goldAyahMarks) ayahMarksHandle = p.style(Sel.deco(QvpDeco.ayahMark), '#b8860b', ms: 300, layer: QvpLayer.theme + 1);
+    if (goldAyahMarks) ayahMarksHandle = p.style(Sel.decoration(QvpDecorationKind.ayahMark), '#b8860b', ms: 300, layer: QvpLayer.theme + 1);
     setState(() {});
   }
 
@@ -463,7 +463,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   void _applyTheme() {
     final p = page;
     if (p == null) return;
-    p.setDefaultInk(ink);
+    p.setDefaultColor(ink);
     setState(() {});
   }
 
@@ -484,7 +484,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     final p = page!;
     revealOn = !revealOn;
     if (revealOn) {
-      revealSteps = p.revealStart(lit: 2, grey: pal.grey, ink: ink, ms: 150);
+      revealStepCount = p.revealStart(lit: 2, grey: pal.grey, ink: ink, ms: 150);
       revealPos = -1;
     } else {
       p.revealStop();
@@ -498,8 +498,8 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   void fitGap() {
     final p = page!;
     final vp = view.viewport;
-    final gap = p.layoutGapToFill(layout.toSpec(vp.width, vp.height));
-    _setLayout(layout.copyWith(fillHeight: false, lineSpacing: 1, lineGap: gap));
+    final spacing = p.layoutLineSpacingToFill(layout.toSpec(vp.width, vp.height));
+    _setLayout(layout.copyWith(fillHeight: false, lineSpacing: spacing));
   }
 
   // ═════════ UI ═════════
@@ -523,7 +523,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
             lastHitUs = hit.distance; // distance in page units of the gap-aware hit
             selectWord(w);
           },
-          onDecoTap: (d) {
+          onDecorationTap: (d) {
             if (d.ayah > 0) selectAyah(d.surah, d.ayah);
           },
           onEmptyTap: () => selectWord(-1),
@@ -674,7 +674,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
                     child: Row(children: [
                       Text(m.text, style: const TextStyle(fontSize: 18)),
                       const SizedBox(width: 8),
-                      Text('${m.wordKey}${m.loose ? ' ~' : ''}', style: TextStyle(color: pal.muted, fontSize: 12)),
+                      Text('${m.wordKey}${m.isLooseMatch ? ' ~' : ''}', style: TextStyle(color: pal.muted, fontSize: 12)),
                     ]),
                   ),
                 ),
@@ -702,10 +702,10 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       rows.add(('wordKey', w.wordKey, false));
       rows.add(('line', '${w.line}', false));
       for (final f in ['rasmImlai', 'qpc', 'rasm', 'search']) {
-        final v = p.wordForm(w.idx, f);
+        final v = p.wordForm(w.index, f);
         if (v.isNotEmpty) rows.add((f, v, true));
       }
-      rows.add(('label', p.wordLabel(w.idx), false));
+      rows.add(('label', p.wordLabel(w.index), false));
       rows.add(('paths', '${w.nPaths}', false));
       for (var i = w.firstPath; i < w.firstPath + w.nPaths; i++) {
         final kind = p.pathKind(i), mark = p.pathMark(i), nth = p.pathNthMark(i);
@@ -718,9 +718,9 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
           tooltip: 'engine path $i · ${engine!.categoryName(p.pathCategory(i))}',
           onSelected: (_) {
             if (on) {
-              p.unstyle(pathHandles.remove(i)!);
+              p.removeStyle(pathHandles.remove(i)!);
             } else {
-              pathHandles[i] = kind == QvpKind.mark && nth >= 0 ? p.style(Sel.wordMark(w.idx, nth), '#ef6c00', ms: 200, layer: QvpLayer.top) : p.style(Sel.path(i), '#ef6c00', ms: 200, layer: QvpLayer.top);
+              pathHandles[i] = kind == QvpKind.mark && nth >= 0 ? p.style(Sel.wordMark(w.index, nth), '#ef6c00', ms: 200, layer: QvpLayer.top) : p.style(Sel.path(i), '#ef6c00', ms: 200, layer: QvpLayer.top);
             }
             setState(() {});
           },
@@ -728,11 +728,11 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       }
     } else if (selAyah != null) {
       final (s, a) = selAyah!;
-      final ws = p.resolve(T.ayah(s, a));
+      final ws = p.targetWords(T.ayah(s, a));
       final c = p.ayahWordCount(s, a);
       big = p.text(T.ayah(s, a));
-      rows.add(('ayah', '$s:$a · ${c.count} words${c.complete ? '' : ' (continues on another page)'}', false));
-      if (ws.isNotEmpty) rows.add(('label', p.ayahLabel(p.words[ws.first].ayahIdx), false));
+      rows.add(('ayah', '$s:$a · ${c.count} words${c.isComplete ? '' : ' (continues on another page)'}', false));
+      if (ws.isNotEmpty) rows.add(('label', p.ayahLabel(p.words[ws.first].ayahIndex), false));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SizedBox(width: double.infinity, child: Text(big, textDirection: TextDirection.rtl, textAlign: TextAlign.right, style: _ar)),
@@ -784,7 +784,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
         Expanded(child: Slider(value: hlMs.toDouble(), min: 0, max: 800, divisions: 16, label: '$hlMs ms', onChanged: (v) => setState(() => hlMs = v.round()))),
         SizedBox(width: 56, child: Text('$hlMs ms', style: const TextStyle(fontSize: 12))),
       ]),
-      _hint('Highlights are engine state: the band slides and the ink fades over the transition time when the target moves (rehighlight).'),
+      _hint('Highlights are engine state: the band slides and the ink fades over the transition time when the target moves (moveHighlight).'),
     ]);
   }
 
@@ -845,13 +845,13 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
         DropdownButton<String>(value: maskMode, items: const [DropdownMenuItem(value: 'hide', child: Text('hide')), DropdownMenuItem(value: 'block', child: Text('block'))], onChanged: (v) => setState(() => maskMode = v!)),
         OutlinedButton(
             onPressed: () {
-              p.revealNext(1);
+              p.unmaskNext(1);
               setState(() {});
             },
             child: const Text('Reveal next')),
         OutlinedButton(
             onPressed: () {
-              p.hideBack(1);
+              p.maskBack(1);
               setState(() {});
             },
             child: const Text('Hide back')),
@@ -870,8 +870,8 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
           child: Slider(
             value: revealPos.toDouble(),
             min: -1,
-            max: revealOn && revealSteps > 0 ? (revealSteps - 1).toDouble() : 0,
-            divisions: revealOn && revealSteps > 0 ? revealSteps : null,
+            max: revealOn && revealStepCount > 0 ? (revealStepCount - 1).toDouble() : 0,
+            divisions: revealOn && revealStepCount > 0 ? revealStepCount : null,
             onChanged: revealOn
                 ? (v) {
                     revealPos = v.round();
@@ -881,7 +881,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
                 : null,
           ),
         ),
-        SizedBox(width: 48, child: _hint(revealOn ? '${revealPos + 1}/${p.revealSteps()}' : '')),
+        SizedBox(width: 48, child: _hint(revealOn ? '${revealPos + 1}/${p.revealStepCount()}' : '')),
       ]),
       _hint('Mask hides (or blocks) the words of the selected ayah — or the whole page when nothing is selected. The greyed page lights a two-word window that the slider moves.'),
     ]);
@@ -895,14 +895,14 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
           SizedBox(width: 44, child: Text(text, style: const TextStyle(fontSize: 12))),
         ]);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      row('line spacing', layout.lineSpacing, 1.0, 2.2, 24, '×${layout.lineSpacing.toStringAsFixed(2)}', (v) => _setLayout(layout.copyWith(lineSpacing: v, lineGap: 0, fillHeight: false))),
+      row('line spacing', layout.lineSpacing, 1.0, 2.2, 24, '×${layout.lineSpacing.toStringAsFixed(2)}', (v) => _setLayout(layout.copyWith(lineSpacing: v, fillHeight: false))),
       row('pad top', layout.padTop, 0, 120, 30, '${layout.padTop.round()}', (v) => _setLayout(layout.copyWith(padTop: v))),
       row('pad bottom', layout.padBottom, 0, 120, 30, '${layout.padBottom.round()}', (v) => _setLayout(layout.copyWith(padBottom: v))),
       Wrap(spacing: 6, children: [
         FilterChip(label: const Text('Fill screen height'), selected: layout.fillHeight, onSelected: (_) => _setLayout(layout.copyWith(fillHeight: !layout.fillHeight))),
         ActionChip(label: const Text('Leading to fill'), onPressed: fitGap),
       ]),
-      _hint('Layout is computed by the engine (per-line dy, pitch, scale); the view only applies pan and zoom on top. Double-tap the page to fit. Leading only grows — the printed pitch is the floor — and the text width is always the viewport\'s.'),
+      _hint('Layout is computed by the engine (per-line dy, lineSpacing, scale); the view only applies pan and zoom on top. Double-tap the page to fit. Leading only grows — the printed lineSpacing is the floor — and the text width is always the viewport\'s.'),
     ]);
   }
 
@@ -912,10 +912,10 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     final su = p.surahs(), dv = p.divisions();
     final names = [for (final s in su) '${s.number}${s.latin.isNotEmpty ? ' ${s.latin}' : ''}${s.arabic.isNotEmpty ? ' ${s.arabic}' : ''}${s.hasBanner ? ' (banner)' : ''}'];
     var t = 'surahs: ${names.join(', ')}';
-    if (dv.isNotEmpty) t += '\nstarts here: ${dv.map((d) => '${d.kind} ${d.n} at ${d.surah}:${d.ayah}').join(', ')}';
+    if (dv.isNotEmpty) t += '\nstarts here: ${dv.map((d) => '${d.division} ${d.number} at ${d.surah}:${d.ayah}').join(', ')}';
     final a = atlas;
     if (a != null && p.words.isNotEmpty) {
-      final j = a.juzAt(p.words.first.surah, p.words.first.ayah);
+      final j = a.juzOf(p.words.first.surah, p.words.first.ayah);
       if (j != null) t += '\njuz $j · pages ${a.pagesOfJuz(j)?.join('–')}';
       final r = a.pageRange(p.page);
       if (r != null) t += '\nrange ${r.first.$1}:${r.first.$2} → ${r.last.$1}:${r.last.$2}';
@@ -944,7 +944,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
             'overlay       ${st?.overlayPaths ?? 0} styled paths + ${st?.bands ?? 0} band boxes in ${(st?.overlayMs ?? 0).toStringAsFixed(2)} ms\n'
             'hit-test      gap-aware, engine (last distance ${lastHitUs.toStringAsFixed(2)} u)\n'
             'styles        ${p.styleHandles().length} handles · ${p.highlightHandles().length} highlights${anim ? ' · animating' : ''}\n'
-            'layout        ${layout.fillHeight ? 'fill height' : layout.lineGap != 0 ? 'gap +${layout.lineGap.toStringAsFixed(1)} u' : 'spacing ×${layout.lineSpacing.toStringAsFixed(2)}'} · pitch ${(l?.pitch ?? 0).toStringAsFixed(1)} u · pad ${layout.padTop.round()}/${layout.padBottom.round()}\n'
+            'layout        ${layout.fillHeight ? 'fill height' : 'spacing ×${layout.lineSpacing.toStringAsFixed(2)}'} · lineSpacing ${(l?.lineSpacing ?? 0).toStringAsFixed(1)} u · pad ${layout.padTop.round()}/${layout.padBottom.round()}\n'
             'zoom          ${(view.scale * (l?.scale ?? 1) * dpr).toStringAsFixed(2)}× device px per unit';
         return Text(text, style: TextStyle(fontFamily: 'monospace', fontSize: 11, height: 1.6, color: pal.muted));
       },

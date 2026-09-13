@@ -46,7 +46,8 @@ void main() {
   });
 
   test('engine: version, names, arabic tools', () {
-    expect(engine.version, greaterThan(0));
+    expect(engine.formatVersion, greaterThan(0));
+    expect(engine.version, matches(RegExp(r'^\d+\.\d+\.\d+$')));
     expect(engine.engineName, 'qvp');
     expect(engine.kindName(QvpKind.mark), 'mark');
     expect(engine.markName(1), 'fathah');
@@ -71,7 +72,7 @@ void main() {
     expect(page.words.length, 147);
     expect(page.lines.length, 15);
     expect(page.ayahs.length, page.nAyahs);
-    expect(page.decos.length, page.nDecos);
+    expect(page.decorations.length, page.nDecorations);
     expect(page.table.length, 1061 * 8);
     for (var i = 0; i < page.nPaths; i++) {
       expect(page.pathOpStart(i) + page.pathOpCount(i), lessThanOrEqualTo(page.ops.length));
@@ -83,14 +84,14 @@ void main() {
     expect(w0.nPaths, greaterThan(0));
     expect(page.findWord(w0.surah, w0.ayah, w0.word), 0);
     expect(page.wordKey(0), w0.wordKey);
-    expect(page.naturalPitch, greaterThan(0));
+    expect(page.lineSpacing, greaterThan(0));
     expect(page.surahs().map((s) => s.number), contains(2));
     expect(page.ayahKeys(), contains((2, 255)));
     expect(page.wordLabel(0), isNotEmpty);
-    expect(page.ayahLabel(page.words[0].ayahIdx), isNotEmpty);
+    expect(page.ayahLabel(page.words[0].ayahIndex), isNotEmpty);
     expect(page.ayahMarks(), isNotEmpty);
     expect(page.lineBands().length, 15);
-    expect(page.hitBoxes().length, 147);
+    expect(page.hitAreas().length, 147);
     expect(page.text('page'), contains(w0.text));
   });
 
@@ -101,12 +102,12 @@ void main() {
     expect(m.first.wordKey, page.wordKey(m.first.word));
   });
 
-  test("resolve('2:255') → 50 words; citation; ayahWordCount", () {
-    final ws = page.resolve('2:255');
+  test("targetWords('2:255') → 50 words; citation; ayahWordCount", () {
+    final ws = page.targetWords('2:255');
     expect(ws.length, 50);
-    expect(page.resolve(T.ayah(2, 255)), ws);
-    expect(page.resolve(ws), ws);
-    expect(page.resolve('2:255:1'), [ws.first]);
+    expect(page.targetWords(T.ayah(2, 255)), ws);
+    expect(page.targetWords(ws), ws);
+    expect(page.targetWords('2:255:1'), [ws.first]);
     expect(page.citation(ws), '2:255');
     expect(page.ayahWordCount(2, 255).count, 50);
     expect(page.text('2:255'), isNotEmpty);
@@ -122,22 +123,22 @@ void main() {
     expect(page.wordForm(0, 'search'), isNotEmpty);
   });
 
-  test("hitTestEx at word 0's bbox centre → word 0; exact inside its ink", () {
+  test("hitTest at word 0's bbox centre → word 0; exact inside its ink", () {
     final w = page.words[0];
     final cx = (w.x0 + w.x1) / 2, cy = (w.y0 + w.y1) / 2;
-    final h = page.hitTestEx(cx, cy);
+    final h = page.hitTest(cx, cy);
     expect(h, isNotNull);
     expect(h!.word, 0);
     expect(h.distance, 0);
     expect(h.wordKey, w.wordKey);
-    expect(h.line, w.lineIdx);
-    expect(page.hitTest(cx, cy)?.word, 0);
+    expect(h.line, w.lineIndex);
+    expect(page.hitTestExact(cx, cy)?.word, 0);
     // the bbox centre can fall between glyphs: probe the bbox for a point inside the outline
-    QvpHitEx? inside;
+    QvpHit? inside;
     for (var y = w.y0; y <= w.y1 && inside == null; y += 0.5) {
       for (var x = w.x0; x <= w.x1; x += 0.5) {
-        final e = page.hitTestEx(x, y);
-        if (e != null && e.word == 0 && e.exact) {
+        final e = page.hitTest(x, y);
+        if (e != null && e.word == 0 && e.isExact) {
           inside = e;
           break;
         }
@@ -147,59 +148,60 @@ void main() {
     expect(inside!.path, greaterThanOrEqualTo(0));
     expect(page.pathWord(inside.path), 0);
     // far outside the page, with a distance cap → nothing
-    expect(page.hitTestEx(-500, -500, const QvpHitOptions(maxDistance: 6)), isNull);
+    expect(page.hitTest(-500, -500, const QvpHitOptions(maxDistance: 6)), isNull);
   });
 
-  test('layout fillHeight 690×1100 pads 50 → scale 2.0, 15 lineDy; hitTestViewEx hits word 0', () {
+  test('layout fillHeight 690×1100 pads 50 → scale 2.0, 15 lineDy; hitTestView hits word 0', () {
     final l = page.layout(const QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true));
     expect(l.scale, closeTo(2.0, 1e-5));
     expect(l.lineDy.length, 15);
     expect(l.slots.length, 15);
     expect(page.currentLayout, same(l));
     final w = page.words[0];
-    final vx = l.ox + (w.x0 + w.x1) / 2 * l.scale;
-    final vy = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIdx]) * l.scale;
-    final h = page.hitTestViewEx(vx, vy, const QvpHitOptions(maxDistance: 6));
+    final viewX = l.offsetX + (w.x0 + w.x1) / 2 * l.scale;
+    final viewY = l.offsetY + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale;
+    final h = page.hitTestView(viewX, viewY, const QvpHitOptions(maxDistance: 6));
     expect(h, isNotNull);
     expect(h!.word, 0);
-    final box = page.wordBoxView(0);
-    expect(box.x0, lessThan(vx));
-    expect(box.x1, greaterThan(vx));
-    expect(engine.gapToFill(page.width, page.height, page.nLines, 600, 1000), isA<double>());
-    expect(engine.wastedFraction(page.width, page.height, 600, 1000), inInclusiveRange(0, 1));
+    final box = page.wordBoundsView(0);
+    expect(box.x0, lessThan(viewX));
+    expect(box.x1, greaterThan(viewX));
+    expect(page.layoutLineSpacingToFill(const QvpLayoutSpec(viewportW: 600, viewportH: 1000)), greaterThanOrEqualTo(1));
+    expect(page.grid.lines, 15);
+    expect(page.layoutWastedFraction(const QvpLayoutSpec(viewportW: 600, viewportH: 1000)), inInclusiveRange(0, 1));
   });
 
-  test('style(Sel.wordMark(w,1), colour) → styled() has exactly 1 path', () {
+  test('style(Sel.wordMark(w,1), colour) → styledPaths() has exactly 1 path', () {
     page.clearStyles();
-    expect(page.styled(), isEmpty);
+    expect(page.styledPaths(), isEmpty);
     final w = 0;
     final h = page.style(Sel.wordMark(w, 1), '#ef6c00');
     expect(h, greaterThan(0));
-    final s = page.styled();
+    final s = page.styledPaths();
     expect(s.length, 1);
     expect(s.first.color, 0xef6c00ff);
     expect(page.pathWord(s.first.path), w);
     expect(page.pathNthMark(s.first.path), 1);
     expect(page.colorOf(s.first.path), 0xef6c00ff);
-    expect(page.paint()[s.first.path], 0xef6c00ff);
+    expect(page.colors()[s.first.path], 0xef6c00ff);
     expect(page.styleHandles(), contains(h));
-    expect(page.unstyle(h), greaterThan(0));
-    expect(page.styled(), isEmpty);
+    expect(page.removeStyle(h), greaterThan(0));
+    expect(page.styledPaths(), isEmpty);
     // theme + hide + target styling under handles
     final th = page.theme(const QvpTheme(diacritics: '#1a73e8', dots: '#c62828', marks: {'shaddah': '#0a7d32'}));
-    expect(page.styled(), isNotEmpty);
+    expect(page.styledPaths(), isNotEmpty);
     final hh = page.hide(Sel.kind(QvpKind.mark));
-    expect(page.styled().where((p) => (p.color & 0xff) == 0), isNotEmpty);
-    page.unstyle(hh);
-    page.unstyle(th);
+    expect(page.styledPaths().where((p) => (p.color & 0xff) == 0), isNotEmpty);
+    page.removeStyle(hh);
+    page.removeStyle(th);
     final ht = page.styleTarget('2:255', '#0a7d32', layer: QvpLayer.top);
-    expect(page.styled().length, greaterThan(50));
-    page.unstyle(ht);
-    expect(page.styled(), isEmpty);
-    page.setDefaultInk('#3b2a14');
+    expect(page.styledPaths().length, greaterThan(50));
+    page.removeStyle(ht);
+    expect(page.styledPaths(), isEmpty);
+    page.setDefaultColor('#3b2a14');
     expect(page.defaultInk, 0x3b2a14ff);
-    expect(page.paint()[0], 0x3b2a14ff);
-    page.setDefaultInk('#231f20');
+    expect(page.colors()[0], 0x3b2a14ff);
+    page.setDefaultColor('#231f20');
   });
 
   test("highlight('2:255', both, 200 ms): tick(100) true, 6 boxes, tick(1000) false", () {
@@ -207,43 +209,43 @@ void main() {
     final h = page.highlight('2:255', const QvpHighlightStyle(mode: 'both', ms: 200));
     expect(h, greaterThan(0));
     expect(page.tick(100), isTrue);
-    final boxes = page.highlightBoxes();
+    final boxes = page.highlightBoxesView();
     expect(boxes.length, 6);
     expect(boxes.every((b) => b.id == h), isTrue);
     expect(page.highlightHandles(), [h]);
     expect(page.highlightWords(h).length, 50);
     expect(page.tick(1000), isFalse);
-    expect(page.rehighlight(h, T.word(0)), isTrue);
+    expect(page.moveHighlight(h, T.word(0)), isTrue);
     expect(page.restyleHighlight(h, const QvpHighlightStyle(mode: 'band')), isTrue);
-    expect(page.unhighlight(h), isTrue);
+    expect(page.removeHighlight(h), isTrue);
     page.tick(5000);
     page.clearHighlights();
     expect(page.highlightHandles(), isEmpty);
-    expect(page.bandBoxes(page.resolve('2:255')).length, 6);
+    expect(page.wordBands(page.targetWords('2:255')).length, 6);
   });
 
-  test("mask('2:255'): 50 hidden, revealNext → 49; reveal steps", () {
+  test("mask('2:255'): 50 hidden, unmaskNext → 49; reveal steps", () {
     page.mask('2:255');
     expect(page.maskHidden().length, 50);
     expect(page.maskWords().length, 50);
-    expect(page.revealNext(1), 1);
+    expect(page.unmaskNext(1), 1);
     expect(page.maskHidden().length, 49);
-    expect(page.hideBack(1), 1);
+    expect(page.maskBack(1), 1);
     expect(page.maskHidden().length, 50);
     page.unmask();
     expect(page.maskHidden(), isEmpty);
     page.mask('2:255', 'block');
-    expect(page.maskBoxes(), isNotEmpty);
+    expect(page.maskBoxesView(), isNotEmpty);
     page.unmask();
     final steps = page.revealStart(lit: 2, ms: 0);
     expect(steps, greaterThan(0));
-    expect(page.revealSteps(), steps);
-    expect(page.revealAt(), -1);
+    expect(page.revealStepCount(), steps);
+    expect(page.revealPosition(), -1);
     expect(page.revealGoto(0), isTrue);
-    expect(page.revealAt(), 0);
+    expect(page.revealPosition(), 0);
     expect(page.revealStepOf(0), greaterThanOrEqualTo(0));
     page.revealStop();
-    expect(page.revealAt(), isNull);
+    expect(page.revealPosition(), isNull);
   });
 
   test('selection', () {
@@ -258,25 +260,25 @@ void main() {
     final svg = page.cropSvg('2:255:1', background: '#fffdf7');
     expect(svg, isNotNull);
     expect(svg!.startsWith('<svg'), isTrue);
-    final box = page.cropBox('2:255');
+    final box = page.cropBounds('2:255');
     expect(box, isNotNull);
     expect(box!.nWords, 50);
   });
 
-  test('atlas: pageOf(2,255) == 42, pagesOfJuz(30) == [582, 604], findSurah(cow)[0].n == 2', () {
+  test('atlas: pageOf(2,255) == 42, pagesOfJuz(30) == [582, 604], searchSurahs(cow)[0].n == 2', () {
     if (!File(atlasPath).existsSync()) return;
     final atlas = engine.loadAtlas(File(atlasPath).readAsBytesSync());
     expect(atlas.pages, 604);
     expect(atlas.pageOf(2, 255), 42);
     expect(atlas.pagesOfJuz(30), [582, 604]);
-    final cow = atlas.findSurah('cow');
+    final cow = atlas.searchSurahs('cow');
     expect(cow, isNotEmpty);
-    expect(cow.first.n, 2);
+    expect(cow.first.number, 2);
     expect(atlas.surah(36)!.latin, isNotEmpty);
     expect(atlas.surahs().length, 114);
     expect(atlas.pageOfSurah(36), atlas.surah(36)!.page);
     expect(atlas.juz(30)!.page, 582);
-    expect(atlas.juzAt(2, 255), 3);
+    expect(atlas.juzOf(2, 255), 3);
     expect(atlas.pageRange(42)!.first.$1, 2);
     atlas.dispose();
   });
@@ -291,15 +293,16 @@ void main() {
       double f(String k) => (s[k] as num).toDouble();
       final spec = QvpLayoutSpec(
         viewportW: f('viewportW'), viewportH: f('viewportH'), padTop: f('padTop'), padBottom: f('padBottom'), padLeft: f('padLeft'), padRight: f('padRight'),
-        lineSpacing: f('lineSpacing'), lineGap: f('lineGap'), fillHeight: s['fillHeight'] as bool, nominalLines: s['nominalLines'] as int,
+        lineSpacing: f('lineSpacing'), fillHeight: s['fillHeight'] as bool, gridLines: s['gridLines'] as int,
         cropLeft: f('cropLeft'), cropRight: f('cropRight'), maxAspectSlack: f('maxAspectSlack'));
       final tag = '${spec.viewportW}x${spec.viewportH} fill=${spec.fillHeight} slack=${spec.maxAspectSlack} crop=${spec.cropLeft}';
       final l = page.layout(spec);
-      close(l.scale, want['scale'] as num, '$tag scale'); close(l.ox, want['ox'] as num, '$tag ox'); close(l.oy, want['oy'] as num, '$tag oy');
-      close(l.contentW, want['contentW'] as num, '$tag contentW'); close(l.contentH, want['contentH'] as num, '$tag contentH'); close(l.pitch, want['pitch'] as num, '$tag pitch');
+      close(l.scale, want['scale'] as num, '$tag scale'); close(l.offsetX, want['offsetX'] as num, '$tag offsetX'); close(l.offsetY, want['offsetY'] as num, '$tag offsetY');
+      close(l.contentW, want['contentW'] as num, '$tag contentW'); close(l.contentH, want['contentH'] as num, '$tag contentH'); close(l.lineSpacing, want['lineSpacing'] as num, '$tag lineSpacing');
       close(l.fitScale, want['fitScale'] as num, '$tag fitScale'); close(l.fitX, want['fitX'] as num, '$tag fitX'); close(l.fitY, want['fitY'] as num, '$tag fitY');
       close(l.lineDy.first, want['lineDy0'] as num, '$tag lineDy[0]'); close(l.lineDy.last, want['lineDyLast'] as num, '$tag lineDy[last]');
-      close(page.layoutGapToFill(spec), c['gapToFill'] as num, '$tag gapToFill');
+      close(page.layoutLineSpacingToFill(spec), c['lineSpacingToFill'] as num, '$tag lineSpacingToFill');
+      close(page.layoutWastedFraction(spec), c['wastedFraction'] as num, '$tag wastedFraction');
     }
     expect(cases.length, 40);
   });

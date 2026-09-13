@@ -20,7 +20,7 @@ import android.view.View
  * Host-canvas renderer for a [QvpPage]. Draw order per frame:
  * highlight bands (one path per highlight, behind the ink) → cached base ink → styled ink → mask boxes.
  * Each frame calls `page.tick(now)` and keeps animating while the engine says so.
- * Gestures: tap → gap-aware hit-test → [onWordTap]/[onDecoTap]/[onEmptyTap]; long-press-drag → whole-word
+ * Gestures: tap → gap-aware hit-test → [onWordTap]/[onDecorationTap]/[onEmptyTap]; long-press-drag → whole-word
  * selection (engine `select`, band in the selection layer); pinch/pan on top of the engine layout.
  */
 class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
@@ -38,16 +38,16 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             invalidate()
         }
     // layout knobs (viewport size comes from the view)
-    var padTop = 0f; var padBottom = 0f; var padSide = 0f; var lineSpacing = 1f; var lineGap = 0f; var fillHeight = false
+    var padTop = 0f; var padBottom = 0f; var padSide = 0f; var lineSpacing = 1f; var fillHeight = false
     var paperColor: Int = Color.TRANSPARENT           // ARGB
-    var selectionBand: Int = 0x2d6fd640                // 0xRRGGBBAA
-    var onWordTap: ((QvpWord, QvpHitEx) -> Unit)? = null
-    var onDecoTap: ((QvpDecoration, QvpHitEx) -> Unit)? = null
+    var selectionBand: Int = QvpDefaults.SELECTION_BAND  // 0xRRGGBBAA
+    var onWordTap: ((QvpWord, QvpHit) -> Unit)? = null
+    var onDecorationTap: ((QvpDecoration, QvpHit) -> Unit)? = null
     var onEmptyTap: (() -> Unit)? = null
     var onSelectionChanged: ((IntArray) -> Unit)? = null
     var zoomEnabled = true
     var selectionEnabled = true
-    var hitOptions = QvpHitOptions(maxDistance = 6f)
+    var hitOptions = QvpHitOptions(maxDistance = QvpDefaults.TAP_DISTANCE)
 
     var viewScale = 1f; var viewOx = 0f; var viewOy = 0f
     private var base: Bitmap? = null
@@ -75,7 +75,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(d: ScaleGestureDetector): Boolean {
             if (!zoomEnabled || selecting) return false
-            val ns = (viewScale * d.scaleFactor).coerceIn(0.5f, 12f); val kk = ns / viewScale
+            val ns = (viewScale * d.scaleFactor).coerceIn(MIN_ZOOM, MAX_ZOOM); val kk = ns / viewScale
             viewOx = d.focusX - (d.focusX - viewOx) * kk; viewOy = d.focusY - (d.focusY - viewOy) * kk; viewScale = ns
             invalidate(); return true
         }
@@ -101,7 +101,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             when {
                 hit == null -> onEmptyTap?.invoke()
                 hit.word >= 0 -> onWordTap?.invoke(p.words[hit.word], hit)
-                hit.deco >= 0 -> onDecoTap?.invoke(p.decos[hit.deco], hit)
+                hit.decoration >= 0 -> onDecorationTap?.invoke(p.decorations[hit.decoration], hit)
                 else -> onEmptyTap?.invoke()
             }
             performClick()
@@ -109,16 +109,16 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         }
     })
 
-    private fun hitAt(x: Float, y: Float): QvpHitEx? {
+    private fun hitAt(x: Float, y: Float): QvpHit? {
         val p = page ?: return null
         val t0 = System.nanoTime()
-        val h = p.hitTestViewEx((x - viewOx) / viewScale, (y - viewOy) / viewScale, hitOptions)
+        val h = p.hitTestView((x - viewOx) / viewScale, (y - viewOy) / viewScale, hitOptions)
         lastHitUs = (System.nanoTime() - t0) / 1000.0
         return h
     }
     private fun extendSelection(x: Float, y: Float) {
         val p = page ?: return
-        val h = p.hitTestViewEx((x - viewOx) / viewScale, (y - viewOy) / viewScale, QvpHitOptions()) ?: return
+        val h = p.hitTestView((x - viewOx) / viewScale, (y - viewOy) / viewScale, QvpHitOptions()) ?: return
         if (h.word < 0) return
         p.select(selAnchor, h.word); paintSelection()
     }
@@ -126,14 +126,14 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val p = page ?: return
         val ws = p.selection()
         val t = Target.words(ws)
-        if (selectionHandle != 0) p.rehighlight(selectionHandle, t)
+        if (selectionHandle != 0) p.moveHighlight(selectionHandle, t)
         else selectionHandle = p.highlight(t, QvpHighlightStyle(mode = HighlightMode.BAND, band = selectionBand, padX = 0.6f, layer = QvpLayer.SELECTION))
         onSelectionChanged?.invoke(ws); invalidate()
     }
     /** Clear the selection band and the engine selection. */
     fun clearSelection() {
         val p = page ?: return
-        p.clearSelection(); if (selectionHandle != 0) { p.unhighlight(selectionHandle); selectionHandle = 0 }
+        p.clearSelection(); if (selectionHandle != 0) { p.removeHighlight(selectionHandle); selectionHandle = 0 }
         onSelectionChanged?.invoke(IntArray(0)); invalidate()
     }
 
@@ -161,10 +161,12 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     }
 
     /** Recompute the engine layout for the current size/knobs. */
+    /** The spec `relayout()` hands the engine for the current size and knobs. */
+    fun layoutSpec() = QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, fillHeight)
     fun relayout() {
         val p = page ?: return
         if (width == 0 || height == 0) return
-        p.layout(QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, lineGap, fillHeight))
+        p.layout(layoutSpec())
         baseKey = ""; invalidate()
     }
     fun resetView() {
@@ -175,7 +177,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     /** Matrix mapping page units of [line] to view px (layout + pan/zoom). */
     fun lineMatrix(line: Int, out: Matrix = m): Matrix {
         val l = page?.currentLayout
-        val ls = l?.scale ?: 1f; val lox = l?.ox ?: 0f; val loy = (l?.oy ?: 0f) + (l?.lineDy?.getOrNull(line) ?: 0f) * ls
+        val ls = l?.scale ?: 1f; val lox = l?.offsetX ?: 0f; val loy = (l?.offsetY ?: 0f) + (l?.lineDy?.getOrNull(line) ?: 0f) * ls
         out.reset(); out.setScale(viewScale * ls, viewScale * ls); out.postTranslate(viewOx + viewScale * lox, viewOy + viewScale * loy)
         return out
     }
@@ -198,7 +200,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val l = p.currentLayout ?: return
         val moving = p.tick(System.nanoTime() / 1e6)
         val paths = p.buildPaths()
-        val styled = p.styled()
+        val styled = p.styledPaths()
         styledPaths.clear(); var i = 0; var styledKey = 1
         while (i < styled.size) {
             val pi = styled[i]
@@ -207,9 +209,9 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             i += 2
         }
         val ink = p.defaultInk
-        val key = "$viewScale|$viewOx|$viewOy|$ink|${l.pitch}|${l.lineDy.contentHashCode()}|$styledKey|$width|$height"
+        val key = "$viewScale|$viewOx|$viewOy|$ink|${l.lineSpacing}|${l.lineDy.contentHashCode()}|$styledKey|$width|$height"
         if (paperColor != Color.TRANSPARENT) { paint.color = paperColor; canvas.drawRect(viewOx, viewOy, viewOx + l.contentW * viewScale, viewOy + l.contentH * viewScale, paint) }
-        val bands = p.highlightBoxes()
+        val bands = p.highlightBoxesView()
         drawBoxes(canvas, bands)
         var b = base
         if (b == null || key != baseKey || b.width != width || b.height != height) {
@@ -241,8 +243,14 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             paint.color = QvpColor.argb(col); canvas.drawPath(paths[pi], paint)
         }
         canvas.restore()
-        drawBoxes(canvas, p.maskBoxes())
+        drawBoxes(canvas, p.maskBoxesView())
         lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = styled.size / 2; lastBands = bands.size
         if (moving) { animating = true; Choreographer.getInstance().postFrameCallback(frameCb) }
+    }
+
+    companion object {
+        /** Pinch limits as multiples of the fitted scale; the same pair on every platform. */
+        const val MIN_ZOOM = 0.5f
+        const val MAX_ZOOM = 12f
     }
 }

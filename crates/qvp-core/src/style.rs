@@ -188,8 +188,8 @@ impl StyleEngine {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PathCtx {
     pub word: u32,
-    pub deco: u32,
-    pub line_no: u8,
+    pub decoration: u32,
+    pub line_number: u8,
     pub surah: u16,
     pub ayah: u16,
     pub kind: PathKind,
@@ -215,13 +215,13 @@ impl Rule {
             Selector::WordMarks(w) => c.word == *w && c.kind == PathKind::Mark,
             Selector::Word(w) => c.word == *w,
             Selector::Ayah(s, a) => c.surah == *s && c.ayah == *a && c.ayah != 0,
-            Selector::Line(l) => c.line_no == *l,
+            Selector::Line(l) => c.line_number == *l,
             Selector::Mark(m) => c.mark == *m,
             Selector::Category(k) => c.category == *k && c.kind == PathKind::Mark,
             Selector::Family(f) => c.family == *f,
             Selector::Kind(k) => c.kind == *k,
-            Selector::Deco(k) => c.deco != NONE && c.deco_kind == *k,
-            Selector::DecoIdx(d) => c.deco == *d,
+            Selector::Deco(k) => c.decoration != NONE && c.deco_kind == *k,
+            Selector::DecoIdx(d) => c.decoration == *d,
         }
     }
 }
@@ -389,7 +389,7 @@ impl Page {
     }
 
     /// Full display list: current colour per path.
-    pub fn paint(&mut self) -> &[Rgba] {
+    pub fn colors(&mut self) -> &[Rgba] {
         self.refresh_targets();
         for (i, a) in self.anim.iter().enumerate() {
             self.colors[i] = a.cur;
@@ -398,7 +398,7 @@ impl Page {
     }
 
     /// Paths whose current colour differs from the default ink (overlay repaint).
-    pub fn styled(&mut self) -> Vec<(u32, Rgba)> {
+    pub fn styled_paths(&mut self) -> Vec<(u32, Rgba)> {
         self.refresh_targets();
         let d = self.styles.default_ink;
         self.anim.iter().enumerate().filter(|(_, a)| a.cur != d).map(|(i, a)| (i as u32, a.cur)).collect()
@@ -414,13 +414,13 @@ impl Page {
     }
     /// Recolour the ink of everything a target resolves to.
     pub fn style_target(&mut self, layer: i32, target: &crate::Target, paint: Paint) -> Handle {
-        let words = self.resolve(target);
+        let words = self.target_words(target);
         self.styles.add_many(layer, words.into_iter().map(Selector::Word), paint)
     }
-    pub fn unstyle(&mut self, handle: Handle) -> usize {
+    pub fn remove_style(&mut self, handle: Handle) -> usize {
         self.styles.remove(handle)
     }
-    pub fn restyle(&mut self, handle: Handle, paint: Paint) -> usize {
+    pub fn recolor_style(&mut self, handle: Handle, paint: Paint) -> usize {
         self.styles.repaint(handle, paint)
     }
     pub fn hide(&mut self, sel: Selector) -> Handle {

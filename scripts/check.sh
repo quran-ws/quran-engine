@@ -28,8 +28,9 @@ for check in "$@"; do
       cargo test --workspace --release
       ;;
     gates)
-      step "data gates: identity (8 pages), ABI, conformance"
+      step "data gates: identity (8 pages), line shift, ABI, conformance"
       QVP_REQUIRE_DATA=1 cargo test -p qvp-convert --release --test identity
+      QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test line_shift
       QVP_REQUIRE_DATA=1 cargo test -p qvp-ffi --release --test abi
       node web/lite.test.mjs
       scripts/gen-conformance.sh --check

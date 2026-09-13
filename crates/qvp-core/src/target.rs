@@ -18,7 +18,7 @@ pub enum Target {
 }
 
 impl Page {
-    pub fn resolve(&self, t: &Target) -> Vec<u32> {
+    pub fn target_words(&self, t: &Target) -> Vec<u32> {
         let d = self.data();
         let n = d.words.len() as u32;
         let mut v: Vec<u32> = match t {
@@ -43,7 +43,7 @@ impl Page {
             Target::Line(l) => d
                 .lines
                 .iter()
-                .filter(|x| x.line_no == *l)
+                .filter(|x| x.line_number == *l)
                 .flat_map(|x| x.first_word as u32..(x.first_word + x.n_words) as u32)
                 .collect(),
             Target::Surah(s) => (0..n).filter(|&i| d.words[i as usize].surah == *s).collect(),
@@ -85,7 +85,7 @@ impl Page {
         if !complete || count != n_segments {
             return None;
         }
-        Some(self.resolve(&Target::Ayah(surah, ayah)))
+        Some(self.target_words(&Target::Ayah(surah, ayah)))
     }
 
     pub fn next_word(&self, wi: u32) -> Option<u32> {

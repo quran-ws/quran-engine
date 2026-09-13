@@ -1,11 +1,11 @@
 //! Line bands, hit boxes and gap-aware hit testing.
 use crate::{Page, NONE};
 
-/// Vertical band of a printed line (page units): pitch-derived, plus the ink extent.
+/// Vertical band of a printed line (page units): line-spacing-derived, plus the ink extent.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LineBand {
     pub line: u32,
-    pub line_no: u8,
+    pub line_number: u8,
     pub y0: f32,
     pub y1: f32,
     pub mid: f32,
@@ -13,10 +13,10 @@ pub struct LineBand {
     pub ink_y1: f32,
 }
 
-/// Hit box of a word: ink box grown sideways to meet its neighbours and vertically to
+/// HitExact box of a word: ink box grown sideways to meet its neighbours and vertically to
 /// the full line band, so every point on a printed line belongs to exactly one word.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct HitBox {
+pub struct HitArea {
     pub word: u32,
     pub line: u32,
     pub x0: f32,
@@ -36,31 +36,31 @@ pub struct HitOptions {
     /// share of a gap awarded to the preceding (right-hand) word
     pub gap_bias: f32,
     /// try the exact outline first (reports `path`)
-    pub exact_first: bool,
+    pub prefer_exact: bool,
 }
 
 impl Default for HitOptions {
     fn default() -> Self {
-        HitOptions { max_distance: f32::INFINITY, gap_bias: 0.6, exact_first: true }
+        HitOptions { max_distance: f32::INFINITY, gap_bias: crate::defaults::GAP_BIAS, prefer_exact: true }
     }
 }
 
 /// Gap-aware hit result. `exact` is true when the point is inside the word's ink outline.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct HitEx {
+pub struct Hit {
     pub word: u32,
     pub path: u32,
-    pub deco: u32,
+    pub decoration: u32,
     pub line: u32,
     pub distance: f32,
-    pub exact: bool,
+    pub is_exact: bool,
 }
 
 impl Page {
-    /// Pitch-derived vertical bands of every printed line, in page units.
+    /// Line-spacing-derived vertical bands of every printed line, in page units.
     pub fn line_bands(&self) -> Vec<LineBand> {
         let q = self.quant();
-        let p = self.natural_pitch();
+        let p = self.line_spacing();
         self.data()
             .lines
             .iter()
@@ -69,7 +69,7 @@ impl Page {
                 let mid = self.line_centre(i);
                 LineBand {
                     line: i as u32,
-                    line_no: l.line_no,
+                    line_number: l.line_number,
                     y0: mid - p / 2.0,
                     y1: mid + p / 2.0,
                     mid,
@@ -81,7 +81,7 @@ impl Page {
     }
 
     /// Gap-aware hit boxes of every word (page units, pre-layout).
-    pub fn hit_boxes(&self, gap_bias: f32) -> Vec<HitBox> {
+    pub fn hit_areas(&self, gap_bias: f32) -> Vec<HitArea> {
         let q = self.quant();
         let d = self.data();
         let bands = self.line_bands();
@@ -116,7 +116,7 @@ impl Page {
                         ix1
                     }
                 };
-                out.push(HitBox {
+                out.push(HitArea {
                     word: wi,
                     line: li as u32,
                     x0,
@@ -135,22 +135,22 @@ impl Page {
     }
 
     /// Nearest-with-direction hit test in page units (no dead zones on a printed line).
-    pub fn hit_test_ex(&self, x: f32, y: f32, opt: &HitOptions) -> Option<HitEx> {
-        if opt.exact_first {
-            if let Some(h) = self.hit_test(x, y) {
-                if h.path != NONE || h.deco != NONE {
+    pub fn hit_test(&self, x: f32, y: f32, opt: &HitOptions) -> Option<Hit> {
+        if opt.prefer_exact {
+            if let Some(h) = self.hit_test_exact(x, y) {
+                if h.path != NONE || h.decoration != NONE {
                     let line = if h.word != NONE {
-                        self.data().words[h.word as usize].line_idx as u32
+                        self.data().words[h.word as usize].line_index as u32
                     } else {
-                        self.geometry().table[self.data().decos[h.deco as usize].first_path as usize].line
+                        self.geometry().table[self.data().decorations[h.decoration as usize].first_path as usize].line
                     };
-                    return Some(HitEx {
+                    return Some(Hit {
                         word: h.word,
                         path: h.path,
-                        deco: h.deco,
+                        decoration: h.decoration,
                         line,
                         distance: 0.0,
-                        exact: h.path != NONE,
+                        is_exact: h.path != NONE,
                     });
                 }
             }
@@ -158,10 +158,10 @@ impl Page {
         self.hit_test_gap(x, y, opt)
     }
 
-    /// Resolve a point to a line by its pitch band, then to a word with the gap split by `gap_bias`.
-    pub fn hit_test_gap(&self, x: f32, y: f32, opt: &HitOptions) -> Option<HitEx> {
+    /// Resolve a point to a line by its line-spacing band, then to a word with the gap split by `gap_bias`.
+    pub fn hit_test_gap(&self, x: f32, y: f32, opt: &HitOptions) -> Option<Hit> {
         let bands = self.line_bands();
-        // nearest band vertically (bands tile the page without gaps at natural pitch)
+        // nearest band vertically (bands tile the page without gaps at printed line spacing)
         let mut best_line = None;
         let mut best_dy = f32::MAX;
         for b in &bands {
@@ -232,30 +232,30 @@ impl Page {
         if distance > opt.max_distance {
             return None;
         }
-        Some(HitEx { word: chosen, path: NONE, deco: NONE, line: li as u32, distance, exact: false })
+        Some(Hit { word: chosen, path: NONE, decoration: NONE, line: li as u32, distance, is_exact: false })
     }
 
     /// Gap-aware hit test in viewport px through the current layout.
-    pub fn hit_test_view_ex(&self, vx: f32, vy: f32, opt: &HitOptions) -> Option<HitEx> {
-        let Some(l) = self.current_layout() else { return self.hit_test_ex(vx, vy, opt) };
-        let x = (vx - l.ox) / l.scale;
-        let y = (vy - l.oy) / l.scale;
+    pub fn hit_test_view(&self, vx: f32, vy: f32, opt: &HitOptions) -> Option<Hit> {
+        let Some(l) = self.current_layout() else { return self.hit_test(vx, vy, opt) };
+        let x = (vx - l.offset_x) / l.scale;
+        let y = (vy - l.offset_y) / l.scale;
         // exact first through the layout
-        if opt.exact_first {
-            if let Some(h) = self.hit_test_view(vx, vy) {
-                if h.path != NONE || h.deco != NONE {
+        if opt.prefer_exact {
+            if let Some(h) = self.hit_test_exact_view(vx, vy) {
+                if h.path != NONE || h.decoration != NONE {
                     let line = if h.word != NONE {
-                        self.data().words[h.word as usize].line_idx as u32
+                        self.data().words[h.word as usize].line_index as u32
                     } else {
-                        self.geometry().table[self.data().decos[h.deco as usize].first_path as usize].line
+                        self.geometry().table[self.data().decorations[h.decoration as usize].first_path as usize].line
                     };
-                    return Some(HitEx {
+                    return Some(Hit {
                         word: h.word,
                         path: h.path,
-                        deco: h.deco,
+                        decoration: h.decoration,
                         line,
                         distance: 0.0,
-                        exact: h.path != NONE,
+                        is_exact: h.path != NONE,
                     });
                 }
             }
@@ -272,7 +272,7 @@ impl Page {
         let li = li?;
         let py = y - l.line_dy[li];
         let mut o = *opt;
-        o.exact_first = false;
+        o.prefer_exact = false;
         let mut h = self.hit_test_gap(x, py, &o)?;
         if h.line as usize != li {
             // the band search picked a neighbour: force this line

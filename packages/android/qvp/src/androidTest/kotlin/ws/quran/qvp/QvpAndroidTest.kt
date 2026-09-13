@@ -17,7 +17,7 @@ class QvpAndroidTest {
 
     @Test
     fun pageGeometryAndEngineOperationsConform() {
-        assertTrue(QvpEngine.version() > 0)
+        assertTrue(QvpEngine.formatVersion() > 0); assertTrue(QvpEngine.version().isNotBlank())
         assertEquals("mark", QvpEngine.kindName(QvpKind.MARK))
 
         val page = QvpPage(pageBytes())
@@ -29,8 +29,8 @@ class QvpAndroidTest {
             assertTrue(page.nPaths > 0)
             assertEquals(page.nWords, page.words.size)
             assertEquals(page.nPaths * 8, page.table.size)
-            assertEquals(page.nWords, page.resolve(Target.page()).size)
-            assertEquals(page.nWords, page.hitBoxes().size)
+            assertEquals(page.nWords, page.targetWords(Target.page()).size)
+            assertEquals(page.nWords, page.hitAreas().size)
 
             val paths = page.buildPaths()
             assertEquals(page.nPaths, paths.size)
@@ -46,6 +46,6 @@ class QvpAndroidTest {
 
         assertTrue(page.isClosed)
         page.close()
-        assertThrows(IllegalStateException::class.java) { page.resolve(Target.page()) }
+        assertThrows(IllegalStateException::class.java) { page.targetWords(Target.page()) }
     }
 }

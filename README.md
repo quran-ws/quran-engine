@@ -46,7 +46,7 @@ const page = await loadPage('https://qvp.quran.ws/v0.1.0/042.qvp')
 ```
 
 Decoded words include their `surah`, `ayah`, `word` and page-coordinate `box`.
-`page.hitTest(x, y)` returns the word at a point in those same page coordinates.
+`page.hitTestExact(x, y)` returns the word at a point in those same page coordinates.
 `drawWords(ctx, wordIndices, options)` draws selected words with their dots,
 diacritics and pause marks. `drawDecorations(ctx, options)` draws non-word page
 elements such as ayah markers, surah banners, basmalahs, division and sajdah

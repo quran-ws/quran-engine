@@ -10,15 +10,25 @@ public let QVP_NONE: UInt32 = 0xFFFF_FFFF
 public enum QvpKind { public static let BODY = 0, MARK = 1, AYAH_NUMBER = 2, AYAH_MARK_ORNAMENT = 3, HEADER_INK = 4, ORNAMENT = 5, PAGE_NUMBER = 6, RUNNING_HEAD = 7, OTHER = 255 }
 public enum QvpFamily { public static let NONE = 0, DIACRITIC = 1, TANWIN = 2, DOTS = 3, WAQF = 4, SIFR = 5, SAJDAH = 6, READING_SIGN = 7 }
 public enum QvpCategory { public static let NONE = 0, HARAKAH = 1, TANWIN = 2, LETTER_DOT = 3, ORTHOGRAPHIC = 4, DABT = 5, WAQF = 6, READING_SIGN = 7, STANDALONE = 8 }
-public enum QvpDeco { public static let AYAH_MARK = 0, SURAH_NAME = 1, BASMALAH = 2, DIVISION_MARK = 3, SAJDAH_MARK = 4, PAGE_NUMBER = 5, RUNNING_HEAD = 6, OTHER = 255 }
+public enum QvpDecorationKind { public static let AYAH_MARK = 0, SURAH_NAME = 1, BASMALAH = 2, DIVISION_MARK = 3, SAJDAH_MARK = 4, PAGE_NUMBER = 5, RUNNING_HEAD = 6, OTHER = 255 }
 public enum QvpLayer { public static let BASE = 0, THEME = 10, HIGHLIGHT = 50, SELECTION = 60, TOP = 100 }
 
 public enum Form: Int { case rasmUthmani = 0, rasmImlai, qpc, rasm, search }
 public enum SearchMode: Int { case includes = 0, exact, prefix }
 public enum HighlightMode: Int { case ink = 0, band, both }
-public enum BandHeight: Int { case pitch = 0, ink }
+public enum BandHeight: Int { case lineSpacing = 0, ink }
 public enum MaskMode: Int { case hide = 0, block, blur }
 public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rubuAlHizb }
+
+/// The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). Colours 0xRRGGBBAA.
+public enum QvpDefaults {
+    public static let INK: UInt32 = 0x231f20ff, HIGHLIGHT_INK: UInt32 = 0x1a73e8ff, HIGHLIGHT_BAND: UInt32 = 0xd6a3264d
+    public static let HIGHLIGHT_PAD_X: Float = 1.2, HIGHLIGHT_PAD_Y: Float = 0, HIGHLIGHT_SEAM: Float = 0.25
+    public static let SELECTION_BAND: UInt32 = 0x2d6fd640, GAP_BIAS: Float = 0.6, TAP_DISTANCE: Float = 6
+    public static let GRID_LINES = 15, ASPECT_SLACK: Float = 1.15
+    public static let MASK_BLOCK: UInt32 = 0xd9d4c8ff, MASK_PAD: Float = 0.6, MASK_RADIUS: Float = 0.8
+    public static let REVEAL_LIT = 1, REVEAL_GREY: UInt32 = 0xc9c4b8ff, CROP_PAD: Float = 2
+}
 
 /// A mark id by its name, from the engine (255 = unknown).
 public func markId(_ name: String) -> Int { QvpEngine.markFromName(name) }
@@ -58,7 +68,7 @@ extension Int { func clamped(_ lo: Int, _ hi: Int) -> Int { Swift.min(Swift.max(
 /// What a style rule applies to (mirrors Sel in web/qvp.js and Selector in Kotlin).
 public struct Selector {
     let c: QvpSelector
-    init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ cc: Int = 0) { c = QvpSelector(kind: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(cc)) }
+    init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ cc: Int = 0) { c = QvpSelector(selector: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(cc)) }
     public static func page() -> Selector { Selector(0) }
     public static func path(_ i: Int) -> Selector { Selector(1, i) }
     public static func wordPath(_ w: Int, _ nth: Int) -> Selector { Selector(2, w, nth) }
@@ -75,8 +85,8 @@ public struct Selector {
     public static func category(_ c: Int) -> Selector { Selector(11, c) }
     public static func family(_ f: Int) -> Selector { Selector(12, f) }
     public static func kind(_ k: Int) -> Selector { Selector(13, k) }
-    public static func deco(_ k: Int) -> Selector { Selector(14, k) }
-    public static func decoIdx(_ i: Int) -> Selector { Selector(15, i) }
+    public static func decoration(_ k: Int) -> Selector { Selector(14, k) }
+    public static func decorationIndex(_ i: Int) -> Selector { Selector(15, i) }
 }
 
 /// What resolves to a word list (mirrors T in web/qvp.js and Target in Kotlin).
@@ -109,74 +119,75 @@ public struct Target {
     /// Run `body` with a C QvpTarget whose `words` pointer is valid for the call.
     func withC<R>(_ body: (UnsafePointer<QvpTarget>) -> R) -> R {
         words.withUnsafeBufferPointer { wp in
-            var t = QvpTarget(kind: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(c), words: wp.baseAddress, n_words: UInt32(wp.count))
+            var t = QvpTarget(target: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(c), words: wp.baseAddress, n_words: UInt32(wp.count))
             return withUnsafePointer(to: &t, body)
         }
     }
 }
 
 public struct QvpWord: Equatable {
-    public let idx: Int, surah: Int, ayah: Int, word: Int, line: Int, ayahIdx: Int, lineIdx: Int
+    public let index: Int, surah: Int, ayah: Int, word: Int, line: Int, ayahIndex: Int, lineIndex: Int
     public let x0: Float, y0: Float, x1: Float, y1: Float
     public let text: String, firstPath: Int, nPaths: Int
     public var wordKey: String { "\(surah):\(ayah):\(word)" }
     public var ayahKey: String { "\(surah):\(ayah)" }
 }
 public struct QvpAyah: Equatable {
-    public let idx: Int, surah: Int, ayah: Int, fragment: Int, fragments: Int, flags: Int, rubuAlHizb: Int, firstWord: Int, nWords: Int, ayahMarkDeco: Int
+    public let index: Int, surah: Int, ayah: Int, fragment: Int, fragments: Int, flags: Int, rubuAlHizb: Int, firstWord: Int, nWords: Int, ayahMarkDecoration: Int
     public let x0: Float, y0: Float, x1: Float, y1: Float
 }
 public struct QvpLine: Equatable {
-    public let idx: Int, lineNo: Int, isHeader: Bool, firstWord: Int, nWords: Int
+    public let index: Int, lineNumber: Int, isHeader: Bool, firstWord: Int, nWords: Int
     public let x0: Float, y0: Float, x1: Float, y1: Float, bandY0: Float, bandY1: Float, centre: Float
 }
 public struct QvpDecoration: Equatable {
-    public let idx: Int, kind: Int, surah: Int, ayah: Int, line: Int
+    public let index: Int, decoration: Int, surah: Int, ayah: Int, line: Int
     public let x0: Float, y0: Float, x1: Float, y1: Float
     public let text: String, firstPath: Int, nPaths: Int
 }
-/// Indices are -1 when absent.
-public struct QvpHit: Equatable { public let word: Int, path: Int, deco: Int }
-public struct QvpHitEx: Equatable { public let word: Int, path: Int, deco: Int, line: Int, distance: Float, exact: Bool }
+/// The one hit shape for every hit test; the exact variants report distance 0 and `isExact`. Indices are -1 when absent.
+public struct QvpHit: Equatable { public let word: Int, path: Int, decoration: Int, line: Int, distance: Float, isExact: Bool }
 public struct QvpHitOptions: Equatable {
-    public var maxDistance: Float, gapBias: Float, exactFirst: Bool
-    public init(maxDistance: Float = 0, gapBias: Float = 0.6, exactFirst: Bool = true) { self.maxDistance = maxDistance; self.gapBias = gapBias; self.exactFirst = exactFirst }
+    public var maxDistance: Float, gapBias: Float, preferExact: Bool
+    public init(maxDistance: Float = 0, gapBias: Float = QvpDefaults.GAP_BIAS, preferExact: Bool = true) { self.maxDistance = maxDistance; self.gapBias = gapBias; self.preferExact = preferExact }
 }
 public struct QvpBox: Equatable { public let id: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, color: UInt32, radius: Float }
-public struct QvpHitBox: Equatable { public let word: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, inkX0: Float, inkY0: Float, inkX1: Float, inkY1: Float }
-public struct QvpLineBand: Equatable { public let line: Int, lineNo: Int, y0: Float, y1: Float, mid: Float, inkY0: Float, inkY1: Float }
-/// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
+public struct QvpHitArea: Equatable { public let word: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, inkX0: Float, inkY0: Float, inkX1: Float, inkY1: Float }
+public struct QvpLineBand: Equatable { public let line: Int, lineNumber: Int, y0: Float, y1: Float, mid: Float, inkY0: Float, inkY1: Float }
+/// Spacing only opens up: `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid.
 public struct QvpLayoutSpec: Equatable {
-    public var viewportW: Float, viewportH: Float, padTop: Float, padBottom: Float, padLeft: Float, padRight: Float, lineSpacing: Float, lineGap: Float, fillHeight: Bool, nominalLines: Int
+    public var viewportW: Float, viewportH: Float, padTop: Float, padBottom: Float, padLeft: Float, padRight: Float, lineSpacing: Float, fillHeight: Bool, gridLines: Int
     /// Printed side margins to cut, in page units (0 = keep the print's margins).
     public var cropLeft: Float, cropRight: Float
     /// The content is never wider than `viewportH · pageW / pageH · maxAspectSlack` (0 = no bound).
     public var maxAspectSlack: Float
-    public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, lineGap: Float = 0, fillHeight: Bool = false, nominalLines: Int = 15,
+    public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, fillHeight: Bool = false, gridLines: Int = 0,
                 cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0) {
         self.viewportW = viewportW; self.viewportH = viewportH; self.padTop = padTop; self.padBottom = padBottom; self.padLeft = padLeft; self.padRight = padRight
-        self.lineSpacing = lineSpacing; self.lineGap = lineGap; self.fillHeight = fillHeight; self.nominalLines = nominalLines
+        self.lineSpacing = lineSpacing; self.fillHeight = fillHeight; self.gridLines = gridLines
         self.cropLeft = cropLeft; self.cropRight = cropRight; self.maxAspectSlack = maxAspectSlack
     }
     var c: QvpFFI.QvpLayoutSpec {
-        QvpFFI.QvpLayoutSpec(viewport_w: viewportW, viewport_h: viewportH, pad_top: padTop, pad_bottom: padBottom, pad_left: padLeft, pad_right: padRight, line_spacing: lineSpacing, line_gap: lineGap,
-                             fill_height: fillHeight ? 1 : 0, nominal_lines: UInt32(nominalLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack)
+        QvpFFI.QvpLayoutSpec(viewport_w: viewportW, viewport_h: viewportH, pad_top: padTop, pad_bottom: padBottom, pad_left: padLeft, pad_right: padRight, line_spacing: lineSpacing,
+                             fill_height: fillHeight ? 1 : 0, grid_lines: UInt32(gridLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack)
     }
 }
-/// Page → viewport: vx = ox + x*scale ; vy = oy + (y + lineDy[line])*scale. `fitScale`, `fitX`, `fitY` show the
+/// The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units).
+public struct QvpGrid: Equatable { public let lines: Int, lineSpacing: Float }
+/// Page → viewport: viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. `fitScale`, `fitX`, `fitY` show the
 /// whole content in the viewport (shrink to height, never enlarge, centred); the host's pan and zoom go on top.
 public final class QvpLayout {
-    public let scale: Float, ox: Float, oy: Float, contentW: Float, contentH: Float, pitch: Float
+    public let scale: Float, offsetX: Float, offsetY: Float, contentW: Float, contentH: Float, lineSpacing: Float
     public let lineDy: [Float], slotTop: [Float], slotBottom: [Float]
     public let fitScale: Float, fitX: Float, fitY: Float
-    init(scale: Float, ox: Float, oy: Float, contentW: Float, contentH: Float, pitch: Float, lineDy: [Float], slotTop: [Float], slotBottom: [Float], fitScale: Float = 1, fitX: Float = 0, fitY: Float = 0) {
-        self.scale = scale; self.ox = ox; self.oy = oy; self.contentW = contentW; self.contentH = contentH; self.pitch = pitch; self.lineDy = lineDy; self.slotTop = slotTop; self.slotBottom = slotBottom
+    init(scale: Float, offsetX: Float, offsetY: Float, contentW: Float, contentH: Float, lineSpacing: Float, lineDy: [Float], slotTop: [Float], slotBottom: [Float], fitScale: Float = 1, fitX: Float = 0, fitY: Float = 0) {
+        self.scale = scale; self.offsetX = offsetX; self.offsetY = offsetY; self.contentW = contentW; self.contentH = contentH; self.lineSpacing = lineSpacing; self.lineDy = lineDy; self.slotTop = slotTop; self.slotBottom = slotBottom
         self.fitScale = fitScale; self.fitX = fitX; self.fitY = fitY
     }
 }
 public struct QvpHighlightStyle: Equatable {
     public var mode: HighlightMode, ink: UInt32, band: UInt32, height: BandHeight, padX: Float, padY: Float, radius: Float, seam: Float, transitionMs: Int, layer: Int
-    public init(mode: HighlightMode = .band, ink: UInt32 = 0x1a73e8ff, band: UInt32 = 0xd6a3264d, height: BandHeight = .pitch, padX: Float = 1.2, padY: Float = 0, radius: Float = 0, seam: Float = 0.25, transitionMs: Int = 0, layer: Int = QvpLayer.HIGHLIGHT) {
+    public init(mode: HighlightMode = .band, ink: UInt32 = QvpDefaults.HIGHLIGHT_INK, band: UInt32 = QvpDefaults.HIGHLIGHT_BAND, height: BandHeight = .lineSpacing, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y, radius: Float = 0, seam: Float = QvpDefaults.HIGHLIGHT_SEAM, transitionMs: Int = 0, layer: Int = QvpLayer.HIGHLIGHT) {
         self.mode = mode; self.ink = ink; self.band = band; self.height = height; self.padX = padX; self.padY = padY; self.radius = radius; self.seam = seam; self.transitionMs = transitionMs; self.layer = layer
     }
     var c: QvpFFI.QvpHighlightStyle {
@@ -191,14 +202,14 @@ public struct QvpTheme: Equatable {
         self.ink = ink; self.diacritics = diacritics; self.dots = dots; self.waqf = waqf; self.sifr = sifr; self.ayahMark = ayahMark; self.numeral = numeral; self.headers = headers; self.marks = marks; self.transitionMs = transitionMs
     }
 }
-public struct QvpSurah: Equatable { public let number: Int, ayahCount: Int, hasBanner: Bool, hasBasmalah: Bool, place: String, bannerDeco: Int, arabic: String, latin: String, english: String }
-public struct QvpDivision: Equatable { public let kind: Division, n: Int, surah: Int, ayah: Int, line: Int, ayahIdx: Int }
-public struct QvpAyahMark: Equatable { public let deco: Int, surah: Int, ayah: Int, line: Int, cx: Float, cy: Float, r: Float, ornamentPath: Int, numeralPath: Int }
-public struct QvpRosette: Equatable { public let deco: Int, surah: Int, ayah: Int, juz: Int, hizb: Int, nisf: Int, rubuAlHizb: Int, rubuAlHizbInHizb: Int }
-public struct QvpSajdah: Equatable { public let deco: Int, surah: Int, ayah: Int, signPath: Int }
-public struct QvpMatch: Equatable { public let word: Int, index: Int, loose: Bool, wordKey: String, text: String }
-public struct QvpCropBox: Equatable { public let x0: Float, y0: Float, x1: Float, y1: Float, nWords: Int, ayahMarkDeco: Int }
-public struct QvpAtlasSurah: Equatable { public let n: Int, page: Int, ayahCount: Int, place: String, arabic: String, latin: String, english: String }
+public struct QvpSurah: Equatable { public let number: Int, ayahCount: Int, hasBanner: Bool, hasBasmalah: Bool, place: String, bannerDecoration: Int, arabic: String, latin: String, english: String }
+public struct QvpDivision: Equatable { public let division: Division, number: Int, surah: Int, ayah: Int, line: Int, ayahIndex: Int }
+public struct QvpAyahMark: Equatable { public let decoration: Int, surah: Int, ayah: Int, line: Int, cx: Float, cy: Float, r: Float, ornamentPath: Int, numeralPath: Int }
+public struct QvpRosette: Equatable { public let decoration: Int, surah: Int, ayah: Int, juz: Int, hizb: Int, nisf: Int, rubuAlHizb: Int, rubuAlHizbInHizb: Int }
+public struct QvpSajdah: Equatable { public let decoration: Int, surah: Int, ayah: Int, signPath: Int }
+public struct QvpMatch: Equatable { public let word: Int, index: Int, isLooseMatch: Bool, wordKey: String, text: String }
+public struct QvpCropBounds: Equatable { public let x0: Float, y0: Float, x1: Float, y1: Float, nWords: Int, ayahMarkDecoration: Int }
+public struct QvpAtlasSurah: Equatable { public let number: Int, page: Int, ayahCount: Int, place: String, arabic: String, latin: String, english: String }
 public struct QvpAtlasRubuAlHizb: Equatable { public let rubuAlHizb: Int, surah: Int, ayah: Int, page: Int; public var ayahKey: String { "\(surah):\(ayah)" } }
 
 // ── C interop helpers ──
@@ -208,7 +219,7 @@ extension QvpStr {
         return String(decoding: UnsafeBufferPointer(start: p, count: Int(len)), as: UTF8.self)
     }
 }
-func idx(_ v: UInt32) -> Int { v == QVP_NONE ? -1 : Int(v) }
+func index(_ v: UInt32) -> Int { v == QVP_NONE ? -1 : Int(v) }
 func place(_ p: UInt8) -> String { QvpEngine.placeName(Int(p)) }
 /// Call an `(out, cap) → total` C function, growing the buffer until everything fits.
 func collect<T>(_ initial: Int = 256, _ f: (UnsafeMutablePointer<T>, UInt32) -> UInt32) -> [T] {

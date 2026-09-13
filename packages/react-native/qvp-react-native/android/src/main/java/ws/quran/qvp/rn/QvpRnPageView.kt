@@ -64,13 +64,13 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     private var appliedReveal: Map<String, Any?>? = null   // without "at"
     private var appliedRevealAt: Long? = null
     private var appliedInk: Int? = null
-    var revealSteps = 0; private set
+    var revealStepCount = 0; private set
     var loadMs = 0.0; private set
     var pageBytes = 0; private set
 
     init {
         inner.onWordTap = { w, h -> page?.let { p -> emit("onWordTap", mapOf("word" to Marshal.word(p, w), "hit" to Marshal.hit(p, h))) } }
-        inner.onDecoTap = { d, h -> page?.let { p -> emit("onDecoTap", mapOf("deco" to Marshal.deco(d), "hit" to Marshal.hit(p, h))) } }
+        inner.onDecorationTap = { d, h -> page?.let { p -> emit("onDecorationTap", mapOf("decoration" to Marshal.decoration(d), "hit" to Marshal.hit(p, h))) } }
         inner.onEmptyTap = { emit("onEmptyTap", emptyMap()) }
         inner.onSelectionChanged = { page?.let { p -> emit("onSelectionChanged", Marshal.selection(p)) } }
     }
@@ -85,7 +85,6 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     fun setPadBottomDp(v: Float) { inner.padBottom = v * density; layoutDirty = true }
     fun setPadSideDp(v: Float) { inner.padSide = v * density; layoutDirty = true }
     fun setLineSpacingProp(v: Float) { inner.lineSpacing = v; layoutDirty = true }
-    fun setLineGapProp(v: Float) { inner.lineGap = v; layoutDirty = true }
     fun setFillHeightProp(v: Boolean) { inner.fillHeight = v; layoutDirty = true }
 
     // ── bytes ──
@@ -121,7 +120,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         val key = pageBase64?.let { "b64:" + it.hashCode() } ?: pageUri
         if (key == loadedKey) return
         // drop everything bound to the old page: handles die with it
-        themeHandle = 0; appliedTheme = null; styleHandles.clear(); highlightHandles.clear(); appliedMask = null; appliedReveal = null; appliedRevealAt = null; appliedInk = null; revealSteps = 0
+        themeHandle = 0; appliedTheme = null; styleHandles.clear(); highlightHandles.clear(); appliedMask = null; appliedReveal = null; appliedRevealAt = null; appliedInk = null; revealStepCount = 0
         page?.close(); page = null; loadedKey = key
         if (key == null) return
         val bytes = pageBase64?.let { Base64.decode(it, Base64.DEFAULT) } ?: readUri(pageUri!!)
@@ -134,12 +133,12 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     }
 
     private fun applyInk(p: QvpPage) {
-        val ink = Marshal.color(defaultInkProp, 0x231f20ff.toInt())
-        if (appliedInk != ink) { appliedInk = ink; p.setDefaultInk(ink) }
+        val ink = Marshal.color(defaultInkProp, QvpDefaults.INK)
+        if (appliedInk != ink) { appliedInk = ink; p.setDefaultColor(ink) }
     }
     private fun applyTheme(p: QvpPage) {
         if (themeProp == appliedTheme) return
-        if (themeHandle != 0) { p.unstyle(themeHandle); themeHandle = 0 }
+        if (themeHandle != 0) { p.removeStyle(themeHandle); themeHandle = 0 }
         appliedTheme = themeProp
         themeProp?.let { themeHandle = p.theme(Marshal.theme(it)) }
     }
@@ -150,13 +149,13 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     }
     private fun applyStyles(p: QvpPage) {
         val want = entries(stylesProp)
-        for (id in styleHandles.keys.toList()) if (!want.containsKey(id)) { p.unstyle(styleHandles.remove(id)!!.handle) }
+        for (id in styleHandles.keys.toList()) if (!want.containsKey(id)) { p.removeStyle(styleHandles.remove(id)!!.handle) }
         for ((id, e) in want) {
             val old = styleHandles[id]
             if (old != null && old.entry == e) continue
             val sameShape = old != null && old.entry["selector"] == e["selector"] && old.entry["target"] == e["target"] && old.entry["layer"] == e["layer"] && old.entry["hide"] == e["hide"] && e["hide"] != true
-            if (sameShape) { p.restyle(old!!.handle, Marshal.color(e["color"], 0), (e["ms"] as? Number)?.toInt() ?: 0); styleHandles[id] = Rule(old.handle, e); continue }
-            if (old != null) p.unstyle(old.handle)
+            if (sameShape) { p.recolorStyle(old!!.handle, Marshal.color(e["color"], 0), (e["ms"] as? Number)?.toInt() ?: 0); styleHandles[id] = Rule(old.handle, e); continue }
+            if (old != null) p.removeStyle(old.handle)
             val ms = (e["ms"] as? Number)?.toInt() ?: 0
             val layer = (e["layer"] as? Number)?.toInt() ?: QvpLayer.BASE
             val color = Marshal.color(e["color"], 0)
@@ -171,14 +170,14 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     }
     private fun applyHighlights(p: QvpPage) {
         val want = entries(highlightsProp)
-        for (id in highlightHandles.keys.toList()) if (!want.containsKey(id)) { p.unhighlight(highlightHandles.remove(id)!!.handle) }
+        for (id in highlightHandles.keys.toList()) if (!want.containsKey(id)) { p.removeHighlight(highlightHandles.remove(id)!!.handle) }
         for ((id, e) in want) {
             val old = highlightHandles[id]
             if (old != null && old.entry == e) continue
             val style = Marshal.highlightStyle(e["style"])
             if (old == null) { val h = p.highlight(Marshal.target(e["target"], p), style); if (h != 0) highlightHandles[id] = Rule(h, e); continue }
             if (old.entry["style"] != e["style"]) p.restyleHighlight(old.handle, style)
-            if (old.entry["target"] != e["target"]) p.rehighlight(old.handle, Marshal.target(e["target"], p))
+            if (old.entry["target"] != e["target"]) p.moveHighlight(old.handle, Marshal.target(e["target"], p))
             highlightHandles[id] = Rule(old.handle, e)
         }
     }
@@ -187,19 +186,20 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         appliedMask = maskProp
         p.unmask()
         val m = maskProp ?: return
-        val paper = Marshal.color(m["blockColor"], 0xd9d4c8ff.toInt())
-        p.maskOptions(paper, (m["padX"] as? Number)?.toFloat() ?: 0.6f, (m["padY"] as? Number)?.toFloat() ?: 0.6f, (m["radius"] as? Number)?.toFloat() ?: 0.8f, m["reverse"] == true)
-        p.mask(Marshal.target(m["target"], p), Marshal.maskMode(m["mode"]))
+        val paper = Marshal.color(m["blockColor"], QvpDefaults.MASK_BLOCK)
+        p.maskOptions(paper, (m["padX"] as? Number)?.toFloat() ?: QvpDefaults.MASK_PAD, (m["padY"] as? Number)?.toFloat() ?: QvpDefaults.MASK_PAD, (m["radius"] as? Number)?.toFloat() ?: QvpDefaults.MASK_RADIUS, m["reverse"] == true)
+        val from = m["from"] as? Number
+        if (from != null) p.maskFrom(from.toInt(), Marshal.maskMode(m["mode"])) else p.mask(Marshal.target(m["target"], p), Marshal.maskMode(m["mode"]))
     }
     private fun applyReveal(p: QvpPage) {
         val r = revealProp
         val cfg = r?.filterKeys { it != "at" }
         if (cfg != appliedReveal) {
             appliedReveal = cfg; appliedRevealAt = null
-            if (cfg == null) { p.revealStop(); revealSteps = 0; emit("onRevealChanged", mapOf("steps" to 0, "at" to null)); return }
-            revealSteps = p.revealStart((cfg["lit"] as? Number)?.toInt() ?: 1, cfg["byAyah"] == true, Marshal.color(cfg["grey"], 0xc9c4b8ff.toInt()), Marshal.color(cfg["ink"], appliedInk ?: 0x231f20ff.toInt()),
+            if (cfg == null) { p.revealStop(); revealStepCount = 0; emit("onRevealChanged", mapOf("steps" to 0, "at" to null)); return }
+            revealStepCount = p.revealStart((cfg["lit"] as? Number)?.toInt() ?: QvpDefaults.REVEAL_LIT, cfg["byAyah"] == true, Marshal.color(cfg["grey"], QvpDefaults.REVEAL_GREY), Marshal.color(cfg["ink"], appliedInk ?: QvpDefaults.INK),
                 cfg["ayahMarks"] != false, (cfg["ms"] as? Number)?.toInt() ?: 0)
-            emit("onRevealChanged", mapOf("steps" to revealSteps, "at" to -1))
+            emit("onRevealChanged", mapOf("steps" to revealStepCount, "at" to -1))
         }
         if (r == null) return
         val at = (r["at"] as? Number)?.toLong() ?: -1L

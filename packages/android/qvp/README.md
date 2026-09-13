@@ -55,7 +55,7 @@ page.close()
 `QvpPage` and `QvpAtlas` are `AutoCloseable`. Closing either object is idempotent; engine operations
 after close throw `IllegalStateException`. Keep application-specific Compose surfaces,
 accessibility nodes, navigation, and state outside the SDK and use `QvpPage.buildPaths()`,
-`resolve()`, `cropBox()`, `hitBoxes()`, and the style/mask APIs as their data layer.
+`targetWords()`, `cropBounds()`, `hitAreas()`, and the style/mask APIs as their data layer.
 
 ## Verify and benchmark
 
@@ -75,6 +75,6 @@ cd packages/android
 ```
 
 `QvpAndroidBenchmarkTest` reports `QvpBenchmark` JSON containing median page-load, Android Path
-construction, first-draw, and cached-draw times. It deliberately has no timing threshold because
+construction, first-draw, and cached-draw times. It deliberately has no duration threshold because
 emulators and physical devices have different performance. Compare results on the same device and
 build type when evaluating a renderer change.

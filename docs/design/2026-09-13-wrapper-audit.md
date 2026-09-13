@@ -6,7 +6,9 @@ and nothing else. This page records what the sweep found; `docs/API-PARITY.md` t
 has moved into the engine since. Items 1 to 4 moved in the change that introduced this
 page (`QvpLayout.fit_*`, `QvpLayoutSpec.max_aspect_slack`, `crop_left`/`crop_right`,
 `qvp_layout_gap_to_fill`). Item 5 followed: `qvp_name`, `qvp_name_id` and `qvp_name_count`
-cover every table, and no wrapper carries one.
+cover every table, and no wrapper carries one. Items 6 and 7 followed: the defaults are
+`QVP_DEFAULT_*` in the header, defined in `crates/qvp-core/src/defaults.rs`, mirrored as
+`QvpDefaults` in every wrapper, and compared by the parity check.
 
 ## Computations that belong in the engine
 
@@ -41,3 +43,20 @@ cover every table, and no wrapper carries one.
 Struct offsets, bit unpacking, colour packing to `0xRRGGBBAA`, output-buffer capacities,
 byte and time formatting, density conversion, and the pan, pinch and scroll transforms.
 `web/lite.mjs` keeps its decoding arithmetic by charter; its `fit()` is item 1.
+
+## Resolution
+
+Items 1 to 7 moved into the engine (fit, aspect slack, crop, gap to fill, name tables,
+defaults, tap distance). Items 8 to 15 were resolved as follows:
+
+| # | resolution |
+|---|---|
+| 8 | one pair of zoom limits, 0.5 to 12, in every page view; listed under platform conveniences in `docs/API-PARITY.md` |
+| 9 | `QvpViewPolicy` in QvpKit holds the zoomed threshold and the swipe classifier for both renderers |
+| 10 | the clamp in `QvpPageCanvas.swift` is deleted; the engine clamps |
+| 11 | the web hover box comes from `qvp_band_boxes` with a pad |
+| 12 | `qvp_highlight_boxes` and `qvp_mask_boxes` clamp the corner radius to half the shorter side; the iOS clamp is deleted |
+| 13 | `docs/EXAMPLE-APP.md` states the nearest-page rule; the iOS example bundles every page, so its clamp is the same rule |
+| 14 | the iOS slider bound is `steps - 1` like the other examples |
+| 15 | declared as a platform convenience in `docs/API-PARITY.md` |
+

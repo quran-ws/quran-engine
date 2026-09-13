@@ -16,22 +16,25 @@ import 'package:flutter/widgets.dart';
 import 'engine.dart';
 
 /// Layout parameters of [QvpPageView] (viewport size is taken from the widget's constraints).
-/// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
+/// Spacing only opens up: `lineSpacing` < 1 is clamped by the engine.
+/// Pinch limits as multiples of the fitted scale; the same pair on every platform.
+const double kMinZoom = 0.5;
+const double kMaxZoom = 12;
+
 @immutable
 class QvpViewLayout {
-  const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.lineGap = 0, this.fillHeight = false, this.nominalLines = 15});
-  final double padTop, padBottom, padSide, lineSpacing, lineGap;
+  const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.fillHeight = false, this.gridLines = 0});
+  final double padTop, padBottom, padSide, lineSpacing;
   final bool fillHeight;
-  final int nominalLines;
+  final int gridLines;
 
-  QvpViewLayout copyWith({double? padTop, double? padBottom, double? padSide, double? lineSpacing, double? lineGap, bool? fillHeight, int? nominalLines}) => QvpViewLayout(
+  QvpViewLayout copyWith({double? padTop, double? padBottom, double? padSide, double? lineSpacing, bool? fillHeight, int? gridLines}) => QvpViewLayout(
         padTop: padTop ?? this.padTop,
         padBottom: padBottom ?? this.padBottom,
         padSide: padSide ?? this.padSide,
         lineSpacing: lineSpacing ?? this.lineSpacing,
-        lineGap: lineGap ?? this.lineGap,
         fillHeight: fillHeight ?? this.fillHeight,
-        nominalLines: nominalLines ?? this.nominalLines,
+        gridLines: gridLines ?? this.gridLines,
       );
 
   QvpLayoutSpec toSpec(double viewportW, double viewportH) => QvpLayoutSpec(
@@ -42,10 +45,9 @@ class QvpViewLayout {
         padLeft: padSide,
         padRight: padSide,
         lineSpacing: lineSpacing,
-        lineGap: lineGap,
         fillHeight: fillHeight,
-        nominalLines: nominalLines,
-        maxAspectSlack: 1.15,
+        gridLines: gridLines,
+        maxAspectSlack: QvpDefaults.aspectSlack,
       );
 
   @override
@@ -55,26 +57,25 @@ class QvpViewLayout {
       other.padBottom == padBottom &&
       other.padSide == padSide &&
       other.lineSpacing == lineSpacing &&
-      other.lineGap == lineGap &&
       other.fillHeight == fillHeight &&
-      other.nominalLines == nominalLines;
+      other.gridLines == gridLines;
 
   @override
-  int get hashCode => Object.hash(padTop, padBottom, padSide, lineSpacing, lineGap, fillHeight, nominalLines);
+  int get hashCode => Object.hash(padTop, padBottom, padSide, lineSpacing, fillHeight, gridLines);
 }
 
-/// Pan / zoom on top of the engine layout. `view px = ox + layout px * scale`.
+/// Pan / zoom on top of the engine layout. `view px = offsetX + layout px * scale`.
 class QvpViewController extends ChangeNotifier {
-  double scale = 1, ox = 0, oy = 0;
+  double scale = 1, offsetX = 0, offsetY = 0;
   bool _fitRequested = true;
 
   /// Size of the last laid-out viewport (logical px).
   Size viewport = Size.zero;
 
-  void set({double? scale, double? ox, double? oy}) {
+  void set({double? scale, double? offsetX, double? offsetY}) {
     this.scale = scale ?? this.scale;
-    this.ox = ox ?? this.ox;
-    this.oy = oy ?? this.oy;
+    this.offsetX = offsetX ?? this.offsetX;
+    this.offsetY = offsetY ?? this.offsetY;
     notifyListeners();
   }
 
@@ -88,15 +89,15 @@ class QvpViewController extends ChangeNotifier {
   }
 
   /// Zooms by [factor] around a point in widget coordinates (default: centre).
-  void zoomBy(double factor, {Offset? around, double minScale = 0.2, double maxScale = 40}) {
+  void zoomBy(double factor, {Offset? around, double minScale = kMinZoom, double maxScale = kMaxZoom}) {
     final c = around ?? Offset(viewport.width / 2, viewport.height / 2);
     final ns = (scale * factor).clamp(minScale, maxScale);
     final k = ns / scale;
-    set(scale: ns, ox: c.dx - (c.dx - ox) * k, oy: c.dy - (c.dy - oy) * k);
+    set(scale: ns, offsetX: c.dx - (c.dx - offsetX) * k, offsetY: c.dy - (c.dy - offsetY) * k);
   }
 
   /// Widget coordinates → layout viewport px (what the engine's `*View` calls take).
-  Offset toView(Offset local) => Offset((local.dx - ox) / scale, (local.dy - oy) / scale);
+  Offset toView(Offset local) => Offset((local.dx - offsetX) / scale, (local.dy - offsetY) / scale);
 }
 
 /// Renders a [QvpPage] with the engine's layout, animated highlights, masks,
@@ -110,16 +111,16 @@ class QvpPageView extends StatefulWidget {
     this.defaultInk,
     this.controller,
     this.onWordTap,
-    this.onDecoTap,
+    this.onDecorationTap,
     this.onEmptyTap,
     this.onSelectionChanged,
-    this.hitMaxDistance = 6,
+    this.hitMaxDistance = QvpDefaults.tapDistance,
     this.selectionEnabled = true,
     this.panZoomEnabled = true,
-    this.selectionBand = 0x2d6fd640,
+    this.selectionBand = QvpDefaults.selectionBand,
     this.paperShadow = true,
-    this.minScale = 0.2,
-    this.maxScale = 40,
+    this.minScale = kMinZoom,
+    this.maxScale = kMaxZoom,
   });
 
   final QvpPage page;
@@ -128,15 +129,15 @@ class QvpPageView extends StatefulWidget {
   /// Paper colour behind the ink (null = transparent).
   final Color? paper;
 
-  /// Default ink; applied to the page with `setDefaultInk` when it changes. Anything [rgba] accepts.
+  /// Default ink; applied to the page with `setDefaultColor` when it changes. Anything [rgba] accepts.
   final Object? defaultInk;
   final QvpViewController? controller;
 
-  /// Tap on a word (gap-aware). [hit] carries path / deco / line / distance.
-  final void Function(int word, QvpHitEx hit)? onWordTap;
+  /// Tap on a word (gap-aware). [hit] carries path / decoration / line / distance.
+  final void Function(int word, QvpHit hit)? onWordTap;
 
   /// Tap on a decoration (ayah mark, surah banner, …) that is not a word.
-  final void Function(QvpDecoInfo deco)? onDecoTap;
+  final void Function(QvpDecorationInfo decoration)? onDecorationTap;
   final VoidCallback? onEmptyTap;
 
   /// Whole-word selection changed through long-press-drag (empty list = cleared).
@@ -195,7 +196,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
 
   void _applyInk() {
     final ink = widget.defaultInk;
-    if (ink != null && rgba(ink) != widget.page.defaultInk) widget.page.setDefaultInk(ink);
+    if (ink != null && rgba(ink) != widget.page.defaultInk) widget.page.setDefaultColor(ink);
   }
 
   @override
@@ -225,8 +226,8 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     if (_selHandle != 0 && !_selecting && !page.isDisposed && page.selection().isEmpty) {
       final h = _selHandle;
       _selHandle = 0;
-      page.unhighlight(h);
-      return; // unhighlight notifies again
+      page.removeHighlight(h);
+      return; // removeHighlight notifies again
     }
     _ensureTicking();
   }
@@ -259,8 +260,8 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   void _fit(Size size) {
     final l = page.currentLayout!;
     _ctl.scale = l.fitScale;
-    _ctl.ox = l.fitX;
-    _ctl.oy = l.fitY;
+    _ctl.offsetX = l.fitX;
+    _ctl.offsetY = l.fitY;
     _ctl._fitRequested = false;
   }
 
@@ -273,17 +274,17 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   }
 
   // ── gestures ──
-  QvpHitEx? _hitAt(Offset local, {double? maxDistance}) {
+  QvpHit? _hitAt(Offset local, {double? maxDistance}) {
     final v = _ctl.toView(local);
-    return page.hitTestViewEx(v.dx, v.dy, QvpHitOptions(maxDistance: maxDistance ?? 0));
+    return page.hitTestView(v.dx, v.dy, QvpHitOptions(maxDistance: maxDistance ?? 0));
   }
 
   void _onTapUp(TapUpDetails d) {
     final h = _hitAt(d.localPosition, maxDistance: widget.hitMaxDistance);
     if (h != null && h.word >= 0) {
       widget.onWordTap?.call(h.word, h);
-    } else if (h != null && h.deco >= 0) {
-      widget.onDecoTap?.call(page.decos[h.deco]);
+    } else if (h != null && h.decoration >= 0) {
+      widget.onDecorationTap?.call(page.decorations[h.decoration]);
     } else {
       widget.onEmptyTap?.call();
     }
@@ -291,8 +292,8 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
 
   void _onScaleStart(ScaleStartDetails d) {
     _gScale = _ctl.scale;
-    _gOx = _ctl.ox;
-    _gOy = _ctl.oy;
+    _gOx = _ctl.offsetX;
+    _gOy = _ctl.offsetY;
     _gFocal = d.localFocalPoint;
   }
 
@@ -301,7 +302,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     final ns = (_gScale * d.scale).clamp(widget.minScale, widget.maxScale);
     final k = ns / _gScale;
     final f = d.localFocalPoint;
-    _ctl.set(scale: ns, ox: f.dx - (_gFocal.dx - _gOx) * k, oy: f.dy - (_gFocal.dy - _gOy) * k);
+    _ctl.set(scale: ns, offsetX: f.dx - (_gFocal.dx - _gOx) * k, offsetY: f.dy - (_gFocal.dy - _gOy) * k);
   }
 
   void _onLongPressStart(LongPressStartDetails d) {
@@ -324,7 +325,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     page.select(_selAnchor, focus);
     final ws = page.selection();
     if (_selHandle != 0) {
-      page.rehighlight(_selHandle, T.words(ws));
+      page.moveHighlight(_selHandle, T.words(ws));
     } else {
       _selHandle = page.highlight(T.words(ws), QvpHighlightStyle(mode: 'band', band: widget.selectionBand, padX: 0.6, ms: 0, layer: QvpLayer.selection));
     }
@@ -339,7 +340,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   /// Clears the drag selection and its band.
   void clearSelection() {
     if (_selHandle != 0) {
-      page.unhighlight(_selHandle);
+      page.removeHighlight(_selHandle);
       _selHandle = 0;
     }
     page.clearSelection();
@@ -467,15 +468,15 @@ class _QvpPainter extends CustomPainter {
 
   /// Transform of one line: (scale, tx, ty) in logical px.
   (double, double, double) _lineTf(QvpLayout? l, int line) {
-    final ls = l?.scale ?? 1, lox = l?.ox ?? 0, loy = l?.oy ?? 0;
+    final ls = l?.scale ?? 1, lox = l?.offsetX ?? 0, loy = l?.offsetY ?? 0;
     final dy = l != null && line < l.lineDy.length ? l.lineDy[line] : 0.0;
-    return (view.scale * ls, view.ox + view.scale * lox, view.oy + view.scale * (loy + dy * ls));
+    return (view.scale * ls, view.offsetX + view.scale * lox, view.offsetY + view.scale * (loy + dy * ls));
   }
 
   void _drawBoxes(ui.Canvas c, List<QvpBox> boxes) {
     if (boxes.isEmpty) return;
     c.save();
-    c.translate(view.ox, view.oy);
+    c.translate(view.offsetX, view.offsetY);
     c.scale(view.scale);
     ui.Path? cur;
     var id = -1, col = 0;
@@ -511,21 +512,21 @@ class _QvpPainter extends CustomPainter {
     if (page.isDisposed) return;
     final paths = cache.buildPaths(page);
     final l = page.currentLayout;
-    final styled = page.styled();
+    final styled = page.styledPaths();
     final styledSet = <int>{for (final s in styled) s.path};
     final ink = page.defaultInk;
 
     // paper
     final paperColor = paper;
     if (paperColor != null) {
-      final rect = Rect.fromLTWH(view.ox, view.oy, (l?.contentW ?? page.width) * view.scale, (l?.contentH ?? page.height) * view.scale);
+      final rect = Rect.fromLTWH(view.offsetX, view.offsetY, (l?.contentW ?? page.width) * view.scale, (l?.contentH ?? page.height) * view.scale);
       if (paperShadow) canvas.drawShadow(ui.Path()..addRect(rect), const Color(0x66000000), 6, false);
       canvas.drawRect(rect, ui.Paint()..color = paperColor);
     }
 
     // base ink cache: every non-styled path at the current transform
     final ids = styledSet.toList()..sort();
-    final key = '${view.scale.toStringAsFixed(5)}|${view.ox.toStringAsFixed(2)}|${view.oy.toStringAsFixed(2)}|$dpr|$ink|${identityHashCode(l)}|${size.width}x${size.height}|${ids.join(',')}';
+    final key = '${view.scale.toStringAsFixed(5)}|${view.offsetX.toStringAsFixed(2)}|${view.offsetY.toStringAsFixed(2)}|$dpr|$ink|${identityHashCode(l)}|${size.width}x${size.height}|${ids.join(',')}';
     if (key != cache.key || (cache.image == null && cache.picture == null)) {
       final sw = Stopwatch()..start();
       final rec = ui.PictureRecorder();
@@ -566,7 +567,7 @@ class _QvpPainter extends CustomPainter {
 
     final sw = Stopwatch()..start();
     // 1. highlight bands (behind the ink)
-    final bands = page.highlightBoxes();
+    final bands = page.highlightBoxesView();
     _drawBoxes(canvas, bands);
 
     // 2. base ink
@@ -603,7 +604,7 @@ class _QvpPainter extends CustomPainter {
     }
 
     // 4. mask boxes (block / blur) on top
-    _drawBoxes(canvas, page.maskBoxes());
+    _drawBoxes(canvas, page.maskBoxesView());
     cache.overlayMs = sw.elapsedMicroseconds / 1000;
     cache.overlayPaths = styled.length;
     cache.bands = bands.length;

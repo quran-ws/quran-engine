@@ -121,8 +121,8 @@ struct ReaderView: View {
                 Button { m.maskModeIdx = 0; m.maskAyah() } label: { Label("Hide words", systemImage: "eye.slash") }
                 Button { m.maskModeIdx = 1; m.maskAyah() } label: { Label("Cover words", systemImage: "rectangle.fill") }
             }
-            Button { m.revealNext() } label: { Label("Reveal next word", systemImage: "arrow.right.circle") }
-            Button { m.hideBack() } label: { Label("Hide last revealed", systemImage: "arrow.left.circle") }
+            Button { m.unmaskNext() } label: { Label("Reveal next word", systemImage: "arrow.right.circle") }
+            Button { m.maskBack() } label: { Label("Hide last revealed", systemImage: "arrow.left.circle") }
             Button { m.unmask() } label: { Label("Show everything", systemImage: "eye") }
             Divider()
             Toggle(isOn: $m.revealOn) { Label("Greyed page", systemImage: "circle.lefthalf.filled") }
@@ -132,7 +132,7 @@ struct ReaderView: View {
     private var revealBar: some View {
         HStack {
             Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary)
-            Slider(value: $m.revealPos, in: 0...m.revealMax, step: 1)
+            Slider(value: $m.revealPos, in: 0...max(m.revealMax, 1), step: 1).disabled(m.revealMax < 1)
             Text(m.revealVal).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(minWidth: 44, alignment: .trailing)
         }
         .padding(.horizontal).padding(.vertical, 10)
@@ -150,7 +150,7 @@ struct GoToSheet: View {
     @State private var query = ""
     private var surahs: [QvpAtlasSurah] { m.atlas?.surahs() ?? [] }
     private var filtered: [QvpAtlasSurah] {
-        query.isEmpty ? surahs : (m.atlas?.findSurah(query) ?? [])
+        query.isEmpty ? surahs : (m.atlas?.searchSurahs(query) ?? [])
     }
 
     var body: some View {
@@ -219,7 +219,7 @@ struct SearchSheet: View {
                         Button { m.selectWord(r.word); dismiss() } label: {
                             HStack {
                                 Text(r.wordKey).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                                if r.loose { Text("≈").foregroundStyle(.secondary) }
+                                if r.isLooseMatch { Text("≈").foregroundStyle(.secondary) }
                                 Spacer()
                                 Text(r.text).font(.title3)
                             }
@@ -260,7 +260,7 @@ struct SettingsSheet: View {
                     LabeledContent("Bottom padding") { Text("\(Int(m.padBottom)) pt").monospacedDigit() }
                     Slider(value: $m.padBottom, in: 0...120, step: 4) { Text("Bottom padding") }
                     Button("Add leading to fill the screen") { m.leadingToFill() }
-                    Text("Leading only grows — the printed pitch is the floor, so the lines never close up — and the text width is always the screen's.")
+                    Text("Leading only grows — the printed lineSpacing is the floor, so the lines never close up — and the text width is always the screen's.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Highlights") {

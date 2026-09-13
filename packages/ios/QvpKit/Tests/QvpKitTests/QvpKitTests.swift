@@ -28,7 +28,8 @@ final class QvpKitTests: XCTestCase {
     var page: QvpPage { Self.page }
 
     func testEngineVersionNamesArabicTools() {
-        XCTAssertGreaterThan(QvpEngine.version(), 0)
+        XCTAssertGreaterThan(QvpEngine.formatVersion(), 0)
+        XCTAssertTrue(QvpEngine.version().split(separator: ".").count == 3)
         XCTAssertEqual(QvpEngine.engineName(), "qvp")
         XCTAssertEqual(QvpEngine.kindName(QvpKind.MARK), "mark")
         XCTAssertEqual(QvpEngine.markName(1), "fathah")
@@ -55,7 +56,7 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(page.words.count, 147)
         XCTAssertEqual(page.lines.count, 15)
         XCTAssertEqual(page.ayahs.count, page.nAyahs)
-        XCTAssertEqual(page.decos.count, page.nDecos)
+        XCTAssertEqual(page.decorations.count, page.nDecorations)
         XCTAssertEqual(page.table.count, 1061 * 8)
         for i in 0..<page.nPaths {
             XCTAssertLessThanOrEqual(page.pathOpStart(i) + page.pathOpCount(i), page.ops.count)
@@ -69,14 +70,14 @@ final class QvpKitTests: XCTestCase {
         XCTAssertGreaterThan(w0.nPaths, 0)
         XCTAssertEqual(page.findWord(w0.surah, w0.ayah, w0.word), 0)
         XCTAssertEqual(page.wordKey(0), w0.wordKey)
-        XCTAssertGreaterThan(page.naturalPitch, 0)
+        XCTAssertGreaterThan(page.lineSpacing, 0)
         XCTAssertTrue(page.surahs().map { $0.number }.contains(2))
         XCTAssertTrue(page.ayahKeys().contains { $0 == (2, 255) })
         XCTAssertFalse(page.wordLabel(0).isEmpty)
-        XCTAssertFalse(page.ayahLabel(page.words[0].ayahIdx).isEmpty)
+        XCTAssertFalse(page.ayahLabel(page.words[0].ayahIndex).isEmpty)
         XCTAssertFalse(page.ayahMarks().isEmpty)
         XCTAssertEqual(page.lineBands().count, 15)
-        XCTAssertEqual(page.hitBoxes().count, 147)
+        XCTAssertEqual(page.hitAreas().count, 147)
         XCTAssertTrue(page.text("page").contains(w0.text))
     }
 
@@ -88,11 +89,11 @@ final class QvpKitTests: XCTestCase {
     }
 
     func testResolve2_255() {
-        let ws = page.resolve("2:255")
+        let ws = page.targetWords("2:255")
         XCTAssertEqual(ws.count, 50)
-        XCTAssertEqual(page.resolve(Target.ayah(2, 255)), ws)
-        XCTAssertEqual(page.resolve(ws), ws)
-        XCTAssertEqual(page.resolve("2:255:1"), [ws[0]])
+        XCTAssertEqual(page.targetWords(Target.ayah(2, 255)), ws)
+        XCTAssertEqual(page.targetWords(ws), ws)
+        XCTAssertEqual(page.targetWords("2:255:1"), [ws[0]])
         XCTAssertEqual(page.citation(ws), "2:255")
         XCTAssertEqual(page.ayahWordCount(2, 255).count, 50)
         XCTAssertFalse(page.text("2:255").isEmpty)
@@ -111,23 +112,23 @@ final class QvpKitTests: XCTestCase {
     func testHitTestEx() {
         let w = page.words[0]
         let cx = (w.x0 + w.x1) / 2, cy = (w.y0 + w.y1) / 2
-        let h = page.hitTestEx(cx, cy)
+        let h = page.hitTest(cx, cy)
         XCTAssertNotNil(h)
         XCTAssertEqual(h?.word, 0)
         XCTAssertEqual(h?.distance, 0)
-        XCTAssertEqual(h?.line, w.lineIdx)
-        XCTAssertEqual(page.hitTest(cx, cy)?.word, 0)
-        var inside: QvpHitEx?
+        XCTAssertEqual(h?.line, w.lineIndex)
+        XCTAssertEqual(page.hitTestExact(cx, cy)?.word, 0)
+        var inside: QvpHit?
         var y = w.y0
         outer: while y <= w.y1 {
             var x = w.x0
-            while x <= w.x1 { if let e = page.hitTestEx(x, y), e.word == 0, e.exact { inside = e; break outer }; x += 0.5 }
+            while x <= w.x1 { if let e = page.hitTest(x, y), e.word == 0, e.isExact { inside = e; break outer }; x += 0.5 }
             y += 0.5
         }
         XCTAssertNotNil(inside, "no point of word 0 is inside its ink")
         XCTAssertGreaterThanOrEqual(inside!.path, 0)
         XCTAssertEqual(page.pathWord(inside!.path), 0)
-        XCTAssertNil(page.hitTestEx(-500, -500, QvpHitOptions(maxDistance: 6)))
+        XCTAssertNil(page.hitTest(-500, -500, QvpHitOptions(maxDistance: 6)))
     }
 
     func testLayoutFillHeight() {
@@ -137,16 +138,17 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(l.slotTop.count, 15)
         XCTAssertTrue(page.currentLayout === l)
         let w = page.words[0]
-        let vx = l.ox + (w.x0 + w.x1) / 2 * l.scale
-        let vy = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIdx]) * l.scale
-        let h = page.hitTestViewEx(vx, vy, QvpHitOptions(maxDistance: 6))
+        let viewX = l.offsetX + (w.x0 + w.x1) / 2 * l.scale
+        let viewY = l.offsetY + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale
+        let h = page.hitTestView(viewX, viewY, QvpHitOptions(maxDistance: 6))
         XCTAssertEqual(h?.word, 0)
-        let box = page.wordBoxView(0)
+        let box = page.wordBoundsView(0)
         XCTAssertNotNil(box)
-        XCTAssertLessThan(box!.x0, vx)
-        XCTAssertGreaterThan(box!.x1, vx)
-        _ = QvpEngine.gapToFill(pageW: page.width, pageH: page.height, lines: page.nLines, viewW: 600, viewH: 1000)
-        let wf = QvpEngine.wastedFraction(pageW: page.width, pageH: page.height, viewW: 600, viewH: 1000)
+        XCTAssertLessThan(box!.x0, viewX)
+        XCTAssertGreaterThan(box!.x1, viewX)
+        XCTAssertGreaterThanOrEqual(page.layoutLineSpacingToFill(QvpLayoutSpec(viewportW: 600, viewportH: 1000)), 1)
+        XCTAssertEqual(page.grid.lines, 15)
+        let wf = page.layoutWastedFraction(QvpLayoutSpec(viewportW: 600, viewportH: 1000))
         XCTAssertTrue(wf >= 0 && wf <= 1)
     }
 
@@ -154,32 +156,32 @@ final class QvpKitTests: XCTestCase {
         // XCTest runs alphabetically over one shared page: drop what other tests left behind
         page.clearHighlights(); page.unmask(); page.revealStop(); page.clearSelection(); _ = page.tick(1e9)
         page.clearStyles()
-        XCTAssertTrue(page.styled().isEmpty)
+        XCTAssertTrue(page.styledPaths().isEmpty)
         let h = page.style(Selector.wordMark(0, 1), 0xef6c00ff)
         XCTAssertGreaterThan(h, 0)
-        let s = page.styled()
+        let s = page.styledPaths()
         XCTAssertEqual(s.count, 1)
         XCTAssertEqual(s[0].color, 0xef6c00ff)
         XCTAssertEqual(page.pathWord(s[0].path), 0)
         XCTAssertEqual(page.pathNthMark(s[0].path), 1)
         XCTAssertEqual(page.colorOf(s[0].path), 0xef6c00ff)
-        XCTAssertEqual(page.paint()[s[0].path], 0xef6c00ff)
+        XCTAssertEqual(page.colors()[s[0].path], 0xef6c00ff)
         XCTAssertTrue(page.styleHandles().contains(h))
-        XCTAssertGreaterThan(page.unstyle(h), 0)
-        XCTAssertTrue(page.styled().isEmpty)
+        XCTAssertGreaterThan(page.removeStyle(h), 0)
+        XCTAssertTrue(page.styledPaths().isEmpty)
         let th = page.theme(QvpTheme(diacritics: 0x1a73e8ff, dots: 0xc62828ff, marks: ["shaddah": 0x0a7d32ff]))
-        XCTAssertFalse(page.styled().isEmpty)
+        XCTAssertFalse(page.styledPaths().isEmpty)
         let hh = page.hide(Selector.kind(QvpKind.MARK))
-        XCTAssertTrue(page.styled().contains { $0.color & 0xff == 0 })
-        page.unstyle(hh); page.unstyle(th)
+        XCTAssertTrue(page.styledPaths().contains { $0.color & 0xff == 0 })
+        page.removeStyle(hh); page.removeStyle(th)
         let ht = page.styleTarget("2:255", 0x0a7d32ff, layer: QvpLayer.TOP)
-        XCTAssertGreaterThan(page.styled().count, 50)
-        page.unstyle(ht)
-        XCTAssertTrue(page.styled().isEmpty)
-        page.setDefaultInk(0x3b2a14ff)
+        XCTAssertGreaterThan(page.styledPaths().count, 50)
+        page.removeStyle(ht)
+        XCTAssertTrue(page.styledPaths().isEmpty)
+        page.setDefaultColor(0x3b2a14ff)
         XCTAssertEqual(page.defaultInk, 0x3b2a14ff)
-        XCTAssertEqual(page.paint()[0], 0x3b2a14ff)
-        page.setDefaultInk(0x231f20ff)
+        XCTAssertEqual(page.colors()[0], 0x3b2a14ff)
+        page.setDefaultColor(0x231f20ff)
     }
 
     func testHighlightTick() {
@@ -188,50 +190,50 @@ final class QvpKitTests: XCTestCase {
         let h = page.highlight("2:255", QvpHighlightStyle(mode: .both, transitionMs: 200))
         XCTAssertGreaterThan(h, 0)
         XCTAssertTrue(page.tick(100))
-        let boxes = page.highlightBoxes()
+        let boxes = page.highlightBoxesView()
         XCTAssertEqual(boxes.count, 6)
         XCTAssertTrue(boxes.allSatisfy { $0.id == h })
         XCTAssertEqual(page.highlightHandles(), [h])
         XCTAssertEqual(page.highlightWords(h).count, 50)
         XCTAssertFalse(page.tick(1000))
-        XCTAssertTrue(page.rehighlight(h, Target.word(0)))
+        XCTAssertTrue(page.moveHighlight(h, Target.word(0)))
         XCTAssertTrue(page.restyleHighlight(h, QvpHighlightStyle(mode: .band)))
-        XCTAssertTrue(page.unhighlight(h))
+        XCTAssertTrue(page.removeHighlight(h))
         _ = page.tick(5000)
         page.clearHighlights()
         XCTAssertTrue(page.highlightHandles().isEmpty)
-        XCTAssertEqual(page.bandBoxes(page.resolve("2:255")).count, 6)
+        XCTAssertEqual(page.wordBands(page.targetWords("2:255")).count, 6)
     }
 
     func testMaskReveal() {
         page.mask("2:255")
         XCTAssertEqual(page.maskHidden().count, 50)
         XCTAssertEqual(page.maskWords().count, 50)
-        XCTAssertEqual(page.revealNext(1), 1)
+        XCTAssertEqual(page.unmaskNext(1), 1)
         XCTAssertEqual(page.maskHidden().count, 49)
-        XCTAssertEqual(page.hideBack(1), 1)
+        XCTAssertEqual(page.maskBack(1), 1)
         XCTAssertEqual(page.maskHidden().count, 50)
         page.unmask()
         XCTAssertTrue(page.maskHidden().isEmpty)
         page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100))
         page.mask("2:255", .block)
-        XCTAssertFalse(page.maskBoxes().isEmpty)
+        XCTAssertFalse(page.maskBoxesView().isEmpty)
         page.unmask()
         let steps = page.revealStart(lit: 2)
         XCTAssertGreaterThan(steps, 0)
-        XCTAssertEqual(page.revealSteps(), steps)
-        XCTAssertEqual(page.revealAt(), -1)
+        XCTAssertEqual(page.revealStepCount(), steps)
+        XCTAssertEqual(page.revealPosition(), -1)
         XCTAssertTrue(page.revealGoto(0))
-        XCTAssertEqual(page.revealAt(), 0)
+        XCTAssertEqual(page.revealPosition(), 0)
         XCTAssertGreaterThanOrEqual(page.revealStepOf(0), 0)
         page.revealStop()
-        XCTAssertNil(page.revealAt())
+        XCTAssertNil(page.revealPosition())
     }
 
     func testSelection() {
         page.select(0, 3)
         XCTAssertEqual(page.selection(), [0, 1, 2, 3])
-        XCTAssertTrue(page.selectionText(.rasmUthmani, citation: true).contains(":"))
+        XCTAssertTrue(page.selectionText(.rasmUthmani, includeCitation: true).contains(":"))
         page.clearSelection()
         XCTAssertTrue(page.selection().isEmpty)
     }
@@ -240,7 +242,7 @@ final class QvpKitTests: XCTestCase {
         let svg = page.cropSvg("2:255:1", background: 0xfffdf7ff)
         XCTAssertNotNil(svg)
         XCTAssertTrue(svg!.hasPrefix("<svg"))
-        let box = page.cropBox("2:255")
+        let box = page.cropBounds("2:255")
         XCTAssertEqual(box?.nWords, 50)
     }
 
@@ -248,17 +250,17 @@ final class QvpKitTests: XCTestCase {
         let url = Self.pages.appendingPathComponent("atlas.qva")
         try XCTSkipUnless(FileManager.default.fileExists(atPath: url.path), "no atlas")
         let atlas = try QvpAtlas(bytes: try Data(contentsOf: url))
-        XCTAssertEqual(atlas.pages(), 604)
+        XCTAssertEqual(atlas.pageCount(), 604)
         XCTAssertEqual(atlas.pageOf(2, 255), 42)
         XCTAssertTrue(atlas.pagesOfJuz(30)! == (582, 604))
-        let cow = atlas.findSurah("cow")
+        let cow = atlas.searchSurahs("cow")
         XCTAssertFalse(cow.isEmpty)
-        XCTAssertEqual(cow.first?.n, 2)
+        XCTAssertEqual(cow.first?.number, 2)
         XCTAssertFalse(atlas.surah(36)!.latin.isEmpty)
         XCTAssertEqual(atlas.surahs().count, 114)
         XCTAssertEqual(atlas.pageOfSurah(36), atlas.surah(36)!.page)
         XCTAssertEqual(atlas.juz(30)!.page, 582)
-        XCTAssertEqual(atlas.juzAt(2, 255), 3)
+        XCTAssertEqual(atlas.juzOf(2, 255), 3)
         XCTAssertEqual(atlas.pageRange(42)!.first.0, 2)
         atlas.close()
     }
@@ -281,11 +283,11 @@ final class QvpKitTests: XCTestCase {
         XCTAssertFalse(c.isZoomed)
         // lineTransform composes engine layout + view transform
         let w = p.words[0]
-        let t = c.lineTransform(w.lineIdx)
+        let t = c.lineTransform(w.lineIndex)
         let pt = CGPoint(x: CGFloat((w.x0 + w.x1) / 2), y: CGFloat((w.y0 + w.y1) / 2)).applying(t)
         // a tap at that view point resolves to the same word through the controller
         var tapped: Int? = nil
-        c.onWordTap = { word, _ in tapped = word.idx }
+        c.onWordTap = { word, _ in tapped = word.index }
         c.tap(pt)
         XCTAssertEqual(tapped, 0)
         // double-tap carries the hit under it
@@ -298,11 +300,12 @@ final class QvpKitTests: XCTestCase {
         XCTAssertTrue(c.isZoomed)
         c.resetView()
         XCTAssertFalse(c.isZoomed)
-        // line spacing only opens up: below 1 clamps to the printed pitch
+        // line spacing only opens up: the engine clamps values below 1 to the printed lineSpacing
+        let printed = try XCTUnwrap(p.currentLayout).lineSpacing
         c.lineSpacing = 0.5
-        XCTAssertEqual(c.lineSpacing, 1)
+        XCTAssertEqual(try XCTUnwrap(p.currentLayout).lineSpacing, printed)
         c.lineSpacing = 1.5
-        XCTAssertEqual(c.lineSpacing, 1.5)
+        XCTAssertGreaterThan(try XCTUnwrap(p.currentLayout).lineSpacing, printed)
     }
 
     /// zoomSpringsBack: a released pinch eases back to the fitted transform; without it the zoom stays.
@@ -316,7 +319,7 @@ final class QvpKitTests: XCTestCase {
         let end = s.value(at: 10 + QvpZoomSpring.duration)
         XCTAssertTrue(end.done)
         XCTAssertEqual(end.transform.scale, 1, accuracy: 1e-9)
-        XCTAssertEqual(end.transform.oy, 10, accuracy: 1e-9)
+        XCTAssertEqual(end.transform.offsetY, 10, accuracy: 1e-9)
 
         let p = try QvpPage(bytes: try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp")))
         defer { p.close() }
@@ -337,17 +340,17 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(c.viewOy, fitted.2, accuracy: 1e-3)
     }
 
-    /// Beside a header line a slot stops half a pitch out: page 1's first line does not claim the
+    /// Beside a header line a slot stops half a lineSpacing out: page 1's first line does not claim the
     /// gap under the banner. Body lines still share their boundaries, and slots never overlap.
     func testSlotsStopAtHeaders() throws {
         let p1 = try QvpPage(bytes: try Data(contentsOf: Self.pages.appendingPathComponent("001.qvp")))
         defer { p1.close() }
         let l = p1.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, fillHeight: true))
-        let pitch = l.pitch * l.scale
+        let lineSpacing = l.lineSpacing * l.scale
         let first = try XCTUnwrap(p1.lines.firstIndex { !$0.isHeader })
         XCTAssertGreaterThan(first, 0)
         XCTAssertTrue(p1.lines[first - 1].isHeader)
-        XCTAssertLessThan(l.slotBottom[first] - l.slotTop[first], pitch * 1.1, "first line's slot is one row, not half the banner gap")
+        XCTAssertLessThan(l.slotBottom[first] - l.slotTop[first], lineSpacing * 1.1, "first line's slot is one row, not half the banner gap")
         for i in 1..<l.slotTop.count { XCTAssertGreaterThanOrEqual(l.slotTop[i], l.slotBottom[i - 1] - 1e-3, "slots never overlap") }
         let body = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true))
         for i in 0..<(page.lines.count - 1) where !page.lines[i].isHeader && !page.lines[i + 1].isHeader {
@@ -396,16 +399,17 @@ final class QvpKitTests: XCTestCase {
             let s = c["spec"] as! [String: Any], want = c["layout"] as! [String: Any]
             let f: (String) -> Float = { Float((s[$0] as! NSNumber).doubleValue) }
             let spec = QvpLayoutSpec(viewportW: f("viewportW"), viewportH: f("viewportH"), padTop: f("padTop"), padBottom: f("padBottom"), padLeft: f("padLeft"), padRight: f("padRight"),
-                                     lineSpacing: f("lineSpacing"), lineGap: f("lineGap"), fillHeight: s["fillHeight"] as! Bool, nominalLines: (s["nominalLines"] as! NSNumber).intValue,
+                                     lineSpacing: f("lineSpacing"), fillHeight: s["fillHeight"] as! Bool, gridLines: (s["gridLines"] as! NSNumber).intValue,
                                      cropLeft: f("cropLeft"), cropRight: f("cropRight"), maxAspectSlack: f("maxAspectSlack"))
             let tag = "\(spec.viewportW)x\(spec.viewportH) fill=\(spec.fillHeight) slack=\(spec.maxAspectSlack) crop=\(spec.cropLeft)"
             let l = Self.page.layout(spec)
             let w: (String) -> Double = { (want[$0] as! NSNumber).doubleValue }
-            close(l.scale, w("scale"), "\(tag) scale"); close(l.ox, w("ox"), "\(tag) ox"); close(l.oy, w("oy"), "\(tag) oy")
-            close(l.contentW, w("contentW"), "\(tag) contentW"); close(l.contentH, w("contentH"), "\(tag) contentH"); close(l.pitch, w("pitch"), "\(tag) pitch")
+            close(l.scale, w("scale"), "\(tag) scale"); close(l.offsetX, w("offsetX"), "\(tag) offsetX"); close(l.offsetY, w("offsetY"), "\(tag) offsetY")
+            close(l.contentW, w("contentW"), "\(tag) contentW"); close(l.contentH, w("contentH"), "\(tag) contentH"); close(l.lineSpacing, w("lineSpacing"), "\(tag) lineSpacing")
             close(l.fitScale, w("fitScale"), "\(tag) fitScale"); close(l.fitX, w("fitX"), "\(tag) fitX"); close(l.fitY, w("fitY"), "\(tag) fitY")
             close(l.lineDy.first!, w("lineDy0"), "\(tag) lineDy[0]"); close(l.lineDy.last!, w("lineDyLast"), "\(tag) lineDy[last]")
-            close(Self.page.layoutGapToFill(spec), (c["gapToFill"] as! NSNumber).doubleValue, "\(tag) gapToFill")
+            close(Self.page.layoutLineSpacingToFill(spec), (c["lineSpacingToFill"] as! NSNumber).doubleValue, "\(tag) lineSpacingToFill")
+            close(Self.page.layoutWastedFraction(spec), (c["wastedFraction"] as! NSNumber).doubleValue, "\(tag) wastedFraction")
         }
         XCTAssertEqual(cases.count, 40)
     }

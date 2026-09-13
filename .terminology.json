@@ -52,7 +52,11 @@
     "\\bAl-Baqarah\\b",
     "KFGQPC Uthmanic Script[A-Za-z ]*",
     "g\\.ayah-mark",
-    "pause\\.fill"
+    "pause\\.fill",
+    "uthmani-hafs\\.json",
+    "Imlaei",
+    "Tarteel",
+    "quran-tajweed"
   ],
   "_external_names": [
     "ayah_markers  — the id of the medallion layer in the quran-svg-elements source SVG; a locator in their file, not our name.",
@@ -61,7 +65,11 @@
     "Ya-Sin, Al-Baqarah — surah labels quoted in a demo and a test fixture, display forms rather than identifiers.",
     "KFGQPC Uthmanic Script HAFS — a font family the demo asks the browser for; renaming it breaks the reference.",
     "pause.fill   — an SF Symbol name Apple defines; the demo's play/stop button asks UIKit for it, nothing to do with waqf.",
-    "g.ayah-mark — audit false positive: the CSS selector splits to `g_ayah`, which it reads as the ayah_fragment concept."
+    "g.ayah-mark — audit false positive: the CSS selector splits to `g_ayah`, which it reads as the ayah_fragment concept.",
+    "uthmani-hafs.json — a file in the quran-tajweed repository. docs/SEARCH-FOLD.md and conformance/search-fold.json name it as the source of four vectors; it is a locator, not a name this project chose.",
+    "Imlaei     — Tanzil's own name for the script it publishes, cited in docs/SEARCH-FOLD.md section 9. Renaming it breaks the reference.",
+    "Tarteel    — the organisation named beside QUL in the docs/SEARCH-FOLD.md section 9 survey, not the recitation quality.",
+    "quran-tajweed — the quran-ws repository of that name, which supplies four conformance vectors. The repository is named quran-tajweed on GitHub; the concept it works on is written tajwid everywhere else here."
   ],
   "compatibility": [
     "crates/qvp-core/src/text.rs"

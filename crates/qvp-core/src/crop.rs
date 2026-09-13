@@ -4,21 +4,21 @@ use qvp_format::*;
 use std::fmt::Write;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct CropBox {
+pub struct CropBounds {
     pub x0: f32,
     pub y0: f32,
     pub x1: f32,
     pub y1: f32,
     pub n_words: u32,
-    /// ayah_mark deco kept (whole ayah in the crop), or NONE
-    pub ayah_mark_deco: u32,
+    /// ayah_mark decoration kept (whole ayah in the crop), or NONE
+    pub ayah_mark_decoration: u32,
 }
 
 impl Page {
     /// Box around a target (page units), `pad` all round. A medallion is kept only when
     /// the whole ayah it closes is inside the target.
-    pub fn crop_box(&self, target: &Target, pad: f32, keep_ayah_marks: bool) -> Option<CropBox> {
-        let words = self.resolve(target);
+    pub fn crop_bounds(&self, target: &Target, pad: f32, keep_ayah_marks: bool) -> Option<CropBounds> {
+        let words = self.target_words(target);
         if words.is_empty() {
             return None;
         }
@@ -34,22 +34,22 @@ impl Page {
                 let w = &d.words[*words.last().unwrap() as usize];
                 (w.surah, w.ayah)
             };
-            let all: Vec<u32> = self.resolve(&Target::Ayah(s, a));
+            let all: Vec<u32> = self.target_words(&Target::Ayah(s, a));
             let (_, complete) = self.ayah_word_count(s, a);
             if complete && all.iter().all(|w| words.contains(w)) {
                 if let Some(m) = self.marker_of(s, a) {
-                    ayah_mark = m.deco;
-                    bb.union(&d.decos[m.deco as usize].bbox);
+                    ayah_mark = m.decoration;
+                    bb.union(&d.decorations[m.decoration as usize].bbox);
                 }
             }
         }
-        Some(CropBox {
+        Some(CropBounds {
             x0: bb.x0 as f32 / q - pad,
             y0: bb.y0 as f32 / q - pad,
             x1: bb.x1 as f32 / q + pad,
             y1: bb.y1 as f32 / q + pad,
             n_words: words.len() as u32,
-            ayah_mark_deco: ayah_mark,
+            ayah_mark_decoration: ayah_mark,
         })
     }
 
@@ -62,9 +62,9 @@ impl Page {
         keep_ayah_marks: bool,
         background: Option<Rgba>,
     ) -> Option<String> {
-        let cb = self.crop_box(target, pad, keep_ayah_marks)?;
-        let words = self.resolve(target);
-        let colors: Vec<Rgba> = self.paint().to_vec();
+        let cb = self.crop_bounds(target, pad, keep_ayah_marks)?;
+        let words = self.target_words(target);
+        let colors: Vec<Rgba> = self.colors().to_vec();
         let d = self.data();
         let quant = d.header.quant;
         let (w, h) = (cb.x1 - cb.x0, cb.y1 - cb.y0);
@@ -87,8 +87,8 @@ impl Page {
             let wr = &d.words[wi as usize];
             path_ids.extend(wr.first_path..wr.first_path + wr.n_paths as u32);
         }
-        if cb.ayah_mark_deco != NONE {
-            let dc = &d.decos[cb.ayah_mark_deco as usize];
+        if cb.ayah_mark_decoration != NONE {
+            let dc = &d.decorations[cb.ayah_mark_decoration as usize];
             path_ids.extend(dc.first_path..dc.first_path + dc.n_paths as u32);
         }
         for pi in path_ids {

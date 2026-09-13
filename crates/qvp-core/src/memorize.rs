@@ -35,10 +35,10 @@ impl Default for MaskState {
             words: vec![],
             hidden: BTreeSet::new(),
             mode: MaskMode::Hide,
-            block_color: 0xd9d4c8ff,
-            pad_x: 0.6,
-            pad_y: 0.6,
-            radius: 0.8,
+            block_color: crate::defaults::MASK_BLOCK,
+            pad_x: crate::defaults::MASK_PAD,
+            pad_y: crate::defaults::MASK_PAD,
+            radius: crate::defaults::MASK_RADIUS,
             reverse: false,
             transition_ms: 0,
         }
@@ -66,9 +66,9 @@ impl Reveal {
         let step = if c.word != NONE {
             self.step_of_word[c.word as usize] as i64
         } else if self.ayah_marks
-            && c.deco != NONE
+            && c.decoration != NONE
             && c.ayah != 0
-            && page.data().decos[c.deco as usize].kind == qvp_format::DecoKind::AyahMark
+            && page.data().decorations[c.decoration as usize].kind == qvp_format::DecoKind::AyahMark
         {
             // a medallion lights with the ayah it closes: its last word's step
             match page.data().words.iter().rposition(|w| w.surah == c.surah && w.ayah == c.ayah) {
@@ -86,7 +86,7 @@ impl Reveal {
 impl Page {
     /// Mask a target. Everything in it is hidden; reveal progressively.
     pub fn mask(&mut self, target: &Target, mode: MaskMode) {
-        let words = self.resolve(target);
+        let words = self.target_words(target);
         self.mask.words = words.clone();
         self.mask.hidden = words.into_iter().collect();
         self.mask.mode = mode;
@@ -107,7 +107,7 @@ impl Page {
         self.mask.hidden.len()
     }
     /// Reveal the next `n` words in order (reverse order when `reverse`). Returns how many changed.
-    pub fn reveal_next(&mut self, n: usize) -> usize {
+    pub fn unmask_next(&mut self, n: usize) -> usize {
         let order: Vec<u32> =
             if self.mask.reverse { self.mask.words.iter().rev().copied().collect() } else { self.mask.words.clone() };
         let mut done = 0;
@@ -125,7 +125,7 @@ impl Page {
         done
     }
     /// Re-hide the last `n` revealed words.
-    pub fn hide_back(&mut self, n: usize) -> usize {
+    pub fn mask_back(&mut self, n: usize) -> usize {
         let order: Vec<u32> =
             if self.mask.reverse { self.mask.words.clone() } else { self.mask.words.iter().rev().copied().collect() };
         let mut done = 0;
@@ -143,12 +143,12 @@ impl Page {
         }
         done
     }
-    pub fn reveal_word(&mut self, wi: u32) -> bool {
+    pub fn unmask_word(&mut self, wi: u32) -> bool {
         let r = self.mask.hidden.remove(&wi);
         self.state_dirty |= r;
         r
     }
-    pub fn hide_word(&mut self, wi: u32) -> bool {
+    pub fn mask_word(&mut self, wi: u32) -> bool {
         if !self.mask.words.contains(&wi) {
             self.mask.words.push(wi);
             self.mask.words.sort_unstable();
@@ -157,11 +157,11 @@ impl Page {
         self.state_dirty |= r;
         r
     }
-    pub fn reveal_all(&mut self) {
+    pub fn unmask_all(&mut self) {
         self.mask.hidden.clear();
         self.state_dirty = true;
     }
-    pub fn hide_all(&mut self) {
+    pub fn mask_all(&mut self) {
         self.mask.hidden = self.mask.words.iter().copied().collect();
         self.state_dirty = true;
     }
@@ -193,7 +193,7 @@ impl Page {
         }
         let q = self.quant();
         let (scale, ox, oy, dy): (f32, f32, f32, Vec<f32>) = match self.current_layout() {
-            Some(l) => (l.scale, l.ox, l.oy, l.line_dy.clone()),
+            Some(l) => (l.scale, l.offset_x, l.offset_y, l.line_dy.clone()),
             None => (1.0, 0.0, 0.0, vec![0.0; self.data().lines.len()]),
         };
         self.mask
@@ -201,16 +201,21 @@ impl Page {
             .iter()
             .map(|&wi| {
                 let w = &self.data().words[wi as usize];
-                let d = dy[w.line_idx as usize];
+                let d = dy[w.line_index as usize];
                 crate::highlight::ViewBox {
                     highlight: 0,
-                    line: w.line_idx as u32,
+                    line: w.line_index as u32,
                     x0: ox + (w.bbox.x0 as f32 / q - self.mask.pad_x) * scale,
                     y0: oy + (w.bbox.y0 as f32 / q - self.mask.pad_y + d) * scale,
                     x1: ox + (w.bbox.x1 as f32 / q + self.mask.pad_x) * scale,
                     y1: oy + (w.bbox.y1 as f32 / q + self.mask.pad_y + d) * scale,
                     color: self.mask.block_color,
-                    radius: self.mask.radius * scale,
+                    radius: crate::highlight::clamp_radius(
+                        self.mask.radius * scale,
+                        (w.bbox.x1 - w.bbox.x0) as f32 / q + 2.0 * self.mask.pad_x,
+                        (w.bbox.y1 - w.bbox.y0) as f32 / q + 2.0 * self.mask.pad_y,
+                        scale,
+                    ),
                 }
             })
             .collect()
@@ -268,10 +273,10 @@ impl Page {
             None => false,
         }
     }
-    pub fn reveal_at(&self) -> Option<i64> {
+    pub fn reveal_position(&self) -> Option<i64> {
         self.reveal.as_ref().map(|r| r.at)
     }
-    pub fn reveal_steps(&self) -> u32 {
+    pub fn reveal_step_count(&self) -> u32 {
         self.reveal.as_ref().map(|r| r.steps).unwrap_or(0)
     }
     /// Step index of a word under the current reveal (word index when by word).

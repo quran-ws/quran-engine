@@ -19,10 +19,11 @@ let n = 0
 for (const c of scenarios.cases) {
   const L = page.layout(c.spec)
   const tag = `${c.spec.viewportW}x${c.spec.viewportH} fill=${c.spec.fillHeight} slack=${c.spec.maxAspectSlack} crop=${c.spec.cropLeft}`
-  for (const k of ['scale', 'ox', 'oy', 'contentW', 'contentH', 'pitch', 'fitScale', 'fitX', 'fitY']) close(L[k], c.layout[k], `${tag} ${k}`)
+  for (const k of ['scale', 'offsetX', 'offsetY', 'contentW', 'contentH', 'lineSpacing', 'fitScale', 'fitX', 'fitY']) close(L[k], c.layout[k], `${tag} ${k}`)
   close(L.lineDy[0], c.layout.lineDy0, `${tag} lineDy[0]`)
   close(L.lineDy[L.lineDy.length - 1], c.layout.lineDyLast, `${tag} lineDy[last]`)
-  close(page.layoutGapToFill(c.spec), c.gapToFill, `${tag} gapToFill`)
+  close(page.layoutLineSpacingToFill(c.spec), c.lineSpacingToFill, `${tag} lineSpacingToFill`)
+  close(page.layoutWastedFraction(c.spec), c.wastedFraction, `${tag} wastedFraction`)
   n++
 }
 page.free()

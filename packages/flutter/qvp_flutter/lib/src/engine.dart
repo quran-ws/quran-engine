@@ -37,8 +37,8 @@ abstract final class QvpCategory {
   static const int none = 0, harakah = 1, tanwin = 2, letterDot = 3, orthographic = 4, dabt = 5, waqf = 6, readingSign = 7, standalone = 8;
 }
 
-/// `QVP_DECO_*`
-abstract final class QvpDeco {
+/// `QVP_DECORATION_*`
+abstract final class QvpDecorationKind {
   static const int ayahMark = 0, surahName = 1, basmalah = 2, divisionMark = 3, sajdahMark = 4;
 }
 
@@ -59,6 +59,14 @@ abstract final class QvpLayer {
   static const int base = 0, theme = 10, highlight = 50, selection = 60, top = 100;
 }
 
+/// The defaults every wrapper shares (`QVP_DEFAULT_*` in qvp.h; the parity check compares them).
+/// Colours are 0xRRGGBBAA, lengths page units.
+abstract final class QvpDefaults {
+  static const int ink = 0x231f20ff, highlightInk = 0x1a73e8ff, highlightBand = 0xd6a3264d, selectionBand = 0x2d6fd640, maskBlock = 0xd9d4c8ff, revealGrey = 0xc9c4b8ff;
+  static const double highlightPadX = 1.2, highlightPadY = 0, highlightSeam = 0.25, gapBias = 0.6, tapDistance = 6, aspectSlack = 1.15, maskPad = 0.6, maskRadius = 0.8, cropPad = 2;
+  static const int gridLines = 15, revealLit = 1;
+}
+
 /// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
 /// No table lives in this package.
 abstract final class QvpNames {
@@ -76,7 +84,7 @@ abstract final class QvpNames {
   }
 }
 
-/// `QVP_DIV_*`
+/// `QVP_DIVISION_*`
 abstract final class QvpDiv {
   static const int juz = 0, hizb = 1, nisf = 2, rubuAlHizb = 3;
   static List<String> get names => QvpNames.of(QvpNames.division);
@@ -129,13 +137,13 @@ abstract final class QvpColor {
 
 // ───────────── selectors & targets ─────────────
 
-/// What a style rule applies to (`QvpSelector`, `QVP_SEL_*`). Build with [Sel].
+/// What a style rule applies to (`QvpSelector`, `QVP_SELECTOR_*`). Build with [Sel].
 @immutable
 final class QvpSelector {
-  const QvpSelector(this.kind, [this.a = 0, this.b = 0, this.c = 0]);
-  final int kind, a, b, c;
+  const QvpSelector(this.selector, [this.a = 0, this.b = 0, this.c = 0]);
+  final int selector, a, b, c;
   @override
-  String toString() => 'Sel($kind,$a,$b,$c)';
+  String toString() => 'Sel($selector,$a,$b,$c)';
 }
 
 /// Selector constructors (same names as web/qvp.js `Sel`).
@@ -156,8 +164,8 @@ abstract final class Sel {
   static QvpSelector category(int c) => QvpSelector(11, c);
   static QvpSelector family(int f) => QvpSelector(12, f);
   static QvpSelector kind(int k) => QvpSelector(13, k);
-  static QvpSelector deco(int k) => QvpSelector(14, k);
-  static QvpSelector decoIdx(int i) => QvpSelector(15, i);
+  static QvpSelector decoration(int k) => QvpSelector(14, k);
+  static QvpSelector decorationIndex(int i) => QvpSelector(15, i);
 }
 
 /// What resolves to a word list (`QvpTarget`, `QVP_TARGET_*`). Build with [T]
@@ -165,8 +173,8 @@ abstract final class Sel {
 /// '2:255-257', 'line:7', 'surah:2'. A `List<int>` of word indices is a target too.
 @immutable
 final class QvpTarget {
-  const QvpTarget(this.kind, {this.a = 0, this.b = 0, this.c = 0, this.words, this.wordKey});
-  final int kind, a, b, c;
+  const QvpTarget(this.target, {this.a = 0, this.b = 0, this.c = 0, this.words, this.wordKey});
+  final int target, a, b, c;
   final List<int>? words;
 
   /// `[surah, ayah, word]` for the '2:255:3' string form; resolved per page via `findWord`.
@@ -213,13 +221,13 @@ abstract final class T {
 @immutable
 final class QvpWordInfo {
   const QvpWordInfo({
-    required this.idx,
+    required this.index,
     required this.surah,
     required this.ayah,
     required this.word,
     required this.line,
-    required this.ayahIdx,
-    required this.lineIdx,
+    required this.ayahIndex,
+    required this.lineIndex,
     required this.x0,
     required this.y0,
     required this.x1,
@@ -228,7 +236,7 @@ final class QvpWordInfo {
     required this.firstPath,
     required this.nPaths,
   });
-  final int idx, surah, ayah, word, line, ayahIdx, lineIdx, firstPath, nPaths;
+  final int index, surah, ayah, word, line, ayahIndex, lineIndex, firstPath, nPaths;
   final double x0, y0, x1, y1;
 
   /// `rasm_uthmani`, the text of record (inline in the QVP file).
@@ -244,7 +252,7 @@ final class QvpWordInfo {
 @immutable
 final class QvpAyahInfo {
   const QvpAyahInfo({
-    required this.idx,
+    required this.index,
     required this.surah,
     required this.ayah,
     required this.fragment,
@@ -253,24 +261,24 @@ final class QvpAyahInfo {
     required this.rubuAlHizb,
     required this.firstWord,
     required this.nWords,
-    required this.ayahMarkDeco,
+    required this.ayahMarkDecoration,
     required this.x0,
     required this.y0,
     required this.x1,
     required this.y1,
   });
-  final int idx, surah, ayah, fragment, fragments, flags, rubuAlHizb, firstWord, nWords;
+  final int index, surah, ayah, fragment, fragments, flags, rubuAlHizb, firstWord, nWords;
 
   /// Deco index of the ayah mark or [qvpNone].
-  final int ayahMarkDeco;
+  final int ayahMarkDecoration;
   final double x0, y0, x1, y1;
 }
 
 @immutable
 final class QvpLineInfo {
   const QvpLineInfo({
-    required this.idx,
-    required this.lineNo,
+    required this.index,
+    required this.lineNumber,
     required this.isHeader,
     required this.firstWord,
     required this.nWords,
@@ -282,16 +290,16 @@ final class QvpLineInfo {
     required this.bandY1,
     required this.centre,
   });
-  final int idx, lineNo, firstWord, nWords;
+  final int index, lineNumber, firstWord, nWords;
   final bool isHeader;
   final double x0, y0, x1, y1, bandY0, bandY1, centre;
 }
 
 @immutable
-final class QvpDecoInfo {
-  const QvpDecoInfo({
-    required this.idx,
-    required this.kind,
+final class QvpDecorationInfo {
+  const QvpDecorationInfo({
+    required this.index,
+    required this.decoration,
     required this.surah,
     required this.ayah,
     required this.line,
@@ -303,41 +311,33 @@ final class QvpDecoInfo {
     required this.firstPath,
     required this.nPaths,
   });
-  final int idx, kind, surah, ayah, line, firstPath, nPaths;
+  final int index, decoration, surah, ayah, line, firstPath, nPaths;
   final double x0, y0, x1, y1;
   final String text;
 }
 
-/// Exact hit (`QvpHit`); indices are -1 when absent.
+/// The one hit shape for every hit test (`QvpHit`); the exact variants report distance 0 and
+/// `isExact`. Indices are -1 when absent.
 @immutable
 final class QvpHit {
-  const QvpHit({required this.word, required this.path, required this.deco});
-  final int word, path, deco;
-  @override
-  String toString() => 'QvpHit(word: $word, path: $path, deco: $deco)';
-}
-
-/// Gap-aware hit (`QvpHitEx`); indices are -1 when absent.
-@immutable
-final class QvpHitEx {
-  const QvpHitEx({required this.word, required this.path, required this.deco, required this.line, required this.distance, required this.exact, this.wordKey, this.ayahKey});
-  final int word, path, deco, line;
+  const QvpHit({required this.word, required this.path, required this.decoration, required this.line, required this.distance, required this.isExact, this.wordKey, this.ayahKey});
+  final int word, path, decoration, line;
   final double distance;
-  final bool exact;
+  final bool isExact;
   final String? wordKey, ayahKey;
   @override
-  String toString() => 'QvpHitEx(word: $word, path: $path, deco: $deco, line: $line, distance: $distance, exact: $exact)';
+  String toString() => 'QvpHit(word: $word, path: $path, decoration: $decoration, line: $line, distance: $distance, isExact: $isExact)';
 }
 
 /// Options of the gap-aware hit test.
 @immutable
 final class QvpHitOptions {
-  const QvpHitOptions({this.maxDistance = 0, this.gapBias = 0.6, this.exactFirst = true});
+  const QvpHitOptions({this.maxDistance = 0, this.gapBias = QvpDefaults.gapBias, this.preferExact = true});
 
   /// Page units; <= 0 unlimited.
   final double maxDistance;
   final double gapBias;
-  final bool exactFirst;
+  final bool preferExact;
 }
 
 /// A band / mask box in layout viewport px (`QvpBox`).
@@ -349,21 +349,21 @@ final class QvpBox {
 }
 
 @immutable
-final class QvpHitBox {
-  const QvpHitBox({required this.word, required this.line, required this.x0, required this.y0, required this.x1, required this.y1, required this.inkX0, required this.inkY0, required this.inkX1, required this.inkY1});
+final class QvpHitArea {
+  const QvpHitArea({required this.word, required this.line, required this.x0, required this.y0, required this.x1, required this.y1, required this.inkX0, required this.inkY0, required this.inkX1, required this.inkY1});
   final int word, line;
   final double x0, y0, x1, y1, inkX0, inkY0, inkX1, inkY1;
 }
 
 @immutable
 final class QvpLineBand {
-  const QvpLineBand({required this.line, required this.lineNo, required this.y0, required this.y1, required this.mid, required this.inkY0, required this.inkY1});
-  final int line, lineNo;
+  const QvpLineBand({required this.line, required this.lineNumber, required this.y0, required this.y1, required this.mid, required this.inkY0, required this.inkY1});
+  final int line, lineNumber;
   final double y0, y1, mid, inkY0, inkY1;
 }
 
 /// Input of [QvpPage.layout]; lengths in viewport px. Spacing only opens up:
-/// `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
+/// `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid.
 @immutable
 final class QvpLayoutSpec {
   const QvpLayoutSpec({
@@ -374,16 +374,15 @@ final class QvpLayoutSpec {
     this.padLeft = 0,
     this.padRight = 0,
     this.lineSpacing = 1,
-    this.lineGap = 0,
     this.fillHeight = false,
-    this.nominalLines = 15,
+    this.gridLines = 0,
     this.cropLeft = 0,
     this.cropRight = 0,
     this.maxAspectSlack = 0,
   });
-  final double viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap;
+  final double viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing;
   final bool fillHeight;
-  final int nominalLines;
+  final int gridLines;
 
   /// Printed side margins to cut, in page units (0 = keep the print's margins).
   final double cropLeft, cropRight;
@@ -399,9 +398,8 @@ final class QvpLayoutSpec {
     double? padLeft,
     double? padRight,
     double? lineSpacing,
-    double? lineGap,
     bool? fillHeight,
-    int? nominalLines,
+    int? gridLines,
     double? cropLeft,
     double? cropRight,
     double? maxAspectSlack,
@@ -414,9 +412,8 @@ final class QvpLayoutSpec {
         padLeft: padLeft ?? this.padLeft,
         padRight: padRight ?? this.padRight,
         lineSpacing: lineSpacing ?? this.lineSpacing,
-        lineGap: lineGap ?? this.lineGap,
         fillHeight: fillHeight ?? this.fillHeight,
-        nominalLines: nominalLines ?? this.nominalLines,
+        gridLines: gridLines ?? this.gridLines,
         cropLeft: cropLeft ?? this.cropLeft,
         cropRight: cropRight ?? this.cropRight,
         maxAspectSlack: maxAspectSlack ?? this.maxAspectSlack,
@@ -432,22 +429,21 @@ final class QvpLayoutSpec {
       other.padLeft == padLeft &&
       other.padRight == padRight &&
       other.lineSpacing == lineSpacing &&
-      other.lineGap == lineGap &&
       other.fillHeight == fillHeight &&
-      other.nominalLines == nominalLines &&
+      other.gridLines == gridLines &&
       other.cropLeft == cropLeft &&
       other.cropRight == cropRight &&
       other.maxAspectSlack == maxAspectSlack;
 
   @override
-  int get hashCode => Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, fillHeight, nominalLines, cropLeft, cropRight, maxAspectSlack);
+  int get hashCode => Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft, cropRight, maxAspectSlack);
 }
 
-/// Output of [QvpPage.layout]. Page → viewport: `vx = ox + x*scale`, `vy = oy + (y + lineDy[line])*scale`.
+/// Output of [QvpPage.layout]. Page → viewport: `viewX = offsetX + x*scale`, `viewY = offsetY + (y + lineDy[line])*scale`.
 @immutable
 final class QvpLayout {
-  const QvpLayout({required this.scale, required this.ox, required this.oy, required this.contentW, required this.contentH, required this.pitch, required this.lineDy, required this.slots, this.fitScale = 1, this.fitX = 0, this.fitY = 0});
-  final double scale, ox, oy, contentW, contentH, pitch;
+  const QvpLayout({required this.scale, required this.offsetX, required this.offsetY, required this.contentW, required this.contentH, required this.lineSpacing, required this.lineDy, required this.slots, this.fitScale = 1, this.fitX = 0, this.fitY = 0});
+  final double scale, offsetX, offsetY, contentW, contentH, lineSpacing;
 
   /// The view transform that shows the whole content in the viewport (shrink to height, never
   /// enlarge, centred). The host's pan and zoom go on top.
@@ -465,13 +461,13 @@ final class QvpLayout {
 final class QvpHighlightStyle {
   const QvpHighlightStyle({
     this.mode = 'band',
-    this.height = 'pitch',
-    this.ink = 0x1a73e8ff,
-    this.band = 0xd6a3264d,
-    this.padX = 1.2,
+    this.height = 'lineSpacing',
+    this.ink = QvpDefaults.highlightInk,
+    this.band = QvpDefaults.highlightBand,
+    this.padX = QvpDefaults.highlightPadX,
     this.padY = 0,
     this.radius = 0,
-    this.seam = 0.25,
+    this.seam = QvpDefaults.highlightSeam,
     this.ms = 0,
     this.layer = QvpLayer.highlight,
   });
@@ -479,7 +475,7 @@ final class QvpHighlightStyle {
   /// 'ink' | 'band' | 'both'
   final String mode;
 
-  /// 'pitch' | 'ink'
+  /// 'lineSpacing' | 'ink'
   final String height;
   final Object ink, band;
   final double padX, padY, radius, seam;
@@ -496,9 +492,9 @@ final class QvpTheme {
 }
 
 @immutable
-final class QvpSurahInfo {
-  const QvpSurahInfo({required this.number, required this.ayahCount, required this.hasBanner, required this.hasBasmalah, required this.place, required this.bannerDeco, required this.arabic, required this.latin, required this.english});
-  final int number, ayahCount, bannerDeco;
+final class QvpSurah {
+  const QvpSurah({required this.number, required this.ayahCount, required this.hasBanner, required this.hasBasmalah, required this.place, required this.bannerDecoration, required this.arabic, required this.latin, required this.english});
+  final int number, ayahCount, bannerDecoration;
   final bool hasBanner, hasBasmalah;
 
   /// 'makkah' | 'madinah' | ''
@@ -507,51 +503,51 @@ final class QvpSurahInfo {
 
 @immutable
 final class QvpDivision {
-  const QvpDivision({required this.kind, required this.line, required this.n, required this.surah, required this.ayah, required this.ayahIdx});
+  const QvpDivision({required this.division, required this.line, required this.number, required this.surah, required this.ayah, required this.ayahIndex});
 
   /// 'juz' | 'hizb' | 'nisf' | 'rubuAlHizb'
-  final String kind;
-  final int line, n, surah, ayah, ayahIdx;
+  final String division;
+  final int line, number, surah, ayah, ayahIndex;
 }
 
 @immutable
 final class QvpAyahMark {
-  const QvpAyahMark({required this.deco, required this.surah, required this.ayah, required this.line, required this.cx, required this.cy, required this.r, required this.ornamentPath, required this.numeralPath});
-  final int deco, surah, ayah, line, ornamentPath, numeralPath;
+  const QvpAyahMark({required this.decoration, required this.surah, required this.ayah, required this.line, required this.cx, required this.cy, required this.r, required this.ornamentPath, required this.numeralPath});
+  final int decoration, surah, ayah, line, ornamentPath, numeralPath;
   final double cx, cy, r;
 }
 
 @immutable
 final class QvpRosette {
-  const QvpRosette({required this.deco, required this.surah, required this.ayah, required this.juz, required this.hizb, required this.nisf, required this.rubuAlHizb, required this.rubuAlHizbInHizb});
-  final int deco, surah, ayah, juz, hizb, nisf, rubuAlHizb, rubuAlHizbInHizb;
+  const QvpRosette({required this.decoration, required this.surah, required this.ayah, required this.juz, required this.hizb, required this.nisf, required this.rubuAlHizb, required this.rubuAlHizbInHizb});
+  final int decoration, surah, ayah, juz, hizb, nisf, rubuAlHizb, rubuAlHizbInHizb;
 }
 
 @immutable
 final class QvpSajdah {
-  const QvpSajdah({required this.deco, required this.surah, required this.ayah, required this.signPath});
-  final int deco, surah, ayah, signPath;
+  const QvpSajdah({required this.decoration, required this.surah, required this.ayah, required this.signPath});
+  final int decoration, surah, ayah, signPath;
 }
 
 @immutable
 final class QvpMatch {
-  const QvpMatch({required this.word, required this.index, required this.loose, required this.wordKey, required this.text});
+  const QvpMatch({required this.word, required this.index, required this.isLooseMatch, required this.wordKey, required this.text});
   final int word, index;
-  final bool loose;
+  final bool isLooseMatch;
   final String wordKey, text;
 }
 
 @immutable
-final class QvpCropBox {
-  const QvpCropBox({required this.x0, required this.y0, required this.x1, required this.y1, required this.nWords, required this.ayahMarkDeco});
+final class QvpCropBounds {
+  const QvpCropBounds({required this.x0, required this.y0, required this.x1, required this.y1, required this.nWords, required this.ayahMarkDecoration});
   final double x0, y0, x1, y1;
-  final int nWords, ayahMarkDeco;
+  final int nWords, ayahMarkDecoration;
 }
 
 @immutable
 final class QvpAtlasSurah {
-  const QvpAtlasSurah({required this.n, required this.page, required this.ayahCount, required this.place, required this.arabic, required this.latin, required this.english});
-  final int n, page, ayahCount;
+  const QvpAtlasSurah({required this.number, required this.page, required this.ayahCount, required this.place, required this.arabic, required this.latin, required this.english});
+  final int number, page, ayahCount;
   final String place, arabic, latin, english;
 }
 
@@ -583,8 +579,7 @@ class QvpEngine {
     _layout = pffi.calloc<QvpLayoutC>();
     _hitOpt = pffi.calloc<QvpHitOptionsC>();
     _hit = pffi.calloc<QvpHitC>();
-    _hitEx = pffi.calloc<QvpHitExC>();
-    _crop = pffi.calloc<QvpCropBoxC>();
+    _crop = pffi.calloc<QvpCropBoundsC>();
   }
 
   /// Opens the engine library: [path] if given, else `libqvp_ffi.so` from the
@@ -616,12 +611,18 @@ class QvpEngine {
   late final ffi.Pointer<QvpLayoutC> _layout;
   late final ffi.Pointer<QvpHitOptionsC> _hitOpt;
   late final ffi.Pointer<QvpHitC> _hit;
-  late final ffi.Pointer<QvpHitExC> _hitEx;
-  late final ffi.Pointer<QvpCropBoxC> _crop;
+  late final ffi.Pointer<QvpCropBoundsC> _crop;
   bool _disposed = false;
 
   /// Format version the library was built for.
-  int get version => b.version();
+  /// The engine version, e.g. `0.2.0`.
+  String get version {
+    b.version(_str);
+    return _s();
+  }
+
+  /// The page format version the engine reads.
+  int get formatVersion => b.formatVersion();
 
   /// `qvp_engine_name()`
   String get engineName => b.engineName().cast<pffi.Utf8>().toDartString();
@@ -682,8 +683,8 @@ class QvpEngine {
   String placeName(int p) => name(QvpNames.place, p);
 
   // Arabic text tools
-  String _arabic(int kind, String s) => withString(s, (p, n) {
-        b.arabic(kind, p, n, _str);
+  String _arabic(int op, String s) => withString(s, (p, n) {
+        b.arabic(op, p, n, _str);
         return _s();
       });
   String strip(String s) => _arabic(0, s);
@@ -705,14 +706,12 @@ class QvpEngine {
     return QvpAtlas._(this, h);
   }
 
-  double gapToFill(double pageW, double pageH, int lines, double viewW, double viewH, [double max = 0]) => b.gapToFill(pageW, pageH, lines, viewW, viewH, max);
-  double wastedFraction(double pageW, double pageH, double viewW, double viewH) => b.wastedFraction(pageW, pageH, viewW, viewH);
 
   /// Releases the scratch memory. Free pages and atlases first.
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    for (final p in <ffi.Pointer>[_scratch, _str, _target, _sel, _hl, _theme, _spec, _layout, _hitOpt, _hit, _hitEx, _crop]) {
+    for (final p in <ffi.Pointer>[_scratch, _str, _target, _sel, _hl, _theme, _spec, _layout, _hitOpt, _hit, _crop]) {
       pffi.calloc.free(p);
     }
   }
@@ -720,7 +719,7 @@ class QvpEngine {
   // struct writers
   ffi.Pointer<QvpSelectorC> _writeSel(QvpSelector s) {
     final r = _sel.ref;
-    r.kind = s.kind;
+    r.selector = s.selector;
     r.a = s.a;
     r.b = s.b;
     r.c = s.c;
@@ -764,7 +763,7 @@ class QvpPage extends ChangeNotifier {
       nAyahs = i.nAyahs;
       nWords = i.nWords;
       nPaths = i.nPaths;
-      nDecos = i.nDecos;
+      nDecorations = i.nDecorations;
       b.geometry(_h, geom);
       final g = geom.ref;
       ops = Uint8List.fromList(g.ops.asTypedList(g.opsLen));
@@ -777,15 +776,15 @@ class QvpPage extends ChangeNotifier {
     words = List.generate(nWords, _word, growable: false);
     ayahs = List.generate(nAyahs, _ayah, growable: false);
     lines = List.generate(nLines, _line, growable: false);
-    decos = List.generate(nDecos, _deco, growable: false);
-    naturalPitch = b.naturalPitch(_h);
+    decorations = List.generate(nDecorations, _deco, growable: false);
+    lineSpacing = b.pageLineSpacing(_h);
   }
 
   final QvpEngine engine;
   ffi.Pointer<QvpPageC> _h;
 
-  late final double width, height, naturalPitch;
-  late final int page, nLines, nAyahs, nWords, nPaths, nDecos;
+  late final double width, height, lineSpacing;
+  late final int page, nLines, nAyahs, nWords, nPaths, nDecorations;
 
   /// Opcode stream (see [QvpOp]).
   late final Uint8List ops;
@@ -799,12 +798,12 @@ class QvpPage extends ChangeNotifier {
   late final List<QvpWordInfo> words;
   late final List<QvpAyahInfo> ayahs;
   late final List<QvpLineInfo> lines;
-  late final List<QvpDecoInfo> decos;
+  late final List<QvpDecorationInfo> decorations;
 
   /// Layout from the last [layout] call, if any.
   QvpLayout? currentLayout;
 
-  int _defaultInk = 0x231f20ff;
+  int _defaultInk = QvpDefaults.ink;
 
   /// Dart-side mirror of the engine's default ink.
   int get defaultInk => _defaultInk;
@@ -872,13 +871,13 @@ class QvpPage extends ChangeNotifier {
       if (_b.wordInfo(_h, i, o) == 0) throw StateError('qvp_word_info($i) failed');
       final w = o.ref;
       return QvpWordInfo(
-        idx: i,
+        index: i,
         surah: w.surah,
         ayah: w.ayah,
         word: w.word,
-        line: w.lineNo,
-        ayahIdx: w.ayahIdx,
-        lineIdx: w.lineIdx,
+        line: w.lineNumber,
+        ayahIndex: w.ayahIndex,
+        lineIndex: w.lineIndex,
         x0: w.x0,
         y0: w.y0,
         x1: w.x1,
@@ -898,7 +897,7 @@ class QvpPage extends ChangeNotifier {
       if (_b.ayahInfo(_h, i, o) == 0) throw StateError('qvp_ayah_info($i) failed');
       final a = o.ref;
       return QvpAyahInfo(
-        idx: i,
+        index: i,
         surah: a.surah,
         ayah: a.ayah,
         fragment: a.fragment,
@@ -907,7 +906,7 @@ class QvpPage extends ChangeNotifier {
         rubuAlHizb: a.rubuAlHizb,
         firstWord: a.firstWord,
         nWords: a.nWords,
-        ayahMarkDeco: a.ayahMarkDeco,
+        ayahMarkDecoration: a.ayahMarkDecoration,
         x0: a.x0,
         y0: a.y0,
         x1: a.x1,
@@ -924,8 +923,8 @@ class QvpPage extends ChangeNotifier {
       if (_b.lineInfo(_h, i, o) == 0) throw StateError('qvp_line_info($i) failed');
       final l = o.ref;
       return QvpLineInfo(
-        idx: i,
-        lineNo: l.lineNo,
+        index: i,
+        lineNumber: l.lineNumber,
         isHeader: l.isHeader != 0,
         firstWord: l.firstWord,
         nWords: l.nWords,
@@ -942,14 +941,14 @@ class QvpPage extends ChangeNotifier {
     }
   }
 
-  QvpDecoInfo _deco(int i) {
-    final o = pffi.calloc<QvpDecoInfoC>();
+  QvpDecorationInfo _deco(int i) {
+    final o = pffi.calloc<QvpDecorationInfoC>();
     try {
-      if (_b.decoInfo(_h, i, o) == 0) throw StateError('qvp_deco_info($i) failed');
+      if (_b.decorationInfo(_h, i, o) == 0) throw StateError('qvp_decoration_info($i) failed');
       final d = o.ref;
-      return QvpDecoInfo(
-        idx: i,
-        kind: d.kind,
+      return QvpDecorationInfo(
+        index: i,
+        decoration: d.decoration,
         surah: d.surah,
         ayah: d.ayah,
         line: d.line,
@@ -989,7 +988,7 @@ class QvpPage extends ChangeNotifier {
       t = i >= 0 ? T.word(i) : T.words(const []);
     }
     final r = _e._target.ref;
-    r.kind = t.kind;
+    r.target = t.target;
     r.a = t.a;
     r.b = t.b;
     r.c = t.c;
@@ -1008,23 +1007,23 @@ class QvpPage extends ChangeNotifier {
   List<int> _u32(int n) => List<int>.from(_e._out<ffi.Uint32>().asTypedList(n.clamp(0, _e._cap(ffi.sizeOf<ffi.Uint32>()))), growable: false);
 
   /// Word indices of a target.
-  List<int> resolve(Object target) => _t(target, (t) => _u32(_b.resolve(_p, t, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>()))));
+  List<int> targetWords(Object target) => _t(target, (t) => _u32(_b.targetWords(_p, t, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>()))));
 
   // ── metadata ──
-  List<QvpSurahInfo> surahs() {
-    final n = _b.surahsCount(_p);
-    final o = pffi.calloc<QvpSurahInfoC>();
+  List<QvpSurah> surahs() {
+    final n = _b.surahCount(_p);
+    final o = pffi.calloc<QvpSurahC>();
     try {
       return List.generate(n, (i) {
         _b.surahAt(_p, i, o);
         final s = o.ref;
-        return QvpSurahInfo(
+        return QvpSurah(
           number: s.number,
           ayahCount: s.ayahCount,
           hasBanner: s.hasBanner != 0,
           hasBasmalah: s.hasBasmalah != 0,
           place: _e.placeName(s.place),
-          bannerDeco: s.bannerDeco,
+          bannerDecoration: s.bannerDecoration,
           arabic: QvpEngine.str(s.arabic),
           latin: QvpEngine.str(s.latin),
           english: QvpEngine.str(s.english),
@@ -1041,7 +1040,7 @@ class QvpPage extends ChangeNotifier {
     final n = _b.divisions(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final d = (o + i).ref;
-      return QvpDivision(kind: _e.divisionName(d.kind), line: d.line, n: d.n, surah: d.surah, ayah: d.ayah, ayahIdx: d.ayahIdx);
+      return QvpDivision(division: _e.divisionName(d.division), line: d.line, number: d.number, surah: d.surah, ayah: d.ayah, ayahIndex: d.ayahIndex);
     }, growable: false);
   }
 
@@ -1051,7 +1050,7 @@ class QvpPage extends ChangeNotifier {
     final n = _b.ayahMarks(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final m = (o + i).ref;
-      return QvpAyahMark(deco: m.deco, surah: m.surah, ayah: m.ayah, line: m.line, cx: m.cx, cy: m.cy, r: m.r, ornamentPath: m.ornamentPath, numeralPath: m.numeralPath);
+      return QvpAyahMark(decoration: m.decoration, surah: m.surah, ayah: m.ayah, line: m.line, cx: m.cx, cy: m.cy, r: m.r, ornamentPath: m.ornamentPath, numeralPath: m.numeralPath);
     }, growable: false);
   }
 
@@ -1061,7 +1060,7 @@ class QvpPage extends ChangeNotifier {
     final n = _b.rosettes(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final r = (o + i).ref;
-      return QvpRosette(deco: r.deco, surah: r.surah, ayah: r.ayah, juz: r.juz, hizb: r.hizb, nisf: r.nisf, rubuAlHizb: r.rubuAlHizb, rubuAlHizbInHizb: r.rubuAlHizbInHizb);
+      return QvpRosette(decoration: r.decoration, surah: r.surah, ayah: r.ayah, juz: r.juz, hizb: r.hizb, nisf: r.nisf, rubuAlHizb: r.rubuAlHizb, rubuAlHizbInHizb: r.rubuAlHizbInHizb);
     }, growable: false);
   }
 
@@ -1070,7 +1069,7 @@ class QvpPage extends ChangeNotifier {
     final n = _b.sajdahs(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final s = (o + i).ref;
-      return QvpSajdah(deco: s.deco, surah: s.surah, ayah: s.ayah, signPath: s.signPath);
+      return QvpSajdah(decoration: s.decoration, surah: s.surah, ayah: s.ayah, signPath: s.signPath);
     }, growable: false);
   }
 
@@ -1078,10 +1077,10 @@ class QvpPage extends ChangeNotifier {
   List<(int, int)> ayahKeys() => _u32(_b.ayahKeys(_p, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>()))).map((k) => (k >> 16, k & 0xffff)).toList(growable: false);
 
   /// Words of an ayah on this page and whether the ayah is complete here.
-  ({int count, bool complete}) ayahWordCount(int surah, int ayah) {
-    final o = _e._out<ffi.Uint32>();
+  ({int count, bool isComplete}) ayahWordCount(int surah, int ayah) {
+    final o = _e._out<ffi.Uint8>();
     final n = _b.ayahWordCount(_p, surah, ayah, o);
-    return (count: n, complete: o.value != 0);
+    return (count: n, isComplete: o.value != 0);
   }
 
   /// Words for [nSegments] recitation segments, or null when the counts disagree (follow the ayah whole).
@@ -1096,26 +1095,26 @@ class QvpPage extends ChangeNotifier {
     return _e._s();
   }
 
-  /// Accessibility label of ayah record [ai].
-  String ayahLabel(int ai) {
-    _b.ayahLabel(_p, ai, _e._str);
+  /// Accessibility label of ayah record [ayahIndex].
+  String ayahLabel(int ayahIndex) {
+    _b.ayahLabel(_p, ayahIndex, _e._str);
     return _e._s();
   }
 
   // ── text & search ──
   /// Text of a target (default: the page).
   String text([Object target = 'page', Object form = 'rasmUthmani', String wordSep = ' ', String lineSep = '\n']) => _e.withString(wordSep, (wp, wn) => _e.withString(lineSep, (lp, ln) => _t(target, (t) {
-        _b.textTarget(_p, t, QvpForm.of(form), wp, wn, lp, ln, _e._str);
+        _b.text(_p, t, QvpForm.of(form), wp, wn, lp, ln, _e._str);
         return _e._s();
       })));
 
   /// Search this page. [mode]: 'includes' | 'exact' | 'prefix'.
-  List<QvpMatch> search(String query, {Object form = 'search', String mode = 'includes', bool normalize = true, bool loose = true, int limit = 0}) {
+  List<QvpMatch> search(String query, {Object form = 'search', String mode = 'includes', bool normalize = true, bool looseMatch = true, int limit = 0}) {
     final o = _e._out<QvpMatchC>(), cap = _e._cap(ffi.sizeOf<QvpMatchC>());
-    final n = _e.withString(query, (p, len) => _b.search(_p, p, len, QvpForm.of(form), const {'includes': 0, 'exact': 1, 'prefix': 2}[mode] ?? 0, normalize ? 1 : 0, loose ? 1 : 0, limit, o, cap)).clamp(0, cap);
+    final n = _e.withString(query, (p, len) => _b.search(_p, p, len, QvpForm.of(form), const {'includes': 0, 'exact': 1, 'prefix': 2}[mode] ?? 0, normalize ? 1 : 0, looseMatch ? 1 : 0, limit, o, cap)).clamp(0, cap);
     return List.generate(n, (i) {
       final m = (o + i).ref;
-      return QvpMatch(word: m.word, index: m.index, loose: m.loose != 0, wordKey: wordKey(m.word), text: words[m.word].text);
+      return QvpMatch(word: m.word, index: m.index, isLooseMatch: m.isLooseMatch != 0, wordKey: wordKey(m.word), text: words[m.word].text);
     }, growable: false);
   }
 
@@ -1143,83 +1142,64 @@ class QvpPage extends ChangeNotifier {
   // ── hit testing ──
   static int _idx(int v) => v == qvpNone ? -1 : v;
 
-  QvpHit? _readHit(int ok) {
-    if (ok == 0) return null;
-    final h = _e._hit.ref;
-    return QvpHit(word: _idx(h.word), path: _idx(h.path), deco: _idx(h.deco));
-  }
-
   /// Exact outline hit, page units.
-  QvpHit? hitTest(double x, double y) => _readHit(_b.hitTest(_p, x, y, _e._hit));
+  QvpHit? hitTestExact(double x, double y) => _readHit(_b.hitTestExact(_p, x, y, _e._hit));
 
   /// Exact outline hit, viewport px through the current layout.
-  QvpHit? hitTestView(double vx, double vy) => _readHit(_b.hitTestView(_p, vx, vy, _e._hit));
+  QvpHit? hitTestExactView(double viewX, double viewY) => _readHit(_b.hitTestExactView(_p, viewX, viewY, _e._hit));
 
   ffi.Pointer<QvpHitOptionsC> _opt(QvpHitOptions o) {
     final r = _e._hitOpt.ref;
     r.maxDistance = o.maxDistance;
     r.gapBias = o.gapBias;
-    r.exactFirst = o.exactFirst ? 1 : 0;
+    r.preferExact = o.preferExact ? 1 : 0;
     return _e._hitOpt;
   }
 
-  QvpHitEx? _readHitEx(int ok) {
+  QvpHit? _readHit(int ok) {
     if (ok == 0) return null;
-    final h = _e._hitEx.ref;
+    final h = _e._hit.ref;
     final w = _idx(h.word);
-    return QvpHitEx(
+    return QvpHit(
       word: w,
       path: _idx(h.path),
-      deco: _idx(h.deco),
+      decoration: _idx(h.decoration),
       line: h.line,
       distance: h.distance,
-      exact: h.exact != 0,
+      isExact: h.isExact != 0,
       wordKey: w >= 0 ? words[w].wordKey : null,
       ayahKey: w >= 0 ? words[w].ayahKey : null,
     );
   }
 
   /// Gap-aware: every point on a printed line resolves to the word the user meant. Page units.
-  QvpHitEx? hitTestEx(double x, double y, [QvpHitOptions opt = const QvpHitOptions()]) => _readHitEx(_b.hitTestEx(_p, x, y, _opt(opt), _e._hitEx));
+  QvpHit? hitTest(double x, double y, [QvpHitOptions opt = const QvpHitOptions()]) => _readHit(_b.hitTest(_p, x, y, _opt(opt), _e._hit));
 
   /// Gap-aware, viewport px through the current layout.
-  QvpHitEx? hitTestViewEx(double vx, double vy, [QvpHitOptions opt = const QvpHitOptions()]) => _readHitEx(_b.hitTestViewEx(_p, vx, vy, _opt(opt), _e._hitEx));
+  QvpHit? hitTestView(double viewX, double viewY, [QvpHitOptions opt = const QvpHitOptions()]) => _readHit(_b.hitTestView(_p, viewX, viewY, _opt(opt), _e._hit));
 
   List<QvpLineBand> lineBands() {
     final o = _e._out<QvpLineBandC>(), cap = _e._cap(ffi.sizeOf<QvpLineBandC>());
     final n = _b.lineBands(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final l = (o + i).ref;
-      return QvpLineBand(line: l.line, lineNo: l.lineNo, y0: l.y0, y1: l.y1, mid: l.mid, inkY0: l.inkY0, inkY1: l.inkY1);
+      return QvpLineBand(line: l.line, lineNumber: l.lineNumber, y0: l.y0, y1: l.y1, mid: l.mid, inkY0: l.inkY0, inkY1: l.inkY1);
     }, growable: false);
   }
 
-  List<QvpHitBox> hitBoxes([double gapBias = 0.6]) {
-    final o = _e._out<QvpHitBoxC>(), cap = _e._cap(ffi.sizeOf<QvpHitBoxC>());
-    final n = _b.hitBoxes(_p, gapBias, o, cap).clamp(0, cap);
+  List<QvpHitArea> hitAreas([double gapBias = QvpDefaults.gapBias]) {
+    final o = _e._out<QvpHitAreaC>(), cap = _e._cap(ffi.sizeOf<QvpHitAreaC>());
+    final n = _b.hitAreas(_p, gapBias, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final h = (o + i).ref;
-      return QvpHitBox(word: h.word, line: h.line, x0: h.x0, y0: h.y0, x1: h.x1, y1: h.y1, inkX0: h.inkX0, inkY0: h.inkY0, inkX1: h.inkX1, inkY1: h.inkY1);
+      return QvpHitArea(word: h.word, line: h.line, x0: h.x0, y0: h.y0, x1: h.x1, y1: h.y1, inkX0: h.inkX0, inkY0: h.inkY0, inkX1: h.inkX1, inkY1: h.inkY1);
     }, growable: false);
   }
 
   // ── layout ──
   /// Computes and stores an engine layout (also used by the *View hit tests and box outputs).
   QvpLayout layout(QvpLayoutSpec spec) {
-    final s = _e._spec.ref;
-    s.viewportW = spec.viewportW;
-    s.viewportH = spec.viewportH;
-    s.padTop = spec.padTop;
-    s.padBottom = spec.padBottom;
-    s.padLeft = spec.padLeft;
-    s.padRight = spec.padRight;
-    s.lineSpacing = spec.lineSpacing;
-    s.lineGap = spec.lineGap;
-    s.fillHeight = spec.fillHeight ? 1 : 0;
-    s.nominalLines = spec.nominalLines;
-    s.cropLeft = spec.cropLeft;
-    s.cropRight = spec.cropRight;
-    s.maxAspectSlack = spec.maxAspectSlack;
+    _writeSpec(spec);
     _b.layout(_p, _e._spec, _e._layout);
     final o = _e._layout.ref;
     final n = o.nLines;
@@ -1229,14 +1209,14 @@ class QvpPage extends ChangeNotifier {
       lineDy[i] = f[i * 3];
       return (f[i * 3 + 1], f[i * 3 + 2]);
     }, growable: false);
-    final l = QvpLayout(scale: o.scale, ox: o.ox, oy: o.oy, contentW: o.contentW, contentH: o.contentH, pitch: o.pitch, lineDy: lineDy, slots: slots, fitScale: o.fitScale, fitX: o.fitX, fitY: o.fitY);
+    final l = QvpLayout(scale: o.scale, offsetX: o.offsetX, offsetY: o.offsetY, contentW: o.contentW, contentH: o.contentH, lineSpacing: o.lineSpacing, lineDy: lineDy, slots: slots, fitScale: o.fitScale, fitX: o.fitX, fitY: o.fitY);
     currentLayout = l;
     _touch();
     return l;
   }
 
   /// Leading (page units) that makes this page fill the padded viewport of [spec]; `max` 0 = unlimited.
-  double layoutGapToFill(QvpLayoutSpec spec, [double max = 0]) {
+  void _writeSpec(QvpLayoutSpec spec) {
     final s = _e._spec.ref;
     s.viewportW = spec.viewportW;
     s.viewportH = spec.viewportH;
@@ -1245,19 +1225,39 @@ class QvpPage extends ChangeNotifier {
     s.padLeft = spec.padLeft;
     s.padRight = spec.padRight;
     s.lineSpacing = spec.lineSpacing;
-    s.lineGap = spec.lineGap;
     s.fillHeight = spec.fillHeight ? 1 : 0;
-    s.nominalLines = spec.nominalLines;
+    s.gridLines = spec.gridLines;
     s.cropLeft = spec.cropLeft;
     s.cropRight = spec.cropRight;
     s.maxAspectSlack = spec.maxAspectSlack;
-    return _b.layoutGapToFill(_p, _e._spec, max);
+  }
+
+  /// The grid this page is laid out inside: the mushaf's line count and the printed line spacing.
+  ({int lines, double lineSpacing}) get grid {
+    final g = pffi.calloc<QvpGridC>();
+    try {
+      _b.pageGrid(_p, g);
+      return (lines: g.ref.lines, lineSpacing: g.ref.lineSpacing);
+    } finally {
+      pffi.calloc.free(g);
+    }
+  }
+
+  /// The share of the padded viewport of [spec] left empty when the page is fitted to width.
+  double layoutWastedFraction(QvpLayoutSpec spec) {
+    _writeSpec(spec);
+    return _b.layoutWastedFraction(_p, _e._spec);
+  }
+
+  double layoutLineSpacingToFill(QvpLayoutSpec spec, [double max = 0]) {
+    _writeSpec(spec);
+    return _b.layoutLineSpacingToFill(_p, _e._spec, max);
   }
 
   /// Word bbox in viewport px through the current layout.
-  ({double x0, double y0, double x1, double y1}) wordBoxView(int i) {
+  ({double x0, double y0, double x1, double y1}) wordBoundsView(int i) {
     final o = _e._out<ffi.Float>();
-    _b.wordBoxView(_p, i, o);
+    _b.wordBoundsView(_p, i, o);
     final f = o.asTypedList(4);
     return (x0: f[0], y0: f[1], x1: f[2], y1: f[3]);
   }
@@ -1277,14 +1277,14 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Removes a rule / theme / hide by handle → rules removed.
-  int unstyle(int handle) {
+  int removeStyle(int handle) {
     final n = _b.styleRemove(_p, handle);
     _touch();
     return n;
   }
 
-  int restyle(int handle, Object color, [int ms = 0]) {
-    final n = _b.styleRepaint(_p, handle, rgba(color), ms);
+  int recolorStyle(int handle, Object color, [int ms = 0]) {
+    final n = _b.styleRecolor(_p, handle, rgba(color), ms);
     _touch();
     return n;
   }
@@ -1306,9 +1306,9 @@ class QvpPage extends ChangeNotifier {
     _touch();
   }
 
-  void setDefaultInk(Object color) {
+  void setDefaultColor(Object color) {
     _defaultInk = rgba(color);
-    _b.styleDefault(_p, _defaultInk);
+    _b.styleDefaultColor(_p, _defaultInk);
     _touch();
   }
 
@@ -1349,15 +1349,15 @@ class QvpPage extends ChangeNotifier {
   bool tick(double nowMs) => _b.tick(_p, nowMs) != 0;
 
   /// Full display list: one 0xRRGGBBAA per path (copy).
-  Uint32List paint() => Uint32List.fromList(_b.paint(_p).asTypedList(nPaths));
+  Uint32List colors() => Uint32List.fromList(_b.colors(_p).asTypedList(nPaths));
 
   /// Paths whose colour differs from the default ink (mid-transition values included).
-  List<QvpStyledPath> styled() {
-    final n = _b.styled(_p, ffi.nullptr, 0);
+  List<QvpStyledPath> styledPaths() {
+    final n = _b.styledPaths(_p, ffi.nullptr, 0);
     if (n == 0) return const [];
     final buf = pffi.malloc<ffi.Uint32>(n * 2);
     try {
-      _b.styled(_p, buf, n);
+      _b.styledPaths(_p, buf, n);
       final v = buf.asTypedList(n * 2);
       return List.generate(n, (i) => (path: v[i * 2], color: v[i * 2 + 1]), growable: false);
     } finally {
@@ -1385,8 +1385,8 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Moves a highlight: the band slides, the ink fades.
-  bool rehighlight(int handle, Object target) {
-    final ok = _t(target, (t) => _b.rehighlight(_p, handle, t)) != 0;
+  bool moveHighlight(int handle, Object target) {
+    final ok = _t(target, (t) => _b.moveHighlight(_p, handle, t)) != 0;
     _touch();
     return ok;
   }
@@ -1398,8 +1398,8 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Fades out over the highlight's transition.
-  bool unhighlight(int handle) {
-    final ok = _b.unhighlight(_p, handle) != 0;
+  bool removeHighlight(int handle) {
+    final ok = _b.removeHighlight(_p, handle) != 0;
     _touch();
     return ok;
   }
@@ -1413,10 +1413,10 @@ class QvpPage extends ChangeNotifier {
   List<int> highlightWords(int handle) => _u32(_b.highlightWords(_p, handle, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>())));
 
   /// Animated band boxes in layout viewport px; draw each id as one nonzero path behind the ink.
-  List<QvpBox> highlightBoxes() => _boxes(_b.highlightBoxes(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
+  List<QvpBox> highlightBoxesView() => _boxes(_b.highlightBoxesView(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
 
   /// Static band boxes for a word list (no highlight state involved).
-  List<QvpBox> bandBoxes(List<int> ws, {String height = 'pitch', double padX = 1.2, double padY = 0}) => _e.withU32(ws, (p, n) => _boxes(_b.bandBoxes(_p, p, n, height == 'ink' ? 1 : 0, padX, padY, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>()))));
+  List<QvpBox> wordBands(List<int> ws, {String height = 'lineSpacing', double padX = QvpDefaults.highlightPadX, double padY = QvpDefaults.highlightPadY}) => _e.withU32(ws, (p, n) => _boxes(_b.wordBands(_p, p, n, height == 'ink' ? 1 : 0, padX, padY, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>()))));
 
   // ── selection ──
   void select(int anchor, [int? focus]) {
@@ -1426,8 +1426,8 @@ class QvpPage extends ChangeNotifier {
 
   void clearSelection() => select(-1, -1);
   List<int> selection() => _u32(_b.selection(_p, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>())));
-  String selectionText([Object form = 'rasmUthmani', bool citation = false]) {
-    _b.selectionText(_p, QvpForm.of(form), citation ? 1 : 0, _e._str);
+  String selectionText([Object form = 'rasmUthmani', bool includeCitation = false]) {
+    _b.selectionText(_p, QvpForm.of(form), includeCitation ? 1 : 0, _e._str);
     return _e._s();
   }
 
@@ -1440,47 +1440,47 @@ class QvpPage extends ChangeNotifier {
     _touch();
   }
 
-  void maskFrom(int wi, [String mode = 'hide']) {
-    _b.maskFrom(_p, wi, _maskMode(mode));
+  void maskFrom(int wordIndex, [String mode = 'hide']) {
+    _b.maskFrom(_p, wordIndex, _maskMode(mode));
     _touch();
   }
 
-  void maskOptions({Object blockColor = '#d9d4c8', double padX = 0.6, double padY = 0.6, double radius = 0.8, bool reverse = false}) {
+  void maskOptions({Object blockColor = QvpDefaults.maskBlock, double padX = QvpDefaults.maskPad, double padY = QvpDefaults.maskPad, double radius = QvpDefaults.maskRadius, bool reverse = false}) {
     _b.maskOptions(_p, rgba(blockColor), padX, padY, radius, reverse ? 1 : 0);
     _touch();
   }
 
-  int revealNext([int n = 1]) {
-    final r = _b.revealNext(_p, n);
+  int unmaskNext([int n = 1]) {
+    final r = _b.unmaskNext(_p, n);
     _touch();
     return r;
   }
 
-  int hideBack([int n = 1]) {
-    final r = _b.hideBack(_p, n);
+  int maskBack([int n = 1]) {
+    final r = _b.maskBack(_p, n);
     _touch();
     return r;
   }
 
-  bool revealWord(int wi) {
-    final r = _b.revealWord(_p, wi) != 0;
+  bool unmaskWord(int wordIndex) {
+    final r = _b.unmaskWord(_p, wordIndex) != 0;
     _touch();
     return r;
   }
 
-  bool hideWord(int wi) {
-    final r = _b.hideWord(_p, wi) != 0;
+  bool maskWord(int wordIndex) {
+    final r = _b.maskWord(_p, wordIndex) != 0;
     _touch();
     return r;
   }
 
-  void revealAll() {
-    _b.revealAll(_p);
+  void unmaskAll() {
+    _b.unmaskAll(_p);
     _touch();
   }
 
-  void hideAll() {
-    _b.hideAll(_p);
+  void maskAll() {
+    _b.maskAll(_p);
     _touch();
   }
 
@@ -1493,10 +1493,10 @@ class QvpPage extends ChangeNotifier {
   List<int> maskWords() => _u32(_b.maskWords(_p, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>())));
 
   /// Block / blur boxes in layout viewport px (drawn last).
-  List<QvpBox> maskBoxes() => _boxes(_b.maskBoxes(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
+  List<QvpBox> maskBoxesView() => _boxes(_b.maskBoxesView(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
 
   /// Greyed page with a lit window → steps.
-  int revealStart({int lit = 1, bool byAyah = false, Object grey = '#c9c4b8', Object ink = '#231f20', bool ayahMarks = true, int ms = 0}) {
+  int revealStart({int lit = QvpDefaults.revealLit, bool byAyah = false, Object grey = QvpDefaults.revealGrey, Object ink = QvpDefaults.ink, bool ayahMarks = true, int ms = 0}) {
     final n = _b.revealStart(_p, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms);
     _touch();
     return n;
@@ -1510,28 +1510,28 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Current step, or null when no reveal is running.
-  int? revealAt() {
-    final v = _b.revealAt(_p);
+  int? revealPosition() {
+    final v = _b.revealPosition(_p);
     return v == -2 ? null : v;
   }
 
-  int revealSteps() => _b.revealSteps(_p);
-  int revealStepOf(int wi) => _b.revealStepOf(_p, wi);
+  int revealStepCount() => _b.revealStepCount(_p);
+  int revealStepOf(int wordIndex) => _b.revealStepOf(_p, wordIndex);
   void revealStop() {
     _b.revealStop(_p);
     _touch();
   }
 
   // ── crop ──
-  QvpCropBox? cropBox(Object target, {double pad = 2, bool keepAyahMarks = true}) {
-    final ok = _t(target, (t) => _b.cropBox(_p, t, pad, keepAyahMarks ? 1 : 0, _e._crop));
+  QvpCropBounds? cropBounds(Object target, {double pad = QvpDefaults.cropPad, bool keepAyahMarks = true}) {
+    final ok = _t(target, (t) => _b.cropBounds(_p, t, pad, keepAyahMarks ? 1 : 0, _e._crop));
     if (ok == 0) return null;
     final c = _e._crop.ref;
-    return QvpCropBox(x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, nWords: c.nWords, ayahMarkDeco: c.ayahMarkDeco);
+    return QvpCropBounds(x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, nWords: c.nWords, ayahMarkDecoration: c.ayahMarkDecoration);
   }
 
   /// Standalone SVG of a target (current colours), or null.
-  String? cropSvg(Object target, {double pad = 2, bool keepAyahMarks = true, Object? background}) {
+  String? cropSvg(Object target, {double pad = QvpDefaults.cropPad, bool keepAyahMarks = true, Object? background}) {
     final ok = _t(target, (t) => _b.cropSvg(_p, t, pad, keepAyahMarks ? 1 : 0, background == null ? 0 : rgba(background), _e._str));
     return ok == 0 ? null : _e._s();
   }
@@ -1560,7 +1560,7 @@ class QvpAtlas {
 
   void dispose() => free();
 
-  int get pages => _b.atlasPages(_a);
+  int get pages => _b.atlasPageCount(_a);
 
   /// Page of an ayah, or null.
   int? pageOf(int surah, int ayah) {
@@ -1577,7 +1577,7 @@ class QvpAtlas {
   }
 
   QvpAtlasSurah _surah(QvpAtlasSurahC s) => QvpAtlasSurah(
-        n: s.n,
+        number: s.number,
         page: s.firstPage,
         ayahCount: s.ayahCount,
         place: engine.placeName(s.place),
@@ -1609,11 +1609,11 @@ class QvpAtlas {
 
   int? pageOfSurah(int n) => surah(n)?.page;
 
-  /// Start of division [n] of [kind] ('juz' | 'hizb' | 'nisf' | 'rubuAlHizb' or [QvpDiv]).
-  QvpAtlasRubuAlHizb? division(Object kind, int n) {
+  /// Start of division [n] of [division] ('juz' | 'hizb' | 'nisf' | 'rubuAlHizb' or [QvpDiv]).
+  QvpAtlasRubuAlHizb? division(Object division, int n) {
     final o = pffi.calloc<QvpAtlasRubuAlHizbC>();
     try {
-      if (_b.atlasDivision(_a, QvpDiv.of(kind), n, o) == 0) return null;
+      if (_b.atlasDivision(_a, QvpDiv.of(division), n, o) == 0) return null;
       final r = o.ref;
       return QvpAtlasRubuAlHizb(rubuAlHizb: r.rubuAlHizb, surah: r.surah, ayah: r.ayah, page: r.page);
     } finally {
@@ -1626,12 +1626,12 @@ class QvpAtlas {
   QvpAtlasRubuAlHizb? rubuAlHizb(int n) => division('rubuAlHizb', n);
 
   /// Division number containing an ayah, or null.
-  int? divisionAt(Object kind, int surah, int ayah) {
-    final v = _b.atlasDivisionAt(_a, QvpDiv.of(kind), surah, ayah);
+  int? divisionOf(Object division, int surah, int ayah) {
+    final v = _b.atlasDivisionOf(_a, QvpDiv.of(division), surah, ayah);
     return v < 0 ? null : v;
   }
 
-  int? juzAt(int surah, int ayah) => divisionAt('juz', surah, ayah);
+  int? juzOf(int surah, int ayah) => divisionOf('juz', surah, ayah);
 
   /// `[first, last]` page of a juz, or null.
   List<int>? pagesOfJuz(int n) {
@@ -1642,9 +1642,9 @@ class QvpAtlas {
   }
 
   /// Surahs matching a (partial, any-script) name.
-  List<QvpAtlasSurah> findSurah(String text) {
+  List<QvpAtlasSurah> searchSurahs(String text) {
     final o = engine._out<ffi.Uint16>(), cap = engine._cap(ffi.sizeOf<ffi.Uint16>());
-    final n = engine.withString(text, (p, len) => _b.atlasFindSurah(_a, p, len, o, cap)).clamp(0, cap);
+    final n = engine.withString(text, (p, len) => _b.atlasSearchSurahs(_a, p, len, o, cap)).clamp(0, cap);
     final ids = List<int>.from(o.asTypedList(n));
     return [for (final k in ids) surah(k)].whereType<QvpAtlasSurah>().toList(growable: false);
   }
