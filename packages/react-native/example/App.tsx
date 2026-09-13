@@ -129,7 +129,7 @@ function Demo() {
     setInfo(e); setSelWord(null); setSelAyah(null); setAyahInfo(null); setSelection(null); setPathOn(new Map()); setRevealOn(false); setRevealAt(-1); setMask(null);
     const [surahs, divisions, keys] = await Promise.all([qvp.surahs(), qvp.divisions(), qvp.ayahKeys()]);
     let t = 'surahs: ' + surahs.map(s => `${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`).join(', ');
-    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.kind} ${d.n} at ${d.surah}:${d.ayah}`).join(', ');
+    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.division} ${d.n} at ${d.surah}:${d.ayah}`).join(', ');
     if (atlas && keys.length) { const j = await atlas.juzOf(keys[0].surah, keys[0].ayah); if (j) { const pr = await atlas.pagesOfJuz(j); t += `\njuz ${j} · pages ${pr ? pr.join('–') : ''}`; } }
     t += '\nayahs: ' + keys.map(k => k.ayahKey).join(' ');
     setMeta(t);

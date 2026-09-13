@@ -53,7 +53,7 @@ public final class QvpPage {
         }
         decos = (0..<Int(info.n_decos)).map { k in
             var d = QvpDecoInfo(); _ = qvp_deco_info(h, UInt32(k), &d)
-            return QvpDecoration(idx: k, kind: Int(d.kind), surah: Int(d.surah), ayah: Int(d.ayah), line: Int(d.line), x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1,
+            return QvpDecoration(idx: k, decoration: Int(d.decoration), surah: Int(d.surah), ayah: Int(d.ayah), line: Int(d.line), x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1,
                                  text: d.text.string, firstPath: Int(d.first_path), nPaths: Int(d.n_paths))
         }
         naturalPitch = qvp_natural_pitch(h)
@@ -117,9 +117,9 @@ public final class QvpPage {
         withBytes(wordSep) { wp, wn in withBytes(lineSep) { lp, ln in t.withC { tp in var s = QvpStr(); qvp_text(p, tp, UInt8(form.rawValue), wp, wn, lp, ln, &s); return s.string } } }
     }
     public func text(_ s: String = "page", form: Form = .rasmUthmani, wordSep: String = " ", lineSep: String = "\n") -> String { text(target(s), form: form, wordSep: wordSep, lineSep: lineSep) }
-    public func search(_ query: String, form: Form = .search, mode: SearchMode = .includes, normalize: Bool = true, loose: Bool = true, limit: Int = 0) -> [QvpMatch] {
-        let v: [QvpFFI.QvpMatch] = withBytes(query) { qp, qn in collect(256) { o, c in qvp_search(p, qp, qn, UInt8(form.rawValue), UInt8(mode.rawValue), normalize ? 1 : 0, loose ? 1 : 0, UInt32(limit), o, c) } }
-        return v.map { m in let w = Int(m.word); return QvpMatch(word: w, index: Int(m.index), loose: m.loose != 0, wordKey: wordKey(w), text: words[w].text) }
+    public func search(_ query: String, form: Form = .search, mode: SearchMode = .includes, normalize: Bool = true, looseMatch: Bool = true, limit: Int = 0) -> [QvpMatch] {
+        let v: [QvpFFI.QvpMatch] = withBytes(query) { qp, qn in collect(256) { o, c in qvp_search(p, qp, qn, UInt8(form.rawValue), UInt8(mode.rawValue), normalize ? 1 : 0, looseMatch ? 1 : 0, UInt32(limit), o, c) } }
+        return v.map { m in let w = Int(m.word); return QvpMatch(word: w, index: Int(m.index), isLooseMatch: m.is_loose_match != 0, wordKey: wordKey(w), text: words[w].text) }
     }
     public func citation(_ ws: [Int]) -> String { ws.map { UInt32($0) }.withUnsafeBufferPointer { b in var s = QvpStr(); qvp_citation(p, b.baseAddress, UInt32(b.count), &s); return s.string } }
     /// Attach a words sidecar ({"s:a:w": {"rasm_imlai","qpc","rasm","search"}}); returns words updated, -1 on bad JSON.
@@ -130,11 +130,11 @@ public final class QvpPage {
     // ── metadata ──
     public func surahs() -> [QvpSurah] {
         (0..<Int(qvp_surah_count(p))).map { i in
-            var s = QvpSurahInfo(); _ = qvp_surah_at(p, UInt32(i), &s)
+            var s = QvpFFI.QvpSurah(); _ = qvp_surah_at(p, UInt32(i), &s)
             return QvpSurah(number: Int(s.number), ayahCount: Int(s.ayah_count), hasBanner: s.has_banner != 0, hasBasmalah: s.has_basmalah != 0, place: place(s.place), bannerDeco: idx(s.banner_deco), arabic: s.arabic.string, latin: s.latin.string, english: s.english.string)
         }
     }
-    public func divisions() -> [QvpDivision] { collect(64) { o, c in qvp_divisions(p, o, c) }.map { (d: QvpFFI.QvpDivision) in QvpDivision(kind: Division(rawValue: Int(d.kind)) ?? .juz, n: Int(d.n), surah: Int(d.surah), ayah: Int(d.ayah), line: Int(d.line), ayahIdx: Int(d.ayah_idx)) } }
+    public func divisions() -> [QvpDivision] { collect(64) { o, c in qvp_divisions(p, o, c) }.map { (d: QvpFFI.QvpDivision) in QvpDivision(division: Division(rawValue: Int(d.division)) ?? .juz, n: Int(d.n), surah: Int(d.surah), ayah: Int(d.ayah), line: Int(d.line), ayahIdx: Int(d.ayah_idx)) } }
     public func ayahMarks() -> [QvpAyahMark] { collect(128) { o, c in qvp_ayah_marks(p, o, c) }.map { (m: QvpFFI.QvpAyahMark) in QvpAyahMark(deco: idx(m.deco), surah: Int(m.surah), ayah: Int(m.ayah), line: Int(m.line), cx: m.cx, cy: m.cy, r: m.r, ornamentPath: idx(m.ornament_path), numeralPath: idx(m.numeral_path)) } }
     public func ayahMarkOf(_ surah: Int, _ ayah: Int) -> QvpAyahMark? { ayahMarks().first { $0.surah == surah && $0.ayah == ayah } }
     public func rosettes() -> [QvpRosette] { collect(32) { o, c in qvp_rosettes(p, o, c) }.map { (r: QvpFFI.QvpRosette) in QvpRosette(deco: idx(r.deco), surah: Int(r.surah), ayah: Int(r.ayah), juz: Int(r.juz), hizb: Int(r.hizb), nisf: Int(r.nisf), rubuAlHizb: Int(r.rubu_al_hizb), rubuAlHizbInHizb: Int(r.rubu_al_hizb_in_hizb)) } }
@@ -311,14 +311,14 @@ public final class QvpAtlas {
     public func surah(_ n: Int) -> QvpAtlasSurah? { var s = QvpFFI.QvpAtlasSurah(); return surah(qvp_atlas_surah(p, UInt16(n), &s), s) }
     public func surahs() -> [QvpAtlasSurah] { (0..<Int(qvp_atlas_surah_count(p))).compactMap { var s = QvpFFI.QvpAtlasSurah(); return surah(qvp_atlas_surah_at(p, UInt32($0), &s), s) } }
     public func pageOfSurah(_ n: Int) -> Int? { surah(n)?.page }
-    public func division(_ kind: Division, _ n: Int) -> QvpAtlasRubuAlHizb? {
+    public func division(_ division: Division, _ n: Int) -> QvpAtlasRubuAlHizb? {
         var r = QvpFFI.QvpAtlasRubuAlHizb()
-        return qvp_atlas_division(p, UInt8(kind.rawValue), UInt16(n), &r) != 0 ? QvpAtlasRubuAlHizb(rubuAlHizb: Int(r.rubu_al_hizb), surah: Int(r.surah), ayah: Int(r.ayah), page: Int(r.page)) : nil
+        return qvp_atlas_division(p, UInt8(division.rawValue), UInt16(n), &r) != 0 ? QvpAtlasRubuAlHizb(rubuAlHizb: Int(r.rubu_al_hizb), surah: Int(r.surah), ayah: Int(r.ayah), page: Int(r.page)) : nil
     }
     public func juz(_ n: Int) -> QvpAtlasRubuAlHizb? { division(.juz, n) }
     public func hizb(_ n: Int) -> QvpAtlasRubuAlHizb? { division(.hizb, n) }
     public func rubuAlHizb(_ n: Int) -> QvpAtlasRubuAlHizb? { division(.rubuAlHizb, n) }
-    public func divisionOf(_ kind: Division, _ surah: Int, _ ayah: Int) -> Int? { let v = qvp_atlas_division_of(p, UInt8(kind.rawValue), UInt16(surah), UInt16(ayah)); return v < 0 ? nil : Int(v) }
+    public func divisionOf(_ division: Division, _ surah: Int, _ ayah: Int) -> Int? { let v = qvp_atlas_division_of(p, UInt8(division.rawValue), UInt16(surah), UInt16(ayah)); return v < 0 ? nil : Int(v) }
     public func juzOf(_ surah: Int, _ ayah: Int) -> Int? { divisionOf(.juz, surah, ayah) }
     public func pagesOfJuz(_ n: Int) -> (Int, Int)? {
         var r: (UInt16, UInt16) = (0, 0)

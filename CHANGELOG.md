@@ -31,6 +31,12 @@ All notable changes to the engine and its packages. The format follows
   Colours: `qvp_colors` (was `paint`; `colors()`), `qvp_style_recolor` (`recolorStyle`),
   `qvp_style_default_color` (`setDefaultColor`); `unstyle` is `removeStyle`. One `qvp_text`
   taking a target replaces the word-list and target pair.
+- Discriminators take their enum's name: `QvpDecoInfo.decoration` (`QVP_DECORATION_*`, was
+  `QVP_DECO_*`), `QvpDivision.division` (`QVP_DIVISION_*`, was `QVP_DIV_*`), `QvpTarget.target`,
+  `QvpSelector.selector` (`QVP_SELECTOR_*`, was `QVP_SEL_*`); `QVP_HIGHLIGHT_*` was `QVP_HL_*`;
+  `QVP_BAND_LINE_SPACING` was `QVP_BAND_PITCH`; `qvp_arabic(op)` takes `QVP_ARABIC_*`. The search
+  option is `loose_match` and a match reports `is_loose_match` (wrappers `looseMatch`,
+  `isLooseMatch`). `QvpSurahInfo` is `QvpSurah`.
 
 ### Added
 - `QvpViewPolicy` in QvpKit: the zoom limits, zoomed threshold and swipe classifier both iOS

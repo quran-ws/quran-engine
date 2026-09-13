@@ -106,8 +106,8 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun targetWords(s: String) = targetWords(target(s))
     fun text(t: Target, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n"): String = QvpNative.text(h, t.arr, form.id, wordSep, lineSep)
     fun text(s: String, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n") = text(target(s), form, wordSep, lineSep)
-    fun search(query: String, form: Form = Form.SEARCH, mode: SearchMode = SearchMode.INCLUDES, normalize: Boolean = true, loose: Boolean = true, limit: Int = 0): List<QvpMatch> {
-        val v = QvpNative.search(h, query, form.id, mode.id, normalize, loose, limit)
+    fun search(query: String, form: Form = Form.SEARCH, mode: SearchMode = SearchMode.INCLUDES, normalize: Boolean = true, looseMatch: Boolean = true, limit: Int = 0): List<QvpMatch> {
+        val v = QvpNative.search(h, query, form.id, mode.id, normalize, looseMatch, limit)
         return List(v.size / 3) { k -> val w = v[k * 3]; QvpMatch(w, v[k * 3 + 1], v[k * 3 + 2] != 0, wordKey(w), words[w].text) }
     }
     fun citation(ws: IntArray): String = QvpNative.citation(h, ws)
@@ -247,11 +247,11 @@ class QvpAtlas(bytes: ByteArray) : AutoCloseable {
     fun surah(n: Int) = surah(QvpNative.atlasSurah(h, n))
     fun surahs(): List<QvpAtlasSurah> = List(QvpNative.atlasSurahCount(h)) { surah(QvpNative.atlasSurahAt(h, it))!! }
     fun pageOfSurah(n: Int) = surah(n)?.page
-    fun division(kind: Division, n: Int): QvpAtlasRubuAlHizb? = QvpNative.atlasDivision(h, kind.id, n)?.let { QvpAtlasRubuAlHizb(it[0], it[1], it[2], it[3]) }
+    fun division(division: Division, n: Int): QvpAtlasRubuAlHizb? = QvpNative.atlasDivision(h, division.id, n)?.let { QvpAtlasRubuAlHizb(it[0], it[1], it[2], it[3]) }
     fun juz(n: Int) = division(Division.JUZ, n)
     fun hizb(n: Int) = division(Division.HIZB, n)
     fun rubuAlHizb(n: Int) = division(Division.RUBU_AL_HIZB, n)
-    fun divisionOf(kind: Division, surah: Int, ayah: Int): Int? = QvpNative.atlasDivisionOf(h, kind.id, surah, ayah).let { if (it < 0) null else it }
+    fun divisionOf(division: Division, surah: Int, ayah: Int): Int? = QvpNative.atlasDivisionOf(h, division.id, surah, ayah).let { if (it < 0) null else it }
     fun juzOf(surah: Int, ayah: Int) = divisionOf(Division.JUZ, surah, ayah)
     fun pagesOfJuz(n: Int): Pair<Int, Int>? = QvpNative.atlasPagesOfJuz(h, n)?.let { it[0] to it[1] }
     fun searchSurahs(text: String): List<QvpAtlasSurah> = QvpNative.atlasSearchSurahs(h, text).toList().mapNotNull { n -> surah(n) }

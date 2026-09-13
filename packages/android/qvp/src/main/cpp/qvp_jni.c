@@ -1,7 +1,7 @@
 /* JNI shim: ws.quran.qvp.QvpNative ↔ qvp.h (complete surface).
  * Marshalling rules: structs go to the JVM as FloatArray/IntArray records (documented per function
  * in QvpNative.kt); colours stay uint32 inside IntArray; QvpStr → String; targets/selectors come in
- * as IntArray {kind, a, b, c, words...}. */
+ * as IntArray {target, a, b, c, words...}. */
 #include <jni.h>
 #include <string.h>
 #include <stdlib.h>
@@ -43,13 +43,13 @@ static uint8_t* jbytes(JNIEnv* env, jstring s, uint32_t* len) {
 static float fbits(jint v) { float f; memcpy(&f, &v, 4); return f; }
 static jint ibits(float f) { jint v; memcpy(&v, &f, 4); return v; }
 
-/* target IntArray: {kind, a, b, c, words...} */
+/* target IntArray: {target, a, b, c, words...} */
 typedef struct { QvpTarget t; jint* buf; jintArray arr; } TargetIn;
 static TargetIn target_in(JNIEnv* env, jintArray arr) {
     TargetIn ti; memset(&ti, 0, sizeof ti); ti.arr = arr;
     jsize n = (*env)->GetArrayLength(env, arr);
     ti.buf = (*env)->GetIntArrayElements(env, arr, NULL);
-    ti.t.kind = (uint8_t)ti.buf[0]; ti.t.a = ti.buf[1]; ti.t.b = ti.buf[2]; ti.t.c = ti.buf[3];
+    ti.t.target = (uint8_t)ti.buf[0]; ti.t.a = ti.buf[1]; ti.t.b = ti.buf[2]; ti.t.c = ti.buf[3];
     ti.t.words = (const uint32_t*)(ti.buf + 4); ti.t.n_words = n > 4 ? n - 4 : 0;
     return ti;
 }
@@ -105,10 +105,10 @@ jfloatArray FN(lineInfo)(JNIEnv* env, jclass c, jlong h, jint i) {
     float v[11] = { l.line_no, l.is_header, (float)l.first_word, (float)l.n_words, l.x0, l.y0, l.x1, l.y1, l.band_y0, l.band_y1, l.centre };
     return floats(env, v, 11);
 }
-/* {kind, surah, ayah, line, x0, y0, x1, y1, firstPath, nPaths} */
+/* {decoration, surah, ayah, line, x0, y0, x1, y1, firstPath, nPaths} */
 jfloatArray FN(decoInfo)(JNIEnv* env, jclass c, jlong h, jint i) {
     QvpDecoInfo d; if (!qvp_deco_info(PG(h), i, &d)) return NULL;
-    float v[10] = { d.kind, d.surah, d.ayah, (float)d.line, d.x0, d.y0, d.x1, d.y1, (float)d.first_path, (float)d.n_paths };
+    float v[10] = { d.decoration, d.surah, d.ayah, (float)d.line, d.x0, d.y0, d.x1, d.y1, (float)d.first_path, (float)d.n_paths };
     return floats(env, v, 10);
 }
 jstring FN(decoText)(JNIEnv* env, jclass c, jlong h, jint i) { QvpDecoInfo d; if (!qvp_deco_info(PG(h), i, &d)) return NULL; return qstr(env, d.text); }
@@ -125,20 +125,20 @@ jfloat FN(naturalPitch)(JNIEnv* env, jclass c, jlong h) { return qvp_natural_pit
 jint FN(surahCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_surah_count(PG(h)); }
 /* {number, ayahCount, hasBanner, hasBasmalah, place, bannerDeco(-1)} */
 jfloatArray FN(surahNums)(JNIEnv* env, jclass c, jlong h, jint i) {
-    QvpSurahInfo s; if (!qvp_surah_at(PG(h), i, &s)) return NULL;
+    QvpSurah s; if (!qvp_surah_at(PG(h), i, &s)) return NULL;
     float v[6] = { s.number, s.ayah_count, s.has_banner, s.has_basmalah, s.place, s.banner_deco == QVP_NONE ? -1.f : (float)s.banner_deco };
     return floats(env, v, 6);
 }
 jobjectArray FN(surahNames)(JNIEnv* env, jclass c, jlong h, jint i) {
-    QvpSurahInfo s; if (!qvp_surah_at(PG(h), i, &s)) return NULL;
+    QvpSurah s; if (!qvp_surah_at(PG(h), i, &s)) return NULL;
     jobjectArray arr = (*env)->NewObjectArray(env, 3, (*env)->FindClass(env, "java/lang/String"), NULL);
     (*env)->SetObjectArrayElement(env, arr, 0, qstr(env, s.arabic)); (*env)->SetObjectArrayElement(env, arr, 1, qstr(env, s.latin)); (*env)->SetObjectArrayElement(env, arr, 2, qstr(env, s.english));
     return arr;
 }
-/* 6 per: kind, line, n, surah, ayah, ayahIdx */
+/* 6 per: division, line, n, surah, ayah, ayahIdx */
 jintArray FN(divisions)(JNIEnv* env, jclass c, jlong h) {
     QvpDivision d[64]; uint32_t n = qvp_divisions(PG(h), d, 64); if (n > 64) n = 64;
-    jint v[64 * 6]; for (uint32_t i = 0; i < n; i++) { v[i*6] = d[i].kind; v[i*6+1] = d[i].line; v[i*6+2] = d[i].n; v[i*6+3] = d[i].surah; v[i*6+4] = d[i].ayah; v[i*6+5] = (jint)d[i].ayah_idx; }
+    jint v[64 * 6]; for (uint32_t i = 0; i < n; i++) { v[i*6] = d[i].division; v[i*6+1] = d[i].line; v[i*6+2] = d[i].n; v[i*6+3] = d[i].surah; v[i*6+4] = d[i].ayah; v[i*6+5] = (jint)d[i].ayah_idx; }
     return ints(env, v, n * 6);
 }
 /* 9 per: deco, surah, ayah, line, cx, cy, r, ornamentPath(-1), numeralPath(-1) */
@@ -175,15 +175,15 @@ jstring FN(text)(JNIEnv* env, jclass c, jlong h, jintArray t, jint form, jstring
     QvpStr s; qvp_text(PG(h), &ti.t, (uint8_t)form, w, wn, l, ln, &s);
     jstring r = qstr(env, s); free(w); free(l); target_done(env, &ti); return r;
 }
-/* 3 per: word, index, loose */
-jintArray FN(search)(JNIEnv* env, jclass c, jlong h, jstring q, jint form, jint mode, jboolean normalize, jboolean loose, jint limit) {
+/* 3 per: word, index, isLooseMatch */
+jintArray FN(search)(JNIEnv* env, jclass c, jlong h, jstring q, jint form, jint mode, jboolean normalize, jboolean looseMatch, jint limit) {
     uint32_t qn; uint8_t* qb = jbytes(env, q, &qn);
-    QvpMatch m[1024]; uint32_t n = qvp_search(PG(h), qb, qn, (uint8_t)form, (uint8_t)mode, normalize ? 1 : 0, loose ? 1 : 0, (uint32_t)limit, m, 1024); free(qb);
+    QvpMatch m[1024]; uint32_t n = qvp_search(PG(h), qb, qn, (uint8_t)form, (uint8_t)mode, normalize ? 1 : 0, looseMatch ? 1 : 0, (uint32_t)limit, m, 1024); free(qb);
     if (n > 1024) n = 1024;
-    jint* v = (jint*)malloc((n ? n : 1) * 3 * sizeof(jint)); for (uint32_t i = 0; i < n; i++) { v[i*3] = (jint)m[i].word; v[i*3+1] = (jint)m[i].index; v[i*3+2] = (jint)m[i].loose; }
+    jint* v = (jint*)malloc((n ? n : 1) * 3 * sizeof(jint)); for (uint32_t i = 0; i < n; i++) { v[i*3] = (jint)m[i].word; v[i*3+1] = (jint)m[i].index; v[i*3+2] = (jint)m[i].is_loose_match; }
     jintArray a = ints(env, v, n * 3); free(v); return a;
 }
-jstring FN(arabic)(JNIEnv* env, jclass c, jint kind, jstring in) { uint32_t n; uint8_t* b = jbytes(env, in, &n); QvpStr s; qvp_arabic((uint8_t)kind, b, n, &s); jstring r = qstr(env, s); free(b); return r; }
+jstring FN(arabic)(JNIEnv* env, jclass c, jint op, jstring in) { uint32_t n; uint8_t* b = jbytes(env, in, &n); QvpStr s; qvp_arabic((uint8_t)op, b, n, &s); jstring r = qstr(env, s); free(b); return r; }
 jstring FN(citation)(JNIEnv* env, jclass c, jlong h, jintArray words) {
     jsize n = (*env)->GetArrayLength(env, words); jint* w = (*env)->GetIntArrayElements(env, words, NULL);
     QvpStr s; qvp_citation(PG(h), (const uint32_t*)w, (uint32_t)n, &s); (*env)->ReleaseIntArrayElements(env, words, w, JNI_ABORT); return qstr(env, s);
@@ -338,8 +338,8 @@ static jobjectArray atlas_surah_out(JNIEnv* env, QvpAtlasSurah* s) {
 }
 jobjectArray FN(atlasSurah)(JNIEnv* env, jclass c, jlong h, jint n) { QvpAtlasSurah s; if (!qvp_atlas_surah(AT(h), (uint16_t)n, &s)) return NULL; return atlas_surah_out(env, &s); }
 jobjectArray FN(atlasSurahAt)(JNIEnv* env, jclass c, jlong h, jint i) { QvpAtlasSurah s; if (!qvp_atlas_surah_at(AT(h), (uint32_t)i, &s)) return NULL; return atlas_surah_out(env, &s); }
-jintArray FN(atlasDivision)(JNIEnv* env, jclass c, jlong h, jint kind, jint n) { QvpAtlasRubuAlHizb r; if (!qvp_atlas_division(AT(h), (uint8_t)kind, (uint16_t)n, &r)) return NULL; jint v[4] = { r.rubu_al_hizb, r.surah, r.ayah, r.page }; return ints(env, v, 4); }
-jint FN(atlasDivisionOf)(JNIEnv* env, jclass c, jlong h, jint kind, jint s, jint a) { return qvp_atlas_division_of(AT(h), (uint8_t)kind, (uint16_t)s, (uint16_t)a); }
+jintArray FN(atlasDivision)(JNIEnv* env, jclass c, jlong h, jint division, jint n) { QvpAtlasRubuAlHizb r; if (!qvp_atlas_division(AT(h), (uint8_t)division, (uint16_t)n, &r)) return NULL; jint v[4] = { r.rubu_al_hizb, r.surah, r.ayah, r.page }; return ints(env, v, 4); }
+jint FN(atlasDivisionOf)(JNIEnv* env, jclass c, jlong h, jint division, jint s, jint a) { return qvp_atlas_division_of(AT(h), (uint8_t)division, (uint16_t)s, (uint16_t)a); }
 jintArray FN(atlasPagesOfJuz)(JNIEnv* env, jclass c, jlong h, jint n) { uint16_t o[2]; if (!qvp_atlas_pages_of_juz(AT(h), (uint16_t)n, o)) return NULL; jint v[2] = { o[0], o[1] }; return ints(env, v, 2); }
 jintArray FN(atlasSearchSurahs)(JNIEnv* env, jclass c, jlong h, jstring text) { uint32_t n; uint8_t* b = jbytes(env, text, &n); uint16_t o[128]; uint32_t k = qvp_atlas_search_surahs(AT(h), b, n, o, 128); free(b); if (k > 128) k = 128; jint v[128]; for (uint32_t i = 0; i < k; i++) v[i] = o[i]; return ints(env, v, k); }
 

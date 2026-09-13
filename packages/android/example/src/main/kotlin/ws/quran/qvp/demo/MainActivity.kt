@@ -202,7 +202,7 @@ class MainActivity : AppCompatActivity() {
     private fun showMeta() {
         val p = page ?: return
         val su = p.surahs().joinToString(", ") { "${it.number}${if (it.latin.isNotEmpty()) " " + it.latin else ""}${if (it.hasBanner) " (banner)" else ""}" }
-        val dv = p.divisions().joinToString(", ") { "${it.kind.name.lowercase()} ${it.n} at ${it.surah}:${it.ayah}" }
+        val dv = p.divisions().joinToString(", ") { "${it.division.name.lowercase()} ${it.n} at ${it.surah}:${it.ayah}" }
         val j = atlas?.juzOf(p.words[0].surah, p.words[0].ayah)
         meta.text = "surahs: $su" + (if (dv.isNotEmpty()) "\nstarts here: $dv" else "") + (if (j != null) "\njuz $j · pages ${atlas!!.pagesOfJuz(j)}" else "") + "\nayahs: " + p.ayahKeys().joinToString(" ") { "${it.first}:${it.second}" }
     }

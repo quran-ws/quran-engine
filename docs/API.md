@@ -50,7 +50,7 @@ page.free(); atlas.free();
 | `page.words[i]` | `{idx, surah, ayah, word, line, lineIdx, ayahIdx, x0,y0,x1,y1, text, firstPath, nPaths}` |
 | `page.ayahs[i]` | one **fragment** per printed line: `{surah, ayah, fragment, fragments, flags, rubuAlHizb, firstWord, nWords, ayahMarkDeco, bbox}` |
 | `page.lines[i]` | `{lineNo, isHeader, firstWord, nWords, bbox, bandY0, bandY1, centre}` |
-| `page.decos[i]` | `{kind, surah, ayah, line, bbox, text, firstPath, nPaths}` — ayah marks, surah banners, basmalah, division rosettes, sajdah signs, page furniture |
+| `page.decos[i]` | `{decoration, surah, ayah, line, bbox, text, firstPath, nPaths}` — ayah marks, surah banners, basmalah, division rosettes, sajdah signs, page furniture |
 | `page.findWord(s,a,w)` | index or −1 |
 | `page.targetWords(target)` | word indices in reading order |
 | `page.wordForm(i, form)` | `'rasm_uthmani' \| 'rasm_imlai' \| 'qpc' \| 'rasm' \| 'search'` (derived forms need the sidecar; `hasForm(form)`) |
@@ -81,7 +81,7 @@ ornament/numeral path indices (swap or recolorStyle them); `ayahKeys()`; `wordLa
 ```js
 page.text('2:255')                                   // with the mushaf's own line breaks
 page.text('page', {form: 'search', wordSep: ' '})
-page.search('الرحمان', {mode: 'includes'})            // [{word, wordKey, text, index, loose}]
+page.search('الرحمان', {mode: 'includes'})            // [{word, wordKey, text, index, isLooseMatch}]
 page.citation([12, 13, 14])                           // "2:255" / "2:255-257" / "2:286, 3:1"
 engine.strip(s); engine.fold(s); engine.normalize(s); engine.looseKey(s)
 ```
@@ -259,7 +259,7 @@ ink applied). The medallion is kept only when the whole ayah is inside the crop.
 ## Atlas (cross-page)
 
 `atlas.pageOf(s,a)`, `pageRange(page)`, `surah(n)`, `surahs()`, `pageOfSurah(n)`,
-`juz(n)/hizb(n)/rubuAlHizb(n)` → `{surah, ayah, page}`, `juzOf(s,a)`, `divisionOf(kind, s, a)`,
+`juz(n)/hizb(n)/rubuAlHizb(n)` → `{surah, ayah, page}`, `juzOf(s,a)`, `divisionOf(division, s, a)`,
 `pagesOfJuz(n)`, `searchSurahs('cow' | 'البقرة' | '2')`.
 
 ## Names
@@ -294,7 +294,7 @@ says which wrapper binds which.
 | page | `qvp_word_form` | `page.wordForm(i, form)` | Return one of a word's text forms; the derived forms need the words sidecar. |
 | page | `qvp_ayah_info` | `page.ayahs[i]` | Return one ayah fragment: key, fragment index and count, flags, word range, ayah-mark decoration, bounds. |
 | page | `qvp_line_info` | `page.lines[i]` | Return one printed line: number, header flag, word range, bounds, band and centre. |
-| page | `qvp_deco_info` | `page.decos[i]` | Return one decoration: kind, key, line, bounds, text and its path range. |
+| page | `qvp_deco_info` | `page.decos[i]` | Return one decoration: its `QVP_DECORATION_*` value, key, line, bounds, text and its path range. |
 | page | `qvp_find_word` | `page.findWord(surah, ayah, word)` | Return the page index of a word by its key, or −1 when the word is not on this page. |
 | page | `qvp_target_words` | `page.targetWords(target)` | Expand a target (page, word, ayah, range, line, surah) into word indices in reading order. |
 | page | `qvp_natural_pitch` | `page.naturalPitch` | Return the printed line spacing of this page, in page units. |
@@ -382,7 +382,7 @@ says which wrapper binds which.
 | atlas | `qvp_atlas_surah` | `atlas.surah(n)` | Return a surah by number: first page, ayah count, place, names. |
 | atlas | `qvp_atlas_surah_at` | `atlas.surahs()[i]` | Return the i-th surah record. |
 | atlas | `qvp_atlas_division` | `atlas.juz(n)`, `.hizb(n)`, `.nisf(n)`, `.rubuAlHizb(n)` | Return where a division starts: surah, ayah, page. |
-| atlas | `qvp_atlas_division_of` | `atlas.juzOf(surah, ayah)`, `.divisionOf(kind, surah, ayah)` | Return the number of the division that contains an ayah. |
+| atlas | `qvp_atlas_division_of` | `atlas.juzOf(surah, ayah)`, `.divisionOf(division, surah, ayah)` | Return the number of the division that contains an ayah. |
 | atlas | `qvp_atlas_pages_of_juz` | `atlas.pagesOfJuz(n)` | Return the first and last page of a juz. |
 | atlas | `qvp_atlas_search_surahs` | `atlas.searchSurahs(text)` | Search the surah names in Arabic, Latin or English, or by number. |
 | atlas | `qvp_atlas_json` | `atlas.json()` | Return the atlas as JSON. |

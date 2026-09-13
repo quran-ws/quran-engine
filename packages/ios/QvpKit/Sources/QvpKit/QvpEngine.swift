@@ -26,7 +26,7 @@ public enum QvpEngine {
     public static func fold(_ s: String) -> String { arabic(1, s) }
     public static func normalize(_ s: String) -> String { arabic(2, s) }
     public static func looseKey(_ s: String) -> String { arabic(3, s) }
-    private static func arabic(_ kind: Int, _ s: String) -> String { withBytes(s) { p, n in var o = QvpStr(); qvp_arabic(UInt8(kind), p, n, &o); return o.string } }
+    private static func arabic(_ op: Int, _ s: String) -> String { withBytes(s) { p, n in var o = QvpStr(); qvp_arabic(UInt8(op), p, n, &o); return o.string } }
     public static func gapToFill(pageW: Float, pageH: Float, lines: Int, viewW: Float, viewH: Float, max: Float = 0) -> Float { qvp_gap_to_fill(pageW, pageH, UInt32(lines), viewW, viewH, max) }
     public static func wastedFraction(pageW: Float, pageH: Float, viewW: Float, viewH: Float) -> Float { qvp_wasted_fraction(pageW, pageH, viewW, viewH) }
 }

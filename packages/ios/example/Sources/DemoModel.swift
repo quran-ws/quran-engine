@@ -149,7 +149,7 @@ final class DemoModel: ObservableObject {
     private func showMeta() {
         guard let p = page else { return }
         let su = p.surahs().map { "\($0.number)\($0.latin.isEmpty ? "" : " " + $0.latin)\($0.hasBanner ? " (banner)" : "")" }.joined(separator: ", ")
-        let dv = p.divisions().map { "\($0.kind) \($0.n) at \($0.surah):\($0.ayah)" }.joined(separator: ", ")
+        let dv = p.divisions().map { "\($0.division) \($0.n) at \($0.surah):\($0.ayah)" }.joined(separator: ", ")
         var s = "surahs: \(su)"
         if !dv.isEmpty { s += "\nstarts here: \(dv)" }
         if let a = atlas, let w = p.words.first, let j = a.juzOf(w.surah, w.ayah) { s += "\njuz \(j) · pages \(a.pagesOfJuz(j).map { "\($0.0)–\($0.1)" } ?? "?")" }

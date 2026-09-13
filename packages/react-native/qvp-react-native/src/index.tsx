@@ -42,38 +42,38 @@ export function rgba(c: Color, alpha: number): string {
 }
 
 // ── targets and selectors (same shapes as web/qvp.js T / Sel) ────────────────────────────────
-export interface TargetObj { kind: number; a?: number; b?: number; c?: number; words?: number[] }
+export interface TargetObj { target: number; a?: number; b?: number; c?: number; words?: number[] }
 /** 'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | word index | [indices] | T.* */
 export type Target = string | number | number[] | TargetObj;
 export const T = {
-  page: (): TargetObj => ({ kind: 0 }),
-  word: (i: number): TargetObj => ({ kind: 1, a: i }),
-  words: (ws: number[]): TargetObj => ({ kind: 2, words: ws }),
-  ayah: (s: number, a: number): TargetObj => ({ kind: 3, a: s, b: a }),
-  ayahRange: (s: number, a: number, b: number): TargetObj => ({ kind: 4, a: s, b: a, c: b }),
-  line: (n: number): TargetObj => ({ kind: 5, a: n }),
-  surah: (s: number): TargetObj => ({ kind: 6, a: s }),
-  range: (a: number, b: number): TargetObj => ({ kind: 7, a, b }),
+  page: (): TargetObj => ({ target: 0 }),
+  word: (i: number): TargetObj => ({ target: 1, a: i }),
+  words: (ws: number[]): TargetObj => ({ target: 2, words: ws }),
+  ayah: (s: number, a: number): TargetObj => ({ target: 3, a: s, b: a }),
+  ayahRange: (s: number, a: number, b: number): TargetObj => ({ target: 4, a: s, b: a, c: b }),
+  line: (n: number): TargetObj => ({ target: 5, a: n }),
+  surah: (s: number): TargetObj => ({ target: 6, a: s }),
+  range: (a: number, b: number): TargetObj => ({ target: 7, a, b }),
 };
-export interface Selector { kind: number; a?: number; b?: number; c?: number; mark?: string }
+export interface Selector { selector: number; a?: number; b?: number; c?: number; mark?: string }
 export const Sel = {
-  page: (): Selector => ({ kind: 0 }),
-  path: (p: number): Selector => ({ kind: 1, a: p }),
-  wordPath: (w: number, nth: number): Selector => ({ kind: 2, a: w, b: nth }),
+  page: (): Selector => ({ selector: 0 }),
+  path: (p: number): Selector => ({ selector: 1, a: p }),
+  wordPath: (w: number, nth: number): Selector => ({ selector: 2, a: w, b: nth }),
   /** nth mark of the word (0-based, marks only) */
-  wordMark: (w: number, nth: number): Selector => ({ kind: 3, a: w, b: nth }),
-  wordMarkNamed: (w: number, mark: string, nth = 0): Selector => ({ kind: 4, a: w, b: markId(mark), c: nth, mark }),
-  wordBody: (w: number): Selector => ({ kind: 5, a: w }),
-  wordMarks: (w: number): Selector => ({ kind: 6, a: w }),
-  word: (w: number): Selector => ({ kind: 7, a: w }),
-  ayah: (s: number, a: number): Selector => ({ kind: 8, a: s, b: a }),
-  line: (n: number): Selector => ({ kind: 9, a: n }),
-  mark: (m: string | number): Selector => ({ kind: 10, a: markId(m) }),
-  category: (c: string | number): Selector => ({ kind: 11, a: named(c, CATEGORY_NAMES) }),
-  family: (f: string | number): Selector => ({ kind: 12, a: named(f, FAMILY_NAMES) }),
-  kind: (k: string | number): Selector => ({ kind: 13, a: named(k, KIND_NAMES) }),
-  deco: (k: string | number): Selector => ({ kind: 14, a: named(k, DECO_NAMES) }),
-  decoIdx: (d: number): Selector => ({ kind: 15, a: d }),
+  wordMark: (w: number, nth: number): Selector => ({ selector: 3, a: w, b: nth }),
+  wordMarkNamed: (w: number, mark: string, nth = 0): Selector => ({ selector: 4, a: w, b: markId(mark), c: nth, mark }),
+  wordBody: (w: number): Selector => ({ selector: 5, a: w }),
+  wordMarks: (w: number): Selector => ({ selector: 6, a: w }),
+  word: (w: number): Selector => ({ selector: 7, a: w }),
+  ayah: (s: number, a: number): Selector => ({ selector: 8, a: s, b: a }),
+  line: (n: number): Selector => ({ selector: 9, a: n }),
+  mark: (m: string | number): Selector => ({ selector: 10, a: markId(m) }),
+  category: (c: string | number): Selector => ({ selector: 11, a: named(c, CATEGORY_NAMES) }),
+  family: (f: string | number): Selector => ({ selector: 12, a: named(f, FAMILY_NAMES) }),
+  kind: (k: string | number): Selector => ({ selector: 13, a: named(k, KIND_NAMES) }),
+  deco: (k: string | number): Selector => ({ selector: 14, a: named(k, DECO_NAMES) }),
+  decoIdx: (d: number): Selector => ({ selector: 15, a: d }),
 };
 
 // ── records ──────────────────────────────────────────────────────────────────────────────────
@@ -87,16 +87,16 @@ export interface Word {
   x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number;
   wordKey: string; ayahKey: string; forms: Partial<Record<Form, string>>; label: string; paths: WordPath[];
 }
-export interface Deco { idx: number; kind: number; kindName: string; surah: number; ayah: number; line: number; x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number }
+export interface Deco { idx: number; decoration: number; decorationName: string; surah: number; ayah: number; line: number; x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number }
 /** The one hit shape for every hit test; the exact variants report distance 0 and `isExact`. */
 export interface Hit { word: number; path: number; deco: number; line: number; distance: number; isExact: boolean; wordKey: string | null; ayahKey: string | null }
 export interface Ayah { idx: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDeco: number; bbox: number[] }
 export interface Line { idx: number; lineNo: number; isHeader: boolean; firstWord: number; nWords: number; bbox: number[]; bandY0: number; bandY1: number; centre: number }
 export interface SelectionInfo { words: number[]; text: string; citation: string; textWithCitation: string }
 export interface PageInfo { page: number; width: number; height: number; nLines: number; nAyahs: number; nWords: number; nPaths: number; nDecos: number; naturalPitch: number; forms: Form[]; loadMs: number; bytes: number; uri?: string }
-export interface Match { word: number; index: number; loose: boolean; wordKey: string; text: string }
+export interface Match { word: number; index: number; isLooseMatch: boolean; wordKey: string; text: string }
 export interface Surah { number: number; ayahCount: number; hasBanner: boolean; hasBasmalah: boolean; place: string; bannerDeco: number; arabic: string; latin: string; english: string }
-export interface Division { kind: DivisionKind; n: number; surah: number; ayah: number; line: number; ayahIdx: number }
+export interface Division { division: DivisionKind; n: number; surah: number; ayah: number; line: number; ayahIdx: number }
 export interface Marker { deco: number; surah: number; ayah: number; line: number; cx: number; cy: number; r: number; ornamentPath: number; numeralPath: number }
 export interface Rosette { deco: number; surah: number; ayah: number; juz: number; hizb: number; nisf: number; rubuAlHizb: number; rubuAlHizbInHizb: number }
 export interface Sajdah { deco: number; surah: number; ayah: number; signPath: number }
@@ -219,7 +219,7 @@ const named = (v: string | number, names: string[]) => { if (typeof v === 'numbe
 export function markId(name: string | number): number { return named(name, MARKS); }
 if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not linked (Android only for now; see README)');
 
-export interface SearchOptions { form?: Form; mode?: 'includes' | 'exact' | 'prefix'; normalize?: boolean; loose?: boolean; limit?: number }
+export interface SearchOptions { form?: Form; mode?: 'includes' | 'exact' | 'prefix'; normalize?: boolean; looseMatch?: boolean; limit?: number }
 export interface TextOptions { form?: Form; wordSep?: string; lineSep?: string }
 export interface CropOptions { pad?: number; keepAyahMarks?: boolean; background?: Color }
 export interface HitOptions { maxDistance?: number; gapBias?: number; preferExact?: boolean }
@@ -283,7 +283,7 @@ export const Qvp = {
   fold: (s: string): Promise<string> => M.arabic('fold', s),
   normalize: (s: string): Promise<string> => M.arabic('normalize', s),
   looseKey: (s: string): Promise<string> => M.arabic('loose', s),
-  arabic: (kind: 'strip' | 'fold' | 'normalize' | 'loose', s: string): Promise<string> => M.arabic(kind, s),
+  arabic: (op: 'strip' | 'fold' | 'normalize' | 'loose', s: string): Promise<string> => M.arabic(op, s),
   gapToFill: (pageW: number, pageH: number, lines: number, viewW: number, viewH: number, max = 0): Promise<number> => M.gapToFill(pageW, pageH, lines, viewW, viewH, max),
   wastedFraction: (pageW: number, pageH: number, viewW: number, viewH: number): Promise<number> => M.wastedFraction(pageW, pageH, viewW, viewH),
   markCategory: (m: number): Promise<number> => M.markCategory(m),
@@ -306,8 +306,8 @@ export const Qvp = {
   atlasSurah: (id: number, n: number): Promise<AtlasSurah | null> => M.atlasSurah(id, n),
   atlasSurahs: (id: number): Promise<AtlasSurah[]> => M.atlasSurahs(id),
   atlasPageOfSurah: (id: number, n: number): Promise<number | null> => M.atlasPageOfSurah(id, n),
-  atlasDivision: (id: number, kind: DivisionKind, n: number): Promise<AtlasRubuAlHizb | null> => M.atlasDivision(id, kind, n),
-  atlasDivisionOf: (id: number, kind: DivisionKind, s: number, a: number): Promise<number | null> => M.atlasDivisionOf(id, kind, s, a),
+  atlasDivision: (id: number, division: DivisionKind, n: number): Promise<AtlasRubuAlHizb | null> => M.atlasDivision(id, division, n),
+  atlasDivisionOf: (id: number, division: DivisionKind, s: number, a: number): Promise<number | null> => M.atlasDivisionOf(id, division, s, a),
   atlasJuzOf: (id: number, s: number, a: number): Promise<number | null> => M.atlasJuzOf(id, s, a),
   atlasPagesOfJuz: (id: number, n: number): Promise<[number, number] | null> => M.atlasPagesOfJuz(id, n),
   atlasSearchSurahs: (id: number, text: string): Promise<AtlasSurah[]> => M.atlasSearchSurahs(id, text),
@@ -324,11 +324,11 @@ export class QvpAtlas {
   surah(n: number) { return Qvp.atlasSurah(this.id, n); }
   surahs() { return Qvp.atlasSurahs(this.id); }
   pageOfSurah(n: number) { return Qvp.atlasPageOfSurah(this.id, n); }
-  division(kind: DivisionKind, n: number) { return Qvp.atlasDivision(this.id, kind, n); }
+  division(division: DivisionKind, n: number) { return Qvp.atlasDivision(this.id, division, n); }
   juz(n: number) { return Qvp.atlasDivision(this.id, 'juz', n); }
   hizb(n: number) { return Qvp.atlasDivision(this.id, 'hizb', n); }
   rubuAlHizb(n: number) { return Qvp.atlasDivision(this.id, 'rubuAlHizb', n); }
-  divisionOf(kind: DivisionKind, s: number, a: number) { return Qvp.atlasDivisionOf(this.id, kind, s, a); }
+  divisionOf(division: DivisionKind, s: number, a: number) { return Qvp.atlasDivisionOf(this.id, division, s, a); }
   juzOf(s: number, a: number) { return Qvp.atlasJuzOf(this.id, s, a); }
   pagesOfJuz(n: number) { return Qvp.atlasPagesOfJuz(this.id, n); }
   searchSurahs(text: string) { return Qvp.atlasSearchSurahs(this.id, text); }

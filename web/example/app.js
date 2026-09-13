@@ -110,7 +110,7 @@
     const parts = [];
     for (const s of su) parts.push(`${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`);
     let t = `surahs: ${parts.join(', ')}`;
-    if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.kind} ${d.n} at ${d.surah}:${d.ayah}`).join(', ')}`;
+    if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.division} ${d.n} at ${d.surah}:${d.ayah}`).join(', ')}`;
     if (atlas) { const j = atlas.juzOf(p.words[0].surah, p.words[0].ayah); if (j) t += `\njuz ${j} · pages ${atlas.pagesOfJuz(j).join('–')}`; }
     t += `\nayahs: ${p.ayahKeys().map(([s, a]) => `${s}:${a}`).join(' ')}`;
     $('meta').textContent = t;

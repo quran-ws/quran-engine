@@ -182,7 +182,7 @@ pub struct QvpLineInfo {
 
 #[repr(C)]
 pub struct QvpDecoInfo {
-    pub kind: u8,
+    pub decoration: u8,
     pub _pad: u8,
     pub surah: u16,
     pub ayah: u16,
@@ -293,7 +293,7 @@ pub struct QvpLayout {
 /// kind: 0 Page, 1 Word(a), 2 Words(words,n), 3 Ayah(a,b), 4 AyahRange(a,b,c), 5 Line(a), 6 Surah(a), 7 Range(a,b)
 #[repr(C)]
 pub struct QvpTarget {
-    pub kind: u8,
+    pub target: u8,
     pub a: u32,
     pub b: u32,
     pub c: u32,
@@ -306,7 +306,7 @@ pub struct QvpTarget {
 /// 12 Family(a), 13 Kind(a), 14 Deco(a), 15 DecoIdx(a)
 #[repr(C)]
 pub struct QvpSelector {
-    pub kind: u8,
+    pub selector: u8,
     pub a: u32,
     pub b: u32,
     pub c: u32,
@@ -344,7 +344,7 @@ pub struct QvpTheme {
 }
 
 #[repr(C)]
-pub struct QvpSurahInfo {
+pub struct QvpSurah {
     pub number: u16,
     pub ayah_count: u16,
     pub has_banner: u8,
@@ -360,7 +360,7 @@ pub struct QvpSurahInfo {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct QvpDivision {
-    pub kind: u8,
+    pub division: u8,
     pub line: u8,
     pub n: u16,
     pub surah: u16,
@@ -410,7 +410,7 @@ pub struct QvpSajdah {
 pub struct QvpMatch {
     pub word: u32,
     pub index: u32,
-    pub loose: u32,
+    pub is_loose_match: u32,
 }
 
 #[repr(C)]
@@ -448,7 +448,7 @@ pub struct QvpAtlasRubuAlHizb {
 
 unsafe fn target(t: *const QvpTarget) -> Target {
     let t = &*t;
-    match t.kind {
+    match t.target {
         1 => Target::Word(t.a),
         2 => Target::Words(if t.words.is_null() {
             vec![]
@@ -466,7 +466,7 @@ unsafe fn target(t: *const QvpTarget) -> Target {
 
 unsafe fn selector(s: *const QvpSelector) -> Option<Selector> {
     let s = &*s;
-    Some(match s.kind {
+    Some(match s.selector {
         0 => Selector::Page,
         1 => Selector::Path(s.a),
         2 => Selector::WordPath(s.a, s.b as u16),
@@ -680,7 +680,7 @@ pub unsafe extern "C" fn qvp_deco_info(page: *const Page, idx: u32, out: *mut Qv
         let q = p.quant();
         let t = p.deco_text(idx);
         *out = QvpDecoInfo {
-            kind: d.kind as u8,
+            decoration: d.kind as u8,
             _pad: 0,
             surah: d.surah,
             ayah: d.ayah,
@@ -721,7 +721,7 @@ pub unsafe extern "C" fn qvp_surah_count(page: *const Page) -> u32 {
 }
 /// Strings point into a thread-local buffer valid until the next string-returning call.
 #[no_mangle]
-pub unsafe extern "C" fn qvp_surah_at(page: *const Page, i: u32, out: *mut QvpSurahInfo) -> i32 {
+pub unsafe extern "C" fn qvp_surah_at(page: *const Page, i: u32, out: *mut QvpSurah) -> i32 {
     guard(|| {
         let v = (*page).surahs();
         let Some(s) = v.get(i as usize) else { return 0 };
@@ -732,7 +732,7 @@ pub unsafe extern "C" fn qvp_surah_at(page: *const Page, i: u32, out: *mut QvpSu
             b.extend_from_slice(joined.as_bytes());
             let base = b.as_ptr();
             let (a, l, e) = (s.arabic.len(), s.latin.len(), s.english.len());
-            *out = QvpSurahInfo {
+            *out = QvpSurah {
                 number: s.number,
                 ayah_count: s.ayah_count,
                 has_banner: s.has_banner as u8,
@@ -759,7 +759,7 @@ pub unsafe extern "C" fn qvp_divisions(page: *const Page, out: *mut QvpDivision,
             .divisions()
             .iter()
             .map(|d| QvpDivision {
-                kind: d.kind,
+                division: d.kind,
                 line: d.line,
                 n: d.n,
                 surah: d.surah,
@@ -899,7 +899,7 @@ pub unsafe extern "C" fn qvp_search(
     form: u8,
     mode: u8,
     normalize: u32,
-    loose: u32,
+    loose_match: u32,
     limit: u32,
     out: *mut QvpMatch,
     cap: u32,
@@ -913,24 +913,24 @@ pub unsafe extern "C" fn qvp_search(
                 _ => SearchMode::Includes,
             },
             normalize: normalize != 0,
-            loose: loose != 0,
+            loose: loose_match != 0,
             limit: if limit == 0 { usize::MAX } else { limit as usize },
         };
         let v: Vec<QvpMatch> = (*page)
             .search(in_str(query, query_len), &opt)
             .iter()
-            .map(|m| QvpMatch { word: m.word, index: m.index as u32, loose: m.loose as u32 })
+            .map(|m| QvpMatch { word: m.word, index: m.index as u32, is_loose_match: m.loose as u32 })
             .collect();
         fill(out, cap, &v)
     })
 }
-/// kind: 0 strip marks, 1 fold, 2 normalize query (match fold), 3 loose key,
+/// op (`QVP_ARABIC_*`): 0 strip marks, 1 fold, 2 normalize query (match fold), 3 loose key,
 /// 4 search key. See docs/SEARCH-FOLD.md; 4 is additive, the rest are unchanged.
 #[no_mangle]
-pub unsafe extern "C" fn qvp_arabic(kind: u8, s: *const u8, len: u32, out: *mut QvpStr) {
+pub unsafe extern "C" fn qvp_arabic(op: u8, s: *const u8, len: u32, out: *mut QvpStr) {
     guard(|| {
         let i = in_str(s, len);
-        let r = match kind {
+        let r = match op {
             0 => strip_marks(i),
             1 => fold(i),
             3 => loose_key(i),
