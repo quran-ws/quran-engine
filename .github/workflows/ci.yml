@@ -8,13 +8,45 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A new push to the same branch cancels the run for the previous commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Which parts changed. Documentation-only changes skip the compile jobs; a skipped
+  # required job counts as passing.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'crates/**'
+              - 'web/**'
+              - 'conformance/**'
+              - 'Cargo.*'
+              - 'rust-toolchain.toml'
+              - 'rustfmt.toml'
+              - 'package.json'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
+
   engine:
     name: engine (fmt, clippy, tests, rustdoc)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -25,7 +57,10 @@ jobs:
 
   gates:
     name: gates (identity, ABI, conformance)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -52,6 +87,7 @@ jobs:
   standards:
     name: standards (parity, versions, terminology, structure)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -64,7 +100,10 @@ jobs:
 
   web:
     name: web (wasm, smoke, lite)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
