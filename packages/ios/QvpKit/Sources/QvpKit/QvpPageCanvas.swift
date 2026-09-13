@@ -68,6 +68,9 @@ public final class QvpCanvasController {
     public var onLongPress: ((QvpHitEx?) -> Void)?
     public var longPressDuration: Double = 0.35
     public var zoomEnabled = true
+    /// Zoom lasts only while the fingers are down: on release the page eases back to its fitted
+    /// size — a peek, not a reading zoom — so a pinch never leaves the page holding a pager's swipe.
+    public var zoomSpringsBack = false
     public var selectionEnabled = true
     public var hitOptions = QvpHitOptions(maxDistance: 6)
 
@@ -96,6 +99,7 @@ public final class QvpCanvasController {
     @ObservationIgnored var pinching = false
     @ObservationIgnored var pinchStart: CGFloat = 1
     @ObservationIgnored var lastDrag = CGSize.zero
+    @ObservationIgnored private var springTask: Task<Void, Never>?
     /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
     public var isZoomed: Bool { viewScale > fitScale * 1.02 }
 
@@ -124,12 +128,17 @@ public final class QvpCanvasController {
     }
     /// Fit the content height and centre it.
     public func resetView() {
-        let l = page?.currentLayout
-        viewScale = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
-        fitScale = viewScale
-        viewOx = l.map { max((bounds.width - CGFloat($0.contentW) * viewScale) / 2, 0) } ?? 0
-        viewOy = l.map { max((bounds.height - CGFloat($0.contentH) * viewScale) / 2, 0) } ?? 0
+        springTask?.cancel(); springTask = nil
+        let f = fittedView()
+        viewScale = f.scale; fitScale = f.scale; viewOx = f.ox; viewOy = f.oy
         invalidate()
+    }
+    /// The transform `resetView()` applies: content height fitted, centred.
+    private func fittedView() -> QvpZoomSpring.ViewTransform {
+        let l = page?.currentLayout
+        let s = (l.map { CGFloat($0.contentH) > bounds.height && $0.contentH > 0 ? bounds.height / CGFloat($0.contentH) : 1 }) ?? 1
+        return (s, l.map { max((bounds.width - CGFloat($0.contentW) * s) / 2, 0) } ?? 0,
+                l.map { max((bounds.height - CGFloat($0.contentH) * s) / 2, 0) } ?? 0)
     }
     /// Clear the selection band and the engine selection.
     public func clearSelection() {
@@ -170,12 +179,32 @@ public final class QvpCanvasController {
     func longPress(_ pt: CGPoint) { onLongPress?(hitAt(pt)) }
     func pinch(_ magnification: CGFloat, at focus: CGPoint) {
         guard zoomEnabled, !selecting else { return }
-        if !pinching { pinching = true; pinchStart = viewScale }
+        if !pinching { springTask?.cancel(); springTask = nil; pinching = true; pinchStart = viewScale }
         let ns = min(max(pinchStart * magnification, 0.5), 12); let k = ns / viewScale
         viewOx = focus.x - (focus.x - viewOx) * k; viewOy = focus.y - (focus.y - viewOy) * k; viewScale = ns
     }
+    func pinchEnded() {
+        pinching = false
+        if zoomSpringsBack { springBack() }
+    }
+    /// Ease from the released transform to the fitted one, one step per display frame or so.
+    private func springBack() {
+        let to = fittedView()
+        let spring = QvpZoomSpring(from: (viewScale, viewOx, viewOy), to: to, start: now())
+        fitScale = to.scale
+        springTask?.cancel()
+        springTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled {
+                let (v, done) = spring.value(at: self.now())
+                self.viewScale = v.scale; self.viewOx = v.ox; self.viewOy = v.oy
+                self.invalidate()
+                if done { self.springTask = nil; return }
+                try? await Task.sleep(nanoseconds: 8_000_000)
+            }
+        }
+    }
     func pan(_ translation: CGSize) {
-        guard zoomEnabled, !selecting, isZoomed else { return }
+        guard zoomEnabled, !selecting, isZoomed, springTask == nil else { return }
         viewOx += translation.width - lastDrag.width; viewOy += translation.height - lastDrag.height
         lastDrag = translation; invalidate()
     }
@@ -307,7 +336,7 @@ public struct QvpPageCanvas: View {
             .exclusively(before: SpatialTapGesture().onEnded { v in controller.tap(v.location) }))
         .gesture(MagnifyGesture()
             .onChanged { v in controller.pinch(v.magnification, at: v.startLocation) }
-            .onEnded { _ in controller.pinching = false },
+            .onEnded { _ in controller.pinchEnded() },
                  including: controller.zoomEnabled ? .all : .subviews)
         // detached at the fitted size when `onSwipe` is nil, so an enclosing pager keeps its swipe
         .highPriorityGesture(DragGesture(minimumDistance: 12)

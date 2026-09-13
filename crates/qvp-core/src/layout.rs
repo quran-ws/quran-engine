@@ -46,7 +46,9 @@ pub struct Layout {
     /// Per-line vertical shift in page units.
     pub line_dy: Vec<f32>,
     /// Laid-out vertical extent of each line in viewport px: (top, bottom).
-    /// Boundaries sit halfway between neighbouring lines' laid-out centres.
+    /// Boundaries sit halfway between neighbouring lines' laid-out centres —
+    /// except beside a header line (surah name, basmalah), where a boundary
+    /// stops half a pitch from the centre. Slots never overlap.
     pub line_slots: Vec<(f32, f32)>,
     /// Total content height in viewport px including padding.
     pub content_h: f32,
@@ -125,18 +127,27 @@ impl Page {
             let k = slot0 + (l.line_no.max(1) as f32 - 1.0).min(n as f32 - 1.0);
             line_dy.push(top_units + k * delta);
         }
-        // laid-out centres in page units; slot boundaries halfway between neighbours
+        // laid-out centres in page units; slot boundaries halfway between neighbours — except
+        // beside a header line, where the printed gap (the opening pages' banner sits pitches
+        // above the text) is not the line's to claim: there a boundary stops half a pitch out
         let centres: Vec<f32> = (0..n).map(|i| self.line_centre[i] + line_dy[i]).collect();
+        let headers: Vec<bool> = (0..n).map(|i| self.line_is_header(i)).collect();
         let half = pitch / 2.0;
         let mut line_slots = Vec::with_capacity(n);
         for i in 0..n {
             let c = centres[i];
-            let top = match i.checked_sub(1).map(|j| centres[j]) {
-                Some(prev) if prev < c => (prev + c) / 2.0,
+            let top = match i.checked_sub(1) {
+                Some(j) if centres[j] < c => {
+                    let mid = (centres[j] + c) / 2.0;
+                    if headers[i] || headers[j] { mid.max(c - half) } else { mid }
+                }
                 _ => c - half,
             };
             let bottom = match centres.get(i + 1) {
-                Some(&next) if next > c => (c + next) / 2.0,
+                Some(&next) if next > c => {
+                    let mid = (c + next) / 2.0;
+                    if headers[i] || headers[i + 1] { mid.min(c + half) } else { mid }
+                }
                 _ => c + half,
             };
             line_slots.push((top * scale, bottom * scale));

@@ -117,7 +117,9 @@ page (fewer lines than `nominalLines`, pages 1–2) has no height of its own to 
 `fillHeight` it takes the rows a full page gets — `(viewportH − pads)/nominalLines` each —
 centred. Leading only opens up: the printed pitch is the floor for all three, and a page
 that cannot fit at it reports a `contentH` taller than the viewport. `slots[]` boundaries
-sit halfway between neighbouring lines.
+sit halfway between neighbouring lines, except beside a header line (surah name, basmalah),
+where they stop half a pitch from the line's centre — the banner on pages 1–2 sits several
+pitches above the text, and that gap is not the first line's.
 Pure helpers:
 `engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` and `wastedFraction(...)`.
 `wordBoxView(i)` gives a word's box in viewport px for scroll-into-view.

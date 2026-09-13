@@ -106,6 +106,7 @@ view.onWordTap = { word, hit in }; view.onDecoTap = { deco, hit in }; view.onEmp
 view.onSwipe = { dir in }                 // horizontal swipe while not zoomed (+1 finger right, −1 left): flip pages; view.isZoomed
 view.onDoubleTap = { hit in }              // nil (default) resets the view; a host that repurposes it calls resetView() itself
 view.onLongPress = { hit in }              // only while selectionEnabled is false; longPressDuration (0.35)
+view.zoomSpringsBack = true               // zoom lasts only while pinching: on release the page eases back to its fitted size
 view.page = page                          // lays out, fits and centres; setNeedsDisplay() after engine calls
 view.relayout(); view.resetView(); view.clearSelection(); view.lineTransform(line)
 view.lastBaseMs / lastOverlayMs / lastHitUs / lastBasePaths / lastOverlayPaths / lastBands / animating   // HUD stats
@@ -138,6 +139,7 @@ controller.padTop = 12; controller.fillHeight = true; controller.paperColor = 0x
 controller.onWordTap = { word, hit in }; controller.onDecoTap = { deco, hit in }; controller.onEmptyTap = { }
 controller.onDoubleTap = { hit in }        // nil (default) resets the view
 controller.onLongPress = { hit in }        // only while selectionEnabled is false — a UIKit recognizer on iOS, never takes a pager's swipe
+controller.zoomSpringsBack = true         // zoom lasts only while pinching, as on the UIKit view
 controller.invalidate()                   // after engine calls the controller cannot see (highlight, style, mask, …)
 controller.resetView(); controller.relayout(); controller.clearSelection(); controller.lineTransform(line); controller.isZoomed
 controller.cropLeft = box.x0; controller.cropRight = page.width - box.x1   // box = page.cropBox("page"): the ink spans the viewport
