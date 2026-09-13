@@ -134,7 +134,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     }
 
     private fun applyInk(p: QvpPage) {
-        val ink = Marshal.color(defaultInkProp, 0x231f20ff.toInt())
+        val ink = Marshal.color(defaultInkProp, QvpDefaults.INK)
         if (appliedInk != ink) { appliedInk = ink; p.setDefaultInk(ink) }
     }
     private fun applyTheme(p: QvpPage) {
@@ -187,8 +187,8 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         appliedMask = maskProp
         p.unmask()
         val m = maskProp ?: return
-        val paper = Marshal.color(m["blockColor"], 0xd9d4c8ff.toInt())
-        p.maskOptions(paper, (m["padX"] as? Number)?.toFloat() ?: 0.6f, (m["padY"] as? Number)?.toFloat() ?: 0.6f, (m["radius"] as? Number)?.toFloat() ?: 0.8f, m["reverse"] == true)
+        val paper = Marshal.color(m["blockColor"], QvpDefaults.MASK_BLOCK)
+        p.maskOptions(paper, (m["padX"] as? Number)?.toFloat() ?: QvpDefaults.MASK_PAD, (m["padY"] as? Number)?.toFloat() ?: QvpDefaults.MASK_PAD, (m["radius"] as? Number)?.toFloat() ?: QvpDefaults.MASK_RADIUS, m["reverse"] == true)
         p.mask(Marshal.target(m["target"], p), Marshal.maskMode(m["mode"]))
     }
     private fun applyReveal(p: QvpPage) {
@@ -197,7 +197,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         if (cfg != appliedReveal) {
             appliedReveal = cfg; appliedRevealAt = null
             if (cfg == null) { p.revealStop(); revealSteps = 0; emit("onRevealChanged", mapOf("steps" to 0, "at" to null)); return }
-            revealSteps = p.revealStart((cfg["lit"] as? Number)?.toInt() ?: 1, cfg["byAyah"] == true, Marshal.color(cfg["grey"], 0xc9c4b8ff.toInt()), Marshal.color(cfg["ink"], appliedInk ?: 0x231f20ff.toInt()),
+            revealSteps = p.revealStart((cfg["lit"] as? Number)?.toInt() ?: QvpDefaults.REVEAL_LIT, cfg["byAyah"] == true, Marshal.color(cfg["grey"], QvpDefaults.REVEAL_GREY), Marshal.color(cfg["ink"], appliedInk ?: QvpDefaults.INK),
                 cfg["ayahMarks"] != false, (cfg["ms"] as? Number)?.toInt() ?: 0)
             emit("onRevealChanged", mapOf("steps" to revealSteps, "at" to -1))
         }

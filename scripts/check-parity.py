@@ -90,9 +90,59 @@ def declared_gaps() -> dict[tuple[str, str], str]:
     return gaps
 
 
+DEFAULT_SITES = {
+    "core": "crates/qvp-core/src/defaults.rs",
+    "web": "web/qvp.js",
+    "android": "packages/android/qvp/src/main/kotlin/ws/quran/qvp/Types.kt",
+    "flutter": "packages/flutter/qvp_flutter/lib/src/engine.dart",
+    "ios": "packages/ios/QvpKit/Sources/QvpKit/Types.swift",
+}
+
+
+def number(text: str) -> float:
+    text = text.rstrip("uUfF").rstrip("L")
+    return float(int(text, 16)) if text.lower().startswith("0x") else float(text)
+
+
+def header_defaults() -> dict[str, float]:
+    return {m.group(1): number(m.group(2)) for m in re.finditer(r"#define QVP_DEFAULT_([A-Z_]+)\s+(0x[0-9a-fA-F]+u?|[0-9.]+f?)", HEADER.read_text())}
+
+
+def defaults_in(path: str, names: list[str]) -> dict[str, float | None]:
+    """Each default's value in a source file: NAME (any case, camel or snake) = or : value."""
+    text = (ROOT / path).read_text()
+    # Search from the defaults block on, not from the top of the file.
+    for marker in ("QvpDefaults", "DEFAULTS = "):
+        if marker in text:
+            text = text[text.index(marker):]
+            break
+    out: dict[str, float | None] = {}
+    for name in names:
+        camel = name.split("_")[0].lower() + "".join(p.capitalize() for p in name.split("_")[1:])
+        pattern = rf"\b(?:{name}|{camel})\b(?:\s*:\s*[A-Za-z0-9<>]+)?\s*[=:]\s*(0x[0-9a-fA-F]+|[0-9.]+)"
+        m = re.search(pattern, text)
+        out[name] = number(m.group(1)) if m else None
+    return out
+
+
+def check_defaults(problems: list[str]) -> None:
+    want = header_defaults()
+    if not want:
+        problems.append("no QVP_DEFAULT_* in the header")
+        return
+    for site, path in DEFAULT_SITES.items():
+        got = defaults_in(path, list(want))
+        for name, value in want.items():
+            if got[name] is None:
+                problems.append(f"{site} ({path}) has no default named {name}")
+            elif abs(got[name] - value) > 1e-9:
+                problems.append(f"{site} ({path}) has {name} = {got[name]}, the header says {value}")
+
+
 def main(argv: list[str]) -> int:
     check = "--check" in argv
     problems: list[str] = []
+    check_defaults(problems)
 
     symbols = header_symbols()
     exports = rust_exports()
@@ -145,7 +195,7 @@ def main(argv: list[str]) -> int:
     else:
         PARITY.write_text(new)
 
-    print(summary)
+    print(summary + f" {len(header_defaults())} defaults agree across the header, the core and the wrappers." if not any("default" in p for p in problems) else summary)
     for p in problems:
         print("FAIL", p)
     if not problems:

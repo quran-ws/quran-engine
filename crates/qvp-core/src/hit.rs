@@ -41,7 +41,7 @@ pub struct HitOptions {
 
 impl Default for HitOptions {
     fn default() -> Self {
-        HitOptions { max_distance: f32::INFINITY, gap_bias: 0.6, exact_first: true }
+        HitOptions { max_distance: f32::INFINITY, gap_bias: crate::defaults::GAP_BIAS, exact_first: true }
     }
 }
 

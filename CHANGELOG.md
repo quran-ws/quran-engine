@@ -7,6 +7,10 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- Defaults: `QVP_DEFAULT_*` in the header, defined once in `crates/qvp-core/src/defaults.rs`
+  (ink, highlight colours, padding and seam, selection band, gap bias, tap distance, nominal
+  lines, aspect slack, mask colour, padding and radius, reveal lit and grey, crop padding) and
+  mirrored as `QvpDefaults` in every wrapper; the parity check fails when any copy differs.
 - The terminology audit passes with zero findings and CI fails on any new one. Code
   comments and documents use the canonical spellings; the shared search-fold
   specification and its fixtures are excluded with a written reason, since their case ids

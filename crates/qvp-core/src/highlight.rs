@@ -41,13 +41,13 @@ impl Default for HighlightStyle {
     fn default() -> Self {
         HighlightStyle {
             mode: HighlightMode::Band,
-            ink: 0x1a73e8ff,
-            band: 0xd6a3264d,
+            ink: crate::defaults::HIGHLIGHT_INK,
+            band: crate::defaults::HIGHLIGHT_BAND,
             height: BandHeight::Pitch,
-            pad_x: 1.2,
-            pad_y: 0.0,
+            pad_x: crate::defaults::HIGHLIGHT_PAD_X,
+            pad_y: crate::defaults::HIGHLIGHT_PAD_Y,
             radius: 0.0,
-            seam: 0.25,
+            seam: crate::defaults::HIGHLIGHT_SEAM,
             transition_ms: 0,
             layer: LAYER_HIGHLIGHT,
         }

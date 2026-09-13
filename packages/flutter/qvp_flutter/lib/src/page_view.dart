@@ -19,7 +19,7 @@ import 'engine.dart';
 /// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
 @immutable
 class QvpViewLayout {
-  const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.lineGap = 0, this.fillHeight = false, this.nominalLines = 15});
+  const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.lineGap = 0, this.fillHeight = false, this.nominalLines = QvpDefaults.nominalLines});
   final double padTop, padBottom, padSide, lineSpacing, lineGap;
   final bool fillHeight;
   final int nominalLines;
@@ -45,7 +45,7 @@ class QvpViewLayout {
         lineGap: lineGap,
         fillHeight: fillHeight,
         nominalLines: nominalLines,
-        maxAspectSlack: 1.15,
+        maxAspectSlack: QvpDefaults.aspectSlack,
       );
 
   @override
@@ -113,10 +113,10 @@ class QvpPageView extends StatefulWidget {
     this.onDecoTap,
     this.onEmptyTap,
     this.onSelectionChanged,
-    this.hitMaxDistance = 6,
+    this.hitMaxDistance = QvpDefaults.tapDistance,
     this.selectionEnabled = true,
     this.panZoomEnabled = true,
-    this.selectionBand = 0x2d6fd640,
+    this.selectionBand = QvpDefaults.selectionBand,
     this.paperShadow = true,
     this.minScale = 0.2,
     this.maxScale = 40,

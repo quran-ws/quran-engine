@@ -50,7 +50,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     val words: List<QvpWord>; val ayahs: List<QvpAyah>; val lines: List<QvpLine>; val decos: List<QvpDecoration>
     val naturalPitch: Float
     var currentLayout: QvpLayout? = null; private set
-    var defaultInk: Int = 0x231f20ff.toInt(); private set
+    var defaultInk: Int = QvpDefaults.INK; private set
     private var paths: Array<Path>? = null
 
     init {
@@ -140,7 +140,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun hitTestEx(x: Float, y: Float, o: QvpHitOptions = QvpHitOptions()) = hitEx(QvpNative.hitTestEx(h, x, y, o.maxDistance, o.gapBias, o.exactFirst))
     fun hitTestViewEx(vx: Float, vy: Float, o: QvpHitOptions = QvpHitOptions()) = hitEx(QvpNative.hitTestViewEx(h, vx, vy, o.maxDistance, o.gapBias, o.exactFirst))
     fun lineBands(): List<QvpLineBand> { val v = QvpNative.lineBands(h); return List(v.size / 7) { k -> val o = k * 7; QvpLineBand(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6]) } }
-    fun hitBoxes(gapBias: Float = 0.6f): List<QvpHitBox> { val v = QvpNative.hitBoxes(h, gapBias); return List(v.size / 10) { k -> val o = k * 10; QvpHitBox(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9]) } }
+    fun hitBoxes(gapBias: Float = QvpDefaults.GAP_BIAS): List<QvpHitBox> { val v = QvpNative.hitBoxes(h, gapBias); return List(v.size / 10) { k -> val o = k * 10; QvpHitBox(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9]) } }
 
     // ── layout ──
     fun layout(spec: QvpLayoutSpec): QvpLayout {
@@ -189,7 +189,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     private fun boxes(v: IntArray): List<QvpBox> = List(v.size / 8) { k -> val o = k * 8; QvpBox(v[o], v[o + 1], Float.fromBits(v[o + 2]), Float.fromBits(v[o + 3]), Float.fromBits(v[o + 4]), Float.fromBits(v[o + 5]), v[o + 6], Float.fromBits(v[o + 7])) }
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
     fun highlightBoxes(): List<QvpBox> = boxes(QvpNative.highlightBoxes(h))
-    fun bandBoxes(ws: IntArray, height: BandHeight = BandHeight.PITCH, padX: Float = 1.2f, padY: Float = 0f) = boxes(QvpNative.bandBoxes(h, ws, height.id, padX, padY))
+    fun bandBoxes(ws: IntArray, height: BandHeight = BandHeight.PITCH, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) = boxes(QvpNative.bandBoxes(h, ws, height.id, padX, padY))
 
     // ── selection ──
     fun select(anchor: Int, focus: Int = anchor) = QvpNative.select(h, anchor, focus)
@@ -200,7 +200,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     // ── memorisation ──
     fun mask(t: Target, mode: MaskMode = MaskMode.HIDE) = QvpNative.mask(h, t.arr, mode.id)
     fun maskFrom(wi: Int, mode: MaskMode = MaskMode.HIDE) = QvpNative.maskFrom(h, wi, mode.id)
-    fun maskOptions(blockColor: Int = 0xd9d4c8ff.toInt(), padX: Float = 0.6f, padY: Float = 0.6f, radius: Float = 0.8f, reverse: Boolean = false) = QvpNative.maskOptions(h, blockColor, padX, padY, radius, reverse)
+    fun maskOptions(blockColor: Int = QvpDefaults.MASK_BLOCK, padX: Float = QvpDefaults.MASK_PAD, padY: Float = QvpDefaults.MASK_PAD, radius: Float = QvpDefaults.MASK_RADIUS, reverse: Boolean = false) = QvpNative.maskOptions(h, blockColor, padX, padY, radius, reverse)
     fun revealNext(n: Int = 1) = QvpNative.revealNext(h, n)
     fun hideBack(n: Int = 1) = QvpNative.hideBack(h, n)
     fun revealWord(wi: Int) = QvpNative.revealWord(h, wi)
@@ -212,7 +212,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun maskWords(): IntArray = QvpNative.maskWords(h)
     fun maskBoxes(): List<QvpBox> = boxes(QvpNative.maskBoxes(h))
     /** greyed page with a lit window; returns steps */
-    fun revealStart(lit: Int = 1, byAyah: Boolean = false, grey: Int = 0xc9c4b8ff.toInt(), ink: Int = 0x231f20ff.toInt(), ayahMarks: Boolean = true, transitionMs: Int = 0) = QvpNative.revealStart(h, lit, byAyah, grey, ink, ayahMarks, transitionMs)
+    fun revealStart(lit: Int = QvpDefaults.REVEAL_LIT, byAyah: Boolean = false, grey: Int = QvpDefaults.REVEAL_GREY, ink: Int = QvpDefaults.INK, ayahMarks: Boolean = true, transitionMs: Int = 0) = QvpNative.revealStart(h, lit, byAyah, grey, ink, ayahMarks, transitionMs)
     fun revealGoto(at: Long) = QvpNative.revealGoto(h, at)
     fun revealAt(): Long? = QvpNative.revealAt(h).let { if (it == -2L) null else it }
     fun revealSteps() = QvpNative.revealSteps(h)
@@ -220,9 +220,9 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun revealStop() = QvpNative.revealStop(h)
 
     // ── crop ──
-    fun cropBox(t: Target, pad: Float = 2f, keepAyahMarks: Boolean = true): QvpCropBox? = QvpNative.cropBox(h, t.arr, pad, keepAyahMarks)?.let { QvpCropBox(it[0], it[1], it[2], it[3], it[4].toInt(), it[5].toInt()) }
+    fun cropBox(t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Boolean = true): QvpCropBox? = QvpNative.cropBox(h, t.arr, pad, keepAyahMarks)?.let { QvpCropBox(it[0], it[1], it[2], it[3], it[4].toInt(), it[5].toInt()) }
     /** standalone SVG with the current colours; background alpha 0 = transparent */
-    fun cropSvg(t: Target, pad: Float = 2f, keepAyahMarks: Boolean = true, background: Int = 0): String? = QvpNative.cropSvg(h, t.arr, pad, keepAyahMarks, background)
+    fun cropSvg(t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Boolean = true, background: Int = 0): String? = QvpNative.cropSvg(h, t.arr, pad, keepAyahMarks, background)
 
     @Synchronized
     override fun close() {

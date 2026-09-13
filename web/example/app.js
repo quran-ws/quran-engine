@@ -63,7 +63,7 @@
   // ── view: engine layout + pan/zoom on top ──
   function layoutSpec() {
     const r = stage.getBoundingClientRect(), ls = S.layout;
-    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, lineGap: ls.lineGap, fillHeight: ls.fillHeight, nominalLines: 15, maxAspectSlack: 1.15 };
+    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, lineGap: ls.lineGap, fillHeight: ls.fillHeight, nominalLines: QVP.DEFAULTS.NOMINAL_LINES, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK };
   }
   function relayout() {
     const p = S.page; if (!p) return null;

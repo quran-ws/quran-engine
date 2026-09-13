@@ -22,7 +22,7 @@ public final class QvpPage {
     public let words: [QvpWord], ayahs: [QvpAyah], lines: [QvpLine], decos: [QvpDecoration]
     public let naturalPitch: Float
     public private(set) var currentLayout: QvpLayout?
-    public private(set) var defaultInk: UInt32 = 0x231f20ff
+    public private(set) var defaultInk: UInt32 = QvpDefaults.INK
     private var paths: [CGPath]?
 
     /// Load a `NNN.qvp` page; bytes are copied by the engine.
@@ -168,7 +168,7 @@ public final class QvpPage {
         return hitEx(qvp_hit_test_view_ex(p, vx, vy, &opt, &v), v)
     }
     public func lineBands() -> [QvpLineBand] { collect(64) { o, c in qvp_line_bands(p, o, c) }.map { (b: QvpFFI.QvpLineBand) in QvpLineBand(line: Int(b.line), lineNo: Int(b.line_no), y0: b.y0, y1: b.y1, mid: b.mid, inkY0: b.ink_y0, inkY1: b.ink_y1) } }
-    public func hitBoxes(gapBias: Float = 0.6) -> [QvpHitBox] { collect(512) { o, c in qvp_hit_boxes(p, gapBias, o, c) }.map { (b: QvpFFI.QvpHitBox) in QvpHitBox(word: Int(b.word), line: Int(b.line), x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, inkX0: b.ink_x0, inkY0: b.ink_y0, inkX1: b.ink_x1, inkY1: b.ink_y1) } }
+    public func hitBoxes(gapBias: Float = QvpDefaults.GAP_BIAS) -> [QvpHitBox] { collect(512) { o, c in qvp_hit_boxes(p, gapBias, o, c) }.map { (b: QvpFFI.QvpHitBox) in QvpHitBox(word: Int(b.word), line: Int(b.line), x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, inkX0: b.ink_x0, inkY0: b.ink_y0, inkX1: b.ink_x1, inkY1: b.ink_y1) } }
 
     // ── layout ──
     @discardableResult
@@ -234,7 +234,7 @@ public final class QvpPage {
     private func boxes(_ v: [QvpFFI.QvpBox]) -> [QvpBox] { v.map { QvpBox(id: Int($0.id), line: Int($0.line), x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1, color: $0.color, radius: $0.radius) } }
     /// Animated band boxes in viewport px; draw each id as one nonzero path behind the ink.
     public func highlightBoxes() -> [QvpBox] { boxes(collect(128) { o, c in qvp_highlight_boxes(p, o, c) }) }
-    public func bandBoxes(_ ws: [Int], height: BandHeight = .pitch, padX: Float = 1.2, padY: Float = 0) -> [QvpBox] {
+    public func bandBoxes(_ ws: [Int], height: BandHeight = .pitch, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) -> [QvpBox] {
         ws.map { UInt32($0) }.withUnsafeBufferPointer { wb in boxes(collect(64) { o, c in qvp_band_boxes(p, wb.baseAddress, UInt32(wb.count), UInt8(height.rawValue), padX, padY, o, c) }) }
     }
 
@@ -248,7 +248,7 @@ public final class QvpPage {
     public func mask(_ t: Target, _ mode: MaskMode = .hide) { t.withC { qvp_mask(p, $0, UInt8(mode.rawValue)) } }
     public func mask(_ s: String, _ mode: MaskMode = .hide) { mask(target(s), mode) }
     public func maskFrom(_ wi: Int, _ mode: MaskMode = .hide) { qvp_mask_from(p, UInt32(wi), UInt8(mode.rawValue)) }
-    public func maskOptions(blockColor: UInt32 = 0xd9d4c8ff, padX: Float = 0.6, padY: Float = 0.6, radius: Float = 0.8, reverse: Bool = false) { qvp_mask_options(p, blockColor, padX, padY, radius, reverse ? 1 : 0) }
+    public func maskOptions(blockColor: UInt32 = QvpDefaults.MASK_BLOCK, padX: Float = QvpDefaults.MASK_PAD, padY: Float = QvpDefaults.MASK_PAD, radius: Float = QvpDefaults.MASK_RADIUS, reverse: Bool = false) { qvp_mask_options(p, blockColor, padX, padY, radius, reverse ? 1 : 0) }
     @discardableResult public func revealNext(_ n: Int = 1) -> Int { Int(qvp_reveal_next(p, UInt32(n))) }
     @discardableResult public func hideBack(_ n: Int = 1) -> Int { Int(qvp_hide_back(p, UInt32(n))) }
     @discardableResult public func revealWord(_ wi: Int) -> Bool { qvp_reveal_word(p, UInt32(wi)) != 0 }
@@ -261,7 +261,7 @@ public final class QvpPage {
     /// Block/blur boxes in viewport px, drawn over the ink.
     public func maskBoxes() -> [QvpBox] { boxes(collect(128) { o, c in qvp_mask_boxes(p, o, c) }) }
     /// Greyed page with a lit window; returns steps.
-    @discardableResult public func revealStart(lit: Int = 1, byAyah: Bool = false, grey: UInt32 = 0xc9c4b8ff, ink: UInt32 = 0x231f20ff, ayahMarks: Bool = true, transitionMs: Int = 0) -> Int {
+    @discardableResult public func revealStart(lit: Int = QvpDefaults.REVEAL_LIT, byAyah: Bool = false, grey: UInt32 = QvpDefaults.REVEAL_GREY, ink: UInt32 = QvpDefaults.INK, ayahMarks: Bool = true, transitionMs: Int = 0) -> Int {
         Int(qvp_reveal_start(p, UInt32(lit), byAyah ? 1 : 0, grey, ink, ayahMarks ? 1 : 0, UInt32(transitionMs)))
     }
     @discardableResult public func revealGoto(_ at: Int) -> Bool { qvp_reveal_goto(p, Int64(at)) != 0 }
@@ -272,18 +272,18 @@ public final class QvpPage {
     public func revealStop() { qvp_reveal_stop(p) }
 
     // ── crop ──
-    public func cropBox(_ t: Target, pad: Float = 2, keepAyahMarks: Bool = true) -> QvpCropBox? {
+    public func cropBox(_ t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Bool = true) -> QvpCropBox? {
         var b = QvpFFI.QvpCropBox()
         guard t.withC({ qvp_crop_box(p, $0, pad, keepAyahMarks ? 1 : 0, &b) }) != 0 else { return nil }
         return QvpCropBox(x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, nWords: Int(b.n_words), ayahMarkDeco: idx(b.ayah_mark_deco))
     }
-    public func cropBox(_ s: String, pad: Float = 2, keepAyahMarks: Bool = true) -> QvpCropBox? { cropBox(target(s), pad: pad, keepAyahMarks: keepAyahMarks) }
+    public func cropBox(_ s: String, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Bool = true) -> QvpCropBox? { cropBox(target(s), pad: pad, keepAyahMarks: keepAyahMarks) }
     /// Standalone SVG with the current colours; background alpha 0 = transparent.
-    public func cropSvg(_ t: Target, pad: Float = 2, keepAyahMarks: Bool = true, background: UInt32 = 0) -> String? {
+    public func cropSvg(_ t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Bool = true, background: UInt32 = 0) -> String? {
         var s = QvpStr()
         return t.withC({ qvp_crop_svg(p, $0, pad, keepAyahMarks ? 1 : 0, background, &s) }) != 0 ? s.string : nil
     }
-    public func cropSvg(_ key: String, pad: Float = 2, keepAyahMarks: Bool = true, background: UInt32 = 0) -> String? { cropSvg(target(key), pad: pad, keepAyahMarks: keepAyahMarks, background: background) }
+    public func cropSvg(_ key: String, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Bool = true, background: UInt32 = 0) -> String? { cropSvg(target(key), pad: pad, keepAyahMarks: keepAyahMarks, background: background) }
 }
 
 /// Cross-page lookup from atlas.qva.

@@ -50,7 +50,7 @@ public final class QvpCanvasController {
     /// Paper behind the page content, 0xRRGGBBAA (nil = transparent).
     public var paperColor: UInt32?
     /// 0xRRGGBBAA band colour of the drag selection.
-    public var selectionBand: UInt32 = 0x2d6fd640
+    public var selectionBand: UInt32 = QvpDefaults.SELECTION_BAND
     public var onWordTap: ((QvpWord, QvpHitEx) -> Void)?
     public var onDecoTap: ((QvpDecoration, QvpHitEx) -> Void)?
     public var onEmptyTap: (() -> Void)?
@@ -72,7 +72,7 @@ public final class QvpCanvasController {
     /// size — a peek, not a reading zoom — so a pinch never leaves the page holding a pager's swipe.
     public var zoomSpringsBack = false
     public var selectionEnabled = true
-    public var hitOptions = QvpHitOptions(maxDistance: 6)
+    public var hitOptions = QvpHitOptions(maxDistance: QvpDefaults.TAP_DISTANCE)
 
     public private(set) var viewScale: CGFloat = 1
     public private(set) var viewOx: CGFloat = 0
