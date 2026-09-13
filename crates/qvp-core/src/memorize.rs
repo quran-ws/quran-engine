@@ -33,10 +33,10 @@ impl Default for MaskState {
             words: vec![],
             hidden: BTreeSet::new(),
             mode: MaskMode::Hide,
-            block_color: 0xd9d4c8ff,
-            pad_x: 0.6,
-            pad_y: 0.6,
-            radius: 0.8,
+            block_color: crate::defaults::MASK_BLOCK,
+            pad_x: crate::defaults::MASK_PAD,
+            pad_y: crate::defaults::MASK_PAD,
+            radius: crate::defaults::MASK_RADIUS,
             reverse: false,
         }
     }

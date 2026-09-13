@@ -40,14 +40,14 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     // layout knobs (viewport size comes from the view)
     var padTop = 0f; var padBottom = 0f; var padSide = 0f; var lineSpacing = 1f; var lineGap = 0f; var fillHeight = false
     var paperColor: Int = Color.TRANSPARENT           // ARGB
-    var selectionBand: Int = 0x2d6fd640                // 0xRRGGBBAA
+    var selectionBand: Int = QvpDefaults.SELECTION_BAND  // 0xRRGGBBAA
     var onWordTap: ((QvpWord, QvpHitEx) -> Unit)? = null
     var onDecoTap: ((QvpDecoration, QvpHitEx) -> Unit)? = null
     var onEmptyTap: (() -> Unit)? = null
     var onSelectionChanged: ((IntArray) -> Unit)? = null
     var zoomEnabled = true
     var selectionEnabled = true
-    var hitOptions = QvpHitOptions(maxDistance = 6f)
+    var hitOptions = QvpHitOptions(maxDistance = QvpDefaults.TAP_DISTANCE)
 
     var viewScale = 1f; var viewOx = 0f; var viewOy = 0f
     private var base: Bitmap? = null

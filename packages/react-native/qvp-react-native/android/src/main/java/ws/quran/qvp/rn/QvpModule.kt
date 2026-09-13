@@ -75,7 +75,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     // ── hit testing / layout (the view already does gestures; these are for scroll-into-view etc.) ──
     @ReactMethod fun hitTestViewEx(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { v, p ->
         val o = opt(opts); val d = v.resources.displayMetrics.density
-        p.hitTestViewEx(((x * d).toFloat() - v.inner.viewOx) / v.inner.viewScale, ((y * d).toFloat() - v.inner.viewOy) / v.inner.viewScale, QvpHitOptions((o["maxDistance"] as? Number)?.toFloat() ?: 6f, (o["gapBias"] as? Number)?.toFloat() ?: 0.6f, o["exactFirst"] != false))?.let { Marshal.hit(p, it) } }
+        p.hitTestViewEx(((x * d).toFloat() - v.inner.viewOx) / v.inner.viewScale, ((y * d).toFloat() - v.inner.viewOy) / v.inner.viewScale, QvpHitOptions((o["maxDistance"] as? Number)?.toFloat() ?: QvpDefaults.TAP_DISTANCE, (o["gapBias"] as? Number)?.toFloat() ?: QvpDefaults.GAP_BIAS, o["exactFirst"] != false))?.let { Marshal.hit(p, it) } }
     @ReactMethod fun wordBoxView(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { v, p -> val d = v.resources.displayMetrics.density
         p.wordBoxView(i)?.let { b -> mapOf("x0" to (v.inner.viewOx + b[0] * v.inner.viewScale) / d, "y0" to (v.inner.viewOy + b[1] * v.inner.viewScale) / d, "x1" to (v.inner.viewOx + b[2] * v.inner.viewScale) / d, "y1" to (v.inner.viewOy + b[3] * v.inner.viewScale) / d) } }
     @ReactMethod fun currentLayout(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.currentLayout?.let { Marshal.layout(it) } }
@@ -107,9 +107,9 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
 
     // ── crop ──
     @ReactMethod fun cropBox(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
-        val o = opt(opts); p.cropBox(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: 2f, o["keepAyahMarks"] != false)?.let { Marshal.cropBox(it) } }
+        val o = opt(opts); p.cropBox(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: QvpDefaults.CROP_PAD, o["keepAyahMarks"] != false)?.let { Marshal.cropBox(it) } }
     @ReactMethod fun cropSvg(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
-        val o = opt(opts); p.cropSvg(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: 2f, o["keepAyahMarks"] != false, Marshal.color(o["background"], 0)) }
+        val o = opt(opts); p.cropSvg(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: QvpDefaults.CROP_PAD, o["keepAyahMarks"] != false, Marshal.color(o["background"], 0)) }
 
     // ── atlas ──
     @ReactMethod fun loadAtlas(uri: String, promise: Promise) = ui(promise) {

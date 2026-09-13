@@ -59,6 +59,14 @@ abstract final class QvpLayer {
   static const int base = 0, theme = 10, highlight = 50, selection = 60, top = 100;
 }
 
+/// The defaults every wrapper shares (`QVP_DEFAULT_*` in qvp.h; the parity check compares them).
+/// Colours are 0xRRGGBBAA, lengths page units.
+abstract final class QvpDefaults {
+  static const int ink = 0x231f20ff, highlightInk = 0x1a73e8ff, highlightBand = 0xd6a3264d, selectionBand = 0x2d6fd640, maskBlock = 0xd9d4c8ff, revealGrey = 0xc9c4b8ff;
+  static const double highlightPadX = 1.2, highlightPadY = 0, highlightSeam = 0.25, gapBias = 0.6, tapDistance = 6, aspectSlack = 1.15, maskPad = 0.6, maskRadius = 0.8, cropPad = 2;
+  static const int nominalLines = 15, revealLit = 1;
+}
+
 /// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
 /// No table lives in this package.
 abstract final class QvpNames {
@@ -332,7 +340,7 @@ final class QvpHitEx {
 /// Options of the gap-aware hit test.
 @immutable
 final class QvpHitOptions {
-  const QvpHitOptions({this.maxDistance = 0, this.gapBias = 0.6, this.exactFirst = true});
+  const QvpHitOptions({this.maxDistance = 0, this.gapBias = QvpDefaults.gapBias, this.exactFirst = true});
 
   /// Page units; <= 0 unlimited.
   final double maxDistance;
@@ -376,7 +384,7 @@ final class QvpLayoutSpec {
     this.lineSpacing = 1,
     this.lineGap = 0,
     this.fillHeight = false,
-    this.nominalLines = 15,
+    this.nominalLines = QvpDefaults.nominalLines,
     this.cropLeft = 0,
     this.cropRight = 0,
     this.maxAspectSlack = 0,
@@ -466,12 +474,12 @@ final class QvpHighlightStyle {
   const QvpHighlightStyle({
     this.mode = 'band',
     this.height = 'pitch',
-    this.ink = 0x1a73e8ff,
-    this.band = 0xd6a3264d,
-    this.padX = 1.2,
+    this.ink = QvpDefaults.highlightInk,
+    this.band = QvpDefaults.highlightBand,
+    this.padX = QvpDefaults.highlightPadX,
     this.padY = 0,
     this.radius = 0,
-    this.seam = 0.25,
+    this.seam = QvpDefaults.highlightSeam,
     this.ms = 0,
     this.layer = QvpLayer.highlight,
   });
@@ -804,7 +812,7 @@ class QvpPage extends ChangeNotifier {
   /// Layout from the last [layout] call, if any.
   QvpLayout? currentLayout;
 
-  int _defaultInk = 0x231f20ff;
+  int _defaultInk = QvpDefaults.ink;
 
   /// Dart-side mirror of the engine's default ink.
   int get defaultInk => _defaultInk;
@@ -1194,7 +1202,7 @@ class QvpPage extends ChangeNotifier {
     }, growable: false);
   }
 
-  List<QvpHitBox> hitBoxes([double gapBias = 0.6]) {
+  List<QvpHitBox> hitBoxes([double gapBias = QvpDefaults.gapBias]) {
     final o = _e._out<QvpHitBoxC>(), cap = _e._cap(ffi.sizeOf<QvpHitBoxC>());
     final n = _b.hitBoxes(_p, gapBias, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
@@ -1416,7 +1424,7 @@ class QvpPage extends ChangeNotifier {
   List<QvpBox> highlightBoxes() => _boxes(_b.highlightBoxes(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
 
   /// Static band boxes for a word list (no highlight state involved).
-  List<QvpBox> bandBoxes(List<int> ws, {String height = 'pitch', double padX = 1.2, double padY = 0}) => _e.withU32(ws, (p, n) => _boxes(_b.bandBoxes(_p, p, n, height == 'ink' ? 1 : 0, padX, padY, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>()))));
+  List<QvpBox> bandBoxes(List<int> ws, {String height = 'pitch', double padX = QvpDefaults.highlightPadX, double padY = QvpDefaults.highlightPadY}) => _e.withU32(ws, (p, n) => _boxes(_b.bandBoxes(_p, p, n, height == 'ink' ? 1 : 0, padX, padY, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>()))));
 
   // ── selection ──
   void select(int anchor, [int? focus]) {
@@ -1445,7 +1453,7 @@ class QvpPage extends ChangeNotifier {
     _touch();
   }
 
-  void maskOptions({Object blockColor = '#d9d4c8', double padX = 0.6, double padY = 0.6, double radius = 0.8, bool reverse = false}) {
+  void maskOptions({Object blockColor = QvpDefaults.maskBlock, double padX = QvpDefaults.maskPad, double padY = QvpDefaults.maskPad, double radius = QvpDefaults.maskRadius, bool reverse = false}) {
     _b.maskOptions(_p, rgba(blockColor), padX, padY, radius, reverse ? 1 : 0);
     _touch();
   }
@@ -1496,7 +1504,7 @@ class QvpPage extends ChangeNotifier {
   List<QvpBox> maskBoxes() => _boxes(_b.maskBoxes(_p, _e._out<QvpBoxC>(), _e._cap(ffi.sizeOf<QvpBoxC>())));
 
   /// Greyed page with a lit window → steps.
-  int revealStart({int lit = 1, bool byAyah = false, Object grey = '#c9c4b8', Object ink = '#231f20', bool ayahMarks = true, int ms = 0}) {
+  int revealStart({int lit = QvpDefaults.revealLit, bool byAyah = false, Object grey = QvpDefaults.revealGrey, Object ink = QvpDefaults.ink, bool ayahMarks = true, int ms = 0}) {
     final n = _b.revealStart(_p, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms);
     _touch();
     return n;
@@ -1523,7 +1531,7 @@ class QvpPage extends ChangeNotifier {
   }
 
   // ── crop ──
-  QvpCropBox? cropBox(Object target, {double pad = 2, bool keepAyahMarks = true}) {
+  QvpCropBox? cropBox(Object target, {double pad = QvpDefaults.cropPad, bool keepAyahMarks = true}) {
     final ok = _t(target, (t) => _b.cropBox(_p, t, pad, keepAyahMarks ? 1 : 0, _e._crop));
     if (ok == 0) return null;
     final c = _e._crop.ref;
@@ -1531,7 +1539,7 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Standalone SVG of a target (current colours), or null.
-  String? cropSvg(Object target, {double pad = 2, bool keepAyahMarks = true, Object? background}) {
+  String? cropSvg(Object target, {double pad = QvpDefaults.cropPad, bool keepAyahMarks = true, Object? background}) {
     final ok = _t(target, (t) => _b.cropSvg(_p, t, pad, keepAyahMarks ? 1 : 0, background == null ? 0 : rgba(background), _e._str));
     return ok == 0 ? null : _e._s();
   }

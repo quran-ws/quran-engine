@@ -12,6 +12,10 @@ Examples are JavaScript; read `page.hitTestEx(...)` as `page.hitTestEx(...)` in 
   Wrappers also accept `'#rgb'`, `'#rrggbb'`, `'#rrggbbaa'`.
 - **Page units** are the printed page's viewBox space (345 × 550 for this mushaf, y down).
   Anything named `…View` is in *viewport pixels through the current layout*.
+- **Defaults.** Every default a wrapper applies (ink, highlight colours and padding, gap bias,
+  tap distance, mask and reveal colours, crop padding) is a `QVP_DEFAULT_*` value in `qvp.h`,
+  defined once in the engine (`crates/qvp-core/src/defaults.rs`) and mirrored as `QvpDefaults`
+  in each wrapper; the parity check keeps every copy equal.
 - **Handles.** Every mutating style/highlight call returns a handle; removing the handle
   undoes exactly that call and nothing else. There is a `clear`, but you never need it.
 - **Targets** resolve to a word list: `'page'`, `'2:255'` (ayah), `'2:255:3'` (word),

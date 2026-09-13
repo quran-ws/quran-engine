@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 pub mod crop;
+pub mod defaults;
 pub mod highlight;
 pub mod hit;
 pub mod layout;
@@ -39,7 +40,7 @@ use style::{PathAnim, PathCtx};
 
 /// Colour as 0xRRGGBBAA. Alpha 0 hides the path.
 pub type Rgba = u32;
-pub const DEFAULT_INK: Rgba = 0x231f20ff;
+pub const DEFAULT_INK: Rgba = defaults::INK;
 pub const NONE: u32 = u32::MAX;
 
 /// Per-path geometry range into [`Geometry::ops`] / [`Geometry::pts`].

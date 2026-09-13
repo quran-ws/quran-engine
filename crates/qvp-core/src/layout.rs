@@ -57,7 +57,7 @@ impl Default for LayoutSpec {
             line_spacing: 1.0,
             line_gap: 0.0,
             fill_height: false,
-            nominal_lines: 15,
+            nominal_lines: crate::defaults::NOMINAL_LINES,
             crop_left: 0.0,
             crop_right: 0.0,
             max_aspect_slack: 0.0,

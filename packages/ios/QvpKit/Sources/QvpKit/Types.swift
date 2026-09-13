@@ -20,6 +20,16 @@ public enum BandHeight: Int { case pitch = 0, ink }
 public enum MaskMode: Int { case hide = 0, block, blur }
 public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rubuAlHizb }
 
+/// The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). Colours 0xRRGGBBAA.
+public enum QvpDefaults {
+    public static let INK: UInt32 = 0x231f20ff, HIGHLIGHT_INK: UInt32 = 0x1a73e8ff, HIGHLIGHT_BAND: UInt32 = 0xd6a3264d
+    public static let HIGHLIGHT_PAD_X: Float = 1.2, HIGHLIGHT_PAD_Y: Float = 0, HIGHLIGHT_SEAM: Float = 0.25
+    public static let SELECTION_BAND: UInt32 = 0x2d6fd640, GAP_BIAS: Float = 0.6, TAP_DISTANCE: Float = 6
+    public static let NOMINAL_LINES = 15, ASPECT_SLACK: Float = 1.15
+    public static let MASK_BLOCK: UInt32 = 0xd9d4c8ff, MASK_PAD: Float = 0.6, MASK_RADIUS: Float = 0.8
+    public static let REVEAL_LIT = 1, REVEAL_GREY: UInt32 = 0xc9c4b8ff, CROP_PAD: Float = 2
+}
+
 /// A mark id by its name, from the engine (255 = unknown).
 public func markId(_ name: String) -> Int { QvpEngine.markFromName(name) }
 
@@ -140,7 +150,7 @@ public struct QvpHit: Equatable { public let word: Int, path: Int, deco: Int }
 public struct QvpHitEx: Equatable { public let word: Int, path: Int, deco: Int, line: Int, distance: Float, exact: Bool }
 public struct QvpHitOptions: Equatable {
     public var maxDistance: Float, gapBias: Float, exactFirst: Bool
-    public init(maxDistance: Float = 0, gapBias: Float = 0.6, exactFirst: Bool = true) { self.maxDistance = maxDistance; self.gapBias = gapBias; self.exactFirst = exactFirst }
+    public init(maxDistance: Float = 0, gapBias: Float = QvpDefaults.GAP_BIAS, exactFirst: Bool = true) { self.maxDistance = maxDistance; self.gapBias = gapBias; self.exactFirst = exactFirst }
 }
 public struct QvpBox: Equatable { public let id: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, color: UInt32, radius: Float }
 public struct QvpHitBox: Equatable { public let word: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, inkX0: Float, inkY0: Float, inkX1: Float, inkY1: Float }
@@ -152,7 +162,7 @@ public struct QvpLayoutSpec: Equatable {
     public var cropLeft: Float, cropRight: Float
     /// The content is never wider than `viewportH · pageW / pageH · maxAspectSlack` (0 = no bound).
     public var maxAspectSlack: Float
-    public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, lineGap: Float = 0, fillHeight: Bool = false, nominalLines: Int = 15,
+    public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, lineGap: Float = 0, fillHeight: Bool = false, nominalLines: Int = QvpDefaults.NOMINAL_LINES,
                 cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0) {
         self.viewportW = viewportW; self.viewportH = viewportH; self.padTop = padTop; self.padBottom = padBottom; self.padLeft = padLeft; self.padRight = padRight
         self.lineSpacing = lineSpacing; self.lineGap = lineGap; self.fillHeight = fillHeight; self.nominalLines = nominalLines
@@ -176,7 +186,7 @@ public final class QvpLayout {
 }
 public struct QvpHighlightStyle: Equatable {
     public var mode: HighlightMode, ink: UInt32, band: UInt32, height: BandHeight, padX: Float, padY: Float, radius: Float, seam: Float, transitionMs: Int, layer: Int
-    public init(mode: HighlightMode = .band, ink: UInt32 = 0x1a73e8ff, band: UInt32 = 0xd6a3264d, height: BandHeight = .pitch, padX: Float = 1.2, padY: Float = 0, radius: Float = 0, seam: Float = 0.25, transitionMs: Int = 0, layer: Int = QvpLayer.HIGHLIGHT) {
+    public init(mode: HighlightMode = .band, ink: UInt32 = QvpDefaults.HIGHLIGHT_INK, band: UInt32 = QvpDefaults.HIGHLIGHT_BAND, height: BandHeight = .pitch, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y, radius: Float = 0, seam: Float = QvpDefaults.HIGHLIGHT_SEAM, transitionMs: Int = 0, layer: Int = QvpLayer.HIGHLIGHT) {
         self.mode = mode; self.ink = ink; self.band = band; self.height = height; self.padX = padX; self.padY = padY; self.radius = radius; self.seam = seam; self.transitionMs = transitionMs; self.layer = layer
     }
     var c: QvpFFI.QvpHighlightStyle {

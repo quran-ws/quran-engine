@@ -18,6 +18,25 @@ extern "C" {
 #endif
 
 #define QVP_NONE 0xFFFFFFFFu
+/* Defaults the engine and every wrapper agree on (crates/qvp-core/src/defaults.rs is the source;
+   the parity check compares every copy). Colours are 0xRRGGBBAA, lengths page units. */
+#define QVP_DEFAULT_INK            0x231f20ffu
+#define QVP_DEFAULT_HIGHLIGHT_INK  0x1a73e8ffu
+#define QVP_DEFAULT_HIGHLIGHT_BAND 0xd6a3264du
+#define QVP_DEFAULT_HIGHLIGHT_PAD_X 1.2f
+#define QVP_DEFAULT_HIGHLIGHT_PAD_Y 0.0f
+#define QVP_DEFAULT_HIGHLIGHT_SEAM 0.25f
+#define QVP_DEFAULT_SELECTION_BAND 0x2d6fd640u
+#define QVP_DEFAULT_GAP_BIAS       0.6f
+#define QVP_DEFAULT_TAP_DISTANCE   6.0f
+#define QVP_DEFAULT_NOMINAL_LINES  15u
+#define QVP_DEFAULT_ASPECT_SLACK   1.15f
+#define QVP_DEFAULT_MASK_BLOCK     0xd9d4c8ffu
+#define QVP_DEFAULT_MASK_PAD       0.6f
+#define QVP_DEFAULT_MASK_RADIUS    0.8f
+#define QVP_DEFAULT_REVEAL_LIT     1u
+#define QVP_DEFAULT_REVEAL_GREY    0xc9c4b8ffu
+#define QVP_DEFAULT_CROP_PAD       2.0f
 typedef struct QvpPage QvpPage;
 typedef struct QvpAtlas QvpAtlas;
 typedef struct { const uint8_t* ptr; uint32_t len; } QvpStr;

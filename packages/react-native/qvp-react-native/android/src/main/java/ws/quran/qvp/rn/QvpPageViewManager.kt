@@ -34,7 +34,7 @@ class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {
     @ReactProp(name = "selectionBand") fun setSelectionBand(v: QvpRnPageView, s: String?) { if (!s.isNullOrBlank()) v.selectionBand = QvpColor.parse(s) }
     @ReactProp(name = "selectionEnabled", defaultBoolean = true) fun setSelectionEnabled(v: QvpRnPageView, b: Boolean) { v.selectionEnabled = b }
     @ReactProp(name = "zoomEnabled", defaultBoolean = true) fun setZoomEnabled(v: QvpRnPageView, b: Boolean) { v.zoomEnabled = b }
-    @ReactProp(name = "hitMaxDistance", defaultFloat = 6f) fun setHitMaxDistance(v: QvpRnPageView, f: Float) { v.hitOptions = v.hitOptions.copy(maxDistance = f) }
+    @ReactProp(name = "hitMaxDistance", defaultFloat = QvpDefaults.TAP_DISTANCE) fun setHitMaxDistance(v: QvpRnPageView, f: Float) { v.hitOptions = v.hitOptions.copy(maxDistance = f) }
     @ReactProp(name = "theme") fun setTheme(v: QvpRnPageView, m: ReadableMap?) { v.themeProp = Marshal.plain(m) }
     @ReactProp(name = "styles") fun setStyles(v: QvpRnPageView, a: ReadableArray?) { v.stylesProp = Marshal.plain(a) }
     @ReactProp(name = "highlights") fun setHighlights(v: QvpRnPageView, a: ReadableArray?) { v.highlightsProp = Marshal.plain(a) }

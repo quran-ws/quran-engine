@@ -6,6 +6,10 @@
   'use strict';
 
   const NONE = 0xffffffff;
+  /** The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). */
+  const DEFAULTS = { INK: 0x231f20ff, HIGHLIGHT_INK: 0x1a73e8ff, HIGHLIGHT_BAND: 0xd6a3264d, HIGHLIGHT_PAD_X: 1.2, HIGHLIGHT_PAD_Y: 0, HIGHLIGHT_SEAM: 0.25,
+    SELECTION_BAND: 0x2d6fd640, GAP_BIAS: 0.6, TAP_DISTANCE: 6, NOMINAL_LINES: 15, ASPECT_SLACK: 1.15, MASK_BLOCK: 0xd9d4c8ff, MASK_PAD: 0.6, MASK_RADIUS: 0.8,
+    REVEAL_LIT: 1, REVEAL_GREY: 0xc9c4b8ff, CROP_PAD: 2 };
   const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, ORNAMENT: 5, PAGE_NUMBER: 6, RUNNING_HEAD: 7, OTHER: 255 };
   const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 };
   const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGRAPHIC: 4, DABT: 5, WAQF: 6, READING_SIGN: 7, STANDALONE: 8 };
@@ -145,7 +149,7 @@
     d.setUint8(at, s.kind); d.setUint32(at + 4, s.a >>> 0 || 0, true); d.setUint32(at + 8, s.b >>> 0 || 0, true); d.setUint32(at + 12, s.c >>> 0 || 0, true);
     return at;
   }
-  const HL_DEFAULT = { mode: 'band', height: 'pitch', ink: '#1a73e8', band: rgba('#d6a326', 0.3), padX: 1.2, padY: 0, radius: 0, seam: 0.25, ms: 0, layer: LAYER.HIGHLIGHT };
+  const HL_DEFAULT = { mode: 'band', height: 'pitch', ink: DEFAULTS.HIGHLIGHT_INK, band: DEFAULTS.HIGHLIGHT_BAND, padX: DEFAULTS.HIGHLIGHT_PAD_X, padY: DEFAULTS.HIGHLIGHT_PAD_Y, radius: 0, seam: DEFAULTS.HIGHLIGHT_SEAM, ms: 0, layer: LAYER.HIGHLIGHT };
   function writeHl(e, at, st) {
     st = { ...HL_DEFAULT, ...st };
     const d = e.dv();
@@ -182,7 +186,7 @@
       this.decos = Array.from({ length: this.nDecos }, (_, i) => this._deco(i));
       this.naturalPitch = ex.qvp_natural_pitch(handle);
       this.currentLayout = null;
-      this._defaultInk = 0x231f20ff;
+      this._defaultInk = DEFAULTS.INK;
     }
     free() { this.e.ex.qvp_page_free(this.h); this.h = 0; }
 
@@ -315,7 +319,7 @@
     hitTestEx(x, y, opt = {}) { return this.e.ex.qvp_hit_test_ex(this.h, x, y, this._hitOpt(opt), this.e.scratch) ? this._hitEx(this.e.scratch) : null; }
     hitTestViewEx(vx, vy, opt = {}) { return this.e.ex.qvp_hit_test_view_ex(this.h, vx, vy, this._hitOpt(opt), this.e.scratch) ? this._hitEx(this.e.scratch) : null; }
     lineBands() { const n = this.e.ex.qvp_line_bands(this.h, this.e.scratch, 64), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 64); i++) { const o = this.e.scratch + i * 28; out.push({ line: d.getUint32(o, true), lineNo: d.getUint32(o + 4, true), y0: d.getFloat32(o + 8, true), y1: d.getFloat32(o + 12, true), mid: d.getFloat32(o + 16, true), inkY0: d.getFloat32(o + 20, true), inkY1: d.getFloat32(o + 24, true) }); } return out; }
-    hitBoxes(gapBias = 0.6) { const n = this.e.ex.qvp_hit_boxes(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
+    hitBoxes(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_boxes(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
 
     // ── layout ──
     /** Write a layout spec (QvpLayoutSpec, 52 bytes) at scratch offset `s`. */
@@ -323,7 +327,7 @@
       const d = this.e.dv();
       d.setFloat32(s, spec.viewportW, true); d.setFloat32(s + 4, spec.viewportH, true); d.setFloat32(s + 8, spec.padTop || 0, true); d.setFloat32(s + 12, spec.padBottom || 0, true);
       d.setFloat32(s + 16, spec.padLeft || 0, true); d.setFloat32(s + 20, spec.padRight || 0, true); d.setFloat32(s + 24, spec.lineSpacing ?? 1, true); d.setFloat32(s + 28, spec.lineGap || 0, true);
-      d.setUint32(s + 32, spec.fillHeight ? 1 : 0, true); d.setUint32(s + 36, spec.nominalLines || 15, true);
+      d.setUint32(s + 32, spec.fillHeight ? 1 : 0, true); d.setUint32(s + 36, spec.nominalLines || DEFAULTS.NOMINAL_LINES, true);
       d.setFloat32(s + 40, spec.cropLeft || 0, true); d.setFloat32(s + 44, spec.cropRight || 0, true); d.setFloat32(s + 48, spec.maxAspectSlack || 0, true);
     }
     /** Leading (page units) that makes the page fill the padded viewport of `spec`; max 0 = unlimited. */
@@ -387,7 +391,7 @@
     highlightWords(h) { const n = this.e.ex.qvp_highlight_words(this.h, h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
     highlightBoxes() { const n = this.e.ex.qvp_highlight_boxes(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
-    bandBoxes(words, { height = 'pitch', padX = 1.2, padY = 0 } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_band_boxes(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
+    bandBoxes(words, { height = 'pitch', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_band_boxes(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
 
     // ── selection ──
     select(anchor, focus = anchor) { this.e.ex.qvp_select(this.h, anchor < 0 ? NONE : anchor, focus < 0 ? NONE : focus); }
@@ -398,7 +402,7 @@
     // ── memorisation ──
     mask(target, mode = 'hide') { this.e.ex.qvp_mask(this.h, this._target(target), { hide: 0, block: 1, blur: 2 }[mode] ?? 0); }
     maskFrom(i, mode = 'hide') { this.e.ex.qvp_mask_from(this.h, i, { hide: 0, block: 1, blur: 2 }[mode] ?? 0); }
-    maskOptions({ blockColor = '#d9d4c8', padX = 0.6, padY = 0.6, radius = 0.8, reverse = false } = {}) { this.e.ex.qvp_mask_options(this.h, rgba(blockColor), padX, padY, radius, reverse ? 1 : 0); }
+    maskOptions({ blockColor = DEFAULTS.MASK_BLOCK, padX = DEFAULTS.MASK_PAD, padY = DEFAULTS.MASK_PAD, radius = DEFAULTS.MASK_RADIUS, reverse = false } = {}) { this.e.ex.qvp_mask_options(this.h, rgba(blockColor), padX, padY, radius, reverse ? 1 : 0); }
     revealNext(n = 1) { return this.e.ex.qvp_reveal_next(this.h, n); }
     hideBack(n = 1) { return this.e.ex.qvp_hide_back(this.h, n); }
     revealWord(i) { return !!this.e.ex.qvp_reveal_word(this.h, i); }
@@ -410,7 +414,7 @@
     maskWords() { const n = this.e.ex.qvp_mask_words(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     maskBoxes() { const n = this.e.ex.qvp_mask_boxes(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
     /** greyed page with a lit window: {lit, byAyah, grey, ink, ayahMarks, ms} → steps */
-    revealStart({ lit = 1, byAyah = false, grey = '#c9c4b8', ink = '#231f20', ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms); }
+    revealStart({ lit = DEFAULTS.REVEAL_LIT, byAyah = false, grey = DEFAULTS.REVEAL_GREY, ink = DEFAULTS.INK, ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms); }
     revealGoto(at) { return !!this.e.ex.qvp_reveal_goto(this.h, BigInt(at)); }
     revealAt() { const v = Number(this.e.ex.qvp_reveal_at(this.h)); return v === -2 ? null : v; }
     revealSteps() { return this.e.ex.qvp_reveal_steps(this.h); }
@@ -418,8 +422,8 @@
     revealStop() { this.e.ex.qvp_reveal_stop(this.h); }
 
     // ── crop ──
-    cropBox(target, { pad = 2, keepAyahMarks = true } = {}) { if (!this.e.ex.qvp_crop_box(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, this.e.scratch)) return null; const d = this.e.dv(), s = this.e.scratch; return { x0: d.getFloat32(s, true), y0: d.getFloat32(s + 4, true), x1: d.getFloat32(s + 8, true), y1: d.getFloat32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDeco: d.getUint32(s + 20, true) }; }
-    cropSvg(target, { pad = 2, keepAyahMarks = true, background = null } = {}) { if (!this.e.ex.qvp_crop_svg(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, background ? rgba(background) : 0, this.e.scratch)) return null; return this.e.qstr(this.e.scratch); }
+    cropBox(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true } = {}) { if (!this.e.ex.qvp_crop_box(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, this.e.scratch)) return null; const d = this.e.dv(), s = this.e.scratch; return { x0: d.getFloat32(s, true), y0: d.getFloat32(s + 4, true), x1: d.getFloat32(s + 8, true), y1: d.getFloat32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDeco: d.getUint32(s + 20, true) }; }
+    cropSvg(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true, background = null } = {}) { if (!this.e.ex.qvp_crop_svg(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, background ? rgba(background) : 0, this.e.scratch)) return null; return this.e.qstr(this.e.scratch); }
   }
 
   class QvpAtlas {
@@ -507,5 +511,5 @@
     }
   }
 
-  global.QVP = { QvpEngine, QvpPage, QvpAtlas, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECO, FORM, LAYER, NAMES_TABLE, NONE, css, rgba, parseTarget };
+  global.QVP = { QvpEngine, QvpPage, QvpAtlas, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECO, FORM, LAYER, NAMES_TABLE, DEFAULTS, NONE, css, rgba, parseTarget };
 })(typeof window !== 'undefined' ? window : globalThis);
