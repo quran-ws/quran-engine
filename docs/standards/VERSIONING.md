@@ -38,7 +38,7 @@ with old data keeps working after an engine update.
 `CHANGELOG.md` at the root follows Keep a Changelog, one section per `vX.Y.Z`, with a
 per-package subsection when a package has something of its own to say. Each SDK package
 also carries a `CHANGELOG.md` because its registry requires one. Copy those entries
-from the root file rather than writing them separately.
+from the root file. Do not write them separately.
 
 ## How it is checked
 
