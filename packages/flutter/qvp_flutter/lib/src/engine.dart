@@ -1006,11 +1006,11 @@ class QvpPage extends ChangeNotifier {
   List<int> _u32(int n) => List<int>.from(_e._out<ffi.Uint32>().asTypedList(n.clamp(0, _e._cap(ffi.sizeOf<ffi.Uint32>()))), growable: false);
 
   /// Word indices of a target.
-  List<int> resolve(Object target) => _t(target, (t) => _u32(_b.resolve(_p, t, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>()))));
+  List<int> targetWords(Object target) => _t(target, (t) => _u32(_b.targetWords(_p, t, _e._out<ffi.Uint32>(), _e._cap(ffi.sizeOf<ffi.Uint32>()))));
 
   // ── metadata ──
   List<QvpSurahInfo> surahs() {
-    final n = _b.surahsCount(_p);
+    final n = _b.surahCount(_p);
     final o = pffi.calloc<QvpSurahInfoC>();
     try {
       return List.generate(n, (i) {
@@ -1103,7 +1103,7 @@ class QvpPage extends ChangeNotifier {
   // ── text & search ──
   /// Text of a target (default: the page).
   String text([Object target = 'page', Object form = 'rasmUthmani', String wordSep = ' ', String lineSep = '\n']) => _e.withString(wordSep, (wp, wn) => _e.withString(lineSep, (lp, ln) => _t(target, (t) {
-        _b.textTarget(_p, t, QvpForm.of(form), wp, wn, lp, ln, _e._str);
+        _b.text(_p, t, QvpForm.of(form), wp, wn, lp, ln, _e._str);
         return _e._s();
       })));
 
@@ -1269,14 +1269,14 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Removes a rule / theme / hide by handle → rules removed.
-  int unstyle(int handle) {
+  int removeStyle(int handle) {
     final n = _b.styleRemove(_p, handle);
     _touch();
     return n;
   }
 
-  int restyle(int handle, Object color, [int ms = 0]) {
-    final n = _b.styleRepaint(_p, handle, rgba(color), ms);
+  int recolorStyle(int handle, Object color, [int ms = 0]) {
+    final n = _b.styleRecolor(_p, handle, rgba(color), ms);
     _touch();
     return n;
   }
@@ -1298,9 +1298,9 @@ class QvpPage extends ChangeNotifier {
     _touch();
   }
 
-  void setDefaultInk(Object color) {
+  void setDefaultColor(Object color) {
     _defaultInk = rgba(color);
-    _b.styleDefault(_p, _defaultInk);
+    _b.styleDefaultColor(_p, _defaultInk);
     _touch();
   }
 
@@ -1341,15 +1341,15 @@ class QvpPage extends ChangeNotifier {
   bool tick(double nowMs) => _b.tick(_p, nowMs) != 0;
 
   /// Full display list: one 0xRRGGBBAA per path (copy).
-  Uint32List paint() => Uint32List.fromList(_b.paint(_p).asTypedList(nPaths));
+  Uint32List colors() => Uint32List.fromList(_b.colors(_p).asTypedList(nPaths));
 
   /// Paths whose colour differs from the default ink (mid-transition values included).
-  List<QvpStyledPath> styled() {
-    final n = _b.styled(_p, ffi.nullptr, 0);
+  List<QvpStyledPath> styledPaths() {
+    final n = _b.styledPaths(_p, ffi.nullptr, 0);
     if (n == 0) return const [];
     final buf = pffi.malloc<ffi.Uint32>(n * 2);
     try {
-      _b.styled(_p, buf, n);
+      _b.styledPaths(_p, buf, n);
       final v = buf.asTypedList(n * 2);
       return List.generate(n, (i) => (path: v[i * 2], color: v[i * 2 + 1]), growable: false);
     } finally {
@@ -1377,8 +1377,8 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Moves a highlight: the band slides, the ink fades.
-  bool rehighlight(int handle, Object target) {
-    final ok = _t(target, (t) => _b.rehighlight(_p, handle, t)) != 0;
+  bool moveHighlight(int handle, Object target) {
+    final ok = _t(target, (t) => _b.moveHighlight(_p, handle, t)) != 0;
     _touch();
     return ok;
   }
@@ -1390,8 +1390,8 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Fades out over the highlight's transition.
-  bool unhighlight(int handle) {
-    final ok = _b.unhighlight(_p, handle) != 0;
+  bool removeHighlight(int handle) {
+    final ok = _b.removeHighlight(_p, handle) != 0;
     _touch();
     return ok;
   }
@@ -1442,37 +1442,37 @@ class QvpPage extends ChangeNotifier {
     _touch();
   }
 
-  int revealNext([int n = 1]) {
-    final r = _b.revealNext(_p, n);
+  int unmaskNext([int n = 1]) {
+    final r = _b.unmaskNext(_p, n);
     _touch();
     return r;
   }
 
-  int hideBack([int n = 1]) {
-    final r = _b.hideBack(_p, n);
+  int maskBack([int n = 1]) {
+    final r = _b.maskBack(_p, n);
     _touch();
     return r;
   }
 
-  bool revealWord(int wi) {
-    final r = _b.revealWord(_p, wi) != 0;
+  bool unmaskWord(int wi) {
+    final r = _b.unmaskWord(_p, wi) != 0;
     _touch();
     return r;
   }
 
-  bool hideWord(int wi) {
-    final r = _b.hideWord(_p, wi) != 0;
+  bool maskWord(int wi) {
+    final r = _b.maskWord(_p, wi) != 0;
     _touch();
     return r;
   }
 
-  void revealAll() {
-    _b.revealAll(_p);
+  void unmaskAll() {
+    _b.unmaskAll(_p);
     _touch();
   }
 
-  void hideAll() {
-    _b.hideAll(_p);
+  void maskAll() {
+    _b.maskAll(_p);
     _touch();
   }
 
@@ -1502,12 +1502,12 @@ class QvpPage extends ChangeNotifier {
   }
 
   /// Current step, or null when no reveal is running.
-  int? revealAt() {
-    final v = _b.revealAt(_p);
+  int? revealPosition() {
+    final v = _b.revealPosition(_p);
     return v == -2 ? null : v;
   }
 
-  int revealSteps() => _b.revealSteps(_p);
+  int revealStepCount() => _b.revealStepCount(_p);
   int revealStepOf(int wi) => _b.revealStepOf(_p, wi);
   void revealStop() {
     _b.revealStop(_p);
@@ -1552,7 +1552,7 @@ class QvpAtlas {
 
   void dispose() => free();
 
-  int get pages => _b.atlasPages(_a);
+  int get pages => _b.atlasPageCount(_a);
 
   /// Page of an ayah, or null.
   int? pageOf(int surah, int ayah) {
@@ -1618,12 +1618,12 @@ class QvpAtlas {
   QvpAtlasRubuAlHizb? rubuAlHizb(int n) => division('rubuAlHizb', n);
 
   /// Division number containing an ayah, or null.
-  int? divisionAt(Object kind, int surah, int ayah) {
-    final v = _b.atlasDivisionAt(_a, QvpDiv.of(kind), surah, ayah);
+  int? divisionOf(Object kind, int surah, int ayah) {
+    final v = _b.atlasDivisionOf(_a, QvpDiv.of(kind), surah, ayah);
     return v < 0 ? null : v;
   }
 
-  int? juzAt(int surah, int ayah) => divisionAt('juz', surah, ayah);
+  int? juzOf(int surah, int ayah) => divisionOf('juz', surah, ayah);
 
   /// `[first, last]` page of a juz, or null.
   List<int>? pagesOfJuz(int n) {
@@ -1634,9 +1634,9 @@ class QvpAtlas {
   }
 
   /// Surahs matching a (partial, any-script) name.
-  List<QvpAtlasSurah> findSurah(String text) {
+  List<QvpAtlasSurah> searchSurahs(String text) {
     final o = engine._out<ffi.Uint16>(), cap = engine._cap(ffi.sizeOf<ffi.Uint16>());
-    final n = engine.withString(text, (p, len) => _b.atlasFindSurah(_a, p, len, o, cap)).clamp(0, cap);
+    final n = engine.withString(text, (p, len) => _b.atlasSearchSurahs(_a, p, len, o, cap)).clamp(0, cap);
     final ids = List<int>.from(o.asTypedList(n));
     return [for (final k in ids) surah(k)].whereType<QvpAtlasSurah>().toList(growable: false);
   }

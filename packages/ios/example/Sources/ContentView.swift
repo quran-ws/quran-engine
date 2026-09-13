@@ -121,8 +121,8 @@ struct ReaderView: View {
                 Button { m.maskModeIdx = 0; m.maskAyah() } label: { Label("Hide words", systemImage: "eye.slash") }
                 Button { m.maskModeIdx = 1; m.maskAyah() } label: { Label("Cover words", systemImage: "rectangle.fill") }
             }
-            Button { m.revealNext() } label: { Label("Reveal next word", systemImage: "arrow.right.circle") }
-            Button { m.hideBack() } label: { Label("Hide last revealed", systemImage: "arrow.left.circle") }
+            Button { m.unmaskNext() } label: { Label("Reveal next word", systemImage: "arrow.right.circle") }
+            Button { m.maskBack() } label: { Label("Hide last revealed", systemImage: "arrow.left.circle") }
             Button { m.unmask() } label: { Label("Show everything", systemImage: "eye") }
             Divider()
             Toggle(isOn: $m.revealOn) { Label("Greyed page", systemImage: "circle.lefthalf.filled") }
@@ -150,7 +150,7 @@ struct GoToSheet: View {
     @State private var query = ""
     private var surahs: [QvpAtlasSurah] { m.atlas?.surahs() ?? [] }
     private var filtered: [QvpAtlasSurah] {
-        query.isEmpty ? surahs : (m.atlas?.findSurah(query) ?? [])
+        query.isEmpty ? surahs : (m.atlas?.searchSurahs(query) ?? [])
     }
 
     var body: some View {

@@ -19,6 +19,18 @@ All notable changes to the engine and its packages. The format follows
   `qvp_mask_boxes_view`, `qvp_word_bands` (was `band_boxes`), `qvp_crop_bounds` (type
   `QvpCropBounds`), `qvp_word_bounds_view`. Wrappers: `hitAreas`, `highlightBoxesView`,
   `maskBoxesView`, `wordBands`, `cropBounds`, `wordBoundsView`.
+- Verbs: the mask calls pair `mask` with `unmask` (`qvp_mask_word`, `mask_all`, `mask_back`,
+  `unmask_word`, `unmask_all`, `unmask_next`; wrappers `maskWord` … `unmaskNext`); the reveal
+  readers are `qvp_reveal_position` and `qvp_reveal_step_count`; the style hide is
+  `qvp_style_hide` (wrapper `hide` unchanged). Highlights: `qvp_highlight_add`, `_move`,
+  `_restyle`, `_remove`, `_clear` (wrappers `highlight`, `moveHighlight`, `restyleHighlight`,
+  `removeHighlight`, `clearHighlights`). Lookups: `qvp_target_words` (was `resolve`),
+  `qvp_atlas_search_surahs` (was `find_surah`), `qvp_atlas_division_of` (was `_at`; wrappers
+  `divisionOf`, `juzOf`). Counts: `qvp_surah_count`, `qvp_atlas_page_count`
+  (`atlas.pageCount()`), `qvp_atlas_surah_count`, `qvp_styled_paths` (`styledPaths()`).
+  Colours: `qvp_colors` (was `paint`; `colors()`), `qvp_style_recolor` (`recolorStyle`),
+  `qvp_style_default_color` (`setDefaultColor`); `unstyle` is `removeStyle`. One `qvp_text`
+  taking a target replaces the word-list and target pair.
 
 ### Added
 - `QvpViewPolicy` in QvpKit: the zoom limits, zoomed threshold and swipe classifier both iOS

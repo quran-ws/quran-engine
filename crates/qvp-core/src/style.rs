@@ -369,7 +369,7 @@ impl Page {
     }
 
     /// Full display list: current colour per path.
-    pub fn paint(&mut self) -> &[Rgba] {
+    pub fn colors(&mut self) -> &[Rgba] {
         self.refresh_targets();
         for (i, a) in self.anim.iter().enumerate() {
             self.colors[i] = a.cur;
@@ -378,7 +378,7 @@ impl Page {
     }
 
     /// Paths whose current colour differs from the default ink (overlay repaint).
-    pub fn styled(&mut self) -> Vec<(u32, Rgba)> {
+    pub fn styled_paths(&mut self) -> Vec<(u32, Rgba)> {
         self.refresh_targets();
         let d = self.styles.default_ink;
         self.anim.iter().enumerate().filter(|(_, a)| a.cur != d).map(|(i, a)| (i as u32, a.cur)).collect()
@@ -394,13 +394,13 @@ impl Page {
     }
     /// Recolour the ink of everything a target resolves to.
     pub fn style_target(&mut self, layer: i32, target: &crate::Target, paint: Paint) -> Handle {
-        let words = self.resolve(target);
+        let words = self.target_words(target);
         self.styles.add_many(layer, words.into_iter().map(Selector::Word), paint)
     }
-    pub fn unstyle(&mut self, handle: Handle) -> usize {
+    pub fn remove_style(&mut self, handle: Handle) -> usize {
         self.styles.remove(handle)
     }
-    pub fn restyle(&mut self, handle: Handle, paint: Paint) -> usize {
+    pub fn recolor_style(&mut self, handle: Handle, paint: Paint) -> usize {
         self.styles.repaint(handle, paint)
     }
     pub fn hide(&mut self, sel: Selector) -> Handle {

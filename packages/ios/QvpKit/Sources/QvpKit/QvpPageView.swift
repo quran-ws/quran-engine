@@ -5,7 +5,7 @@ import QuartzCore
 /// Host-canvas renderer for a `QvpPage` (CoreGraphics). Draw order per frame:
 /// highlight bands (one path per highlight id, nonzero, behind the ink) → cached base ink
 /// (a bitmap of every non-styled path at the current transform, rebuilt only when the styled
-/// set / layout / transform changes) → styled ink from `styled()` → mask boxes.
+/// set / layout / transform changes) → styled ink from `styledPaths()` → mask boxes.
 /// Each frame calls `page.tick(now)`; a CADisplayLink keeps running while the engine says so.
 /// Gestures: tap → gap-aware hit-test → `onWordTap` / `onDecoTap` / `onEmptyTap`; long-press +
 /// drag → whole-word selection (engine `select`, band in the selection layer); pinch / pan on
@@ -149,14 +149,14 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         guard let p = page else { return }
         let ws = p.selection()
         let t = Target.words(ws)
-        if selectionHandle != 0 { p.rehighlight(selectionHandle, t) }
+        if selectionHandle != 0 { p.moveHighlight(selectionHandle, t) }
         else { selectionHandle = p.highlight(t, QvpHighlightStyle(mode: .band, band: selectionBand, padX: 0.6, layer: QvpLayer.SELECTION)) }
         onSelectionChanged?(ws); setNeedsDisplay()
     }
     /// Clear the selection band and the engine selection.
     public func clearSelection() {
         guard let p = page else { return }
-        p.clearSelection(); if selectionHandle != 0 { p.unhighlight(selectionHandle); selectionHandle = 0 }
+        p.clearSelection(); if selectionHandle != 0 { p.removeHighlight(selectionHandle); selectionHandle = 0 }
         onSelectionChanged?([]); setNeedsDisplay()
     }
 
@@ -228,7 +228,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         guard let l = p.currentLayout else { return }
         let moving = p.tick(CACurrentMediaTime() * 1000)
         let paths = p.buildPaths()
-        let styled = p.styled()
+        let styled = p.styledPaths()
         let styledSet = Set(styled.map { $0.path })
         let ink = p.defaultInk
         let scale = window?.screen.scale ?? contentScaleFactor

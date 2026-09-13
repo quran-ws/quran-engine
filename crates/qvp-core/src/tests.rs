@@ -166,45 +166,45 @@ fn gap_aware_hit_and_hit_boxes() {
 #[test]
 fn styles_layers_handles_and_subword() {
     let mut p = page();
-    assert!(p.styled().is_empty());
+    assert!(p.styled_paths().is_empty());
     let h_ayah = p.style(Selector::Ayah(1, 1), Paint::new(0x0000ffff));
     let h_word = p.style(Selector::Word(1), Paint::new(0x00ff00ff));
     let h_fam = p.style(Selector::Family(Family::Diacritic), Paint::new(0xff0000ff));
     assert_eq!(p.color_of(0), 0x0000ffff, "ayah applies to word 0");
     assert_eq!(p.color_of(1), 0x00ff00ff, "word beats ayah");
     assert_eq!(p.color_of(2), 0x00ff00ff, "word beats family for its mark");
-    p.unstyle(h_word);
+    p.remove_style(h_word);
     assert_eq!(p.color_of(2), 0x0000ffff, "ayah beats family");
-    p.unstyle(h_ayah);
+    p.remove_style(h_ayah);
     assert_eq!(p.color_of(2), 0xff0000ff, "family applies to the mark only");
     // higher layer wins regardless of specificity
     let h_theme = p.style_in(LAYER_THEME, Selector::Page, Paint::new(0x111111ff));
     assert_eq!(p.color_of(2), 0x111111ff);
-    p.unstyle(h_theme);
-    p.unstyle(h_fam);
+    p.remove_style(h_theme);
+    p.remove_style(h_fam);
     // sub-word: the 2nd mark (index 1) of word 1 is the dot
     let h = p.style(Selector::WordMark(1, 1), Paint::new(0xabcdefff));
     assert_eq!(p.color_of(3), 0xabcdefff);
     assert_eq!(p.color_of(2), DEFAULT_INK);
-    p.unstyle(h);
+    p.remove_style(h);
     let h = p.style(Selector::WordMarkNamed(1, Mark::Fathah, 0), Paint::new(0x123456ff));
     assert_eq!(p.color_of(2), 0x123456ff);
-    p.unstyle(h);
+    p.remove_style(h);
     let h = p.style(Selector::Category(Category::LetterDot), Paint::new(0x0a0b0cff));
     assert_eq!(p.color_of(3), 0x0a0b0cff);
-    assert_eq!(p.styled(), vec![(3, 0x0a0b0cff)]);
-    p.restyle(h, Paint::new(0x0d0e0fff));
+    assert_eq!(p.styled_paths(), vec![(3, 0x0a0b0cff)]);
+    p.recolor_style(h, Paint::new(0x0d0e0fff));
     assert_eq!(p.color_of(3), 0x0d0e0fff);
-    p.unstyle(h);
+    p.remove_style(h);
     assert!(p.styles.is_empty());
     let h = p.hide(Selector::Path(2));
     assert_eq!(p.color_of(2) & 0xff, 0, "alpha 0 hides");
-    p.unstyle(h);
+    p.remove_style(h);
     // theme handle undoes as a whole
     let t = p.theme(&Theme { ink: Some(0x222222ff), dots: Some(0xcc0000ff), ..Default::default() });
     assert_eq!(p.color_of(0), 0x222222ff);
     assert_eq!(p.color_of(3), 0xcc0000ff);
-    p.unstyle(t);
+    p.remove_style(t);
     assert_eq!(p.color_of(3), DEFAULT_INK);
 }
 
@@ -220,7 +220,7 @@ fn transitions_run_on_the_clock() {
     assert_ne!(mid, 0xff0000ff);
     assert!(!p.tick(200.0));
     assert_eq!(p.color_of(0), 0xff0000ff);
-    p.unstyle(h);
+    p.remove_style(h);
     assert!(p.tick(210.0), "fade back uses the previous rule's duration");
     assert!(!p.tick(400.0));
     assert_eq!(p.color_of(0), DEFAULT_INK);
@@ -246,7 +246,7 @@ fn highlights_bands_and_animation() {
     assert!((boxes[0].x0 - (10.0 - 1.2)).abs() < 1e-3 && (boxes[0].x1 - (40.0 + 1.2)).abs() < 1e-3);
     assert_eq!(boxes[0].color, 0xffcc0080);
     // slide to word C on line 2
-    p.rehighlight(h, &Target::Word(2));
+    p.move_highlight(h, &Target::Word(2));
     p.tick(1050.0);
     let mid = p.highlight_boxes_view();
     assert_eq!(mid.len(), 1);
@@ -256,7 +256,7 @@ fn highlights_bands_and_animation() {
     assert!((end[0].x0 - (10.0 - 1.2)).abs() < 1e-3 && end[0].y0 > 30.0, "{end:?}");
     assert_eq!(p.color_of(4), 0x00aa00ff, "word C's body path");
     assert_eq!(p.color_of(0), DEFAULT_INK);
-    p.unhighlight(h);
+    p.remove_highlight(h);
     p.tick(2050.0);
     assert_eq!(p.highlight_boxes_view().len(), 1, "fading out");
     p.tick(3000.0);
@@ -268,7 +268,7 @@ fn highlights_bands_and_animation() {
 fn text_search_selection_citation() {
     let p = page();
     assert_eq!(p.text_of(&[0, 1, 2], Form::RasmUthmani, " ", "\n"), "ذَٰلِكَ ٱلْكِتَٰبُ\nلَا");
-    assert_eq!(p.text_of(&p.resolve(&Target::Page), Form::Search, " ", " / "), "ذلك الكتاب / لا");
+    assert_eq!(p.text_of(&p.target_words(&Target::Page), Form::Search, " ", " / "), "ذلك الكتاب / لا");
     let m = p.search("الكتاب", &SearchOptions::default());
     assert_eq!(m.len(), 1);
     assert_eq!(m[0].word, 1);
@@ -296,7 +296,7 @@ fn mask_reveal_and_crop() {
     p.mask(&Target::Ayah(1, 1), MaskMode::Hide);
     assert_eq!(p.mask_hidden_count(), 2);
     assert_eq!(p.color_of(0) & 0xff, 0);
-    assert_eq!(p.reveal_next(1), 1);
+    assert_eq!(p.unmask_next(1), 1);
     assert_ne!(p.color_of(0) & 0xff, 0);
     assert_eq!(p.color_of(1) & 0xff, 0);
     p.unmask();
@@ -313,7 +313,7 @@ fn mask_reveal_and_crop() {
     assert_eq!(p.color_of(1), 0xc9c4b8ff);
     let h = p.style(Selector::Word(1), Paint::new(0xff0000ff));
     assert_eq!(p.color_of(1), 0xff0000ff, "explicit rules beat reveal grey");
-    p.unstyle(h);
+    p.remove_style(h);
     p.reveal_stop();
     assert_eq!(p.color_of(1), DEFAULT_INK);
     let cb = p.crop_bounds(&Target::Ayah(1, 1), 2.0, true).unwrap();

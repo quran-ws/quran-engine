@@ -259,11 +259,11 @@
       if (t instanceof Array) t = T.words(t);
       return writeTarget(this.e, this.e.scratch2 + 4096, t);
     }
-    resolve(t) { const n = this.e.ex.qvp_resolve(this.h, this._target(t), this.e.scratch, 16384); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 16384))); }
+    targetWords(t) { const n = this.e.ex.qvp_target_words(this.h, this._target(t), this.e.scratch, 16384); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 16384))); }
 
     // ── metadata ──
     surahs() {
-      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surahs_count(this.h), out = [];
+      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surah_count(this.h), out = [];
       for (let i = 0; i < n; i++) { ex.qvp_surah_at(this.h, i, s); const d = this.e.dv();
         out.push({ number: d.getUint16(s, true), ayahCount: d.getUint16(s + 2, true), hasBanner: !!d.getUint8(s + 4), hasBasmalah: !!d.getUint8(s + 5), place: names('place')[d.getUint8(s + 6)] || '', bannerDeco: d.getUint32(s + 8, true), arabic: this.e.qstr(s + 12), latin: this.e.qstr(s + 20), english: this.e.qstr(s + 28) }); }
       return out;
@@ -298,7 +298,7 @@
     // ── text & search ──
     text(target = 'page', { form = 'rasm_uthmani', wordSep = ' ', lineSep = '\n' } = {}) {
       const [wp, wn] = this.e.putStr(wordSep, 0), [lp, ln] = this.e.putStr(lineSep, 256);
-      this.e.ex.qvp_text_target(this.h, this._target(target), FORM[form] ?? 0, wp, wn, lp, ln, this.e.scratch);
+      this.e.ex.qvp_text(this.h, this._target(target), FORM[form] ?? 0, wp, wn, lp, ln, this.e.scratch);
       return this.e.qstr(this.e.scratch);
     }
     search(query, { form = 'search', mode = 'includes', normalize = true, loose = true, limit = 0 } = {}) {
@@ -354,12 +354,12 @@
     // ── styles (handles undo exactly) ──
     style(sel, color, { ms = 0, layer = LAYER.BASE } = {}) { return this.e.ex.qvp_style_add(this.h, layer, writeSel(this.e, this.e.scratch2 + 12288, sel), rgba(color), ms); }
     styleTarget(target, color, { ms = 0, layer = LAYER.BASE } = {}) { return this.e.ex.qvp_style_add_target(this.h, layer, this._target(target), rgba(color), ms); }
-    unstyle(handle) { return this.e.ex.qvp_style_remove(this.h, handle); }
-    restyle(handle, color, ms = 0) { return this.e.ex.qvp_style_repaint(this.h, handle, rgba(color), ms); }
-    hide(sel) { return this.e.ex.qvp_hide(this.h, writeSel(this.e, this.e.scratch2 + 12288, sel)); }
+    removeStyle(handle) { return this.e.ex.qvp_style_remove(this.h, handle); }
+    recolorStyle(handle, color, ms = 0) { return this.e.ex.qvp_style_recolor(this.h, handle, rgba(color), ms); }
+    hide(sel) { return this.e.ex.qvp_style_hide(this.h, writeSel(this.e, this.e.scratch2 + 12288, sel)); }
     clearStyles() { this.e.ex.qvp_style_clear(this.h); }
     clearLayer(layer) { this.e.ex.qvp_style_clear_layer(this.h, layer); }
-    setDefaultInk(color) { this._defaultInk = rgba(color); this.e.ex.qvp_style_default(this.h, this._defaultInk); }
+    setDefaultColor(color) { this._defaultInk = rgba(color); this.e.ex.qvp_style_default_color(this.h, this._defaultInk); }
     get defaultInk() { return this._defaultInk; }
     /** {ink, diacritics, dots, waqf, sifr, ayahMark, numeral, headers, marks: {name: colour}, ms} → handle */
     theme(t) {
@@ -376,10 +376,10 @@
     // ── clock & display list ──
     /** advance animations; returns true while something is still moving */
     tick(nowMs) { return !!this.e.ex.qvp_tick(this.h, nowMs); }
-    paint() { const p = this.e.ex.qvp_paint(this.h); return new Uint32Array(this.e.mem.buffer.slice(p, p + this.nPaths * 4)); }
-    styled() {
-      const ex = this.e.ex; const n = ex.qvp_styled(this.h, 0, 0); if (!n) return [];
-      const buf = ex.qvp_alloc(n * 8); ex.qvp_styled(this.h, buf, n);
+    colors() { const p = this.e.ex.qvp_colors(this.h); return new Uint32Array(this.e.mem.buffer.slice(p, p + this.nPaths * 4)); }
+    styledPaths() {
+      const ex = this.e.ex; const n = ex.qvp_styled_paths(this.h, 0, 0); if (!n) return [];
+      const buf = ex.qvp_alloc(n * 8); ex.qvp_styled_paths(this.h, buf, n);
       const v = new Uint32Array(this.e.mem.buffer.slice(buf, buf + n * 8)); ex.qvp_dealloc(buf, n * 8);
       const out = new Array(n); for (let i = 0; i < n; i++) out[i] = [v[i * 2], v[i * 2 + 1]]; return out;
     }
@@ -387,11 +387,11 @@
 
     // ── highlights ──
     /** style: {mode:'ink'|'band'|'both', height:'pitch'|'ink', ink, band, padX, padY, radius, seam, ms, layer} */
-    highlight(target, style = {}) { return this.e.ex.qvp_highlight(this.h, this._target(target), writeHl(this.e, this.e.scratch2 + 24576, style)); }
-    rehighlight(handle, target) { return !!this.e.ex.qvp_rehighlight(this.h, handle, this._target(target)); }
-    restyleHighlight(handle, style) { return !!this.e.ex.qvp_restyle_highlight(this.h, handle, writeHl(this.e, this.e.scratch2 + 24576, style)); }
-    unhighlight(handle) { return !!this.e.ex.qvp_unhighlight(this.h, handle); }
-    clearHighlights() { this.e.ex.qvp_clear_highlights(this.h); }
+    highlight(target, style = {}) { return this.e.ex.qvp_highlight_add(this.h, this._target(target), writeHl(this.e, this.e.scratch2 + 24576, style)); }
+    moveHighlight(handle, target) { return !!this.e.ex.qvp_highlight_move(this.h, handle, this._target(target)); }
+    restyleHighlight(handle, style) { return !!this.e.ex.qvp_highlight_restyle(this.h, handle, writeHl(this.e, this.e.scratch2 + 24576, style)); }
+    removeHighlight(handle) { return !!this.e.ex.qvp_highlight_remove(this.h, handle); }
+    clearHighlights() { this.e.ex.qvp_highlight_clear(this.h); }
     highlightHandles() { const n = this.e.ex.qvp_highlight_handles(this.h, this.e.scratch, 1024); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 1024))); }
     highlightWords(h) { const n = this.e.ex.qvp_highlight_words(this.h, h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
@@ -408,12 +408,12 @@
     mask(target, mode = 'hide') { this.e.ex.qvp_mask(this.h, this._target(target), { hide: 0, block: 1, blur: 2 }[mode] ?? 0); }
     maskFrom(i, mode = 'hide') { this.e.ex.qvp_mask_from(this.h, i, { hide: 0, block: 1, blur: 2 }[mode] ?? 0); }
     maskOptions({ blockColor = DEFAULTS.MASK_BLOCK, padX = DEFAULTS.MASK_PAD, padY = DEFAULTS.MASK_PAD, radius = DEFAULTS.MASK_RADIUS, reverse = false } = {}) { this.e.ex.qvp_mask_options(this.h, rgba(blockColor), padX, padY, radius, reverse ? 1 : 0); }
-    revealNext(n = 1) { return this.e.ex.qvp_reveal_next(this.h, n); }
-    hideBack(n = 1) { return this.e.ex.qvp_hide_back(this.h, n); }
-    revealWord(i) { return !!this.e.ex.qvp_reveal_word(this.h, i); }
-    hideWord(i) { return !!this.e.ex.qvp_hide_word(this.h, i); }
-    revealAll() { this.e.ex.qvp_reveal_all(this.h); }
-    hideAll() { this.e.ex.qvp_hide_all(this.h); }
+    unmaskNext(n = 1) { return this.e.ex.qvp_unmask_next(this.h, n); }
+    maskBack(n = 1) { return this.e.ex.qvp_mask_back(this.h, n); }
+    unmaskWord(i) { return !!this.e.ex.qvp_unmask_word(this.h, i); }
+    maskWord(i) { return !!this.e.ex.qvp_mask_word(this.h, i); }
+    unmaskAll() { this.e.ex.qvp_unmask_all(this.h); }
+    maskAll() { this.e.ex.qvp_mask_all(this.h); }
     unmask() { this.e.ex.qvp_unmask(this.h); }
     maskHidden() { const n = this.e.ex.qvp_mask_hidden(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     maskWords() { const n = this.e.ex.qvp_mask_words(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
@@ -421,8 +421,8 @@
     /** greyed page with a lit window: {lit, byAyah, grey, ink, ayahMarks, ms} → steps */
     revealStart({ lit = DEFAULTS.REVEAL_LIT, byAyah = false, grey = DEFAULTS.REVEAL_GREY, ink = DEFAULTS.INK, ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms); }
     revealGoto(at) { return !!this.e.ex.qvp_reveal_goto(this.h, BigInt(at)); }
-    revealAt() { const v = Number(this.e.ex.qvp_reveal_at(this.h)); return v === -2 ? null : v; }
-    revealSteps() { return this.e.ex.qvp_reveal_steps(this.h); }
+    revealPosition() { const v = Number(this.e.ex.qvp_reveal_position(this.h)); return v === -2 ? null : v; }
+    revealStepCount() { return this.e.ex.qvp_reveal_step_count(this.h); }
     revealStepOf(i) { return Number(this.e.ex.qvp_reveal_step_of(this.h, i)); }
     revealStop() { this.e.ex.qvp_reveal_stop(this.h); }
 
@@ -438,20 +438,20 @@
     pageRange(page) { if (!this.e.ex.qvp_atlas_page_range(this.h, page, this.e.scratch)) return null; const v = new Uint16Array(this.e.mem.buffer, this.e.scratch, 4); return { first: [v[0], v[1]], last: [v[2], v[3]] }; }
     _surah(s) { const d = this.e.dv(); return { n: d.getUint16(s, true), page: d.getUint16(s + 2, true), ayahCount: d.getUint16(s + 4, true), place: names('place')[d.getUint8(s + 6)] || '', arabic: this.e.qstr(s + 8), latin: this.e.qstr(s + 16), english: this.e.qstr(s + 24) }; }
     surah(n) { return this.e.ex.qvp_atlas_surah(this.h, n, this.e.scratch) ? this._surah(this.e.scratch) : null; }
-    surahs() { const n = this.e.ex.qvp_atlas_surahs(this.h), out = []; for (let i = 0; i < n; i++) { this.e.ex.qvp_atlas_surah_at(this.h, i, this.e.scratch); out.push(this._surah(this.e.scratch)); } return out; }
+    surahs() { const n = this.e.ex.qvp_atlas_surah_count(this.h), out = []; for (let i = 0; i < n; i++) { this.e.ex.qvp_atlas_surah_at(this.h, i, this.e.scratch); out.push(this._surah(this.e.scratch)); } return out; }
     pageOfSurah(n) { const s = this.surah(n); return s ? s.page : null; }
     /** How many pages the atlas covers. */
-    pages() { return this.e.ex.qvp_atlas_pages(this.h); }
+    pageCount() { return this.e.ex.qvp_atlas_page_count(this.h); }
     /** The whole atlas as JSON text. */
     json() { this.e.ex.qvp_atlas_json(this.h, this.e.scratch); return this.e.qstr(this.e.scratch); }
     division(kind, n) { if (!this.e.ex.qvp_atlas_division(this.h, { juz: 0, hizb: 1, nisf: 2, rubu_al_hizb: 3 }[kind], n, this.e.scratch)) return null; const v = new Uint16Array(this.e.mem.buffer, this.e.scratch, 4); return { rubuAlHizb: v[0], surah: v[1], ayah: v[2], page: v[3], ayahKey: `${v[1]}:${v[2]}` }; }
     juz(n) { return this.division('juz', n); }
     hizb(n) { return this.division('hizb', n); }
     rubuAlHizb(n) { return this.division('rubu_al_hizb', n); }
-    divisionAt(kind, surah, ayah) { const v = this.e.ex.qvp_atlas_division_at(this.h, { juz: 0, hizb: 1, nisf: 2, rubu_al_hizb: 3 }[kind], surah, ayah); return v < 0 ? null : v; }
-    juzAt(surah, ayah) { return this.divisionAt('juz', surah, ayah); }
+    divisionOf(kind, surah, ayah) { const v = this.e.ex.qvp_atlas_division_of(this.h, { juz: 0, hizb: 1, nisf: 2, rubu_al_hizb: 3 }[kind], surah, ayah); return v < 0 ? null : v; }
+    juzOf(surah, ayah) { return this.divisionOf('juz', surah, ayah); }
     pagesOfJuz(n) { if (!this.e.ex.qvp_atlas_pages_of_juz(this.h, n, this.e.scratch)) return null; const v = new Uint16Array(this.e.mem.buffer, this.e.scratch, 2); return [v[0], v[1]]; }
-    findSurah(text) { const [p, n] = this.e.putStr(text); const c = this.e.ex.qvp_atlas_find_surah(this.h, p, n, this.e.scratch, 128); return Array.from(new Uint16Array(this.e.mem.buffer, this.e.scratch, Math.min(c, 128))).map(k => this.surah(k)); }
+    searchSurahs(text) { const [p, n] = this.e.putStr(text); const c = this.e.ex.qvp_atlas_search_surahs(this.h, p, n, this.e.scratch, 128); return Array.from(new Uint16Array(this.e.mem.buffer, this.e.scratch, Math.min(c, 128))).map(k => this.surah(k)); }
   }
 
   /**
@@ -482,7 +482,7 @@
     }
     draw(page, view, dpr) {
       const paths = page.buildPaths();
-      const styled = page.styled();
+      const styled = page.styledPaths();
       const styledSet = new Set(styled.map(s => s[0]));
       const L = page.currentLayout || { scale: 1, ox: 0, oy: 0, lineDy: null, pitch: 0 };
       const ink = page.defaultInk;

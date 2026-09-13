@@ -107,7 +107,7 @@ export interface AtlasSurah { n: number; number: number; page: number; ayahCount
 export interface AtlasRubuAlHizb { rubuAlHizb: number; surah: number; ayah: number; page: number; ayahKey: string }
 
 export interface HighlightStyle { mode?: HighlightMode; ink?: Color; band?: Color; height?: 'pitch' | 'ink'; padX?: number; padY?: number; radius?: number; seam?: number; ms?: number; layer?: number }
-/** One declarative highlight; the native side keeps id → handle and calls highlight / rehighlight / restyleHighlight / unhighlight on diff. */
+/** One declarative highlight; the native side keeps id → handle and calls highlight / moveHighlight / restyleHighlight / removeHighlight on diff. */
 export interface Highlight { id: string; target: Target; style?: HighlightStyle }
 /** One declarative style rule: `selector` (→ page.style) or `target` (→ page.styleTarget); `hide` → page.hide(selector). */
 export interface StyleRule { id: string; selector?: Selector; target?: Target; color?: Color; ms?: number; layer?: number; hide?: boolean }
@@ -233,7 +233,7 @@ export const Qvp = {
   lines: (tag: number): Promise<Line[]> => M.lines(tag),
   decos: (tag: number): Promise<Deco[]> => M.decos(tag),
   findWord: (tag: number, s: number, a: number, w: number): Promise<number> => M.findWord(tag, s, a, w),
-  resolve: (tag: number, target: Target): Promise<number[]> => M.resolve(tag, target),
+  targetWords: (tag: number, target: Target): Promise<number[]> => M.targetWords(tag, target),
   wordForm: (tag: number, idx: number, form: Form = 'rasmUthmani'): Promise<string> => M.wordForm(tag, idx, form),
   hasForm: (tag: number, form: Form): Promise<boolean> => M.hasForm(tag, form),
   attachWords: (tag: number, json: string | object): Promise<number> => M.attachWords(tag, typeof json === 'string' ? json : JSON.stringify(json)),
@@ -264,16 +264,16 @@ export const Qvp = {
   clearSelection: (tag: number): Promise<void> => M.clearSelection(tag),
   selection: (tag: number): Promise<SelectionInfo> => M.selection(tag),
   selectionText: (tag: number, form: Form = 'rasmUthmani', citation = false): Promise<string> => M.selectionText(tag, form, citation),
-  revealNext: (tag: number, n = 1): Promise<number> => M.revealNext(tag, n),
-  hideBack: (tag: number, n = 1): Promise<number> => M.hideBack(tag, n),
-  revealWord: (tag: number, i: number): Promise<boolean> => M.revealWord(tag, i),
-  hideWord: (tag: number, i: number): Promise<boolean> => M.hideWord(tag, i),
-  revealAll: (tag: number): Promise<void> => M.revealAll(tag),
-  hideAll: (tag: number): Promise<void> => M.hideAll(tag),
+  unmaskNext: (tag: number, n = 1): Promise<number> => M.unmaskNext(tag, n),
+  maskBack: (tag: number, n = 1): Promise<number> => M.maskBack(tag, n),
+  unmaskWord: (tag: number, i: number): Promise<boolean> => M.unmaskWord(tag, i),
+  maskWord: (tag: number, i: number): Promise<boolean> => M.maskWord(tag, i),
+  unmaskAll: (tag: number): Promise<void> => M.unmaskAll(tag),
+  maskAll: (tag: number): Promise<void> => M.maskAll(tag),
   maskHidden: (tag: number): Promise<number[]> => M.maskHidden(tag),
   maskWords: (tag: number): Promise<number[]> => M.maskWords(tag),
-  revealSteps: (tag: number): Promise<number> => M.revealSteps(tag),
-  revealAt: (tag: number): Promise<number | null> => M.revealAt(tag),
+  revealStepCount: (tag: number): Promise<number> => M.revealStepCount(tag),
+  revealPosition: (tag: number): Promise<number | null> => M.revealPosition(tag),
   revealStepOf: (tag: number, i: number): Promise<number> => M.revealStepOf(tag, i),
   cropBounds: (tag: number, target: Target, opts?: CropOptions): Promise<CropBox | null> => M.cropBounds(tag, target, opts ?? null),
   cropSvg: (tag: number, target: Target, opts?: CropOptions): Promise<string | null> => M.cropSvg(tag, target, opts ? { ...opts, background: css(opts.background) } : null),
@@ -302,15 +302,15 @@ export const Qvp = {
   freeAtlas: (id: number): Promise<void> => M.freeAtlas(id),
   atlasPageOf: (id: number, s: number, a: number): Promise<number | null> => M.atlasPageOf(id, s, a),
   atlasPageRange: (id: number, page: number): Promise<{ first: { surah: number; ayah: number }; last: { surah: number; ayah: number } } | null> => M.atlasPageRange(id, page),
-  atlasPages: (id: number): Promise<number> => M.atlasPages(id),
+  atlasPageCount: (id: number): Promise<number> => M.atlasPageCount(id),
   atlasSurah: (id: number, n: number): Promise<AtlasSurah | null> => M.atlasSurah(id, n),
   atlasSurahs: (id: number): Promise<AtlasSurah[]> => M.atlasSurahs(id),
   atlasPageOfSurah: (id: number, n: number): Promise<number | null> => M.atlasPageOfSurah(id, n),
   atlasDivision: (id: number, kind: DivisionKind, n: number): Promise<AtlasRubuAlHizb | null> => M.atlasDivision(id, kind, n),
-  atlasDivisionAt: (id: number, kind: DivisionKind, s: number, a: number): Promise<number | null> => M.atlasDivisionAt(id, kind, s, a),
-  atlasJuzAt: (id: number, s: number, a: number): Promise<number | null> => M.atlasJuzAt(id, s, a),
+  atlasDivisionOf: (id: number, kind: DivisionKind, s: number, a: number): Promise<number | null> => M.atlasDivisionOf(id, kind, s, a),
+  atlasJuzOf: (id: number, s: number, a: number): Promise<number | null> => M.atlasJuzOf(id, s, a),
   atlasPagesOfJuz: (id: number, n: number): Promise<[number, number] | null> => M.atlasPagesOfJuz(id, n),
-  atlasFindSurah: (id: number, text: string): Promise<AtlasSurah[]> => M.atlasFindSurah(id, text),
+  atlasSearchSurahs: (id: number, text: string): Promise<AtlasSurah[]> => M.atlasSearchSurahs(id, text),
 };
 
 /** Cross-page lookup (atlas.qva). `const atlas = await QvpAtlas.load('asset://pages/atlas.qva')`. */
@@ -320,7 +320,7 @@ export class QvpAtlas {
   free() { return Qvp.freeAtlas(this.id); }
   pageOf(s: number, a: number) { return Qvp.atlasPageOf(this.id, s, a); }
   pageRange(page: number) { return Qvp.atlasPageRange(this.id, page); }
-  pages() { return Qvp.atlasPages(this.id); }
+  pageCount() { return Qvp.atlasPageCount(this.id); }
   surah(n: number) { return Qvp.atlasSurah(this.id, n); }
   surahs() { return Qvp.atlasSurahs(this.id); }
   pageOfSurah(n: number) { return Qvp.atlasPageOfSurah(this.id, n); }
@@ -328,14 +328,14 @@ export class QvpAtlas {
   juz(n: number) { return Qvp.atlasDivision(this.id, 'juz', n); }
   hizb(n: number) { return Qvp.atlasDivision(this.id, 'hizb', n); }
   rubuAlHizb(n: number) { return Qvp.atlasDivision(this.id, 'rubuAlHizb', n); }
-  divisionAt(kind: DivisionKind, s: number, a: number) { return Qvp.atlasDivisionAt(this.id, kind, s, a); }
-  juzAt(s: number, a: number) { return Qvp.atlasJuzAt(this.id, s, a); }
+  divisionOf(kind: DivisionKind, s: number, a: number) { return Qvp.atlasDivisionOf(this.id, kind, s, a); }
+  juzOf(s: number, a: number) { return Qvp.atlasJuzOf(this.id, s, a); }
   pagesOfJuz(n: number) { return Qvp.atlasPagesOfJuz(this.id, n); }
-  findSurah(text: string) { return Qvp.atlasFindSurah(this.id, text); }
+  searchSurahs(text: string) { return Qvp.atlasSearchSurahs(this.id, text); }
 }
 
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decos', 'findWord', 'resolve', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutGapToFill', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'revealNext', 'hideBack', 'revealWord', 'hideWord', 'revealAll', 'hideAll', 'maskHidden', 'maskWords', 'revealSteps', 'revealAt', 'revealStepOf', 'cropBounds', 'cropSvg'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decos', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutGapToFill', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg'] as const;
 type PageMethod = (typeof pageMethods)[number];
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {

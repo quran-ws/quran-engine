@@ -577,12 +577,12 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpDecoInfoC>), int Function(PtrPage, int, ffi.Pointer<QvpDecoInfoC>)>('qvp_deco_info');
   late final int Function(PtrPage, int, int, int) findWord =
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint16, ffi.Uint16, ffi.Uint16), int Function(PtrPage, int, int, int)>('qvp_find_word');
-  late final int Function(PtrPage, PtrTarget, PtrU32, int) resolve =
-      lib.lookupFunction<ffi.Uint32 Function(PtrPage, PtrTarget, PtrU32, ffi.Uint32), int Function(PtrPage, PtrTarget, PtrU32, int)>('qvp_resolve');
+  late final int Function(PtrPage, PtrTarget, PtrU32, int) targetWords =
+      lib.lookupFunction<ffi.Uint32 Function(PtrPage, PtrTarget, PtrU32, ffi.Uint32), int Function(PtrPage, PtrTarget, PtrU32, int)>('qvp_target_words');
   late final double Function(PtrPage) naturalPitch = lib.lookupFunction<ffi.Float Function(PtrPage), double Function(PtrPage)>('qvp_natural_pitch');
 
   // metadata
-  late final int Function(PtrPage) surahsCount = lib.lookupFunction<ffi.Uint32 Function(PtrPage), int Function(PtrPage)>('qvp_surahs_count');
+  late final int Function(PtrPage) surahCount = lib.lookupFunction<ffi.Uint32 Function(PtrPage), int Function(PtrPage)>('qvp_surah_count');
   late final int Function(PtrPage, int, ffi.Pointer<QvpSurahInfoC>) surahAt =
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpSurahInfoC>), int Function(PtrPage, int, ffi.Pointer<QvpSurahInfoC>)>('qvp_surah_at');
   late final int Function(PtrPage, ffi.Pointer<QvpDivisionC>, int) divisions =
@@ -605,12 +605,9 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Void Function(PtrPage, ffi.Uint32, PtrStr), void Function(PtrPage, int, PtrStr)>('qvp_ayah_label');
 
   // text & search
-  late final void Function(PtrPage, PtrU32, int, int, PtrU8, int, PtrU8, int, PtrStr) text = lib.lookupFunction<
-      ffi.Void Function(PtrPage, PtrU32, ffi.Uint32, ffi.Uint8, PtrU8, ffi.Uint32, PtrU8, ffi.Uint32, PtrStr),
-      void Function(PtrPage, PtrU32, int, int, PtrU8, int, PtrU8, int, PtrStr)>('qvp_text');
-  late final void Function(PtrPage, PtrTarget, int, PtrU8, int, PtrU8, int, PtrStr) textTarget = lib.lookupFunction<
+  late final void Function(PtrPage, PtrTarget, int, PtrU8, int, PtrU8, int, PtrStr) text = lib.lookupFunction<
       ffi.Void Function(PtrPage, PtrTarget, ffi.Uint8, PtrU8, ffi.Uint32, PtrU8, ffi.Uint32, PtrStr),
-      void Function(PtrPage, PtrTarget, int, PtrU8, int, PtrU8, int, PtrStr)>('qvp_text_target');
+      void Function(PtrPage, PtrTarget, int, PtrU8, int, PtrU8, int, PtrStr)>('qvp_text');
   late final int Function(PtrPage, PtrU8, int, int, int, int, int, int, ffi.Pointer<QvpMatchC>, int) search = lib.lookupFunction<
       ffi.Uint32 Function(PtrPage, PtrU8, ffi.Uint32, ffi.Uint8, ffi.Uint8, ffi.Uint32, ffi.Uint32, ffi.Uint32, ffi.Pointer<QvpMatchC>, ffi.Uint32),
       int Function(PtrPage, PtrU8, int, int, int, int, int, int, ffi.Pointer<QvpMatchC>, int)>('qvp_search');
@@ -660,13 +657,13 @@ final class QvpBindings {
   late final int Function(PtrPage, int, PtrTarget, int, int) styleAddTarget = lib.lookupFunction<
       ffi.Uint32 Function(PtrPage, ffi.Int32, PtrTarget, ffi.Uint32, ffi.Uint32), int Function(PtrPage, int, PtrTarget, int, int)>('qvp_style_add_target');
   late final int Function(PtrPage, int) styleRemove = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_style_remove');
-  late final int Function(PtrPage, int, int, int) styleRepaint =
-      lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32, ffi.Uint32, ffi.Uint32), int Function(PtrPage, int, int, int)>('qvp_style_repaint');
+  late final int Function(PtrPage, int, int, int) styleRecolor =
+      lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32, ffi.Uint32, ffi.Uint32), int Function(PtrPage, int, int, int)>('qvp_style_recolor');
   late final void Function(PtrPage) styleClear = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_style_clear');
   late final void Function(PtrPage, int) styleClearLayer = lib.lookupFunction<ffi.Void Function(PtrPage, ffi.Int32), void Function(PtrPage, int)>('qvp_style_clear_layer');
-  late final void Function(PtrPage, int) styleDefault = lib.lookupFunction<ffi.Void Function(PtrPage, ffi.Uint32), void Function(PtrPage, int)>('qvp_style_default');
+  late final void Function(PtrPage, int) styleDefaultColor = lib.lookupFunction<ffi.Void Function(PtrPage, ffi.Uint32), void Function(PtrPage, int)>('qvp_style_default_color');
   late final int Function(PtrPage, ffi.Pointer<QvpSelectorC>) hide =
-      lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Pointer<QvpSelectorC>), int Function(PtrPage, ffi.Pointer<QvpSelectorC>)>('qvp_hide');
+      lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Pointer<QvpSelectorC>), int Function(PtrPage, ffi.Pointer<QvpSelectorC>)>('qvp_style_hide');
   late final int Function(PtrPage, ffi.Pointer<QvpThemeC>) theme =
       lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Pointer<QvpThemeC>), int Function(PtrPage, ffi.Pointer<QvpThemeC>)>('qvp_theme');
   late final int Function(PtrPage, PtrU32, int) styleHandles =
@@ -674,19 +671,19 @@ final class QvpBindings {
 
   // clock & display list
   late final int Function(PtrPage, double) tick = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Double), int Function(PtrPage, double)>('qvp_tick');
-  late final PtrU32 Function(PtrPage) paint = lib.lookupFunction<PtrU32 Function(PtrPage), PtrU32 Function(PtrPage)>('qvp_paint');
-  late final int Function(PtrPage, PtrU32, int) styled = lib.lookupFunction<ffi.Uint32 Function(PtrPage, PtrU32, ffi.Uint32), int Function(PtrPage, PtrU32, int)>('qvp_styled');
+  late final PtrU32 Function(PtrPage) colors = lib.lookupFunction<PtrU32 Function(PtrPage), PtrU32 Function(PtrPage)>('qvp_colors');
+  late final int Function(PtrPage, PtrU32, int) styledPaths = lib.lookupFunction<ffi.Uint32 Function(PtrPage, PtrU32, ffi.Uint32), int Function(PtrPage, PtrU32, int)>('qvp_styled_paths');
   late final int Function(PtrPage, int) colorOf = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_color_of');
 
   // highlights
   late final int Function(PtrPage, PtrTarget, ffi.Pointer<QvpHighlightStyleC>) highlight = lib.lookupFunction<
-      ffi.Uint32 Function(PtrPage, PtrTarget, ffi.Pointer<QvpHighlightStyleC>), int Function(PtrPage, PtrTarget, ffi.Pointer<QvpHighlightStyleC>)>('qvp_highlight');
-  late final int Function(PtrPage, int, PtrTarget) rehighlight =
-      lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32, PtrTarget), int Function(PtrPage, int, PtrTarget)>('qvp_rehighlight');
+      ffi.Uint32 Function(PtrPage, PtrTarget, ffi.Pointer<QvpHighlightStyleC>), int Function(PtrPage, PtrTarget, ffi.Pointer<QvpHighlightStyleC>)>('qvp_highlight_add');
+  late final int Function(PtrPage, int, PtrTarget) moveHighlight =
+      lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32, PtrTarget), int Function(PtrPage, int, PtrTarget)>('qvp_highlight_move');
   late final int Function(PtrPage, int, ffi.Pointer<QvpHighlightStyleC>) restyleHighlight = lib.lookupFunction<
-      ffi.Uint32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpHighlightStyleC>), int Function(PtrPage, int, ffi.Pointer<QvpHighlightStyleC>)>('qvp_restyle_highlight');
-  late final int Function(PtrPage, int) unhighlight = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_unhighlight');
-  late final void Function(PtrPage) clearHighlights = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_clear_highlights');
+      ffi.Uint32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpHighlightStyleC>), int Function(PtrPage, int, ffi.Pointer<QvpHighlightStyleC>)>('qvp_highlight_restyle');
+  late final int Function(PtrPage, int) removeHighlight = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_highlight_remove');
+  late final void Function(PtrPage) clearHighlights = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_highlight_clear');
   late final int Function(PtrPage, PtrU32, int) highlightHandles =
       lib.lookupFunction<ffi.Uint32 Function(PtrPage, PtrU32, ffi.Uint32), int Function(PtrPage, PtrU32, int)>('qvp_highlight_handles');
   late final int Function(PtrPage, int, PtrU32, int) highlightWords =
@@ -711,12 +708,12 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Void Function(PtrPage, ffi.Uint32, ffi.Uint8), void Function(PtrPage, int, int)>('qvp_mask_from');
   late final void Function(PtrPage, int, double, double, double, int) maskOptions = lib.lookupFunction<
       ffi.Void Function(PtrPage, ffi.Uint32, ffi.Float, ffi.Float, ffi.Float, ffi.Uint32), void Function(PtrPage, int, double, double, double, int)>('qvp_mask_options');
-  late final int Function(PtrPage, int) revealNext = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_reveal_next');
-  late final int Function(PtrPage, int) hideBack = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_hide_back');
-  late final int Function(PtrPage, int) revealWord = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_reveal_word');
-  late final int Function(PtrPage, int) hideWord = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_hide_word');
-  late final void Function(PtrPage) revealAll = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_reveal_all');
-  late final void Function(PtrPage) hideAll = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_hide_all');
+  late final int Function(PtrPage, int) unmaskNext = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_unmask_next');
+  late final int Function(PtrPage, int) maskBack = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_mask_back');
+  late final int Function(PtrPage, int) unmaskWord = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_unmask_word');
+  late final int Function(PtrPage, int) maskWord = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_mask_word');
+  late final void Function(PtrPage) unmaskAll = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_unmask_all');
+  late final void Function(PtrPage) maskAll = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_mask_all');
   late final void Function(PtrPage) unmask = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_unmask');
   late final int Function(PtrPage, PtrU32, int) maskHidden =
       lib.lookupFunction<ffi.Uint32 Function(PtrPage, PtrU32, ffi.Uint32), int Function(PtrPage, PtrU32, int)>('qvp_mask_hidden');
@@ -728,8 +725,8 @@ final class QvpBindings {
       ffi.Uint32 Function(PtrPage, ffi.Uint32, ffi.Uint32, ffi.Uint32, ffi.Uint32, ffi.Uint32, ffi.Uint32),
       int Function(PtrPage, int, int, int, int, int, int)>('qvp_reveal_start');
   late final int Function(PtrPage, int) revealGoto = lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Int64), int Function(PtrPage, int)>('qvp_reveal_goto');
-  late final int Function(PtrPage) revealAt = lib.lookupFunction<ffi.Int64 Function(PtrPage), int Function(PtrPage)>('qvp_reveal_at');
-  late final int Function(PtrPage) revealSteps = lib.lookupFunction<ffi.Uint32 Function(PtrPage), int Function(PtrPage)>('qvp_reveal_steps');
+  late final int Function(PtrPage) revealPosition = lib.lookupFunction<ffi.Int64 Function(PtrPage), int Function(PtrPage)>('qvp_reveal_position');
+  late final int Function(PtrPage) revealStepCount = lib.lookupFunction<ffi.Uint32 Function(PtrPage), int Function(PtrPage)>('qvp_reveal_step_count');
   late final int Function(PtrPage, int) revealStepOf = lib.lookupFunction<ffi.Int64 Function(PtrPage, ffi.Uint32), int Function(PtrPage, int)>('qvp_reveal_step_of');
   late final void Function(PtrPage) revealStop = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_reveal_stop');
 
@@ -746,20 +743,20 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Int32 Function(PtrAtlas, ffi.Uint16, ffi.Uint16), int Function(PtrAtlas, int, int)>('qvp_atlas_page_of');
   late final int Function(PtrAtlas, int, PtrU16) atlasPageRange =
       lib.lookupFunction<ffi.Int32 Function(PtrAtlas, ffi.Uint16, PtrU16), int Function(PtrAtlas, int, PtrU16)>('qvp_atlas_page_range');
-  late final int Function(PtrAtlas) atlasPages = lib.lookupFunction<ffi.Uint32 Function(PtrAtlas), int Function(PtrAtlas)>('qvp_atlas_pages');
-  late final int Function(PtrAtlas) atlasSurahs = lib.lookupFunction<ffi.Uint32 Function(PtrAtlas), int Function(PtrAtlas)>('qvp_atlas_surahs');
+  late final int Function(PtrAtlas) atlasPageCount = lib.lookupFunction<ffi.Uint32 Function(PtrAtlas), int Function(PtrAtlas)>('qvp_atlas_page_count');
+  late final int Function(PtrAtlas) atlasSurahs = lib.lookupFunction<ffi.Uint32 Function(PtrAtlas), int Function(PtrAtlas)>('qvp_atlas_surah_count');
   late final int Function(PtrAtlas, int, ffi.Pointer<QvpAtlasSurahC>) atlasSurah = lib.lookupFunction<
       ffi.Int32 Function(PtrAtlas, ffi.Uint16, ffi.Pointer<QvpAtlasSurahC>), int Function(PtrAtlas, int, ffi.Pointer<QvpAtlasSurahC>)>('qvp_atlas_surah');
   late final int Function(PtrAtlas, int, ffi.Pointer<QvpAtlasSurahC>) atlasSurahAt = lib.lookupFunction<
       ffi.Int32 Function(PtrAtlas, ffi.Uint32, ffi.Pointer<QvpAtlasSurahC>), int Function(PtrAtlas, int, ffi.Pointer<QvpAtlasSurahC>)>('qvp_atlas_surah_at');
   late final int Function(PtrAtlas, int, int, ffi.Pointer<QvpAtlasRubuAlHizbC>) atlasDivision = lib.lookupFunction<
       ffi.Int32 Function(PtrAtlas, ffi.Uint8, ffi.Uint16, ffi.Pointer<QvpAtlasRubuAlHizbC>), int Function(PtrAtlas, int, int, ffi.Pointer<QvpAtlasRubuAlHizbC>)>('qvp_atlas_division');
-  late final int Function(PtrAtlas, int, int, int) atlasDivisionAt =
-      lib.lookupFunction<ffi.Int32 Function(PtrAtlas, ffi.Uint8, ffi.Uint16, ffi.Uint16), int Function(PtrAtlas, int, int, int)>('qvp_atlas_division_at');
+  late final int Function(PtrAtlas, int, int, int) atlasDivisionOf =
+      lib.lookupFunction<ffi.Int32 Function(PtrAtlas, ffi.Uint8, ffi.Uint16, ffi.Uint16), int Function(PtrAtlas, int, int, int)>('qvp_atlas_division_of');
   late final int Function(PtrAtlas, int, PtrU16) atlasPagesOfJuz =
       lib.lookupFunction<ffi.Int32 Function(PtrAtlas, ffi.Uint16, PtrU16), int Function(PtrAtlas, int, PtrU16)>('qvp_atlas_pages_of_juz');
-  late final int Function(PtrAtlas, PtrU8, int, PtrU16, int) atlasFindSurah = lib.lookupFunction<
-      ffi.Uint32 Function(PtrAtlas, PtrU8, ffi.Uint32, PtrU16, ffi.Uint32), int Function(PtrAtlas, PtrU8, int, PtrU16, int)>('qvp_atlas_find_surah');
+  late final int Function(PtrAtlas, PtrU8, int, PtrU16, int) atlasSearchSurahs = lib.lookupFunction<
+      ffi.Uint32 Function(PtrAtlas, PtrU8, ffi.Uint32, PtrU16, ffi.Uint32), int Function(PtrAtlas, PtrU8, int, PtrU16, int)>('qvp_atlas_search_surahs');
   late final void Function(PtrAtlas, PtrStr) atlasJson = lib.lookupFunction<ffi.Void Function(PtrAtlas, PtrStr), void Function(PtrAtlas, PtrStr)>('qvp_atlas_json');
 
   // names

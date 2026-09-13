@@ -109,9 +109,9 @@ class MainActivity : AppCompatActivity() {
         // styling
         panel.addView(section("Styling (each toggle is one engine handle)"))
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val bTaj = toggleButton("Mark colours") { on -> page?.let { p -> if (tajwid != 0) { p.unstyle(tajwid); tajwid = 0 }; if (on) tajwid = p.theme(QvpTheme(diacritics = 0x1a73e8ff.toInt(), dots = 0xc62828ff.toInt(), waqf = 0x0a7d32ff.toInt(), sifr = 0xef6c00ff.toInt(), transitionMs = 200)); view.invalidate() } }
-        val bHide = toggleButton("Hide marks") { on -> page?.let { p -> if (hideMarksH != 0) { p.unstyle(hideMarksH); hideMarksH = 0 }; if (on) hideMarksH = p.hide(Selector.kind(QvpKind.MARK)); view.invalidate() } }
-        val bMk = toggleButton("Gold ayah marks") { on -> page?.let { p -> if (ayahMarksH != 0) { p.unstyle(ayahMarksH); ayahMarksH = 0 }; if (on) ayahMarksH = p.style(Selector.deco(QvpDeco.AYAH_MARK), 0xb8860bff.toInt(), 300, QvpLayer.THEME + 1); view.invalidate() } }
+        val bTaj = toggleButton("Mark colours") { on -> page?.let { p -> if (tajwid != 0) { p.removeStyle(tajwid); tajwid = 0 }; if (on) tajwid = p.theme(QvpTheme(diacritics = 0x1a73e8ff.toInt(), dots = 0xc62828ff.toInt(), waqf = 0x0a7d32ff.toInt(), sifr = 0xef6c00ff.toInt(), transitionMs = 200)); view.invalidate() } }
+        val bHide = toggleButton("Hide marks") { on -> page?.let { p -> if (hideMarksH != 0) { p.removeStyle(hideMarksH); hideMarksH = 0 }; if (on) hideMarksH = p.hide(Selector.kind(QvpKind.MARK)); view.invalidate() } }
+        val bMk = toggleButton("Gold ayah marks") { on -> page?.let { p -> if (ayahMarksH != 0) { p.removeStyle(ayahMarksH); ayahMarksH = 0 }; if (on) ayahMarksH = p.style(Selector.deco(QvpDeco.AYAH_MARK), 0xb8860bff.toInt(), 300, QvpLayer.THEME + 1); view.invalidate() } }
         listOf(bTaj, bHide, bMk).forEach { row1.addView(it) }
         panel.addView(HorizontalScrollView(this).apply { addView(row1) })
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -129,14 +129,14 @@ class MainActivity : AppCompatActivity() {
         val maskMode = Spinner(this).apply { adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, listOf("hide", "block")) }
         mrow.addView(Button(this).apply { text = "Mask ayah"; setOnClickListener { page?.let { p -> val t = selAyah?.let { Target.ayah(it.first, it.second) } ?: (if (selWordIdx >= 0) p.words[selWordIdx].let { Target.ayah(it.surah, it.ayah) } else Target.page()); p.maskOptions(blockColor = QvpColor.rgba(themes[theme]!!.third)); p.mask(t, if (maskMode.selectedItemPosition == 1) MaskMode.BLOCK else MaskMode.HIDE); view.invalidate() } } })
         mrow.addView(maskMode)
-        mrow.addView(Button(this).apply { text = "Reveal"; setOnClickListener { page?.revealNext(1); view.invalidate() } })
-        mrow.addView(Button(this).apply { text = "Hide back"; setOnClickListener { page?.hideBack(1); view.invalidate() } })
+        mrow.addView(Button(this).apply { text = "Reveal"; setOnClickListener { page?.unmaskNext(1); view.invalidate() } })
+        mrow.addView(Button(this).apply { text = "Hide back"; setOnClickListener { page?.maskBack(1); view.invalidate() } })
         mrow.addView(Button(this).apply { text = "Unmask"; setOnClickListener { page?.unmask(); view.invalidate() } })
         panel.addView(HorizontalScrollView(this).apply { addView(mrow) })
         val rrow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         rrow.addView(toggleButton("Greyed page") { on -> page?.let { p -> revealOn = on; if (on) { val steps = p.revealStart(lit = 2, grey = if (theme == "dark") 0x4a4f57ff.toInt() else 0xc9c4b8ff.toInt(), ink = themes[theme]!!.first, transitionMs = 150); revealSeek.max = steps - 1; revealSeek.progress = 0; revealSeek.isEnabled = true; p.revealGoto(-1) } else { p.revealStop(); revealSeek.isEnabled = false }; view.invalidate() } })
         revealSeek = SeekBar(this).apply { isEnabled = false; setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, v: Int, fromUser: Boolean) { if (revealOn) { page?.revealGoto(v.toLong()); revealVal.text = "${v + 1}/${page?.revealSteps()}"; view.invalidate() } }
+            override fun onProgressChanged(s: SeekBar?, v: Int, fromUser: Boolean) { if (revealOn) { page?.revealGoto(v.toLong()); revealVal.text = "${v + 1}/${page?.revealStepCount()}"; view.invalidate() } }
             override fun onStartTrackingTouch(s: SeekBar?) {}; override fun onStopTrackingTouch(s: SeekBar?) {} }) }
         revealVal = TextView(this).apply { textSize = 11f; minWidth = dp(44) }
         rrow.addView(revealSeek, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)); rrow.addView(revealVal)
@@ -181,7 +181,7 @@ class MainActivity : AppCompatActivity() {
         val a = atlas ?: return
         Regex("^(\\d+):(\\d+)").find(s)?.let { g -> val su = g.groupValues[1].toInt(); val ay = g.groupValues[2].toInt(); a.pageOf(su, ay)?.let { loadPage(it); selectAyah(su, ay) }; return }
         Regex("^juz\\s*(\\d+)", RegexOption.IGNORE_CASE).find(s)?.let { g -> a.juz(g.groupValues[1].toInt())?.let { loadPage(it.page) }; return }
-        a.findSurah(s).firstOrNull()?.let { loadPage(it.page) }
+        a.searchSurahs(s).firstOrNull()?.let { loadPage(it.page) }
     }
 
     private fun loadPage(n: Int) {
@@ -195,7 +195,7 @@ class MainActivity : AppCompatActivity() {
         stopPlay(); page?.close(); page = p; pageNo = target
         pageField.setText("$target")
         selWordIdx = -1; selAyah = null; hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; pathHandles.clear(); tajwid = 0; hideMarksH = 0; ayahMarksH = 0; revealOn = false; revealSeek.isEnabled = false
-        p.setDefaultInk(themes[theme]!!.first)
+        p.setDefaultColor(themes[theme]!!.first)
         view.page = p
         showSelection(); showMeta(); runSearch()
     }
@@ -203,28 +203,28 @@ class MainActivity : AppCompatActivity() {
         val p = page ?: return
         val su = p.surahs().joinToString(", ") { "${it.number}${if (it.latin.isNotEmpty()) " " + it.latin else ""}${if (it.hasBanner) " (banner)" else ""}" }
         val dv = p.divisions().joinToString(", ") { "${it.kind.name.lowercase()} ${it.n} at ${it.surah}:${it.ayah}" }
-        val j = atlas?.juzAt(p.words[0].surah, p.words[0].ayah)
+        val j = atlas?.juzOf(p.words[0].surah, p.words[0].ayah)
         meta.text = "surahs: $su" + (if (dv.isNotEmpty()) "\nstarts here: $dv" else "") + (if (j != null) "\njuz $j · pages ${atlas!!.pagesOfJuz(j)}" else "") + "\nayahs: " + p.ayahKeys().joinToString(" ") { "${it.first}:${it.second}" }
     }
 
     private fun selectWord(i: Int) {
         val p = page ?: return
-        selAyah = null; view.clearSelection(); if (hlAyah != 0) { p.unhighlight(hlAyah); hlAyah = 0 }
-        pathHandles.values.forEach { p.unstyle(it) }; pathHandles.clear()
-        if (i < 0 || i == selWordIdx) { selWordIdx = -1; if (hlSel != 0) { p.unhighlight(hlSel); hlSel = 0 } }
+        selAyah = null; view.clearSelection(); if (hlAyah != 0) { p.removeHighlight(hlAyah); hlAyah = 0 }
+        pathHandles.values.forEach { p.removeStyle(it) }; pathHandles.clear()
+        if (i < 0 || i == selWordIdx) { selWordIdx = -1; if (hlSel != 0) { p.removeHighlight(hlSel); hlSel = 0 } }
         else {
             selWordIdx = i
             val st = QvpHighlightStyle(mode = hlMode, ink = 0x1a73e8ff.toInt(), band = QvpColor.withAlpha(0x1a73e8ff.toInt(), 0.18f), radius = 1.5f, transitionMs = hlMs, layer = QvpLayer.SELECTION)
-            if (hlSel != 0) p.rehighlight(hlSel, Target.word(i)) else hlSel = p.highlight(Target.word(i), st)
+            if (hlSel != 0) p.moveHighlight(hlSel, Target.word(i)) else hlSel = p.highlight(Target.word(i), st)
         }
         showSelection(); view.invalidate()
     }
     private fun selectAyah(s: Int, a: Int) {
         val p = page ?: return
-        if (hlSel != 0) { p.unhighlight(hlSel); hlSel = 0 }; selWordIdx = -1; view.clearSelection()
+        if (hlSel != 0) { p.removeHighlight(hlSel); hlSel = 0 }; selWordIdx = -1; view.clearSelection()
         selAyah = s to a
         val st = QvpHighlightStyle(mode = hlMode, ink = 0x0a7d32ff.toInt(), band = QvpColor.withAlpha(0x0a7d32ff.toInt(), 0.14f), radius = 1.5f, transitionMs = hlMs, layer = QvpLayer.SELECTION)
-        if (hlAyah != 0) p.rehighlight(hlAyah, Target.ayah(s, a)) else hlAyah = p.highlight(Target.ayah(s, a), st)
+        if (hlAyah != 0) p.moveHighlight(hlAyah, Target.ayah(s, a)) else hlAyah = p.highlight(Target.ayah(s, a), st)
         showSelection(); view.invalidate()
     }
     private fun showSelection() {
@@ -248,7 +248,7 @@ class MainActivity : AppCompatActivity() {
             val label = if (kind == QvpKind.MARK) "${QvpEngine.markName(p.pathMark(i))} #$nth" else QvpEngine.kindName(kind)
             chips.addView(ToggleButton(this).apply { textOn = label; textOff = label; text = label; textSize = 10f; isChecked = pathHandles.containsKey(i)
                 setOnCheckedChangeListener { _, c -> if (c) pathHandles[i] = if (kind == QvpKind.MARK && nth >= 0) p.style(Selector.wordMark(w.idx, nth), 0xef6c00ff.toInt(), 200, QvpLayer.TOP) else p.style(Selector.path(i), 0xef6c00ff.toInt(), 200, QvpLayer.TOP)
-                    else pathHandles.remove(i)?.let { p.unstyle(it) }; view.invalidate() } })
+                    else pathHandles.remove(i)?.let { p.removeStyle(it) }; view.invalidate() } })
         }
     }
     private fun copySelection() {
@@ -267,7 +267,7 @@ class MainActivity : AppCompatActivity() {
     private fun runSearch() {
         val p = page ?: return
         results.removeAllViews()
-        if (hlSearch != 0) { p.unhighlight(hlSearch); hlSearch = 0 }
+        if (hlSearch != 0) { p.removeHighlight(hlSearch); hlSearch = 0 }
         val q = searchField.text.toString().trim()
         if (q.isEmpty()) { view.invalidate(); return }
         val m = p.search(q)
@@ -282,7 +282,7 @@ class MainActivity : AppCompatActivity() {
         view.paperColor = paper; root.setBackgroundColor(bg)
         val fg = if (t == "dark") Color.WHITE else Color.BLACK
         listOf(selWord, selInfo, hud, meta).forEach { it.setTextColor(fg) }
-        page?.setDefaultInk(ink); view.invalidate()
+        page?.setDefaultColor(ink); view.invalidate()
     }
     private fun clearAll() {
         val p = page ?: return
@@ -300,11 +300,11 @@ class MainActivity : AppCompatActivity() {
             val pg = page ?: return
             playIdx++
             if (playIdx >= pg.nWords) { stepPage(+1); return }
-            pg.rehighlight(hlPlay, Target.word(playIdx)); view.invalidate(); handler.postDelayed(this, 320)
+            pg.moveHighlight(hlPlay, Target.word(playIdx)); view.invalidate(); handler.postDelayed(this, 320)
         } }
         handler.postDelayed(tick, 320); view.invalidate()
     }
-    private fun stopPlay() { playing = false; handler.removeCallbacksAndMessages(null); page?.let { if (hlPlay != 0) { it.unhighlight(hlPlay); hlPlay = 0 } }; view.invalidate() }
+    private fun stopPlay() { playing = false; handler.removeCallbacksAndMessages(null); page?.let { if (hlPlay != 0) { it.removeHighlight(hlPlay); hlPlay = 0 } }; view.invalidate() }
 
     private fun hud() {
         val p = page ?: return

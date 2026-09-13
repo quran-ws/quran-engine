@@ -702,9 +702,9 @@ pub unsafe extern "C" fn qvp_find_word(page: *const Page, surah: u16, ayah: u16,
     guard(|| guard(|| (*page).find_word(surah, ayah, word).map(|i| i as i32).unwrap_or(-1)))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_resolve(page: *const Page, t: *const QvpTarget, out: *mut u32, cap: u32) -> u32 {
+pub unsafe extern "C" fn qvp_target_words(page: *const Page, t: *const QvpTarget, out: *mut u32, cap: u32) -> u32 {
     guard(|| {
-        let v = (*page).resolve(&target(t));
+        let v = (*page).target_words(&target(t));
         fill(out, cap, &v)
     })
 }
@@ -716,7 +716,7 @@ pub unsafe extern "C" fn qvp_natural_pitch(page: *const Page) -> f32 {
 // ───────────── metadata ─────────────
 
 #[no_mangle]
-pub unsafe extern "C" fn qvp_surahs_count(page: *const Page) -> u32 {
+pub unsafe extern "C" fn qvp_surah_count(page: *const Page) -> u32 {
     guard(|| guard(|| (*page).surahs().len() as u32))
 }
 /// Strings point into a thread-local buffer valid until the next string-returning call.
@@ -875,29 +875,6 @@ pub unsafe extern "C" fn qvp_ayah_label(page: *const Page, ai: u32, out: *mut Qv
 #[no_mangle]
 pub unsafe extern "C" fn qvp_text(
     page: *const Page,
-    words: *const u32,
-    n: u32,
-    form: u8,
-    word_sep: *const u8,
-    word_sep_len: u32,
-    line_sep: *const u8,
-    line_sep_len: u32,
-    out: *mut QvpStr,
-) {
-    guard(|| {
-        let ws = if words.is_null() {
-            (*page).resolve(&Target::Page)
-        } else {
-            std::slice::from_raw_parts(words, n as usize).to_vec()
-        };
-        let s =
-            (*page).text_of(&ws, Form::from_u8(form), in_str(word_sep, word_sep_len), in_str(line_sep, line_sep_len));
-        out_str(out, &s);
-    })
-}
-#[no_mangle]
-pub unsafe extern "C" fn qvp_text_target(
-    page: *const Page,
     t: *const QvpTarget,
     form: u8,
     word_sep: *const u8,
@@ -907,7 +884,7 @@ pub unsafe extern "C" fn qvp_text_target(
     out: *mut QvpStr,
 ) {
     guard(|| {
-        let ws = (*page).resolve(&target(t));
+        let ws = if t.is_null() { (*page).target_words(&Target::Page) } else { (*page).target_words(&target(t)) };
         let s =
             (*page).text_of(&ws, Form::from_u8(form), in_str(word_sep, word_sep_len), in_str(line_sep, line_sep_len));
         out_str(out, &s);
@@ -1222,11 +1199,11 @@ pub unsafe extern "C" fn qvp_style_add_target(
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_remove(page: *mut Page, handle: u32) -> u32 {
-    guard(|| guard(|| (*page).unstyle(handle) as u32))
+    guard(|| guard(|| (*page).remove_style(handle) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_style_repaint(page: *mut Page, handle: u32, rgba: u32, transition_ms: u32) -> u32 {
-    guard(|| guard(|| (*page).restyle(handle, Paint::fade(rgba, transition_ms)) as u32))
+pub unsafe extern "C" fn qvp_style_recolor(page: *mut Page, handle: u32, rgba: u32, transition_ms: u32) -> u32 {
+    guard(|| guard(|| (*page).recolor_style(handle, Paint::fade(rgba, transition_ms)) as u32))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_clear(page: *mut Page) {
@@ -1241,13 +1218,13 @@ pub unsafe extern "C" fn qvp_style_clear_layer(page: *mut Page, layer: i32) {
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_style_default(page: *mut Page, rgba: u32) {
+pub unsafe extern "C" fn qvp_style_default_color(page: *mut Page, rgba: u32) {
     guard(|| {
         (*page).set_default_ink(rgba);
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hide(page: *mut Page, sel: *const QvpSelector) -> u32 {
+pub unsafe extern "C" fn qvp_style_hide(page: *mut Page, sel: *const QvpSelector) -> u32 {
     guard(|| {
         guard(|| match selector(sel) {
             Some(s) => (*page).hide(s),
@@ -1296,13 +1273,13 @@ pub unsafe extern "C" fn qvp_tick(page: *mut Page, now_ms: f64) -> u32 {
     guard(|| guard(|| (*page).tick(now_ms) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_paint(page: *mut Page) -> *const u32 {
-    guard(|| guard(|| (*page).paint().as_ptr()))
+pub unsafe extern "C" fn qvp_colors(page: *mut Page) -> *const u32 {
+    guard(|| guard(|| (*page).colors().as_ptr()))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_styled(page: *mut Page, out: *mut u32, cap: u32) -> u32 {
+pub unsafe extern "C" fn qvp_styled_paths(page: *mut Page, out: *mut u32, cap: u32) -> u32 {
     guard(|| {
-        let v = (*page).styled();
+        let v = (*page).styled_paths();
         if !out.is_null() {
             for (i, (idx, c)) in v.iter().enumerate().take(cap as usize) {
                 *out.add(i * 2) = *idx;
@@ -1320,26 +1297,30 @@ pub unsafe extern "C" fn qvp_color_of(page: *mut Page, pi: u32) -> u32 {
 // ───────────── highlights ─────────────
 
 #[no_mangle]
-pub unsafe extern "C" fn qvp_highlight(page: *mut Page, t: *const QvpTarget, style: *const QvpHighlightStyle) -> u32 {
+pub unsafe extern "C" fn qvp_highlight_add(
+    page: *mut Page,
+    t: *const QvpTarget,
+    style: *const QvpHighlightStyle,
+) -> u32 {
     guard(|| {
         let st = if style.is_null() { HighlightStyle::default() } else { hstyle(style) };
         (*page).highlight(&target(t), st)
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_rehighlight(page: *mut Page, handle: u32, t: *const QvpTarget) -> u32 {
-    guard(|| guard(|| (*page).rehighlight(handle, &target(t)) as u32))
+pub unsafe extern "C" fn qvp_highlight_move(page: *mut Page, handle: u32, t: *const QvpTarget) -> u32 {
+    guard(|| guard(|| (*page).move_highlight(handle, &target(t)) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_restyle_highlight(page: *mut Page, handle: u32, style: *const QvpHighlightStyle) -> u32 {
+pub unsafe extern "C" fn qvp_highlight_restyle(page: *mut Page, handle: u32, style: *const QvpHighlightStyle) -> u32 {
     guard(|| guard(|| (*page).restyle_highlight(handle, hstyle(style)) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_unhighlight(page: *mut Page, handle: u32) -> u32 {
-    guard(|| guard(|| (*page).unhighlight(handle) as u32))
+pub unsafe extern "C" fn qvp_highlight_remove(page: *mut Page, handle: u32) -> u32 {
+    guard(|| guard(|| (*page).remove_highlight(handle) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_clear_highlights(page: *mut Page) {
+pub unsafe extern "C" fn qvp_highlight_clear(page: *mut Page) {
     guard(|| {
         (*page).clear_highlights();
     })
@@ -1453,31 +1434,31 @@ pub unsafe extern "C" fn qvp_mask_options(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_reveal_next(page: *mut Page, n: u32) -> u32 {
-    guard(|| guard(|| (*page).reveal_next(n as usize) as u32))
+pub unsafe extern "C" fn qvp_unmask_next(page: *mut Page, n: u32) -> u32 {
+    guard(|| guard(|| (*page).unmask_next(n as usize) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hide_back(page: *mut Page, n: u32) -> u32 {
-    guard(|| guard(|| (*page).hide_back(n as usize) as u32))
+pub unsafe extern "C" fn qvp_mask_back(page: *mut Page, n: u32) -> u32 {
+    guard(|| guard(|| (*page).mask_back(n as usize) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_reveal_word(page: *mut Page, wi: u32) -> u32 {
-    guard(|| guard(|| (*page).reveal_word(wi) as u32))
+pub unsafe extern "C" fn qvp_unmask_word(page: *mut Page, wi: u32) -> u32 {
+    guard(|| guard(|| (*page).unmask_word(wi) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hide_word(page: *mut Page, wi: u32) -> u32 {
-    guard(|| guard(|| (*page).hide_word(wi) as u32))
+pub unsafe extern "C" fn qvp_mask_word(page: *mut Page, wi: u32) -> u32 {
+    guard(|| guard(|| (*page).mask_word(wi) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_reveal_all(page: *mut Page) {
+pub unsafe extern "C" fn qvp_unmask_all(page: *mut Page) {
     guard(|| {
-        (*page).reveal_all();
+        (*page).unmask_all();
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hide_all(page: *mut Page) {
+pub unsafe extern "C" fn qvp_mask_all(page: *mut Page) {
     guard(|| {
-        (*page).hide_all();
+        (*page).mask_all();
     })
 }
 #[no_mangle]
@@ -1519,12 +1500,12 @@ pub unsafe extern "C" fn qvp_reveal_goto(page: *mut Page, at: i64) -> u32 {
     guard(|| guard(|| (*page).reveal_goto(at) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_reveal_at(page: *const Page) -> i64 {
-    guard(|| guard(|| (*page).reveal_at().unwrap_or(-2)))
+pub unsafe extern "C" fn qvp_reveal_position(page: *const Page) -> i64 {
+    guard(|| guard(|| (*page).reveal_position().unwrap_or(-2)))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_reveal_steps(page: *const Page) -> u32 {
-    guard(|| guard(|| (*page).reveal_steps()))
+pub unsafe extern "C" fn qvp_reveal_step_count(page: *const Page) -> u32 {
+    guard(|| guard(|| (*page).reveal_step_count()))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_step_of(page: *const Page, wi: u32) -> i64 {
@@ -1628,11 +1609,11 @@ pub unsafe extern "C" fn qvp_atlas_page_range(a: *const Atlas, page: u16, out: *
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_atlas_pages(a: *const Atlas) -> u32 {
+pub unsafe extern "C" fn qvp_atlas_page_count(a: *const Atlas) -> u32 {
     guard(|| guard(|| (*a).pages.len() as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_atlas_surahs(a: *const Atlas) -> u32 {
+pub unsafe extern "C" fn qvp_atlas_surah_count(a: *const Atlas) -> u32 {
     guard(|| guard(|| (*a).surahs.len() as u32))
 }
 unsafe fn atlas_surah_out(s: &qvp_core::qvp_format::atlas::AtlasSurah, out: *mut QvpAtlasSurah) {
@@ -1704,7 +1685,7 @@ pub unsafe extern "C" fn qvp_atlas_division(a: *const Atlas, kind: u8, n: u16, o
 }
 /// kind: 0 juz, 1 hizb, 2 nisf, 3 rubu_al_hizb → division number containing the ayah, or -1
 #[no_mangle]
-pub unsafe extern "C" fn qvp_atlas_division_at(a: *const Atlas, kind: u8, surah: u16, ayah: u16) -> i32 {
+pub unsafe extern "C" fn qvp_atlas_division_of(a: *const Atlas, kind: u8, surah: u16, ayah: u16) -> i32 {
     guard(|| {
         let r = match kind {
             0 => (*a).juz_at(surah, ayah),
@@ -1730,7 +1711,7 @@ pub unsafe extern "C" fn qvp_atlas_pages_of_juz(a: *const Atlas, n: u16, out: *m
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_atlas_find_surah(
+pub unsafe extern "C" fn qvp_atlas_search_surahs(
     a: *const Atlas,
     text: *const u8,
     len: u32,
@@ -1738,7 +1719,7 @@ pub unsafe extern "C" fn qvp_atlas_find_surah(
     cap: u32,
 ) -> u32 {
     guard(|| {
-        let v: Vec<u16> = (*a).find_surah(in_str(text, len)).iter().map(|s| s.n).collect();
+        let v: Vec<u16> = (*a).search_surahs(in_str(text, len)).iter().map(|s| s.n).collect();
         fill(out, cap, &v)
     })
 }

@@ -46,7 +46,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun lines(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.lines.map { Marshal.line(it) } }
     @ReactMethod fun decos(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.decos.map { Marshal.deco(it) } }
     @ReactMethod fun findWord(tag: Int, s: Int, a: Int, w: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.findWord(s, a, w) }
-    @ReactMethod fun resolve(tag: Int, target: Dynamic, promise: Promise) = withPage(tag, promise) { _, p -> p.resolve(tgt(target, p)).toList() }
+    @ReactMethod fun targetWords(tag: Int, target: Dynamic, promise: Promise) = withPage(tag, promise) { _, p -> p.targetWords(tgt(target, p)).toList() }
     @ReactMethod fun wordForm(tag: Int, idx: Int, form: String?, promise: Promise) = withPage(tag, promise) { _, p -> p.wordForm(idx, Marshal.form(form)) }
     @ReactMethod fun hasForm(tag: Int, form: String?, promise: Promise) = withPage(tag, promise) { _, p -> p.hasForm(Marshal.form(form)) }
     @ReactMethod fun attachWords(tag: Int, json: String, promise: Promise) = withPage(tag, promise) { _, p -> p.attachWords(json) }
@@ -103,16 +103,16 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun selectionText(tag: Int, form: String?, citation: Boolean, promise: Promise) = withPage(tag, promise) { _, p -> p.selectionText(Marshal.form(form), citation) }
 
     // ── memorisation (stepwise ops; `mask` / `reveal` props hold the declarative part) ──
-    @ReactMethod fun revealNext(tag: Int, n: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.revealNext(n).also { v.inner.invalidate() } }
-    @ReactMethod fun hideBack(tag: Int, n: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.hideBack(n).also { v.inner.invalidate() } }
-    @ReactMethod fun revealWord(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.revealWord(i).also { v.inner.invalidate() } }
-    @ReactMethod fun hideWord(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.hideWord(i).also { v.inner.invalidate() } }
-    @ReactMethod fun revealAll(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.revealAll(); v.inner.invalidate(); null }
-    @ReactMethod fun hideAll(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.hideAll(); v.inner.invalidate(); null }
+    @ReactMethod fun unmaskNext(tag: Int, n: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.unmaskNext(n).also { v.inner.invalidate() } }
+    @ReactMethod fun maskBack(tag: Int, n: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.maskBack(n).also { v.inner.invalidate() } }
+    @ReactMethod fun unmaskWord(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.unmaskWord(i).also { v.inner.invalidate() } }
+    @ReactMethod fun maskWord(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.maskWord(i).also { v.inner.invalidate() } }
+    @ReactMethod fun unmaskAll(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.unmaskAll(); v.inner.invalidate(); null }
+    @ReactMethod fun maskAll(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.maskAll(); v.inner.invalidate(); null }
     @ReactMethod fun maskHidden(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.maskHidden().toList() }
     @ReactMethod fun maskWords(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.maskWords().toList() }
-    @ReactMethod fun revealSteps(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.revealSteps() }
-    @ReactMethod fun revealAt(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.revealAt()?.toDouble() }
+    @ReactMethod fun revealStepCount(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.revealStepCount() }
+    @ReactMethod fun revealPosition(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.revealPosition()?.toDouble() }
     @ReactMethod fun revealStepOf(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.revealStepOf(i).toDouble() }
 
     // ── crop ──
@@ -138,15 +138,15 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun freeAtlas(id: Int, promise: Promise) = ui(promise) { atlases.remove(id)?.close(); atlasByUri.entries.removeAll { it.value == id }; null }
     @ReactMethod fun atlasPageOf(id: Int, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.pageOf(s, a) }
     @ReactMethod fun atlasPageRange(id: Int, page: Int, promise: Promise) = withAtlas(id, promise) { it.pageRange(page)?.let { r -> mapOf("first" to mapOf("surah" to r.first.first, "ayah" to r.first.second), "last" to mapOf("surah" to r.second.first, "ayah" to r.second.second)) } }
-    @ReactMethod fun atlasPages(id: Int, promise: Promise) = withAtlas(id, promise) { it.pages() }
+    @ReactMethod fun atlasPageCount(id: Int, promise: Promise) = withAtlas(id, promise) { it.pageCount() }
     @ReactMethod fun atlasSurah(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.surah(n)?.let { s -> Marshal.atlasSurah(s) } }
     @ReactMethod fun atlasSurahs(id: Int, promise: Promise) = withAtlas(id, promise) { it.surahs().map { s -> Marshal.atlasSurah(s) } }
     @ReactMethod fun atlasPageOfSurah(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.pageOfSurah(n) }
     @ReactMethod fun atlasDivision(id: Int, kind: String, n: Int, promise: Promise) = withAtlas(id, promise) { it.division(Marshal.division(kind), n)?.let { r -> Marshal.atlasRubuAlHizb(r) } }
-    @ReactMethod fun atlasDivisionAt(id: Int, kind: String, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.divisionAt(Marshal.division(kind), s, a) }
-    @ReactMethod fun atlasJuzAt(id: Int, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.juzAt(s, a) }
+    @ReactMethod fun atlasDivisionOf(id: Int, kind: String, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.divisionOf(Marshal.division(kind), s, a) }
+    @ReactMethod fun atlasJuzOf(id: Int, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.juzOf(s, a) }
     @ReactMethod fun atlasPagesOfJuz(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.pagesOfJuz(n)?.let { r -> listOf(r.first, r.second) } }
-    @ReactMethod fun atlasFindSurah(id: Int, text: String, promise: Promise) = withAtlas(id, promise) { it.findSurah(text).map { s -> Marshal.atlasSurah(s) } }
+    @ReactMethod fun atlasSearchSurahs(id: Int, text: String, promise: Promise) = withAtlas(id, promise) { it.searchSurahs(text).map { s -> Marshal.atlasSurah(s) } }
 
     // ── names ──
     @ReactMethod fun markName(m: Int, promise: Promise) = ui(promise) { QvpEngine.markName(m) }

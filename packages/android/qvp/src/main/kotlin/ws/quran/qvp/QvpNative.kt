@@ -22,10 +22,10 @@ internal object QvpNative {
     @JvmStatic external fun decoInfo(h: Long, i: Int): FloatArray?
     @JvmStatic external fun decoText(h: Long, i: Int): String?
     @JvmStatic external fun findWord(h: Long, s: Int, a: Int, w: Int): Int
-    @JvmStatic external fun resolve(h: Long, target: IntArray): IntArray
+    @JvmStatic external fun targetWords(h: Long, target: IntArray): IntArray
     @JvmStatic external fun naturalPitch(h: Long): Float
     // metadata
-    @JvmStatic external fun surahsCount(h: Long): Int
+    @JvmStatic external fun surahCount(h: Long): Int
     @JvmStatic external fun surahNums(h: Long, i: Int): FloatArray?
     @JvmStatic external fun surahNames(h: Long, i: Int): Array<String>?
     @JvmStatic external fun divisions(h: Long): IntArray
@@ -38,7 +38,7 @@ internal object QvpNative {
     @JvmStatic external fun wordLabel(h: Long, i: Int): String
     @JvmStatic external fun ayahLabel(h: Long, i: Int): String
     // text & search
-    @JvmStatic external fun textTarget(h: Long, target: IntArray, form: Int, wordSep: String, lineSep: String): String
+    @JvmStatic external fun text(h: Long, target: IntArray, form: Int, wordSep: String, lineSep: String): String
     @JvmStatic external fun search(h: Long, query: String, form: Int, mode: Int, normalize: Boolean, loose: Boolean, limit: Int): IntArray
     @JvmStatic external fun arabic(kind: Int, s: String): String
     @JvmStatic external fun citation(h: Long, words: IntArray): String
@@ -61,23 +61,23 @@ internal object QvpNative {
     @JvmStatic external fun styleAdd(h: Long, layer: Int, sel: IntArray, rgba: Int, ms: Int): Int
     @JvmStatic external fun styleAddTarget(h: Long, layer: Int, target: IntArray, rgba: Int, ms: Int): Int
     @JvmStatic external fun styleRemove(h: Long, handle: Int): Int
-    @JvmStatic external fun styleRepaint(h: Long, handle: Int, rgba: Int, ms: Int): Int
+    @JvmStatic external fun styleRecolor(h: Long, handle: Int, rgba: Int, ms: Int): Int
     @JvmStatic external fun styleClear(h: Long)
     @JvmStatic external fun styleClearLayer(h: Long, layer: Int)
-    @JvmStatic external fun styleDefault(h: Long, rgba: Int)
+    @JvmStatic external fun styleDefaultColor(h: Long, rgba: Int)
     @JvmStatic external fun hide(h: Long, sel: IntArray): Int
     @JvmStatic external fun theme(h: Long, theme: IntArray): Int
     @JvmStatic external fun styleHandles(h: Long): IntArray
     // clock & display list
     @JvmStatic external fun tick(h: Long, nowMs: Double): Boolean
-    @JvmStatic external fun paint(h: Long): IntArray
-    @JvmStatic external fun styled(h: Long): IntArray
+    @JvmStatic external fun colors(h: Long): IntArray
+    @JvmStatic external fun styledPaths(h: Long): IntArray
     @JvmStatic external fun colorOf(h: Long, path: Int): Int
     // highlights
     @JvmStatic external fun highlight(h: Long, target: IntArray, styleInts: IntArray, styleFloats: FloatArray): Int
-    @JvmStatic external fun rehighlight(h: Long, handle: Int, target: IntArray): Boolean
+    @JvmStatic external fun moveHighlight(h: Long, handle: Int, target: IntArray): Boolean
     @JvmStatic external fun restyleHighlight(h: Long, handle: Int, styleInts: IntArray, styleFloats: FloatArray): Boolean
-    @JvmStatic external fun unhighlight(h: Long, handle: Int): Boolean
+    @JvmStatic external fun removeHighlight(h: Long, handle: Int): Boolean
     @JvmStatic external fun clearHighlights(h: Long)
     @JvmStatic external fun highlightHandles(h: Long): IntArray
     @JvmStatic external fun highlightWords(h: Long, handle: Int): IntArray
@@ -91,20 +91,20 @@ internal object QvpNative {
     @JvmStatic external fun mask(h: Long, target: IntArray, mode: Int)
     @JvmStatic external fun maskFrom(h: Long, wi: Int, mode: Int)
     @JvmStatic external fun maskOptions(h: Long, blockColor: Int, padX: Float, padY: Float, radius: Float, reverse: Boolean)
-    @JvmStatic external fun revealNext(h: Long, n: Int): Int
-    @JvmStatic external fun hideBack(h: Long, n: Int): Int
-    @JvmStatic external fun revealWord(h: Long, wi: Int): Boolean
-    @JvmStatic external fun hideWord(h: Long, wi: Int): Boolean
-    @JvmStatic external fun revealAll(h: Long)
-    @JvmStatic external fun hideAll(h: Long)
+    @JvmStatic external fun unmaskNext(h: Long, n: Int): Int
+    @JvmStatic external fun maskBack(h: Long, n: Int): Int
+    @JvmStatic external fun unmaskWord(h: Long, wi: Int): Boolean
+    @JvmStatic external fun maskWord(h: Long, wi: Int): Boolean
+    @JvmStatic external fun unmaskAll(h: Long)
+    @JvmStatic external fun maskAll(h: Long)
     @JvmStatic external fun unmask(h: Long)
     @JvmStatic external fun maskHidden(h: Long): IntArray
     @JvmStatic external fun maskWords(h: Long): IntArray
     @JvmStatic external fun maskBoxesView(h: Long): IntArray
     @JvmStatic external fun revealStart(h: Long, lit: Int, byAyah: Boolean, grey: Int, ink: Int, ayahMarks: Boolean, ms: Int): Int
     @JvmStatic external fun revealGoto(h: Long, at: Long): Boolean
-    @JvmStatic external fun revealAt(h: Long): Long
-    @JvmStatic external fun revealSteps(h: Long): Int
+    @JvmStatic external fun revealPosition(h: Long): Long
+    @JvmStatic external fun revealStepCount(h: Long): Int
     @JvmStatic external fun revealStepOf(h: Long, wi: Int): Long
     @JvmStatic external fun revealStop(h: Long)
     // crop
@@ -115,14 +115,14 @@ internal object QvpNative {
     @JvmStatic external fun atlasFree(h: Long)
     @JvmStatic external fun atlasPageOf(h: Long, s: Int, a: Int): Int
     @JvmStatic external fun atlasPageRange(h: Long, page: Int): IntArray?
-    @JvmStatic external fun atlasPages(h: Long): Int
-    @JvmStatic external fun atlasSurahs(h: Long): Int
+    @JvmStatic external fun atlasPageCount(h: Long): Int
+    @JvmStatic external fun atlasSurahCount(h: Long): Int
     @JvmStatic external fun atlasSurah(h: Long, n: Int): Array<String>?
     @JvmStatic external fun atlasSurahAt(h: Long, i: Int): Array<String>?
     @JvmStatic external fun atlasDivision(h: Long, kind: Int, n: Int): IntArray?
-    @JvmStatic external fun atlasDivisionAt(h: Long, kind: Int, s: Int, a: Int): Int
+    @JvmStatic external fun atlasDivisionOf(h: Long, kind: Int, s: Int, a: Int): Int
     @JvmStatic external fun atlasPagesOfJuz(h: Long, n: Int): IntArray?
-    @JvmStatic external fun atlasFindSurah(h: Long, text: String): IntArray
+    @JvmStatic external fun atlasSearchSurahs(h: Long, text: String): IntArray
     // names
     @JvmStatic external fun markName(m: Int): String
     @JvmStatic external fun familyName(f: Int): String

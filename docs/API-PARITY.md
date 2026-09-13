@@ -33,31 +33,37 @@ is owed.
 | `qvp_page_free` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_geometry` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_tick` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
-| `qvp_paint` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
-| `qvp_styled` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_colors` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_styled_paths` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_color_of` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_highlight_boxes_view` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_mask_boxes_view` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_hit_areas` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_line_bands` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_word_bands` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_highlight_add` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
+| `qvp_highlight_move` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
+| `qvp_highlight_restyle` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
+| `qvp_highlight_remove` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
+| `qvp_style_hide` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
+| `qvp_atlas_surah_count` | react-native | list form: bound as `atlasSurahs()` |
 | `qvp_style_add` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_style_add_target` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_style_remove` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
-| `qvp_style_repaint` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
+| `qvp_style_recolor` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_style_clear` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_style_clear_layer` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
-| `qvp_style_default` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
-| `qvp_clear_highlights` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
+| `qvp_style_default_color` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
+| `qvp_highlight_clear` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_highlight_words` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_surah_at` | react-native | list form: bound as `surahs()` |
-| `qvp_surahs_count` | react-native | list form: bound as `surahs().length` |
+| `qvp_surah_count` | react-native | list form: bound as `surahs().length` |
 | `qvp_atlas_surah_at` | react-native | list form: bound as `atlasSurahs()` |
 | `qvp_word_info` | react-native | list form: bound as `word(i)` and `words()` |
 | `qvp_ayah_info` | react-native | list form: bound as `ayahs()` |
 | `qvp_line_info` | react-native | list form: bound as `lines()` |
 | `qvp_deco_info` | react-native | list form: bound as `decos()` |
-| `qvp_text_target` | react-native | list form: `text(target)` takes a target |
+| `qvp_text` | react-native | list form: `text(target)` takes a target |
 
 ## Platform-level gaps
 
@@ -113,7 +119,7 @@ to every language.
 | text twins | `qvp_text_target` | `qvp_text` | `page.text(target)` | `page.text(target)` | one `qvp_text` taking a target; the word-list form is `QVP_TARGET_WORDS` |
 | colours | `qvp_paint` | `qvp_colors` | `page.paint()` | `page.colors()` | nouns for reads |
 | colours | `qvp_style_repaint` | `qvp_style_recolor` | `page.restyle` | `page.recolorStyle` | verbs for writes |
-| colours | `qvp_style_default` | `qvp_style_default_color` | `page.setDefaultInk` | `page.defaultColor` |  |
+| colours | `qvp_style_default` | `qvp_style_default_color` | `page.setDefaultInk` | `page.setDefaultColor` | `set` writes one value |
 | colours | `qvp_style_remove` | `qvp_style_remove` | `page.unstyle` | `page.removeStyle` | wrapper only: `un-` is not a verb in the vocabulary |
 | abbreviations | `qvp_deco_info` | `qvp_decoration_info` | `page.decos[i]` | `page.decorations[i]` |  |
 | abbreviations | `qvp_natural_pitch` | `qvp_page_line_spacing` | `page.naturalPitch` | `page.lineSpacing` | the owning noun carries the meaning |
@@ -207,25 +213,25 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-114 symbols in the header, 114 Rust exports. web: 114 bound, android: 112 bound, flutter: 114 bound, ios: 112 bound, react-native: 83 bound.
+113 symbols in the header, 113 Rust exports. web: 113 bound, android: 111 bound, flutter: 113 bound, ios: 111 bound, react-native: 77 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
 | `qvp_alloc` | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) |
 | `qvp_arabic` | yes | yes | yes | yes | yes |
 | `qvp_atlas_division` | yes | yes | yes | yes | yes |
-| `qvp_atlas_division_at` | yes | yes | yes | yes | yes |
-| `qvp_atlas_find_surah` | yes | yes | yes | yes | yes |
+| `qvp_atlas_division_of` | yes | yes | yes | yes | yes |
 | `qvp_atlas_free` | yes | yes | yes | yes | yes |
 | `qvp_atlas_json` | yes | yes | yes | yes | yes |
 | `qvp_atlas_load` | yes | yes | yes | yes | yes |
+| `qvp_atlas_page_count` | yes | yes | yes | yes | yes |
 | `qvp_atlas_page_of` | yes | yes | yes | yes | yes |
 | `qvp_atlas_page_range` | yes | yes | yes | yes | yes |
-| `qvp_atlas_pages` | yes | yes | yes | yes | yes |
 | `qvp_atlas_pages_of_juz` | yes | yes | yes | yes | yes |
+| `qvp_atlas_search_surahs` | yes | yes | yes | yes | yes |
 | `qvp_atlas_surah` | yes | yes | yes | yes | yes |
 | `qvp_atlas_surah_at` | yes | yes | yes | yes | gap (list form: bound as `atlasSurahs()`) |
-| `qvp_atlas_surahs` | yes | yes | yes | yes | yes |
+| `qvp_atlas_surah_count` | yes | yes | yes | yes | gap (list form: bound as `atlasSurahs()`) |
 | `qvp_attach_words` | yes | yes | yes | yes | yes |
 | `qvp_ayah_info` | yes | yes | yes | yes | gap (list form: bound as `ayahs()`) |
 | `qvp_ayah_keys` | yes | yes | yes | yes | yes |
@@ -234,8 +240,8 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_ayah_word_count` | yes | yes | yes | yes | yes |
 | `qvp_category_name` | yes | yes | yes | yes | yes |
 | `qvp_citation` | yes | yes | yes | yes | yes |
-| `qvp_clear_highlights` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_color_of` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_colors` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_crop_bounds` | yes | yes | yes | yes | yes |
 | `qvp_crop_svg` | yes | yes | yes | yes | yes |
 | `qvp_dealloc` | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) |
@@ -247,13 +253,13 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_gap_to_fill` | yes | yes | yes | yes | yes |
 | `qvp_geometry` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_has_form` | yes | yes | yes | yes | yes |
-| `qvp_hide` | yes | yes | yes | yes | yes |
-| `qvp_hide_all` | yes | yes | yes | yes | yes |
-| `qvp_hide_back` | yes | yes | yes | yes | yes |
-| `qvp_hide_word` | yes | yes | yes | yes | yes |
-| `qvp_highlight` | yes | yes | yes | yes | yes |
+| `qvp_highlight_add` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_highlight_boxes_view` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_highlight_clear` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_highlight_handles` | yes | yes | yes | yes | yes |
+| `qvp_highlight_move` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
+| `qvp_highlight_remove` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
+| `qvp_highlight_restyle` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_highlight_words` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_hit_areas` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_hit_test` | yes | yes | yes | yes | yes |
@@ -269,10 +275,13 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_mark_from_name` | yes | yes | yes | yes | yes |
 | `qvp_mark_name` | yes | yes | yes | yes | yes |
 | `qvp_mask` | yes | yes | yes | yes | yes |
+| `qvp_mask_all` | yes | yes | yes | yes | yes |
+| `qvp_mask_back` | yes | yes | yes | yes | yes |
 | `qvp_mask_boxes_view` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_mask_from` | yes | yes | yes | yes | yes |
 | `qvp_mask_hidden` | yes | yes | yes | yes | yes |
 | `qvp_mask_options` | yes | yes | yes | yes | yes |
+| `qvp_mask_word` | yes | yes | yes | yes | yes |
 | `qvp_mask_words` | yes | yes | yes | yes | yes |
 | `qvp_name` | yes | yes | yes | yes | yes |
 | `qvp_name_count` | yes | yes | yes | yes | yes |
@@ -281,20 +290,13 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_page_free` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_page_info` | yes | yes | yes | yes | yes |
 | `qvp_page_load` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript (`pageUri` prop)) |
-| `qvp_paint` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |
-| `qvp_rehighlight` | yes | yes | yes | yes | yes |
-| `qvp_resolve` | yes | yes | yes | yes | yes |
-| `qvp_restyle_highlight` | yes | yes | yes | yes | yes |
-| `qvp_reveal_all` | yes | yes | yes | yes | yes |
-| `qvp_reveal_at` | yes | yes | yes | yes | yes |
 | `qvp_reveal_goto` | yes | yes | yes | yes | yes |
-| `qvp_reveal_next` | yes | yes | yes | yes | yes |
+| `qvp_reveal_position` | yes | yes | yes | yes | yes |
 | `qvp_reveal_start` | yes | yes | yes | yes | yes |
+| `qvp_reveal_step_count` | yes | yes | yes | yes | yes |
 | `qvp_reveal_step_of` | yes | yes | yes | yes | yes |
-| `qvp_reveal_steps` | yes | yes | yes | yes | yes |
 | `qvp_reveal_stop` | yes | yes | yes | yes | yes |
-| `qvp_reveal_word` | yes | yes | yes | yes | yes |
 | `qvp_rosettes` | yes | yes | yes | yes | yes |
 | `qvp_sajdahs` | yes | yes | yes | yes | yes |
 | `qvp_search` | yes | yes | yes | yes | yes |
@@ -305,19 +307,22 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_style_add_target` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_clear` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_clear_layer` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
-| `qvp_style_default` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
+| `qvp_style_default_color` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_handles` | yes | yes | yes | yes | yes |
+| `qvp_style_hide` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
+| `qvp_style_recolor` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_remove` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
-| `qvp_style_repaint` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
-| `qvp_styled` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_styled_paths` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_surah_at` | yes | yes | yes | yes | gap (list form: bound as `surahs()`) |
-| `qvp_surahs_count` | yes | yes | yes | yes | gap (list form: bound as `surahs().length`) |
+| `qvp_surah_count` | yes | yes | yes | yes | gap (list form: bound as `surahs().length`) |
+| `qvp_target_words` | yes | yes | yes | yes | yes |
 | `qvp_text` | yes | yes | yes | yes | yes |
-| `qvp_text_target` | yes | yes | yes | yes | gap (list form: `text(target)` takes a target) |
 | `qvp_theme` | yes | yes | yes | yes | yes |
 | `qvp_tick` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_unhighlight` | yes | yes | yes | yes | yes |
 | `qvp_unmask` | yes | yes | yes | yes | yes |
+| `qvp_unmask_all` | yes | yes | yes | yes | yes |
+| `qvp_unmask_next` | yes | yes | yes | yes | yes |
+| `qvp_unmask_word` | yes | yes | yes | yes | yes |
 | `qvp_version` | yes | yes | yes | yes | yes |
 | `qvp_wasted_fraction` | yes | yes | yes | yes | yes |
 | `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |

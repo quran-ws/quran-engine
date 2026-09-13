@@ -340,7 +340,7 @@ impl Page {
     }
     /// All word indices of an ayah on this page, in reading order.
     pub fn ayah_words(&self, surah: u16, ayah: u16) -> Vec<u32> {
-        self.resolve(&Target::Ayah(surah, ayah))
+        self.target_words(&Target::Ayah(surah, ayah))
     }
     pub fn path_deco(&self, pi: u32) -> u32 {
         self.path_deco[pi as usize]
@@ -568,7 +568,7 @@ impl Page {
         for b in self.highlight_boxes_view() {
             r.fill_rect(b.x0, b.y0, b.x1, b.y1, b.radius, b.color);
         }
-        self.paint();
+        self.colors();
         for (i, g) in self.geom.table.iter().enumerate() {
             let c = self.colors[i];
             if c & 0xff == 0 {

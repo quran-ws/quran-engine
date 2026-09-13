@@ -111,7 +111,7 @@
     for (const s of su) parts.push(`${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`);
     let t = `surahs: ${parts.join(', ')}`;
     if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.kind} ${d.n} at ${d.surah}:${d.ayah}`).join(', ')}`;
-    if (atlas) { const j = atlas.juzAt(p.words[0].surah, p.words[0].ayah); if (j) t += `\njuz ${j} · pages ${atlas.pagesOfJuz(j).join('–')}`; }
+    if (atlas) { const j = atlas.juzOf(p.words[0].surah, p.words[0].ayah); if (j) t += `\njuz ${j} · pages ${atlas.pagesOfJuz(j).join('–')}`; }
     t += `\nayahs: ${p.ayahKeys().map(([s, a]) => `${s}:${a}`).join(' ')}`;
     $('meta').textContent = t;
   }
@@ -128,7 +128,7 @@
     }
     if (!w) {
       if (S.selAyah) {
-        const [s, a] = S.selAyah, ws = p.resolve(T.ayah(s, a)), { count, complete } = p.ayahWordCount(s, a);
+        const [s, a] = S.selAyah, ws = p.targetWords(T.ayah(s, a)), { count, complete } = p.ayahWordCount(s, a);
         $('selWord').textContent = p.text(T.ayah(s, a));
         info.innerHTML = `<b>ayah</b><span>${s}:${a} · ${count} words${complete ? '' : ' (continues on another page)'}</span><b>label</b><span>${p.ayahLabel(p.words[ws[0]].ayahIdx)}</span>`;
       } else { $('selWord').textContent = '—'; }
@@ -144,7 +144,7 @@
       el.className = 'chip' + (S.pathHandles.has(i) ? ' on' : '');
       el.textContent = label; el.title = `engine path ${i} · ${engine.categoryName(p.pathCategory(i)) || 'body'}`;
       el.onclick = () => {
-        if (S.pathHandles.has(i)) { p.unstyle(S.pathHandles.get(i)); S.pathHandles.delete(i); }
+        if (S.pathHandles.has(i)) { p.removeStyle(S.pathHandles.get(i)); S.pathHandles.delete(i); }
         else S.pathHandles.set(i, kind === KIND.MARK && nth >= 0 ? p.style(Sel.wordMark(w.idx, nth), '#ef6c00', { ms: 200, layer: LAYER.TOP }) : p.style(Sel.path(i), '#ef6c00', { ms: 200, layer: LAYER.TOP }));
         el.classList.toggle('on'); draw();
       };
@@ -154,29 +154,29 @@
   function selectWord(i) {
     const p = S.page;
     S.selAyah = null; p.clearSelection();
-    if (S.hlAyah) { p.unhighlight(S.hlAyah); S.hlAyah = 0; }
-    for (const h of S.pathHandles.values()) p.unstyle(h); S.pathHandles.clear();
-    if (i < 0 || i === S.selWord) { S.selWord = -1; if (S.hlSel) { p.unhighlight(S.hlSel); S.hlSel = 0; } }
+    if (S.hlAyah) { p.removeHighlight(S.hlAyah); S.hlAyah = 0; }
+    for (const h of S.pathHandles.values()) p.removeStyle(h); S.pathHandles.clear();
+    if (i < 0 || i === S.selWord) { S.selWord = -1; if (S.hlSel) { p.removeHighlight(S.hlSel); S.hlSel = 0; } }
     else {
       S.selWord = i;
       const st = { mode: S.hlMode, ink: '#1a73e8', band: rgba('#1a73e8', 0.18), radius: 1.5, ms: S.hlMs, layer: LAYER.SELECTION };
-      if (S.hlSel) p.rehighlight(S.hlSel, T.word(i)); else S.hlSel = p.highlight(T.word(i), st);
+      if (S.hlSel) p.moveHighlight(S.hlSel, T.word(i)); else S.hlSel = p.highlight(T.word(i), st);
     }
     showSelection(); draw();
   }
   function selectAyah(s, a) {
     const p = S.page;
-    if (S.hlSel) { p.unhighlight(S.hlSel); S.hlSel = 0; } S.selWord = -1; p.clearSelection();
+    if (S.hlSel) { p.removeHighlight(S.hlSel); S.hlSel = 0; } S.selWord = -1; p.clearSelection();
     S.selAyah = [s, a];
     const st = { mode: S.hlMode, ink: '#0a7d32', band: rgba('#0a7d32', 0.14), radius: 1.5, ms: S.hlMs, layer: LAYER.SELECTION };
-    if (S.hlAyah) p.rehighlight(S.hlAyah, T.ayah(s, a)); else S.hlAyah = p.highlight(T.ayah(s, a), st);
+    if (S.hlAyah) p.moveHighlight(S.hlAyah, T.ayah(s, a)); else S.hlAyah = p.highlight(T.ayah(s, a), st);
     showSelection(); draw();
   }
 
   // ── search ──
   function runSearch() {
     const p = S.page, q = $('q').value.trim(), box = $('results'); box.innerHTML = '';
-    if (S.hlSearch) { p.unhighlight(S.hlSearch); S.hlSearch = 0; }
+    if (S.hlSearch) { p.removeHighlight(S.hlSearch); S.hlSearch = 0; }
     if (!q) { draw(); return; }
     const m = p.search(q, { mode: $('qmode').value });
     if (m.length) S.hlSearch = p.highlight(T.words(m.map(x => x.word)), { mode: 'both', ink: '#c62828', band: rgba('#c62828', 0.12), height: 'ink', padY: 1, radius: 1, ms: S.hlMs });
@@ -190,9 +190,9 @@
   $('goto').onchange = async e => {
     const v = e.target.value.trim(); if (!v || !atlas) return;
     let m;
-    if ((m = /^(\d+):(\d+)/.exec(v))) { const pg = atlas.pageOf(+m[1], +m[2]); if (pg) { await loadPage(pg); const ws = S.page.resolve(T.ayah(+m[1], +m[2])); if (ws.length) selectAyah(+m[1], +m[2]); } return; }
+    if ((m = /^(\d+):(\d+)/.exec(v))) { const pg = atlas.pageOf(+m[1], +m[2]); if (pg) { await loadPage(pg); const ws = S.page.targetWords(T.ayah(+m[1], +m[2])); if (ws.length) selectAyah(+m[1], +m[2]); } return; }
     if ((m = /^juz\s*(\d+)/i.exec(v))) { const j = atlas.juz(+m[1]); if (j) await loadPage(j.page); return; }
-    const su = atlas.findSurah(v); if (su.length) await loadPage(su[0].page);
+    const su = atlas.searchSurahs(v); if (su.length) await loadPage(su[0].page);
   };
 
   // ── pointer: tap, drag-select, pan, pinch ──
@@ -220,13 +220,13 @@
     const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
     if (drag && selecting) {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (!selecting.active && Math.hypot(dx, dy) > 4) { selecting.active = true; stage.classList.add('selecting'); if (S.hlSel) { S.page.unhighlight(S.hlSel); S.hlSel = 0; } S.selWord = -1; S.selAyah = null; if (S.hlAyah) { S.page.unhighlight(S.hlAyah); S.hlAyah = 0; } }
+      if (!selecting.active && Math.hypot(dx, dy) > 4) { selecting.active = true; stage.classList.add('selecting'); if (S.hlSel) { S.page.removeHighlight(S.hlSel); S.hlSel = 0; } S.selWord = -1; S.selAyah = null; if (S.hlAyah) { S.page.removeHighlight(S.hlAyah); S.hlAyah = 0; } }
       if (selecting.active) {
         const h = S.page.hitTestView(x, y, {});
         if (h && h.word >= 0) {
           S.page.select(selecting.anchor, h.word);
           const ws = S.page.selection();
-          if (S.hlSel) S.page.rehighlight(S.hlSel, T.words(ws)); else S.hlSel = S.page.highlight(T.words(ws), { mode: 'band', band: rgba('#2d6fd6', 0.25), padX: 0.6, ms: 0, layer: LAYER.SELECTION });
+          if (S.hlSel) S.page.moveHighlight(S.hlSel, T.words(ws)); else S.hlSel = S.page.highlight(T.words(ws), { mode: 'band', band: rgba('#2d6fd6', 0.25), padX: 0.6, ms: 0, layer: LAYER.SELECTION });
           moved = true; draw();
         }
         return;
@@ -289,7 +289,7 @@
   $('hlMode').onchange = e => { S.hlMode = e.target.value; if (S.selWord >= 0) { const i = S.selWord; S.selWord = -1; selectWord(i); } };
   $('hlMs').oninput = e => { S.hlMs = +e.target.value; $('hlMsVal').textContent = S.hlMs + ' ms'; };
   let timer = 0;
-  function stopPlay() { S.playing = false; clearInterval(timer); timer = 0; $('play').classList.remove('on'); $('play').textContent = '▶ Follow words'; if (S.hlPlay) { S.page.unhighlight(S.hlPlay); S.hlPlay = 0; } draw(); }
+  function stopPlay() { S.playing = false; clearInterval(timer); timer = 0; $('play').classList.remove('on'); $('play').textContent = '▶ Follow words'; if (S.hlPlay) { S.page.removeHighlight(S.hlPlay); S.hlPlay = 0; } draw(); }
   $('play').onclick = () => {
     if (S.playing) { stopPlay(); return; }
     S.playing = true; $('play').classList.add('on'); $('play').textContent = '■ Stop';
@@ -299,7 +299,7 @@
     timer = setInterval(async () => {
       S.playIdx++;
       if (S.playIdx >= S.page.nWords) { const next = src.pages[src.pages.indexOf(S.n) + 1]; if (next) { await loadPage(next); S.playing = true; $('play').classList.add('on'); $('play').textContent = '■ Stop'; S.playIdx = 0; S.hlPlay = S.page.highlight(T.word(0), st); } else stopPlay(); return; }
-      S.page.rehighlight(S.hlPlay, T.word(S.playIdx)); draw();
+      S.page.moveHighlight(S.hlPlay, T.word(S.playIdx)); draw();
     }, 320);
     draw();
   };
@@ -307,11 +307,11 @@
   // ── styling toggles (each is one engine handle) ──
   function applyToggles() {
     const p = S.page;
-    if (S.tajwidHandle) { p.unstyle(S.tajwidHandle); S.tajwidHandle = 0; }
+    if (S.tajwidHandle) { p.removeStyle(S.tajwidHandle); S.tajwidHandle = 0; }
     if ($('tajwid').classList.contains('on')) S.tajwidHandle = p.theme({ marks: {}, ms: 200, ...Object.fromEntries([]) , diacritics: PALETTE[CATEGORY.HARAKAH], dots: PALETTE[CATEGORY.LETTER_DOT], waqf: PALETTE[CATEGORY.WAQF], sifr: PALETTE[CATEGORY.DABT] });
-    if (S.hideHandle) { p.unstyle(S.hideHandle); S.hideHandle = 0; }
+    if (S.hideHandle) { p.removeStyle(S.hideHandle); S.hideHandle = 0; }
     if ($('hideMarks').classList.contains('on')) S.hideHandle = p.hide(Sel.kind(KIND.MARK));
-    if (S.ayahMarksHandle) { p.unstyle(S.ayahMarksHandle); S.ayahMarksHandle = 0; }
+    if (S.ayahMarksHandle) { p.removeStyle(S.ayahMarksHandle); S.ayahMarksHandle = 0; }
     if ($('ayahMarks').classList.contains('on')) S.ayahMarksHandle = p.style(Sel.deco(DECO.AYAH_MARK), '#b8860b', { ms: 300, layer: LAYER.THEME + 1 });
     draw();
   }
@@ -320,7 +320,7 @@
   function applyTheme() {
     const p = S.page; if (!p) return;
     document.body.setAttribute('data-qvp-theme', S.theme);
-    p.setDefaultInk($('ink').value);
+    p.setDefaultColor($('ink').value);
     renderer.baseKey = ''; draw();
   }
   $('ink').oninput = applyTheme;
@@ -329,8 +329,8 @@
 
   // ── memorisation ──
   $('maskAyah').onclick = () => { const p = S.page; const t = S.selAyah ? T.ayah(...S.selAyah) : S.selWord >= 0 ? T.ayah(p.words[S.selWord].surah, p.words[S.selWord].ayah) : T.page(); p.maskOptions({ blockColor: getComputedStyle(document.body).getPropertyValue('--line').trim() }); p.mask(t, $('maskMode').value); draw(); };
-  $('revealNext').onclick = () => { S.page.revealNext(1); draw(); };
-  $('hideBack').onclick = () => { S.page.hideBack(1); draw(); };
+  $('unmaskNext').onclick = () => { S.page.unmaskNext(1); draw(); };
+  $('maskBack').onclick = () => { S.page.maskBack(1); draw(); };
   $('unmask').onclick = () => { S.page.unmask(); draw(); };
   $('revealMode').onclick = () => {
     const p = S.page; S.revealOn = !S.revealOn; $('revealMode').classList.toggle('on', S.revealOn);
@@ -338,7 +338,7 @@
     else { p.revealStop(); $('revealPos').disabled = true; $('revealVal').textContent = ''; }
     draw();
   };
-  $('revealPos').oninput = e => { S.page.revealGoto(+e.target.value); $('revealVal').textContent = `${+e.target.value + 1}/${S.page.revealSteps()}`; draw(); };
+  $('revealPos').oninput = e => { S.page.revealGoto(+e.target.value); $('revealVal').textContent = `${+e.target.value + 1}/${S.page.revealStepCount()}`; draw(); };
 
   // ── layout ──
   const relayoutUI = () => { $('spacingVal').textContent = '×' + S.layout.lineSpacing.toFixed(2); fit(); };
