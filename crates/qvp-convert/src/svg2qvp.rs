@@ -97,7 +97,7 @@ pub fn convert(svg: &str) -> Result<Converted, String> {
             ayahs: vec![],
             words: vec![],
             paths: vec![],
-            decos: vec![],
+            decorations: vec![],
             glyphs: vec![],
             insts: vec![],
             ops: vec![],
@@ -154,13 +154,13 @@ impl<'a> Ctx<'a> {
             let ctf = self.node_tf(c, tf)?;
             match (c.tag_name().name(), class(c)) {
                 ("g", "line") => self.line(c, ctf)?,
-                ("g", "ayah-mark") => self.deco(c, ctf, DecoKind::AyahMark, NONE_U16)?,
-                ("g", "surah-name") => self.deco(c, ctf, DecoKind::SurahName, NONE_U16)?,
-                ("g", "basmalah") => self.deco(c, ctf, DecoKind::Basmalah, NONE_U16)?,
-                ("g", "division-mark") => self.deco(c, ctf, DecoKind::DivisionMark, NONE_U16)?,
-                ("g", "sajdah-mark") => self.deco(c, ctf, DecoKind::SajdahMark, NONE_U16)?,
-                ("g", "page_number") => self.deco(c, ctf, DecoKind::PageNumber, NONE_U16)?,
-                ("g", "running_head") => self.deco(c, ctf, DecoKind::RunningHead, NONE_U16)?,
+                ("g", "ayah-mark") => self.decoration(c, ctf, DecoKind::AyahMark, NONE_U16)?,
+                ("g", "surah-name") => self.decoration(c, ctf, DecoKind::SurahName, NONE_U16)?,
+                ("g", "basmalah") => self.decoration(c, ctf, DecoKind::Basmalah, NONE_U16)?,
+                ("g", "division-mark") => self.decoration(c, ctf, DecoKind::DivisionMark, NONE_U16)?,
+                ("g", "sajdah-mark") => self.decoration(c, ctf, DecoKind::SajdahMark, NONE_U16)?,
+                ("g", "page_number") => self.decoration(c, ctf, DecoKind::PageNumber, NONE_U16)?,
+                ("g", "running_head") => self.decoration(c, ctf, DecoKind::RunningHead, NONE_U16)?,
                 ("g", _) => self.walk(c, ctf)?,
                 ("path", _) => {
                     self.warn(format!("stray path outside any group (parent class {:?})", class(n)));
@@ -174,39 +174,39 @@ impl<'a> Ctx<'a> {
     }
 
     fn line(&mut self, n: Node<'a, '_>, tf: Affine) -> Result<(), String> {
-        let line_no: u8 = n.attribute("data-line").and_then(|s| s.parse().ok()).unwrap_or(0);
+        let line_number: u8 = n.attribute("data-line").and_then(|s| s.parse().ok()).unwrap_or(0);
         let first_word = self.page.words.len() as u16;
-        let line_idx = self.page.lines.len() as u16;
-        self.page.lines.push(LineRec { line_no, first_word, n_words: 0, bbox: IBox::EMPTY });
-        self.line_children(n, tf, line_idx, line_no)?;
-        let l = &mut self.page.lines[line_idx as usize];
+        let line_index = self.page.lines.len() as u16;
+        self.page.lines.push(LineRec { line_number, first_word, n_words: 0, bbox: IBox::EMPTY });
+        self.line_children(n, tf, line_index, line_number)?;
+        let l = &mut self.page.lines[line_index as usize];
         l.n_words = self.page.words.len() as u16 - first_word;
         let mut bb = IBox::EMPTY;
         for w in &self.page.words[first_word as usize..] {
             bb.union(&w.bbox);
         }
-        self.page.lines[line_idx as usize].bbox = bb;
+        self.page.lines[line_index as usize].bbox = bb;
         Ok(())
     }
 
-    fn line_children(&mut self, n: Node<'a, '_>, tf: Affine, line_idx: u16, line_no: u8) -> Result<(), String> {
+    fn line_children(&mut self, n: Node<'a, '_>, tf: Affine, line_index: u16, line_number: u8) -> Result<(), String> {
         for c in n.children().filter(|c| c.is_element()) {
             let ctf = self.node_tf(c, tf)?;
             match (c.tag_name().name(), class(c)) {
-                ("g", "ayah-fragment") => self.ayah(c, ctf, line_idx)?,
-                ("g", "") => self.line_children(c, ctf, line_idx, line_no)?,
-                ("g", "surah-name") => self.deco(c, ctf, DecoKind::SurahName, line_idx)?,
-                ("g", "basmalah") => self.deco(c, ctf, DecoKind::Basmalah, line_idx)?,
-                ("g", "division-mark") => self.deco(c, ctf, DecoKind::DivisionMark, line_idx)?,
-                ("g", "sajdah-mark") => self.deco(c, ctf, DecoKind::SajdahMark, line_idx)?,
-                ("g", "ayah-mark") => self.deco(c, ctf, DecoKind::AyahMark, line_idx)?,
-                (t, cl) => self.warn(format!("line {line_no}: unexpected <{t} class={cl:?}> inside line")),
+                ("g", "ayah-fragment") => self.ayah(c, ctf, line_index)?,
+                ("g", "") => self.line_children(c, ctf, line_index, line_number)?,
+                ("g", "surah-name") => self.decoration(c, ctf, DecoKind::SurahName, line_index)?,
+                ("g", "basmalah") => self.decoration(c, ctf, DecoKind::Basmalah, line_index)?,
+                ("g", "division-mark") => self.decoration(c, ctf, DecoKind::DivisionMark, line_index)?,
+                ("g", "sajdah-mark") => self.decoration(c, ctf, DecoKind::SajdahMark, line_index)?,
+                ("g", "ayah-mark") => self.decoration(c, ctf, DecoKind::AyahMark, line_index)?,
+                (t, cl) => self.warn(format!("line {line_number}: unexpected <{t} class={cl:?}> inside line")),
             }
         }
         Ok(())
     }
 
-    fn ayah(&mut self, n: Node<'a, '_>, tf: Affine, line_idx: u16) -> Result<(), String> {
+    fn ayah(&mut self, n: Node<'a, '_>, tf: Affine, line_index: u16) -> Result<(), String> {
         let (surah, ayah) = n.attribute("data-ayah-key").and_then(parse_ayah_key).unwrap_or((0, 0));
         let fragment = n.attribute("data-fragment").and_then(|s| s.parse().ok()).unwrap_or(1);
         let fragments = n.attribute("data-ayah-fragments").and_then(|s| s.parse().ok()).unwrap_or(1);
@@ -230,9 +230,9 @@ impl<'a> Ctx<'a> {
             .or_else(|| num("data-juz-start").map(|x| (x - 1) * 8 + 1))
             .unwrap_or(0);
         let first_word = self.page.words.len() as u16;
-        let ayah_idx = self.page.ayahs.len() as u16;
-        // the ayah-mark id is resolved after decos are all known
-        let ayah_mark_deco = match n.attribute("data-ayah-mark") {
+        let ayah_index = self.page.ayahs.len() as u16;
+        // the ayah-mark id is resolved after decorations are all known
+        let ayah_mark_decoration = match n.attribute("data-ayah-mark") {
             Some(id) => self.intern(id) | 0x8000, // temp: string ref flagged
             None => NONE_U16,
         };
@@ -244,17 +244,17 @@ impl<'a> Ctx<'a> {
             flags,
             first_word,
             n_words: 0,
-            ayah_mark_deco,
+            ayah_mark_decoration,
             rubu_al_hizb,
             bbox: IBox::EMPTY,
         });
-        self.ayah_children(n, tf, line_idx, ayah_idx, surah, ayah)?;
+        self.ayah_children(n, tf, line_index, ayah_index, surah, ayah)?;
         let n_words = self.page.words.len() as u16 - first_word;
         let mut bb = IBox::EMPTY;
         for w in &self.page.words[first_word as usize..] {
             bb.union(&w.bbox);
         }
-        let a = &mut self.page.ayahs[ayah_idx as usize];
+        let a = &mut self.page.ayahs[ayah_index as usize];
         a.n_words = n_words;
         a.bbox = bb;
         Ok(())
@@ -264,23 +264,23 @@ impl<'a> Ctx<'a> {
         &mut self,
         n: Node<'a, '_>,
         tf: Affine,
-        line_idx: u16,
-        ayah_idx: u16,
+        line_index: u16,
+        ayah_index: u16,
         surah: u16,
         ayah: u16,
     ) -> Result<(), String> {
         for c in n.children().filter(|c| c.is_element()) {
             let ctf = self.node_tf(c, tf)?;
             match (c.tag_name().name(), class(c)) {
-                ("g", "word") => self.word(c, ctf, line_idx, ayah_idx)?,
-                ("g", "") => self.ayah_children(c, ctf, line_idx, ayah_idx, surah, ayah)?,
+                ("g", "word") => self.word(c, ctf, line_index, ayah_index)?,
+                ("g", "") => self.ayah_children(c, ctf, line_index, ayah_index, surah, ayah)?,
                 (t, cl) => self.warn(format!("ayah {surah}:{ayah}: unexpected <{t} class={cl:?}> inside ayah")),
             }
         }
         Ok(())
     }
 
-    fn word(&mut self, n: Node<'a, '_>, tf: Affine, line_idx: u16, ayah_idx: u16) -> Result<(), String> {
+    fn word(&mut self, n: Node<'a, '_>, tf: Affine, line_index: u16, ayah_index: u16) -> Result<(), String> {
         let word_key = n.attribute("data-word-key").unwrap_or("");
         let mut it = word_key.split(':').map(|s| s.parse::<u16>().unwrap_or(0));
         let (surah, ayah, word) = (it.next().unwrap_or(0), it.next().unwrap_or(0), it.next().unwrap_or(0));
@@ -319,8 +319,8 @@ impl<'a> Ctx<'a> {
             surah,
             ayah,
             word,
-            line_idx,
-            ayah_idx,
+            line_index,
+            ayah_index,
             text,
             rasm_imlai,
             qpc,
@@ -333,7 +333,7 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    fn deco(&mut self, n: Node<'a, '_>, tf: Affine, kind: DecoKind, line: u16) -> Result<(), String> {
+    fn decoration(&mut self, n: Node<'a, '_>, tf: Affine, kind: DecoKind, line: u16) -> Result<(), String> {
         let (surah, ayah) = n
             .attribute("data-ayah-key")
             .and_then(parse_ayah_key)
@@ -395,8 +395,8 @@ impl<'a> Ctx<'a> {
         raws: Vec<RawPath>,
     ) -> u16 {
         let (first_path, n_paths, bbox) = self.push_paths(raws);
-        let idx = self.page.decos.len() as u16;
-        self.page.decos.push(DecoRec { kind, surah, ayah, text, first_path, n_paths, line, bbox });
+        let idx = self.page.decorations.len() as u16;
+        self.page.decorations.push(DecoRec { kind, surah, ayah, text, first_path, n_paths, line, bbox });
         idx
     }
 
@@ -551,13 +551,13 @@ impl<'a> Ctx<'a> {
     fn link_markers(&mut self) {
         let mut unresolved = 0;
         for a in &mut self.page.ayahs {
-            if a.ayah_mark_deco != NONE_U16 && a.ayah_mark_deco & 0x8000 != 0 {
-                let id = &self.page.strings[(a.ayah_mark_deco & 0x7fff) as usize];
+            if a.ayah_mark_decoration != NONE_U16 && a.ayah_mark_decoration & 0x8000 != 0 {
+                let id = &self.page.strings[(a.ayah_mark_decoration & 0x7fff) as usize];
                 match self.ayah_mark_ids.get(id) {
-                    Some(&i) => a.ayah_mark_deco = i,
+                    Some(&i) => a.ayah_mark_decoration = i,
                     None => {
                         unresolved += 1;
-                        a.ayah_mark_deco = NONE_U16;
+                        a.ayah_mark_decoration = NONE_U16;
                     }
                 }
             }

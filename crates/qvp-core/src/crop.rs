@@ -10,8 +10,8 @@ pub struct CropBounds {
     pub x1: f32,
     pub y1: f32,
     pub n_words: u32,
-    /// ayah_mark deco kept (whole ayah in the crop), or NONE
-    pub ayah_mark_deco: u32,
+    /// ayah_mark decoration kept (whole ayah in the crop), or NONE
+    pub ayah_mark_decoration: u32,
 }
 
 impl Page {
@@ -38,8 +38,8 @@ impl Page {
             let (_, complete) = self.ayah_word_count(s, a);
             if complete && all.iter().all(|w| words.contains(w)) {
                 if let Some(m) = self.marker_of(s, a) {
-                    ayah_mark = m.deco;
-                    bb.union(&d.decos[m.deco as usize].bbox);
+                    ayah_mark = m.decoration;
+                    bb.union(&d.decorations[m.decoration as usize].bbox);
                 }
             }
         }
@@ -49,7 +49,7 @@ impl Page {
             x1: bb.x1 as f32 / q + pad,
             y1: bb.y1 as f32 / q + pad,
             n_words: words.len() as u32,
-            ayah_mark_deco: ayah_mark,
+            ayah_mark_decoration: ayah_mark,
         })
     }
 
@@ -87,8 +87,8 @@ impl Page {
             let wr = &d.words[wi as usize];
             path_ids.extend(wr.first_path..wr.first_path + wr.n_paths as u32);
         }
-        if cb.ayah_mark_deco != NONE {
-            let dc = &d.decos[cb.ayah_mark_deco as usize];
+        if cb.ayah_mark_decoration != NONE {
+            let dc = &d.decorations[cb.ayah_mark_decoration as usize];
             path_ids.extend(dc.first_path..dc.first_path + dc.n_paths as u32);
         }
         for pi in path_ids {

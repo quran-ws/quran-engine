@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
-  QvpPageView, QvpAtlas, Qvp, useQvp, Sel, T, KIND, DECO, LAYER, rgba,
+  QvpPageView, QvpAtlas, Qvp, useQvp, Sel, T, KIND, DECORATION, LAYER, rgba,
   type Word, type Deco, type Highlight, type StyleRule, type Theme, type Mask, type Reveal, type Match, type SelectionInfo, type PageInfo, type Stats, type HighlightMode, type Selector,
 } from '@quran.ws/qvp-react-native';
 
@@ -116,7 +116,7 @@ function Demo() {
   // ── selection ──
   const selectWord = useCallback((w: Word | null) => {
     setSelAyah(null); setAyahInfo(null); setPathOn(new Map()); qvp.clearSelection().catch(() => {});
-    setSelWord(prev => (w == null || prev?.idx === w.idx ? null : w));
+    setSelWord(prev => (w == null || prev?.index === w.index ? null : w));
   }, [qvp]);
   const selectAyah = useCallback(async (s: number, a: number) => {
     setSelWord(null); setPathOn(new Map()); qvp.clearSelection().catch(() => {});
@@ -129,7 +129,7 @@ function Demo() {
     setInfo(e); setSelWord(null); setSelAyah(null); setAyahInfo(null); setSelection(null); setPathOn(new Map()); setRevealOn(false); setRevealAt(-1); setMask(null);
     const [surahs, divisions, keys] = await Promise.all([qvp.surahs(), qvp.divisions(), qvp.ayahKeys()]);
     let t = 'surahs: ' + surahs.map(s => `${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`).join(', ');
-    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.division} ${d.n} at ${d.surah}:${d.ayah}`).join(', ');
+    if (divisions.length) t += '\nstarts here: ' + divisions.map(d => `${d.division} ${d.number} at ${d.surah}:${d.ayah}`).join(', ');
     if (atlas && keys.length) { const j = await atlas.juzOf(keys[0].surah, keys[0].ayah); if (j) { const pr = await atlas.pagesOfJuz(j); t += `\njuz ${j} · pages ${pr ? pr.join('–') : ''}`; } }
     t += '\nayahs: ' + keys.map(k => k.ayahKey).join(' ');
     setMeta(t);
@@ -162,7 +162,7 @@ function Demo() {
   // ── declarative engine state ──
   const highlights = useMemo<Highlight[]>(() => {
     const out: Highlight[] = [];
-    if (selWord) out.push({ id: 'sel', target: T.word(selWord.idx), style: { mode: hlMode, ink: '#1a73e8', band: rgba('#1a73e8', 0.18), radius: 1.5, ms: hlMs, layer: LAYER.SELECTION } });
+    if (selWord) out.push({ id: 'sel', target: T.word(selWord.index), style: { mode: hlMode, ink: '#1a73e8', band: rgba('#1a73e8', 0.18), radius: 1.5, ms: hlMs, layer: LAYER.SELECTION } });
     if (selAyah) out.push({ id: 'ayah', target: T.ayah(selAyah[0], selAyah[1]), style: { mode: hlMode, ink: '#0a7d32', band: rgba('#0a7d32', 0.14), radius: 1.5, ms: hlMs, layer: LAYER.SELECTION } });
     if (matches.length) out.push({ id: 'search', target: T.words(matches.map(m => m.word)), style: { mode: 'both', ink: '#c62828', band: rgba('#c62828', 0.12), height: 'ink', padY: 1, radius: 1, ms: hlMs } });
     if (playing) out.push({ id: 'play', target: T.word(playIdx), style: { mode: hlMode, ink: '#d81b60', band: rgba('#d81b60', 0.14), radius: 1.5, ms: hlMs } });
@@ -171,7 +171,7 @@ function Demo() {
   const styles = useMemo<StyleRule[]>(() => {
     const out: StyleRule[] = [];
     if (hideMarks) out.push({ id: 'hide-marks', selector: Sel.kind(KIND.MARK), hide: true });
-    if (gold) out.push({ id: 'ayahMarks', selector: Sel.deco(DECO.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 });
+    if (gold) out.push({ id: 'ayahMarks', selector: Sel.decoration(DECORATION.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 });
     for (const [i, selector] of pathOn) out.push({ id: `path:${i}`, selector, color: '#ef6c00', ms: 200, layer: LAYER.TOP });
     return out;
   }, [hideMarks, gold, pathOn]);
@@ -186,15 +186,15 @@ function Demo() {
     let text: string;
     if (selection && selection.words.length) text = selection.textWithCitation;
     else if (selAyah && ayahInfo) text = `${ayahInfo.text} (${selAyah[0]}:${selAyah[1]})`;
-    else if (selWord) text = `${selWord.text} (${await qvp.citation([selWord.idx])})`;
+    else if (selWord) text = `${selWord.text} (${await qvp.citation([selWord.index])})`;
     else return;
     flash('copied: ' + text);
   };
   const cropSelection = async () => {
-    const target = selection && selection.words.length ? T.words(selection.words) : selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.word(selWord.idx) : null;
+    const target = selection && selection.words.length ? T.words(selection.words) : selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.word(selWord.index) : null;
     if (!target) return;
     const [svg, box] = await Promise.all([qvp.cropSvg(target, { pad: 3, keepAyahMarks: true, background: th.paper }), qvp.cropBounds(target, { pad: 3, keepAyahMarks: true })]);
-    if (svg && box) flash(`SVG ${(svg.length / 1024).toFixed(0)} KB · box ${(box.x1 - box.x0).toFixed(0)}×${(box.y1 - box.y0).toFixed(0)} units · ayahMark ${box.ayahMarkDeco >= 0 ? 'kept' : 'no'}`);
+    if (svg && box) flash(`SVG ${(svg.length / 1024).toFixed(0)} KB · box ${(box.x1 - box.x0).toFixed(0)}×${(box.y1 - box.y0).toFixed(0)} units · ayahMark ${box.ayahMarkDecoration >= 0 ? 'kept' : 'no'}`);
   };
   const clearAll = () => {
     setTajwid(false); setHideMarks(false); setGold(false); setPlaying(false); setMask(null); setRevealOn(false); setRevealAt(-1);
@@ -244,7 +244,7 @@ function Demo() {
         theme={markTheme} styles={styles} highlights={highlights} mask={mask} reveal={reveal}
         onPageLoad={onPageLoad}
         onWordTap={e => selectWord(e.word)}
-        onDecoTap={(e: { deco: Deco }) => { if (e.deco.ayah) selectAyah(e.deco.surah, e.deco.ayah); }}
+        onDecorationTap={(e: { decoration: Deco }) => { if (e.decoration.ayah) selectAyah(e.decoration.surah, e.decoration.ayah); }}
         onEmptyTap={() => selectWord(null)}
         onSelectionChanged={e => { setSelection(e); if (e.words.length > 1) { setSelWord(null); setSelAyah(null); setAyahInfo(null); } }}
         onRevealChanged={e => setRevealSteps(e.steps)}
@@ -267,8 +267,8 @@ function Demo() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 4 }}>
             {selWord.paths.map(p => {
               const label = p.kind === KIND.MARK ? `${p.markName} #${p.nthMark}` : p.kindName;
-              const sel = p.kind === KIND.MARK && p.nthMark >= 0 ? Sel.wordMark(selWord.idx, p.nthMark) : Sel.path(p.idx);
-              return <Btn key={p.idx} small label={label} on={pathOn.has(p.idx)} onPress={() => setPathOn(prev => { const m = new Map(prev); if (m.has(p.idx)) m.delete(p.idx); else m.set(p.idx, sel); return m; })} />;
+              const sel = p.kind === KIND.MARK && p.nthMark >= 0 ? Sel.wordMark(selWord.index, p.nthMark) : Sel.path(p.index);
+              return <Btn key={p.index} small label={label} on={pathOn.has(p.index)} onPress={() => setPathOn(prev => { const m = new Map(prev); if (m.has(p.index)) m.delete(p.index); else m.set(p.index, sel); return m; })} />;
             })}
           </ScrollView>
         )}
@@ -278,7 +278,7 @@ function Demo() {
         <Section title="Highlights (engine-animated)" fg={th.fg} />
         <View style={st.row}>
           {(['both', 'band', 'ink'] as HighlightMode[]).map(m => <Btn key={m} small label={m === 'both' ? 'band + ink' : m} on={hlMode === m} onPress={() => setHlMode(m)} />)}
-          <Btn label={playing ? '■ Stop' : '▶ Follow words'} on={playing} onPress={() => { if (!playing) setPlayIdx(selWord ? selWord.idx : 0); setPlaying(!playing); }} />
+          <Btn label={playing ? '■ Stop' : '▶ Follow words'} on={playing} onPress={() => { if (!playing) setPlayIdx(selWord ? selWord.index : 0); setPlaying(!playing); }} />
         </View>
         <Slider label="fade ms" min={0} max={800} value={hlMs} step={10} onChange={setHlMs} fg={th.fg} />
 

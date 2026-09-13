@@ -8,7 +8,7 @@
 // (`@Observable`): set the page and the layout knobs there, call `invalidate()` after engine
 // calls the controller cannot see (`highlight`, `style`, `mask`, …), and pass the controller
 // to `QvpPageCanvas`. Gestures mirror QvpPageView and every one is a callback: tap →
-// gap-aware hit-test → `onWordTap` / `onDecoTap` / `onEmptyTap`; double-tap → `onDoubleTap`
+// gap-aware hit-test → `onWordTap` / `onDecorationTap` / `onEmptyTap`; double-tap → `onDoubleTap`
 // (nil resets the view); long-press + drag → whole-word selection; pinch / pan on top of the
 // engine layout, with a horizontal swipe at the fitted size reported through `onSwipe`.
 // When the page is not zoomed and `onSwipe` is nil the drag gesture is detached entirely,
@@ -47,7 +47,7 @@ public final class QvpCanvasController {
     /// 0xRRGGBBAA band colour of the drag selection.
     public var selectionBand: UInt32 = QvpDefaults.SELECTION_BAND
     public var onWordTap: ((QvpWord, QvpHit) -> Void)?
-    public var onDecoTap: ((QvpDecoration, QvpHit) -> Void)?
+    public var onDecorationTap: ((QvpDecoration, QvpHit) -> Void)?
     public var onEmptyTap: (() -> Void)?
     public var onSelectionChanged: (([Int]) -> Void)?
     /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
@@ -159,7 +159,7 @@ public final class QvpCanvasController {
         guard let p = page, p.isOpen else { return }
         let hit = hitAt(pt)
         if let h = hit, h.word >= 0 { onWordTap?(p.words[h.word], h) }
-        else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
+        else if let h = hit, h.decoration >= 0 { onDecorationTap?(p.decorations[h.decoration], h) }
         else { onEmptyTap?() }
     }
     func doubleTap(_ pt: CGPoint) { if let cb = onDoubleTap { cb(hitAt(pt)) } else { resetView() } }

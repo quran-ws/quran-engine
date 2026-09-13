@@ -369,7 +369,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     setState(() => cropInfo = svg == null || box == null
         ? 'crop failed'
         : 'SVG ${svg.length} chars · ${svg.substring(0, svg.indexOf('>') + 1).replaceAll(RegExp(r'\s+'), ' ')}\n'
-            'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.ayahMarkDeco != qvpNone ? ' · ayahMark' : ''}');
+            'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.ayahMarkDecoration != qvpNone ? ' · ayahMark' : ''}');
   }
 
   // ── follow words ──
@@ -433,7 +433,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       p.removeStyle(ayahMarksHandle);
       ayahMarksHandle = 0;
     }
-    if (goldAyahMarks) ayahMarksHandle = p.style(Sel.deco(QvpDeco.ayahMark), '#b8860b', ms: 300, layer: QvpLayer.theme + 1);
+    if (goldAyahMarks) ayahMarksHandle = p.style(Sel.decoration(QvpDecorationKind.ayahMark), '#b8860b', ms: 300, layer: QvpLayer.theme + 1);
     setState(() {});
   }
 
@@ -523,7 +523,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
             lastHitUs = hit.distance; // distance in page units of the gap-aware hit
             selectWord(w);
           },
-          onDecoTap: (d) {
+          onDecorationTap: (d) {
             if (d.ayah > 0) selectAyah(d.surah, d.ayah);
           },
           onEmptyTap: () => selectWord(-1),
@@ -702,10 +702,10 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       rows.add(('wordKey', w.wordKey, false));
       rows.add(('line', '${w.line}', false));
       for (final f in ['rasmImlai', 'qpc', 'rasm', 'search']) {
-        final v = p.wordForm(w.idx, f);
+        final v = p.wordForm(w.index, f);
         if (v.isNotEmpty) rows.add((f, v, true));
       }
-      rows.add(('label', p.wordLabel(w.idx), false));
+      rows.add(('label', p.wordLabel(w.index), false));
       rows.add(('paths', '${w.nPaths}', false));
       for (var i = w.firstPath; i < w.firstPath + w.nPaths; i++) {
         final kind = p.pathKind(i), mark = p.pathMark(i), nth = p.pathNthMark(i);
@@ -720,7 +720,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
             if (on) {
               p.removeStyle(pathHandles.remove(i)!);
             } else {
-              pathHandles[i] = kind == QvpKind.mark && nth >= 0 ? p.style(Sel.wordMark(w.idx, nth), '#ef6c00', ms: 200, layer: QvpLayer.top) : p.style(Sel.path(i), '#ef6c00', ms: 200, layer: QvpLayer.top);
+              pathHandles[i] = kind == QvpKind.mark && nth >= 0 ? p.style(Sel.wordMark(w.index, nth), '#ef6c00', ms: 200, layer: QvpLayer.top) : p.style(Sel.path(i), '#ef6c00', ms: 200, layer: QvpLayer.top);
             }
             setState(() {});
           },
@@ -732,7 +732,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       final c = p.ayahWordCount(s, a);
       big = p.text(T.ayah(s, a));
       rows.add(('ayah', '$s:$a · ${c.count} words${c.complete ? '' : ' (continues on another page)'}', false));
-      if (ws.isNotEmpty) rows.add(('label', p.ayahLabel(p.words[ws.first].ayahIdx), false));
+      if (ws.isNotEmpty) rows.add(('label', p.ayahLabel(p.words[ws.first].ayahIndex), false));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SizedBox(width: double.infinity, child: Text(big, textDirection: TextDirection.rtl, textAlign: TextAlign.right, style: _ar)),
@@ -912,7 +912,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     final su = p.surahs(), dv = p.divisions();
     final names = [for (final s in su) '${s.number}${s.latin.isNotEmpty ? ' ${s.latin}' : ''}${s.arabic.isNotEmpty ? ' ${s.arabic}' : ''}${s.hasBanner ? ' (banner)' : ''}'];
     var t = 'surahs: ${names.join(', ')}';
-    if (dv.isNotEmpty) t += '\nstarts here: ${dv.map((d) => '${d.division} ${d.n} at ${d.surah}:${d.ayah}').join(', ')}';
+    if (dv.isNotEmpty) t += '\nstarts here: ${dv.map((d) => '${d.division} ${d.number} at ${d.surah}:${d.ayah}').join(', ')}';
     final a = atlas;
     if (a != null && p.words.isNotEmpty) {
       final j = a.juzOf(p.words.first.surah, p.words.first.ayah);

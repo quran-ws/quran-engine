@@ -13,8 +13,8 @@ pub struct SurahInfo {
     pub ayah_count: u16,
     pub has_banner: bool,
     pub has_basmalah: bool,
-    /// deco index of the banner, or NONE
-    pub banner_deco: u32,
+    /// decoration index of the banner, or NONE
+    pub banner_decoration: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,12 +25,12 @@ pub struct Division {
     pub surah: u16,
     pub ayah: u16,
     pub line: u8,
-    pub ayah_idx: u32,
+    pub ayah_index: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MarkerInfo {
-    pub deco: u32,
+    pub decoration: u32,
     pub surah: u16,
     pub ayah: u16,
     pub line: u32,
@@ -45,7 +45,7 @@ pub struct MarkerInfo {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rosette {
-    pub deco: u32,
+    pub decoration: u32,
     pub surah: u16,
     pub ayah: u16,
     pub juz: u16,
@@ -70,11 +70,11 @@ impl Page {
                     ayah_count: 0,
                     has_banner: false,
                     has_basmalah: false,
-                    banner_deco: NONE,
+                    banner_decoration: NONE,
                 });
             }
         }
-        for (di, dc) in d.decos.iter().enumerate() {
+        for (di, dc) in d.decorations.iter().enumerate() {
             if dc.kind != DecoKind::SurahName && dc.kind != DecoKind::Basmalah {
                 continue;
             }
@@ -90,7 +90,7 @@ impl Page {
                         ayah_count: 0,
                         has_banner: false,
                         has_basmalah: false,
-                        banner_deco: NONE,
+                        banner_decoration: NONE,
                     });
                     out.last_mut().unwrap()
                 }
@@ -107,7 +107,7 @@ impl Page {
             }
             if dc.kind == DecoKind::SurahName {
                 s.has_banner = true;
-                s.banner_deco = di as u32;
+                s.banner_decoration = di as u32;
             } else {
                 s.has_basmalah = true;
             }
@@ -124,9 +124,10 @@ impl Page {
             if a.flags == 0 || a.rubu_al_hizb == 0 || a.fragment != 1 {
                 continue;
             }
-            let line = d.lines[d.words.get(a.first_word as usize).map(|w| w.line_idx as usize).unwrap_or(0)].line_no;
+            let line =
+                d.lines[d.words.get(a.first_word as usize).map(|w| w.line_index as usize).unwrap_or(0)].line_number;
             let push = |out: &mut Vec<Division>, kind: u8, n: u16| {
-                out.push(Division { kind, n, surah: a.surah, ayah: a.ayah, line, ayah_idx: ai as u32 })
+                out.push(Division { kind, n, surah: a.surah, ayah: a.ayah, line, ayah_index: ai as u32 })
             };
             if a.flags & AF_JUZ_START != 0 {
                 push(&mut out, 0, (a.rubu_al_hizb - 1) / 8 + 1);
@@ -147,13 +148,13 @@ impl Page {
     /// Drawn hizb rosettes.
     pub fn rosettes(&self) -> Vec<Rosette> {
         let d = self.data();
-        d.decos
+        d.decorations
             .iter()
             .enumerate()
             .filter(|(_, x)| x.kind == DecoKind::DivisionMark)
             .map(|(i, x)| {
                 let mut r = Rosette {
-                    deco: i as u32,
+                    decoration: i as u32,
                     surah: x.surah,
                     ayah: x.ayah,
                     juz: 0,
@@ -184,11 +185,11 @@ impl Page {
             .collect()
     }
 
-    /// Sajdah sites: (deco, surah, ayah, sign path index).
+    /// Sajdah sites: (decoration, surah, ayah, sign path index).
     pub fn sajdahs(&self) -> Vec<(u32, u16, u16, u32)> {
         let d = self.data();
         let mut out = Vec::new();
-        for (di, dc) in d.decos.iter().enumerate() {
+        for (di, dc) in d.decorations.iter().enumerate() {
             for p in dc.first_path..dc.first_path + dc.n_paths as u32 {
                 if d.paths[p as usize].mark == Mark::SajdahMark {
                     out.push((di as u32, dc.surah, dc.ayah, p));
@@ -202,7 +203,7 @@ impl Page {
     pub fn ayah_marks(&self) -> Vec<MarkerInfo> {
         let d = self.data();
         let q = self.quant();
-        d.decos
+        d.decorations
             .iter()
             .enumerate()
             .filter(|(_, x)| x.kind == DecoKind::AyahMark && x.ayah != 0)
@@ -225,7 +226,7 @@ impl Page {
                 }
                 let b = if ob.is_empty() { x.bbox } else { ob };
                 MarkerInfo {
-                    deco: i as u32,
+                    decoration: i as u32,
                     surah: x.surah,
                     ayah: x.ayah,
                     line: self.geometry().table[x.first_path as usize].line,
@@ -248,7 +249,7 @@ impl Page {
     pub fn line_is_header(&self, li: usize) -> bool {
         let d = self.data();
         d.lines[li].n_words == 0
-            && d.decos
+            && d.decorations
                 .iter()
                 .any(|x| x.line as usize == li && matches!(x.kind, DecoKind::SurahName | DecoKind::Basmalah))
     }

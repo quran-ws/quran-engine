@@ -43,7 +43,7 @@ impl Page {
             Target::Line(l) => d
                 .lines
                 .iter()
-                .filter(|x| x.line_no == *l)
+                .filter(|x| x.line_number == *l)
                 .flat_map(|x| x.first_word as u32..(x.first_word + x.n_words) as u32)
                 .collect(),
             Target::Surah(s) => (0..n).filter(|&i| d.words[i as usize].surah == *s).collect(),

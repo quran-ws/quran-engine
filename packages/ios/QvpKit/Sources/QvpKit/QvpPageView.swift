@@ -7,7 +7,7 @@ import QuartzCore
 /// (a bitmap of every non-styled path at the current transform, rebuilt only when the styled
 /// set / layout / transform changes) → styled ink from `styledPaths()` → mask boxes.
 /// Each frame calls `page.tick(now)`; a CADisplayLink keeps running while the engine says so.
-/// Gestures: tap → gap-aware hit-test → `onWordTap` / `onDecoTap` / `onEmptyTap`; long-press +
+/// Gestures: tap → gap-aware hit-test → `onWordTap` / `onDecorationTap` / `onEmptyTap`; long-press +
 /// drag → whole-word selection (engine `select`, band in the selection layer); pinch / pan on
 /// top of the engine layout; double-tap resets the view (or runs `onDoubleTap` when set).
 public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
@@ -26,7 +26,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
     /// 0xRRGGBBAA band colour of the drag selection.
     public var selectionBand: UInt32 = QvpDefaults.SELECTION_BAND
     public var onWordTap: ((QvpWord, QvpHit) -> Void)?
-    public var onDecoTap: ((QvpDecoration, QvpHit) -> Void)?
+    public var onDecorationTap: ((QvpDecoration, QvpHit) -> Void)?
     public var onEmptyTap: (() -> Void)?
     public var onSelectionChanged: (([Int]) -> Void)?
     /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
@@ -100,7 +100,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate {
         guard let p = page else { return }
         let hit = hitAt(g.location(in: self))
         if let h = hit, h.word >= 0 { onWordTap?(p.words[h.word], h) }
-        else if let h = hit, h.deco >= 0 { onDecoTap?(p.decos[h.deco], h) }
+        else if let h = hit, h.decoration >= 0 { onDecorationTap?(p.decorations[h.decoration], h) }
         else { onEmptyTap?() }
     }
     @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) { if let cb = onDoubleTap { cb(hitAt(g.location(in: self))) } else { resetView() } }

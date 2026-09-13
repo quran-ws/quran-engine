@@ -5,7 +5,7 @@
 //! * **Tables are struct-of-arrays, varint/zigzag-delta coded.** Their fields are
 //!   sorted or near-sorted, so deltas are small; fixed 2/4-byte fields were not.
 //! * **Bboxes are not stored.** A path's is the bbox of its own decoded points
-//!   (control points included); a word's, ayah's, line's and deco's is the union of
+//!   (control points included); a word's, ayah's, line's and decoration's is the union of
 //!   its members'. They would be 16 bytes of near-random `i32` per record — also the
 //!   part a compressor can do least with.
 //! * **`PathRec::ox/oy` and `op_off` are not stored.** The origin is the owning group's
@@ -183,7 +183,7 @@ pub fn encode(p: &PageData) -> Vec<u8> {
     // ── tables ──
     let mut t: Vec<u8> = Vec::with_capacity(p.paths.len() * 8 + p.words.len() * 16 + 512);
     for l in &p.lines {
-        t.push(l.line_no);
+        t.push(l.line_number);
         vi(&mut t, l.n_words as u32);
     }
     let (mut ps, mut pa) = (0i32, 0i32);
@@ -196,7 +196,7 @@ pub fn encode(p: &PageData) -> Vec<u8> {
         t.push(a.fragments);
         t.push(a.flags);
         vi(&mut t, a.n_words as u32);
-        vi(&mut t, opt(a.ayah_mark_deco));
+        vi(&mut t, opt(a.ayah_mark_decoration));
         vi(&mut t, a.rubu_al_hizb as u32);
     }
     let (mut ws, mut wa, mut ww, mut wl, mut wai) = (0i32, 0i32, 0i32, 0i32, 0i32);
@@ -207,13 +207,13 @@ pub fn encode(p: &PageData) -> Vec<u8> {
         zv(&mut t, x.surah as i32 - ws);
         zv(&mut t, x.ayah as i32 - wa);
         zv(&mut t, x.word as i32 - ww);
-        zv(&mut t, x.line_idx as i32 - wl);
-        zv(&mut t, x.ayah_idx as i32 - wai);
+        zv(&mut t, x.line_index as i32 - wl);
+        zv(&mut t, x.ayah_index as i32 - wai);
         ws = x.surah as i32;
         wa = x.ayah as i32;
         ww = x.word as i32;
-        wl = x.line_idx as i32;
-        wai = x.ayah_idx as i32;
+        wl = x.line_index as i32;
+        wai = x.ayah_index as i32;
         for v in [x.text, x.rasm_imlai, x.qpc, x.rasm, x.search] {
             vi(&mut t, opt(v));
         }
@@ -252,7 +252,7 @@ pub fn encode(p: &PageData) -> Vec<u8> {
     }
     let mut dend = 0i64;
     let mut ds = 0i32;
-    for d in &p.decos {
+    for d in &p.decorations {
         zv(&mut t, (d.first_path as i64 - dend) as i32);
         dend = d.first_path as i64 + d.n_paths as i64;
         t.push(d.kind as u8);
@@ -298,7 +298,7 @@ pub fn encode(p: &PageData) -> Vec<u8> {
     u16v(&mut o, p.lines.len() as u16);
     u16v(&mut o, p.ayahs.len() as u16);
     u16v(&mut o, p.words.len() as u16);
-    u16v(&mut o, p.decos.len() as u16);
+    u16v(&mut o, p.decorations.len() as u16);
     o.extend_from_slice(&(p.paths.len() as u32).to_le_bytes());
     u16v(&mut o, p.strings.len() as u16);
     u16v(&mut o, p.glyphs.len() as u16);
@@ -330,7 +330,7 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         width: f32::from_bits(u32a(12)),
         height: f32::from_bits(u32a(16)),
     };
-    let (n_lines, n_ayahs, n_words, n_decos) =
+    let (n_lines, n_ayahs, n_words, n_decorations) =
         (u16a(20) as usize, u16a(22) as usize, u16a(24) as usize, u16a(26) as usize);
     let n_paths = u32a(28) as usize;
     let (n_strings, n_glyphs, n_insts) = (u16a(32) as usize, u16a(34) as usize, u16a(36) as usize);
@@ -351,9 +351,9 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
     let mut lines = Vec::with_capacity(n_lines);
     let mut fw = 0u32;
     for _ in 0..n_lines {
-        let line_no = t.u8("line")?;
+        let line_number = t.u8("line")?;
         let n_words = t.vi("line")? as u16;
-        lines.push(LineRec { line_no, first_word: fw as u16, n_words, bbox: IBox::EMPTY });
+        lines.push(LineRec { line_number, first_word: fw as u16, n_words, bbox: IBox::EMPTY });
         fw += n_words as u32;
     }
     let mut ayahs = Vec::with_capacity(n_ayahs);
@@ -366,7 +366,7 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         let fragments = t.u8("ayah")?;
         let flags = t.u8("ayah")?;
         let n_words = t.vi("ayah")? as u16;
-        let ayah_mark_deco = unopt(t.vi("ayah")?);
+        let ayah_mark_decoration = unopt(t.vi("ayah")?);
         let rubu_al_hizb = t.vi("ayah")? as u16;
         ayahs.push(AyahRec {
             surah: ps as u16,
@@ -376,7 +376,7 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
             flags,
             first_word: afw as u16,
             n_words,
-            ayah_mark_deco,
+            ayah_mark_decoration,
             rubu_al_hizb,
             bbox: IBox::EMPTY,
         });
@@ -403,8 +403,8 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
             surah: ws as u16,
             ayah: wa as u16,
             word: ww as u16,
-            line_idx: wl as u16,
-            ayah_idx: wai as u16,
+            line_index: wl as u16,
+            ayah_index: wai as u16,
             text,
             rasm_imlai,
             qpc,
@@ -447,19 +447,19 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         let h = t.zv("inst bbox")?;
         inst_bbox.push(IBox { x0, y0, x1: x0 + w, y1: y0 + h });
     }
-    let mut decos = Vec::with_capacity(n_decos);
+    let mut decorations = Vec::with_capacity(n_decorations);
     let mut dend = 0i64;
     let mut ds = 0i32;
-    for _ in 0..n_decos {
-        let first_path = (dend + t.zv("deco")? as i64) as u32;
-        let kind = DecoKind::from_u8(t.u8("deco")?);
-        ds += t.zv("deco")?;
-        let ayah = t.vi("deco")? as u16;
-        let text = unopt(t.vi("deco")?);
-        let n_paths = t.vi("deco")? as u16;
-        let line = unopt(t.vi("deco")?);
+    for _ in 0..n_decorations {
+        let first_path = (dend + t.zv("decoration")? as i64) as u32;
+        let kind = DecoKind::from_u8(t.u8("decoration")?);
+        ds += t.zv("decoration")?;
+        let ayah = t.vi("decoration")? as u16;
+        let text = unopt(t.vi("decoration")?);
+        let n_paths = t.vi("decoration")? as u16;
+        let line = unopt(t.vi("decoration")?);
         dend = first_path as i64 + n_paths as i64;
-        decos.push(DecoRec { kind, surah: ds as u16, ayah, text, first_path, n_paths, line, bbox: IBox::EMPTY });
+        decorations.push(DecoRec { kind, surah: ds as u16, ayah, text, first_path, n_paths, line, bbox: IBox::EMPTY });
     }
     let mut glyph_ops = Vec::with_capacity(n_glyphs);
     let mut glyph_bbox = Vec::with_capacity(n_glyphs);
@@ -601,7 +601,7 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
     for w in words.iter_mut() {
         w.bbox = set_origin(&mut paths, w.first_path, w.n_paths);
     }
-    for d in decos.iter_mut() {
+    for d in decorations.iter_mut() {
         d.bbox = set_origin(&mut paths, d.first_path, d.n_paths);
     }
     let wbox = |first: u16, n: u16| {
@@ -649,5 +649,5 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         strings.push(String::from_utf8_lossy(s).into_owned());
     }
 
-    Ok(PageData { header, lines, ayahs, words, paths, decos, glyphs, insts, ops, strings })
+    Ok(PageData { header, lines, ayahs, words, paths, decorations, glyphs, insts, ops, strings })
 }

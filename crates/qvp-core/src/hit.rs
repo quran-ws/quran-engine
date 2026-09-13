@@ -5,7 +5,7 @@ use crate::{Page, NONE};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LineBand {
     pub line: u32,
-    pub line_no: u8,
+    pub line_number: u8,
     pub y0: f32,
     pub y1: f32,
     pub mid: f32,
@@ -50,7 +50,7 @@ impl Default for HitOptions {
 pub struct Hit {
     pub word: u32,
     pub path: u32,
-    pub deco: u32,
+    pub decoration: u32,
     pub line: u32,
     pub distance: f32,
     pub is_exact: bool,
@@ -69,7 +69,7 @@ impl Page {
                 let mid = self.line_centre(i);
                 LineBand {
                     line: i as u32,
-                    line_no: l.line_no,
+                    line_number: l.line_number,
                     y0: mid - p / 2.0,
                     y1: mid + p / 2.0,
                     mid,
@@ -138,16 +138,16 @@ impl Page {
     pub fn hit_test(&self, x: f32, y: f32, opt: &HitOptions) -> Option<Hit> {
         if opt.prefer_exact {
             if let Some(h) = self.hit_test_exact(x, y) {
-                if h.path != NONE || h.deco != NONE {
+                if h.path != NONE || h.decoration != NONE {
                     let line = if h.word != NONE {
-                        self.data().words[h.word as usize].line_idx as u32
+                        self.data().words[h.word as usize].line_index as u32
                     } else {
-                        self.geometry().table[self.data().decos[h.deco as usize].first_path as usize].line
+                        self.geometry().table[self.data().decorations[h.decoration as usize].first_path as usize].line
                     };
                     return Some(Hit {
                         word: h.word,
                         path: h.path,
-                        deco: h.deco,
+                        decoration: h.decoration,
                         line,
                         distance: 0.0,
                         is_exact: h.path != NONE,
@@ -232,7 +232,7 @@ impl Page {
         if distance > opt.max_distance {
             return None;
         }
-        Some(Hit { word: chosen, path: NONE, deco: NONE, line: li as u32, distance, is_exact: false })
+        Some(Hit { word: chosen, path: NONE, decoration: NONE, line: li as u32, distance, is_exact: false })
     }
 
     /// Gap-aware hit test in viewport px through the current layout.
@@ -243,16 +243,16 @@ impl Page {
         // exact first through the layout
         if opt.prefer_exact {
             if let Some(h) = self.hit_test_exact_view(vx, vy) {
-                if h.path != NONE || h.deco != NONE {
+                if h.path != NONE || h.decoration != NONE {
                     let line = if h.word != NONE {
-                        self.data().words[h.word as usize].line_idx as u32
+                        self.data().words[h.word as usize].line_index as u32
                     } else {
-                        self.geometry().table[self.data().decos[h.deco as usize].first_path as usize].line
+                        self.geometry().table[self.data().decorations[h.decoration as usize].first_path as usize].line
                     };
                     return Some(Hit {
                         word: h.word,
                         path: h.path,
-                        deco: h.deco,
+                        decoration: h.decoration,
                         line,
                         distance: 0.0,
                         is_exact: h.path != NONE,

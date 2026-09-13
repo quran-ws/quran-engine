@@ -188,8 +188,8 @@ impl StyleEngine {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PathCtx {
     pub word: u32,
-    pub deco: u32,
-    pub line_no: u8,
+    pub decoration: u32,
+    pub line_number: u8,
     pub surah: u16,
     pub ayah: u16,
     pub kind: PathKind,
@@ -215,13 +215,13 @@ impl Rule {
             Selector::WordMarks(w) => c.word == *w && c.kind == PathKind::Mark,
             Selector::Word(w) => c.word == *w,
             Selector::Ayah(s, a) => c.surah == *s && c.ayah == *a && c.ayah != 0,
-            Selector::Line(l) => c.line_no == *l,
+            Selector::Line(l) => c.line_number == *l,
             Selector::Mark(m) => c.mark == *m,
             Selector::Category(k) => c.category == *k && c.kind == PathKind::Mark,
             Selector::Family(f) => c.family == *f,
             Selector::Kind(k) => c.kind == *k,
-            Selector::Deco(k) => c.deco != NONE && c.deco_kind == *k,
-            Selector::DecoIdx(d) => c.deco == *d,
+            Selector::Deco(k) => c.decoration != NONE && c.deco_kind == *k,
+            Selector::DecoIdx(d) => c.decoration == *d,
         }
     }
 }

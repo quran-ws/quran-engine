@@ -115,7 +115,7 @@ pub struct QvpPageInfo {
     pub n_ayahs: u32,
     pub n_words: u32,
     pub n_paths: u32,
-    pub n_decos: u32,
+    pub n_decorations: u32,
 }
 
 #[repr(C)]
@@ -134,9 +134,9 @@ pub struct QvpWordInfo {
     pub surah: u16,
     pub ayah: u16,
     pub word: u16,
-    pub line_no: u16,
-    pub ayah_idx: u32,
-    pub line_idx: u32,
+    pub line_number: u16,
+    pub ayah_index: u32,
+    pub line_index: u32,
     pub x0: f32,
     pub y0: f32,
     pub x1: f32,
@@ -157,7 +157,7 @@ pub struct QvpAyahInfo {
     pub rubu_al_hizb: u16,
     pub first_word: u32,
     pub n_words: u32,
-    pub ayah_mark_deco: u32,
+    pub ayah_mark_decoration: u32,
     pub x0: f32,
     pub y0: f32,
     pub x1: f32,
@@ -166,7 +166,7 @@ pub struct QvpAyahInfo {
 
 #[repr(C)]
 pub struct QvpLineInfo {
-    pub line_no: u8,
+    pub line_number: u8,
     pub is_header: u8,
     pub first_word: u32,
     pub n_words: u32,
@@ -181,7 +181,7 @@ pub struct QvpLineInfo {
 }
 
 #[repr(C)]
-pub struct QvpDecoInfo {
+pub struct QvpDecorationInfo {
     pub decoration: u8,
     pub _pad: u8,
     pub surah: u16,
@@ -202,7 +202,7 @@ pub struct QvpDecoInfo {
 pub struct QvpHit {
     pub word: u32,
     pub path: u32,
-    pub deco: u32,
+    pub decoration: u32,
     pub line: u32,
     pub distance: f32,
     pub is_exact: u32,
@@ -247,7 +247,7 @@ pub struct QvpHitArea {
 #[derive(Clone, Copy)]
 pub struct QvpLineBand {
     pub line: u32,
-    pub line_no: u32,
+    pub line_number: u32,
     pub y0: f32,
     pub y1: f32,
     pub mid: f32,
@@ -283,8 +283,8 @@ pub struct QvpLayout {
     pub n_lines: u32,
     /// n_lines × {dy, slot_top, slot_bottom}; valid until the next qvp_layout call on this thread
     pub lines: *const f32,
-    /// The view transform that shows the whole content: draw at fit_x + fit_scale·vx,
-    /// fit_y + fit_scale·vy; the host's pan and zoom go on top.
+    /// The view transform that shows the whole content: draw at fit_x + fit_scale·view_x,
+    /// fit_y + fit_scale·view_y; the host's pan and zoom go on top.
     pub fit_scale: f32,
     pub fit_x: f32,
     pub fit_y: f32,
@@ -351,7 +351,7 @@ pub struct QvpSurah {
     pub has_basmalah: u8,
     pub place: u8,
     pub _pad: u8,
-    pub banner_deco: u32,
+    pub banner_decoration: u32,
     pub arabic: QvpStr,
     pub latin: QvpStr,
     pub english: QvpStr,
@@ -362,16 +362,16 @@ pub struct QvpSurah {
 pub struct QvpDivision {
     pub division: u8,
     pub line: u8,
-    pub n: u16,
+    pub number: u16,
     pub surah: u16,
     pub ayah: u16,
-    pub ayah_idx: u32,
+    pub ayah_index: u32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct QvpAyahMark {
-    pub deco: u32,
+    pub decoration: u32,
     pub surah: u16,
     pub ayah: u16,
     pub line: u32,
@@ -385,7 +385,7 @@ pub struct QvpAyahMark {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct QvpRosette {
-    pub deco: u32,
+    pub decoration: u32,
     pub surah: u16,
     pub ayah: u16,
     pub juz: u16,
@@ -399,7 +399,7 @@ pub struct QvpRosette {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct QvpSajdah {
-    pub deco: u32,
+    pub decoration: u32,
     pub surah: u16,
     pub ayah: u16,
     pub sign_path: u32,
@@ -420,12 +420,12 @@ pub struct QvpCropBounds {
     pub x1: f32,
     pub y1: f32,
     pub n_words: u32,
-    pub ayah_mark_deco: u32,
+    pub ayah_mark_decoration: u32,
 }
 
 #[repr(C)]
 pub struct QvpAtlasSurah {
-    pub n: u16,
+    pub number: u16,
     pub first_page: u16,
     pub ayah_count: u16,
     pub place: u8,
@@ -566,7 +566,7 @@ pub unsafe extern "C" fn qvp_page_info(page: *const Page, out: *mut QvpPageInfo)
             n_ayahs: d.ayahs.len() as u32,
             n_words: d.words.len() as u32,
             n_paths: d.paths.len() as u32,
-            n_decos: d.decos.len() as u32,
+            n_decorations: d.decorations.len() as u32,
         };
     })
 }
@@ -585,20 +585,20 @@ pub unsafe extern "C" fn qvp_geometry(page: *const Page, out: *mut QvpGeometry) 
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_word_info(page: *const Page, idx: u32, out: *mut QvpWordInfo) -> i32 {
+pub unsafe extern "C" fn qvp_word_info(page: *const Page, index: u32, out: *mut QvpWordInfo) -> i32 {
     guard(|| {
         let p = &*page;
         let d = p.data();
-        let Some(w) = d.words.get(idx as usize) else { return 0 };
+        let Some(w) = d.words.get(index as usize) else { return 0 };
         let q = p.quant();
-        let t = p.word_text(idx);
+        let t = p.word_text(index);
         *out = QvpWordInfo {
             surah: w.surah,
             ayah: w.ayah,
             word: w.word,
-            line_no: d.lines[w.line_idx as usize].line_no as u16,
-            ayah_idx: w.ayah_idx as u32,
-            line_idx: w.line_idx as u32,
+            line_number: d.lines[w.line_index as usize].line_number as u16,
+            ayah_index: w.ayah_index as u32,
+            line_index: w.line_index as u32,
             x0: w.bbox.x0 as f32 / q,
             y0: w.bbox.y0 as f32 / q,
             x1: w.bbox.x1 as f32 / q,
@@ -612,22 +612,22 @@ pub unsafe extern "C" fn qvp_word_info(page: *const Page, idx: u32, out: *mut Qv
 }
 /// form: 0 rasm_uthmani, 1 rasm_imlai, 2 qpc, 3 rasm, 4 search
 #[no_mangle]
-pub unsafe extern "C" fn qvp_word_form(page: *const Page, idx: u32, form: u8, out: *mut QvpStr) -> i32 {
+pub unsafe extern "C" fn qvp_word_form(page: *const Page, index: u32, form: u8, out: *mut QvpStr) -> i32 {
     guard(|| {
         let p = &*page;
-        if idx as usize >= p.data().words.len() {
+        if index as usize >= p.data().words.len() {
             return 0;
         }
-        let t = p.word_form(idx, Form::from_u8(form));
+        let t = p.word_form(index, Form::from_u8(form));
         *out = QvpStr { ptr: t.as_ptr(), len: t.len() as u32 };
         1
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_ayah_info(page: *const Page, idx: u32, out: *mut QvpAyahInfo) -> i32 {
+pub unsafe extern "C" fn qvp_ayah_info(page: *const Page, index: u32, out: *mut QvpAyahInfo) -> i32 {
     guard(|| {
         let p = &*page;
-        let Some(a) = p.data().ayahs.get(idx as usize) else { return 0 };
+        let Some(a) = p.data().ayahs.get(index as usize) else { return 0 };
         let q = p.quant();
         *out = QvpAyahInfo {
             surah: a.surah,
@@ -639,7 +639,7 @@ pub unsafe extern "C" fn qvp_ayah_info(page: *const Page, idx: u32, out: *mut Qv
             rubu_al_hizb: a.rubu_al_hizb,
             first_word: a.first_word as u32,
             n_words: a.n_words as u32,
-            ayah_mark_deco: if a.ayah_mark_deco == u16::MAX { NONE } else { a.ayah_mark_deco as u32 },
+            ayah_mark_decoration: if a.ayah_mark_decoration == u16::MAX { NONE } else { a.ayah_mark_decoration as u32 },
             x0: a.bbox.x0 as f32 / q,
             y0: a.bbox.y0 as f32 / q,
             x1: a.bbox.x1 as f32 / q,
@@ -649,16 +649,16 @@ pub unsafe extern "C" fn qvp_ayah_info(page: *const Page, idx: u32, out: *mut Qv
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_line_info(page: *const Page, idx: u32, out: *mut QvpLineInfo) -> i32 {
+pub unsafe extern "C" fn qvp_line_info(page: *const Page, index: u32, out: *mut QvpLineInfo) -> i32 {
     guard(|| {
         let p = &*page;
-        let Some(l) = p.data().lines.get(idx as usize) else { return 0 };
+        let Some(l) = p.data().lines.get(index as usize) else { return 0 };
         let q = p.quant();
         let pitch = p.natural_pitch();
-        let c = p.line_centre(idx as usize);
+        let c = p.line_centre(index as usize);
         *out = QvpLineInfo {
-            line_no: l.line_no,
-            is_header: p.line_is_header(idx as usize) as u8,
+            line_number: l.line_number,
+            is_header: p.line_is_header(index as usize) as u8,
             first_word: l.first_word as u32,
             n_words: l.n_words as u32,
             x0: l.bbox.x0 as f32 / q,
@@ -673,13 +673,13 @@ pub unsafe extern "C" fn qvp_line_info(page: *const Page, idx: u32, out: *mut Qv
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_deco_info(page: *const Page, idx: u32, out: *mut QvpDecoInfo) -> i32 {
+pub unsafe extern "C" fn qvp_decoration_info(page: *const Page, index: u32, out: *mut QvpDecorationInfo) -> i32 {
     guard(|| {
         let p = &*page;
-        let Some(d) = p.data().decos.get(idx as usize) else { return 0 };
+        let Some(d) = p.data().decorations.get(index as usize) else { return 0 };
         let q = p.quant();
-        let t = p.deco_text(idx);
-        *out = QvpDecoInfo {
+        let t = p.deco_text(index);
+        *out = QvpDecorationInfo {
             decoration: d.kind as u8,
             _pad: 0,
             surah: d.surah,
@@ -743,7 +743,7 @@ pub unsafe extern "C" fn qvp_surah_at(page: *const Page, i: u32, out: *mut QvpSu
                     _ => 255,
                 },
                 _pad: 0,
-                banner_deco: s.banner_deco,
+                banner_decoration: s.banner_decoration,
                 arabic: QvpStr { ptr: base, len: a as u32 },
                 latin: QvpStr { ptr: base.add(a + 1), len: l as u32 },
                 english: QvpStr { ptr: base.add(a + l + 2), len: e as u32 },
@@ -761,10 +761,10 @@ pub unsafe extern "C" fn qvp_divisions(page: *const Page, out: *mut QvpDivision,
             .map(|d| QvpDivision {
                 division: d.kind,
                 line: d.line,
-                n: d.n,
+                number: d.n,
                 surah: d.surah,
                 ayah: d.ayah,
-                ayah_idx: d.ayah_idx,
+                ayah_index: d.ayah_index,
             })
             .collect();
         fill(out, cap, &v)
@@ -777,7 +777,7 @@ pub unsafe extern "C" fn qvp_ayah_marks(page: *const Page, out: *mut QvpAyahMark
             .ayah_marks()
             .iter()
             .map(|m| QvpAyahMark {
-                deco: m.deco,
+                decoration: m.decoration,
                 surah: m.surah,
                 ayah: m.ayah,
                 line: m.line,
@@ -798,7 +798,7 @@ pub unsafe extern "C" fn qvp_rosettes(page: *const Page, out: *mut QvpRosette, c
             .rosettes()
             .iter()
             .map(|r| QvpRosette {
-                deco: r.deco,
+                decoration: r.decoration,
                 surah: r.surah,
                 ayah: r.ayah,
                 juz: r.juz,
@@ -818,7 +818,7 @@ pub unsafe extern "C" fn qvp_sajdahs(page: *const Page, out: *mut QvpSajdah, cap
         let v: Vec<QvpSajdah> = (*page)
             .sajdahs()
             .iter()
-            .map(|&(d, s, a, p)| QvpSajdah { deco: d, surah: s, ayah: a, sign_path: p })
+            .map(|&(d, s, a, p)| QvpSajdah { decoration: d, surah: s, ayah: a, sign_path: p })
             .collect();
         fill(out, cap, &v)
     })
@@ -858,15 +858,15 @@ pub unsafe extern "C" fn qvp_recite_map(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_word_label(page: *const Page, wi: u32, out: *mut QvpStr) {
+pub unsafe extern "C" fn qvp_word_label(page: *const Page, word_index: u32, out: *mut QvpStr) {
     guard(|| {
-        out_str(out, &(*page).word_label(wi));
+        out_str(out, &(*page).word_label(word_index));
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_ayah_label(page: *const Page, ai: u32, out: *mut QvpStr) {
+pub unsafe extern "C" fn qvp_ayah_label(page: *const Page, ayah_index: u32, out: *mut QvpStr) {
     guard(|| {
-        out_str(out, &(*page).ayah_label(ai));
+        out_str(out, &(*page).ayah_label(ayah_index));
     })
 }
 
@@ -967,8 +967,8 @@ pub unsafe extern "C" fn qvp_has_form(page: *const Page, form: u8) -> u32 {
 
 /// An exact hit in the one hit struct: the word's line, distance 0, `is_exact` 1.
 unsafe fn exact_hit(page: *const Page, h: HitExact) -> QvpHit {
-    let line = if h.word == u32::MAX { u32::MAX } else { (*page).data().words[h.word as usize].line_idx as u32 };
-    QvpHit { word: h.word, path: h.path, deco: h.deco, line, distance: 0.0, is_exact: 1 }
+    let line = if h.word == u32::MAX { u32::MAX } else { (*page).data().words[h.word as usize].line_index as u32 };
+    QvpHit { word: h.word, path: h.path, decoration: h.decoration, line, distance: 0.0, is_exact: 1 }
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_hit_test_exact(page: *const Page, x: f32, y: f32, out: *mut QvpHit) -> i32 {
@@ -981,8 +981,8 @@ pub unsafe extern "C" fn qvp_hit_test_exact(page: *const Page, x: f32, y: f32, o
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hit_test_exact_view(page: *const Page, vx: f32, vy: f32, out: *mut QvpHit) -> i32 {
-    guard(|| match (*page).hit_test_exact_view(vx, vy) {
+pub unsafe extern "C" fn qvp_hit_test_exact_view(page: *const Page, view_x: f32, view_y: f32, out: *mut QvpHit) -> i32 {
+    guard(|| match (*page).hit_test_exact_view(view_x, view_y) {
         Some(h) => {
             *out = exact_hit(page, h);
             1
@@ -1002,7 +1002,14 @@ unsafe fn hopt(o: *const QvpHitOptions) -> HitOptions {
     }
 }
 fn hx(h: Hit) -> QvpHit {
-    QvpHit { word: h.word, path: h.path, deco: h.deco, line: h.line, distance: h.distance, is_exact: h.is_exact as u32 }
+    QvpHit {
+        word: h.word,
+        path: h.path,
+        decoration: h.decoration,
+        line: h.line,
+        distance: h.distance,
+        is_exact: h.is_exact as u32,
+    }
 }
 /// Gap-aware: every point on a printed line resolves to a word. `opt` may be NULL.
 #[no_mangle]
@@ -1024,12 +1031,12 @@ pub unsafe extern "C" fn qvp_hit_test(
 #[no_mangle]
 pub unsafe extern "C" fn qvp_hit_test_view(
     page: *const Page,
-    vx: f32,
-    vy: f32,
+    view_x: f32,
+    view_y: f32,
     opt: *const QvpHitOptions,
     out: *mut QvpHit,
 ) -> i32 {
-    guard(|| match (*page).hit_test_view(vx, vy, &hopt(opt)) {
+    guard(|| match (*page).hit_test_view(view_x, view_y, &hopt(opt)) {
         Some(h) => {
             *out = hx(h);
             1
@@ -1045,7 +1052,7 @@ pub unsafe extern "C" fn qvp_line_bands(page: *const Page, out: *mut QvpLineBand
             .iter()
             .map(|b| QvpLineBand {
                 line: b.line,
-                line_no: b.line_no as u32,
+                line_number: b.line_number as u32,
                 y0: b.y0,
                 y1: b.y1,
                 mid: b.mid,
@@ -1158,12 +1165,12 @@ pub extern "C" fn qvp_wasted_fraction(page_w: f32, page_h: f32, view_w: f32, vie
 }
 /// out: x0,y0,x1,y1 in viewport px through the current layout
 #[no_mangle]
-pub unsafe extern "C" fn qvp_word_bounds_view(page: *const Page, wi: u32, out: *mut f32) -> i32 {
+pub unsafe extern "C" fn qvp_word_bounds_view(page: *const Page, word_index: u32, out: *mut f32) -> i32 {
     guard(|| {
-        if wi as usize >= (*page).data().words.len() {
+        if word_index as usize >= (*page).data().words.len() {
             return 0;
         }
-        let (a, b, c, d) = (*page).word_bounds_view(wi);
+        let (a, b, c, d) = (*page).word_bounds_view(word_index);
         *out = a;
         *out.add(1) = b;
         *out.add(2) = c;
@@ -1281,8 +1288,8 @@ pub unsafe extern "C" fn qvp_styled_paths(page: *mut Page, out: *mut u32, cap: u
     guard(|| {
         let v = (*page).styled_paths();
         if !out.is_null() {
-            for (i, (idx, c)) in v.iter().enumerate().take(cap as usize) {
-                *out.add(i * 2) = *idx;
+            for (i, (index, c)) in v.iter().enumerate().take(cap as usize) {
+                *out.add(i * 2) = *index;
                 *out.add(i * 2 + 1) = *c;
             }
         }
@@ -1408,10 +1415,10 @@ pub unsafe extern "C" fn qvp_mask(page: *mut Page, t: *const QvpTarget, mode: u8
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_mask_from(page: *mut Page, wi: u32, mode: u8) {
+pub unsafe extern "C" fn qvp_mask_from(page: *mut Page, word_index: u32, mode: u8) {
     guard(|| {
         (*page).mask_from(
-            wi,
+            word_index,
             match mode {
                 1 => MaskMode::Block,
                 2 => MaskMode::Blur,
@@ -1442,12 +1449,12 @@ pub unsafe extern "C" fn qvp_mask_back(page: *mut Page, n: u32) -> u32 {
     guard(|| guard(|| (*page).mask_back(n as usize) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_unmask_word(page: *mut Page, wi: u32) -> u32 {
-    guard(|| guard(|| (*page).unmask_word(wi) as u32))
+pub unsafe extern "C" fn qvp_unmask_word(page: *mut Page, word_index: u32) -> u32 {
+    guard(|| guard(|| (*page).unmask_word(word_index) as u32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_mask_word(page: *mut Page, wi: u32) -> u32 {
-    guard(|| guard(|| (*page).mask_word(wi) as u32))
+pub unsafe extern "C" fn qvp_mask_word(page: *mut Page, word_index: u32) -> u32 {
+    guard(|| guard(|| (*page).mask_word(word_index) as u32))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_unmask_all(page: *mut Page) {
@@ -1508,8 +1515,8 @@ pub unsafe extern "C" fn qvp_reveal_step_count(page: *const Page) -> u32 {
     guard(|| guard(|| (*page).reveal_step_count()))
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_reveal_step_of(page: *const Page, wi: u32) -> i64 {
-    guard(|| guard(|| (*page).reveal_step_of(wi).map(|s| s as i64).unwrap_or(-1)))
+pub unsafe extern "C" fn qvp_reveal_step_of(page: *const Page, word_index: u32) -> i64 {
+    guard(|| guard(|| (*page).reveal_step_of(word_index).map(|s| s as i64).unwrap_or(-1)))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_stop(page: *mut Page) {
@@ -1536,7 +1543,7 @@ pub unsafe extern "C" fn qvp_crop_bounds(
                 x1: c.x1,
                 y1: c.y1,
                 n_words: c.n_words,
-                ayah_mark_deco: c.ayah_mark_deco,
+                ayah_mark_decoration: c.ayah_mark_decoration,
             };
             1
         }
@@ -1625,7 +1632,7 @@ unsafe fn atlas_surah_out(s: &qvp_core::qvp_format::atlas::AtlasSurah, out: *mut
         let base = b.as_ptr();
         let (ar, l, e) = (s.arabic.len(), s.latin.len(), s.english.len());
         *out = QvpAtlasSurah {
-            n: s.n,
+            number: s.n,
             first_page: s.first_page,
             ayah_count: s.ayah_count,
             place: s.place,

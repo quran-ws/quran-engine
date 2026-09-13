@@ -55,7 +55,7 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(page.words.count, 147)
         XCTAssertEqual(page.lines.count, 15)
         XCTAssertEqual(page.ayahs.count, page.nAyahs)
-        XCTAssertEqual(page.decos.count, page.nDecos)
+        XCTAssertEqual(page.decorations.count, page.nDecorations)
         XCTAssertEqual(page.table.count, 1061 * 8)
         for i in 0..<page.nPaths {
             XCTAssertLessThanOrEqual(page.pathOpStart(i) + page.pathOpCount(i), page.ops.count)
@@ -73,7 +73,7 @@ final class QvpKitTests: XCTestCase {
         XCTAssertTrue(page.surahs().map { $0.number }.contains(2))
         XCTAssertTrue(page.ayahKeys().contains { $0 == (2, 255) })
         XCTAssertFalse(page.wordLabel(0).isEmpty)
-        XCTAssertFalse(page.ayahLabel(page.words[0].ayahIdx).isEmpty)
+        XCTAssertFalse(page.ayahLabel(page.words[0].ayahIndex).isEmpty)
         XCTAssertFalse(page.ayahMarks().isEmpty)
         XCTAssertEqual(page.lineBands().count, 15)
         XCTAssertEqual(page.hitAreas().count, 147)
@@ -115,7 +115,7 @@ final class QvpKitTests: XCTestCase {
         XCTAssertNotNil(h)
         XCTAssertEqual(h?.word, 0)
         XCTAssertEqual(h?.distance, 0)
-        XCTAssertEqual(h?.line, w.lineIdx)
+        XCTAssertEqual(h?.line, w.lineIndex)
         XCTAssertEqual(page.hitTestExact(cx, cy)?.word, 0)
         var inside: QvpHit?
         var y = w.y0
@@ -137,14 +137,14 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(l.slotTop.count, 15)
         XCTAssertTrue(page.currentLayout === l)
         let w = page.words[0]
-        let vx = l.ox + (w.x0 + w.x1) / 2 * l.scale
-        let vy = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIdx]) * l.scale
-        let h = page.hitTestView(vx, vy, QvpHitOptions(maxDistance: 6))
+        let viewX = l.ox + (w.x0 + w.x1) / 2 * l.scale
+        let viewY = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale
+        let h = page.hitTestView(viewX, viewY, QvpHitOptions(maxDistance: 6))
         XCTAssertEqual(h?.word, 0)
         let box = page.wordBoundsView(0)
         XCTAssertNotNil(box)
-        XCTAssertLessThan(box!.x0, vx)
-        XCTAssertGreaterThan(box!.x1, vx)
+        XCTAssertLessThan(box!.x0, viewX)
+        XCTAssertGreaterThan(box!.x1, viewX)
         _ = QvpEngine.gapToFill(pageW: page.width, pageH: page.height, lines: page.nLines, viewW: 600, viewH: 1000)
         let wf = QvpEngine.wastedFraction(pageW: page.width, pageH: page.height, viewW: 600, viewH: 1000)
         XCTAssertTrue(wf >= 0 && wf <= 1)
@@ -253,7 +253,7 @@ final class QvpKitTests: XCTestCase {
         XCTAssertTrue(atlas.pagesOfJuz(30)! == (582, 604))
         let cow = atlas.searchSurahs("cow")
         XCTAssertFalse(cow.isEmpty)
-        XCTAssertEqual(cow.first?.n, 2)
+        XCTAssertEqual(cow.first?.number, 2)
         XCTAssertFalse(atlas.surah(36)!.latin.isEmpty)
         XCTAssertEqual(atlas.surahs().count, 114)
         XCTAssertEqual(atlas.pageOfSurah(36), atlas.surah(36)!.page)
@@ -281,11 +281,11 @@ final class QvpKitTests: XCTestCase {
         XCTAssertFalse(c.isZoomed)
         // lineTransform composes engine layout + view transform
         let w = p.words[0]
-        let t = c.lineTransform(w.lineIdx)
+        let t = c.lineTransform(w.lineIndex)
         let pt = CGPoint(x: CGFloat((w.x0 + w.x1) / 2), y: CGFloat((w.y0 + w.y1) / 2)).applying(t)
         // a tap at that view point resolves to the same word through the controller
         var tapped: Int? = nil
-        c.onWordTap = { word, _ in tapped = word.idx }
+        c.onWordTap = { word, _ in tapped = word.index }
         c.tap(pt)
         XCTAssertEqual(tapped, 0)
         // double-tap carries the hit under it

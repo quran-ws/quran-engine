@@ -64,8 +64,8 @@ class MainActivity : AppCompatActivity() {
 
         view = QvpPageView(this).apply {
             padTop = dp(12).toFloat(); padBottom = dp(12).toFloat(); padSide = dp(8).toFloat()
-            onWordTap = { w, _ -> selectWord(w.idx) }
-            onDecoTap = { dec, _ -> if (dec.ayah != 0) selectAyah(dec.surah, dec.ayah) }
+            onWordTap = { w, _ -> selectWord(w.index) }
+            onDecorationTap = { dec, _ -> if (dec.ayah != 0) selectAyah(dec.surah, dec.ayah) }
             onEmptyTap = { selectWord(-1) }
             onSelectionChanged = { showSelection() }
         }
@@ -111,7 +111,7 @@ class MainActivity : AppCompatActivity() {
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val bTaj = toggleButton("Mark colours") { on -> page?.let { p -> if (tajwid != 0) { p.removeStyle(tajwid); tajwid = 0 }; if (on) tajwid = p.theme(QvpTheme(diacritics = 0x1a73e8ff.toInt(), dots = 0xc62828ff.toInt(), waqf = 0x0a7d32ff.toInt(), sifr = 0xef6c00ff.toInt(), transitionMs = 200)); view.invalidate() } }
         val bHide = toggleButton("Hide marks") { on -> page?.let { p -> if (hideMarksH != 0) { p.removeStyle(hideMarksH); hideMarksH = 0 }; if (on) hideMarksH = p.hide(Selector.kind(QvpKind.MARK)); view.invalidate() } }
-        val bMk = toggleButton("Gold ayah marks") { on -> page?.let { p -> if (ayahMarksH != 0) { p.removeStyle(ayahMarksH); ayahMarksH = 0 }; if (on) ayahMarksH = p.style(Selector.deco(QvpDeco.AYAH_MARK), 0xb8860bff.toInt(), 300, QvpLayer.THEME + 1); view.invalidate() } }
+        val bMk = toggleButton("Gold ayah marks") { on -> page?.let { p -> if (ayahMarksH != 0) { p.removeStyle(ayahMarksH); ayahMarksH = 0 }; if (on) ayahMarksH = p.style(Selector.decoration(QvpDecorationKind.AYAH_MARK), 0xb8860bff.toInt(), 300, QvpLayer.THEME + 1); view.invalidate() } }
         listOf(bTaj, bHide, bMk).forEach { row1.addView(it) }
         panel.addView(HorizontalScrollView(this).apply { addView(row1) })
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -202,7 +202,7 @@ class MainActivity : AppCompatActivity() {
     private fun showMeta() {
         val p = page ?: return
         val su = p.surahs().joinToString(", ") { "${it.number}${if (it.latin.isNotEmpty()) " " + it.latin else ""}${if (it.hasBanner) " (banner)" else ""}" }
-        val dv = p.divisions().joinToString(", ") { "${it.division.name.lowercase()} ${it.n} at ${it.surah}:${it.ayah}" }
+        val dv = p.divisions().joinToString(", ") { "${it.division.name.lowercase()} ${it.number} at ${it.surah}:${it.ayah}" }
         val j = atlas?.juzOf(p.words[0].surah, p.words[0].ayah)
         meta.text = "surahs: $su" + (if (dv.isNotEmpty()) "\nstarts here: $dv" else "") + (if (j != null) "\njuz $j · pages ${atlas!!.pagesOfJuz(j)}" else "") + "\nayahs: " + p.ayahKeys().joinToString(" ") { "${it.first}:${it.second}" }
     }
@@ -240,14 +240,14 @@ class MainActivity : AppCompatActivity() {
         selWord.text = w.text
         selInfo.text = buildString {
             append("wordKey ${w.wordKey} · line ${w.line} · ${w.nPaths} paths\n")
-            if (p.hasForm(Form.RASM_IMLAI)) append("rasmImlai ${p.wordForm(w.idx, Form.RASM_IMLAI)} · search ${p.wordForm(w.idx, Form.SEARCH)}\n")
-            append(p.wordLabel(w.idx))
+            if (p.hasForm(Form.RASM_IMLAI)) append("rasmImlai ${p.wordForm(w.index, Form.RASM_IMLAI)} · search ${p.wordForm(w.index, Form.SEARCH)}\n")
+            append(p.wordLabel(w.index))
         }
         for (i in w.firstPath until w.firstPath + w.nPaths) {
             val kind = p.pathKind(i); val nth = p.pathNthMark(i)
             val label = if (kind == QvpKind.MARK) "${QvpEngine.markName(p.pathMark(i))} #$nth" else QvpEngine.kindName(kind)
             chips.addView(ToggleButton(this).apply { textOn = label; textOff = label; text = label; textSize = 10f; isChecked = pathHandles.containsKey(i)
-                setOnCheckedChangeListener { _, c -> if (c) pathHandles[i] = if (kind == QvpKind.MARK && nth >= 0) p.style(Selector.wordMark(w.idx, nth), 0xef6c00ff.toInt(), 200, QvpLayer.TOP) else p.style(Selector.path(i), 0xef6c00ff.toInt(), 200, QvpLayer.TOP)
+                setOnCheckedChangeListener { _, c -> if (c) pathHandles[i] = if (kind == QvpKind.MARK && nth >= 0) p.style(Selector.wordMark(w.index, nth), 0xef6c00ff.toInt(), 200, QvpLayer.TOP) else p.style(Selector.path(i), 0xef6c00ff.toInt(), 200, QvpLayer.TOP)
                     else pathHandles.remove(i)?.let { p.removeStyle(it) }; view.invalidate() } })
         }
     }
@@ -262,7 +262,7 @@ class MainActivity : AppCompatActivity() {
         val t = when { p.selection().isNotEmpty() -> Target.words(p.selection()); selAyah != null -> Target.ayah(selAyah!!.first, selAyah!!.second); selWordIdx >= 0 -> Target.word(selWordIdx); else -> return }
         val svg = p.cropSvg(t, 3f, true, QvpColor.rgba(themes[theme]!!.second)) ?: return
         val cb = p.cropBounds(t, 3f, true)
-        Toast.makeText(this, "SVG ${svg.length / 1024} KB · box ${"%.0f×%.0f".format(cb!!.x1 - cb.x0, cb.y1 - cb.y0)} units · marker ${if (cb.ayahMarkDeco >= 0) "kept" else "no"}", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "SVG ${svg.length / 1024} KB · box ${"%.0f×%.0f".format(cb!!.x1 - cb.x0, cb.y1 - cb.y0)} units · marker ${if (cb.ayahMarkDecoration >= 0) "kept" else "no"}", Toast.LENGTH_LONG).show()
     }
     private fun runSearch() {
         val p = page ?: return

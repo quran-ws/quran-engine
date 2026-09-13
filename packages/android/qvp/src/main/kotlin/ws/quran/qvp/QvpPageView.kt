@@ -20,7 +20,7 @@ import android.view.View
  * Host-canvas renderer for a [QvpPage]. Draw order per frame:
  * highlight bands (one path per highlight, behind the ink) → cached base ink → styled ink → mask boxes.
  * Each frame calls `page.tick(now)` and keeps animating while the engine says so.
- * Gestures: tap → gap-aware hit-test → [onWordTap]/[onDecoTap]/[onEmptyTap]; long-press-drag → whole-word
+ * Gestures: tap → gap-aware hit-test → [onWordTap]/[onDecorationTap]/[onEmptyTap]; long-press-drag → whole-word
  * selection (engine `select`, band in the selection layer); pinch/pan on top of the engine layout.
  */
 class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
@@ -42,7 +42,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     var paperColor: Int = Color.TRANSPARENT           // ARGB
     var selectionBand: Int = QvpDefaults.SELECTION_BAND  // 0xRRGGBBAA
     var onWordTap: ((QvpWord, QvpHit) -> Unit)? = null
-    var onDecoTap: ((QvpDecoration, QvpHit) -> Unit)? = null
+    var onDecorationTap: ((QvpDecoration, QvpHit) -> Unit)? = null
     var onEmptyTap: (() -> Unit)? = null
     var onSelectionChanged: ((IntArray) -> Unit)? = null
     var zoomEnabled = true
@@ -101,7 +101,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             when {
                 hit == null -> onEmptyTap?.invoke()
                 hit.word >= 0 -> onWordTap?.invoke(p.words[hit.word], hit)
-                hit.deco >= 0 -> onDecoTap?.invoke(p.decos[hit.deco], hit)
+                hit.decoration >= 0 -> onDecorationTap?.invoke(p.decorations[hit.decoration], hit)
                 else -> onEmptyTap?.invoke()
             }
             performClick()

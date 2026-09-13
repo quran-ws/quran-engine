@@ -14,7 +14,7 @@ final class QvpStrC extends ffi.Struct {
   external int len;
 }
 
-/// `{ float width, height; uint32_t page, n_lines, n_ayahs, n_words, n_paths, n_decos; }`
+/// `{ float width, height; uint32_t page, n_lines, n_ayahs, n_words, n_paths, n_decorations; }`
 final class QvpPageInfoC extends ffi.Struct {
   @ffi.Float()
   external double width;
@@ -31,7 +31,7 @@ final class QvpPageInfoC extends ffi.Struct {
   @ffi.Uint32()
   external int nPaths;
   @ffi.Uint32()
-  external int nDecos;
+  external int nDecorations;
 }
 
 /// `{ const uint8_t* ops; uint32_t ops_len; const float* pts; uint32_t pts_len; const uint32_t* table; uint32_t n_paths; }`
@@ -47,7 +47,7 @@ final class QvpGeometryC extends ffi.Struct {
   external int nPaths;
 }
 
-/// `{ uint16_t surah, ayah, word, line_no; uint32_t ayah_idx, line_idx; float x0, y0, x1, y1; QvpStr text; uint32_t first_path, n_paths; }`
+/// `{ uint16_t surah, ayah, word, line_number; uint32_t ayah_index, line_index; float x0, y0, x1, y1; QvpStr text; uint32_t first_path, n_paths; }`
 final class QvpWordInfoC extends ffi.Struct {
   @ffi.Uint16()
   external int surah;
@@ -56,11 +56,11 @@ final class QvpWordInfoC extends ffi.Struct {
   @ffi.Uint16()
   external int word;
   @ffi.Uint16()
-  external int lineNo;
+  external int lineNumber;
   @ffi.Uint32()
-  external int ayahIdx;
+  external int ayahIndex;
   @ffi.Uint32()
-  external int lineIdx;
+  external int lineIndex;
   @ffi.Float()
   external double x0;
   @ffi.Float()
@@ -76,7 +76,7 @@ final class QvpWordInfoC extends ffi.Struct {
   external int nPaths;
 }
 
-/// `{ uint16_t surah, ayah; uint8_t fragment, fragments, flags, _pad; uint16_t rubuAlHizb; uint32_t first_word, n_words, ayah_mark_deco; float x0, y0, x1, y1; }`
+/// `{ uint16_t surah, ayah; uint8_t fragment, fragments, flags, _pad; uint16_t rubuAlHizb; uint32_t first_word, n_words, ayah_mark_decoration; float x0, y0, x1, y1; }`
 final class QvpAyahInfoC extends ffi.Struct {
   @ffi.Uint16()
   external int surah;
@@ -97,7 +97,7 @@ final class QvpAyahInfoC extends ffi.Struct {
   @ffi.Uint32()
   external int nWords;
   @ffi.Uint32()
-  external int ayahMarkDeco;
+  external int ayahMarkDecoration;
   @ffi.Float()
   external double x0;
   @ffi.Float()
@@ -108,10 +108,10 @@ final class QvpAyahInfoC extends ffi.Struct {
   external double y1;
 }
 
-/// `{ uint8_t line_no, is_header; uint32_t first_word, n_words; float x0, y0, x1, y1, band_y0, band_y1, centre; }`
+/// `{ uint8_t line_number, is_header; uint32_t first_word, n_words; float x0, y0, x1, y1, band_y0, band_y1, centre; }`
 final class QvpLineInfoC extends ffi.Struct {
   @ffi.Uint8()
-  external int lineNo;
+  external int lineNumber;
   @ffi.Uint8()
   external int isHeader;
   @ffi.Uint32()
@@ -135,7 +135,7 @@ final class QvpLineInfoC extends ffi.Struct {
 }
 
 /// `{ uint8_t decoration, _pad; uint16_t surah, ayah, _pad2; uint32_t line; float x0, y0, x1, y1; QvpStr text; uint32_t first_path, n_paths; }`
-final class QvpDecoInfoC extends ffi.Struct {
+final class QvpDecorationInfoC extends ffi.Struct {
   @ffi.Uint8()
   external int decoration;
   @ffi.Uint8()
@@ -163,14 +163,14 @@ final class QvpDecoInfoC extends ffi.Struct {
   external int nPaths;
 }
 
-/// `{ uint32_t word, path, deco, line; float distance; uint32_t is_exact; }`
+/// `{ uint32_t word, path, decoration, line; float distance; uint32_t is_exact; }`
 final class QvpHitC extends ffi.Struct {
   @ffi.Uint32()
   external int word;
   @ffi.Uint32()
   external int path;
   @ffi.Uint32()
-  external int deco;
+  external int decoration;
   @ffi.Uint32()
   external int line;
   @ffi.Float()
@@ -233,12 +233,12 @@ final class QvpHitAreaC extends ffi.Struct {
   external double inkY1;
 }
 
-/// `{ uint32_t line, line_no; float y0, y1, mid, ink_y0, ink_y1; }`
+/// `{ uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; }`
 final class QvpLineBandC extends ffi.Struct {
   @ffi.Uint32()
   external int line;
   @ffi.Uint32()
-  external int lineNo;
+  external int lineNumber;
   @ffi.Float()
   external double y0;
   @ffi.Float()
@@ -382,7 +382,7 @@ final class QvpThemeC extends ffi.Struct {
   external int nMarks;
 }
 
-/// `{ uint16_t number, ayah_count; uint8_t has_banner, has_basmalah, place, _pad; uint32_t banner_deco; QvpStr arabic, latin, english; }`
+/// `{ uint16_t number, ayah_count; uint8_t has_banner, has_basmalah, place, _pad; uint32_t banner_decoration; QvpStr arabic, latin, english; }`
 final class QvpSurahC extends ffi.Struct {
   @ffi.Uint16()
   external int number;
@@ -397,32 +397,32 @@ final class QvpSurahC extends ffi.Struct {
   @ffi.Uint8()
   external int pad;
   @ffi.Uint32()
-  external int bannerDeco;
+  external int bannerDecoration;
   external QvpStrC arabic;
   external QvpStrC latin;
   external QvpStrC english;
 }
 
-/// `{ uint8_t division, line; uint16_t n, surah, ayah; uint32_t ayah_idx; }`
+/// `{ uint8_t division, line; uint16_t n, surah, ayah; uint32_t ayah_index; }`
 final class QvpDivisionC extends ffi.Struct {
   @ffi.Uint8()
   external int division;
   @ffi.Uint8()
   external int line;
   @ffi.Uint16()
-  external int n;
+  external int number;
   @ffi.Uint16()
   external int surah;
   @ffi.Uint16()
   external int ayah;
   @ffi.Uint32()
-  external int ayahIdx;
+  external int ayahIndex;
 }
 
-/// `{ uint32_t deco; uint16_t surah, ayah; uint32_t line; float cx, cy, r; uint32_t ornament_path, numeral_path; }`
+/// `{ uint32_t decoration; uint16_t surah, ayah; uint32_t line; float cx, cy, r; uint32_t ornament_path, numeral_path; }`
 final class QvpAyahMarkC extends ffi.Struct {
   @ffi.Uint32()
-  external int deco;
+  external int decoration;
   @ffi.Uint16()
   external int surah;
   @ffi.Uint16()
@@ -441,10 +441,10 @@ final class QvpAyahMarkC extends ffi.Struct {
   external int numeralPath;
 }
 
-/// `{ uint32_t deco; uint16_t surah, ayah, juz, hizb, nisf, rubuAlHizb, rubu_al_hizb_in_hizb, _pad; }`
+/// `{ uint32_t decoration; uint16_t surah, ayah, juz, hizb, nisf, rubuAlHizb, rubu_al_hizb_in_hizb, _pad; }`
 final class QvpRosetteC extends ffi.Struct {
   @ffi.Uint32()
-  external int deco;
+  external int decoration;
   @ffi.Uint16()
   external int surah;
   @ffi.Uint16()
@@ -463,10 +463,10 @@ final class QvpRosetteC extends ffi.Struct {
   external int pad;
 }
 
-/// `{ uint32_t deco; uint16_t surah, ayah; uint32_t sign_path; }`
+/// `{ uint32_t decoration; uint16_t surah, ayah; uint32_t sign_path; }`
 final class QvpSajdahC extends ffi.Struct {
   @ffi.Uint32()
-  external int deco;
+  external int decoration;
   @ffi.Uint16()
   external int surah;
   @ffi.Uint16()
@@ -485,7 +485,7 @@ final class QvpMatchC extends ffi.Struct {
   external int isLooseMatch;
 }
 
-/// `{ float x0, y0, x1, y1; uint32_t n_words, ayah_mark_deco; }`
+/// `{ float x0, y0, x1, y1; uint32_t n_words, ayah_mark_decoration; }`
 final class QvpCropBoundsC extends ffi.Struct {
   @ffi.Float()
   external double x0;
@@ -498,13 +498,13 @@ final class QvpCropBoundsC extends ffi.Struct {
   @ffi.Uint32()
   external int nWords;
   @ffi.Uint32()
-  external int ayahMarkDeco;
+  external int ayahMarkDecoration;
 }
 
 /// `{ uint16_t n, first_page, ayah_count; uint8_t place, _pad; QvpStr arabic, latin, english; }`
 final class QvpAtlasSurahC extends ffi.Struct {
   @ffi.Uint16()
-  external int n;
+  external int number;
   @ffi.Uint16()
   external int firstPage;
   @ffi.Uint16()
@@ -573,8 +573,8 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpAyahInfoC>), int Function(PtrPage, int, ffi.Pointer<QvpAyahInfoC>)>('qvp_ayah_info');
   late final int Function(PtrPage, int, ffi.Pointer<QvpLineInfoC>) lineInfo =
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpLineInfoC>), int Function(PtrPage, int, ffi.Pointer<QvpLineInfoC>)>('qvp_line_info');
-  late final int Function(PtrPage, int, ffi.Pointer<QvpDecoInfoC>) decoInfo =
-      lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpDecoInfoC>), int Function(PtrPage, int, ffi.Pointer<QvpDecoInfoC>)>('qvp_deco_info');
+  late final int Function(PtrPage, int, ffi.Pointer<QvpDecorationInfoC>) decorationInfo =
+      lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpDecorationInfoC>), int Function(PtrPage, int, ffi.Pointer<QvpDecorationInfoC>)>('qvp_decoration_info');
   late final int Function(PtrPage, int, int, int) findWord =
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint16, ffi.Uint16, ffi.Uint16), int Function(PtrPage, int, int, int)>('qvp_find_word');
   late final int Function(PtrPage, PtrTarget, PtrU32, int) targetWords =

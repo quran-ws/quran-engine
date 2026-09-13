@@ -205,7 +205,7 @@ impl Page {
         let mut last_line = NONE;
         for &wi in words {
             let w = &self.data().words[wi as usize];
-            let line = w.line_idx as u32;
+            let line = w.line_index as u32;
             if !out.is_empty() {
                 out.push_str(if last_line != NONE && line != last_line { line_sep } else { word_sep });
             }

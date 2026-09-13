@@ -303,7 +303,7 @@ pub struct Header {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct LineRec {
-    pub line_no: u8,
+    pub line_number: u8,
     pub first_word: u16,
     pub n_words: u16,
     pub bbox: IBox,
@@ -318,8 +318,8 @@ pub struct AyahRec {
     pub flags: u8,
     pub first_word: u16,
     pub n_words: u16,
-    /// Index into decos, or NONE_U16.
-    pub ayah_mark_deco: u16,
+    /// Index into decorations, or NONE_U16.
+    pub ayah_mark_decoration: u16,
     /// `rubu_al_hizb` number (1..240) that starts at this ayah when any AF_*_START flag is
     /// set, else 0. juz = (rubu_al_hizb-1)/8+1, hizb = (rubu_al_hizb-1)/4+1, nisf = (rubu_al_hizb-1)/2+1.
     pub rubu_al_hizb: u16,
@@ -331,8 +331,8 @@ pub struct WordRec {
     pub surah: u16,
     pub ayah: u16,
     pub word: u16,
-    pub line_idx: u16,
-    pub ayah_idx: u16,
+    pub line_index: u16,
+    pub ayah_index: u16,
     /// Index into strings (rasm_uthmani text) or NONE_U16.
     pub text: u16,
     /// Other text forms (rasm_imlai, qpc, rasm, search): string index or NONE_U16.
@@ -403,7 +403,7 @@ pub struct PageData {
     pub ayahs: Vec<AyahRec>,
     pub words: Vec<WordRec>,
     pub paths: Vec<PathRec>,
-    pub decos: Vec<DecoRec>,
+    pub decorations: Vec<DecoRec>,
     pub glyphs: Vec<GlyphRec>,
     pub insts: Vec<InstRec>,
     pub ops: Vec<u8>,
@@ -847,7 +847,7 @@ mod tests {
         let bb = encode_cmds(&cmds, 500, 600, &mut ops);
         let p = PageData {
             header: Header { version: VERSION, quant: 100, page: 7, flags: 0, width: 345.0, height: 550.0 },
-            lines: vec![LineRec { line_no: 1, first_word: 0, n_words: 1, bbox: bb }],
+            lines: vec![LineRec { line_number: 1, first_word: 0, n_words: 1, bbox: bb }],
             ayahs: vec![AyahRec {
                 surah: 2,
                 ayah: 3,
@@ -856,7 +856,7 @@ mod tests {
                 flags: AF_RUBU_AL_HIZB_START,
                 first_word: 0,
                 n_words: 1,
-                ayah_mark_deco: 0,
+                ayah_mark_decoration: 0,
                 rubu_al_hizb: 5,
                 bbox: bb,
             }],
@@ -864,8 +864,8 @@ mod tests {
                 surah: 2,
                 ayah: 3,
                 word: 1,
-                line_idx: 0,
-                ayah_idx: 0,
+                line_index: 0,
+                ayah_index: 0,
                 text: 0,
                 rasm_imlai: NONE_U16,
                 qpc: NONE_U16,
@@ -899,7 +899,7 @@ mod tests {
                     bbox: bb,
                 },
             ],
-            decos: vec![DecoRec {
+            decorations: vec![DecoRec {
                 kind: DecoKind::AyahMark,
                 surah: 2,
                 ayah: 3,

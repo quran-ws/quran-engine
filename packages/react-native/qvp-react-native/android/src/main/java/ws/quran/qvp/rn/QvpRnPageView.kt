@@ -70,7 +70,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
 
     init {
         inner.onWordTap = { w, h -> page?.let { p -> emit("onWordTap", mapOf("word" to Marshal.word(p, w), "hit" to Marshal.hit(p, h))) } }
-        inner.onDecoTap = { d, h -> page?.let { p -> emit("onDecoTap", mapOf("deco" to Marshal.deco(d), "hit" to Marshal.hit(p, h))) } }
+        inner.onDecorationTap = { d, h -> page?.let { p -> emit("onDecorationTap", mapOf("decoration" to Marshal.decoration(d), "hit" to Marshal.hit(p, h))) } }
         inner.onEmptyTap = { emit("onEmptyTap", emptyMap()) }
         inner.onSelectionChanged = { page?.let { p -> emit("onSelectionChanged", Marshal.selection(p)) } }
     }

@@ -42,8 +42,8 @@ fn page() -> Page {
     let data = PageData {
         header: Header { version: VERSION, quant: 100, page: 1, flags: 0, width: 100.0, height: 100.0 },
         lines: vec![
-            LineRec { line_no: 1, first_word: 0, n_words: 2, bbox: l1 },
-            LineRec { line_no: 2, first_word: 2, n_words: 1, bbox: c },
+            LineRec { line_number: 1, first_word: 0, n_words: 2, bbox: l1 },
+            LineRec { line_number: 2, first_word: 2, n_words: 1, bbox: c },
         ],
         ayahs: vec![
             AyahRec {
@@ -54,7 +54,7 @@ fn page() -> Page {
                 flags: AF_JUZ_START | AF_HIZB_START | AF_RUBU_AL_HIZB_START,
                 first_word: 0,
                 n_words: 2,
-                ayah_mark_deco: NONE_U16,
+                ayah_mark_decoration: NONE_U16,
                 rubu_al_hizb: 1,
                 bbox: l1,
             },
@@ -66,7 +66,7 @@ fn page() -> Page {
                 flags: 0,
                 first_word: 2,
                 n_words: 1,
-                ayah_mark_deco: NONE_U16,
+                ayah_mark_decoration: NONE_U16,
                 rubu_al_hizb: 0,
                 bbox: c,
             },
@@ -76,8 +76,8 @@ fn page() -> Page {
                 surah: 1,
                 ayah: 1,
                 word: 1,
-                line_idx: 0,
-                ayah_idx: 0,
+                line_index: 0,
+                ayah_index: 0,
                 text: ta,
                 rasm_imlai: ta,
                 qpc: ta,
@@ -91,8 +91,8 @@ fn page() -> Page {
                 surah: 1,
                 ayah: 1,
                 word: 2,
-                line_idx: 0,
-                ayah_idx: 0,
+                line_index: 0,
+                ayah_index: 0,
                 text: tb,
                 rasm_imlai: tb,
                 qpc: tb,
@@ -106,8 +106,8 @@ fn page() -> Page {
                 surah: 1,
                 ayah: 2,
                 word: 1,
-                line_idx: 1,
-                ayah_idx: 1,
+                line_index: 1,
+                ayah_index: 1,
                 text: tc,
                 rasm_imlai: tc,
                 qpc: tc,
@@ -119,7 +119,7 @@ fn page() -> Page {
             },
         ],
         paths,
-        decos: vec![],
+        decorations: vec![],
         glyphs: vec![],
         insts: vec![],
         ops,
@@ -131,10 +131,10 @@ fn page() -> Page {
 #[test]
 fn hit_testing() {
     let p = page();
-    assert_eq!(p.hit_test_exact(15.0, 15.0), Some(HitExact { word: 0, path: 0, deco: NONE }));
-    assert_eq!(p.hit_test_exact(35.0, 15.0), Some(HitExact { word: 1, path: 1, deco: NONE }));
-    assert_eq!(p.hit_test_exact(33.0, 6.0), Some(HitExact { word: 1, path: 2, deco: NONE }));
-    assert_eq!(p.hit_test_exact(33.0, 8.5), Some(HitExact { word: 1, path: NONE, deco: NONE }));
+    assert_eq!(p.hit_test_exact(15.0, 15.0), Some(HitExact { word: 0, path: 0, decoration: NONE }));
+    assert_eq!(p.hit_test_exact(35.0, 15.0), Some(HitExact { word: 1, path: 1, decoration: NONE }));
+    assert_eq!(p.hit_test_exact(33.0, 6.0), Some(HitExact { word: 1, path: 2, decoration: NONE }));
+    assert_eq!(p.hit_test_exact(33.0, 8.5), Some(HitExact { word: 1, path: NONE, decoration: NONE }));
     assert_eq!(p.hit_test_exact(25.0, 15.0), None);
     assert_eq!(p.hit_test_exact(50.0, 50.0), None);
     assert_eq!(p.word_text(1), "ٱلْكِتَٰبُ");
@@ -350,7 +350,7 @@ fn layout_fill_height_and_view_hit() {
     assert!((l.line_slots[0].1 - mid).abs() < 1e-3 && (l.line_slots[1].0 - mid).abs() < 1e-3);
     let vx = l.ox + 15.0 * 2.0;
     let vy = l.oy + (15.0 + l.line_dy[0]) * 2.0;
-    assert_eq!(p.hit_test_exact_view(vx, vy), Some(HitExact { word: 0, path: 0, deco: NONE }));
+    assert_eq!(p.hit_test_exact_view(vx, vy), Some(HitExact { word: 0, path: 0, decoration: NONE }));
     assert_eq!(p.hit_test_exact_view(vx, 5.0), None);
     let g = p.hit_test_view(l.ox + 25.0 * 2.0, vy, &HitOptions::default()).unwrap();
     assert_eq!((g.word, g.is_exact), (1, false));

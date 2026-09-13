@@ -114,7 +114,7 @@ class QvpPageView extends StatefulWidget {
     this.defaultInk,
     this.controller,
     this.onWordTap,
-    this.onDecoTap,
+    this.onDecorationTap,
     this.onEmptyTap,
     this.onSelectionChanged,
     this.hitMaxDistance = QvpDefaults.tapDistance,
@@ -136,11 +136,11 @@ class QvpPageView extends StatefulWidget {
   final Object? defaultInk;
   final QvpViewController? controller;
 
-  /// Tap on a word (gap-aware). [hit] carries path / deco / line / distance.
+  /// Tap on a word (gap-aware). [hit] carries path / decoration / line / distance.
   final void Function(int word, QvpHit hit)? onWordTap;
 
   /// Tap on a decoration (ayah mark, surah banner, …) that is not a word.
-  final void Function(QvpDecoInfo deco)? onDecoTap;
+  final void Function(QvpDecorationInfo decoration)? onDecorationTap;
   final VoidCallback? onEmptyTap;
 
   /// Whole-word selection changed through long-press-drag (empty list = cleared).
@@ -286,8 +286,8 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     final h = _hitAt(d.localPosition, maxDistance: widget.hitMaxDistance);
     if (h != null && h.word >= 0) {
       widget.onWordTap?.call(h.word, h);
-    } else if (h != null && h.deco >= 0) {
-      widget.onDecoTap?.call(page.decos[h.deco]);
+    } else if (h != null && h.decoration >= 0) {
+      widget.onDecorationTap?.call(page.decorations[h.decoration]);
     } else {
       widget.onEmptyTap?.call();
     }

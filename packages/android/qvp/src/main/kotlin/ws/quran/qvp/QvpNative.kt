@@ -19,8 +19,8 @@ internal object QvpNative {
     @JvmStatic external fun wordForm(h: Long, i: Int, form: Int): String?
     @JvmStatic external fun ayahInfo(h: Long, i: Int): FloatArray?
     @JvmStatic external fun lineInfo(h: Long, i: Int): FloatArray?
-    @JvmStatic external fun decoInfo(h: Long, i: Int): FloatArray?
-    @JvmStatic external fun decoText(h: Long, i: Int): String?
+    @JvmStatic external fun decorationInfo(h: Long, i: Int): FloatArray?
+    @JvmStatic external fun decorationText(h: Long, i: Int): String?
     @JvmStatic external fun findWord(h: Long, s: Int, a: Int, w: Int): Int
     @JvmStatic external fun targetWords(h: Long, target: IntArray): IntArray
     @JvmStatic external fun naturalPitch(h: Long): Float
@@ -89,12 +89,12 @@ internal object QvpNative {
     @JvmStatic external fun selectionText(h: Long, form: Int, citation: Boolean): String
     // memorisation
     @JvmStatic external fun mask(h: Long, target: IntArray, mode: Int)
-    @JvmStatic external fun maskFrom(h: Long, wi: Int, mode: Int)
+    @JvmStatic external fun maskFrom(h: Long, wordIndex: Int, mode: Int)
     @JvmStatic external fun maskOptions(h: Long, blockColor: Int, padX: Float, padY: Float, radius: Float, reverse: Boolean)
     @JvmStatic external fun unmaskNext(h: Long, n: Int): Int
     @JvmStatic external fun maskBack(h: Long, n: Int): Int
-    @JvmStatic external fun unmaskWord(h: Long, wi: Int): Boolean
-    @JvmStatic external fun maskWord(h: Long, wi: Int): Boolean
+    @JvmStatic external fun unmaskWord(h: Long, wordIndex: Int): Boolean
+    @JvmStatic external fun maskWord(h: Long, wordIndex: Int): Boolean
     @JvmStatic external fun unmaskAll(h: Long)
     @JvmStatic external fun maskAll(h: Long)
     @JvmStatic external fun unmask(h: Long)
@@ -105,7 +105,7 @@ internal object QvpNative {
     @JvmStatic external fun revealGoto(h: Long, at: Long): Boolean
     @JvmStatic external fun revealPosition(h: Long): Long
     @JvmStatic external fun revealStepCount(h: Long): Int
-    @JvmStatic external fun revealStepOf(h: Long, wi: Int): Long
+    @JvmStatic external fun revealStepOf(h: Long, wordIndex: Int): Long
     @JvmStatic external fun revealStop(h: Long)
     // crop
     @JvmStatic external fun cropBounds(h: Long, target: IntArray, pad: Float, keepAyahMarks: Boolean): FloatArray?

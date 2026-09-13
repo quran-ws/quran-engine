@@ -62,7 +62,7 @@ is owed.
 | `qvp_word_info` | react-native | list form: bound as `word(i)` and `words()` |
 | `qvp_ayah_info` | react-native | list form: bound as `ayahs()` |
 | `qvp_line_info` | react-native | list form: bound as `lines()` |
-| `qvp_deco_info` | react-native | list form: bound as `decos()` |
+| `qvp_decoration_info` | react-native | list form: bound as `decorations()` |
 | `qvp_text` | react-native | list form: `text(target)` takes a target |
 
 ## Platform-level gaps
@@ -245,7 +245,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_crop_bounds` | yes | yes | yes | yes | yes |
 | `qvp_crop_svg` | yes | yes | yes | yes | yes |
 | `qvp_dealloc` | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) |
-| `qvp_deco_info` | yes | yes | yes | yes | gap (list form: bound as `decos()`) |
+| `qvp_decoration_info` | yes | yes | yes | yes | gap (list form: bound as `decorations()`) |
 | `qvp_divisions` | yes | yes | yes | yes | yes |
 | `qvp_engine_name` | yes | yes | yes | yes | yes |
 | `qvp_family_name` | yes | yes | yes | yes | yes |

@@ -63,9 +63,9 @@ impl Reveal {
         let step = if c.word != NONE {
             self.step_of_word[c.word as usize] as i64
         } else if self.ayah_marks
-            && c.deco != NONE
+            && c.decoration != NONE
             && c.ayah != 0
-            && page.data().decos[c.deco as usize].kind == qvp_format::DecoKind::AyahMark
+            && page.data().decorations[c.decoration as usize].kind == qvp_format::DecoKind::AyahMark
         {
             // a medallion lights with the ayah it closes: its last word's step
             match page.data().words.iter().rposition(|w| w.surah == c.surah && w.ayah == c.ayah) {
@@ -192,10 +192,10 @@ impl Page {
             .iter()
             .map(|&wi| {
                 let w = &self.data().words[wi as usize];
-                let d = dy[w.line_idx as usize];
+                let d = dy[w.line_index as usize];
                 crate::highlight::ViewBox {
                     highlight: 0,
-                    line: w.line_idx as u32,
+                    line: w.line_index as u32,
                     x0: ox + (w.bbox.x0 as f32 / q - self.mask.pad_x) * scale,
                     y0: oy + (w.bbox.y0 as f32 / q - self.mask.pad_y + d) * scale,
                     x1: ox + (w.bbox.x1 as f32 / q + self.mask.pad_x) * scale,
