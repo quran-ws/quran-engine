@@ -22,7 +22,7 @@ Expand QVP and QVA once, in the README and here. Nowhere else needs to.
 
 ## Quranic terms
 
-The Quran.ws terminology standard decides every Quranic word: `surah`, `ayah`, `juz`,
+The Quran.ws terminology standard fixes every Quranic word: `surah`, `ayah`, `juz`,
 `hizb`, `rubu_al_hizb`, `rasm_uthmani`, `rasm_imlai`, `ayah_mark`, `waqf`, `sajdah`, and
 the mark names from the source bundle's taxonomy (`fathah`, `hamzat_al_wasl`,
 `omitted_alif`, `small_meem`, …). `.terminology.json` records what this repository has
@@ -44,7 +44,7 @@ Same word four times, and the call site reads as a sentence: the page's line spa
 layout's line spacing. In the C header the noun becomes the prefix mechanically:
 `qvp_page_line_spacing`, `qvp_grid_line_spacing`, `QvpLayoutOptions.line_spacing`,
 `QvpLayout.line_spacing`. Setting a ratio and reading back a length under one name is how
-CSS `line-height` works, and every web and mobile developer already knows it.
+CSS `line-height` works, a pattern that web and mobile developers already use.
 
 When a group of values needs a home, introduce a noun (`grid`), never a prefix (`nominal_`).
 

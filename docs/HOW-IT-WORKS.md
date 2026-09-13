@@ -8,10 +8,11 @@ the end.
 
 A mushaf page starts as a drawing: every letter, dot and mark is a vector outline. The
 converter turns that drawing into a small binary page file. The engine loads a page file,
-knows where every word and mark sits, and answers questions about it: which word is under
-this finger, how to spread the lines to fill a tall screen, what colour each outline
-should be right now. Your app draws the outlines with its own graphics API and gives the
-engine the events. The engine decides. The app paints.
+indexes the position of every word and mark, and computes answers from that index: the
+word under a touch point, the line positions that fill a tall screen, the colour of each
+outline at the current moment. Your app renders the outlines with its own graphics API and
+passes touch events to the engine. The engine computes geometry, layout and colours; the
+app renders them.
 
 ## From a drawing to pixels
 
@@ -37,11 +38,11 @@ source SVG ──converter──▶ page file ──engine──▶ outlines + c
    same engine runs inside iOS, Android, Flutter, React Native and the browser (as
    WebAssembly, "wasm", a binary format browsers can run).
 5. **The wrapper** is a thin layer in each language. It passes your calls to the engine,
-   and it draws what the engine returns with the platform's own canvas. It never decides
-   anything itself.
+   and it renders what the engine returns with the platform's own canvas. It computes
+   nothing itself.
 
-Two more files travel with the pages. The **atlas** (`atlas.qva`) knows the whole mushaf:
-which page holds ayah 2:255, where each juz starts. The **words sidecar**
+Two more files travel with the pages. The **atlas** (`atlas.qva`) indexes the whole
+mushaf: the page that holds ayah 2:255, the ayah where each juz starts. The **words sidecar**
 (`NNN.words.json`) carries the other spellings of each word, such as the plain modern
 spelling used for search.
 
@@ -57,7 +58,7 @@ const hit = page.hitTestViewEx(x, y);          // the word under a finger, or nu
 
 Everything below is optional and reachable from the same page object.
 
-## What the engine decides
+## What the engine computes
 
 ### Which word is under a finger
 
@@ -72,7 +73,7 @@ it.
 ### How the lines spread on a tall screen
 
 A printed page fitted to a phone's width leaves empty paper above and below. The engine can
-spend that space by pushing each line further down than the last: line one stays, line two
+distribute that space by moving each line further down than the last: line one stays, line two
 moves down by *d*, line three by *2d*, and so on. Every gap grows by the same amount and no
 line is reshaped. Printed lines are not equally tall, and ink often reaches into the line
 above, so the engine snaps nothing to a grid. Spacing only opens up: the printed spacing is the
@@ -84,7 +85,7 @@ Styles are rules on layers: base, theme, highlight, selection, top. A rule says 
 outlines, this colour, fade over this many milliseconds". A rule can address a whole page,
 a line, an ayah, a word, or one diacritic of one word. Every rule returns a **handle**;
 removing the handle undoes exactly that rule. The engine resolves all rules into one colour
-per outline, and your app paints those colours.
+per outline, and your app renders those colours.
 
 Mark colouring for tajwid-style display is one such rule set: colour the diacritics blue,
 the dots red, the pause marks green.
@@ -119,14 +120,15 @@ Crop returns a standalone SVG of any target with the current colours applied, fo
 
 ### Finding a page
 
-The atlas answers cross-page questions without a database: which page holds an ayah, the
+The atlas resolves cross-page lookups without a database: which page holds an ayah, the
 page range of a surah, the ayah where juz 30 starts, a surah by name in Arabic or English.
 
 ## What the app does
 
-Your app owns the screen. It loads bytes, keeps the page object, paints the outlines with
-the colours the engine gives it, and forwards taps, drags and pinches. Zooming and panning are the app's job. Every number that affects where something is, or what colour it has,
-comes from the engine.
+Your app controls the screen. It loads bytes, keeps the page object, renders the outlines
+with the colours the engine returns, and forwards taps, drags and pinches. The app also
+implements zooming and panning. The engine computes every number that affects the position
+or the colour of an outline.
 
 ## Units and coordinates
 

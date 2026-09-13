@@ -23,7 +23,7 @@ fail, because `scripts/sync-test-data.sh` always provides the data there.
 (`scripts/gen-conformance.sh`) for fixed inputs: page 042 at ten viewport sizes in every
 fit mode, hit tests at fixed points, a search, a highlight's boxes. Every wrapper's test
 suite runs the same scenarios through its public API and compares the numbers. A wrapper
-that reimplements a formula fails with the exact divergence. When a decision moves from a
+that reimplements a formula fails with the exact divergence. When a computation moves from a
 wrapper into the core, it gets a scenario.
 
 ## What a change must ship with

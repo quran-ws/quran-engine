@@ -20,7 +20,7 @@ scripts/check-parity.py               # header vs Rust vs every wrapper
 
 ## Invariants that are easy to break
 
-- The engine decides. Wrappers marshal and paint. No formula in a wrapper
+- The engine computes; wrappers marshal calls and render results. No formula in a wrapper
   (`docs/standards/API-DESIGN.md`).
 - `include/qvp.h` is hand-written and must match the `#[no_mangle]` set in
   `crates/qvp-ffi/src/lib.rs` exactly. `scripts/build-engine-android.sh` generates the Android copy at

@@ -7,7 +7,7 @@ The test every public member must pass:
 
 ## The rules
 
-- **Design from the caller's side.** Name a method for what the app wants
+- **Design from the caller's side.** Name a method for the result the app needs
   (`highlight`, `search`, `mask`), never for how the engine does it (`resolve`, `tick`,
   `styled`).
 - **A small verb vocabulary, used everywhere.** load, free, get, set, add, remove, move,
@@ -43,7 +43,7 @@ The test every public member must pass:
 
 | layer | job | guessable? |
 |---|---|---|
-| `crates/qvp-core` | every decision: geometry, hit testing, layout, styles, highlights, selection, masks, search, crop, atlas | n/a, internal |
+| `crates/qvp-core` | every computation: geometry, hit testing, layout, styles, highlights, selection, masks, search, crop, atlas | n/a, internal |
 | `crates/qvp-ffi/include/qvp.h` | the one contract. Flat, complete, predictable | no, and it need not be |
 | `web/qvp.js` | the reference wrapper. Every other wrapper mirrors its names | yes |
 | Kotlin, Dart, Swift, TypeScript packages | the same surface in each language's idiom | yes |
@@ -64,10 +64,10 @@ crop · atlas · names
 
 A wrapper may do arithmetic for two things only: converting engine output to platform
 units, and tracking gesture state (pan, pinch, scroll). Anything else, such as a fit
-scale, a clamp, box mathematics, index mathematics or colour mathematics, is a decision. It
-belongs in the core, exposed through one symbol, and the wrapper calls it.
+scale, a clamp, box mathematics, index mathematics or colour mathematics, is engine work.
+It belongs in the core, exposed through one symbol, and the wrapper calls it.
 
-When you find a new decision in a wrapper, move it to the core so it and gets a scenario in
+When you find such a computation in a wrapper, move it to the core and add a scenario in
 `conformance/scenarios/`. Then no wrapper can reimplement it differently again.
 
 ## The three tiers of a feature
@@ -76,7 +76,7 @@ When you find a new decision in a wrapper, move it to the core so it and gets a 
 |---|---|
 | core behaviour | changed once in Rust. Every platform receives it with the next native build. Nothing to mirror |
 | engine API (a C symbol) | bound in all five wrappers under the parity table's name, or listed there as a declared gap with an issue number. CI fails on undeclared drift |
-| platform convenience | per platform, in its idiom, documented in the package README and listed in the parity table as a gap for the others. Must not make a decision the engine could make |
+| platform convenience | per platform, in its idiom, documented in the package README and listed in the parity table as a gap for the others. Must not compute anything the engine can compute |
 
 A feature is done when it meets its tier's rule.
 

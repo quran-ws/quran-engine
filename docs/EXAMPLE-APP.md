@@ -1,7 +1,7 @@
 # The example app
 
 Every platform ships the same example app so the four can be compared side by side and so a
-developer who has seen one knows the others. This page is its specification. The web
+developer who has used one can use the others. This page is its specification. The web
 example is the reference.
 
 ## Data
