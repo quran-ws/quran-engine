@@ -276,6 +276,129 @@ The engine holds every name table. A wrapper reads them from the engine when it 
 (`Sel.mark('shaddah')`, `Sel.deco('ayah-mark')` and the rest resolve through them) and
 carries no table of its own; a name the engine does not have resolves to 255, never to 0.
 
+## Every symbol
+
+One row per C function, with its spelling in the reference wrapper (`web/qvp.js`; the other
+wrappers use the same names in their own casing) and what it does. `docs/API-PARITY.md`
+says which wrapper binds which.
+
+| section | C | reference wrapper | what it does |
+|---|---|---|---|
+| memory | `qvp_alloc` | engine internal | Allocate `len` bytes inside the engine's memory, for hosts without their own allocator (wasm). |
+| memory | `qvp_dealloc` | engine internal | Free bytes from `qvp_alloc`. |
+| page | `qvp_page_load` | `engine.loadPage(bytes)` | Decode a page file into a page handle; null on a malformed file; the bytes are copied. |
+| page | `qvp_page_free` | `page.free()` | Free the page handle. |
+| page | `qvp_page_info` | `page.width`, `.height`, `.page`, `.nLines`, `.nAyahs`, `.nWords`, `.nPaths`, `.nDecos` | Return the page's dimensions and element counts. |
+| page | `qvp_geometry` | `page.paths`, `page.buildPaths()` | Return the outline streams and the per-path table a renderer draws from; they live as long as the page. |
+| page | `qvp_word_info` | `page.words[i]` | Return one word: key, line, ayah fragment, bounds, text and its path range. |
+| page | `qvp_word_form` | `page.wordForm(i, form)` | Return one of a word's text forms; the derived forms need the words sidecar. |
+| page | `qvp_ayah_info` | `page.ayahs[i]` | Return one ayah fragment: key, fragment index and count, flags, word range, ayah-mark decoration, bounds. |
+| page | `qvp_line_info` | `page.lines[i]` | Return one printed line: number, header flag, word range, bounds, band and centre. |
+| page | `qvp_deco_info` | `page.decos[i]` | Return one decoration: kind, key, line, bounds, text and its path range. |
+| page | `qvp_find_word` | `page.findWord(surah, ayah, word)` | Return the page index of a word by its key, or −1 when the word is not on this page. |
+| page | `qvp_resolve` | `page.resolve(target)` | Expand a target (page, word, ayah, range, line, surah) into word indices in reading order. |
+| page | `qvp_natural_pitch` | `page.naturalPitch` | Return the printed line spacing of this page, in page units. |
+| metadata | `qvp_surahs_count` | `page.surahs().length` | Return how many surahs have text on this page. |
+| metadata | `qvp_surah_at` | `page.surahs()[i]` | Return the i-th surah on the page: number, ayah count, banner and basmalah flags, place, names. |
+| metadata | `qvp_divisions` | `page.divisions()` | Return the juz, hizb, nisf and rubu_al_hizb divisions that start on this page. |
+| metadata | `qvp_ayah_marks` | `page.ayahMarks()` | Return the ayah-mark medallions on the page with their centres and radii. |
+| metadata | `qvp_rosettes` | `page.rosettes()` | Return the drawn hizb rosettes with the division numbers they mark. |
+| metadata | `qvp_sajdahs` | `page.sajdahs()` | Return the sajdah signs on the page. |
+| metadata | `qvp_ayah_keys` | `page.ayahKeys()` | Return the ayah keys on the page in reading order, packed as surah in the high 16 bits and ayah in the low 16. |
+| metadata | `qvp_ayah_word_count` | `page.ayahWordCount(surah, ayah)` | Return how many of an ayah's words are on this page and whether the ayah is complete here. |
+| metadata | `qvp_recite_map` | `page.reciteMap(surah, ayah, nSegments)` | Map an ayah's words onto `nSegments` recitation timings, or −1 when the counts disagree. |
+| metadata | `qvp_word_label` | `page.wordLabel(i)` | Return an accessibility label for a word. |
+| metadata | `qvp_ayah_label` | `page.ayahLabel(i)` | Return an accessibility label for an ayah fragment. |
+| text and search | `qvp_text` | `page.text(words, form, wordSep, lineSep)` | Return the text of a word list (or the page) in one form, with the given separators. |
+| text and search | `qvp_text_target` | `page.text(target, …)` | The same for a target. |
+| text and search | `qvp_search` | `page.search(query, …)` | Search the page's words in one text form with Arabic normalisation; returns matches with their word index. |
+| text and search | `qvp_arabic` | `engine.strip()`, `.fold()`, `.normalize()`, `.looseKey()`, `.searchKey()` | Apply one of the Arabic text transforms of the search fold to a string. |
+| text and search | `qvp_citation` | `page.citation(words)` | Return a citation such as `2:255-257, 3:1` for a word list. |
+| text and search | `qvp_attach_words` | `page.attachWords(json)` | Attach the words sidecar's text forms; returns the number of words updated, −1 on bad JSON. |
+| text and search | `qvp_has_form` | `page.hasForm(form)` | Return whether a text form is available (the derived forms need the sidecar). |
+| hit testing | `qvp_hit_test` | `page.hitTest(x, y)` | Return the word, path or decoration whose exact outline contains a point in page units. |
+| hit testing | `qvp_hit_test_view` | `page.hitTestView(vx, vy)` | The same for a point in viewport pixels through the current layout. |
+| hit testing | `qvp_hit_test_ex` | `page.hitTestEx(x, y, options)` | Gap-aware: resolve a point to the nearest word by line band and gap bias, with the distance and whether the hit was exact. |
+| hit testing | `qvp_hit_test_view_ex` | `page.hitTestViewEx(vx, vy, options)` | The same for viewport pixels. |
+| hit testing | `qvp_line_bands` | `page.lineBands()` | Return every line's vertical band in page units. |
+| hit testing | `qvp_hit_boxes` | `page.hitBoxes(gapBias)` | Return the gap-aware rectangle of every word, a partition of each line with no dead zone. |
+| layout | `qvp_layout` | `page.layout(spec)` | Lay the page out for a viewport: scale, per-line shifts, slots, content size and the fit transform. |
+| layout | `qvp_gap_to_fill` | `engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` | Return the leading that fills a viewport when fitted to width, from raw dimensions. |
+| layout | `qvp_layout_gap_to_fill` | `page.layoutGapToFill(spec, max)` | The same from a layout spec; the padding is subtracted in the engine. |
+| layout | `qvp_wasted_fraction` | `engine.wastedFraction(pageW, pageH, viewW, viewH)` | Return the share of a viewport left empty when the page is fitted to width. |
+| layout | `qvp_word_box_view` | `page.wordBoxView(i)` | Return a word's bounds in viewport pixels through the current layout. |
+| styles | `qvp_style_add` | `page.style(selector, colour, ms, layer)` | Add a colour rule for a selector on a layer; returns a handle, 0 for a bad selector. |
+| styles | `qvp_style_add_target` | `page.styleTarget(target, colour, ms, layer)` | Add a colour rule for a target's words. |
+| styles | `qvp_style_remove` | `page.unstyle(handle)` | Remove a rule by handle; returns how many rules were removed. |
+| styles | `qvp_style_repaint` | `page.restyle(handle, colour, ms)` | Change a rule's colour in place, with a transition. |
+| styles | `qvp_style_clear` | `page.clearStyles()` | Remove every rule. |
+| styles | `qvp_style_clear_layer` | `page.clearLayer(layer)` | Remove every rule on one layer. |
+| styles | `qvp_style_default` | `page.setDefaultInk(colour)` | Set the ink colour a path has when no rule applies. |
+| styles | `qvp_hide` | `page.hide(selector)` | Add an alpha-0 rule on the top layer; returns its handle. |
+| styles | `qvp_theme` | `page.theme(theme)` | Apply a theme (ink, mark families, headers) as one rule set with one handle. |
+| styles | `qvp_style_handles` | `page.styleHandles()` | Return the handles of every live rule. |
+| clock and colours | `qvp_tick` | `page.tick(nowMs)` | Advance transitions to a time; returns 1 while anything is still animating. |
+| clock and colours | `qvp_paint` | `page.paint()` | Return the current colour of every path, mid-transition included. |
+| clock and colours | `qvp_styled` | `page.styled()` | Return the (path, colour) pairs whose colour differs from the default ink. |
+| clock and colours | `qvp_color_of` | `page.colorOf(path)` | Return one path's current colour. |
+| highlights | `qvp_highlight` | `page.highlight(target, style)` | Add a highlight (ink, band or both) for a target; returns a handle. |
+| highlights | `qvp_rehighlight` | `page.rehighlight(handle, target)` | Move a highlight to another target: the band slides, the ink cross-fades. |
+| highlights | `qvp_restyle_highlight` | `page.restyleHighlight(handle, style)` | Change a highlight's style in place. |
+| highlights | `qvp_unhighlight` | `page.unhighlight(handle)` | Fade a highlight out and remove it. |
+| highlights | `qvp_clear_highlights` | `page.clearHighlights()` | Remove every highlight. |
+| highlights | `qvp_highlight_handles` | `page.highlightHandles()` | Return the handles of every live highlight. |
+| highlights | `qvp_highlight_words` | `page.highlightWords(handle)` | Return the words a highlight covers. |
+| highlights | `qvp_highlight_boxes` | `page.highlightBoxes()` | Return every highlight's band rectangles in viewport pixels; draw each id as one nonzero path behind the ink. |
+| highlights | `qvp_band_boxes` | `page.bandBoxes(words, options)` | Return band rectangles for an arbitrary word list, in page units. |
+| selection | `qvp_select` | `page.select(anchor, focus)` | Select the whole words between two word indices; `QVP_NONE` clears. |
+| selection | `qvp_selection` | `page.selection()` | Return the selected word indices. |
+| selection | `qvp_selection_text` | `page.selectionText(form, citation)` | Return the selected text, with its citation when asked. |
+| memorisation | `qvp_mask` | `page.mask(target, mode)` | Mask a target's words: hide, block or blur. |
+| memorisation | `qvp_mask_from` | `page.maskFrom(word, mode)` | Mask every word from a word index to the end of the page. |
+| memorisation | `qvp_mask_options` | `page.maskOptions(options)` | Set the block colour, padding, radius and direction of the mask. |
+| memorisation | `qvp_reveal_next` | `page.revealNext(n)` | Unhide the next `n` masked words; returns how many are still hidden. |
+| memorisation | `qvp_hide_back` | `page.hideBack(n)` | Re-hide the last `n` revealed words. |
+| memorisation | `qvp_reveal_word` | `page.revealWord(i)` | Unhide one word. |
+| memorisation | `qvp_hide_word` | `page.hideWord(i)` | Hide one word again. |
+| memorisation | `qvp_reveal_all` | `page.revealAll()` | Unhide every masked word. |
+| memorisation | `qvp_hide_all` | `page.hideAll()` | Hide every word in the mask again. |
+| memorisation | `qvp_unmask` | `page.unmask()` | Remove the mask. |
+| memorisation | `qvp_mask_hidden` | `page.maskHidden()` | Return the words currently hidden. |
+| memorisation | `qvp_mask_words` | `page.maskWords()` | Return the words in the mask's scope. |
+| memorisation | `qvp_mask_boxes` | `page.maskBoxes()` | Return the block or blur rectangles in viewport pixels for the host to draw. |
+| memorisation | `qvp_reveal_start` | `page.revealStart(options)` | Grey the page and light a moving window of steps; returns the step count. |
+| memorisation | `qvp_reveal_goto` | `page.revealGoto(at)` | Light the window ending at a step; −1 when nothing is lit yet. |
+| memorisation | `qvp_reveal_at` | `page.revealAt()` | Return the current step, −2 when no reveal is running. |
+| memorisation | `qvp_reveal_steps` | `page.revealSteps()` | Return the number of steps in the running reveal. |
+| memorisation | `qvp_reveal_step_of` | `page.revealStepOf(i)` | Return the step that lights a word. |
+| memorisation | `qvp_reveal_stop` | `page.revealStop()` | End the reveal and restore the page. |
+| crop | `qvp_crop_box` | `page.cropBox(target, options)` | Return the crop rectangle of a target with padding, and whether the ayah mark is inside it. |
+| crop | `qvp_crop_svg` | `page.cropSvg(target, options)` | Return a standalone SVG of a target with the current colours applied. |
+| atlas | `qvp_atlas_load` | `engine.loadAtlas(bytes)` | Decode the atlas file; null on a malformed file. |
+| atlas | `qvp_atlas_free` | `atlas.free()` | Free the atlas. |
+| atlas | `qvp_atlas_page_of` | `atlas.pageOf(surah, ayah)` | Return the page an ayah is on. |
+| atlas | `qvp_atlas_page_range` | `atlas.pageRange(page)` | Return the first and last ayah keys of a page. |
+| atlas | `qvp_atlas_pages` | `atlas.pages()` | Return how many pages the atlas covers. |
+| atlas | `qvp_atlas_surahs` | `atlas.surahs()` | Return how many surahs the atlas covers. |
+| atlas | `qvp_atlas_surah` | `atlas.surah(n)` | Return a surah by number: first page, ayah count, place, names. |
+| atlas | `qvp_atlas_surah_at` | `atlas.surahs()[i]` | Return the i-th surah record. |
+| atlas | `qvp_atlas_division` | `atlas.juz(n)`, `.hizb(n)`, `.nisf(n)`, `.rubuAlHizb(n)` | Return where a division starts: surah, ayah, page. |
+| atlas | `qvp_atlas_division_at` | `atlas.juzAt(surah, ayah)`, `.divisionAt(kind, surah, ayah)` | Return the number of the division that contains an ayah. |
+| atlas | `qvp_atlas_pages_of_juz` | `atlas.pagesOfJuz(n)` | Return the first and last page of a juz. |
+| atlas | `qvp_atlas_find_surah` | `atlas.findSurah(text)` | Search the surah names in Arabic, Latin or English, or by number. |
+| atlas | `qvp_atlas_json` | `atlas.json()` | Return the atlas as JSON. |
+| names | `qvp_name_count` | `engine.nameCount(table)` | Return how many ids a name table has. |
+| names | `qvp_name` | `engine.name(table, id)` | Return the name of an id in a table; empty outside the table. |
+| names | `qvp_name_id` | `engine.nameId(table, name)` | Return the id of a name in a table; 255 when the table has no such name. |
+| names | `qvp_mark_name` | `engine.markName(id)` | Return a mark's name. |
+| names | `qvp_family_name` | `engine.familyName(id)` | Return a mark family's name. |
+| names | `qvp_kind_name` | `engine.kindName(id)` | Return a path kind's name. |
+| names | `qvp_category_name` | `engine.categoryName(id)` | Return a mark category's name. |
+| names | `qvp_mark_from_name` | `engine.markFromName(name)` | Return a mark's id by name; 255 when unknown. |
+| names | `qvp_mark_category` | `engine.markCategory(id)` | Return the category a mark belongs to. |
+| names | `qvp_version` | `engine.version` | Return the page format version the engine reads. |
+| names | `qvp_engine_name` | `engine.engineName()` | Return the engine's name, `qvp`. |
+
 ## C ABI notes
 
 Struct layouts, enums and every function signature are in `qvp.h`. Arrays are

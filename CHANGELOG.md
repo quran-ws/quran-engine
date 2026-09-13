@@ -7,6 +7,8 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- `docs/API.md` lists every C symbol with its reference-wrapper spelling and what it does;
+  the 32 that no section named are documented.
 - Defaults: `QVP_DEFAULT_*` in the header, defined once in `crates/qvp-core/src/defaults.rs`
   (ink, highlight colours, padding and seam, selection band, gap bias, tap distance, nominal
   lines, aspect slack, mask colour, padding and radius, reveal lit and grey, crop padding) and
