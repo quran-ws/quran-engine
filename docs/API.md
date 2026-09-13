@@ -150,7 +150,7 @@ Pure helpers:
 
 `nominalLines` is the grid the page is laid out *inside*, not the page's own line
 count: it defaults to 15 and is clamped up to `page.nLines`, never down. A short page
-laid out at 15 — al-Fatiha's 7 lines, say — is therefore centred in a full-page box:
+laid out at 15 — Fatihah's 7 lines, say — is therefore centred in a full-page box:
 without `fillHeight` it draws at under half the height, with the rest of the viewport left
 empty; with it, its lines take full-page rows. That is the spec working, not a rendering
 bug. Pass `nominalLines: page.nLines` when you want the page to fill what you gave it, and

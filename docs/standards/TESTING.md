@@ -43,7 +43,7 @@ wrapper into the core, it gets a scenario.
 |---|---|---|
 | `engine` | every PR | format check, clippy with warnings as errors, workspace tests, rustdoc |
 | `gates` | every PR | identity gate (8 pages), ABI test, conformance fixtures |
-| `standards` | every PR | parity, versions, terminology (a ratchet: the error count must not grow), structure |
+| `standards` | every PR | parity, versions, terminology (zero findings), structure |
 | `web` | every PR | wasm build, `smoke.mjs`, `lite.test.mjs` |
 | `android`, `ios`, `flutter`, `react-native` | PRs touching `crates/`, the header, or that package | build and the package's tests |
 | `nightly` | schedule | all 604 pages, simulator and emulator UI tests, benchmarks against `docs/MEASURED.md` |

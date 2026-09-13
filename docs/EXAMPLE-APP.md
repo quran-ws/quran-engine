@@ -47,7 +47,7 @@ the same 29.
 8. **Memorisation**: mask (hide, block, blur), reveal step by step, reveal all.
 9. **Layout**: sliders for line spacing and padding, a fill-height switch.
 10. **Crop**: crop the selection to SVG and share it.
-11. **Metadata and engine stats**: page info, surahs on the page, load and hit-test timing.
+11. **Metadata and engine stats**: page info, surahs on the page, load and hit-test durations.
 
 This list is closed: a platform may add a feature only after adding it here and to the
 other platforms.

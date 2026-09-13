@@ -65,7 +65,7 @@ the cross-page atlas.
 | file | what |
 |---|---|
 | `NNN.qvp` | one page: outlines, words, lines, ayahs, decorations |
-| `NNN.words.json` | that page's text forms (rasm imlai, QPC, search) — optional |
+| `NNN.words.json` | that page's text forms (`rasm_imlai`, QPC, search) — optional |
 | `atlas.qva` | cross-page lookup: surah → page, ayah → page, juz, hizb |
 
 604 pages come to about 91 MB. Bundle them all, bundle a subset, or download them on first launch
