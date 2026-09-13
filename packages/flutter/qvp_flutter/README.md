@@ -39,17 +39,17 @@ engine.strip(s); engine.fold(s); engine.normalize(s); engine.looseKey(s);       
 engine.gapToFill(pw, ph, lines, vw, vh); engine.wastedFraction(pw, ph, vw, vh);
 
 final page = engine.loadPage(bytes);                    // geometry copied once: page.ops / page.pts / page.table (stride 8)
-page.words / ayahs / lines / decos;  page.wordForm(i, 'rasm_imlai');  page.findWord(2, 255, 3);
+page.words / ayahs / lines / decorations;  page.wordForm(i, 'rasm_imlai');  page.findWord(2, 255, 3);
 page.targetWords('2:255');                                  // targets: 'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | T.word(i) | [w0, w1]
 page.surahs(); page.divisions(); page.ayahMarks(); page.rosettes(); page.sajdahs(); page.ayahKeys();
-page.ayahWordCount(2, 255); page.reciteMap(2, 255, 4); page.wordLabel(i); page.ayahLabel(ai);
+page.ayahWordCount(2, 255); page.reciteMap(2, 255, 4); page.wordLabel(i); page.ayahLabel(ayahIndex);
 page.text('2:255'); page.search('الله', mode: 'includes'); page.citation(words); page.attachWords(json); page.hasForm('qpc');
 page.hitTestExact(x, y); page.hitTest(x, y, QvpHitOptions(maxDistance: 6));         // page units, exact / gap-aware
-page.hitTestExactView(vx, vy); page.hitTestView(vx, vy);                             // viewport px through the layout
+page.hitTestExactView(viewX, viewY); page.hitTestView(viewX, viewY);                             // viewport px through the layout
 page.lineBands(); page.hitAreas();
 final l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true)); // l.scale, l.lineDy[line]
 page.wordBoundsView(i);
-final h = page.style(Sel.wordMark(w, 1), '#ef6c00', ms: 200, layer: QvpLayer.top);  // Sel.path/word/ayah/line/mark/category/family/kind/deco…
+final h = page.style(Sel.wordMark(w, 1), '#ef6c00', ms: 200, layer: QvpLayer.top);  // Sel.path/word/ayah/line/mark/category/family/kind/decoration…
 page.styleTarget('2:255', color); page.recolorStyle(h, color); page.removeStyle(h); page.hide(Sel.kind(QvpKind.mark));
 page.theme(QvpTheme(diacritics: '#1a73e8', marks: {'shaddah': '#0a7d32'})); page.setDefaultColor('#231f20'); page.clearStyles(); page.clearLayer(QvpLayer.theme);
 page.tick(nowMs);                                       // true while animating — keep drawing frames
@@ -77,7 +77,7 @@ QvpPageView(
   layout: QvpViewLayout(padTop: 24, padBottom: 24, padSide: 16, lineSpacing: 1, lineGap: 0, fillHeight: false),
   // spacing only opens up: lineSpacing < 1 and a negative lineGap are clamped to "as printed"
   paper: Color(0xfffffdf7), defaultInk: '#231f20', controller: QvpViewController(),
-  onWordTap: (word, hit) {}, onDecoTap: (deco) {}, onEmptyTap: () {}, onSelectionChanged: (words) {},
+  onWordTap: (word, hit) {}, onDecorationTap: (decoration) {}, onEmptyTap: () {}, onSelectionChanged: (words) {},
 )
 ```
 

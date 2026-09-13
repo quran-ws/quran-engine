@@ -44,11 +44,11 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     val isClosed: Boolean get() = nativeHandle == 0L
 
     val width: Float; val height: Float; val pageNo: Int
-    val nLines: Int; val nAyahs: Int; val nWords: Int; val nPaths: Int; val nDecos: Int
+    val nLines: Int; val nAyahs: Int; val nWords: Int; val nPaths: Int; val nDecorations: Int
     val ops: ByteArray; val pts: FloatArray
     /** stride 8 per path: opStart, opCount, ptStart, ptCount, flags, word, line, extra */
     val table: IntArray
-    val words: List<QvpWord>; val ayahs: List<QvpAyah>; val lines: List<QvpLine>; val decos: List<QvpDecoration>
+    val words: List<QvpWord>; val ayahs: List<QvpAyah>; val lines: List<QvpLine>; val decorations: List<QvpDecoration>
     val naturalPitch: Float
     var currentLayout: QvpLayout? = null; private set
     var defaultInk: Int = QvpDefaults.INK; private set
@@ -56,12 +56,12 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
 
     init {
         val i = QvpNative.pageInfo(h)
-        width = i[0]; height = i[1]; pageNo = i[2].toInt(); nLines = i[3].toInt(); nAyahs = i[4].toInt(); nWords = i[5].toInt(); nPaths = i[6].toInt(); nDecos = i[7].toInt()
+        width = i[0]; height = i[1]; pageNo = i[2].toInt(); nLines = i[3].toInt(); nAyahs = i[4].toInt(); nWords = i[5].toInt(); nPaths = i[6].toInt(); nDecorations = i[7].toInt()
         ops = QvpNative.geomOps(h); pts = QvpNative.geomPts(h); table = QvpNative.geomTable(h)
         words = List(nWords) { k -> val v = QvpNative.wordInfo(h, k)!!; QvpWord(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4].toInt(), v[5].toInt(), v[6], v[7], v[8], v[9], QvpNative.wordText(h, k) ?: "", v[10].toInt(), v[11].toInt()) }
         ayahs = List(nAyahs) { k -> val v = QvpNative.ayahInfo(h, k)!!; QvpAyah(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4].toInt(), v[5].toInt(), v[6].toInt(), v[7].toInt(), v[8].toInt(), v[9], v[10], v[11], v[12]) }
         lines = List(nLines) { k -> val v = QvpNative.lineInfo(h, k)!!; QvpLine(k, v[0].toInt(), v[1] > 0.5f, v[2].toInt(), v[3].toInt(), v[4], v[5], v[6], v[7], v[8], v[9], v[10]) }
-        decos = List(nDecos) { k -> val v = QvpNative.decoInfo(h, k)!!; QvpDecoration(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4], v[5], v[6], v[7], QvpNative.decoText(h, k) ?: "", v[8].toInt(), v[9].toInt()) }
+        decorations = List(nDecorations) { k -> val v = QvpNative.decorationInfo(h, k)!!; QvpDecoration(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4], v[5], v[6], v[7], QvpNative.decorationText(h, k) ?: "", v[8].toInt(), v[9].toInt()) }
         naturalPitch = QvpNative.naturalPitch(h)
     }
 
@@ -135,10 +135,10 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     // ── hit testing ──
     private fun hit(v: FloatArray?) = v?.let { QvpHit(it[0].toInt(), it[1].toInt(), it[2].toInt(), it[3].toInt(), it[4], it[5] > 0.5f) }
     fun hitTestExact(x: Float, y: Float) = hit(QvpNative.hitTestExact(h, x, y))
-    fun hitTestExactView(vx: Float, vy: Float) = hit(QvpNative.hitTestExactView(h, vx, vy))
+    fun hitTestExactView(viewX: Float, viewY: Float) = hit(QvpNative.hitTestExactView(h, viewX, viewY))
     /** gap-aware: every point on a printed line resolves to the word the reader meant */
     fun hitTest(x: Float, y: Float, o: QvpHitOptions = QvpHitOptions()) = hit(QvpNative.hitTest(h, x, y, o.maxDistance, o.gapBias, o.preferExact))
-    fun hitTestView(vx: Float, vy: Float, o: QvpHitOptions = QvpHitOptions()) = hit(QvpNative.hitTestView(h, vx, vy, o.maxDistance, o.gapBias, o.preferExact))
+    fun hitTestView(viewX: Float, viewY: Float, o: QvpHitOptions = QvpHitOptions()) = hit(QvpNative.hitTestView(h, viewX, viewY, o.maxDistance, o.gapBias, o.preferExact))
     fun lineBands(): List<QvpLineBand> { val v = QvpNative.lineBands(h); return List(v.size / 7) { k -> val o = k * 7; QvpLineBand(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6]) } }
     fun hitAreas(gapBias: Float = QvpDefaults.GAP_BIAS): List<QvpHitArea> { val v = QvpNative.hitAreas(h, gapBias); return List(v.size / 10) { k -> val o = k * 10; QvpHitArea(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9]) } }
 
@@ -199,12 +199,12 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
 
     // ── memorisation ──
     fun mask(t: Target, mode: MaskMode = MaskMode.HIDE) = QvpNative.mask(h, t.arr, mode.id)
-    fun maskFrom(wi: Int, mode: MaskMode = MaskMode.HIDE) = QvpNative.maskFrom(h, wi, mode.id)
+    fun maskFrom(wordIndex: Int, mode: MaskMode = MaskMode.HIDE) = QvpNative.maskFrom(h, wordIndex, mode.id)
     fun maskOptions(blockColor: Int = QvpDefaults.MASK_BLOCK, padX: Float = QvpDefaults.MASK_PAD, padY: Float = QvpDefaults.MASK_PAD, radius: Float = QvpDefaults.MASK_RADIUS, reverse: Boolean = false) = QvpNative.maskOptions(h, blockColor, padX, padY, radius, reverse)
     fun unmaskNext(n: Int = 1) = QvpNative.unmaskNext(h, n)
     fun maskBack(n: Int = 1) = QvpNative.maskBack(h, n)
-    fun unmaskWord(wi: Int) = QvpNative.unmaskWord(h, wi)
-    fun maskWord(wi: Int) = QvpNative.maskWord(h, wi)
+    fun unmaskWord(wordIndex: Int) = QvpNative.unmaskWord(h, wordIndex)
+    fun maskWord(wordIndex: Int) = QvpNative.maskWord(h, wordIndex)
     fun unmaskAll() = QvpNative.unmaskAll(h)
     fun maskAll() = QvpNative.maskAll(h)
     fun unmask() = QvpNative.unmask(h)
@@ -216,7 +216,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun revealGoto(at: Long) = QvpNative.revealGoto(h, at)
     fun revealPosition(): Long? = QvpNative.revealPosition(h).let { if (it == -2L) null else it }
     fun revealStepCount() = QvpNative.revealStepCount(h)
-    fun revealStepOf(wi: Int) = QvpNative.revealStepOf(h, wi)
+    fun revealStepOf(wordIndex: Int) = QvpNative.revealStepOf(h, wordIndex)
     fun revealStop() = QvpNative.revealStop(h)
 
     // ── crop ──

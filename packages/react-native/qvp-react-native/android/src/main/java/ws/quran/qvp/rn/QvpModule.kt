@@ -41,13 +41,13 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     // ── page facts ──
     @ReactMethod fun info(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> Marshal.pageInfo(p) + mapOf("loadMs" to v.loadMs, "bytes" to v.pageBytes) }
     @ReactMethod fun words(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.words.map { Marshal.word(p, it) } }
-    @ReactMethod fun word(tag: Int, idx: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.words.getOrNull(idx)?.let { Marshal.word(p, it) } }
+    @ReactMethod fun word(tag: Int, index: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.words.getOrNull(index)?.let { Marshal.word(p, it) } }
     @ReactMethod fun ayahs(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahs.map { Marshal.ayah(it) } }
     @ReactMethod fun lines(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.lines.map { Marshal.line(it) } }
-    @ReactMethod fun decos(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.decos.map { Marshal.deco(it) } }
+    @ReactMethod fun decorations(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.decorations.map { Marshal.decoration(it) } }
     @ReactMethod fun findWord(tag: Int, s: Int, a: Int, w: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.findWord(s, a, w) }
     @ReactMethod fun targetWords(tag: Int, target: Dynamic, promise: Promise) = withPage(tag, promise) { _, p -> p.targetWords(tgt(target, p)).toList() }
-    @ReactMethod fun wordForm(tag: Int, idx: Int, form: String?, promise: Promise) = withPage(tag, promise) { _, p -> p.wordForm(idx, Marshal.form(form)) }
+    @ReactMethod fun wordForm(tag: Int, index: Int, form: String?, promise: Promise) = withPage(tag, promise) { _, p -> p.wordForm(index, Marshal.form(form)) }
     @ReactMethod fun hasForm(tag: Int, form: String?, promise: Promise) = withPage(tag, promise) { _, p -> p.hasForm(Marshal.form(form)) }
     @ReactMethod fun attachWords(tag: Int, json: String, promise: Promise) = withPage(tag, promise) { _, p -> p.attachWords(json) }
 

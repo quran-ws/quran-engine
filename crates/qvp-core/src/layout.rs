@@ -184,7 +184,7 @@ impl Page {
         let top_units = spec.pad_top / scale + (block_h - ph - (nominal - 1.0) * delta) / 2.0;
         let mut line_dy = Vec::with_capacity(n);
         for l in self.data.lines.iter() {
-            let k = slot0 + (l.line_no.max(1) as f32 - 1.0).min(n as f32 - 1.0);
+            let k = slot0 + (l.line_number.max(1) as f32 - 1.0).min(n as f32 - 1.0);
             line_dy.push(top_units + k * delta);
         }
         // laid-out centres in page units; slot boundaries halfway between neighbours — except
@@ -259,7 +259,7 @@ impl Page {
         let (x0, y0, x1, y1) = (w.bbox.x0 as f32 / q, w.bbox.y0 as f32 / q, w.bbox.x1 as f32 / q, w.bbox.y1 as f32 / q);
         match &self.layout {
             Some(l) => {
-                let d = l.line_dy[w.line_idx as usize];
+                let d = l.line_dy[w.line_index as usize];
                 (l.ox + x0 * l.scale, l.oy + (y0 + d) * l.scale, l.ox + x1 * l.scale, l.oy + (y1 + d) * l.scale)
             }
             None => (x0, y0, x1, y1),

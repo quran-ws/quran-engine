@@ -107,7 +107,7 @@ impl Page {
         let mut by_line: Vec<Option<BandBox>> = vec![None; d.lines.len()];
         for &wi in words {
             let w = &d.words[wi as usize];
-            let li = w.line_idx as usize;
+            let li = w.line_index as usize;
             let (x0, x1) = (w.bbox.x0 as f32 / q - pad_x, w.bbox.x1 as f32 / q + pad_x);
             let (y0, y1) = match height {
                 BandHeight::Pitch => (bands[li].y0, bands[li].y1),

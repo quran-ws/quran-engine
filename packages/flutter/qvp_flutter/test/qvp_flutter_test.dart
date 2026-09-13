@@ -71,7 +71,7 @@ void main() {
     expect(page.words.length, 147);
     expect(page.lines.length, 15);
     expect(page.ayahs.length, page.nAyahs);
-    expect(page.decos.length, page.nDecos);
+    expect(page.decorations.length, page.nDecorations);
     expect(page.table.length, 1061 * 8);
     for (var i = 0; i < page.nPaths; i++) {
       expect(page.pathOpStart(i) + page.pathOpCount(i), lessThanOrEqualTo(page.ops.length));
@@ -87,7 +87,7 @@ void main() {
     expect(page.surahs().map((s) => s.number), contains(2));
     expect(page.ayahKeys(), contains((2, 255)));
     expect(page.wordLabel(0), isNotEmpty);
-    expect(page.ayahLabel(page.words[0].ayahIdx), isNotEmpty);
+    expect(page.ayahLabel(page.words[0].ayahIndex), isNotEmpty);
     expect(page.ayahMarks(), isNotEmpty);
     expect(page.lineBands().length, 15);
     expect(page.hitAreas().length, 147);
@@ -130,7 +130,7 @@ void main() {
     expect(h!.word, 0);
     expect(h.distance, 0);
     expect(h.wordKey, w.wordKey);
-    expect(h.line, w.lineIdx);
+    expect(h.line, w.lineIndex);
     expect(page.hitTestExact(cx, cy)?.word, 0);
     // the bbox centre can fall between glyphs: probe the bbox for a point inside the outline
     QvpHit? inside;
@@ -157,14 +157,14 @@ void main() {
     expect(l.slots.length, 15);
     expect(page.currentLayout, same(l));
     final w = page.words[0];
-    final vx = l.ox + (w.x0 + w.x1) / 2 * l.scale;
-    final vy = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIdx]) * l.scale;
-    final h = page.hitTestView(vx, vy, const QvpHitOptions(maxDistance: 6));
+    final viewX = l.ox + (w.x0 + w.x1) / 2 * l.scale;
+    final viewY = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale;
+    final h = page.hitTestView(viewX, viewY, const QvpHitOptions(maxDistance: 6));
     expect(h, isNotNull);
     expect(h!.word, 0);
     final box = page.wordBoundsView(0);
-    expect(box.x0, lessThan(vx));
-    expect(box.x1, greaterThan(vx));
+    expect(box.x0, lessThan(viewX));
+    expect(box.x1, greaterThan(viewX));
     expect(engine.gapToFill(page.width, page.height, page.nLines, 600, 1000), isA<double>());
     expect(engine.wastedFraction(page.width, page.height, 600, 1000), inInclusiveRange(0, 1));
   });
@@ -271,7 +271,7 @@ void main() {
     expect(atlas.pagesOfJuz(30), [582, 604]);
     final cow = atlas.searchSurahs('cow');
     expect(cow, isNotEmpty);
-    expect(cow.first.n, 2);
+    expect(cow.first.number, 2);
     expect(atlas.surah(36)!.latin, isNotEmpty);
     expect(atlas.surahs().length, 114);
     expect(atlas.pageOfSurah(36), atlas.surah(36)!.page);

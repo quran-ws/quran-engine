@@ -37,7 +37,7 @@ URIs: `asset://pages/042.qvp`, `file:///…`, `/abs/path`, or `base64:…`.
 ## The view
 
 ```tsx
-import { QvpPageView, useQvp, Sel, T, LAYER, KIND, DECO, rgba } from '@quran.ws/qvp-react-native';
+import { QvpPageView, useQvp, Sel, T, LAYER, KIND, DECORATION, rgba } from '@quran.ws/qvp-react-native';
 
 const qvp = useQvp();
 <QvpPageView
@@ -52,7 +52,7 @@ const qvp = useQvp();
   theme={{ diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', ms: 200 }}     // page.theme(...) — one handle
   styles={[
     { id: 'hide-marks', selector: Sel.kind(KIND.MARK), hide: true },                  // page.hide(sel)
-    { id: 'gold', selector: Sel.deco(DECO.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 },
+    { id: 'gold', selector: Sel.decoration(DECORATION.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 },
     { id: 'mark', selector: Sel.wordMark(12, 1), color: '#ef6c00', ms: 200, layer: LAYER.TOP },  // 2nd diacritic of word 12
     { id: 'ayah', target: '2:255', color: '#0a7d32' },                                 // page.styleTarget(...)
   ]}
@@ -62,11 +62,11 @@ const qvp = useQvp();
   ]}
   mask={{ target: '2:255', mode: 'hide' }}                       // or 'block' | 'blur' (+ blockColor, padX, padY, radius)
   reveal={{ lit: 2, grey: '#c9c4b8', ink: '#231f20', ms: 150, at: 3 }}   // greyed page; `at` drives revealGoto
-  onWordTap={({ word, hit }) => …}      // word: {idx, surah, ayah, word, line, …, text, wordKey, aid, forms, label, paths[]}
-  onDecoTap={({ deco, hit }) => …}      // ayah markers, banners, basmalah, rosettes, sajdah signs
+  onWordTap={({ word, hit }) => …}      // word: {index, surah, ayah, word, line, …, text, wordKey, aid, forms, label, paths[]}
+  onDecorationTap={({ decoration, hit }) => …}      // ayah markers, banners, basmalah, rosettes, sajdah signs
   onEmptyTap={() => …}
   onSelectionChanged={({ words, text, citation, textWithCitation }) => …}   // long-press-drag selection
-  onPageLoad={info => …}                // {page, width, height, nLines, nAyahs, nWords, nPaths, nDecos, forms, loadMs, bytes}
+  onPageLoad={info => …}                // {page, width, height, nLines, nAyahs, nWords, nPaths, nDecorations, forms, loadMs, bytes}
   onRevealChanged={({ steps, at }) => …}
   onError={({ message }) => …}
 />
@@ -80,13 +80,13 @@ Reconciliation: each `highlights` entry maps to one engine handle. A new id → 
 changes (`null` → `revealStop`). When `pageUri` changes, the old page is freed and every declarative
 prop is re-applied to the new page.
 
-Gestures are the Kotlin view's: tap → gap-aware `hitTestView` → `onWordTap` / `onDecoTap` /
+Gestures are the Kotlin view's: tap → gap-aware `hitTestView` → `onWordTap` / `onDecorationTap` /
 `onEmptyTap`; long-press-drag → engine `select` with a band in `LAYER.SELECTION`; pinch / pan;
 double-tap resets. Props `selectionEnabled`, `zoomEnabled`, `hitMaxDistance`, `selectionBand`.
 
 Colours: `'#rgb' | '#rrggbb' | '#rrggbbaa' | 0xRRGGBBAA` (`css()` / `rgba(c, alpha)` helpers).
-Targets: `'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | wordIdx | [idx…] | T.*`.
-Selectors: `Sel.page/path/wordPath/wordMark/wordMarkNamed/wordBody/wordMarks/word/ayah/line/mark/category/family/kind/deco/decoIdx`.
+Targets: `'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | wordIdx | [index…] | T.*`.
+Selectors: `Sel.page/path/wordPath/wordMark/wordMarkNamed/wordBody/wordMarks/word/ayah/line/mark/category/family/kind/decoration/decorationIndex`.
 
 ## The module
 
@@ -95,13 +95,13 @@ Everything takes the view's react tag (`findNodeHandle`) — or use the bound fo
 
 ```ts
 const qvp = useQvp();
-await qvp.info(); qvp.words(); qvp.word(i); qvp.ayahs(); qvp.lines(); qvp.decos();
+await qvp.info(); qvp.words(); qvp.word(i); qvp.ayahs(); qvp.lines(); qvp.decorations();
 await qvp.search('الرحمان', { mode: 'includes' });     // [{word, wordKey, text, index, loose}]
 await qvp.text('2:255', { form: 'search', wordSep: ' ' });
 await qvp.targetWords('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
 await qvp.attachWords(jsonString);                      // when you do not use the wordsUri prop
 await qvp.surahs(); qvp.divisions(); qvp.ayahMarks(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
-await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ai);
+await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ayahIndex);
 await qvp.citation([12, 13, 14]);
 await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' }); qvp.cropBounds(target);
 await qvp.select(anchor, focus); qvp.clearSelection(); qvp.selection(); qvp.selectionText('rasm_uthmani', true);

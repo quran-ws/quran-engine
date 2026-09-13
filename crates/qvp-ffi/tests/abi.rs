@@ -101,10 +101,10 @@ fn abi_end_to_end() {
         assert_eq!(qvp_tick(page, 1000.0), 0);
         qvp_highlight_remove(page, hh);
         // metadata
-        let mut d = [QvpDivision { division: 0, line: 0, n: 0, surah: 0, ayah: 0, ayah_idx: 0 }; 8];
+        let mut d = [QvpDivision { division: 0, line: 0, number: 0, surah: 0, ayah: 0, ayah_index: 0 }; 8];
         let _ = qvp_divisions(page, d.as_mut_ptr(), 8);
         let mut mk = [QvpAyahMark {
-            deco: 0,
+            decoration: 0,
             surah: 0,
             ayah: 0,
             line: 0,

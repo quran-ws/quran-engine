@@ -1,6 +1,6 @@
 (async function () {
   'use strict';
-  const { QvpEngine, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECO, LAYER, css, rgba } = window.QVP;
+  const { QvpEngine, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECORATION, LAYER, css, rgba } = window.QVP;
   const $ = id => document.getElementById(id);
 
   // ── data source: embedded (single-file build) or fetch (dev server) — the SDK ships no data ──
@@ -53,7 +53,7 @@
     // hover: a cheap UI overlay, not engine state
     if (S.hover >= 0 && S.hover !== S.selWord) {
       const c = renderer.ctx, w = p.words[S.hover];
-      const [s, tx, ty] = renderer.lineTransform(p, v, w.lineIdx, dpr);
+      const [s, tx, ty] = renderer.lineTransform(p, v, w.lineIndex, dpr);
       c.setTransform(s, 0, 0, s, tx, ty); c.globalCompositeOperation = 'destination-over';
       c.fillStyle = getComputedStyle(document.body).getPropertyValue('--hover'); c.beginPath();
       for (const b of p.wordBands([S.hover], { height: 'ink', padX: 1.2, padY: 1.2 })) c.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 1.5);
@@ -110,7 +110,7 @@
     const parts = [];
     for (const s of su) parts.push(`${s.number}${s.latin ? ' ' + s.latin : ''}${s.hasBanner ? ' (banner)' : ''}`);
     let t = `surahs: ${parts.join(', ')}`;
-    if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.division} ${d.n} at ${d.surah}:${d.ayah}`).join(', ')}`;
+    if (dv.length) t += `\nstarts here: ${dv.map(d => `${d.division} ${d.number} at ${d.surah}:${d.ayah}`).join(', ')}`;
     if (atlas) { const j = atlas.juzOf(p.words[0].surah, p.words[0].ayah); if (j) t += `\njuz ${j} · pages ${atlas.pagesOfJuz(j).join('–')}`; }
     t += `\nayahs: ${p.ayahKeys().map(([s, a]) => `${s}:${a}`).join(' ')}`;
     $('meta').textContent = t;
@@ -130,12 +130,12 @@
       if (S.selAyah) {
         const [s, a] = S.selAyah, ws = p.targetWords(T.ayah(s, a)), { count, complete } = p.ayahWordCount(s, a);
         $('selWord').textContent = p.text(T.ayah(s, a));
-        info.innerHTML = `<b>ayah</b><span>${s}:${a} · ${count} words${complete ? '' : ' (continues on another page)'}</span><b>label</b><span>${p.ayahLabel(p.words[ws[0]].ayahIdx)}</span>`;
+        info.innerHTML = `<b>ayah</b><span>${s}:${a} · ${count} words${complete ? '' : ' (continues on another page)'}</span><b>label</b><span>${p.ayahLabel(p.words[ws[0]].ayahIndex)}</span>`;
       } else { $('selWord').textContent = '—'; }
       return;
     }
     $('selWord').textContent = w.text;
-    const rows = [['word_key', p.wordKey(w.idx)], ['line', w.line], ['rasm_imlai', p.wordForm(w.idx, 'rasm_imlai')], ['qpc', p.wordForm(w.idx, 'qpc')], ['rasm', p.wordForm(w.idx, 'rasm')], ['search', p.wordForm(w.idx, 'search')], ['label', p.wordLabel(w.idx)], ['paths', w.nPaths]];
+    const rows = [['word_key', p.wordKey(w.index)], ['line', w.line], ['rasm_imlai', p.wordForm(w.index, 'rasm_imlai')], ['qpc', p.wordForm(w.index, 'qpc')], ['rasm', p.wordForm(w.index, 'rasm')], ['search', p.wordForm(w.index, 'search')], ['label', p.wordLabel(w.index)], ['paths', w.nPaths]];
     for (const [k, v] of rows) if (v !== undefined && v !== '') info.insertAdjacentHTML('beforeend', `<b>${k}</b><span class="${/rasm_imlai|qpc|rasm|search/.test(k) ? 'v' : ''}">${v}</span>`);
     for (let i = w.firstPath; i < w.firstPath + w.nPaths; i++) {
       const kind = p.pathKind(i), mark = p.pathMark(i), nth = p.pathNthMark(i);
@@ -145,7 +145,7 @@
       el.textContent = label; el.title = `engine path ${i} · ${engine.categoryName(p.pathCategory(i)) || 'body'}`;
       el.onclick = () => {
         if (S.pathHandles.has(i)) { p.removeStyle(S.pathHandles.get(i)); S.pathHandles.delete(i); }
-        else S.pathHandles.set(i, kind === KIND.MARK && nth >= 0 ? p.style(Sel.wordMark(w.idx, nth), '#ef6c00', { ms: 200, layer: LAYER.TOP }) : p.style(Sel.path(i), '#ef6c00', { ms: 200, layer: LAYER.TOP }));
+        else S.pathHandles.set(i, kind === KIND.MARK && nth >= 0 ? p.style(Sel.wordMark(w.index, nth), '#ef6c00', { ms: 200, layer: LAYER.TOP }) : p.style(Sel.path(i), '#ef6c00', { ms: 200, layer: LAYER.TOP }));
         el.classList.toggle('on'); draw();
       };
       chips.appendChild(el);
@@ -239,7 +239,7 @@
     }
     const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 4 }); S.lastHitUs = (performance.now() - t) * 1000;
     const hw = h ? h.word : -1;
-    if (hw !== S.hover) { S.hover = hw; stage.style.cursor = hw >= 0 || (h && h.deco >= 0) ? 'pointer' : 'grab'; draw(); }
+    if (hw !== S.hover) { S.hover = hw; stage.style.cursor = hw >= 0 || (h && h.decoration >= 0) ? 'pointer' : 'grab'; draw(); }
   });
   const up = e => {
     pts.delete(e.pointerId);
@@ -251,7 +251,7 @@
         const r = stage.getBoundingClientRect(); const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
         const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 6 }); S.lastHitUs = (performance.now() - t) * 1000;
         if (h && h.word >= 0) selectWord(h.word);
-        else if (h && h.deco >= 0) { const d = S.page.decos[h.deco]; if (d.ayah) selectAyah(d.surah, d.ayah); }
+        else if (h && h.decoration >= 0) { const d = S.page.decorations[h.decoration]; if (d.ayah) selectAyah(d.surah, d.ayah); }
         else selectWord(-1);
       }
       drag = null; selecting = null;
@@ -312,7 +312,7 @@
     if (S.hideHandle) { p.removeStyle(S.hideHandle); S.hideHandle = 0; }
     if ($('hideMarks').classList.contains('on')) S.hideHandle = p.hide(Sel.kind(KIND.MARK));
     if (S.ayahMarksHandle) { p.removeStyle(S.ayahMarksHandle); S.ayahMarksHandle = 0; }
-    if ($('ayahMarks').classList.contains('on')) S.ayahMarksHandle = p.style(Sel.deco(DECO.AYAH_MARK), '#b8860b', { ms: 300, layer: LAYER.THEME + 1 });
+    if ($('ayahMarks').classList.contains('on')) S.ayahMarksHandle = p.style(Sel.decoration(DECORATION.AYAH_MARK), '#b8860b', { ms: 300, layer: LAYER.THEME + 1 });
     draw();
   }
   for (const id of ['tajwid', 'hideMarks', 'ayahMarks']) $(id).onclick = () => { $(id).classList.toggle('on'); applyToggles(); };

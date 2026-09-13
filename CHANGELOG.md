@@ -37,6 +37,13 @@ All notable changes to the engine and its packages. The format follows
   `QVP_BAND_LINE_SPACING` was `QVP_BAND_PITCH`; `qvp_arabic(op)` takes `QVP_ARABIC_*`. The search
   option is `loose_match` and a match reports `is_loose_match` (wrappers `looseMatch`,
   `isLooseMatch`). `QvpSurahInfo` is `QvpSurah`.
+- Full words: `qvp_decoration_info` and `QvpDecorationInfo` (was `deco`); fields `decoration`,
+  `n_decorations`, `ayah_mark_decoration`, `banner_decoration`, `line_number`, `ayah_index`,
+  `line_index`, `number` (was `n` on `QvpDivision` and `QvpAtlasSurah`); parameters `index`,
+  `word_index`, `ayah_index`, `view_x`, `view_y`; `QVP_SELECTOR_DECORATION` and
+  `QVP_SELECTOR_DECORATION_INDEX`. Wrappers: `decorations`, `nDecorations`, `decoration`,
+  `ayahMarkDecoration`, `bannerDecoration`, `onDecorationTap`, `Sel.decoration`,
+  `Sel.decorationIndex`, `index`, `lineNumber`, `ayahIndex`, `lineIndex`, `number`.
 
 ### Added
 - `QvpViewPolicy` in QvpKit: the zoom limits, zoomed threshold and swipe classifier both iOS

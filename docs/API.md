@@ -25,7 +25,7 @@ and `qvp_hit_test(...)` in C.
   diacritic of one word*: `Sel.page()`, `Sel.word(i)`, `Sel.ayah(s,a)`, `Sel.line(n)`,
   `Sel.wordBody(i)`, `Sel.wordMarks(i)`, `Sel.wordMark(i, nth)`, `Sel.wordMarkNamed(i, 'fathah', nth)`,
   `Sel.wordPath(i, nth)`, `Sel.path(p)`, `Sel.mark('shaddah')`, `Sel.category('harakah')`,
-  `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.deco('ayah-mark')`, `Sel.decoIdx(d)`.
+  `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.decoration('ayah-mark')`, `Sel.decorationIndex(d)`.
 - **The engine computes, the host renders.** Hit-testing, layout, styling, highlight bands,
   masks and search are engine calls. A wrapper marshals the calls and renders the results.
 - **Data is separate from code.** Pages (`NNN.qvp`), the atlas (`atlas.qva`) and the
@@ -41,16 +41,16 @@ page.attachWords(await fetchJson('pages/042.words.json'));               // opti
 page.free(); atlas.free();
 ```
 
-`page.width/height/page/nLines/nAyahs/nWords/nPaths/nDecos`, `page.naturalPitch`.
+`page.width/height/page/nLines/nAyahs/nWords/nPaths/nDecorations`, `page.naturalPitch`.
 
 ## Words, ayahs, lines, decorations
 
 | | |
 |---|---|
-| `page.words[i]` | `{idx, surah, ayah, word, line, lineIdx, ayahIdx, x0,y0,x1,y1, text, firstPath, nPaths}` |
-| `page.ayahs[i]` | one **fragment** per printed line: `{surah, ayah, fragment, fragments, flags, rubuAlHizb, firstWord, nWords, ayahMarkDeco, bbox}` |
-| `page.lines[i]` | `{lineNo, isHeader, firstWord, nWords, bbox, bandY0, bandY1, centre}` |
-| `page.decos[i]` | `{decoration, surah, ayah, line, bbox, text, firstPath, nPaths}` — ayah marks, surah banners, basmalah, division rosettes, sajdah signs, page furniture |
+| `page.words[i]` | `{index, surah, ayah, word, line, lineIndex, ayahIndex, x0,y0,x1,y1, text, firstPath, nPaths}` |
+| `page.ayahs[i]` | one **fragment** per printed line: `{surah, ayah, fragment, fragments, flags, rubuAlHizb, firstWord, nWords, ayahMarkDecoration, bbox}` |
+| `page.lines[i]` | `{lineNumber, isHeader, firstWord, nWords, bbox, bandY0, bandY1, centre}` |
+| `page.decorations[i]` | `{decoration, surah, ayah, line, bbox, text, firstPath, nPaths}` — ayah marks, surah banners, basmalah, division rosettes, sajdah signs, page furniture |
 | `page.findWord(s,a,w)` | index or −1 |
 | `page.targetWords(target)` | word indices in reading order |
 | `page.wordForm(i, form)` | `'rasm_uthmani' \| 'rasm_imlai' \| 'qpc' \| 'rasm' \| 'search'` (derived forms need the sidecar; `hasForm(form)`) |
@@ -93,8 +93,8 @@ Modes: `includes`, `exact`, `prefix`. Without a sidecar it searches the stripped
 ## Hit testing
 
 ```js
-page.hitTestView(vx, vy, {maxDistance: 6, gapBias: 0.6})
-// → {word, path, deco, line, distance, isExact, wordKey, ayahKey} | null
+page.hitTestView(viewX, viewY, {maxDistance: 6, gapBias: 0.6})
+// → {word, path, decoration, line, distance, isExact, wordKey, ayahKey} | null
 ```
 
 Exact outline first, then **nearest with direction**: the point is resolved to a line
@@ -115,7 +115,7 @@ page.layoutGapToFill(spec)   // leading (page units) that fills the padded viewp
 
 **The fit.** `fitScale`, `fitX`, `fitY` is the view transform that shows the whole laid-out
 content in the viewport: shrink by `fitScale` when the content is taller than the viewport
-(never enlarge), then centre. A host draws at `fitX + fitScale·vx`, `fitY + fitScale·vy`
+(never enlarge), then centre. A host draws at `fitX + fitScale·viewX`, `fitY + fitScale·viewY`
 and applies its own pan and zoom on top. `maxAspectSlack` bounds the content width to
 `viewportH·pageW/pageH·slack` so a landscape screen does not stretch the lines (0 = no
 bound; the examples use 1.15). `cropLeft`/`cropRight` cut the printed side margins (page
@@ -273,7 +273,7 @@ engine.nameCount('mark')        // 36
 ```
 
 The engine holds every name table. A wrapper reads them from the engine when it starts
-(`Sel.mark('shaddah')`, `Sel.deco('ayah-mark')` and the rest resolve through them) and
+(`Sel.mark('shaddah')`, `Sel.decoration('ayah-mark')` and the rest resolve through them) and
 carries no table of its own; a name the engine does not have resolves to 255, never to 0.
 
 ## Every symbol
@@ -288,13 +288,13 @@ says which wrapper binds which.
 | memory | `qvp_dealloc` | engine internal | Free bytes from `qvp_alloc`. |
 | page | `qvp_page_load` | `engine.loadPage(bytes)` | Decode a page file into a page handle; null on a malformed file; the bytes are copied. |
 | page | `qvp_page_free` | `page.free()` | Free the page handle. |
-| page | `qvp_page_info` | `page.width`, `.height`, `.page`, `.nLines`, `.nAyahs`, `.nWords`, `.nPaths`, `.nDecos` | Return the page's dimensions and element counts. |
+| page | `qvp_page_info` | `page.width`, `.height`, `.page`, `.nLines`, `.nAyahs`, `.nWords`, `.nPaths`, `.nDecorations` | Return the page's dimensions and element counts. |
 | page | `qvp_geometry` | `page.paths`, `page.buildPaths()` | Return the outline streams and the per-path table a renderer draws from; they live as long as the page. |
 | page | `qvp_word_info` | `page.words[i]` | Return one word: key, line, ayah fragment, bounds, text and its path range. |
 | page | `qvp_word_form` | `page.wordForm(i, form)` | Return one of a word's text forms; the derived forms need the words sidecar. |
 | page | `qvp_ayah_info` | `page.ayahs[i]` | Return one ayah fragment: key, fragment index and count, flags, word range, ayah-mark decoration, bounds. |
 | page | `qvp_line_info` | `page.lines[i]` | Return one printed line: number, header flag, word range, bounds, band and centre. |
-| page | `qvp_deco_info` | `page.decos[i]` | Return one decoration: its `QVP_DECORATION_*` value, key, line, bounds, text and its path range. |
+| page | `qvp_decoration_info` | `page.decorations[i]` | Return one decoration: its `QVP_DECORATION_*` value, key, line, bounds, text and its path range. |
 | page | `qvp_find_word` | `page.findWord(surah, ayah, word)` | Return the page index of a word by its key, or −1 when the word is not on this page. |
 | page | `qvp_target_words` | `page.targetWords(target)` | Expand a target (page, word, ayah, range, line, surah) into word indices in reading order. |
 | page | `qvp_natural_pitch` | `page.naturalPitch` | Return the printed line spacing of this page, in page units. |
@@ -316,9 +316,9 @@ says which wrapper binds which.
 | text and search | `qvp_attach_words` | `page.attachWords(json)` | Attach the words sidecar's text forms; returns the number of words updated, −1 on bad JSON. |
 | text and search | `qvp_has_form` | `page.hasForm(form)` | Return whether a text form is available (the derived forms need the sidecar). |
 | hit testing | `qvp_hit_test_exact` | `page.hitTestExact(x, y)` | Return the word, path or decoration whose exact outline contains a point in page units. |
-| hit testing | `qvp_hit_test_exact_view` | `page.hitTestExactView(vx, vy)` | The same for a point in viewport pixels through the current layout. |
+| hit testing | `qvp_hit_test_exact_view` | `page.hitTestExactView(viewX, viewY)` | The same for a point in viewport pixels through the current layout. |
 | hit testing | `qvp_hit_test` | `page.hitTest(x, y, options)` | Gap-aware: resolve a point to the nearest word by line band and gap bias, with the distance and whether the hit was exact. |
-| hit testing | `qvp_hit_test_view` | `page.hitTestView(vx, vy, options)` | The same for viewport pixels. |
+| hit testing | `qvp_hit_test_view` | `page.hitTestView(viewX, viewY, options)` | The same for viewport pixels. |
 | hit testing | `qvp_line_bands` | `page.lineBands()` | Return every line's vertical band in page units. |
 | hit testing | `qvp_hit_areas` | `page.hitAreas(gapBias)` | Return the gap-aware rectangle of every word, a partition of each line with no dead zone. |
 | layout | `qvp_layout` | `page.layout(spec)` | Lay the page out for a viewport: scale, per-line shifts, slots, content size and the fit transform. |

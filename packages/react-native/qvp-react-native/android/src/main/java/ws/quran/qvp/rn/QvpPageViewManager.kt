@@ -43,6 +43,6 @@ class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {
 
     companion object {
         const val NAME = "QvpPageView"
-        val EVENTS = listOf("onWordTap", "onDecoTap", "onEmptyTap", "onSelectionChanged", "onPageLoad", "onRevealChanged", "onError")
+        val EVENTS = listOf("onWordTap", "onDecorationTap", "onEmptyTap", "onSelectionChanged", "onPageLoad", "onRevealChanged", "onError")
     }
 }

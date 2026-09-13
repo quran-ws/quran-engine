@@ -69,8 +69,8 @@ final class DemoModel: ObservableObject {
         view.onSwipe = { [weak self] dir in self?.flip(dir) }   // mushaf order: finger right → next page
         view.isAccessibilityElement = true; view.accessibilityIdentifier = "qvpPage"; view.accessibilityLabel = "mushaf page"
         view.selectionEnabled = false                       // a reader: tap highlights, no text selection
-        view.onWordTap = { [weak self] w, _ in self?.selectWord(w.idx) }
-        view.onDecoTap = { [weak self] d, _ in if d.ayah != 0 { self?.selectAyah(d.surah, d.ayah) } }
+        view.onWordTap = { [weak self] w, _ in self?.selectWord(w.index) }
+        view.onDecorationTap = { [weak self] d, _ in if d.ayah != 0 { self?.selectAyah(d.surah, d.ayah) } }
         view.onEmptyTap = { [weak self] in self?.selectWord(-1) }
         applyTheme()
         loadPage(Self.pages.lowerBound)
@@ -149,7 +149,7 @@ final class DemoModel: ObservableObject {
     private func showMeta() {
         guard let p = page else { return }
         let su = p.surahs().map { "\($0.number)\($0.latin.isEmpty ? "" : " " + $0.latin)\($0.hasBanner ? " (banner)" : "")" }.joined(separator: ", ")
-        let dv = p.divisions().map { "\($0.division) \($0.n) at \($0.surah):\($0.ayah)" }.joined(separator: ", ")
+        let dv = p.divisions().map { "\($0.division) \($0.number) at \($0.surah):\($0.ayah)" }.joined(separator: ", ")
         var s = "surahs: \(su)"
         if !dv.isEmpty { s += "\nstarts here: \(dv)" }
         if let a = atlas, let w = p.words.first, let j = a.juzOf(w.surah, w.ayah) { s += "\njuz \(j) · pages \(a.pagesOfJuz(j).map { "\($0.0)–\($0.1)" } ?? "?")" }
@@ -215,7 +215,7 @@ final class DemoModel: ObservableObject {
     private func toggleAyahMarks(_ on: Bool) {
         guard let p = page else { return }
         if ayahMarksH != 0 { p.removeStyle(ayahMarksH); ayahMarksH = 0 }
-        if on { ayahMarksH = p.style(Selector.deco(QvpDeco.AYAH_MARK), 0xb8860bff, transitionMs: 300, layer: QvpLayer.THEME + 1) }
+        if on { ayahMarksH = p.style(Selector.decoration(QvpDecorationKind.AYAH_MARK), 0xb8860bff, transitionMs: 300, layer: QvpLayer.THEME + 1) }
         view.setNeedsDisplay()
     }
     private func applyTheme() {

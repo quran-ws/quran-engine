@@ -13,7 +13,7 @@
   const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, ORNAMENT: 5, PAGE_NUMBER: 6, RUNNING_HEAD: 7, OTHER: 255 };
   const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 };
   const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGRAPHIC: 4, DABT: 5, WAQF: 6, READING_SIGN: 7, STANDALONE: 8 };
-  const DECO = { AYAH_MARK: 0, SURAH_NAME: 1, BASMALAH: 2, DIVISION_MARK: 3, SAJDAH_MARK: 4, PAGE_NUMBER: 5, RUNNING_HEAD: 6, OTHER: 255 };
+  const DECORATION = { AYAH_MARK: 0, SURAH_NAME: 1, BASMALAH: 2, DIVISION_MARK: 3, SAJDAH_MARK: 4, PAGE_NUMBER: 5, RUNNING_HEAD: 6, OTHER: 255 };
   const FORM = { rasm_uthmani: 0, rasm_imlai: 1, qpc: 2, rasm: 3, search: 4 };
   const LAYER = { BASE: 0, THEME: 10, HIGHLIGHT: 50, SELECTION: 60, TOP: 100 };
   // The engine's name tables (QVP_NAMES_*), read from the engine when it is initialised.
@@ -49,8 +49,8 @@
     category: c => ({ selector: 11, a: idOf('category', c) }),
     family: f => ({ selector: 12, a: idOf('family', f) }),
     kind: k => ({ selector: 13, a: idOf('kind', k) }),
-    deco: k => ({ selector: 14, a: idOf('decoration', k) }),
-    decoIdx: i => ({ selector: 15, a: i }),
+    decoration: k => ({ selector: 14, a: idOf('decoration', k) }),
+    decorationIndex: i => ({ selector: 15, a: i }),
   };
   const markId = m => idOf('mark', m);
 
@@ -177,7 +177,7 @@
       ex.qvp_page_info(handle, s);
       let d = engine.dv();
       this.width = d.getFloat32(s, true); this.height = d.getFloat32(s + 4, true); this.page = d.getUint32(s + 8, true);
-      this.nLines = d.getUint32(s + 12, true); this.nAyahs = d.getUint32(s + 16, true); this.nWords = d.getUint32(s + 20, true); this.nPaths = d.getUint32(s + 24, true); this.nDecos = d.getUint32(s + 28, true);
+      this.nLines = d.getUint32(s + 12, true); this.nAyahs = d.getUint32(s + 16, true); this.nWords = d.getUint32(s + 20, true); this.nPaths = d.getUint32(s + 24, true); this.nDecorations = d.getUint32(s + 28, true);
       ex.qvp_geometry(handle, s);
       d = engine.dv();
       const opsPtr = d.getUint32(s, true), opsLen = d.getUint32(s + 4, true), ptsPtr = d.getUint32(s + 8, true), ptsLen = d.getUint32(s + 12, true), tabPtr = d.getUint32(s + 16, true), nPaths = d.getUint32(s + 20, true);
@@ -188,7 +188,7 @@
       this.words = Array.from({ length: this.nWords }, (_, i) => this._word(i));
       this.ayahs = Array.from({ length: this.nAyahs }, (_, i) => this._ayah(i));
       this.lines = Array.from({ length: this.nLines }, (_, i) => this._line(i));
-      this.decos = Array.from({ length: this.nDecos }, (_, i) => this._deco(i));
+      this.decorations = Array.from({ length: this.nDecorations }, (_, i) => this._deco(i));
       this.naturalPitch = ex.qvp_natural_pitch(handle);
       this.currentLayout = null;
       this._defaultInk = DEFAULTS.INK;
@@ -230,25 +230,25 @@
     _word(i) {
       const ex = this.e.ex, s = this.e.scratch; if (!ex.qvp_word_info(this.h, i, s)) return null;
       const d = this.e.dv();
-      return { idx: i, surah: d.getUint16(s, true), ayah: d.getUint16(s + 2, true), word: d.getUint16(s + 4, true), line: d.getUint16(s + 6, true), ayahIdx: d.getUint32(s + 8, true), lineIdx: d.getUint32(s + 12, true),
+      return { index: i, surah: d.getUint16(s, true), ayah: d.getUint16(s + 2, true), word: d.getUint16(s + 4, true), line: d.getUint16(s + 6, true), ayahIndex: d.getUint32(s + 8, true), lineIndex: d.getUint32(s + 12, true),
         x0: d.getFloat32(s + 16, true), y0: d.getFloat32(s + 20, true), x1: d.getFloat32(s + 24, true), y1: d.getFloat32(s + 28, true), text: this.e.qstr(s + 32), firstPath: d.getUint32(s + 40, true), nPaths: d.getUint32(s + 44, true) };
     }
     _ayah(i) {
       const ex = this.e.ex, s = this.e.scratch; if (!ex.qvp_ayah_info(this.h, i, s)) return null;
       const d = this.e.dv();
-      return { idx: i, surah: d.getUint16(s, true), ayah: d.getUint16(s + 2, true), fragment: d.getUint8(s + 4), fragments: d.getUint8(s + 5), flags: d.getUint8(s + 6), rubuAlHizb: d.getUint16(s + 8, true),
-        firstWord: d.getUint32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDeco: d.getUint32(s + 20, true), x0: d.getFloat32(s + 24, true), y0: d.getFloat32(s + 28, true), x1: d.getFloat32(s + 32, true), y1: d.getFloat32(s + 36, true) };
+      return { index: i, surah: d.getUint16(s, true), ayah: d.getUint16(s + 2, true), fragment: d.getUint8(s + 4), fragments: d.getUint8(s + 5), flags: d.getUint8(s + 6), rubuAlHizb: d.getUint16(s + 8, true),
+        firstWord: d.getUint32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDecoration: d.getUint32(s + 20, true), x0: d.getFloat32(s + 24, true), y0: d.getFloat32(s + 28, true), x1: d.getFloat32(s + 32, true), y1: d.getFloat32(s + 36, true) };
     }
     _line(i) {
       const ex = this.e.ex, s = this.e.scratch; if (!ex.qvp_line_info(this.h, i, s)) return null;
       const d = this.e.dv();
-      return { idx: i, lineNo: d.getUint8(s), isHeader: !!d.getUint8(s + 1), firstWord: d.getUint32(s + 4, true), nWords: d.getUint32(s + 8, true), x0: d.getFloat32(s + 12, true), y0: d.getFloat32(s + 16, true), x1: d.getFloat32(s + 20, true), y1: d.getFloat32(s + 24, true),
+      return { index: i, lineNumber: d.getUint8(s), isHeader: !!d.getUint8(s + 1), firstWord: d.getUint32(s + 4, true), nWords: d.getUint32(s + 8, true), x0: d.getFloat32(s + 12, true), y0: d.getFloat32(s + 16, true), x1: d.getFloat32(s + 20, true), y1: d.getFloat32(s + 24, true),
         bandY0: d.getFloat32(s + 28, true), bandY1: d.getFloat32(s + 32, true), centre: d.getFloat32(s + 36, true) };
     }
     _deco(i) {
-      const ex = this.e.ex, s = this.e.scratch; if (!ex.qvp_deco_info(this.h, i, s)) return null;
+      const ex = this.e.ex, s = this.e.scratch; if (!ex.qvp_decoration_info(this.h, i, s)) return null;
       const d = this.e.dv();
-      return { idx: i, decoration: d.getUint8(s), surah: d.getUint16(s + 2, true), ayah: d.getUint16(s + 4, true), line: d.getUint32(s + 8, true), x0: d.getFloat32(s + 12, true), y0: d.getFloat32(s + 16, true), x1: d.getFloat32(s + 20, true), y1: d.getFloat32(s + 24, true),
+      return { index: i, decoration: d.getUint8(s), surah: d.getUint16(s + 2, true), ayah: d.getUint16(s + 4, true), line: d.getUint32(s + 8, true), x0: d.getFloat32(s + 12, true), y0: d.getFloat32(s + 16, true), x1: d.getFloat32(s + 20, true), y1: d.getFloat32(s + 24, true),
         text: this.e.qstr(s + 28), firstPath: d.getUint32(s + 36, true), nPaths: d.getUint32(s + 40, true) };
     }
     wordForm(i, form = 'rasm_uthmani') { const s = this.e.scratch; if (!this.e.ex.qvp_word_form(this.h, i, FORM[form] ?? 0, s)) return ''; return this.e.qstr(s); }
@@ -265,27 +265,27 @@
     surahs() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surah_count(this.h), out = [];
       for (let i = 0; i < n; i++) { ex.qvp_surah_at(this.h, i, s); const d = this.e.dv();
-        out.push({ number: d.getUint16(s, true), ayahCount: d.getUint16(s + 2, true), hasBanner: !!d.getUint8(s + 4), hasBasmalah: !!d.getUint8(s + 5), place: names('place')[d.getUint8(s + 6)] || '', bannerDeco: d.getUint32(s + 8, true), arabic: this.e.qstr(s + 12), latin: this.e.qstr(s + 20), english: this.e.qstr(s + 28) }); }
+        out.push({ number: d.getUint16(s, true), ayahCount: d.getUint16(s + 2, true), hasBanner: !!d.getUint8(s + 4), hasBasmalah: !!d.getUint8(s + 5), place: names('place')[d.getUint8(s + 6)] || '', bannerDecoration: d.getUint32(s + 8, true), arabic: this.e.qstr(s + 12), latin: this.e.qstr(s + 20), english: this.e.qstr(s + 28) }); }
       return out;
     }
     divisions() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_divisions(this.h, s, 64), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 64); i++) { const o = s + i * 12; out.push({ division: names('division')[d.getUint8(o)], line: d.getUint8(o + 1), n: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIdx: d.getUint32(o + 8, true) }); }
+      for (let i = 0; i < Math.min(n, 64); i++) { const o = s + i * 12; out.push({ division: names('division')[d.getUint8(o)], line: d.getUint8(o + 1), number: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIndex: d.getUint32(o + 8, true) }); }
       return out;
     }
     ayahMarks() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_ayah_marks(this.h, s, 128), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ deco: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
+      for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
       return out;
     }
     rosettes() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_rosettes(this.h, s, 32), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 20; out.push({ deco: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), juz: d.getUint16(o + 8, true), hizb: d.getUint16(o + 10, true), nisf: d.getUint16(o + 12, true), rubuAlHizb: d.getUint16(o + 14, true), rubuAlHizbInHizb: d.getUint16(o + 16, true) }); }
+      for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 20; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), juz: d.getUint16(o + 8, true), hizb: d.getUint16(o + 10, true), nisf: d.getUint16(o + 12, true), rubuAlHizb: d.getUint16(o + 14, true), rubuAlHizbInHizb: d.getUint16(o + 16, true) }); }
       return out;
     }
     sajdahs() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_sajdahs(this.h, s, 16), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 16); i++) { const o = s + i * 12; out.push({ deco: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), signPath: d.getUint32(o + 8, true) }); }
+      for (let i = 0; i < Math.min(n, 16); i++) { const o = s + i * 12; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), signPath: d.getUint32(o + 8, true) }); }
       return out;
     }
     ayahKeys() { const n = this.e.ex.qvp_ayah_keys(this.h, this.e.scratch, 256); const v = new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 256)); return Array.from(v, k => [k >>> 16, k & 0xffff]); }
@@ -316,14 +316,14 @@
 
     // ── hit testing ──
     hitTestExact(x, y) { return this.e.ex.qvp_hit_test_exact(this.h, x, y, this.e.scratch) ? this._hit(this.e.scratch) : null; }
-    hitTestExactView(vx, vy) { return this.e.ex.qvp_hit_test_exact_view(this.h, vx, vy, this.e.scratch) ? this._hit(this.e.scratch) : null; }
+    hitTestExactView(viewX, viewY) { return this.e.ex.qvp_hit_test_exact_view(this.h, viewX, viewY, this.e.scratch) ? this._hit(this.e.scratch) : null; }
     _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o.maxDistance ?? 0, true); d.setFloat32(at + 4, o.gapBias ?? 0.6, true); d.setUint32(at + 8, o.preferExact === false ? 0 : 1, true); return at; }
     /** the one hit shape for every hit test; the exact variants report distance 0 and isExact */
-    _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), deco: f(d.getUint32(s + 8, true)), line: f(d.getUint32(s + 12, true)), distance: d.getFloat32(s + 16, true), isExact: !!d.getUint32(s + 20, true) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
+    _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), decoration: f(d.getUint32(s + 8, true)), line: f(d.getUint32(s + 12, true)), distance: d.getFloat32(s + 16, true), isExact: !!d.getUint32(s + 20, true) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
     /** gap-aware: every point on a printed line resolves to the word the user meant */
     hitTest(x, y, opt = {}) { return this.e.ex.qvp_hit_test(this.h, x, y, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
-    hitTestView(vx, vy, opt = {}) { return this.e.ex.qvp_hit_test_view(this.h, vx, vy, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
-    lineBands() { const n = this.e.ex.qvp_line_bands(this.h, this.e.scratch, 64), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 64); i++) { const o = this.e.scratch + i * 28; out.push({ line: d.getUint32(o, true), lineNo: d.getUint32(o + 4, true), y0: d.getFloat32(o + 8, true), y1: d.getFloat32(o + 12, true), mid: d.getFloat32(o + 16, true), inkY0: d.getFloat32(o + 20, true), inkY1: d.getFloat32(o + 24, true) }); } return out; }
+    hitTestView(viewX, viewY, opt = {}) { return this.e.ex.qvp_hit_test_view(this.h, viewX, viewY, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
+    lineBands() { const n = this.e.ex.qvp_line_bands(this.h, this.e.scratch, 64), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 64); i++) { const o = this.e.scratch + i * 28; out.push({ line: d.getUint32(o, true), lineNumber: d.getUint32(o + 4, true), y0: d.getFloat32(o + 8, true), y1: d.getFloat32(o + 12, true), mid: d.getFloat32(o + 16, true), inkY0: d.getFloat32(o + 20, true), inkY1: d.getFloat32(o + 24, true) }); } return out; }
     hitAreas(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
 
     // ── layout ──
@@ -427,7 +427,7 @@
     revealStop() { this.e.ex.qvp_reveal_stop(this.h); }
 
     // ── crop ──
-    cropBounds(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true } = {}) { if (!this.e.ex.qvp_crop_bounds(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, this.e.scratch)) return null; const d = this.e.dv(), s = this.e.scratch; return { x0: d.getFloat32(s, true), y0: d.getFloat32(s + 4, true), x1: d.getFloat32(s + 8, true), y1: d.getFloat32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDeco: d.getUint32(s + 20, true) }; }
+    cropBounds(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true } = {}) { if (!this.e.ex.qvp_crop_bounds(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, this.e.scratch)) return null; const d = this.e.dv(), s = this.e.scratch; return { x0: d.getFloat32(s, true), y0: d.getFloat32(s + 4, true), x1: d.getFloat32(s + 8, true), y1: d.getFloat32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDecoration: d.getUint32(s + 20, true) }; }
     cropSvg(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true, background = null } = {}) { if (!this.e.ex.qvp_crop_svg(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, background ? rgba(background) : 0, this.e.scratch)) return null; return this.e.qstr(this.e.scratch); }
   }
 
@@ -436,7 +436,7 @@
     free() { this.e.ex.qvp_atlas_free(this.h); this.h = 0; }
     pageOf(surah, ayah) { const p = this.e.ex.qvp_atlas_page_of(this.h, surah, ayah); return p < 0 ? null : p; }
     pageRange(page) { if (!this.e.ex.qvp_atlas_page_range(this.h, page, this.e.scratch)) return null; const v = new Uint16Array(this.e.mem.buffer, this.e.scratch, 4); return { first: [v[0], v[1]], last: [v[2], v[3]] }; }
-    _surah(s) { const d = this.e.dv(); return { n: d.getUint16(s, true), page: d.getUint16(s + 2, true), ayahCount: d.getUint16(s + 4, true), place: names('place')[d.getUint8(s + 6)] || '', arabic: this.e.qstr(s + 8), latin: this.e.qstr(s + 16), english: this.e.qstr(s + 24) }; }
+    _surah(s) { const d = this.e.dv(); return { number: d.getUint16(s, true), page: d.getUint16(s + 2, true), ayahCount: d.getUint16(s + 4, true), place: names('place')[d.getUint8(s + 6)] || '', arabic: this.e.qstr(s + 8), latin: this.e.qstr(s + 16), english: this.e.qstr(s + 24) }; }
     surah(n) { return this.e.ex.qvp_atlas_surah(this.h, n, this.e.scratch) ? this._surah(this.e.scratch) : null; }
     surahs() { const n = this.e.ex.qvp_atlas_surah_count(this.h), out = []; for (let i = 0; i < n; i++) { this.e.ex.qvp_atlas_surah_at(this.h, i, this.e.scratch); out.push(this._surah(this.e.scratch)); } return out; }
     pageOfSurah(n) { const s = this.surah(n); return s ? s.page : null; }
@@ -520,5 +520,5 @@
     }
   }
 
-  global.QVP = { QvpEngine, QvpPage, QvpAtlas, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECO, FORM, LAYER, NAMES_TABLE, DEFAULTS, NONE, css, rgba, parseTarget };
+  global.QVP = { QvpEngine, QvpPage, QvpAtlas, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECORATION, FORM, LAYER, NAMES_TABLE, DEFAULTS, NONE, css, rgba, parseTarget };
 })(typeof window !== 'undefined' ? window : globalThis);

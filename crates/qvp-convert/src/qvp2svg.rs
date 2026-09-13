@@ -35,7 +35,7 @@ pub fn to_svg(p: &PageData) -> Result<String, Error> {
     )
     .unwrap();
     s.push_str("<g class=\"decorations\">");
-    for d in &p.decos {
+    for d in &p.decorations {
         write!(s, "<g class=\"{}\" data-ayah-key=\"{}:{}\">", d.kind.as_str(), d.surah, d.ayah).unwrap();
         for i in d.first_path..d.first_path + d.n_paths as u32 {
             write_path(p, i as usize, &mut s)?;
@@ -44,16 +44,16 @@ pub fn to_svg(p: &PageData) -> Result<String, Error> {
     }
     s.push_str("</g>");
     for (li, l) in p.lines.iter().enumerate() {
-        write!(s, "<g class=\"line\" data-line=\"{}\">", l.line_no).unwrap();
+        write!(s, "<g class=\"line\" data-line=\"{}\">", l.line_number).unwrap();
         let mut cur_ayah = u16::MAX;
         for wi in l.first_word..l.first_word + l.n_words {
             let w = &p.words[wi as usize];
-            debug_assert_eq!(w.line_idx as usize, li);
-            if w.ayah_idx != cur_ayah {
+            debug_assert_eq!(w.line_index as usize, li);
+            if w.ayah_index != cur_ayah {
                 if cur_ayah != u16::MAX {
                     s.push_str("</g>");
                 }
-                cur_ayah = w.ayah_idx;
+                cur_ayah = w.ayah_index;
                 let a = &p.ayahs[cur_ayah as usize];
                 write!(s, "<g class=\"ayah-fragment\" data-ayah-key=\"{}:{}\" data-fragment=\"{}\" data-ayah-fragments=\"{}\">", a.surah, a.ayah, a.fragment, a.fragments).unwrap();
             }

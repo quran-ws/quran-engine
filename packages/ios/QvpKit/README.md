@@ -62,17 +62,17 @@ QvpEngine.strip(s); QvpEngine.fold(s); QvpEngine.normalize(s); QvpEngine.looseKe
 QvpEngine.gapToFill(pageW:pageH:lines:viewW:viewH:); QvpEngine.wastedFraction(pageW:pageH:viewW:viewH:)
 
 let page = try QvpPage(bytes: data)                     // geometry copied once: page.ops / page.pts / page.table (stride 8)
-page.words / ayahs / lines / decos;  page.wordForm(i, .rasmImlai);  page.findWord(2, 255, 3);  page.buildPaths()  // [CGPath]
+page.words / ayahs / lines / decorations;  page.wordForm(i, .rasmImlai);  page.findWord(2, 255, 3);  page.buildPaths()  // [CGPath]
 page.targetWords("2:255")                                   // "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | Target.word(i) | [w0, w1]
 page.surahs(); page.divisions(); page.ayahMarks(); page.rosettes(); page.sajdahs(); page.ayahKeys()
-page.ayahWordCount(2, 255); page.reciteMap(2, 255, nSegments: 4); page.wordLabel(i); page.ayahLabel(ai)
+page.ayahWordCount(2, 255); page.reciteMap(2, 255, nSegments: 4); page.wordLabel(i); page.ayahLabel(ayahIndex)
 page.text("2:255"); page.search("الله", mode: .includes); page.citation(words); page.attachWords(json); page.hasForm(.qpc)
 page.hitTestExact(x, y); page.hitTest(x, y, QvpHitOptions(maxDistance: 6))                        // page units, exact / gap-aware
-page.hitTestExactView(vx, vy); page.hitTestView(vx, vy)                                            // viewport px through the layout
+page.hitTestExactView(viewX, viewY); page.hitTestView(viewX, viewY)                                            // viewport px through the layout
 page.lineBands(); page.hitAreas()
 let l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true))  // l.scale, l.lineDy[line]
 page.wordBoundsView(i)
-let h = page.style(Selector.wordMark(w, 1), 0xef6c00ff, transitionMs: 200, layer: QvpLayer.TOP)   // Selector.path/word/ayah/line/mark/category/family/kind/deco…
+let h = page.style(Selector.wordMark(w, 1), 0xef6c00ff, transitionMs: 200, layer: QvpLayer.TOP)   // Selector.path/word/ayah/line/mark/category/family/kind/decoration…
 page.styleTarget("2:255", rgba); page.recolorStyle(h, rgba); page.removeStyle(h); page.hide(Selector.kind(QvpKind.MARK))
 page.theme(QvpTheme(diacritics: 0x1a73e8ff, marks: ["shaddah": 0x0a7d32ff])); page.setDefaultColor(0x231f20ff); page.clearStyles(); page.clearLayer(QvpLayer.THEME)
 page.tick(nowMs)                                        // true while animating — keep drawing frames
@@ -103,7 +103,7 @@ let view = QvpPageView()
 view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.lineSpacing = 1; view.lineGap = 0; view.fillHeight = false
 // lineSpacing < 1 / a negative lineGap are clamped by the engine: spacing only ever opens up
 view.paperColor = UIColor(...); view.selectionBand = 0x2d6fd640; view.hitOptions = QvpHitOptions(maxDistance: 6)
-view.onWordTap = { word, hit in }; view.onDecoTap = { deco, hit in }; view.onEmptyTap = { }; view.onSelectionChanged = { words in }
+view.onWordTap = { word, hit in }; view.onDecorationTap = { decoration, hit in }; view.onEmptyTap = { }; view.onSelectionChanged = { words in }
 view.onSwipe = { dir in }                 // horizontal swipe while not zoomed (+1 finger right, −1 left): flip pages; view.isZoomed
 view.onDoubleTap = { hit in }              // nil (default) resets the view; a host that repurposes it calls resetView() itself
 view.onLongPress = { hit in }              // only while selectionEnabled is false; longPressDuration (0.35)
@@ -116,9 +116,9 @@ view.lastBaseMs / lastOverlayMs / lastHitUs / lastBasePaths / lastOverlayPaths /
 Draw order per frame: `highlightBoxesView()` (one nonzero path per highlight id, behind the ink) →
 cached base ink (a bitmap of every non-styled path at the current per-line transform, rebuilt only
 when the styled set, layout or pan/zoom changes) → `styledPaths()` paths → `maskBoxesView()`. Per-line
-transform: `vx = ox + x·scale`, `vy = oy + (y + lineDy[line])·scale`, with pinch/pan on top. Each
+transform: `viewX = ox + x·scale`, `viewY = oy + (y + lineDy[line])·scale`, with pinch/pan on top. Each
 frame calls `page.tick(now)`; a `CADisplayLink` keeps running while it returns true. Tap → gap-aware
-`hitTestView` (max distance 6) → `onWordTap` / `onDecoTap` / `onEmptyTap`; long-press + drag →
+`hitTestView` (max distance 6) → `onWordTap` / `onDecorationTap` / `onEmptyTap`; long-press + drag →
 whole-word selection through `page.select` with a band highlight in `QvpLayer.SELECTION`
 (`selectionEnabled = false` turns it off); a horizontal pan while the page is at its fitted size is reported
 through `onSwipe` instead of panning, so the host can flip pages; double-tap resets the view (or runs
@@ -137,7 +137,7 @@ QvpPageCanvas(controller: controller)
 
 controller.page = page                    // relayouts, fits and centres
 controller.padTop = 12; controller.fillHeight = true; controller.paperColor = 0xfffdf7ff
-controller.onWordTap = { word, hit in }; controller.onDecoTap = { deco, hit in }; controller.onEmptyTap = { }
+controller.onWordTap = { word, hit in }; controller.onDecorationTap = { decoration, hit in }; controller.onEmptyTap = { }
 controller.onDoubleTap = { hit in }        // nil (default) resets the view
 controller.onLongPress = { hit in }        // only while selectionEnabled is false — a UIKit recognizer on iOS, never takes a pager's swipe
 controller.zoomSpringsBack = true         // zoom lasts only while pinching, as on the UIKit view
