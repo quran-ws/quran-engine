@@ -5,6 +5,7 @@ import android.graphics.Path
 /** Engine-wide helpers (names, Arabic text tools, layout maths). */
 object QvpEngine {
     fun version() = QvpNative.version()
+    fun engineName() = QvpNative.engineName()
     fun markName(m: Int) = QvpNative.markName(m)
     fun familyName(f: Int) = QvpNative.familyName(f)
     fun kindName(k: Int) = QvpNative.kindName(k)

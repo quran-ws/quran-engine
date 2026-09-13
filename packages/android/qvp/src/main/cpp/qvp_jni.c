@@ -355,3 +355,4 @@ jint FN(nameCount)(JNIEnv* env, jclass c, jint table) { return (jint)qvp_name_co
 jstring FN(name)(JNIEnv* env, jclass c, jint table, jint id) { QvpStr s; qvp_name((uint8_t)table, (uint8_t)id, &s); return qstr(env, s); }
 jint FN(nameId)(JNIEnv* env, jclass c, jint table, jstring name) { uint32_t n; uint8_t* b = jbytes(env, name, &n); jint r = qvp_name_id((uint8_t)table, b, n); free(b); return r; }
 jint FN(version)(JNIEnv* env, jclass c) { return (jint)qvp_version(); }
+jstring FN(engineName)(JNIEnv* env, jclass c) { return (*env)->NewStringUTF(env, qvp_engine_name()); }

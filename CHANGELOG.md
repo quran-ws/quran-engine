@@ -9,6 +9,13 @@ All notable changes to the engine and its packages. The format follows
 ### Added
 - `QvpViewPolicy` in QvpKit: the zoom limits, zoomed threshold and swipe classifier both iOS
   renderers share. `docs/API-PARITY.md` lists every platform convenience.
+- Parity: every declared gap names its kind (issue, native, declarative, list form, not
+  applicable) and the platform-level gaps have issues (#40 Flutter iOS, #41 React Native
+  iOS, #42 React Native tarball). New bindings: web `engine.version()`, `engineName()`,
+  `markFromName()`, `atlas.pages()`, `atlas.json()`; Android `QvpEngine.engineName()` and
+  `QvpPageView.layoutSpec()`; React Native `hitTest`, `hitTestEx`, `hitTestView`,
+  `layoutGapToFill`, `markCategory`, `engineName`, `nameCount`, `nameId` and a `from`
+  field on the `mask` prop.
 - `docs/API.md` lists every C symbol with its reference-wrapper spelling and what it does;
   the 32 that no section named are documented.
 - Defaults: `QVP_DEFAULT_*` in the header, defined once in `crates/qvp-core/src/defaults.rs`

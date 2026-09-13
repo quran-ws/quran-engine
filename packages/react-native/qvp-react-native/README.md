@@ -107,12 +107,13 @@ await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' })
 await qvp.select(anchor, focus); qvp.clearSelection(); qvp.selection(); qvp.selectionText('rasm_uthmani', true);
 await qvp.revealNext(1); qvp.hideBack(1); qvp.revealWord(i); qvp.hideWord(i); qvp.revealAll(); qvp.hideAll();
 await qvp.maskHidden(); qvp.maskWords(); qvp.revealSteps(); qvp.revealAt(); qvp.revealStepOf(i);
-await qvp.hitTestViewEx(x, y, { maxDistance: 6 }); qvp.wordBoxView(i); qvp.currentLayout(); qvp.relayout(); qvp.resetView(); qvp.stats();
+await qvp.hitTestViewEx(x, y, { maxDistance: 6 }); qvp.hitTestView(x, y); qvp.hitTestEx(px, py); qvp.hitTest(px, py);   // view dp or page units
+await qvp.wordBoxView(i); qvp.currentLayout(); qvp.layoutGapToFill(); qvp.relayout(); qvp.resetView(); qvp.stats();
 
 // engine-wide (Qvp.*)
 await Qvp.strip(s); Qvp.fold(s); Qvp.normalize(s); Qvp.looseKey(s);       // = Qvp.arabic(kind, s)
 await Qvp.gapToFill(pageW, pageH, lines, viewW, viewH); Qvp.wastedFraction(...)
-Qvp.markName(7); Qvp.kindName(1); Qvp.categoryName(1); Qvp.familyName(3); Qvp.version
+Qvp.markName(7); Qvp.kindName(1); Qvp.categoryName(1); Qvp.familyName(3); Qvp.nameId('marks', 'fathah'); Qvp.version; await Qvp.markCategory(7); Qvp.engineName()
 
 // atlas (cross-page)
 const atlas = await QvpAtlas.load('asset://pages/atlas.qva');
