@@ -46,44 +46,6 @@ scripts/build-engine-ios.sh                          # QvpEngine.xcframework (de
 
 See `packages/ios/QvpKit/README.md`. Pick any installed simulator name (`xcrun simctl list devices available`).
 
-## iOS wrapper — the prompt it was built from
-
-This was run in Claude Code from the repo root (kept for reference):
-
-> Build the iOS/Swift wrapper and demo for the QVP engine in this repo. Read README.md,
-> docs/API.md, crates/qvp-ffi/include/qvp.h, web/qvp.js (reference wrapper),
-> packages/android/qvp/src/main/kotlin/ws/quran/qvp/*.kt (the Kotlin wrapper: mirror
-> its class and method names in Swift: QvpEngine, QvpPage, QvpAtlas, Selector, Target,
-> QvpHighlightStyle, QvpTheme, QvpLayoutSpec, QvpPageView) and packages/android/demo for the
-> demo behaviours. Deliverables: (1) scripts/build-engine-ios.sh that builds qvp-ffi for
-> aarch64-apple-ios, aarch64-apple-ios-sim and x86_64-apple-ios (`cargo build -p qvp-ffi
-> --release --target …`), lipo's the simulator slices, and packages a QvpEngine.xcframework
-> from the static libs with include/qvp.h and a module.modulemap; (2) packages/ios/QvpKit — a
-> Swift package (Package.swift, binaryTarget on the xcframework) exposing the same API as the
-> Kotlin wrapper over the C ABI (all coordinates/colours as in docs/API.md; geometry copied
-> once into Swift arrays; CGPath per engine path built once), plus QvpPageView (UIView) that
-> draws with CoreGraphics in this order: highlightBoxes (one path per highlight id, nonzero,
-> behind the ink) → cached base ink (CGLayer or bitmap of every non-styled path at the current
-> transform, rebuilt only when the styled set / layout / transform changes) → styled paths from
-> styled() → maskBoxes; per-line transforms from the engine layout (vx = ox + x*scale, vy =
-> oy + (y + lineDy[line])*scale) with pinch/pan on top; a CADisplayLink calls page.tick(now)
-> and keeps running while it returns true; UITapGestureRecognizer → hitTestViewEx(maxDistance
-> 6) → onWordTap / onDecoTap / onEmptyTap; UILongPressGestureRecognizer + drag → whole-word
-> selection via page.select and a band highlight in the selection layer; (3)
-> packages/ios/Demo — a SwiftUI app reproducing packages/android/demo (page nav + atlas goto,
-> search, selection panel with per-path chips using Selector.wordMark, copy with citation, crop
-> → SVG share sheet, highlight mode + fade slider, follow words, mark colours / hide marks / gold
-> markers, themes, mask/reveal, layout sliders, metadata, engine stats), bundling as APP assets
-> only dist/pages 001–021, 440–445, 582, 604 (.qvp + .words.json) and atlas.qva — the package
-> ships no data; (4) XCTest target with the same assertions as
-> packages/flutter/qvp_flutter/test/qvp_flutter_test.dart (page 042: 147 words, search الله = 7,
-> resolve 2:255 = 50 words, layout fill 690×1100 → scale 2, highlight tick, mask/reveal, crop,
-> atlas pageOf(2,255) = 42, pagesOfJuz(30) = 582…604). Build the demo for the iOS simulator
-> (`xcodebuild -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 16'`), run it, take
-> a screenshot with `xcrun simctl io booted screenshot`, look at it and fix what is broken.
-> Then write packages/ios/README.md and update the packages table in README.md. Commit on a
-> branch `ios-wrapper` and open a PR.
-
 ## Notes
 
 - Pages 1–2 have 8 lines and a different viewBox; nothing in the engine hardcodes 15 or
