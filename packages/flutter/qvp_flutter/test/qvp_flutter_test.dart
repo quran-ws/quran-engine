@@ -90,7 +90,7 @@ void main() {
     expect(page.ayahLabel(page.words[0].ayahIdx), isNotEmpty);
     expect(page.ayahMarks(), isNotEmpty);
     expect(page.lineBands().length, 15);
-    expect(page.hitBoxes().length, 147);
+    expect(page.hitAreas().length, 147);
     expect(page.text('page'), contains(w0.text));
   });
 
@@ -122,22 +122,22 @@ void main() {
     expect(page.wordForm(0, 'search'), isNotEmpty);
   });
 
-  test("hitTestEx at word 0's bbox centre → word 0; exact inside its ink", () {
+  test("hitTest at word 0's bbox centre → word 0; exact inside its ink", () {
     final w = page.words[0];
     final cx = (w.x0 + w.x1) / 2, cy = (w.y0 + w.y1) / 2;
-    final h = page.hitTestEx(cx, cy);
+    final h = page.hitTest(cx, cy);
     expect(h, isNotNull);
     expect(h!.word, 0);
     expect(h.distance, 0);
     expect(h.wordKey, w.wordKey);
     expect(h.line, w.lineIdx);
-    expect(page.hitTest(cx, cy)?.word, 0);
+    expect(page.hitTestExact(cx, cy)?.word, 0);
     // the bbox centre can fall between glyphs: probe the bbox for a point inside the outline
-    QvpHitEx? inside;
+    QvpHit? inside;
     for (var y = w.y0; y <= w.y1 && inside == null; y += 0.5) {
       for (var x = w.x0; x <= w.x1; x += 0.5) {
-        final e = page.hitTestEx(x, y);
-        if (e != null && e.word == 0 && e.exact) {
+        final e = page.hitTest(x, y);
+        if (e != null && e.word == 0 && e.isExact) {
           inside = e;
           break;
         }
@@ -147,10 +147,10 @@ void main() {
     expect(inside!.path, greaterThanOrEqualTo(0));
     expect(page.pathWord(inside.path), 0);
     // far outside the page, with a distance cap → nothing
-    expect(page.hitTestEx(-500, -500, const QvpHitOptions(maxDistance: 6)), isNull);
+    expect(page.hitTest(-500, -500, const QvpHitOptions(maxDistance: 6)), isNull);
   });
 
-  test('layout fillHeight 690×1100 pads 50 → scale 2.0, 15 lineDy; hitTestViewEx hits word 0', () {
+  test('layout fillHeight 690×1100 pads 50 → scale 2.0, 15 lineDy; hitTestView hits word 0', () {
     final l = page.layout(const QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true));
     expect(l.scale, closeTo(2.0, 1e-5));
     expect(l.lineDy.length, 15);
@@ -159,10 +159,10 @@ void main() {
     final w = page.words[0];
     final vx = l.ox + (w.x0 + w.x1) / 2 * l.scale;
     final vy = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIdx]) * l.scale;
-    final h = page.hitTestViewEx(vx, vy, const QvpHitOptions(maxDistance: 6));
+    final h = page.hitTestView(vx, vy, const QvpHitOptions(maxDistance: 6));
     expect(h, isNotNull);
     expect(h!.word, 0);
-    final box = page.wordBoxView(0);
+    final box = page.wordBoundsView(0);
     expect(box.x0, lessThan(vx));
     expect(box.x1, greaterThan(vx));
     expect(engine.gapToFill(page.width, page.height, page.nLines, 600, 1000), isA<double>());
@@ -207,7 +207,7 @@ void main() {
     final h = page.highlight('2:255', const QvpHighlightStyle(mode: 'both', ms: 200));
     expect(h, greaterThan(0));
     expect(page.tick(100), isTrue);
-    final boxes = page.highlightBoxes();
+    final boxes = page.highlightBoxesView();
     expect(boxes.length, 6);
     expect(boxes.every((b) => b.id == h), isTrue);
     expect(page.highlightHandles(), [h]);
@@ -219,7 +219,7 @@ void main() {
     page.tick(5000);
     page.clearHighlights();
     expect(page.highlightHandles(), isEmpty);
-    expect(page.bandBoxes(page.resolve('2:255')).length, 6);
+    expect(page.wordBands(page.resolve('2:255')).length, 6);
   });
 
   test("mask('2:255'): 50 hidden, revealNext → 49; reveal steps", () {
@@ -233,7 +233,7 @@ void main() {
     page.unmask();
     expect(page.maskHidden(), isEmpty);
     page.mask('2:255', 'block');
-    expect(page.maskBoxes(), isNotEmpty);
+    expect(page.maskBoxesView(), isNotEmpty);
     page.unmask();
     final steps = page.revealStart(lit: 2, ms: 0);
     expect(steps, greaterThan(0));
@@ -258,7 +258,7 @@ void main() {
     final svg = page.cropSvg('2:255:1', background: '#fffdf7');
     expect(svg, isNotNull);
     expect(svg!.startsWith('<svg'), isTrue);
-    final box = page.cropBox('2:255');
+    final box = page.cropBounds('2:255');
     expect(box, isNotNull);
     expect(box!.nWords, 50);
   });

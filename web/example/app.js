@@ -56,7 +56,7 @@
       const [s, tx, ty] = renderer.lineTransform(p, v, w.lineIdx, dpr);
       c.setTransform(s, 0, 0, s, tx, ty); c.globalCompositeOperation = 'destination-over';
       c.fillStyle = getComputedStyle(document.body).getPropertyValue('--hover'); c.beginPath();
-      for (const b of p.bandBoxes([S.hover], { height: 'ink', padX: 1.2, padY: 1.2 })) c.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 1.5);
+      for (const b of p.wordBands([S.hover], { height: 'ink', padX: 1.2, padY: 1.2 })) c.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 1.5);
       c.fill();
       c.globalCompositeOperation = 'source-over';
     }
@@ -202,7 +202,7 @@
     try { stage.setPointerCapture(e.pointerId); } catch (_) {}
     pts.set(e.pointerId, [e.clientX, e.clientY]); moved = false;
     const r = stage.getBoundingClientRect(), [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
-    const h = S.page.hitTestViewEx(x, y, { maxDistance: 6 });
+    const h = S.page.hitTestView(x, y, { maxDistance: 6 });
     if (pts.size === 1) {
       drag = { x: e.clientX, y: e.clientY, ox: S.view.ox, oy: S.view.oy };
       selecting = h && h.word >= 0 && (e.shiftKey || e.pointerType !== 'touch') ? { anchor: h.word, active: false } : null;
@@ -222,7 +222,7 @@
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (!selecting.active && Math.hypot(dx, dy) > 4) { selecting.active = true; stage.classList.add('selecting'); if (S.hlSel) { S.page.unhighlight(S.hlSel); S.hlSel = 0; } S.selWord = -1; S.selAyah = null; if (S.hlAyah) { S.page.unhighlight(S.hlAyah); S.hlAyah = 0; } }
       if (selecting.active) {
-        const h = S.page.hitTestViewEx(x, y, {});
+        const h = S.page.hitTestView(x, y, {});
         if (h && h.word >= 0) {
           S.page.select(selecting.anchor, h.word);
           const ws = S.page.selection();
@@ -237,7 +237,7 @@
       if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); S.view.ox = drag.ox + dx; S.view.oy = drag.oy + dy; draw(); }
       return;
     }
-    const t = performance.now(); const h = S.page.hitTestViewEx(x, y, { maxDistance: 4 }); S.lastHitUs = (performance.now() - t) * 1000;
+    const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 4 }); S.lastHitUs = (performance.now() - t) * 1000;
     const hw = h ? h.word : -1;
     if (hw !== S.hover) { S.hover = hw; stage.style.cursor = hw >= 0 || (h && h.deco >= 0) ? 'pointer' : 'grab'; draw(); }
   });
@@ -249,7 +249,7 @@
       if (selecting && selecting.active) { showSelection(); selecting = null; drag = null; return; }
       if (drag && !moved) {
         const r = stage.getBoundingClientRect(); const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
-        const t = performance.now(); const h = S.page.hitTestViewEx(x, y, { maxDistance: 6 }); S.lastHitUs = (performance.now() - t) * 1000;
+        const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 6 }); S.lastHitUs = (performance.now() - t) * 1000;
         if (h && h.word >= 0) selectWord(h.word);
         else if (h && h.deco >= 0) { const d = S.page.decos[h.deco]; if (d.ayah) selectAyah(d.surah, d.ayah); }
         else selectWord(-1);

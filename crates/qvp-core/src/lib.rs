@@ -16,9 +16,9 @@ pub mod style;
 pub mod target;
 pub mod text;
 
-pub use crop::CropBox;
+pub use crop::CropBounds;
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
-pub use hit::{HitBox, HitEx, HitOptions, LineBand};
+pub use hit::{Hit, HitArea, HitOptions, LineBand};
 pub use layout::{gap_to_fill, wasted_fraction, Layout, LayoutSpec};
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
@@ -70,7 +70,7 @@ pub struct Geometry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Hit {
+pub struct HitExact {
     pub word: u32,
     pub path: u32,
     pub deco: u32,
@@ -352,7 +352,7 @@ impl Page {
     // ───────────── exact hit testing ─────────────
 
     /// Exact hit-test in page units (bbox → outline). Words first, then decorations.
-    pub fn hit_test(&self, x: f32, y: f32) -> Option<Hit> {
+    pub fn hit_test_exact(&self, x: f32, y: f32) -> Option<HitExact> {
         let q = self.quant();
         let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
         let mut bbox_only: Option<u32> = None;
@@ -373,25 +373,25 @@ impl Page {
                     bbox_only = Some(wi);
                 }
                 if let Some(pi) = self.exact_path_hit(w.first_path, w.n_paths as u32, x, y) {
-                    return Some(Hit { word: wi, path: pi, deco: NONE });
+                    return Some(HitExact { word: wi, path: pi, deco: NONE });
                 }
             }
         }
         if let Some(wi) = bbox_only {
-            return Some(Hit { word: wi, path: NONE, deco: NONE });
+            return Some(HitExact { word: wi, path: NONE, deco: NONE });
         }
         for (di, d) in self.data.decos.iter().enumerate() {
             if d.bbox.contains(qx, qy) {
                 let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, y).unwrap_or(NONE);
-                return Some(Hit { word: NONE, path: pi, deco: di as u32 });
+                return Some(HitExact { word: NONE, path: pi, deco: di as u32 });
             }
         }
         None
     }
 
     /// Exact hit-test in viewport px using the current layout.
-    pub fn hit_test_view(&self, vx: f32, vy: f32) -> Option<Hit> {
-        let Some(l) = &self.layout else { return self.hit_test(vx, vy) };
+    pub fn hit_test_exact_view(&self, vx: f32, vy: f32) -> Option<HitExact> {
+        let Some(l) = &self.layout else { return self.hit_test_exact(vx, vy) };
         let x = (vx - l.ox) / l.scale;
         let y = (vy - l.oy) / l.scale;
         let q = self.quant();
@@ -411,13 +411,13 @@ impl Page {
             let (qx, qy) = ((x * q).round() as i32, (py * q).round() as i32);
             if d.bbox.contains(qx, qy) {
                 let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, py).unwrap_or(NONE);
-                return Some(Hit { word: NONE, path: pi, deco: di as u32 });
+                return Some(HitExact { word: NONE, path: pi, deco: di as u32 });
             }
         }
         None
     }
 
-    fn hit_test_in_line(&self, li: usize, x: f32, y: f32) -> Option<Hit> {
+    fn hit_test_in_line(&self, li: usize, x: f32, y: f32) -> Option<HitExact> {
         let q = self.quant();
         let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
         let ws = &self.line_words[li];
@@ -434,18 +434,18 @@ impl Page {
                 bbox_only = Some(wi);
             }
             if let Some(pi) = self.exact_path_hit(w.first_path, w.n_paths as u32, x, y) {
-                return Some(Hit { word: wi, path: pi, deco: NONE });
+                return Some(HitExact { word: wi, path: pi, deco: NONE });
             }
         }
         if let Some(wi) = bbox_only {
-            return Some(Hit { word: wi, path: NONE, deco: NONE });
+            return Some(HitExact { word: wi, path: NONE, deco: NONE });
         }
         for (di, d) in self.data.decos.iter().enumerate() {
             if self.geom.table[d.first_path as usize].line as usize != li || !d.bbox.contains(qx, qy) {
                 continue;
             }
             let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, y).unwrap_or(NONE);
-            return Some(Hit { word: NONE, path: pi, deco: di as u32 });
+            return Some(HitExact { word: NONE, path: pi, deco: di as u32 });
         }
         None
     }

@@ -131,11 +131,7 @@ object Marshal {
         "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "x0" to d.x0, "y0" to d.y0, "x1" to d.x1, "y1" to d.y1, "text" to d.text, "firstPath" to d.firstPath, "nPaths" to d.nPaths)
     fun hit(p: QvpPage, h: QvpHit): Map<String, Any?> {
         val w = if (h.word >= 0) p.words[h.word] else null
-        return mapOf("word" to h.word, "path" to h.path, "deco" to h.deco, "wordKey" to w?.wordKey, "ayahKey" to w?.ayahKey)
-    }
-    fun hit(p: QvpPage, h: QvpHitEx): Map<String, Any?> {
-        val w = if (h.word >= 0) p.words[h.word] else null
-        return mapOf("word" to h.word, "path" to h.path, "deco" to h.deco, "line" to h.line, "distance" to h.distance, "exact" to h.exact, "wordKey" to w?.wordKey, "ayahKey" to w?.ayahKey)
+        return mapOf("word" to h.word, "path" to h.path, "deco" to h.deco, "line" to h.line, "distance" to h.distance, "isExact" to h.isExact, "wordKey" to w?.wordKey, "ayahKey" to w?.ayahKey)
     }
     fun ayah(a: QvpAyah): Map<String, Any?> = mapOf("idx" to a.idx, "surah" to a.surah, "ayah" to a.ayah, "fragment" to a.fragment, "fragments" to a.fragments, "flags" to a.flags, "rubuAlHizb" to a.rubuAlHizb, "firstWord" to a.firstWord, "nWords" to a.nWords,
         "ayahMarkDeco" to a.ayahMarkDeco, "bbox" to listOf(a.x0, a.y0, a.x1, a.y1))
@@ -148,7 +144,7 @@ object Marshal {
     fun rosette(r: QvpRosette): Map<String, Any?> = mapOf("deco" to r.deco, "surah" to r.surah, "ayah" to r.ayah, "juz" to r.juz, "hizb" to r.hizb, "nisf" to r.nisf, "rubuAlHizb" to r.rubuAlHizb, "rubuAlHizbInHizb" to r.rubuAlHizbInHizb)
     fun sajdah(s: QvpSajdah): Map<String, Any?> = mapOf("deco" to s.deco, "surah" to s.surah, "ayah" to s.ayah, "signPath" to s.signPath)
     fun match(m: QvpMatch): Map<String, Any?> = mapOf("word" to m.word, "index" to m.index, "loose" to m.loose, "wordKey" to m.wordKey, "text" to m.text)
-    fun cropBox(c: QvpCropBox): Map<String, Any?> = mapOf("x0" to c.x0, "y0" to c.y0, "x1" to c.x1, "y1" to c.y1, "nWords" to c.nWords, "ayahMarkDeco" to c.ayahMarkDeco)
+    fun cropBounds(c: QvpCropBounds): Map<String, Any?> = mapOf("x0" to c.x0, "y0" to c.y0, "x1" to c.x1, "y1" to c.y1, "nWords" to c.nWords, "ayahMarkDeco" to c.ayahMarkDeco)
     fun atlasSurah(s: QvpAtlasSurah): Map<String, Any?> = mapOf("n" to s.n, "number" to s.n, "page" to s.page, "ayahCount" to s.ayahCount, "place" to s.place, "arabic" to s.arabic, "latin" to s.latin, "english" to s.english)
     fun atlasRubuAlHizb(r: QvpAtlasRubuAlHizb): Map<String, Any?> = mapOf("rubuAlHizb" to r.rubuAlHizb, "surah" to r.surah, "ayah" to r.ayah, "page" to r.page, "ayahKey" to r.ayahKey)
     fun layout(l: QvpLayout): Map<String, Any?> = mapOf("scale" to l.scale, "ox" to l.ox, "oy" to l.oy, "contentW" to l.contentW, "contentH" to l.contentH, "pitch" to l.pitch, "fitScale" to l.fitScale, "fitX" to l.fitX, "fitY" to l.fitY, "lineDy" to l.lineDy.toList(),

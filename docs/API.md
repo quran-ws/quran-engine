@@ -3,8 +3,8 @@
 One engine, one contract. The C ABI in `crates/qvp-ffi/include/qvp.h` is the source of
 truth; every wrapper (`web/qvp.js`, Kotlin, Dart, React Native, Swift) exposes the same
 names in the platform's own casing, so this page documents once and applies everywhere.
-Examples are JavaScript; read `page.hitTestEx(...)` as `page.hitTestEx(...)` in Dart,
-`page.hitTestEx(...)` in Kotlin, `qvp_hit_test_ex(...)` in C.
+Examples are JavaScript; the same call is `page.hitTest(...)` in Dart, Kotlin and Swift
+and `qvp_hit_test(...)` in C.
 
 **Conventions**
 
@@ -93,15 +93,15 @@ Modes: `includes`, `exact`, `prefix`. Without a sidecar it searches the stripped
 ## Hit testing
 
 ```js
-page.hitTestViewEx(vx, vy, {maxDistance: 6, gapBias: 0.6})
-// → {word, path, deco, line, distance, exact, wordKey, ayahKey} | null
+page.hitTestView(vx, vy, {maxDistance: 6, gapBias: 0.6})
+// → {word, path, deco, line, distance, isExact, wordKey, ayahKey} | null
 ```
 
 Exact outline first, then **nearest with direction**: the point is resolved to a line
 by its pitch band, then to a word, with a gap between two words split 60/40 towards the
 preceding (right-hand) word — trailing ink is drawn *into* the following gap in this
-print. `hitBoxes()` returns the same partition as boxes (no dead zones on a line);
-`lineBands()` the pitch bands. `hitTest`/`hitTestView` are the exact-only variants.
+print. `hitAreas()` returns the same partition as boxes (no dead zones on a line);
+`lineBands()` the pitch bands. `hitTestExact`/`hitTestExactView` are the exact-only variants.
 
 ## Layout
 
@@ -150,7 +150,7 @@ only layout knob a reader gets is more leading, never a narrower or wider line.
 
 Pure helpers:
 `engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` and `wastedFraction(...)`.
-`wordBoxView(i)` gives a word's box in viewport px for scroll-into-view.
+`wordBoundsView(i)` gives a word's box in viewport px for scroll-into-view.
 
 `nominalLines` is the grid the page is laid out *inside*, not the page's own line
 count: it defaults to 15 and is clamped up to `page.nLines`, never down. A short page
@@ -209,7 +209,7 @@ at the display list. The native bindings build paths against their own platform 
 
 `paint()` is the full display list (a colour per path); `styled()` lists only the
 paths that differ from the default ink, which is what the cached-base-layer renderer
-repaints. `highlightBoxes()` and `maskBoxes()` are viewport-px rectangles.
+repaints. `highlightBoxesView()` and `maskBoxesView()` are viewport-px rectangles.
 
 ## Highlights
 
@@ -241,7 +241,7 @@ page.revealGoto(at); page.revealStop();
 ```
 
 `hide` keeps the page's shape (ink alpha 0). `block`/`blur` keep the ink and hand the
-host `maskBoxes()` to draw over. The greyed-page reveal lights a window of `lit` steps
+host `maskBoxesView()` to draw over. The greyed-page reveal lights a window of `lit` steps
 ending at `at`; a medallion lights with the ayah it closes.
 
 ## Recitation
@@ -252,7 +252,7 @@ Drive the highlight with `rehighlight(h, T.word(i))`.
 
 ## Crop and export
 
-`cropBox(target, {pad, keepAyahMarks})`; `cropSvg(target, {pad, keepAyahMarks, background})`
+`cropBounds(target, {pad, keepAyahMarks})`; `cropSvg(target, {pad, keepAyahMarks, background})`
 returns a standalone SVG string with the current colours (masks, themes and highlights'
 ink applied). The medallion is kept only when the whole ayah is inside the crop.
 
@@ -316,17 +316,17 @@ says which wrapper binds which.
 | text and search | `qvp_citation` | `page.citation(words)` | Return a citation such as `2:255-257, 3:1` for a word list. |
 | text and search | `qvp_attach_words` | `page.attachWords(json)` | Attach the words sidecar's text forms; returns the number of words updated, −1 on bad JSON. |
 | text and search | `qvp_has_form` | `page.hasForm(form)` | Return whether a text form is available (the derived forms need the sidecar). |
-| hit testing | `qvp_hit_test` | `page.hitTest(x, y)` | Return the word, path or decoration whose exact outline contains a point in page units. |
-| hit testing | `qvp_hit_test_view` | `page.hitTestView(vx, vy)` | The same for a point in viewport pixels through the current layout. |
-| hit testing | `qvp_hit_test_ex` | `page.hitTestEx(x, y, options)` | Gap-aware: resolve a point to the nearest word by line band and gap bias, with the distance and whether the hit was exact. |
-| hit testing | `qvp_hit_test_view_ex` | `page.hitTestViewEx(vx, vy, options)` | The same for viewport pixels. |
+| hit testing | `qvp_hit_test_exact` | `page.hitTestExact(x, y)` | Return the word, path or decoration whose exact outline contains a point in page units. |
+| hit testing | `qvp_hit_test_exact_view` | `page.hitTestExactView(vx, vy)` | The same for a point in viewport pixels through the current layout. |
+| hit testing | `qvp_hit_test` | `page.hitTest(x, y, options)` | Gap-aware: resolve a point to the nearest word by line band and gap bias, with the distance and whether the hit was exact. |
+| hit testing | `qvp_hit_test_view` | `page.hitTestView(vx, vy, options)` | The same for viewport pixels. |
 | hit testing | `qvp_line_bands` | `page.lineBands()` | Return every line's vertical band in page units. |
-| hit testing | `qvp_hit_boxes` | `page.hitBoxes(gapBias)` | Return the gap-aware rectangle of every word, a partition of each line with no dead zone. |
+| hit testing | `qvp_hit_areas` | `page.hitAreas(gapBias)` | Return the gap-aware rectangle of every word, a partition of each line with no dead zone. |
 | layout | `qvp_layout` | `page.layout(spec)` | Lay the page out for a viewport: scale, per-line shifts, slots, content size and the fit transform. |
 | layout | `qvp_gap_to_fill` | `engine.gapToFill(pageW, pageH, lines, viewW, viewH, max)` | Return the leading that fills a viewport when fitted to width, from raw dimensions. |
 | layout | `qvp_layout_gap_to_fill` | `page.layoutGapToFill(spec, max)` | The same from a layout spec; the padding is subtracted in the engine. |
 | layout | `qvp_wasted_fraction` | `engine.wastedFraction(pageW, pageH, viewW, viewH)` | Return the share of a viewport left empty when the page is fitted to width. |
-| layout | `qvp_word_box_view` | `page.wordBoxView(i)` | Return a word's bounds in viewport pixels through the current layout. |
+| layout | `qvp_word_bounds_view` | `page.wordBoundsView(i)` | Return a word's bounds in viewport pixels through the current layout. |
 | styles | `qvp_style_add` | `page.style(selector, colour, ms, layer)` | Add a colour rule for a selector on a layer; returns a handle, 0 for a bad selector. |
 | styles | `qvp_style_add_target` | `page.styleTarget(target, colour, ms, layer)` | Add a colour rule for a target's words. |
 | styles | `qvp_style_remove` | `page.unstyle(handle)` | Remove a rule by handle; returns how many rules were removed. |
@@ -348,8 +348,8 @@ says which wrapper binds which.
 | highlights | `qvp_clear_highlights` | `page.clearHighlights()` | Remove every highlight. |
 | highlights | `qvp_highlight_handles` | `page.highlightHandles()` | Return the handles of every live highlight. |
 | highlights | `qvp_highlight_words` | `page.highlightWords(handle)` | Return the words a highlight covers. |
-| highlights | `qvp_highlight_boxes` | `page.highlightBoxes()` | Return every highlight's band rectangles in viewport pixels; draw each id as one nonzero path behind the ink. |
-| highlights | `qvp_band_boxes` | `page.bandBoxes(words, options)` | Return band rectangles for an arbitrary word list, in page units. |
+| highlights | `qvp_highlight_boxes_view` | `page.highlightBoxesView()` | Return every highlight's band rectangles in viewport pixels; draw each id as one nonzero path behind the ink. |
+| highlights | `qvp_word_bands` | `page.wordBands(words, options)` | Return band rectangles for an arbitrary word list, in page units. |
 | selection | `qvp_select` | `page.select(anchor, focus)` | Select the whole words between two word indices; `QVP_NONE` clears. |
 | selection | `qvp_selection` | `page.selection()` | Return the selected word indices. |
 | selection | `qvp_selection_text` | `page.selectionText(form, citation)` | Return the selected text, with its citation when asked. |
@@ -365,14 +365,14 @@ says which wrapper binds which.
 | memorisation | `qvp_unmask` | `page.unmask()` | Remove the mask. |
 | memorisation | `qvp_mask_hidden` | `page.maskHidden()` | Return the words currently hidden. |
 | memorisation | `qvp_mask_words` | `page.maskWords()` | Return the words in the mask's scope. |
-| memorisation | `qvp_mask_boxes` | `page.maskBoxes()` | Return the block or blur rectangles in viewport pixels for the host to draw. |
+| memorisation | `qvp_mask_boxes_view` | `page.maskBoxesView()` | Return the block or blur rectangles in viewport pixels for the host to draw. |
 | memorisation | `qvp_reveal_start` | `page.revealStart(options)` | Grey the page and light a moving window of steps; returns the step count. |
 | memorisation | `qvp_reveal_goto` | `page.revealGoto(at)` | Light the window ending at a step; −1 when nothing is lit yet. |
 | memorisation | `qvp_reveal_at` | `page.revealAt()` | Return the current step, −2 when no reveal is running. |
 | memorisation | `qvp_reveal_steps` | `page.revealSteps()` | Return the number of steps in the running reveal. |
 | memorisation | `qvp_reveal_step_of` | `page.revealStepOf(i)` | Return the step that lights a word. |
 | memorisation | `qvp_reveal_stop` | `page.revealStop()` | End the reveal and restore the page. |
-| crop | `qvp_crop_box` | `page.cropBox(target, options)` | Return the crop rectangle of a target with padding, and whether the ayah mark is inside it. |
+| crop | `qvp_crop_bounds` | `page.cropBounds(target, options)` | Return the crop rectangle of a target with padding, and whether the ayah mark is inside it. |
 | crop | `qvp_crop_svg` | `page.cropSvg(target, options)` | Return a standalone SVG of a target with the current colours applied. |
 | atlas | `qvp_atlas_load` | `engine.loadAtlas(bytes)` | Decode the atlas file; null on a malformed file. |
 | atlas | `qvp_atlas_free` | `atlas.free()` | Free the atlas. |

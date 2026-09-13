@@ -203,24 +203,16 @@ pub struct QvpHit {
     pub word: u32,
     pub path: u32,
     pub deco: u32,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct QvpHitEx {
-    pub word: u32,
-    pub path: u32,
-    pub deco: u32,
     pub line: u32,
     pub distance: f32,
-    pub exact: u32,
+    pub is_exact: u32,
 }
 
 #[repr(C)]
 pub struct QvpHitOptions {
     pub max_distance: f32,
     pub gap_bias: f32,
-    pub exact_first: u32,
+    pub prefer_exact: u32,
 }
 
 #[repr(C)]
@@ -238,7 +230,7 @@ pub struct QvpBox {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct QvpHitBox {
+pub struct QvpHitArea {
     pub word: u32,
     pub line: u32,
     pub x0: f32,
@@ -422,7 +414,7 @@ pub struct QvpMatch {
 }
 
 #[repr(C)]
-pub struct QvpCropBox {
+pub struct QvpCropBounds {
     pub x0: f32,
     pub y0: f32,
     pub x1: f32,
@@ -996,28 +988,29 @@ pub unsafe extern "C" fn qvp_has_form(page: *const Page, form: u8) -> u32 {
 
 // ───────────── hit testing ─────────────
 
+/// An exact hit in the one hit struct: the word's line, distance 0, `is_exact` 1.
+unsafe fn exact_hit(page: *const Page, h: HitExact) -> QvpHit {
+    let line = if h.word == u32::MAX { u32::MAX } else { (*page).data().words[h.word as usize].line_idx as u32 };
+    QvpHit { word: h.word, path: h.path, deco: h.deco, line, distance: 0.0, is_exact: 1 }
+}
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hit_test(page: *const Page, x: f32, y: f32, out: *mut QvpHit) -> i32 {
-    guard(|| {
-        guard(|| match (*page).hit_test(x, y) {
-            Some(Hit { word, path, deco }) => {
-                *out = QvpHit { word, path, deco };
-                1
-            }
-            None => 0,
-        })
+pub unsafe extern "C" fn qvp_hit_test_exact(page: *const Page, x: f32, y: f32, out: *mut QvpHit) -> i32 {
+    guard(|| match (*page).hit_test_exact(x, y) {
+        Some(h) => {
+            *out = exact_hit(page, h);
+            1
+        }
+        None => 0,
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hit_test_view(page: *const Page, vx: f32, vy: f32, out: *mut QvpHit) -> i32 {
-    guard(|| {
-        guard(|| match (*page).hit_test_view(vx, vy) {
-            Some(Hit { word, path, deco }) => {
-                *out = QvpHit { word, path, deco };
-                1
-            }
-            None => 0,
-        })
+pub unsafe extern "C" fn qvp_hit_test_exact_view(page: *const Page, vx: f32, vy: f32, out: *mut QvpHit) -> i32 {
+    guard(|| match (*page).hit_test_exact_view(vx, vy) {
+        Some(h) => {
+            *out = exact_hit(page, h);
+            1
+        }
+        None => 0,
     })
 }
 unsafe fn hopt(o: *const QvpHitOptions) -> HitOptions {
@@ -1028,22 +1021,22 @@ unsafe fn hopt(o: *const QvpHitOptions) -> HitOptions {
     HitOptions {
         max_distance: if o.max_distance <= 0.0 { f32::INFINITY } else { o.max_distance },
         gap_bias: o.gap_bias,
-        exact_first: o.exact_first != 0,
+        prefer_exact: o.prefer_exact != 0,
     }
 }
-fn hx(h: HitEx) -> QvpHitEx {
-    QvpHitEx { word: h.word, path: h.path, deco: h.deco, line: h.line, distance: h.distance, exact: h.exact as u32 }
+fn hx(h: Hit) -> QvpHit {
+    QvpHit { word: h.word, path: h.path, deco: h.deco, line: h.line, distance: h.distance, is_exact: h.is_exact as u32 }
 }
 /// Gap-aware: every point on a printed line resolves to a word. `opt` may be NULL.
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hit_test_ex(
+pub unsafe extern "C" fn qvp_hit_test(
     page: *const Page,
     x: f32,
     y: f32,
     opt: *const QvpHitOptions,
-    out: *mut QvpHitEx,
+    out: *mut QvpHit,
 ) -> i32 {
-    guard(|| match (*page).hit_test_ex(x, y, &hopt(opt)) {
+    guard(|| match (*page).hit_test(x, y, &hopt(opt)) {
         Some(h) => {
             *out = hx(h);
             1
@@ -1052,14 +1045,14 @@ pub unsafe extern "C" fn qvp_hit_test_ex(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hit_test_view_ex(
+pub unsafe extern "C" fn qvp_hit_test_view(
     page: *const Page,
     vx: f32,
     vy: f32,
     opt: *const QvpHitOptions,
-    out: *mut QvpHitEx,
+    out: *mut QvpHit,
 ) -> i32 {
-    guard(|| match (*page).hit_test_view_ex(vx, vy, &hopt(opt)) {
+    guard(|| match (*page).hit_test_view(vx, vy, &hopt(opt)) {
         Some(h) => {
             *out = hx(h);
             1
@@ -1087,12 +1080,12 @@ pub unsafe extern "C" fn qvp_line_bands(page: *const Page, out: *mut QvpLineBand
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn qvp_hit_boxes(page: *const Page, gap_bias: f32, out: *mut QvpHitBox, cap: u32) -> u32 {
+pub unsafe extern "C" fn qvp_hit_areas(page: *const Page, gap_bias: f32, out: *mut QvpHitArea, cap: u32) -> u32 {
     guard(|| {
-        let v: Vec<QvpHitBox> = (*page)
-            .hit_boxes(gap_bias)
+        let v: Vec<QvpHitArea> = (*page)
+            .hit_areas(gap_bias)
             .iter()
-            .map(|h| QvpHitBox {
+            .map(|h| QvpHitArea {
                 word: h.word,
                 line: h.line,
                 x0: h.x0,
@@ -1188,12 +1181,12 @@ pub extern "C" fn qvp_wasted_fraction(page_w: f32, page_h: f32, view_w: f32, vie
 }
 /// out: x0,y0,x1,y1 in viewport px through the current layout
 #[no_mangle]
-pub unsafe extern "C" fn qvp_word_box_view(page: *const Page, wi: u32, out: *mut f32) -> i32 {
+pub unsafe extern "C" fn qvp_word_bounds_view(page: *const Page, wi: u32, out: *mut f32) -> i32 {
     guard(|| {
         if wi as usize >= (*page).data().words.len() {
             return 0;
         }
-        let (a, b, c, d) = (*page).word_box_view(wi);
+        let (a, b, c, d) = (*page).word_bounds_view(wi);
         *out = a;
         *out.add(1) = b;
         *out.add(2) = c;
@@ -1361,7 +1354,7 @@ pub unsafe extern "C" fn qvp_highlight_words(page: *const Page, handle: u32, out
 }
 /// Band boxes of every highlight in viewport px (animated). Draw each highlight id as one path.
 #[no_mangle]
-pub unsafe extern "C" fn qvp_highlight_boxes(page: *const Page, out: *mut QvpBox, cap: u32) -> u32 {
+pub unsafe extern "C" fn qvp_highlight_boxes_view(page: *const Page, out: *mut QvpBox, cap: u32) -> u32 {
     guard(|| {
         let v: Vec<QvpBox> = (*page).highlight_boxes_view().iter().map(vb).collect();
         fill(out, cap, &v)
@@ -1369,7 +1362,7 @@ pub unsafe extern "C" fn qvp_highlight_boxes(page: *const Page, out: *mut QvpBox
 }
 /// Raw band boxes (page units, no animation) for a word list.
 #[no_mangle]
-pub unsafe extern "C" fn qvp_band_boxes(
+pub unsafe extern "C" fn qvp_word_bands(
     page: *const Page,
     words: *const u32,
     n: u32,
@@ -1382,7 +1375,7 @@ pub unsafe extern "C" fn qvp_band_boxes(
     guard(|| {
         let ws = std::slice::from_raw_parts(words, n as usize);
         let v: Vec<QvpBox> = (*page)
-            .band_boxes(ws, if height == 1 { BandHeight::Ink } else { BandHeight::Pitch }, pad_x, pad_y)
+            .word_bands(ws, if height == 1 { BandHeight::Ink } else { BandHeight::Pitch }, pad_x, pad_y)
             .iter()
             .map(|b| QvpBox { id: 0, line: b.line, x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, color: 0, radius: 0.0 })
             .collect();
@@ -1503,7 +1496,7 @@ pub unsafe extern "C" fn qvp_mask_words(page: *const Page, out: *mut u32, cap: u
 }
 /// Boxes to draw over hidden words in Block/Blur mode (viewport px).
 #[no_mangle]
-pub unsafe extern "C" fn qvp_mask_boxes(page: *const Page, out: *mut QvpBox, cap: u32) -> u32 {
+pub unsafe extern "C" fn qvp_mask_boxes_view(page: *const Page, out: *mut QvpBox, cap: u32) -> u32 {
     guard(|| {
         let v: Vec<QvpBox> = (*page).mask_boxes_view().iter().map(vb).collect();
         fill(out, cap, &v)
@@ -1547,16 +1540,16 @@ pub unsafe extern "C" fn qvp_reveal_stop(page: *mut Page) {
 // ───────────── crop ─────────────
 
 #[no_mangle]
-pub unsafe extern "C" fn qvp_crop_box(
+pub unsafe extern "C" fn qvp_crop_bounds(
     page: *const Page,
     t: *const QvpTarget,
     pad: f32,
     keep_ayah_marks: u32,
-    out: *mut QvpCropBox,
+    out: *mut QvpCropBounds,
 ) -> i32 {
-    guard(|| match (*page).crop_box(&target(t), pad, keep_ayah_marks != 0) {
+    guard(|| match (*page).crop_bounds(&target(t), pad, keep_ayah_marks != 0) {
         Some(c) => {
-            *out = QvpCropBox {
+            *out = QvpCropBounds {
                 x0: c.x0,
                 y0: c.y0,
                 x1: c.x1,

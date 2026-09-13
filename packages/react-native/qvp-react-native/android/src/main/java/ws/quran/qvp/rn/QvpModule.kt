@@ -73,19 +73,19 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun arabic(kind: String, s: String, promise: Promise) = ui(promise) { when (kind) { "strip" -> QvpEngine.strip(s); "fold" -> QvpEngine.fold(s); "normalize" -> QvpEngine.normalize(s); "loose", "looseKey" -> QvpEngine.looseKey(s); else -> s } }
 
     // ── hit testing / layout (the view already does gestures; these are for scroll-into-view etc.) ──
-    private fun hitOptions(o: Map<String, Any?>) = QvpHitOptions((o["maxDistance"] as? Number)?.toFloat() ?: QvpDefaults.TAP_DISTANCE, (o["gapBias"] as? Number)?.toFloat() ?: QvpDefaults.GAP_BIAS, o["exactFirst"] != false)
+    private fun hitOptions(o: Map<String, Any?>) = QvpHitOptions((o["maxDistance"] as? Number)?.toFloat() ?: QvpDefaults.TAP_DISTANCE, (o["gapBias"] as? Number)?.toFloat() ?: QvpDefaults.GAP_BIAS, o["preferExact"] != false)
     /** Exact outline hit at a point in page units. */
-    @ReactMethod fun hitTest(tag: Int, x: Double, y: Double, promise: Promise) = withPage(tag, promise) { _, p -> p.hitTest(x.toFloat(), y.toFloat())?.let { Marshal.hit(p, it) } }
+    @ReactMethod fun hitTestExact(tag: Int, x: Double, y: Double, promise: Promise) = withPage(tag, promise) { _, p -> p.hitTestExact(x.toFloat(), y.toFloat())?.let { Marshal.hit(p, it) } }
     /** Gap-aware hit at a point in page units. */
-    @ReactMethod fun hitTestEx(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p -> p.hitTestEx(x.toFloat(), y.toFloat(), hitOptions(opt(opts)))?.let { Marshal.hit(p, it) } }
+    @ReactMethod fun hitTest(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p -> p.hitTest(x.toFloat(), y.toFloat(), hitOptions(opt(opts)))?.let { Marshal.hit(p, it) } }
     /** Exact outline hit at a point in view dp (density and pan/zoom removed here, the layout in the engine). */
-    @ReactMethod fun hitTestView(tag: Int, x: Double, y: Double, promise: Promise) = withPage(tag, promise) { v, p -> val d = v.resources.displayMetrics.density
-        p.hitTestView(((x * d).toFloat() - v.inner.viewOx) / v.inner.viewScale, ((y * d).toFloat() - v.inner.viewOy) / v.inner.viewScale)?.let { Marshal.hit(p, it) } }
-    @ReactMethod fun hitTestViewEx(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { v, p ->
+    @ReactMethod fun hitTestExactView(tag: Int, x: Double, y: Double, promise: Promise) = withPage(tag, promise) { v, p -> val d = v.resources.displayMetrics.density
+        p.hitTestExactView(((x * d).toFloat() - v.inner.viewOx) / v.inner.viewScale, ((y * d).toFloat() - v.inner.viewOy) / v.inner.viewScale)?.let { Marshal.hit(p, it) } }
+    @ReactMethod fun hitTestView(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { v, p ->
         val o = opt(opts); val d = v.resources.displayMetrics.density
-        p.hitTestViewEx(((x * d).toFloat() - v.inner.viewOx) / v.inner.viewScale, ((y * d).toFloat() - v.inner.viewOy) / v.inner.viewScale, hitOptions(o))?.let { Marshal.hit(p, it) } }
-    @ReactMethod fun wordBoxView(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { v, p -> val d = v.resources.displayMetrics.density
-        p.wordBoxView(i)?.let { b -> mapOf("x0" to (v.inner.viewOx + b[0] * v.inner.viewScale) / d, "y0" to (v.inner.viewOy + b[1] * v.inner.viewScale) / d, "x1" to (v.inner.viewOx + b[2] * v.inner.viewScale) / d, "y1" to (v.inner.viewOy + b[3] * v.inner.viewScale) / d) } }
+        p.hitTestView(((x * d).toFloat() - v.inner.viewOx) / v.inner.viewScale, ((y * d).toFloat() - v.inner.viewOy) / v.inner.viewScale, hitOptions(o))?.let { Marshal.hit(p, it) } }
+    @ReactMethod fun wordBoundsView(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { v, p -> val d = v.resources.displayMetrics.density
+        p.wordBoundsView(i)?.let { b -> mapOf("x0" to (v.inner.viewOx + b[0] * v.inner.viewScale) / d, "y0" to (v.inner.viewOy + b[1] * v.inner.viewScale) / d, "x1" to (v.inner.viewOx + b[2] * v.inner.viewScale) / d, "y1" to (v.inner.viewOy + b[3] * v.inner.viewScale) / d) } }
     @ReactMethod fun currentLayout(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.currentLayout?.let { Marshal.layout(it) } }
     @ReactMethod fun relayout(tag: Int, promise: Promise) = withPage(tag, promise) { v, _ -> v.inner.relayout(); v.resetView(); null }
     @ReactMethod fun resetView(tag: Int, promise: Promise) = withPage(tag, promise) { v, _ -> v.resetView(); null }
@@ -116,8 +116,8 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun revealStepOf(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.revealStepOf(i).toDouble() }
 
     // ── crop ──
-    @ReactMethod fun cropBox(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
-        val o = opt(opts); p.cropBox(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: QvpDefaults.CROP_PAD, o["keepAyahMarks"] != false)?.let { Marshal.cropBox(it) } }
+    @ReactMethod fun cropBounds(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
+        val o = opt(opts); p.cropBounds(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: QvpDefaults.CROP_PAD, o["keepAyahMarks"] != false)?.let { Marshal.cropBounds(it) } }
     @ReactMethod fun cropSvg(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
         val o = opt(opts); p.cropSvg(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: QvpDefaults.CROP_PAD, o["keepAyahMarks"] != false, Marshal.color(o["background"], 0)) }
 

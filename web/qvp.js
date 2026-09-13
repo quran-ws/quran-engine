@@ -315,16 +315,16 @@
     citation(words) { const p = this.e.putU32(Uint32Array.from(words)); this.e.ex.qvp_citation(this.h, p, words.length, this.e.scratch); return this.e.qstr(this.e.scratch); }
 
     // ── hit testing ──
-    _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); return { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), deco: f(d.getUint32(s + 8, true)) }; }
-    hitTest(x, y) { return this.e.ex.qvp_hit_test(this.h, x, y, this.e.scratch) ? this._hit(this.e.scratch) : null; }
-    hitTestView(vx, vy) { return this.e.ex.qvp_hit_test_view(this.h, vx, vy, this.e.scratch) ? this._hit(this.e.scratch) : null; }
-    _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o.maxDistance ?? 0, true); d.setFloat32(at + 4, o.gapBias ?? 0.6, true); d.setUint32(at + 8, o.exactFirst === false ? 0 : 1, true); return at; }
-    _hitEx(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), deco: f(d.getUint32(s + 8, true)), line: d.getUint32(s + 12, true), distance: d.getFloat32(s + 16, true), exact: !!d.getUint32(s + 20, true) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
+    hitTestExact(x, y) { return this.e.ex.qvp_hit_test_exact(this.h, x, y, this.e.scratch) ? this._hit(this.e.scratch) : null; }
+    hitTestExactView(vx, vy) { return this.e.ex.qvp_hit_test_exact_view(this.h, vx, vy, this.e.scratch) ? this._hit(this.e.scratch) : null; }
+    _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o.maxDistance ?? 0, true); d.setFloat32(at + 4, o.gapBias ?? 0.6, true); d.setUint32(at + 8, o.preferExact === false ? 0 : 1, true); return at; }
+    /** the one hit shape for every hit test; the exact variants report distance 0 and isExact */
+    _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), deco: f(d.getUint32(s + 8, true)), line: f(d.getUint32(s + 12, true)), distance: d.getFloat32(s + 16, true), isExact: !!d.getUint32(s + 20, true) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
     /** gap-aware: every point on a printed line resolves to the word the user meant */
-    hitTestEx(x, y, opt = {}) { return this.e.ex.qvp_hit_test_ex(this.h, x, y, this._hitOpt(opt), this.e.scratch) ? this._hitEx(this.e.scratch) : null; }
-    hitTestViewEx(vx, vy, opt = {}) { return this.e.ex.qvp_hit_test_view_ex(this.h, vx, vy, this._hitOpt(opt), this.e.scratch) ? this._hitEx(this.e.scratch) : null; }
+    hitTest(x, y, opt = {}) { return this.e.ex.qvp_hit_test(this.h, x, y, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
+    hitTestView(vx, vy, opt = {}) { return this.e.ex.qvp_hit_test_view(this.h, vx, vy, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
     lineBands() { const n = this.e.ex.qvp_line_bands(this.h, this.e.scratch, 64), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 64); i++) { const o = this.e.scratch + i * 28; out.push({ line: d.getUint32(o, true), lineNo: d.getUint32(o + 4, true), y0: d.getFloat32(o + 8, true), y1: d.getFloat32(o + 12, true), mid: d.getFloat32(o + 16, true), inkY0: d.getFloat32(o + 20, true), inkY1: d.getFloat32(o + 24, true) }); } return out; }
-    hitBoxes(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_boxes(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
+    hitAreas(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
 
     // ── layout ──
     /** Write a layout spec (QvpLayoutSpec, 52 bytes) at scratch offset `s`. */
@@ -349,7 +349,7 @@
       return (this.currentLayout = { scale: d.getFloat32(o, true), ox: d.getFloat32(o + 4, true), oy: d.getFloat32(o + 8, true), contentW: d.getFloat32(o + 12, true), contentH: d.getFloat32(o + 16, true), pitch: d.getFloat32(o + 20, true), lineDy, slots,
         fitScale: d.getFloat32(o + 32, true), fitX: d.getFloat32(o + 36, true), fitY: d.getFloat32(o + 40, true) });
     }
-    wordBoxView(i) { this.e.ex.qvp_word_box_view(this.h, i, this.e.scratch); const f = new Float32Array(this.e.mem.buffer, this.e.scratch, 4); return { x0: f[0], y0: f[1], x1: f[2], y1: f[3] }; }
+    wordBoundsView(i) { this.e.ex.qvp_word_bounds_view(this.h, i, this.e.scratch); const f = new Float32Array(this.e.mem.buffer, this.e.scratch, 4); return { x0: f[0], y0: f[1], x1: f[2], y1: f[3] }; }
 
     // ── styles (handles undo exactly) ──
     style(sel, color, { ms = 0, layer = LAYER.BASE } = {}) { return this.e.ex.qvp_style_add(this.h, layer, writeSel(this.e, this.e.scratch2 + 12288, sel), rgba(color), ms); }
@@ -395,8 +395,8 @@
     highlightHandles() { const n = this.e.ex.qvp_highlight_handles(this.h, this.e.scratch, 1024); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 1024))); }
     highlightWords(h) { const n = this.e.ex.qvp_highlight_words(this.h, h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
-    highlightBoxes() { const n = this.e.ex.qvp_highlight_boxes(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
-    bandBoxes(words, { height = 'pitch', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_band_boxes(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
+    highlightBoxesView() { const n = this.e.ex.qvp_highlight_boxes_view(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
+    wordBands(words, { height = 'pitch', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_word_bands(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
 
     // ── selection ──
     select(anchor, focus = anchor) { this.e.ex.qvp_select(this.h, anchor < 0 ? NONE : anchor, focus < 0 ? NONE : focus); }
@@ -417,7 +417,7 @@
     unmask() { this.e.ex.qvp_unmask(this.h); }
     maskHidden() { const n = this.e.ex.qvp_mask_hidden(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     maskWords() { const n = this.e.ex.qvp_mask_words(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
-    maskBoxes() { const n = this.e.ex.qvp_mask_boxes(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
+    maskBoxesView() { const n = this.e.ex.qvp_mask_boxes_view(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
     /** greyed page with a lit window: {lit, byAyah, grey, ink, ayahMarks, ms} → steps */
     revealStart({ lit = DEFAULTS.REVEAL_LIT, byAyah = false, grey = DEFAULTS.REVEAL_GREY, ink = DEFAULTS.INK, ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms); }
     revealGoto(at) { return !!this.e.ex.qvp_reveal_goto(this.h, BigInt(at)); }
@@ -427,7 +427,7 @@
     revealStop() { this.e.ex.qvp_reveal_stop(this.h); }
 
     // ── crop ──
-    cropBox(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true } = {}) { if (!this.e.ex.qvp_crop_box(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, this.e.scratch)) return null; const d = this.e.dv(), s = this.e.scratch; return { x0: d.getFloat32(s, true), y0: d.getFloat32(s + 4, true), x1: d.getFloat32(s + 8, true), y1: d.getFloat32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDeco: d.getUint32(s + 20, true) }; }
+    cropBounds(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true } = {}) { if (!this.e.ex.qvp_crop_bounds(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, this.e.scratch)) return null; const d = this.e.dv(), s = this.e.scratch; return { x0: d.getFloat32(s, true), y0: d.getFloat32(s + 4, true), x1: d.getFloat32(s + 8, true), y1: d.getFloat32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDeco: d.getUint32(s + 20, true) }; }
     cropSvg(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true, background = null } = {}) { if (!this.e.ex.qvp_crop_svg(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, background ? rgba(background) : 0, this.e.scratch)) return null; return this.e.qstr(this.e.scratch); }
   }
 
@@ -505,7 +505,7 @@
       const t1 = performance.now();
       const c = this.ctx;
       c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
-      const bands = page.highlightBoxes();
+      const bands = page.highlightBoxesView();
       this.drawBoxes(c, bands, view, dpr);
       c.setTransform(1, 0, 0, 1, 0, 0);
       c.drawImage(this.base, 0, 0);
@@ -515,7 +515,7 @@
         const ln = page.pathLine(i); if (ln !== cur) { setTf(c, ln); cur = ln; }
         c.fillStyle = css(col); c.fill(paths[i], page.pathEvenOdd(i) ? 'evenodd' : 'nonzero');
       }
-      this.drawBoxes(c, page.maskBoxes(), view, dpr);
+      this.drawBoxes(c, page.maskBoxesView(), view, dpr);
       this.stats.overlayMs = performance.now() - t1; this.stats.overlayPaths = styled.length; this.stats.bands = bands.length;
     }
   }

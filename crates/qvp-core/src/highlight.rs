@@ -100,7 +100,7 @@ pub(crate) struct Highlight {
 
 impl Page {
     /// Band boxes for a word list (page units, before seams).
-    pub fn band_boxes(&self, words: &[u32], height: BandHeight, pad_x: f32, pad_y: f32) -> Vec<BandBox> {
+    pub fn word_bands(&self, words: &[u32], height: BandHeight, pad_x: f32, pad_y: f32) -> Vec<BandBox> {
         let q = self.quant();
         let d = self.data();
         let bands = self.line_bands();
@@ -138,7 +138,7 @@ impl Page {
             }
         }
         if matches!(style.mode, HighlightMode::Band | HighlightMode::Both) {
-            let boxes = self.band_boxes(&words, style.height, style.pad_x, style.pad_y);
+            let boxes = self.word_bands(&words, style.height, style.pad_x, style.pad_y);
             let from = style.band & !0xff; // fade in from transparent when animated
             self.highlights.push(Highlight {
                 handle: h,
@@ -185,7 +185,7 @@ impl Page {
         }
         let hl = &mut self.highlights[i];
         if matches!(style.mode, HighlightMode::Band | HighlightMode::Both) {
-            let new_boxes = self.band_boxes(&words, style.height, style.pad_x, style.pad_y);
+            let new_boxes = self.word_bands(&words, style.height, style.pad_x, style.pad_y);
             let hl = &mut self.highlights[i];
             // snapshot the current interpolated boxes as the new "prev"
             hl.prev_boxes = current_boxes(hl, self.clock_ms);
@@ -216,7 +216,7 @@ impl Page {
         }
         let now = self.clock_ms;
         let boxes = if matches!(style.mode, HighlightMode::Band | HighlightMode::Both) {
-            self.band_boxes(&words, style.height, style.pad_x, style.pad_y)
+            self.word_bands(&words, style.height, style.pad_x, style.pad_y)
         } else {
             vec![]
         };

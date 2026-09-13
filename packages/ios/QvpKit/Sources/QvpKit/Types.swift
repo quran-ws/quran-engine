@@ -145,15 +145,14 @@ public struct QvpDecoration: Equatable {
     public let x0: Float, y0: Float, x1: Float, y1: Float
     public let text: String, firstPath: Int, nPaths: Int
 }
-/// Indices are -1 when absent.
-public struct QvpHit: Equatable { public let word: Int, path: Int, deco: Int }
-public struct QvpHitEx: Equatable { public let word: Int, path: Int, deco: Int, line: Int, distance: Float, exact: Bool }
+/// The one hit shape for every hit test; the exact variants report distance 0 and `isExact`. Indices are -1 when absent.
+public struct QvpHit: Equatable { public let word: Int, path: Int, deco: Int, line: Int, distance: Float, isExact: Bool }
 public struct QvpHitOptions: Equatable {
-    public var maxDistance: Float, gapBias: Float, exactFirst: Bool
-    public init(maxDistance: Float = 0, gapBias: Float = QvpDefaults.GAP_BIAS, exactFirst: Bool = true) { self.maxDistance = maxDistance; self.gapBias = gapBias; self.exactFirst = exactFirst }
+    public var maxDistance: Float, gapBias: Float, preferExact: Bool
+    public init(maxDistance: Float = 0, gapBias: Float = QvpDefaults.GAP_BIAS, preferExact: Bool = true) { self.maxDistance = maxDistance; self.gapBias = gapBias; self.preferExact = preferExact }
 }
 public struct QvpBox: Equatable { public let id: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, color: UInt32, radius: Float }
-public struct QvpHitBox: Equatable { public let word: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, inkX0: Float, inkY0: Float, inkX1: Float, inkY1: Float }
+public struct QvpHitArea: Equatable { public let word: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, inkX0: Float, inkY0: Float, inkX1: Float, inkY1: Float }
 public struct QvpLineBand: Equatable { public let line: Int, lineNo: Int, y0: Float, y1: Float, mid: Float, inkY0: Float, inkY1: Float }
 /// Spacing only opens up: `lineSpacing` < 1 and a negative `lineGap` are clamped by the engine.
 public struct QvpLayoutSpec: Equatable {
@@ -207,7 +206,7 @@ public struct QvpAyahMark: Equatable { public let deco: Int, surah: Int, ayah: I
 public struct QvpRosette: Equatable { public let deco: Int, surah: Int, ayah: Int, juz: Int, hizb: Int, nisf: Int, rubuAlHizb: Int, rubuAlHizbInHizb: Int }
 public struct QvpSajdah: Equatable { public let deco: Int, surah: Int, ayah: Int, signPath: Int }
 public struct QvpMatch: Equatable { public let word: Int, index: Int, loose: Bool, wordKey: String, text: String }
-public struct QvpCropBox: Equatable { public let x0: Float, y0: Float, x1: Float, y1: Float, nWords: Int, ayahMarkDeco: Int }
+public struct QvpCropBounds: Equatable { public let x0: Float, y0: Float, x1: Float, y1: Float, nWords: Int, ayahMarkDeco: Int }
 public struct QvpAtlasSurah: Equatable { public let n: Int, page: Int, ayahCount: Int, place: String, arabic: String, latin: String, english: String }
 public struct QvpAtlasRubuAlHizb: Equatable { public let rubuAlHizb: Int, surah: Int, ayah: Int, page: Int; public var ayahKey: String { "\(surah):\(ayah)" } }
 

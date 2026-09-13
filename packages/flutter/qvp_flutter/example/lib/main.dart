@@ -365,7 +365,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     if (t == null) return;
     final p = page!;
     final svg = p.cropSvg(t, pad: 3, keepAyahMarks: true, background: QvpColor.fromColor(pal.paper));
-    final box = p.cropBox(t, pad: 3);
+    final box = p.cropBounds(t, pad: 3);
     setState(() => cropInfo = svg == null || box == null
         ? 'crop failed'
         : 'SVG ${svg.length} chars · ${svg.substring(0, svg.indexOf('>') + 1).replaceAll(RegExp(r'\s+'), ' ')}\n'

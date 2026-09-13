@@ -41,8 +41,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     var padTop = 0f; var padBottom = 0f; var padSide = 0f; var lineSpacing = 1f; var lineGap = 0f; var fillHeight = false
     var paperColor: Int = Color.TRANSPARENT           // ARGB
     var selectionBand: Int = QvpDefaults.SELECTION_BAND  // 0xRRGGBBAA
-    var onWordTap: ((QvpWord, QvpHitEx) -> Unit)? = null
-    var onDecoTap: ((QvpDecoration, QvpHitEx) -> Unit)? = null
+    var onWordTap: ((QvpWord, QvpHit) -> Unit)? = null
+    var onDecoTap: ((QvpDecoration, QvpHit) -> Unit)? = null
     var onEmptyTap: (() -> Unit)? = null
     var onSelectionChanged: ((IntArray) -> Unit)? = null
     var zoomEnabled = true
@@ -109,16 +109,16 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         }
     })
 
-    private fun hitAt(x: Float, y: Float): QvpHitEx? {
+    private fun hitAt(x: Float, y: Float): QvpHit? {
         val p = page ?: return null
         val t0 = System.nanoTime()
-        val h = p.hitTestViewEx((x - viewOx) / viewScale, (y - viewOy) / viewScale, hitOptions)
+        val h = p.hitTestView((x - viewOx) / viewScale, (y - viewOy) / viewScale, hitOptions)
         lastHitUs = (System.nanoTime() - t0) / 1000.0
         return h
     }
     private fun extendSelection(x: Float, y: Float) {
         val p = page ?: return
-        val h = p.hitTestViewEx((x - viewOx) / viewScale, (y - viewOy) / viewScale, QvpHitOptions()) ?: return
+        val h = p.hitTestView((x - viewOx) / viewScale, (y - viewOy) / viewScale, QvpHitOptions()) ?: return
         if (h.word < 0) return
         p.select(selAnchor, h.word); paintSelection()
     }
@@ -211,7 +211,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val ink = p.defaultInk
         val key = "$viewScale|$viewOx|$viewOy|$ink|${l.pitch}|${l.lineDy.contentHashCode()}|$styledKey|$width|$height"
         if (paperColor != Color.TRANSPARENT) { paint.color = paperColor; canvas.drawRect(viewOx, viewOy, viewOx + l.contentW * viewScale, viewOy + l.contentH * viewScale, paint) }
-        val bands = p.highlightBoxes()
+        val bands = p.highlightBoxesView()
         drawBoxes(canvas, bands)
         var b = base
         if (b == null || key != baseKey || b.width != width || b.height != height) {
@@ -243,7 +243,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             paint.color = QvpColor.argb(col); canvas.drawPath(paths[pi], paint)
         }
         canvas.restore()
-        drawBoxes(canvas, p.maskBoxes())
+        drawBoxes(canvas, p.maskBoxesView())
         lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = styled.size / 2; lastBands = bands.size
         if (moving) { animating = true; Choreographer.getInstance().postFrameCallback(frameCb) }
     }

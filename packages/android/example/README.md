@@ -13,5 +13,5 @@ The three calls the app is built on, in `src/main/kotlin/ws/quran/qvp/demo/MainA
 ```kotlin
 val page = QvpPage(bytes)                          // load
 view.page = page                                   // render: QvpPageView draws it
-val hit = page.hitTestViewEx(x, y)                 // tap: the word under the finger
+val hit = page.hitTestView(x, y)                 // tap: the word under the finger
 ```

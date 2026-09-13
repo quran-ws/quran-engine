@@ -261,7 +261,7 @@ class MainActivity : AppCompatActivity() {
         val p = page ?: return
         val t = when { p.selection().isNotEmpty() -> Target.words(p.selection()); selAyah != null -> Target.ayah(selAyah!!.first, selAyah!!.second); selWordIdx >= 0 -> Target.word(selWordIdx); else -> return }
         val svg = p.cropSvg(t, 3f, true, QvpColor.rgba(themes[theme]!!.second)) ?: return
-        val cb = p.cropBox(t, 3f, true)
+        val cb = p.cropBounds(t, 3f, true)
         Toast.makeText(this, "SVG ${svg.length / 1024} KB · box ${"%.0f×%.0f".format(cb!!.x1 - cb.x0, cb.y1 - cb.y0)} units · marker ${if (cb.ayahMarkDeco >= 0) "kept" else "no"}", Toast.LENGTH_LONG).show()
     }
     private fun runSearch() {

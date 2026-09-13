@@ -80,7 +80,7 @@ Reconciliation: each `highlights` entry maps to one engine handle. A new id → 
 changes (`null` → `revealStop`). When `pageUri` changes, the old page is freed and every declarative
 prop is re-applied to the new page.
 
-Gestures are the Kotlin view's: tap → gap-aware `hitTestViewEx` → `onWordTap` / `onDecoTap` /
+Gestures are the Kotlin view's: tap → gap-aware `hitTestView` → `onWordTap` / `onDecoTap` /
 `onEmptyTap`; long-press-drag → engine `select` with a band in `LAYER.SELECTION`; pinch / pan;
 double-tap resets. Props `selectionEnabled`, `zoomEnabled`, `hitMaxDistance`, `selectionBand`.
 
@@ -103,12 +103,12 @@ await qvp.attachWords(jsonString);                      // when you do not use t
 await qvp.surahs(); qvp.divisions(); qvp.ayahMarks(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
 await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ai);
 await qvp.citation([12, 13, 14]);
-await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' }); qvp.cropBox(target);
+await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' }); qvp.cropBounds(target);
 await qvp.select(anchor, focus); qvp.clearSelection(); qvp.selection(); qvp.selectionText('rasm_uthmani', true);
 await qvp.revealNext(1); qvp.hideBack(1); qvp.revealWord(i); qvp.hideWord(i); qvp.revealAll(); qvp.hideAll();
 await qvp.maskHidden(); qvp.maskWords(); qvp.revealSteps(); qvp.revealAt(); qvp.revealStepOf(i);
-await qvp.hitTestViewEx(x, y, { maxDistance: 6 }); qvp.hitTestView(x, y); qvp.hitTestEx(px, py); qvp.hitTest(px, py);   // view dp or page units
-await qvp.wordBoxView(i); qvp.currentLayout(); qvp.layoutGapToFill(); qvp.relayout(); qvp.resetView(); qvp.stats();
+await qvp.hitTestView(x, y, { maxDistance: 6 }); qvp.hitTestExactView(x, y); qvp.hitTest(px, py); qvp.hitTestExact(px, py);   // view dp or page units
+await qvp.wordBoundsView(i); qvp.currentLayout(); qvp.layoutGapToFill(); qvp.relayout(); qvp.resetView(); qvp.stats();
 
 // engine-wide (Qvp.*)
 await Qvp.strip(s); Qvp.fold(s); Qvp.normalize(s); Qvp.looseKey(s);       // = Qvp.arabic(kind, s)

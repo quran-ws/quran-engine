@@ -76,7 +76,7 @@ final class QvpKitTests: XCTestCase {
         XCTAssertFalse(page.ayahLabel(page.words[0].ayahIdx).isEmpty)
         XCTAssertFalse(page.ayahMarks().isEmpty)
         XCTAssertEqual(page.lineBands().count, 15)
-        XCTAssertEqual(page.hitBoxes().count, 147)
+        XCTAssertEqual(page.hitAreas().count, 147)
         XCTAssertTrue(page.text("page").contains(w0.text))
     }
 
@@ -111,23 +111,23 @@ final class QvpKitTests: XCTestCase {
     func testHitTestEx() {
         let w = page.words[0]
         let cx = (w.x0 + w.x1) / 2, cy = (w.y0 + w.y1) / 2
-        let h = page.hitTestEx(cx, cy)
+        let h = page.hitTest(cx, cy)
         XCTAssertNotNil(h)
         XCTAssertEqual(h?.word, 0)
         XCTAssertEqual(h?.distance, 0)
         XCTAssertEqual(h?.line, w.lineIdx)
-        XCTAssertEqual(page.hitTest(cx, cy)?.word, 0)
-        var inside: QvpHitEx?
+        XCTAssertEqual(page.hitTestExact(cx, cy)?.word, 0)
+        var inside: QvpHit?
         var y = w.y0
         outer: while y <= w.y1 {
             var x = w.x0
-            while x <= w.x1 { if let e = page.hitTestEx(x, y), e.word == 0, e.exact { inside = e; break outer }; x += 0.5 }
+            while x <= w.x1 { if let e = page.hitTest(x, y), e.word == 0, e.isExact { inside = e; break outer }; x += 0.5 }
             y += 0.5
         }
         XCTAssertNotNil(inside, "no point of word 0 is inside its ink")
         XCTAssertGreaterThanOrEqual(inside!.path, 0)
         XCTAssertEqual(page.pathWord(inside!.path), 0)
-        XCTAssertNil(page.hitTestEx(-500, -500, QvpHitOptions(maxDistance: 6)))
+        XCTAssertNil(page.hitTest(-500, -500, QvpHitOptions(maxDistance: 6)))
     }
 
     func testLayoutFillHeight() {
@@ -139,9 +139,9 @@ final class QvpKitTests: XCTestCase {
         let w = page.words[0]
         let vx = l.ox + (w.x0 + w.x1) / 2 * l.scale
         let vy = l.oy + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIdx]) * l.scale
-        let h = page.hitTestViewEx(vx, vy, QvpHitOptions(maxDistance: 6))
+        let h = page.hitTestView(vx, vy, QvpHitOptions(maxDistance: 6))
         XCTAssertEqual(h?.word, 0)
-        let box = page.wordBoxView(0)
+        let box = page.wordBoundsView(0)
         XCTAssertNotNil(box)
         XCTAssertLessThan(box!.x0, vx)
         XCTAssertGreaterThan(box!.x1, vx)
@@ -188,7 +188,7 @@ final class QvpKitTests: XCTestCase {
         let h = page.highlight("2:255", QvpHighlightStyle(mode: .both, transitionMs: 200))
         XCTAssertGreaterThan(h, 0)
         XCTAssertTrue(page.tick(100))
-        let boxes = page.highlightBoxes()
+        let boxes = page.highlightBoxesView()
         XCTAssertEqual(boxes.count, 6)
         XCTAssertTrue(boxes.allSatisfy { $0.id == h })
         XCTAssertEqual(page.highlightHandles(), [h])
@@ -200,7 +200,7 @@ final class QvpKitTests: XCTestCase {
         _ = page.tick(5000)
         page.clearHighlights()
         XCTAssertTrue(page.highlightHandles().isEmpty)
-        XCTAssertEqual(page.bandBoxes(page.resolve("2:255")).count, 6)
+        XCTAssertEqual(page.wordBands(page.resolve("2:255")).count, 6)
     }
 
     func testMaskReveal() {
@@ -215,7 +215,7 @@ final class QvpKitTests: XCTestCase {
         XCTAssertTrue(page.maskHidden().isEmpty)
         page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100))
         page.mask("2:255", .block)
-        XCTAssertFalse(page.maskBoxes().isEmpty)
+        XCTAssertFalse(page.maskBoxesView().isEmpty)
         page.unmask()
         let steps = page.revealStart(lit: 2)
         XCTAssertGreaterThan(steps, 0)
@@ -240,7 +240,7 @@ final class QvpKitTests: XCTestCase {
         let svg = page.cropSvg("2:255:1", background: 0xfffdf7ff)
         XCTAssertNotNil(svg)
         XCTAssertTrue(svg!.hasPrefix("<svg"))
-        let box = page.cropBox("2:255")
+        let box = page.cropBounds("2:255")
         XCTAssertEqual(box?.nWords, 50)
     }
 

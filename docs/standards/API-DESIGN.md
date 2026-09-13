@@ -21,14 +21,14 @@ The test every public member must pass:
 - **Progressive disclosure.** Styles, transitions, masks, reveal, crop and the atlas are
   reachable but invisible until needed. The first screen of a package README never mentions
   them.
-- **Expressive variants over flags.** `hitTestExact` not `hitTest(exact: true)`.
+- **Expressive variants over flags.** `hitTestExact` not `hitTestExact(exact: true)`.
   `findWord` returns nothing when absent. A variant that throws says so in its name.
 - **Hide the machinery.** Handles, layers, path tables, string lifetimes and scratch buffers
   are marshalling. They never appear on a wrapper's public surface.
 - **Predictable pairs.** `add`/`remove`, `mask`/`unmask`, `load`/`free`,
   `select`/`selection` (the verb writes, the noun reads). Similar concepts take the same
   shape.
-- **Distinguish meaning by name, never by argument.** `hitTest` vs `hitTestExact`, `find`
+- **Distinguish meaning by name, never by argument.** `hitTestExact` vs `hitTestExact`, `find`
   vs `search`, `pageOf` (which page contains this) vs `pageAt` (the page at this index).
 - **No abbreviations, no jargon, no generic names.** `decoration` not `deco`, `lineSpacing`
   not `pitch`. Never `process`, `handle`, `data` or `info` as a whole name.

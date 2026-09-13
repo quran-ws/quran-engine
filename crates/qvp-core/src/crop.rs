@@ -4,7 +4,7 @@ use qvp_format::*;
 use std::fmt::Write;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct CropBox {
+pub struct CropBounds {
     pub x0: f32,
     pub y0: f32,
     pub x1: f32,
@@ -17,7 +17,7 @@ pub struct CropBox {
 impl Page {
     /// Box around a target (page units), `pad` all round. A medallion is kept only when
     /// the whole ayah it closes is inside the target.
-    pub fn crop_box(&self, target: &Target, pad: f32, keep_ayah_marks: bool) -> Option<CropBox> {
+    pub fn crop_bounds(&self, target: &Target, pad: f32, keep_ayah_marks: bool) -> Option<CropBounds> {
         let words = self.resolve(target);
         if words.is_empty() {
             return None;
@@ -43,7 +43,7 @@ impl Page {
                 }
             }
         }
-        Some(CropBox {
+        Some(CropBounds {
             x0: bb.x0 as f32 / q - pad,
             y0: bb.y0 as f32 / q - pad,
             x1: bb.x1 as f32 / q + pad,
@@ -62,7 +62,7 @@ impl Page {
         keep_ayah_marks: bool,
         background: Option<Rgba>,
     ) -> Option<String> {
-        let cb = self.crop_box(target, pad, keep_ayah_marks)?;
+        let cb = self.crop_bounds(target, pad, keep_ayah_marks)?;
         let words = self.resolve(target);
         let colors: Vec<Rgba> = self.paint().to_vec();
         let d = self.data();

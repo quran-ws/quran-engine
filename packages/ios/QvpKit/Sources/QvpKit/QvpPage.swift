@@ -154,21 +154,22 @@ public final class QvpPage {
     public func ayahLabel(_ i: Int) -> String { var s = QvpStr(); qvp_ayah_label(p, UInt32(i), &s); return s.string }
 
     // ── hit testing ──
-    private func hit(_ ok: Int32, _ v: QvpFFI.QvpHit) -> QvpHit? { ok != 0 ? QvpHit(word: idx(v.word), path: idx(v.path), deco: idx(v.deco)) : nil }
-    private func hitEx(_ ok: Int32, _ v: QvpFFI.QvpHitEx) -> QvpHitEx? { ok != 0 ? QvpHitEx(word: idx(v.word), path: idx(v.path), deco: idx(v.deco), line: idx(v.line), distance: v.distance, exact: v.exact != 0) : nil }
-    public func hitTest(_ x: Float, _ y: Float) -> QvpHit? { var v = QvpFFI.QvpHit(); return hit(qvp_hit_test(p, x, y, &v), v) }
-    public func hitTestView(_ vx: Float, _ vy: Float) -> QvpHit? { var v = QvpFFI.QvpHit(); return hit(qvp_hit_test_view(p, vx, vy, &v), v) }
+    private func hit(_ ok: Int32, _ v: QvpFFI.QvpHit) -> QvpHit? { ok != 0 ? QvpHit(word: idx(v.word), path: idx(v.path), deco: idx(v.deco), line: idx(v.line), distance: v.distance, isExact: v.is_exact != 0) : nil }
+    /// Exact outline only, page units.
+    public func hitTestExact(_ x: Float, _ y: Float) -> QvpHit? { var v = QvpFFI.QvpHit(); return hit(qvp_hit_test_exact(p, x, y, &v), v) }
+    /// Exact outline only, viewport px through the current layout.
+    public func hitTestExactView(_ vx: Float, _ vy: Float) -> QvpHit? { var v = QvpFFI.QvpHit(); return hit(qvp_hit_test_exact_view(p, vx, vy, &v), v) }
     /// Gap-aware: every point on a printed line resolves to the word the reader meant.
-    public func hitTestEx(_ x: Float, _ y: Float, _ o: QvpHitOptions = QvpHitOptions()) -> QvpHitEx? {
-        var opt = QvpFFI.QvpHitOptions(max_distance: o.maxDistance, gap_bias: o.gapBias, exact_first: o.exactFirst ? 1 : 0); var v = QvpFFI.QvpHitEx()
-        return hitEx(qvp_hit_test_ex(p, x, y, &opt, &v), v)
+    public func hitTest(_ x: Float, _ y: Float, _ o: QvpHitOptions = QvpHitOptions()) -> QvpHit? {
+        var opt = QvpFFI.QvpHitOptions(max_distance: o.maxDistance, gap_bias: o.gapBias, prefer_exact: o.preferExact ? 1 : 0); var v = QvpFFI.QvpHit()
+        return hit(qvp_hit_test(p, x, y, &opt, &v), v)
     }
-    public func hitTestViewEx(_ vx: Float, _ vy: Float, _ o: QvpHitOptions = QvpHitOptions()) -> QvpHitEx? {
-        var opt = QvpFFI.QvpHitOptions(max_distance: o.maxDistance, gap_bias: o.gapBias, exact_first: o.exactFirst ? 1 : 0); var v = QvpFFI.QvpHitEx()
-        return hitEx(qvp_hit_test_view_ex(p, vx, vy, &opt, &v), v)
+    public func hitTestView(_ vx: Float, _ vy: Float, _ o: QvpHitOptions = QvpHitOptions()) -> QvpHit? {
+        var opt = QvpFFI.QvpHitOptions(max_distance: o.maxDistance, gap_bias: o.gapBias, prefer_exact: o.preferExact ? 1 : 0); var v = QvpFFI.QvpHit()
+        return hit(qvp_hit_test_view(p, vx, vy, &opt, &v), v)
     }
     public func lineBands() -> [QvpLineBand] { collect(64) { o, c in qvp_line_bands(p, o, c) }.map { (b: QvpFFI.QvpLineBand) in QvpLineBand(line: Int(b.line), lineNo: Int(b.line_no), y0: b.y0, y1: b.y1, mid: b.mid, inkY0: b.ink_y0, inkY1: b.ink_y1) } }
-    public func hitBoxes(gapBias: Float = QvpDefaults.GAP_BIAS) -> [QvpHitBox] { collect(512) { o, c in qvp_hit_boxes(p, gapBias, o, c) }.map { (b: QvpFFI.QvpHitBox) in QvpHitBox(word: Int(b.word), line: Int(b.line), x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, inkX0: b.ink_x0, inkY0: b.ink_y0, inkX1: b.ink_x1, inkY1: b.ink_y1) } }
+    public func hitAreas(gapBias: Float = QvpDefaults.GAP_BIAS) -> [QvpHitArea] { collect(512) { o, c in qvp_hit_areas(p, gapBias, o, c) }.map { (b: QvpFFI.QvpHitArea) in QvpHitArea(word: Int(b.word), line: Int(b.line), x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, inkX0: b.ink_x0, inkY0: b.ink_y0, inkX1: b.ink_x1, inkY1: b.ink_y1) } }
 
     // ── layout ──
     @discardableResult
@@ -184,9 +185,9 @@ public final class QvpPage {
     /// Leading (page units) that makes this page fill the padded viewport of `spec`; `max` 0 = unlimited.
     public func layoutGapToFill(_ spec: QvpLayoutSpec, max: Float = 0) -> Float { var s = spec.c; return qvp_layout_gap_to_fill(p, &s, max) }
     /// A word's box in viewport px through the current layout (x0, y0, x1, y1).
-    public func wordBoxView(_ i: Int) -> (x0: Float, y0: Float, x1: Float, y1: Float)? {
+    public func wordBoundsView(_ i: Int) -> (x0: Float, y0: Float, x1: Float, y1: Float)? {
         var b: (Float, Float, Float, Float) = (0, 0, 0, 0)
-        let ok = withUnsafeMutablePointer(to: &b) { $0.withMemoryRebound(to: Float.self, capacity: 4) { qvp_word_box_view(p, UInt32(i), $0) } }
+        let ok = withUnsafeMutablePointer(to: &b) { $0.withMemoryRebound(to: Float.self, capacity: 4) { qvp_word_bounds_view(p, UInt32(i), $0) } }
         return ok != 0 ? (b.0, b.1, b.2, b.3) : nil
     }
 
@@ -233,9 +234,9 @@ public final class QvpPage {
     public func highlightWords(_ handle: Int) -> [Int] { collect(512) { o, c in qvp_highlight_words(p, UInt32(handle), o, c) }.map { (w: UInt32) in Int(w) } }
     private func boxes(_ v: [QvpFFI.QvpBox]) -> [QvpBox] { v.map { QvpBox(id: Int($0.id), line: Int($0.line), x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1, color: $0.color, radius: $0.radius) } }
     /// Animated band boxes in viewport px; draw each id as one nonzero path behind the ink.
-    public func highlightBoxes() -> [QvpBox] { boxes(collect(128) { o, c in qvp_highlight_boxes(p, o, c) }) }
-    public func bandBoxes(_ ws: [Int], height: BandHeight = .pitch, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) -> [QvpBox] {
-        ws.map { UInt32($0) }.withUnsafeBufferPointer { wb in boxes(collect(64) { o, c in qvp_band_boxes(p, wb.baseAddress, UInt32(wb.count), UInt8(height.rawValue), padX, padY, o, c) }) }
+    public func highlightBoxesView() -> [QvpBox] { boxes(collect(128) { o, c in qvp_highlight_boxes_view(p, o, c) }) }
+    public func wordBands(_ ws: [Int], height: BandHeight = .pitch, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) -> [QvpBox] {
+        ws.map { UInt32($0) }.withUnsafeBufferPointer { wb in boxes(collect(64) { o, c in qvp_word_bands(p, wb.baseAddress, UInt32(wb.count), UInt8(height.rawValue), padX, padY, o, c) }) }
     }
 
     // ── selection ──
@@ -259,7 +260,7 @@ public final class QvpPage {
     public func maskHidden() -> [Int] { collect(512) { o, c in qvp_mask_hidden(p, o, c) }.map { (w: UInt32) in Int(w) } }
     public func maskWords() -> [Int] { collect(512) { o, c in qvp_mask_words(p, o, c) }.map { (w: UInt32) in Int(w) } }
     /// Block/blur boxes in viewport px, drawn over the ink.
-    public func maskBoxes() -> [QvpBox] { boxes(collect(128) { o, c in qvp_mask_boxes(p, o, c) }) }
+    public func maskBoxesView() -> [QvpBox] { boxes(collect(128) { o, c in qvp_mask_boxes_view(p, o, c) }) }
     /// Greyed page with a lit window; returns steps.
     @discardableResult public func revealStart(lit: Int = QvpDefaults.REVEAL_LIT, byAyah: Bool = false, grey: UInt32 = QvpDefaults.REVEAL_GREY, ink: UInt32 = QvpDefaults.INK, ayahMarks: Bool = true, transitionMs: Int = 0) -> Int {
         Int(qvp_reveal_start(p, UInt32(lit), byAyah ? 1 : 0, grey, ink, ayahMarks ? 1 : 0, UInt32(transitionMs)))
@@ -272,12 +273,12 @@ public final class QvpPage {
     public func revealStop() { qvp_reveal_stop(p) }
 
     // ── crop ──
-    public func cropBox(_ t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Bool = true) -> QvpCropBox? {
-        var b = QvpFFI.QvpCropBox()
-        guard t.withC({ qvp_crop_box(p, $0, pad, keepAyahMarks ? 1 : 0, &b) }) != 0 else { return nil }
-        return QvpCropBox(x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, nWords: Int(b.n_words), ayahMarkDeco: idx(b.ayah_mark_deco))
+    public func cropBounds(_ t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Bool = true) -> QvpCropBounds? {
+        var b = QvpFFI.QvpCropBounds()
+        guard t.withC({ qvp_crop_bounds(p, $0, pad, keepAyahMarks ? 1 : 0, &b) }) != 0 else { return nil }
+        return QvpCropBounds(x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, nWords: Int(b.n_words), ayahMarkDeco: idx(b.ayah_mark_deco))
     }
-    public func cropBox(_ s: String, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Bool = true) -> QvpCropBox? { cropBox(target(s), pad: pad, keepAyahMarks: keepAyahMarks) }
+    public func cropBounds(_ s: String, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Bool = true) -> QvpCropBounds? { cropBounds(target(s), pad: pad, keepAyahMarks: keepAyahMarks) }
     /// Standalone SVG with the current colours; background alpha 0 = transparent.
     public func cropSvg(_ t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Bool = true, background: UInt32 = 0) -> String? {
         var s = QvpStr()

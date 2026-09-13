@@ -137,7 +137,7 @@ class QvpPageView extends StatefulWidget {
   final QvpViewController? controller;
 
   /// Tap on a word (gap-aware). [hit] carries path / deco / line / distance.
-  final void Function(int word, QvpHitEx hit)? onWordTap;
+  final void Function(int word, QvpHit hit)? onWordTap;
 
   /// Tap on a decoration (ayah mark, surah banner, …) that is not a word.
   final void Function(QvpDecoInfo deco)? onDecoTap;
@@ -277,9 +277,9 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   }
 
   // ── gestures ──
-  QvpHitEx? _hitAt(Offset local, {double? maxDistance}) {
+  QvpHit? _hitAt(Offset local, {double? maxDistance}) {
     final v = _ctl.toView(local);
-    return page.hitTestViewEx(v.dx, v.dy, QvpHitOptions(maxDistance: maxDistance ?? 0));
+    return page.hitTestView(v.dx, v.dy, QvpHitOptions(maxDistance: maxDistance ?? 0));
   }
 
   void _onTapUp(TapUpDetails d) {
@@ -570,7 +570,7 @@ class _QvpPainter extends CustomPainter {
 
     final sw = Stopwatch()..start();
     // 1. highlight bands (behind the ink)
-    final bands = page.highlightBoxes();
+    final bands = page.highlightBoxesView();
     _drawBoxes(canvas, bands);
 
     // 2. base ink
@@ -607,7 +607,7 @@ class _QvpPainter extends CustomPainter {
     }
 
     // 4. mask boxes (block / blur) on top
-    _drawBoxes(canvas, page.maskBoxes());
+    _drawBoxes(canvas, page.maskBoxesView());
     cache.overlayMs = sw.elapsedMicroseconds / 1000;
     cache.overlayPaths = styled.length;
     cache.bands = bands.length;
