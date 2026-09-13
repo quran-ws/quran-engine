@@ -1580,7 +1580,7 @@ class QvpAtlas {
         n: s.n,
         page: s.firstPage,
         ayahCount: s.ayahCount,
-        place: _e.placeName(s.place),
+        place: engine.placeName(s.place),
         arabic: QvpEngine.str(s.arabic),
         latin: QvpEngine.str(s.latin),
         english: QvpEngine.str(s.english),
