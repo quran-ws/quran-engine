@@ -13,8 +13,8 @@ enum class BandHeight(val id: Int) { PITCH(0), INK(1) }
 enum class MaskMode(val id: Int) { HIDE(0), BLOCK(1), BLUR(2) }
 enum class Division(val id: Int) { JUZ(0), HIZB(1), NISF(2), RUBU_AL_HIZB(3) }
 
-val QVP_MARKS = listOf("", "fathah", "kasrah", "dammah", "tanwin_al_fath", "tanwin_al_kasr", "tanwin_al_damm", "shaddah", "sukun", "maddah", "hamzah", "hamzat_al_wasl", "omitted_alif", "small_waw", "small_yaa", "small_noon", "dot", "two_dots", "three_dots", "rounded_zero", "rectangular_zero", "waqf_jaiz_mustawi_al_tarafayn", "waqf_jaiz_waqf_awla", "waqf_jaiz_wasl_awla", "waqf_lazim", "waqf_al_muanaqah", "saktah", "small_meem", "hizb", "sajdah", "sajdah_mark", "sajdah_line", "seen_al_qiraah", "tashil", "ishmam", "imalah")
-fun markId(name: String): Int = QVP_MARKS.indexOf(name).let { if (it < 0) 255 else it }
+/** A mark id by its name, from the engine (255 = unknown). */
+fun markId(name: String): Int = QvpEngine.markFromName(name)
 
 /** 0xRRGGBBAA ↔ Android ARGB. */
 object QvpColor {

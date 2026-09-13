@@ -258,6 +258,20 @@ ink applied). The medallion is kept only when the whole ayah is inside the crop.
 `juz(n)/hizb(n)/rubuAlHizb(n)` → `{surah, ayah, page}`, `juzAt(s,a)`, `divisionAt(kind, s, a)`,
 `pagesOfJuz(n)`, `findSurah('cow' | 'البقرة' | '2')`.
 
+## Names
+
+```js
+engine.names('mark')            // every name of a table, index = id: 'mark' | 'kind' | 'family' |
+                                //   'category' | 'decoration' | 'division' | 'place'
+engine.name('decoration', 0)    // 'ayah-mark'
+engine.nameId('mark', 'shaddah')  // 7; 255 when the table has no such name
+engine.nameCount('mark')        // 36
+```
+
+The engine holds every name table. A wrapper reads them from the engine when it starts
+(`Sel.mark('shaddah')`, `Sel.deco('ayah-mark')` and the rest resolve through them) and
+carries no table of its own; a name the engine does not have resolves to 255, never to 0.
+
 ## C ABI notes
 
 Struct layouts, enums and every function signature are in `qvp.h`. Arrays are

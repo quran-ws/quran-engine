@@ -23,17 +23,6 @@ export const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGR
 export const DECO = { AYAH_MARK: 0, SURAH_NAME: 1, BASMALAH: 2, DIVISION_MARK: 3, SAJDAH_MARK: 4 } as const;
 export const LAYER = { BASE: 0, THEME: 10, HIGHLIGHT: 50, SELECTION: 60, TOP: 100 } as const;
 export const DIVISION = { JUZ: 0, HIZB: 1, NISF: 2, RUBU_AL_HIZB: 3 } as const;
-export const MARKS = ['', 'fathah', 'kasrah', 'dammah', 'tanwin_al_fath', 'tanwin_al_kasr', 'tanwin_al_damm', 'shaddah', 'sukun', 'maddah', 'hamzah', 'hamzat_al_wasl', 'omitted_alif', 'small_waw', 'small_yaa', 'small_noon', 'dot', 'two_dots', 'three_dots', 'rounded_zero', 'rectangular_zero', 'waqf_jaiz_mustawi_al_tarafayn', 'waqf_jaiz_waqf_awla', 'waqf_jaiz_wasl_awla', 'waqf_lazim', 'waqf_al_muanaqah', 'saktah', 'small_meem', 'hizb', 'sajdah', 'sajdah_mark', 'sajdah_line', 'seen_al_qiraah', 'tashil', 'ishmam', 'imalah'];
-const KIND_NAMES = ['body', 'mark', 'ayah-number', 'ayah-ornament', 'header-ink'];
-const FAMILY_NAMES = ['none', 'diacritic', 'tanwin', 'dots', 'waqf', 'sifr', 'sajdah', 'reading_sign'];
-const CATEGORY_NAMES = ['none', 'harakah', 'tanwin', 'letter_dot', 'orthographic', 'dabt', 'waqf', 'reading_sign', 'standalone'];
-const DECO_NAMES = ['ayah-mark', 'surah-name', 'basmalah', 'division-mark', 'sajdah-mark', 'page-number', 'running-head'];
-export function markId(name: string | number): number {
-  if (typeof name === 'number') return name;
-  const i = MARKS.indexOf(name);
-  return i < 0 ? 255 : i;
-}
-const named = (v: string | number, names: string[]) => (typeof v === 'number' ? v : Math.max(0, names.indexOf(v)));
 
 // ── colours ──────────────────────────────────────────────────────────────────────────────────
 export type Color = string | number;
@@ -214,6 +203,17 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
 
 // ── the module ───────────────────────────────────────────────────────────────────────────────
 const M = NativeModules.QvpModule as any;
+
+// The engine's name tables, read through the native module's constants; no table lives here.
+const NAMES = (M.getConstants?.() ?? {}) as { marks?: string[]; kinds?: string[]; families?: string[]; categories?: string[]; decorations?: string[]; divisions?: string[]; places?: string[] };
+const KIND_NAMES: string[] = NAMES.kinds ?? [];
+const FAMILY_NAMES: string[] = NAMES.families ?? [];
+const CATEGORY_NAMES: string[] = NAMES.categories ?? [];
+const DECO_NAMES: string[] = NAMES.decorations ?? [];
+export const MARKS: string[] = NAMES.marks ?? [];
+/** A name's id in a table; 255 when the table has no such name. */
+const named = (v: string | number, names: string[]) => { if (typeof v === 'number') return v; const i = names.indexOf(v); return i < 0 ? 255 : i; };
+export function markId(name: string | number): number { return named(name, MARKS); }
 if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not linked (Android only for now; see README)');
 
 export interface SearchOptions { form?: Form; mode?: 'includes' | 'exact' | 'prefix'; normalize?: boolean; loose?: boolean; limit?: number }

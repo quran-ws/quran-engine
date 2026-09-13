@@ -12,8 +12,11 @@
   const DECO = { AYAH_MARK: 0, SURAH_NAME: 1, BASMALAH: 2, DIVISION_MARK: 3, SAJDAH_MARK: 4, PAGE_NUMBER: 5, RUNNING_HEAD: 6, OTHER: 255 };
   const FORM = { rasm_uthmani: 0, rasm_imlai: 1, qpc: 2, rasm: 3, search: 4 };
   const LAYER = { BASE: 0, THEME: 10, HIGHLIGHT: 50, SELECTION: 60, TOP: 100 };
-  const MARKS = ['', 'fathah', 'kasrah', 'dammah', 'tanwin_al_fath', 'tanwin_al_kasr', 'tanwin_al_damm', 'shaddah', 'sukun', 'maddah', 'hamzah', 'hamzat_al_wasl', 'omitted_alif', 'small_waw', 'small_yaa', 'small_noon', 'dot', 'two_dots', 'three_dots', 'rounded_zero', 'rectangular_zero', 'waqf_jaiz_mustawi_al_tarafayn', 'waqf_jaiz_waqf_awla', 'waqf_jaiz_wasl_awla', 'waqf_lazim', 'waqf_al_muanaqah', 'saktah', 'small_meem', 'hizb', 'sajdah', 'sajdah_mark', 'sajdah_line', 'seen_al_qiraah', 'tashil', 'ishmam', 'imalah'];
-  const MARK = Object.fromEntries(MARKS.map((n, i) => [n, i]).filter(([n]) => n));
+  // The engine's name tables (QVP_NAMES_*), read from the engine when it is initialised.
+  const NAMES_TABLE = { mark: 0, kind: 1, family: 2, category: 3, decoration: 4, division: 5, place: 6 };
+  let NAMES = null;
+  const names = table => { if (!NAMES) throw new Error('QvpEngine.init() first: names come from the engine'); return NAMES[table]; };
+  const idOf = (table, v) => { if (typeof v !== 'string') return v; const i = names(table).indexOf(v); return i < 0 ? 255 : i; };
 
   // colours: numbers are 0xRRGGBBAA; strings '#rgb', '#rrggbb', '#rrggbbaa'
   function rgba(c, alpha) {
@@ -39,13 +42,13 @@
     ayah: (s, a) => ({ kind: 8, a: s, b: a }),
     line: n => ({ kind: 9, a: n }),
     mark: m => ({ kind: 10, a: markId(m) }),
-    category: c => ({ kind: 11, a: typeof c === 'string' ? CATEGORY[c.toUpperCase().replace('-', '_')] : c }),
-    family: f => ({ kind: 12, a: typeof f === 'string' ? FAMILY[f.toUpperCase().replace('-', '_')] : f }),
-    kind: k => ({ kind: 13, a: typeof k === 'string' ? KIND[k.toUpperCase()] : k }),
-    deco: k => ({ kind: 14, a: typeof k === 'string' ? DECO[k.toUpperCase().replace('-', '_')] : k }),
+    category: c => ({ kind: 11, a: idOf('category', c) }),
+    family: f => ({ kind: 12, a: idOf('family', f) }),
+    kind: k => ({ kind: 13, a: idOf('kind', k) }),
+    deco: k => ({ kind: 14, a: idOf('decoration', k) }),
     decoIdx: i => ({ kind: 15, a: i }),
   };
-  const markId = m => (typeof m === 'string' ? (MARK[m] ?? 255) : m);
+  const markId = m => idOf('mark', m);
 
   // Targets (what resolves to a word list). Strings: 'page', '2:255', '2:255:3', '2:255-257', 'line:7', 'surah:2'
   const T = {
@@ -71,7 +74,14 @@
       this.scratch2 = this.ex.qvp_alloc(1 << 16);  // 64 KB for inputs
       this.td = new TextDecoder();
       this.te = new TextEncoder();
+      // Load every name table from the engine once; Sel and markId read them.
+      NAMES = Object.fromEntries(Object.entries(NAMES_TABLE).map(([k, t]) => [k, this.names(t)]));
     }
+    /** All names of a table (QVP_NAMES_* id or key), index = id. */
+    names(table) { const t = typeof table === 'string' ? NAMES_TABLE[table] : table; const n = this.ex.qvp_name_count(t); return Array.from({ length: n }, (_, i) => this.name(t, i)); }
+    nameCount(table) { return this.ex.qvp_name_count(typeof table === 'string' ? NAMES_TABLE[table] : table); }
+    name(table, id) { this.ex.qvp_name(typeof table === 'string' ? NAMES_TABLE[table] : table, id, this.scratch); return this.qstr(this.scratch); }
+    nameId(table, s) { const [p, n] = this.putStr(s); return this.ex.qvp_name_id(typeof table === 'string' ? NAMES_TABLE[table] : table, p, n); }
     dv() { return new DataView(this.mem.buffer); }
     str(ptr, len) { return this.td.decode(new Uint8Array(this.mem.buffer, ptr, len)); }
     qstr(at) { const d = this.dv(); return this.str(d.getUint32(at, true), d.getUint32(at + 4, true)); }
@@ -79,7 +89,7 @@
     putStr(s, off = 0) { const b = this.te.encode(s); new Uint8Array(this.mem.buffer, this.scratch2 + off, b.length).set(b); return [this.scratch2 + off, b.length]; }
     putU32(arr, off = 0) { const p = this.scratch2 + off; new Uint32Array(this.mem.buffer, p, arr.length).set(arr); return p; }
     nameOf(fn, v) { this.ex[fn](v, this.scratch); return this.qstr(this.scratch); }
-    markName(m) { return MARKS[m] || 'unknown'; }
+    markName(m) { return this.nameOf('qvp_mark_name', m); }
     familyName(f) { return this.nameOf('qvp_family_name', f); }
     kindName(k) { return this.nameOf('qvp_kind_name', k); }
     categoryName(c) { return this.nameOf('qvp_category_name', c); }
@@ -246,12 +256,12 @@
     surahs() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surahs_count(this.h), out = [];
       for (let i = 0; i < n; i++) { ex.qvp_surah_at(this.h, i, s); const d = this.e.dv();
-        out.push({ number: d.getUint16(s, true), ayahCount: d.getUint16(s + 2, true), hasBanner: !!d.getUint8(s + 4), hasBasmalah: !!d.getUint8(s + 5), place: ['makkah', 'madinah'][d.getUint8(s + 6)] || '', bannerDeco: d.getUint32(s + 8, true), arabic: this.e.qstr(s + 12), latin: this.e.qstr(s + 20), english: this.e.qstr(s + 28) }); }
+        out.push({ number: d.getUint16(s, true), ayahCount: d.getUint16(s + 2, true), hasBanner: !!d.getUint8(s + 4), hasBasmalah: !!d.getUint8(s + 5), place: names('place')[d.getUint8(s + 6)] || '', bannerDeco: d.getUint32(s + 8, true), arabic: this.e.qstr(s + 12), latin: this.e.qstr(s + 20), english: this.e.qstr(s + 28) }); }
       return out;
     }
     divisions() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_divisions(this.h, s, 64), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 64); i++) { const o = s + i * 12; out.push({ kind: ['juz', 'hizb', 'nisf', 'rubu_al_hizb'][d.getUint8(o)], line: d.getUint8(o + 1), n: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIdx: d.getUint32(o + 8, true) }); }
+      for (let i = 0; i < Math.min(n, 64); i++) { const o = s + i * 12; out.push({ kind: names('division')[d.getUint8(o)], line: d.getUint8(o + 1), n: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIdx: d.getUint32(o + 8, true) }); }
       return out;
     }
     ayahMarks() {
@@ -417,7 +427,7 @@
     free() { this.e.ex.qvp_atlas_free(this.h); this.h = 0; }
     pageOf(surah, ayah) { const p = this.e.ex.qvp_atlas_page_of(this.h, surah, ayah); return p < 0 ? null : p; }
     pageRange(page) { if (!this.e.ex.qvp_atlas_page_range(this.h, page, this.e.scratch)) return null; const v = new Uint16Array(this.e.mem.buffer, this.e.scratch, 4); return { first: [v[0], v[1]], last: [v[2], v[3]] }; }
-    _surah(s) { const d = this.e.dv(); return { n: d.getUint16(s, true), page: d.getUint16(s + 2, true), ayahCount: d.getUint16(s + 4, true), place: ['makkah', 'madinah'][d.getUint8(s + 6)] || '', arabic: this.e.qstr(s + 8), latin: this.e.qstr(s + 16), english: this.e.qstr(s + 24) }; }
+    _surah(s) { const d = this.e.dv(); return { n: d.getUint16(s, true), page: d.getUint16(s + 2, true), ayahCount: d.getUint16(s + 4, true), place: names('place')[d.getUint8(s + 6)] || '', arabic: this.e.qstr(s + 8), latin: this.e.qstr(s + 16), english: this.e.qstr(s + 24) }; }
     surah(n) { return this.e.ex.qvp_atlas_surah(this.h, n, this.e.scratch) ? this._surah(this.e.scratch) : null; }
     surahs() { const n = this.e.ex.qvp_atlas_surahs(this.h), out = []; for (let i = 0; i < n; i++) { this.e.ex.qvp_atlas_surah_at(this.h, i, this.e.scratch); out.push(this._surah(this.e.scratch)); } return out; }
     pageOfSurah(n) { const s = this.surah(n); return s ? s.page : null; }
@@ -497,5 +507,5 @@
     }
   }
 
-  global.QVP = { QvpEngine, QvpPage, QvpAtlas, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECO, FORM, LAYER, MARK, MARKS, NONE, css, rgba, parseTarget };
+  global.QVP = { QvpEngine, QvpPage, QvpAtlas, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECO, FORM, LAYER, NAMES_TABLE, NONE, css, rgba, parseTarget };
 })(typeof window !== 'undefined' ? window : globalThis);

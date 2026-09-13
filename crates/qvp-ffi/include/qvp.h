@@ -216,6 +216,12 @@ uint32_t  qvp_atlas_find_surah(const QvpAtlas*, const uint8_t* text, uint32_t le
 void      qvp_atlas_json(const QvpAtlas*, QvpStr* out);
 
 /* names --------------------------------------------------------------------------------- */
+/* The name tables the engine owns; ids run from 0, 255 is "unknown". A wrapper reads names from
+   here and never carries a table of its own. */
+enum { QVP_NAMES_MARK = 0, QVP_NAMES_KIND, QVP_NAMES_FAMILY, QVP_NAMES_CATEGORY, QVP_NAMES_DECORATION, QVP_NAMES_DIVISION, QVP_NAMES_PLACE };
+uint32_t qvp_name_count(uint8_t table);
+void     qvp_name(uint8_t table, uint8_t id, QvpStr* out);                 /* empty outside the table */
+uint8_t  qvp_name_id(uint8_t table, const uint8_t* s, uint32_t len);       /* 255 = not in the table */
 void     qvp_mark_name(uint8_t mark, QvpStr* out);
 void     qvp_family_name(uint8_t f, QvpStr* out);
 void     qvp_kind_name(uint8_t k, QvpStr* out);

@@ -59,24 +59,39 @@ abstract final class QvpLayer {
   static const int base = 0, theme = 10, highlight = 50, selection = 60, top = 100;
 }
 
+/// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
+/// No table lives in this package.
+abstract final class QvpNames {
+  static const int mark = 0, kind = 1, family = 2, category = 3, decoration = 4, division = 5, place = 6;
+  static final Map<int, List<String>> _tables = {};
+
+  /// Every name of a table, index = id. Empty until a [QvpEngine] has opened.
+  static List<String> of(int table) => _tables[table] ?? const [];
+
+  /// A name's id in a table; 255 when the table has no such name.
+  static int idOf(int table, Object v) {
+    if (v is int) return v;
+    final i = of(table).indexOf(v as String);
+    return i < 0 ? 255 : i;
+  }
+}
+
 /// `QVP_DIV_*`
 abstract final class QvpDiv {
   static const int juz = 0, hizb = 1, nisf = 2, rubuAlHizb = 3;
-  static const List<String> names = ['juz', 'hizb', 'nisf', 'rubuAlHizb'];
-  static int of(Object k) => k is int ? k : names.indexOf(k as String);
+  static List<String> get names => QvpNames.of(QvpNames.division);
+  static int of(Object k) => k is int ? k : QvpNames.idOf(QvpNames.division, k == 'rubuAlHizb' ? 'rubu_al_hizb' : k);
 }
 
-/// Mark ids ↔ names (`qvp_mark_name`). Index = id; 255 = unknown.
+/// Mark ids ↔ names, from the engine. Index = id; 255 = unknown.
 abstract final class QvpMark {
-  static const List<String> names = [
-    '', 'fathah', 'kasrah', 'dammah', 'tanwin_al_fath', 'tanwin_al_kasr', 'tanwin_al_damm', 'shaddah', 'sukun', 'maddah', 'hamzah', 'hamzat_al_wasl', 'omitted_alif', 'small_waw', 'small_yaa', 'small_noon', 'dot', 'two_dots', 'three_dots', 'rounded_zero', 'rectangular_zero', 'waqf_jaiz_mustawi_al_tarafayn', 'waqf_jaiz_waqf_awla', 'waqf_jaiz_wasl_awla', 'waqf_lazim', 'waqf_al_muanaqah', 'saktah', 'small_meem', 'hizb', 'sajdah', 'sajdah_mark', 'sajdah_line', 'seen_al_qiraah', 'tashil', 'ishmam', 'imalah',
-  ];
+  static List<String> get names => QvpNames.of(QvpNames.mark);
 
   /// Mark id from a name or an id; unknown names → 255.
   static int id(Object m) {
     if (m is int) return m;
-    final i = names.indexOf(m as String);
-    return i <= 0 ? 255 : i;
+    final i = QvpNames.idOf(QvpNames.mark, m);
+    return i == 0 ? 255 : i;
   }
 }
 
@@ -561,6 +576,9 @@ class QvpEngine {
     _sel = pffi.calloc<QvpSelectorC>();
     _hl = pffi.calloc<QvpHighlightStyleC>();
     _theme = pffi.calloc<QvpThemeC>();
+    for (final t in [QvpNames.mark, QvpNames.kind, QvpNames.family, QvpNames.category, QvpNames.decoration, QvpNames.division, QvpNames.place]) {
+      QvpNames._tables[t] = names(t);
+    }
     _spec = pffi.calloc<QvpLayoutSpecC>();
     _layout = pffi.calloc<QvpLayoutC>();
     _hitOpt = pffi.calloc<QvpHitOptionsC>();
@@ -647,12 +665,21 @@ class QvpEngine {
     return _s();
   }
 
-  String markName(int m) => m > 0 && m < QvpMark.names.length ? QvpMark.names[m] : _name(b.markName, m);
+  String markName(int m) => _name(b.markName, m);
   String familyName(int f) => _name(b.familyName, f);
   String kindName(int k) => _name(b.kindName, k);
   String categoryName(int c) => _name(b.categoryName, c);
   int markCategory(Object m) => b.markCategory(QvpMark.id(m));
   int markFromName(String s) => withString(s, (p, n) => b.markFromName(p, n));
+  int nameCount(int table) => b.nameCount(table);
+  String name(int table, int id) => _name((v, out) => b.name(table, v, out), id);
+  /// 255 when the table has no such name.
+  int nameId(int table, String s) => withString(s, (p, n) => b.nameId(table, p, n));
+  /// Every name of a table, index = id.
+  List<String> names(int table) => List.generate(nameCount(table), (i) => name(table, i), growable: false);
+  String decorationName(int k) => name(QvpNames.decoration, k);
+  String divisionName(int d) => name(QvpNames.division, d);
+  String placeName(int p) => name(QvpNames.place, p);
 
   // Arabic text tools
   String _arabic(int kind, String s) => withString(s, (p, n) {
@@ -996,7 +1023,7 @@ class QvpPage extends ChangeNotifier {
           ayahCount: s.ayahCount,
           hasBanner: s.hasBanner != 0,
           hasBasmalah: s.hasBasmalah != 0,
-          place: const ['makkah', 'madinah'].elementAtOrNull(s.place) ?? '',
+          place: _e.placeName(s.place),
           bannerDeco: s.bannerDeco,
           arabic: QvpEngine.str(s.arabic),
           latin: QvpEngine.str(s.latin),
@@ -1014,7 +1041,7 @@ class QvpPage extends ChangeNotifier {
     final n = _b.divisions(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final d = (o + i).ref;
-      return QvpDivision(kind: QvpDiv.names[d.kind.clamp(0, 3)], line: d.line, n: d.n, surah: d.surah, ayah: d.ayah, ayahIdx: d.ayahIdx);
+      return QvpDivision(kind: _e.divisionName(d.kind), line: d.line, n: d.n, surah: d.surah, ayah: d.ayah, ayahIdx: d.ayahIdx);
     }, growable: false);
   }
 
@@ -1553,7 +1580,7 @@ class QvpAtlas {
         n: s.n,
         page: s.firstPage,
         ayahCount: s.ayahCount,
-        place: const ['makkah', 'madinah'].elementAtOrNull(s.place) ?? '',
+        place: _e.placeName(s.place),
         arabic: QvpEngine.str(s.arabic),
         latin: QvpEngine.str(s.latin),
         english: QvpEngine.str(s.english),

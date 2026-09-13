@@ -11,6 +11,17 @@ object QvpEngine {
     fun categoryName(c: Int) = QvpNative.categoryName(c)
     fun markFromName(name: String) = QvpNative.markFromName(name)
     fun markCategory(m: Int) = QvpNative.markCategory(m)
+    /** The engine's name tables (QVP_NAMES_*): no wrapper carries a table of its own. */
+    object Names { const val MARK = 0; const val KIND = 1; const val FAMILY = 2; const val CATEGORY = 3; const val DECORATION = 4; const val DIVISION = 5; const val PLACE = 6 }
+    fun nameCount(table: Int) = QvpNative.nameCount(table)
+    fun name(table: Int, id: Int) = QvpNative.name(table, id)
+    /** 255 when the table has no such name. */
+    fun nameId(table: Int, name: String) = QvpNative.nameId(table, name)
+    /** Every name of a table, index = id. */
+    fun names(table: Int): List<String> = (0 until nameCount(table)).map { name(table, it) }
+    fun decorationName(k: Int) = name(Names.DECORATION, k)
+    fun divisionName(d: Int) = name(Names.DIVISION, d)
+    fun placeName(p: Int) = name(Names.PLACE, p)
     fun strip(s: String) = QvpNative.arabic(0, s)
     fun fold(s: String) = QvpNative.arabic(1, s)
     fun normalize(s: String) = QvpNative.arabic(2, s)
@@ -106,7 +117,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
 
     // ── metadata ──
     fun surahs(): List<QvpSurah> = List(QvpNative.surahsCount(h)) { i -> val n = QvpNative.surahNums(h, i)!!; val s = QvpNative.surahNames(h, i)!!
-        QvpSurah(n[0].toInt(), n[1].toInt(), n[2] > 0.5f, n[3] > 0.5f, when (n[4].toInt()) { 0 -> "makkah"; 1 -> "madinah"; else -> "" }, n[5].toInt(), s[0], s[1], s[2]) }
+        QvpSurah(n[0].toInt(), n[1].toInt(), n[2] > 0.5f, n[3] > 0.5f, QvpEngine.placeName(n[4].toInt()), n[5].toInt(), s[0], s[1], s[2]) }
     fun divisions(): List<QvpDivision> { val v = QvpNative.divisions(h); return List(v.size / 6) { k -> QvpDivision(Division.entries[v[k * 6]], v[k * 6 + 2], v[k * 6 + 3], v[k * 6 + 4], v[k * 6 + 1], v[k * 6 + 5]) } }
     fun ayahMarks(): List<QvpAyahMark> { val v = QvpNative.ayahMarks(h); return List(v.size / 9) { k -> val o = k * 9; QvpAyahMark(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3].toInt(), v[o + 4], v[o + 5], v[o + 6], v[o + 7].toInt(), v[o + 8].toInt()) } }
     fun ayahMarkOf(surah: Int, ayah: Int) = ayahMarks().firstOrNull { it.surah == surah && it.ayah == ayah }
@@ -229,7 +240,7 @@ class QvpAtlas(bytes: ByteArray) : AutoCloseable {
     private val h: Long get() = nativeHandle.takeIf { it != 0L } ?: error("QvpAtlas is closed")
     init { require(nativeHandle != 0L) { "qvp_atlas_load failed" } }
     val isClosed: Boolean get() = nativeHandle == 0L
-    private fun surah(v: Array<String>?) = v?.let { QvpAtlasSurah(it[0].toInt(), it[1].toInt(), it[2].toInt(), when (it[3]) { "0" -> "makkah"; "1" -> "madinah"; else -> "" }, it[4], it[5], it[6]) }
+    private fun surah(v: Array<String>?) = v?.let { QvpAtlasSurah(it[0].toInt(), it[1].toInt(), it[2].toInt(), QvpEngine.placeName(it[3].toIntOrNull() ?: 255), it[4], it[5], it[6]) }
     fun pageOf(surah: Int, ayah: Int): Int? = QvpNative.atlasPageOf(h, surah, ayah).let { if (it < 0) null else it }
     fun pageRange(page: Int): Pair<Pair<Int, Int>, Pair<Int, Int>>? = QvpNative.atlasPageRange(h, page)?.let { (it[0] to it[1]) to (it[2] to it[3]) }
     fun pages() = QvpNative.atlasPages(h)
