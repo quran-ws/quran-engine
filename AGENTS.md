@@ -9,7 +9,7 @@ beyond them: exact commands, invariants that are easy to break, and where to loo
 scripts/check.sh                      # everything CI runs
 scripts/check.sh test                 # unit tests, no data
 scripts/sync-test-data.sh             # pages/, index/ (quran-svg-elements) and dist/pages/ (data release)
-scripts/check.sh gates                # identity gate (8 pages), ABI test, conformance
+scripts/check.sh gates                # identity gate (8 pages), line-shift gate, ABI test, conformance
 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity   # all 604 pages
 cargo run -p qvp-convert --release -- batch pages dist/pages          # rebuild page data
 cargo build -p qvp-ffi --release --target wasm32-unknown-unknown      # the wasm engine
