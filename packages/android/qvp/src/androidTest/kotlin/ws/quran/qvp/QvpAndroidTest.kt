@@ -17,7 +17,7 @@ class QvpAndroidTest {
 
     @Test
     fun pageGeometryAndEngineOperationsConform() {
-        assertTrue(QvpEngine.version() > 0)
+        assertTrue(QvpEngine.formatVersion() > 0); assertTrue(QvpEngine.version().isNotBlank())
         assertEquals("mark", QvpEngine.kindName(QvpKind.MARK))
 
         val page = QvpPage(pageBytes())
