@@ -100,7 +100,7 @@ await qvp.search('الرحمان', { mode: 'includes' });     // [{word, wordKey
 await qvp.text('2:255', { form: 'search', wordSep: ' ' });
 await qvp.resolve('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
 await qvp.attachWords(jsonString);                      // when you do not use the wordsUri prop
-await qvp.surahs(); qvp.divisions(); qvp.markers(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
+await qvp.surahs(); qvp.divisions(); qvp.ayahMarks(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
 await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ai);
 await qvp.citation([12, 13, 14]);
 await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' }); qvp.cropBox(target);

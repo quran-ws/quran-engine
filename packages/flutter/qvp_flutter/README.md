@@ -41,7 +41,7 @@ engine.gapToFill(pw, ph, lines, vw, vh); engine.wastedFraction(pw, ph, vw, vh);
 final page = engine.loadPage(bytes);                    // geometry copied once: page.ops / page.pts / page.table (stride 8)
 page.words / ayahs / lines / decos;  page.wordForm(i, 'rasm_imlai');  page.findWord(2, 255, 3);
 page.resolve('2:255');                                  // targets: 'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | T.word(i) | [w0, w1]
-page.surahs(); page.divisions(); page.markers(); page.rosettes(); page.sajdahs(); page.ayahKeys();
+page.surahs(); page.divisions(); page.ayahMarks(); page.rosettes(); page.sajdahs(); page.ayahKeys();
 page.ayahWordCount(2, 255); page.reciteMap(2, 255, 4); page.wordLabel(i); page.ayahLabel(ai);
 page.text('2:255'); page.search('الله', mode: 'includes'); page.citation(words); page.attachWords(json); page.hasForm('qpc');
 page.hitTest(x, y); page.hitTestEx(x, y, QvpHitOptions(maxDistance: 6));         // page units, exact / gap-aware

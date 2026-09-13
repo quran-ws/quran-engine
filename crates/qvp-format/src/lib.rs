@@ -2,13 +2,10 @@
 //!
 //! One file = one mushaf page. Coordinates are in *page units* (the SVG
 //! viewBox space, origin top-left, y down), quantised by `Header::quant`
-//! (default 100 → 0.01 unit). Tables are fixed-width little-endian records;
-//! path outlines are an opcode stream with zigzag-LEB128 point deltas.
-//!
-//! Layout:
-//! ```text
-//! Header (72 B) | lines[] | ayahs[] | words[] | paths[] | decos[] | ops | strings
-//! ```
+//! (default 100 → 0.01 unit). The records in this module are the decoded,
+//! in-memory form; the bytes on disk are a 64-byte header and six sections
+//! (delta-coded tables, packed opcodes, close indices, x deltas, y deltas,
+//! strings). `codec.rs` implements it and `docs/FORMAT.md` specifies it.
 #![forbid(unsafe_code)]
 
 pub mod atlas;
