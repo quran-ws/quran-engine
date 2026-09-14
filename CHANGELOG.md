@@ -6,7 +6,9 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+- Android release AARs use 16 KiB-aligned 64-bit native libraries and are attached to each
+  GitHub release with a SHA-256 checksum.
 
 ## [0.2.0] - 2026-09-13
 ### Changed

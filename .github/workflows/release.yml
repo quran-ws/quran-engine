@@ -1,5 +1,5 @@
 # A code release: tag vX.Y.Z. Runs the full check, builds every artifact, attaches the
-# XCFramework and the wasm engine to the GitHub release, and publishes to each registry
+# XCFramework, Android AAR and wasm engine to the GitHub release, and publishes to each registry
 # whose token is configured. A registry without a token is reported and skipped.
 name: Release
 
@@ -71,9 +71,41 @@ jobs:
             QvpEngine.xcframework.zip
             QvpEngine.xcframework.zip.checksum
 
+  android:
+    name: qvp-android AAR
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: android-actions/setup-android@v4
+      - name: Install Android build tools
+        run: sdkmanager "platforms;android-35" "ndk;$NDK_VERSION" "cmake;3.22.1"
+      - name: Select NDK
+        run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Package and verify AAR
+        run: scripts/package-android.sh "${{ needs.verify.outputs.version }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android
+          path: |
+            dist/android/*.aar
+            dist/android/*.sha256
+
   publish:
     name: GitHub release and registries
-    needs: [verify, xcframework]
+    needs: [verify, xcframework, android]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -92,7 +124,9 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md \
             artifacts/qvp_ffi.wasm/qvp_ffi.wasm artifacts/xcframework/QvpEngine.xcframework.zip \
-            artifacts/xcframework/QvpEngine.xcframework.zip.checksum
+            artifacts/xcframework/QvpEngine.xcframework.zip.checksum \
+            artifacts/android/qvp-android-${{ needs.verify.outputs.version }}.aar \
+            artifacts/android/qvp-android-${{ needs.verify.outputs.version }}.aar.sha256
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
