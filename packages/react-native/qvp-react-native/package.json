@@ -1,6 +1,6 @@
 {
   "name": "@quran.ws/qvp-react-native",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "React Native wrapper for the QVP vector mushaf engine (Android; iOS TODO). Thin marshalling over the Kotlin library, which is JNI over qvp.h.",
   "main": "src/index.tsx",
   "types": "src/index.tsx",

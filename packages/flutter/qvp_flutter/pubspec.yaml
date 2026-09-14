@@ -1,6 +1,6 @@
 name: qvp_flutter
 description: "Flutter wrapper for the QVP vector mushaf engine (dart:ffi over libqvp_ffi)."
-version: 0.2.0
+version: 0.2.1
 publish_to: none
 
 environment:
