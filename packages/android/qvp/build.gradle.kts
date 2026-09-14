@@ -1,11 +1,12 @@
+import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("maven-publish")
+    id("com.vanniktech.maven.publish")
 }
 
-group = "ws.quran"
-version = providers.gradleProperty("qvpVersion").getOrElse("0.1.0-SNAPSHOT")
+val qvpVersion = providers.gradleProperty("qvpVersion").getOrElse("0.1.0-SNAPSHOT")
 
 android {
     namespace = "ws.quran.qvp"
@@ -25,7 +26,6 @@ android {
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
-    publishing { singleVariant("release") { withSourcesJar() } }
 }
 
 dependencies {
@@ -34,25 +34,34 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
 }
 
-afterEvaluate {
-    publishing {
-        publications {
-            create<MavenPublication>("release") {
-                from(components["release"])
-                artifactId = "qvp-android"
-                pom {
-                    name.set("QVP Android")
-                    description.set("Android wrapper and Canvas renderer for the QVP vector Mushaf engine")
-                    url.set("https://github.com/quran-ws/quran-engine")
-                    licenses {
-                        license {
-                            name.set("MIT")
-                            url.set("https://opensource.org/licenses/MIT")
-                        }
-                    }
-                    scm { url.set("https://github.com/quran-ws/quran-engine") }
-                }
+mavenPublishing {
+    configure(AndroidSingleVariantLibrary(variant = "release", sourcesJar = true, publishJavadocJar = true))
+    coordinates("ws.quran", "qvp-android", qvpVersion)
+    publishToMavenCentral()
+
+    pom {
+        name.set("QVP Android")
+        description.set("Android wrapper and Canvas renderer for the QVP vector Mushaf engine")
+        inceptionYear.set("2026")
+        url.set("https://github.com/quran-ws/quran-engine")
+        licenses {
+            license {
+                name.set("MIT")
+                url.set("https://opensource.org/license/mit/")
+                distribution.set("repo")
             }
+        }
+        developers {
+            developer {
+                id.set("quran-ws")
+                name.set("Quran.ws")
+                url.set("https://quran.ws")
+            }
+        }
+        scm {
+            url.set("https://github.com/quran-ws/quran-engine")
+            connection.set("scm:git:https://github.com/quran-ws/quran-engine.git")
+            developerConnection.set("scm:git:ssh://git@github.com/quran-ws/quran-engine.git")
         }
     }
 }

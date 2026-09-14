@@ -9,14 +9,21 @@
    target, and publishes:
    - npm: `@quran.ws/engine`, `@quran.ws/qvp-react-native`
    - crates.io: `qvp-format`, `qvp-core`, `qvp-convert`, `qvp-ffi`
+   - Maven Central: `ws.quran:qvp-android`
    - the Android AAR, XCFramework zip, and their checksums as release assets. `Package.swift`
      points at the XCFramework URL and checksum
    The release notes are the changelog section.
 4. Nobody publishes by hand. If a step fails, fix and re-run the workflow for the same
    tag. The workflow skips and reports any registry that refuses the same version twice.
 
-Maven Central and pub.dev are not wired yet. Until a registry is live, its release step is
-a no-op that says so.
+pub.dev is not wired yet. Until a registry is live, its release step is a no-op that says so.
+
+Maven Central requires the `ws.quran` namespace to be verified in the Central Portal and four
+repository secrets: `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `MAVEN_SIGNING_KEY`, and
+`MAVEN_SIGNING_PASSWORD`. The username and password are a Central Portal user token, and the
+signing key is an ASCII-armored private PGP key whose public key is available from a key server.
+The release key fingerprint is `5215 4C15 0932 3295 218D C5A3 C51E AFC2 1281 52F4`; it expires
+on 2029-09-13 and must be replaced in GitHub before then.
 
 ## A data release (`data-vX.Y.Z`)
 

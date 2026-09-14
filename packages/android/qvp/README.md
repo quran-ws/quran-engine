@@ -5,11 +5,19 @@ Canvas. The AAR contains the Rust engine for `arm64-v8a`, `armeabi-v7a`, and `x8
 supply their own page data. Its 64-bit libraries support 16 KiB memory-page devices. The minimum
 Android API is 24.
 
-## Use a release AAR
+## Install
 
-Starting with v0.2.1, each code release includes `qvp-android-X.Y.Z.aar` and its SHA-256
-checksum. Verify the download, copy the AAR into the application's `libs/` directory, and add it
-as a file dependency:
+Releases are available from Maven Central:
+
+```kotlin
+dependencies {
+    implementation("ws.quran:qvp-android:0.2.1")
+}
+```
+
+Each code release also includes `qvp-android-X.Y.Z.aar` and its SHA-256 checksum. To use the
+release artifact directly, verify the download, copy the AAR into the application's `libs/`
+directory, and add it as a file dependency:
 
 ```kotlin
 dependencies {
@@ -31,7 +39,7 @@ to Maven Local for development:
 ```sh
 scripts/build-engine-android.sh
 cd packages/android
-./gradlew :qvp:publishReleasePublicationToMavenLocal -PqvpVersion=0.2.1
+./gradlew :qvp:publishToMavenLocal -PqvpVersion=0.2.1
 ```
 
 Or consume a Maven-local build:

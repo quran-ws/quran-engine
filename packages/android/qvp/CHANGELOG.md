@@ -4,6 +4,7 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+- Releases publish `ws.quran:qvp-android` to Maven Central when its credentials are configured.
 - Release AARs use 16 KiB-aligned 64-bit native libraries and are attached to each GitHub
   release with a SHA-256 checksum.
 
