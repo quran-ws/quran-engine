@@ -4,6 +4,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.2] - 2026-09-14
+
 - QvpKit can be installed from the repository as a remote Swift package. SwiftPM downloads
   the release XCFramework and verifies its checksum.
 

@@ -1,6 +1,6 @@
 {
   "name": "@quran.ws/engine",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Rendering engine for interactive muṣḥaf pages: layout, hit-testing, styling and search over the QVP page format, as wasm with a Canvas2D wrapper.",
   "license": "MIT",
   "homepage": "https://quran.ws/blocks/quran-engine",

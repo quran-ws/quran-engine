@@ -6,6 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.2] - 2026-09-14
+
 ### Added
 - QvpKit can be installed from the repository as a remote Swift package. SwiftPM downloads
   the release XCFramework and verifies its checksum.
@@ -286,7 +290,8 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/quran-ws/quran-engine/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/quran-ws/quran-engine/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/quran-ws/quran-engine/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/quran-ws/quran-engine/compare/v0.1.0...v0.1.1
