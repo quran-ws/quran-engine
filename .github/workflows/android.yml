@@ -9,6 +9,7 @@ on:
       - "crates/**"
       - "packages/android/**"
       - "scripts/build-engine-android.sh"
+      - "scripts/check-android-page-size.sh"
       - "scripts/package-android.sh"
       - "scripts/sync-android-test-data.sh"
   push:
@@ -46,7 +47,9 @@ jobs:
         working-directory: packages/android
         run: ./gradlew --no-daemon :qvp:testDebugUnitTest
       - name: Package AAR
-        run: scripts/package-android.sh 0.1.0-${GITHUB_SHA::12}
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
+          scripts/package-android.sh "$version-${GITHUB_SHA::12}"
       - name: Inspect native payload
         run: unzip -l dist/android/*.aar | grep 'jni/.*/libqvp_jni.so'
       - uses: actions/upload-artifact@v7

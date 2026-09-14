@@ -2,14 +2,27 @@
 
 `qvp` is the Kotlin/JNI SDK for loading original `.qvp` pages and drawing them with Android
 Canvas. The AAR contains the Rust engine for `arm64-v8a`, `armeabi-v7a`, and `x86_64`; applications
-supply their own page data. The minimum Android API is 24.
+supply their own page data. Its 64-bit libraries support 16 KiB memory-page devices. The minimum
+Android API is 24.
+
+## Use a release AAR
+
+Starting with v0.2.1, each code release includes `qvp-android-X.Y.Z.aar` and its SHA-256
+checksum. Verify the download, copy the AAR into the application's `libs/` directory, and add it
+as a file dependency:
+
+```kotlin
+dependencies {
+    implementation(files("libs/qvp-android-0.2.1.aar"))
+}
+```
 
 ## Build an AAR
 
 Install JDK 17, Android SDK 35, NDK 27.2.12479018, Rust, and `cargo-ndk`, then run:
 
 ```sh
-scripts/package-android.sh 0.1.0
+scripts/package-android.sh 0.2.1
 ```
 
 The versioned AAR and its checksum are written to `dist/android/`. To publish the same component
@@ -18,22 +31,14 @@ to Maven Local for development:
 ```sh
 scripts/build-engine-android.sh
 cd packages/android
-./gradlew :qvp:publishReleasePublicationToMavenLocal -PqvpVersion=0.1.0
-```
-
-Consume the AAR directly:
-
-```kotlin
-dependencies {
-    implementation(files("libs/qvp-android-0.1.0.aar"))
-}
+./gradlew :qvp:publishReleasePublicationToMavenLocal -PqvpVersion=0.2.1
 ```
 
 Or consume a Maven-local build:
 
 ```kotlin
 repositories { mavenLocal(); google(); mavenCentral() }
-dependencies { implementation("ws.quran:qvp-android:0.1.0") }
+dependencies { implementation("ws.quran:qvp-android:0.2.1") }
 ```
 
 The AAR's consumer rules preserve the name-based JNI bridge when the application enables R8.

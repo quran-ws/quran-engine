@@ -2,6 +2,11 @@
 
 This package shares the engine version. Entries are copied from the root `CHANGELOG.md`.
 
+## [Unreleased]
+
+- Release AARs use 16 KiB-aligned 64-bit native libraries and are attached to each GitHub
+  release with a SHA-256 checksum.
+
 ## [0.2.0] - 2026-09-13
 
 - ABI 0.2: the header and every wrapper follow the naming standard (hit tests, rectangles,

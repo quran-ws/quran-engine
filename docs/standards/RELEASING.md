@@ -9,16 +9,14 @@
    target, and publishes:
    - npm: `@quran.ws/engine`, `@quran.ws/qvp-react-native`
    - crates.io: `qvp-format`, `qvp-core`, `qvp-convert`, `qvp-ffi`
-   - pub.dev: `qvp_flutter`
-   - Maven Central: `ws.quran:qvp`
-   - the XCFramework zip and its checksum as release assets. `Package.swift` points at that
-     URL and checksum
+   - the Android AAR, XCFramework zip, and their checksums as release assets. `Package.swift`
+     points at the XCFramework URL and checksum
    The release notes are the changelog section.
 4. Nobody publishes by hand. If a step fails, fix and re-run the workflow for the same
    tag. The workflow skips and reports any registry that refuses the same version twice.
 
-Publishing targets come online in this order: npm and crates.io, then Maven and pub.dev,
-then the SwiftPM binary target. Until a target is live, its step is a no-op that says so.
+Maven Central and pub.dev are not wired yet. Until a registry is live, its release step is
+a no-op that says so.
 
 ## A data release (`data-vX.Y.Z`)
 

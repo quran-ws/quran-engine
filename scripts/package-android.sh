@@ -11,6 +11,7 @@ out="dist/android"
 mkdir -p "$out"
 aar="$out/qvp-android-$version.aar"
 cp packages/android/qvp/build/outputs/aar/qvp-release.aar "$aar"
+scripts/check-android-page-size.sh "$aar"
 python3 - "$aar" > "$aar.sha256" <<'PY'
 import hashlib
 import pathlib
