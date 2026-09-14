@@ -37,6 +37,8 @@ packages/react-native/example/ios/Pods/
 packages/react-native/example/ios/build/
 packages/react-native/*.log
 # iOS
+.build/
+.swiftpm/
 packages/ios/QvpKit/QvpEngine.xcframework/
 packages/ios/QvpKit/.build/
 packages/ios/QvpKit/.swiftpm/

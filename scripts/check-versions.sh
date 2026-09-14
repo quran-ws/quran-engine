@@ -17,6 +17,7 @@ check package.json "$(python3 -c 'import json;print(json.load(open("package.json
 check packages/react-native/qvp-react-native/package.json "$(python3 -c 'import json;print(json.load(open("packages/react-native/qvp-react-native/package.json"))["version"])')"
 check packages/flutter/qvp_flutter/pubspec.yaml "$(sed -n 's/^version: //p' packages/flutter/qvp_flutter/pubspec.yaml)"
 check packages/flutter/qvp_flutter/android/build.gradle "$(sed -n 's/^version = "\(.*\)"$/\1/p' packages/flutter/qvp_flutter/android/build.gradle)"
+check Package.swift/XCFramework "$(sed -n 's|.*releases/download/v\([^/]*\)/QvpEngine\.xcframework\.zip.*|\1|p' Package.swift)"
 
 echo "workspace version: $want"
 exit $status

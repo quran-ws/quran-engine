@@ -56,6 +56,15 @@ and `ink` options as `draw()` and leave clearing and sizing to the caller.
 Use the main package for layout, exact hit-testing, search, styling, selection,
 masks and animation.
 
+On iOS and macOS, add the repository as a Swift package and use its `QvpKit` product:
+
+```swift
+.package(url: "https://github.com/quran-ws/quran-engine.git", from: "0.2.2")
+```
+
+SwiftPM downloads the release XCFramework and verifies its checksum. Page data remains a
+separate app or CDN resource.
+
 ## Where the documentation is
 
 Everything about using it lives on the site. This repository is the source.

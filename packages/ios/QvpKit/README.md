@@ -46,11 +46,23 @@ Set `QVP_DATA_TAG` to pin another release, or `QVP_PAGES=<dir>` to use converter
 
 ## Depend on it
 
-Xcode → File → Add Package Dependencies → local path `packages/ios/QvpKit`, or in a `Package.swift`:
+In Xcode, choose File → Add Package Dependencies and enter:
+
+```
+https://github.com/quran-ws/quran-engine.git
+```
+
+Or add the package in `Package.swift`:
 
 ```swift
-.package(path: "../quran-engine/packages/ios/QvpKit")     // product "QvpKit"
+.package(url: "https://github.com/quran-ws/quran-engine.git", from: "0.2.2")
 ```
+
+Then add the `QvpKit` product to the app target. SwiftPM downloads the published release's
+XCFramework and verifies its checksum. The package still ships no page data.
+
+Contributors can use the local package at `packages/ios/QvpKit`; build its local binary first
+with `scripts/build-engine-ios.sh`.
 
 ## API (mirrors the Kotlin wrapper — see docs/API.md)
 
