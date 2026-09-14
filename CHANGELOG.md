@@ -6,6 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+### Added
+- Android releases publish `ws.quran:qvp-android` to Maven Central when its credentials are
+  configured.
+
 ### Fixed
 - Android release AARs use 16 KiB-aligned 64-bit native libraries and are attached to each
   GitHub release with a SHA-256 checksum.

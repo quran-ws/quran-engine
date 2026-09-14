@@ -102,6 +102,24 @@ jobs:
           path: |
             dist/android/*.aar
             dist/android/*.sha256
+      - name: Maven Central
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
+        run: |
+          if [ -z "$ORG_GRADLE_PROJECT_mavenCentralUsername" ] || \
+             [ -z "$ORG_GRADLE_PROJECT_mavenCentralPassword" ] || \
+             [ -z "$ORG_GRADLE_PROJECT_signingInMemoryKey" ] || \
+             [ -z "$ORG_GRADLE_PROJECT_signingInMemoryKeyPassword" ]; then
+            echo "::notice::Maven Central skipped: publishing or signing credentials are not set"
+            exit 0
+          fi
+          cd packages/android
+          ./gradlew --no-daemon :qvp:publishAndReleaseToMavenCentral \
+            -PqvpVersion="${{ needs.verify.outputs.version }}" \
+            -PsignAllPublications=true
 
   publish:
     name: GitHub release and registries
@@ -148,5 +166,5 @@ jobs:
           cp artifacts/qvp_ffi.wasm/qvp_ffi.wasm web/qvp_ffi.wasm
           npm publish --access public --ignore-scripts
           (cd packages/react-native/qvp-react-native && npm install --no-audit --no-fund && npm run build && npm publish --access public)
-      - name: pub.dev and Maven Central
-        run: echo "::notice::pub.dev and Maven Central publishing are not wired yet (see docs/standards/RELEASING.md); the packages are consumable from this release's tag"
+      - name: pub.dev
+        run: echo "::notice::pub.dev publishing is not wired yet (see docs/standards/RELEASING.md); the package is consumable from this release's tag"
