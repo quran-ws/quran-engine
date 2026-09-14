@@ -22,6 +22,16 @@ for p in glob.glob("crates/*/Cargo.toml"):
 for p in ("package.json", "packages/react-native/qvp-react-native/package.json"):
     d = json.load(open(p)); d["version"] = v
     json.dump(d, open(p, "w"), indent=2, ensure_ascii=False); open(p, "a").write("\n")
+swift = open("Package.swift").read()
+swift, replacements = re.subn(
+    r"(releases/download/)v[^/]+(/QvpEngine\.xcframework\.zip)",
+    rf"\g<1>v{v}\g<2>",
+    swift,
+    count=1,
+)
+if replacements != 1:
+    raise SystemExit("error: Package.swift does not contain one XCFramework release URL")
+open("Package.swift", "w").write(swift)
 PY
 sed -i.bak -E "s/^version: .*/version: $v/" packages/flutter/qvp_flutter/pubspec.yaml && rm packages/flutter/qvp_flutter/pubspec.yaml.bak
 sed -i.bak -E "s/^version = \".*\"$/version = \"$v\"/" packages/flutter/qvp_flutter/android/build.gradle && rm packages/flutter/qvp_flutter/android/build.gradle.bak

@@ -1,6 +1,6 @@
-# A code release: tag vX.Y.Z. Runs the full check, builds every artifact, attaches the
-# XCFramework, Android AAR and wasm engine to the GitHub release, and publishes to each registry
-# whose token is configured. A registry without a token is reported and skipped.
+# A code release: prepare the iOS artifact, then tag vX.Y.Z. Runs the full check, verifies the
+# prepared XCFramework, builds the Android AAR and wasm engine, completes the GitHub release,
+# and publishes to each configured registry. A registry without a token is reported and skipped.
 name: Release
 
 on:
@@ -47,23 +47,41 @@ jobs:
           path: web/qvp_ffi.wasm
 
   xcframework:
-    name: QvpEngine.xcframework
+    name: prepared QvpEngine.xcframework
     needs: verify
-    runs-on: macos-15
-    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios, aarch64-apple-ios-sim, x86_64-apple-ios, aarch64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
-      - run: scripts/build-engine-ios.sh
-      - name: Zip and checksum
+      - name: Download and verify the prepared artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          cd packages/ios/QvpKit
-          zip -qr ../../../QvpEngine.xcframework.zip QvpEngine.xcframework
-          cd ../../..
-          swift package compute-checksum QvpEngine.xcframework.zip > QvpEngine.xcframework.zip.checksum
+          release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$GITHUB_REF_NAME\") | .id" | head -1)"
+          [ -n "$release_id" ] || {
+            echo "error: no prepared release for $GITHUB_REF_NAME; run scripts/prepare-ios-release.sh first" >&2
+            exit 1
+          }
+          for name in QvpEngine.xcframework.zip QvpEngine.xcframework.zip.checksum; do
+            asset_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" \
+              --jq ".[] | select(.name == \"$name\") | .id")"
+            [ -n "$asset_id" ] || { echo "error: prepared release lacks $name" >&2; exit 1; }
+            gh api -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$name"
+          done
+          expected="$(sed -n 's/.*checksum: "\([0-9a-f]\{64\}\)".*/\1/p' Package.swift)"
+          recorded="$(cat QvpEngine.xcframework.zip.checksum)"
+          actual="$(sha256sum QvpEngine.xcframework.zip | cut -d' ' -f1)"
+          [ "$expected" = "$recorded" ] && [ "$recorded" = "$actual" ] || {
+            echo "error: Package.swift, checksum asset, and XCFramework differ" >&2
+            exit 1
+          }
+          grep -Fq "releases/download/$GITHUB_REF_NAME/QvpEngine.xcframework.zip" Package.swift || {
+            echo "error: Package.swift does not point at $GITHUB_REF_NAME" >&2
+            exit 1
+          }
+          unzip -tq QvpEngine.xcframework.zip
       - uses: actions/upload-artifact@v7
         with:
           name: xcframework
@@ -136,15 +154,31 @@ jobs:
           v="${{ needs.verify.outputs.version }}"
           awk -v v="$v" '/^## \[/{p = index($0, "[" v "]") > 0} p' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "Release $v" > notes.md
-      - name: GitHub release with the engine artifacts
+      - name: Complete the prepared GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md \
-            artifacts/qvp_ffi.wasm/qvp_ffi.wasm artifacts/xcframework/QvpEngine.xcframework.zip \
-            artifacts/xcframework/QvpEngine.xcframework.zip.checksum \
-            artifacts/android/qvp-android-${{ needs.verify.outputs.version }}.aar \
-            artifacts/android/qvp-android-${{ needs.verify.outputs.version }}.aar.sha256
+          release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$GITHUB_REF_NAME\") | .id" | head -1)"
+          [ -n "$release_id" ] || { echo "error: prepared release is missing" >&2; exit 1; }
+          upload_asset() {
+            path="$1"
+            name="$(basename "$path")"
+            old="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" \
+              --jq ".[] | select(.name == \"$name\") | .id")"
+            [ -z "$old" ] || gh api --method DELETE \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$old"
+            gh api --method POST -H "Content-Type: application/octet-stream" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$name" \
+              --input "$path" >/dev/null
+          }
+          upload_asset artifacts/qvp_ffi.wasm/qvp_ffi.wasm
+          upload_asset artifacts/android/qvp-android-${{ needs.verify.outputs.version }}.aar
+          upload_asset artifacts/android/qvp-android-${{ needs.verify.outputs.version }}.aar.sha256
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -f tag_name="$GITHUB_REF_NAME" -f target_commitish="$GITHUB_SHA" \
+            -f name="$GITHUB_REF_NAME" -f body="$(cat notes.md)" \
+            -F draft=false -F prerelease=false -f make_latest=true >/dev/null
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown

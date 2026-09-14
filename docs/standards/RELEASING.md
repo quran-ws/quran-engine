@@ -3,15 +3,17 @@
 ## A code release (`vX.Y.Z`)
 
 1. `scripts/set-version.sh X.Y.Z`, move the `Unreleased` section of `CHANGELOG.md` under the
-   new version, copy per-package entries into each package's changelog. One PR.
+   new version, copy per-package entries into each package's changelog. Run
+   `scripts/prepare-ios-release.sh X.Y.Z` after the code is final; it creates a draft release
+   with the XCFramework and stamps its URL and checksum into the root `Package.swift`. One PR.
 2. Merge, then `git tag vX.Y.Z && git push --tags`.
-3. `release.yml` runs `scripts/check.sh` in full, builds the native libraries for every
-   target, and publishes:
+3. `release.yml` runs `scripts/check.sh` in full, verifies the prepared Apple binary, builds
+   the other release artifacts, and publishes:
    - npm: `@quran.ws/engine`, `@quran.ws/qvp-react-native`
    - crates.io: `qvp-format`, `qvp-core`, `qvp-convert`, `qvp-ffi`
    - Maven Central: `ws.quran:qvp-android`
    - the Android AAR, XCFramework zip, and their checksums as release assets. `Package.swift`
-     points at the XCFramework URL and checksum
+     points at the prepared XCFramework URL and checksum
    The release notes are the changelog section.
 4. Nobody publishes by hand. If a step fails, fix and re-run the workflow for the same
    tag. The workflow skips and reports any registry that refuses the same version twice.

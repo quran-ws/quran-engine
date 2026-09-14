@@ -6,7 +6,9 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- QvpKit can be installed from the repository as a remote Swift package. SwiftPM downloads
+  the release XCFramework and verifies its checksum.
 
 ## [0.2.1] - 2026-09-14
 

@@ -8,7 +8,7 @@ fail() { echo "FAIL $1"; status=1; }
 ok() { echo "ok   $1"; }
 
 # 1. The root holds only the allowed files and directories.
-allowed="README.md LICENSE LICENSES CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md CHANGELOG.md AGENTS.md CLAUDE.md Cargo.toml Cargo.lock package.json rust-toolchain.toml rustfmt.toml .editorconfig .gitignore .mailmap .terminology.json .github crates packages web docs scripts conformance"
+allowed="README.md LICENSE LICENSES CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md CHANGELOG.md AGENTS.md CLAUDE.md Cargo.toml Cargo.lock Package.swift package.json rust-toolchain.toml rustfmt.toml .editorconfig .gitignore .mailmap .terminology.json .github crates packages web docs scripts conformance"
 extra=""
 for entry in $(git ls-files | cut -d/ -f1 | sort -u); do
   case " $allowed " in *" $entry "*) ;; *) extra="$extra $entry" ;; esac
