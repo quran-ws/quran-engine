@@ -22,6 +22,8 @@ Maven Central requires the `ws.quran` namespace to be verified in the Central Po
 repository secrets: `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `MAVEN_SIGNING_KEY`, and
 `MAVEN_SIGNING_PASSWORD`. The username and password are a Central Portal user token, and the
 signing key is an ASCII-armored private PGP key whose public key is available from a key server.
+The release key fingerprint is `5215 4C15 0932 3295 218D C5A3 C51E AFC2 1281 52F4`; it expires
+on 2029-09-13 and must be replaced in GitHub before then.
 
 ## A data release (`data-vX.Y.Z`)
 
