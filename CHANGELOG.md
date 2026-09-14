@@ -6,7 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- Publishing documentation now reflects the packages and versions available from Maven Central,
+  Swift Package Manager, npm and crates.io.
 
 ## [0.2.2] - 2026-09-14
 
