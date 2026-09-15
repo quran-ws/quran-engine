@@ -108,6 +108,9 @@ pub struct Page {
     /// Tracing every outline costs more than the rest of loading a page, and only a reflow
     /// needs it, so it waits until something asks.
     silhouettes: std::cell::OnceCell<Silhouettes>,
+    /// The searched zoom steps of a page the shipped table does not cover, kept so the search
+    /// runs at most once a page. See [`Page::zoom_steps`].
+    pub(crate) searched_steps: Option<Vec<f32>>,
     path_deco: Vec<u32>,
     pub(crate) path_ctx: Vec<PathCtx>,
     word_index: HashMap<(u16, u16, u16), u32>,
@@ -378,6 +381,7 @@ impl Page {
             word_body,
             line_baseline,
             silhouettes: std::cell::OnceCell::new(),
+            searched_steps: None,
             path_deco,
             path_ctx,
             word_index,

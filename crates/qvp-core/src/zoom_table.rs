@@ -9,6 +9,8 @@
 
 /// The generator and layout this table was built with.
 pub(crate) const SCHEMA: u32 = 1;
+/// The revision of the layout the steps were searched against.
+pub(crate) const LAYOUT_REVISION: u32 = 1;
 /// A content hash of the page data it was built from.
 pub(crate) const ARTWORK: u64 = 0x98f45a4be4c7328e;
 /// The zoom each step aims at, before the search.
@@ -634,18 +636,26 @@ pub(crate) const LEVELS: [[f32; 3]; 604] = [
     [1.4809998, 1.7519999, 2.2180011],
 ];
 
-/// The layout the steps were chosen for. A change to any of it makes the table stale, and the
-/// engine will not build until it is generated again.
-const _: () = {
-    assert!(BAND == crate::defaults::ZOOM_LEVEL_BAND);
-    assert!(STEP == crate::defaults::ZOOM_LEVEL_STEP);
-    assert!(RELAX_NEIGHBOURS == crate::defaults::RELAX_NEIGHBOURS);
-    assert!(RELAX == crate::defaults::REFLOW_RELAX);
-    assert!(MAX_STRETCH == crate::defaults::REFLOW_MAX_STRETCH);
-    assert!(NOMINALS.len() == crate::defaults::ZOOM_LEVEL_NOMINALS.len());
-};
-
 /// The steps of one page, by page number, or `None` for a page this table does not cover.
 pub(crate) fn steps(page: u16) -> Option<&'static [f32; NOMINALS.len()]> {
     LEVELS.get((page as usize).checked_sub(1)?)
+}
+/// The layout the steps were chosen for. A change to any of it makes the table stale.
+///
+/// This is a test, not a compile-time assertion: the generator that rewrites this file is built
+/// against this crate, so a table that refused to compile would take the tool that fixes it
+/// down with it.
+#[cfg(test)]
+mod manifest {
+    #[test]
+    fn the_table_was_built_with_the_layout_the_engine_has() {
+        assert_eq!(super::LAYOUT_REVISION, crate::defaults::LAYOUT_REVISION);
+        assert_eq!(super::BAND, crate::defaults::ZOOM_LEVEL_BAND);
+        assert_eq!(super::STEP, crate::defaults::ZOOM_LEVEL_STEP);
+        assert_eq!(super::RELAX_NEIGHBOURS, crate::defaults::RELAX_NEIGHBOURS);
+        assert_eq!(super::RELAX, crate::defaults::REFLOW_RELAX);
+        assert_eq!(super::MAX_STRETCH, crate::defaults::REFLOW_MAX_STRETCH);
+        assert_eq!(super::WORD_GAP, crate::reflow::ReflowSpec::default().word_gap);
+        assert_eq!(super::NOMINALS, crate::defaults::ZOOM_LEVEL_NOMINALS);
+    }
 }

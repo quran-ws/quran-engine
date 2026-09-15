@@ -70,6 +70,13 @@ pub const CURVE_STEPS: u32 = 8;
 /// had strokes crossing by 4.6. These bands are about a third of a page unit.
 pub const SLICES_PER_LINE: u32 = 96;
 
+/// The revision of the layout itself: how words are broken onto rows, how the air between two
+/// words is measured, and how a short row is opened up. Raise it whenever a change to any of
+/// those moves words, so the shipped zoom steps (`zoom_table`) are known to be stale. The
+/// settings those steps were searched with are recorded beside it, and the regeneration check
+/// in `scripts/check.sh gates` catches a change that reaches the rows without passing here.
+pub const LAYOUT_REVISION: u32 = 1;
+
 /// The zoom each step of the reader's zoom control aims at, above the printed page. The engine
 /// searches around these for the zoom that breaks the page best (`Page::zoom_levels`).
 pub const ZOOM_LEVEL_NOMINALS: [f32; 3] = [1.4, 1.8, 2.2];

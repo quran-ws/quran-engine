@@ -473,10 +473,15 @@ impl Page {
     /// settings they asked for, so a spacing knob never resizes the text. A page the table does
     /// not cover falls back to [`Page::zoom_levels`], which searches.
     pub fn zoom_steps(&mut self, spec: &LayoutSpec) -> Vec<f32> {
-        match crate::zoom_table::steps(self.page_number()) {
-            Some(row) => row.to_vec(),
-            None => self.zoom_levels(spec, &[], 0.0),
+        if let Some(row) = crate::zoom_table::steps(self.page_number()) {
+            return row.to_vec();
         }
+        // a page the table does not cover searches, once: the answer is the page's, so a
+        // second call cannot put 40 ms into a reader's hands
+        if self.searched_steps.is_none() {
+            self.searched_steps = Some(self.zoom_levels(spec, &[], 0.0));
+        }
+        self.searched_steps.clone().unwrap_or_default()
     }
 
     /// Every zoom the search considers for one step, with what its rows cost: what

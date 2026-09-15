@@ -15,6 +15,7 @@ use std::path::Path;
 /// What the table was built from and with. A change to any of it makes the table stale.
 pub struct Manifest {
     pub schema: u32,
+    pub layout_revision: u32,
     pub artwork: u64,
     pub pages: usize,
     pub nominals: Vec<f32>,
@@ -134,6 +135,7 @@ pub fn generate(pages_dir: &Path) -> Result<Table, String> {
     Ok(Table {
         manifest: Manifest {
             schema: SCHEMA,
+            layout_revision: qvp_core::defaults::LAYOUT_REVISION,
             artwork,
             pages: pages.len(),
             nominals,
@@ -190,8 +192,8 @@ pub fn render(t: &Table) -> String {
     let m = &t.manifest;
     s.push_str("\n#![allow(dead_code)] // the manifest below is the record of how the table was built\n");
     s.push_str(&format!(
-        "\n/// The generator and layout this table was built with.\npub(crate) const SCHEMA: u32 = {};\n",
-        m.schema
+        "\n/// The generator and layout this table was built with.\npub(crate) const SCHEMA: u32 = {};\n/// The revision of the layout the steps were searched against.\npub(crate) const LAYOUT_REVISION: u32 = {};\n",
+        m.schema, m.layout_revision
     ));
     s.push_str(&format!(
         "/// A content hash of the page data it was built from.\npub(crate) const ARTWORK: u64 = 0x{:016x};\n",
@@ -212,20 +214,28 @@ pub fn render(t: &Table) -> String {
     s.push_str("];\n");
     s.push_str(
         r#"
-/// The layout the steps were chosen for. A change to any of it makes the table stale, and the
-/// engine will not build until it is generated again.
-const _: () = {
-    assert!(BAND == crate::defaults::ZOOM_LEVEL_BAND);
-    assert!(STEP == crate::defaults::ZOOM_LEVEL_STEP);
-    assert!(RELAX_NEIGHBOURS == crate::defaults::RELAX_NEIGHBOURS);
-    assert!(RELAX == crate::defaults::REFLOW_RELAX);
-    assert!(MAX_STRETCH == crate::defaults::REFLOW_MAX_STRETCH);
-    assert!(NOMINALS.len() == crate::defaults::ZOOM_LEVEL_NOMINALS.len());
-};
-
 /// The steps of one page, by page number, or `None` for a page this table does not cover.
 pub(crate) fn steps(page: u16) -> Option<&'static [f32; NOMINALS.len()]> {
     LEVELS.get((page as usize).checked_sub(1)?)
+}
+/// The layout the steps were chosen for. A change to any of it makes the table stale.
+///
+/// This is a test, not a compile-time assertion: the generator that rewrites this file is built
+/// against this crate, so a table that refused to compile would take the tool that fixes it
+/// down with it.
+#[cfg(test)]
+mod manifest {
+    #[test]
+    fn the_table_was_built_with_the_layout_the_engine_has() {
+        assert_eq!(super::LAYOUT_REVISION, crate::defaults::LAYOUT_REVISION);
+        assert_eq!(super::BAND, crate::defaults::ZOOM_LEVEL_BAND);
+        assert_eq!(super::STEP, crate::defaults::ZOOM_LEVEL_STEP);
+        assert_eq!(super::RELAX_NEIGHBOURS, crate::defaults::RELAX_NEIGHBOURS);
+        assert_eq!(super::RELAX, crate::defaults::REFLOW_RELAX);
+        assert_eq!(super::MAX_STRETCH, crate::defaults::REFLOW_MAX_STRETCH);
+        assert_eq!(super::WORD_GAP, crate::reflow::ReflowSpec::default().word_gap);
+        assert_eq!(super::NOMINALS, crate::defaults::ZOOM_LEVEL_NOMINALS);
+    }
 }
 "#,
     );
