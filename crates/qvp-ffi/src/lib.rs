@@ -1470,6 +1470,22 @@ pub unsafe extern "C" fn qvp_zoom_levels(
         n as u32
     })
 }
+/// The zoom each step of this page's zoom control lands on, lowest first, read from the table
+/// the engine carries. Writes up to `n_out` and returns how many it wrote. Zoom 1, the printed
+/// page, is the step every control starts from and is not among them.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_steps(page: *mut Page, spec: *const QvpLayoutSpec, out: *mut f32, n_out: u32) -> u32 {
+    guard(|| {
+        if page.is_null() || out.is_null() {
+            return 0;
+        }
+        let s = layout_spec(spec);
+        let steps = (*page).zoom_steps(&s);
+        let n = steps.len().min(n_out as usize);
+        std::ptr::copy_nonoverlapping(steps.as_ptr(), out, n);
+        n as u32
+    })
+}
 /// Every zoom the search considers for one step of a zoom control, with what its rows cost:
 /// what `qvp_zoom_levels` picks the least of. Writes up to `n_out` pairs to `out_zoom` and
 /// `out_cost` and returns how many it wrote. `floor` bounds the search from below, so a

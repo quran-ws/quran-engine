@@ -424,6 +424,13 @@
       const n = this.e.ex.qvp_zoom_levels(this.h, s, np, k, band || 0, out, 8);
       return Array.from(new Float32Array(this.e.mem.buffer, out, n));
     }
+    /** the zoom steps this page ships with, lowest first; zoom 1 is the step before them */
+    zoomSteps(spec) {
+      const s = this.e.scratch; this._writeLayoutSpec(spec, s);
+      const out = this.e.buf(8 * 4);
+      const n = this.e.ex.qvp_zoom_steps(this.h, s, out, 8);
+      return Array.from(new Float32Array(this.e.mem.buffer, out, n));
+    }
     /** every zoom the search weighs for one step of a zoom control, with its cost */
     zoomLevelCandidates(spec, nominal, band, floor) {
       const s = this.e.scratch; this._writeLayoutSpec(spec, s);

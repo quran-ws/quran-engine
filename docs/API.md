@@ -245,11 +245,30 @@ rows and makes that change larger. The search takes about 40 ms a page. Its answ
 back at every viewport measured, from 360x1200 to 820x1180, so a generator can work the table
 out once and ship it.
 
-`page.zoomLevelCandidates(spec, nominal, band, floor)` returns every zoom the search weighs for
-one step, with its cost, for a generator choosing the steps for a whole mushaf: weighing a
-page's own rows against how much the ink changes size from the page before it cuts the median
-change from one page to the next from 2.8% to 0.8%, and the largest from 12.4% to 7.0%, while
-the rows under 60% full go from 0.17% to 0.21%.
+`page.zoomSteps(spec)` reads this page's steps out of the table the engine carries, which is
+what a reader's zoom control uses: the search runs once, at release time, and the engine ships
+the answer. A lookup takes about 0.02 ms against about 40 ms for the search.
+
+The steps were chosen for the whole mushaf at once, weighing a page's own rows against how much
+the ink changes size at the page turn, so no page turn changes the text size by more than 7%
+and half change it by about 1%. They were chosen for the engine's own breaking and spacing: a
+reader who changes a spacing knob keeps these steps and gets a page laid out with the settings
+they asked for, so a spacing knob never resizes the text.
+
+| steps | median fill | standard deviation | rows under 60% | 95th step |
+|---|---:|---:|---:|---:|
+| nominal ×1.4, ×1.8, ×2.2 | 90.5% | 7.49 pp | 0.47% | 17.1 pp |
+| the shipped table | 91.3% | 6.90 pp | 0.21% | 15.8 pp |
+
+`page.zoomLevels(spec, nominals, band)` runs the search itself, and
+`page.zoomLevelCandidates(spec, nominal, band, floor)` returns every zoom it weighs with its
+cost. These are what the generator uses; a reader does not need them.
+
+`cargo run -p qvp-convert --release -- zoom-levels dist/pages crates/qvp-core/src/zoom_table.rs`
+writes the table, and `--check` reports whether the committed one is still what the page data
+and the layout produce. `scripts/check.sh gates` runs the check, and the table carries what it
+was built from, so a change to the artwork or to the spacing defaults is caught rather than
+left to drift.
 
 `fill` is `centred` (the default), `ragged` (the row starts at the right margin) or `justified`
 (gaps stretch to both margins, the row that ends a block excepted). `gaps` is `uniform` (the

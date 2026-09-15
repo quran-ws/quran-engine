@@ -463,6 +463,22 @@ impl Page {
         out
     }
 
+    /// The zoom each step of this page's zoom control lands on, lowest first, read from the
+    /// table the engine carries. The printed page, zoom 1, is the step every control starts
+    /// from and is not among them.
+    ///
+    /// The steps were chosen for the engine's own breaking and spacing, and for the whole
+    /// mushaf at once, so the ink changes size as little as it can from one page to the next.
+    /// A reader who changes a spacing knob keeps these steps and gets a page laid out with the
+    /// settings they asked for, so a spacing knob never resizes the text. A page the table does
+    /// not cover falls back to [`Page::zoom_levels`], which searches.
+    pub fn zoom_steps(&mut self, spec: &LayoutSpec) -> Vec<f32> {
+        match crate::zoom_table::steps(self.page_number()) {
+            Some(row) => row.to_vec(),
+            None => self.zoom_levels(spec, &[], 0.0),
+        }
+    }
+
     /// Every zoom the search considers for one step, with what its rows cost: what
     /// [`Page::zoom_levels`] picks the least of. A generator choosing the steps for a whole
     /// mushaf uses this to weigh a page's own rows against how much the ink changes size from

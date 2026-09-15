@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 fn usage() -> ! {
     eprintln!(
-        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg>\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out."
+        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg>\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert zoom-levels <pages_dir> <out.rs> [--check]\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out."
     );
     std::process::exit(2)
 }
@@ -78,6 +78,47 @@ fn main() {
             let bytes = fs::read(&args[2]).expect("read qvp");
             let page = qvp_format::decode(&bytes).expect("decode");
             fs::write(&args[3], to_svg(&page).expect("to_svg")).expect("write svg");
+        }
+        // the engine's shipped zoom steps: search every page, chain the pages together, write
+        // the table the engine carries. `--check` rebuilds it and reports whether the committed
+        // table still matches, which is what catches artwork or layout changes.
+        "zoom-levels" => {
+            expect_args(&args, 2, 3);
+            let (pages_dir, out) = (PathBuf::from(&args[2]), PathBuf::from(&args[3]));
+            let check = args.get(4).is_some_and(|a| a == "--check");
+            let table = match zoom_levels::generate(&pages_dir) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1)
+                }
+            };
+            if let Err(e) = zoom_levels::validate(&pages_dir, &table) {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+            let text = zoom_levels::render(&table);
+            if check {
+                let have = fs::read_to_string(&out).unwrap_or_default();
+                if have != text {
+                    eprintln!(
+                        "{} is stale: regenerate it with `cargo run -p qvp-convert --release -- zoom-levels {} {}`",
+                        out.display(),
+                        pages_dir.display(),
+                        out.display()
+                    );
+                    std::process::exit(1);
+                }
+                println!("ok  {} zoom steps match {}", table.levels.len(), out.display());
+            } else {
+                fs::write(&out, &text).expect("write zoom table");
+                println!(
+                    "{}: {} pages, {} steps each",
+                    out.display(),
+                    table.levels.len(),
+                    table.manifest.nominals.len()
+                );
+            }
         }
         "info" => {
             expect_args(&args, 1, 1);

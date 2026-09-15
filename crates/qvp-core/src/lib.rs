@@ -17,6 +17,7 @@ pub mod style;
 pub mod target;
 pub mod text;
 pub mod view;
+mod zoom_table;
 
 pub use crop::CropBounds;
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};

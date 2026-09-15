@@ -104,7 +104,7 @@
     S.themeHandle = S.tajwidHandle = S.hideHandle = S.ayahMarksHandle = 0;
     $('pageNo').value = n;
     applyTheme(); applyToggles();
-    if (S.level > 1) { const lv = S.page.zoomLevels(layoutSpec()); S.levels = lv; S.reflow.zoom = lv[S.level - 2] || S.reflow.zoom; }
+    if (S.level > 1) { const lv = S.page.zoomSteps(layoutSpec()); S.levels = lv; S.reflow.zoom = lv[S.level - 2] || S.reflow.zoom; }
     renderer.baseKey = '';
     fit(false);
     showSelection(); showMeta(); runSearch();
@@ -379,7 +379,7 @@
   $('rZoom').oninput = e => { S.reflow.zoom = +e.target.value; S.level = 0; S.reflow.on = true; reflowUI(); };
   // The zoom steps this page offers, from the engine: level 1 is the printed page, the rest
   // are the zooms whose rows come out best near each nominal size.
-  const levels = () => (S.levels = S.levels || (S.page ? S.page.zoomLevels(layoutSpec()) : []));
+  const levels = () => (S.levels = S.levels || (S.page ? S.page.zoomSteps(layoutSpec()) : []));
   const setLevel = n => {
     S.level = n;
     if (n <= 1) { S.reflow.on = false; } else { S.reflow.on = true; S.reflow.zoom = levels()[n - 2] || S.reflow.zoom; $('rZoom').value = S.reflow.zoom; }

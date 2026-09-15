@@ -191,6 +191,7 @@ uint32_t qvp_layout_word_row(const QvpPage*, uint32_t word);                    
 float    qvp_reflow_max_zoom(const QvpPage*, const QvpLayoutSpec*);              /* the largest reflow zoom whose rows still hold every word */
 uint32_t qvp_zoom_levels(QvpPage*, const QvpLayoutSpec*, const float* nominals, uint32_t n_nominals,
                          float band, float* out, uint32_t n_out);                 /* the zoom each step of a zoom control lands on; returns how many were written */
+uint32_t qvp_zoom_steps(QvpPage*, const QvpLayoutSpec*, float* out, uint32_t n_out);  /* the zoom steps this page ships with */
 uint32_t qvp_zoom_level_candidates(QvpPage*, const QvpLayoutSpec*, float nominal, float band, float floor,
                          float* out_zoom, float* out_cost, uint32_t n_out);        /* every zoom the search weighs for one step, with its cost */
 float    qvp_layout_line_spacing_to_fill(const QvpPage*, const QvpLayoutSpec*, float max /* <=0 unlimited */);   /* the multiplier that fills the padded viewport */
