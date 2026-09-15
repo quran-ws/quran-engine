@@ -37,7 +37,8 @@ scripts/package-data.sh X.Y.Z                                # VERSION.json, the
 
 The identity gate renders each source page and its converted page at four times the page
 size and compares them pixel by pixel; the conversion keeps every curve and point, and
-every page passes. A data release is tagged `data-vX.Y.Z` (the first one, `v0.1.0`, predates
+every page passes. A data release is tagged `data-vX.Y.Z` and is served as `qvp/vX.Y.Z/` (the first one,
+`v0.1.0`, predates
 that naming) and is never rewritten; a correction is a new version.
 
 ## Where to get it
