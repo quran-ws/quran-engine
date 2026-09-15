@@ -27,6 +27,10 @@ All notable changes to the engine and its packages. The format follows
 
 ### Fixed
 
+- The iOS demo builds again. It read `QvpAtlasSurah.n`, which the naming standard
+  renamed to `number`, and the surah sheet was one expression larger than the
+  Swift type checker would finish. The iOS job piped the build into `tail`, so it
+  took `tail`'s exit status and reported a failed build as a pass.
 - The CDN publish verifies the bundle by its digest. It required a `br`
   Content-Encoding, which the edge never sets, because brotli is the bundle's
   file format and the client decodes it.
