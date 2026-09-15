@@ -9,14 +9,14 @@
 #                 needed by the identity gate.
 #
 # Environment:
-#   QVP_DATA_TAG   data release tag (default v0.3.0)
+#   QVP_DATA_TAG   data release tag (default data-v0.3.0)
 #   QVP_SVG_TAG    quran-svg-elements release tag (default v1.1.2)
 #   QVP_KEEP_PAGES keep dist/pages as it is, whatever built it
 # Output: the directories above; a line per artifact saying fetched, kept or skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-tag="${QVP_DATA_TAG:-v0.3.0}"
+tag="${QVP_DATA_TAG:-data-v0.3.0}"
 asset="quran-engine-pages-hafs-kfgqpc.tar.gz"
 base="https://github.com/quran-ws/quran-engine/releases/download/$tag"
 

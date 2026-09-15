@@ -47,11 +47,10 @@ does not send consumers back to it:
   "updated": "2026-09-15T00:00:00Z" }
 ```
 
-A data release is tagged with the version the CDN serves it under: `v0.3.0` publishes to
-`qvp/v0.3.0/`. The engine line of this repository is tagged `engine-vX.Y.Z` and publishes to
-`engine/<family>/vX.Y.Z/`, so one repository carries two release lines without their tags
-meeting. The first two data releases, `v0.1.0` and `data-v0.2.0`, predate this: `data-v0.2.0`
-is served as `qvp/v0.2.0/`.
+A data release is tagged `data-vX.Y.Z` and publishes to `qvp/vX.Y.Z/`: the tag says which of
+this repository's two release lines produced it, and the URL says the version alone. The engine
+line is tagged `vX.Y.Z` and publishes to `engine/<family>/vX.Y.Z/`. The first data release,
+`v0.1.0`, predates the prefix.
 
 Before this layout the page data was served from `qvp.quran.ws/<version>/`. That hostname
 now returns a 301 to `cdn.quran.ws/qvp/<version>/`, so URLs published before the move still
