@@ -51,15 +51,17 @@ jobs:
       - name: Unit tests
         working-directory: packages/android
         run: ./gradlew --no-daemon :qvp:testDebugUnitTest
-      # The example is the only place that exercises the wrapper the way an app does, so a
-      # renamed member that no test calls shows up here and nowhere else.
-      - name: Build the example
-        working-directory: packages/android
-        run: ./gradlew --no-daemon :example:assembleDebug
       - name: Package AAR
         run: |
           version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
           scripts/package-android.sh "$version-${GITHUB_SHA::12}"
+      # After the AAR, because the example links the static libraries that
+      # scripts/build-engine-android.sh writes to qvp/prebuilt/<abi>. The example is the
+      # only place that calls the wrapper the way an app does, so a renamed member that no
+      # test touches shows up here and nowhere else.
+      - name: Build the example
+        working-directory: packages/android
+        run: ./gradlew --no-daemon :example:assembleDebug
       - name: Inspect native payload
         run: unzip -l dist/android/*.aar | grep 'jni/.*/libqvp_jni.so'
       - uses: actions/upload-artifact@v7

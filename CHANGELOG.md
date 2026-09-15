@@ -35,6 +35,9 @@ All notable changes to the engine and its packages. The format follows
 
 ### Fixed
 
+- The React Native example typechecks again. It held the ayah word count as
+  `complete` where the API returns `isComplete`, and called a `setLineGap` that no
+  longer exists. Its lockfile recorded the linked library at 0.1.0.
 - The iOS demo builds again. It read `QvpAtlasSurah.n`, which the naming standard
   renamed to `number`, and the surah sheet was one expression larger than the
   Swift type checker would finish. The iOS job piped the build into `tail`, so it
