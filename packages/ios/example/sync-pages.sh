@@ -21,8 +21,9 @@ SRC="${QVP_PAGES:-$ROOT/dist/pages}"
 # 604 pages + 604 sidecars + atlas.qva
 want=1209
 have=$( (ls pages 2>/dev/null || true) | wc -l | tr -d ' ')
-if [ "$have" -ge "$want" ] && [ -f pages/atlas.qva ] && [ -z "${QVP_FORCE_SYNC:-}" ]; then
-  echo "demo pages already synced ($have files)"; exit 0
+if [ "$have" -ge "$want" ] && [ -f pages/atlas.qva ] && [ -z "${QVP_FORCE_SYNC:-}" ] \
+   && [ "$(cat pages/.tag 2>/dev/null)" = "$TAG" ]; then
+  echo "demo pages already synced ($have files, $TAG)"; exit 0
 fi
 
 if [ ! -f "$SRC/atlas.qva" ]; then
@@ -50,6 +51,7 @@ if [ ! -f "$SRC/atlas.qva" ]; then
   SRC="$ROOT/dist/pages"
   rm -rf "$SRC"; mkdir -p "$SRC"
   tar xzf "$ROOT/dist/$ASSET" -C "$SRC" --strip-components=1
+  echo "$TAG" > "$SRC/.tag"
 fi
 
 rm -rf pages; mkdir -p pages
@@ -59,4 +61,7 @@ for n in $(seq 1 604); do
   [ -f "$SRC/$p.words.json" ] && cp "$SRC/$p.words.json" pages/
 done
 cp "$SRC/atlas.qva" pages/
+# Record where the bundle came from: the tag its source directory records, or "local"
+# for page data built on this machine. A mismatch makes the next run re-sync.
+cat "$SRC/.tag" 2>/dev/null > pages/.tag || echo local > pages/.tag
 echo "demo pages synced: $(ls pages | wc -l | tr -d ' ') files from $SRC"

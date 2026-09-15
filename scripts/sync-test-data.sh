@@ -3,12 +3,15 @@
 #
 #   dist/pages/   the built page data (NNN.qvp, atlas.qva, NNN.words.json) from the data
 #                 release on GitHub; needed by the ABI test and every wrapper test.
+#                 Each directory records its tag, and a tag that does not match is refetched.
+#                 A locally built dist/pages records no tag, so set QVP_KEEP_PAGES=1 to keep it.
 #   pages/ index/ the source SVG bundle from the quran-svg-elements release (hafs-kfgqpc);
 #                 needed by the identity gate.
 #
 # Environment:
 #   QVP_DATA_TAG   data release tag (default data-v0.2.0)
 #   QVP_SVG_TAG    quran-svg-elements release tag (default v1.1.1)
+#   QVP_KEEP_PAGES keep dist/pages as it is, whatever built it
 # Output: the directories above; a line per artifact saying fetched, kept or skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -17,8 +20,11 @@ tag="${QVP_DATA_TAG:-data-v0.2.0}"
 asset="quran-engine-pages-hafs-kfgqpc.tar.gz"
 base="https://github.com/quran-ws/quran-engine/releases/download/$tag"
 
-if [ -f dist/pages/atlas.qva ] && [ "$(ls dist/pages/*.qvp 2>/dev/null | wc -l)" -ge 604 ]; then
-  echo "kept     dist/pages (604 pages present)"
+if [ -n "${QVP_KEEP_PAGES:-}" ] && [ -f dist/pages/atlas.qva ]; then
+  echo "skipped  dist/pages (QVP_KEEP_PAGES is set)"
+elif [ -f dist/pages/atlas.qva ] && [ "$(ls dist/pages/*.qvp 2>/dev/null | wc -l)" -ge 604 ] \
+   && [ "$(cat dist/pages/.tag 2>/dev/null)" = "$tag" ]; then
+  echo "kept     dist/pages ($tag, 604 pages present)"
 else
   mkdir -p dist
   curl --fail --location --retry 3 --silent --show-error "$base/$asset" --output "dist/$asset"
@@ -26,6 +32,7 @@ else
   (cd dist && shasum -a 256 -c "$asset.sha256" >/dev/null)
   rm -rf dist/pages && mkdir -p dist/pages
   tar -xzf "dist/$asset" -C dist/pages --strip-components=1
+  echo "$tag" > dist/pages/.tag
   echo "fetched  dist/pages ($tag, checksum verified)"
 fi
 

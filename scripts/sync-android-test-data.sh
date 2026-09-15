@@ -28,10 +28,10 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 expected = {
-    "001.qvp": "cdacaf5698be94f47ea32d486d4e59f4514a133da23575cf5cd864744af54291",
-    "042.qvp": "555804dccc3727465a19bb8065a65b0bdd52de514a0f7a8dd78dfcaef81377c1",
+    "001.qvp": "2792ceab5f3cfaa0d86d09a8ca11c80e49b2692de384705b57225c9e3899940a",
+    "042.qvp": "0fc141ceb6b3f555a2590332bfe153a17ec185a76f81be05cdfc0b0d4bccadb2",
 }
-if sys.argv[2] == "v0.1.0":
+if sys.argv[2] == "data-v0.2.0":
     for name, digest in expected.items():
         actual = hashlib.sha256((root / name).read_bytes()).hexdigest()
         if actual != digest:
