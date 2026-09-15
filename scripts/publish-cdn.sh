@@ -74,8 +74,17 @@ fi
 echo "== staging $PREFIX"
 rm -rf "$STAGE" && mkdir -p "$STAGE"
 : > "$STAGE/.files.tsv"
-for f in "$SRC"/*.qvp "$SRC"/*.words.json "$SRC"/atlas.qva "$SRC"/atlas.json "$SRC"/VERSION.json "$SRC"/README.md; do
+# The text files a bundle carries have changed between data releases, so publish the ones
+# this bundle has. The page data itself is always present and is checked above.
+extras=""
+for f in README.md NOTICE.txt; do
+  if [ -f "$SRC/$f" ]; then extras="$extras $f"; fi
+done
+for f in "$SRC"/*.qvp "$SRC"/*.words.json "$SRC"/atlas.qva "$SRC"/atlas.json "$SRC"/VERSION.json; do
   printf '%s\t%s\t%s\n' "$(basename "$f")" "$(wc -c < "$f" | tr -d ' ')" "$(sha256 "$f")" >> "$STAGE/.files.tsv"
+done
+for f in $extras; do
+  printf '%s\t%s\t%s\n' "$f" "$(wc -c < "$SRC/$f" | tr -d ' ')" "$(sha256 "$SRC/$f")" >> "$STAGE/.files.tsv"
 done
 
 # 2b. The solid bundle, named for the edition alone: the host says the format and the prefix
@@ -86,7 +95,7 @@ echo "== building $BUNDLE (solid brotli, this takes a few minutes)"
 # members. `tar tf` on macOS hides them, but Linux, iOS and every JS untar see them — the
 # archive would extract to 2,424 files, half of them junk, and differ from a CI build.
   # --format ustar keeps it to the portable header, with no pax extensions to parse.
-( cd "$SRC" && COPYFILE_DISABLE=1 tar --format ustar -cf - $(ls *.qvp *.words.json atlas.qva atlas.json VERSION.json README.md) ) \
+( cd "$SRC" && COPYFILE_DISABLE=1 tar --format ustar -cf - $(ls *.qvp *.words.json atlas.qva atlas.json VERSION.json $extras) ) \
   | brotli -q 11 -c > "$STAGE/$BUNDLE"
 bundle_bytes=$(wc -c < "$STAGE/$BUNDLE" | tr -d ' ')
 bundle_sha=$(sha256 "$STAGE/$BUNDLE")
