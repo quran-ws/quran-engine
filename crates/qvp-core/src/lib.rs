@@ -525,7 +525,9 @@ impl Page {
                 .data
                 .words
                 .iter()
-                .map(|w| self.trace(w.first_path, w.n_paths as u32, self.line_baseline[w.line_index as usize], true))
+                // marks included: a mark reaching past its letters still has to clear the next
+                // word, and a band knows the height it reaches at
+                .map(|w| self.trace(w.first_path, w.n_paths as u32, self.line_baseline[w.line_index as usize], false))
                 .collect(),
             decorations: self
                 .data

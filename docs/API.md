@@ -216,10 +216,15 @@ walked, not its points: a curve's control points stand far apart, so bands betwe
 read as empty and a pair would be measured against ink that is not facing it. The tracing waits
 until a reflow asks for it, because loading a page is otherwise three times faster.
 
-A mark is traced with the word it is set inline with, so a medallion standing between two words
-is what the next word is spaced from. The shape decides what a pair may do: a final `م` written
-round lets the next word tuck under it in 83% of pairs, the same letter written with a tail in
-47%, and the engine reads that off the ink rather than off a list of letters. A reflowed row leaves every pair the air the print keeps on
+The trace holds a word's marks as well as its letters, because a mark reaching past the letters
+still has to clear the next word, and a band knows the height it reaches at. A medallion is
+traced with the word it closes, so the next word is spaced from the medallion.
+
+The shape decides what a pair may do: a final `م` written round lets the next word tuck under it
+in 83% of pairs, the same letter written with a tail in 47%, and the engine reads that off the
+ink rather than off a list of letters. Across the mushaf the print leaves ink clear of ink in
+6,699 of 6,700 neighbouring pairs, and a reflowed row holds to that: of 37,788 placed pairs the
+only ink that meets is the `ٱلرَّحْمَٰنِ ٱلرَّحِيمِ` the print draws as one piece. A reflowed row leaves every pair the air the print keeps on
 that page, which across the 604 pages holds the placed air to a median of 4.2 page units and a
 spread of 0.5, against a box gap that varies by 2.7.
 

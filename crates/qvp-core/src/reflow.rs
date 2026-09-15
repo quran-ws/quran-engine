@@ -177,9 +177,6 @@ struct Atom {
     /// printed extent of the word and its inline ink, in page units
     x0: f32,
     x1: f32,
-    /// printed extent of the letters alone
-    body_x0: f32,
-    body_x1: f32,
     /// the atom's letters and inline marks sliced into bands: what the air is measured on
     slices: Vec<(i16, f32, f32)>,
     /// what the atom takes off a row: its printed extent plus room for the margin marks
@@ -462,9 +459,9 @@ impl Page {
                 // leaves the wanted air is the printed one moved by the difference.
                 GapMode::Uniform => match Page::slice_clearance(&prev.slices, &next.slices, 0.0) {
                     Some(now) => (prev.x0 - next.x1) + (air - now),
-                    // no band in common: nothing of one word stands beside the other, so fall
-                    // back to the distance between their letters
-                    None => air - ((prev.body_x0 - prev.x0) + (next.x1 - next.body_x1)),
+                    // no band in common: neither word has ink at any height the other does, so
+                    // nothing can meet and the boxes may sit the wanted air apart
+                    None => air,
                 },
                 GapMode::Printed => {
                     let (a, b) = (&d.words[prev.word as usize], &d.words[next.word as usize]);
@@ -474,7 +471,7 @@ impl Page {
                     } else {
                         match Page::slice_clearance(&prev.slices, &next.slices, 0.0) {
                             Some(now) => (prev.x0 - next.x1) + (air - now),
-                            None => air - ((prev.body_x0 - prev.x0) + (next.x1 - next.body_x1)),
+                            None => air,
                         }
                     }
                 }
@@ -926,15 +923,8 @@ impl Page {
                 margin_decos.push((di, bx1 - bx0));
             }
         }
-        // the letters of the word, widened by any mark placed inline with it
-        let (mut b0, mut b1) = self.word_body[wi as usize];
-        for &di in &inline_decos {
-            let b = self.deco_mark_bbox(di as usize);
-            b0 = b0.min(b.x0 as f32 / q);
-            b1 = b1.max(b.x1 as f32 / q);
-        }
         let slices = self.slices_with(wi, &inline_decos);
-        Atom { word: wi, inline_decos, margin_decos, x0, x1, body_x0: b0, body_x1: b1, width: x1 - x0, slices }
+        Atom { word: wi, inline_decos, margin_decos, x0, x1, width: x1 - x0, slices }
     }
 
     /// A banner line keeps its printed drawing, shrunk to the row width and centred on it.
