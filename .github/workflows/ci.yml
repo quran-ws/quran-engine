@@ -77,11 +77,11 @@ jobs:
             dist/pages
             pages
             index
-          key: test-data-${{ vars.QVP_DATA_TAG || 'v0.1.0' }}-${{ vars.QVP_SVG_TAG || 'v1.0.1' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.2.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.1' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
       - name: Fetch test data
         env:
-          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
-          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.0.1' }}
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.2.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.1' }}
         run: scripts/sync-test-data.sh
       - name: Identity gate (8 pages), ABI test, conformance
         run: scripts/check.sh gates

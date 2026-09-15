@@ -6,6 +6,13 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Changed
+- Page data is rebuilt from `quran-svg-elements` v1.1.1, which redraws the ayah
+  medallions to the ones the printed mushaf uses. All 604 pages change. The
+  decomposition is the same, 6,236 ayahs and 77,432 words, and every `NNN.words.json`,
+  `atlas.qva` and `atlas.json` is byte-identical to the previous data release. Pages 1
+  and 2 no longer carry a duplicate ornament, so the ornament count matches the marker
+  count on every page. The release is `data-v0.2.0`. `scripts/sync-test-data.sh` and CI
+  default to it.
 - Page data is published to `cdn.quran.ws/qvp/<version>/` instead of
   `qvp.quran.ws/<version>/`. The old hostname redirects, so existing URLs still
   resolve. One host now carries the releases of the whole stack, each repository

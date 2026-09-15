@@ -35,11 +35,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dist/pages
-          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.2.0' }}
       - name: Fetch page data
         env:
-          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.1.0' }}
-          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.0.1' }}
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.2.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.1' }}
         run: scripts/sync-test-data.sh
       - name: Build the host engine library
         run: cargo build -p qvp-ffi --release
