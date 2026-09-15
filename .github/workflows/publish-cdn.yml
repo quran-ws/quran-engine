@@ -13,10 +13,9 @@ on:
 
 jobs:
   publish:
-    # Only data releases go to the CDN. They are tagged vX.Y.Z, the version the CDN serves
-    # them under; the engine line is tagged engine-vX.Y.Z and carries no pages. The tags of
-    # the first two data releases, v0.1.0 and data-v0.2.0, predate that.
-    if: ${{ inputs.version != '' || !startsWith(github.event.release.tag_name, 'engine-') }}
+    # Only data releases (data-vX.Y.Z, and the first one, v0.1.0) go to the CDN; code
+    # releases (vX.Y.Z) carry the engine, not pages.
+    if: ${{ inputs.version != '' || startsWith(github.event.release.tag_name, 'data-v') || github.event.release.tag_name == 'v0.1.0' }}
     runs-on: ubuntu-latest
     # The R2 credentials live in this environment, not in repo secrets, so only a run
     # started from a tag — and approved — can reach them.

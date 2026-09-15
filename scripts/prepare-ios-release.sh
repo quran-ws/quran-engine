@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 version="${1:?usage: scripts/prepare-ios-release.sh X.Y.Z}"
-tag="engine-v$version"
+tag="v$version"
 have="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
 [ "$version" = "$have" ] || {
   echo "error: requested version $version does not match Cargo.toml version $have" >&2

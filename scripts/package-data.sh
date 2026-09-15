@@ -5,7 +5,7 @@
 # Usage: scripts/package-data.sh X.Y.Z
 # Inputs: dist/pages/ (604 pages, atlas.qva), pages/.tag (the quran-svg-elements tag).
 # Output: dist/quran-engine-pages-hafs-kfgqpc.tar.gz and .sha256, ready for
-#         `gh release create vX.Y.Z`.
+#         `gh release create data-vX.Y.Z`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 v="${1:?usage: scripts/package-data.sh X.Y.Z}"
@@ -35,4 +35,4 @@ awk '/^## Third-party/,0' LICENSE > "$stage/NOTICE.txt" 2>/dev/null || cp LICENS
 mkdir -p dist
 tar -czf "dist/$name.tar.gz" -C "$(dirname "$stage")" "$name"
 (cd dist && shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256")
-echo "packaged dist/$name.tar.gz ($count pages, data version $v); next: gh release create v$v dist/$name.tar.gz dist/$name.tar.gz.sha256"
+echo "packaged dist/$name.tar.gz ($count pages, data version $v); next: gh release create data-v$v dist/$name.tar.gz dist/$name.tar.gz.sha256"
