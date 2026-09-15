@@ -273,7 +273,7 @@ final class QvpKitTests: XCTestCase {
         defer { p.close() }
         let c = QvpCanvasController()
         c.page = p
-        c.setBounds(CGSize(width: 690, height: 1100))
+        c.setBounds(CGSize(width: 690, height: 1100), fromCanvas: 1)
         let l = try XCTUnwrap(p.currentLayout)
         // fit-and-centre, exactly QvpPageView.resetView()
         let expScale: CGFloat = CGFloat(l.contentH) > 1100 ? 1100 / CGFloat(l.contentH) : 1
@@ -308,6 +308,22 @@ final class QvpKitTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(p.currentLayout).lineSpacing, printed)
     }
 
+    /// A canvas that a newer canvas replaced cannot resize the page: in a rotation the outgoing canvas
+    /// reports its half-rotated size after the incoming canvas reported the real one.
+    @MainActor func testCanvasControllerIgnoresSizeFromReplacedCanvas() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try QvpPage(bytes: try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp")))
+        defer { p.close() }
+        let c = QvpCanvasController()
+        c.page = p
+        c.setBounds(CGSize(width: 690, height: 1100), fromCanvas: 2)
+        let scale = try XCTUnwrap(p.currentLayout).scale
+        c.setBounds(CGSize(width: 345, height: 550), fromCanvas: 1)
+        XCTAssertEqual(try XCTUnwrap(p.currentLayout).scale, scale, "the replaced canvas's size is ignored")
+        c.setBounds(CGSize(width: 345, height: 550), fromCanvas: 3)
+        XCTAssertNotEqual(try XCTUnwrap(p.currentLayout).scale, scale, "the newest canvas's size lays the page out")
+    }
+
     /// zoomSpringsBack: a released pinch eases back to the fitted transform; without it the zoom stays.
     @MainActor func testZoomSpringsBack() async throws {
         guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
@@ -325,7 +341,7 @@ final class QvpKitTests: XCTestCase {
         defer { p.close() }
         let c = QvpCanvasController()
         c.page = p
-        c.setBounds(CGSize(width: 690, height: 1100))
+        c.setBounds(CGSize(width: 690, height: 1100), fromCanvas: 1)
         let fitted = (c.viewScale, c.viewOx, c.viewOy)
         c.pinch(2.0, at: CGPoint(x: 345, y: 550)); c.pinchEnded()
         XCTAssertTrue(c.isZoomed, "without zoomSpringsBack the zoom stays")
