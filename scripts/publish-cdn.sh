@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Publish one version of the page data to qvp.quran.ws (Cloudflare R2).
+# Publish one version of the page data to cdn.quran.ws/qvp/ (Cloudflare R2).
+#
+# The host carries every artefact of the stack, so the page data lives under a folder of its
+# own; scripts/cdn-put.sh holds the layout and the upload itself.
 #
 # Versions are immutable: a path is written once and served forever, so the objects go up
 # with `Cache-Control: immutable` and nothing ever overwrites them. A new build means a new
@@ -23,15 +26,13 @@
 # JavaScript, so a web app should fetch pages individually — 20 of them arrive in 36 ms.
 #
 # Objects are stored RAW. Compression happens at the edge: a Cloudflare Compression Rule on
-# qvp.quran.ws compresses application/octet-stream, negotiating zstd → brotli → gzip per
+# cdn.quran.ws compresses application/octet-stream, negotiating zstd → brotli → gzip per
 # client, which beats one fixed encoding (~37 MB brotli vs ~62 MB gzip for the mushaf). It
 # also fails safely — lose the rule and clients get correct, larger bytes — and what arrives
 # is the byte stream the manifest's sha256 covers.
 #
 # Needs: curl (>= 7.75, for --aws-sigv4), brotli, tar, sha256sum/shasum, jq;
-# gh for --from-release.
-# Credentials come from the environment: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
-# R2_SECRET_ACCESS_KEY, and optionally R2_BUCKET (default: qvp-pages).
+# gh for --from-release. Credentials: see scripts/cdn-put.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -45,18 +46,21 @@ for arg in "$@"; do
   esac
 done
 
-BUCKET="${R2_BUCKET:-qvp-pages}"
-PREFIX="$VERSION"
+. scripts/cdn-put.sh
+
+FAMILY=qvp
+RELEASE="$VERSION"           # the tag, for `gh release download`
+VERSION="$(cdn_version "$VERSION")"   # the folder, without the data- prefix
+PREFIX="$FAMILY/$VERSION"
 SRC=dist/pages
 STAGE="dist/cdn/$VERSION"
-sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
 # 1. Source the files. The release tarball is the canonical artefact; dist/pages is what a
 #    local `batch` just produced. Either way we verify nothing beyond what the release signs.
 if [ "$FROM_RELEASE" = 1 ]; then
   TAR=dist/quran-engine-pages-hafs-kfgqpc.tar.gz
   mkdir -p dist && rm -rf "$SRC"
-  gh release download "$VERSION" --repo quran-ws/quran-engine --clobber -D dist \
+  gh release download "$RELEASE" --repo quran-ws/quran-engine --clobber -D dist \
     -p 'quran-engine-pages-hafs-kfgqpc.tar.gz*'
   echo "== verifying $TAR"
   want=$(cut -d' ' -f1 < "$TAR.sha256"); got=$(sha256 "$TAR")
@@ -96,7 +100,7 @@ echo "   $(echo "scale=1; $bundle_bytes/1048576" | bc) MB"
 # 3. A manifest so a service worker can prefetch a range of pages and verify what it got,
 #    without 604 HEAD requests. Carries the data release's own VERSION.json verbatim.
 jq -n --arg version "$VERSION" \
-      --arg base "https://qvp.quran.ws/$PREFIX/" \
+      --arg base "https://$CDN_HOST/$PREFIX/" \
       --arg bundle "$BUNDLE" --arg bbytes "$bundle_bytes" --arg bsha "$bundle_sha" \
       --arg tbytes "$tar_bytes" --arg tsha "$tar_sha" \
       --slurpfile release "$SRC/VERSION.json" \
@@ -113,40 +117,16 @@ echo "   $(wc -l < "$STAGE/.files.tsv" | tr -d ' ') objects + manifest, $(du -sh
 
 [ "$STAGE_ONLY" = 1 ] && { echo "== staged only: $STAGE"; exit 0; }
 
-# 4. Upload. One object per file, content type by extension, never overwriting a version
+# 4. Upload. One object per file, straight from the source tree, never overwriting a version
 #    that already exists. curl signs the S3 requests itself, so there is no SDK to install.
-: "${R2_ACCOUNT_ID:?}" "${R2_ACCESS_KEY_ID:?}" "${R2_SECRET_ACCESS_KEY:?}"
-ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
-SIGV4=(--aws-sigv4 "aws:amz:auto:s3" --user "$R2_ACCESS_KEY_ID:$R2_SECRET_ACCESS_KEY")
-
-if [ "$(curl -sS -o /dev/null -w '%{http_code}' -I "${SIGV4[@]}" \
-          "$ENDPOINT/$BUCKET/$PREFIX/manifest.json")" = 200 ]; then
-  echo "$PREFIX is already published — versions are immutable; cut a new one" >&2; exit 1
-fi
+cdn_init
+cdn_guard "$PREFIX" || exit 1
 
 echo "== uploading to r2://$BUCKET/$PREFIX"
-export ENDPOINT BUCKET PREFIX SRC R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
-put() {
-  case "$1" in
-    *.json) type=application/json ;;
-    *.md)   type=text/markdown ;;
-    *)      type=application/octet-stream ;;
-  esac
-  # Content is immutable and cached for a year. The manifest is the entry point, and an
-  # index cached that long is a footgun — a mistake in it is unreachable without a cache
-  # purge. Five minutes costs one request per POP per five minutes and keeps it fixable.
-  cache="public, max-age=31536000, immutable"
-  [ "$1" = manifest.json ] && cache="public, max-age=300"
-  code=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT \
-    --aws-sigv4 "aws:amz:auto:s3" --user "$R2_ACCESS_KEY_ID:$R2_SECRET_ACCESS_KEY" \
-    -H "Content-Type: $type" \
-    -H "Cache-Control: $cache" \
-    --data-binary "@$2" "$ENDPOINT/$BUCKET/$PREFIX/$1")
-  [ "$code" = 200 ] || { echo "PUT $1 failed: HTTP $code" >&2; return 1; }
-}
-export -f put
-cut -f1 "$STAGE/.files.tsv" | xargs -P 16 -I{} bash -c 'put "{}" "$SRC/{}"'
-put "$BUNDLE" "$STAGE/$BUNDLE"
-put manifest.json "$STAGE/manifest.json"
+export PREFIX SRC
+cut -f1 "$STAGE/.files.tsv" | xargs -P 16 -I{} bash -c 'cdn_put "$PREFIX/{}" "$SRC/{}"'
+cdn_put "$PREFIX/$BUNDLE" "$STAGE/$BUNDLE"
+cdn_put "$PREFIX/manifest.json" "$STAGE/manifest.json" "public, max-age=300"
+cdn_latest "$FAMILY" "$VERSION"
 
-echo "== published https://qvp.quran.ws/$PREFIX/manifest.json"
+echo "== published https://$CDN_HOST/$PREFIX/manifest.json"

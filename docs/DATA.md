@@ -44,8 +44,9 @@ that naming) and is never rewritten; a correction is a new version.
 
 - The GitHub release: `https://github.com/quran-ws/quran-engine/releases`, the
   `quran-engine-pages-hafs-kfgqpc.tar.gz` asset and its `.sha256`.
-- The CDN, for apps that load pages over HTTP: `https://qvp.quran.ws/<version>/NNN.qvp`,
-  immutable per version, with a `manifest.json` of digests (`docs/CDN.md`).
+- The CDN, for apps that load pages over HTTP:
+  `https://cdn.quran.ws/qvp/<version>/NNN.qvp`, immutable per version, with a
+  `manifest.json` of digests (`docs/CDN.md`).
 - `scripts/sync-test-data.sh` fetches the release into `dist/pages/` for development and
   tests; `scripts/sync-example-data.sh` copies the 29-page example set into an example app.
 

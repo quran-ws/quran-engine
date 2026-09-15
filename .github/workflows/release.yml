@@ -202,3 +202,71 @@ jobs:
           (cd packages/react-native/qvp-react-native && npm install --no-audit --no-fund && npm run build && npm publish --access public)
       - name: pub.dev
         run: echo "::notice::pub.dev publishing is not wired yet (see docs/standards/RELEASING.md); the package is consumable from this release's tag"
+
+  cdn:
+    name: engine builds to cdn.quran.ws
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    # The R2 credentials live in this environment, not in repo secrets, so only a run
+    # started from a tag — and approved — can reach them.
+    environment: cdn
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      # Each build is its own family on the CDN, so a consumer that wants the wasm never
+      # lists the Apple artifacts, and the three can move at different versions later.
+      - name: Publish
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'cdn-quran-ws' }}
+          VERSION: ${{ github.ref_name }}
+          AAR_VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          . scripts/cdn-put.sh
+          cdn_init
+          publish() {   # publish <family> <file>...
+            local family="$1"; shift
+            local prefix="engine/$family/$VERSION" tmp
+            cdn_guard "$prefix" || exit 1
+            tmp=$(mktemp -d)
+            for f in "$@"; do
+              printf '%s\t%s\t%s\n' "$(basename "$f")" "$(wc -c < "$f" | tr -d ' ')" "$(sha256 "$f")"
+            done > "$tmp/files.tsv"
+            jq -n --arg version "$VERSION" --arg base "https://$CDN_HOST/$prefix/" \
+                  --rawfile tsv "$tmp/files.tsv" \
+              '{version: $version, base: $base,
+                files: ($tsv | rtrimstr("\n") | split("\n") | map(split("\t") |
+                  {name: .[0], bytes: (.[1]|tonumber), sha256: .[2]}))}' > "$tmp/manifest.json"
+            for f in "$@"; do cdn_put "$prefix/$(basename "$f")" "$f"; done
+            cdn_put "$prefix/manifest.json" "$tmp/manifest.json" "public, max-age=300"
+            cdn_latest "engine/$family" "$VERSION"
+            echo "== published https://$CDN_HOST/$prefix/manifest.json"
+          }
+          publish wasm artifacts/qvp_ffi.wasm/qvp_ffi.wasm
+          publish apple artifacts/xcframework/QvpEngine.xcframework.zip \
+                        artifacts/xcframework/QvpEngine.xcframework.zip.checksum
+          publish android "artifacts/android/qvp-android-$AAR_VERSION.aar" \
+                          "artifacts/android/qvp-android-$AAR_VERSION.aar.sha256"
+
+      - name: Check it is live
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          for family in wasm apple android; do
+            base="https://cdn.quran.ws/engine/$family/$VERSION"
+            curl -fsS "$base/manifest.json" -o /tmp/m.json
+            name=$(jq -r '.files[0].name' /tmp/m.json)
+            want=$(jq -r '.files[0].sha256' /tmp/m.json)
+            curl -fsS -H 'Origin: https://example.com' -o /tmp/a -D /tmp/h "$base/$name"
+            grep -qi '^access-control-allow-origin' /tmp/h || { echo "no CORS header on $family"; exit 1; }
+            got=$(sha256sum /tmp/a | cut -d' ' -f1)
+            [ "$want" = "$got" ] || { echo "$family/$name digest mismatch"; exit 1; }
+            echo "$family ok"
+          done

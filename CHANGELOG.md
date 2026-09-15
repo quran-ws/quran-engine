@@ -5,6 +5,18 @@ All notable changes to the engine and its packages. The format follows
 `docs/standards/VERSIONING.md`. Every package shares the version listed here.
 
 ## [Unreleased]
+### Changed
+- Page data is published to `cdn.quran.ws/qvp/<version>/` instead of
+  `qvp.quran.ws/<version>/`. The old hostname redirects, so existing URLs still
+  resolve. One host now carries the releases of the whole stack, each repository
+  in its own folder (`docs/CDN.md`).
+
+### Added
+- `latest.json` beside each family names its current version, so a consumer can
+  resolve the newest release without knowing the tag.
+- The wasm, Apple and Android builds are published to `cdn.quran.ws/engine/`.
+- `scripts/cdn-put.sh`, the shared upload library, and
+  `scripts/migrate-cdn-prefix.sh` for the one-time move of the published data.
 
 ### Fixed
 

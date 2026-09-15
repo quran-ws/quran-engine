@@ -38,12 +38,26 @@ const canvas = document.querySelector('canvas')
 page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
 ```
 
-Page files are served from `qvp.quran.ws` under immutable, versioned URLs, so a
+Page files are served from `cdn.quran.ws` under immutable, versioned URLs, so a
 browser can load one page without shipping the data — `docs/CDN.md`:
 
 ```js
-const page = await loadPage('https://qvp.quran.ws/v0.1.0/042.qvp')
+const page = await loadPage('https://cdn.quran.ws/qvp/v0.1.0/042.qvp')
 ```
+
+`cdn.quran.ws` mirrors the signed releases of the stack. This repo publishes two
+kinds of artifact, each on its own version line:
+
+| folder | holds |
+|---|---|
+| `qvp/<version>/` | page data: `.qvp`, `.words.json`, `atlas.qva`, the brotli bundle |
+| `engine/wasm/<version>/`, `engine/apple/<version>/`, `engine/android/<version>/` | engine builds |
+
+`latest.json` beside each names the current version. Other repositories of the
+stack publish their own folders on the same host — `docs/CDN.md` has the layout.
+
+`qvp.quran.ws/<version>/` redirects to `cdn.quran.ws/qvp/<version>/`, so URLs
+published before the move still resolve.
 
 Decoded words include their `surah`, `ayah`, `word` and page-coordinate `box`.
 `page.hitTestExact(x, y)` returns the word at a point in those same page coordinates.

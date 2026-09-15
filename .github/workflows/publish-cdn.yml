@@ -1,5 +1,5 @@
-# Publish a data release to qvp.quran.ws. Versions are immutable: this runs once per
-# release and refuses to overwrite a prefix that already exists.
+# Publish a data release to cdn.quran.ws/qvp/. Versions are immutable: this runs once per
+# release and refuses to overwrite a folder that already exists.
 name: publish-cdn
 
 on:
@@ -35,7 +35,7 @@ jobs:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ vars.R2_BUCKET || 'qvp-pages' }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'cdn-quran-ws' }}
           VERSION: ${{ inputs.version || github.event.release.tag_name }}
         run: ./scripts/publish-cdn.sh "$VERSION" --from-release
 
@@ -43,7 +43,9 @@ jobs:
         env:
           VERSION: ${{ inputs.version || github.event.release.tag_name }}
         run: |
-          base="https://qvp.quran.ws/$VERSION"
+          # the tag may carry a data- prefix; the URL never does
+          v="${VERSION#data-}"
+          base="https://cdn.quran.ws/qvp/$v"
           curl -fsS "$base/manifest.json" -o /tmp/m.json
 
           # a page: CORS must be present, and the bytes must match the manifest digest.
@@ -60,4 +62,12 @@ jobs:
                   "$base/$name" | tr -d '\r' | awk 'tolower($1)=="content-encoding:"{print tolower($2)}')
           [ "$enc" = br ] || { echo "bundle served as '${enc:-identity}', expected br — check the compression rules"; exit 1; }
 
-          echo "pages, digests and bundle encoding all ok"
+          # latest.json must name this version, or consumers that follow it never see it
+          got=$(curl -fsS "https://cdn.quran.ws/qvp/latest.json" | jq -r .version)
+          [ "$got" = "$v" ] || { echo "latest.json names '$got', expected '$v'"; exit 1; }
+
+          # the old hostname must still resolve, or links published before the move break
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -I "https://qvp.quran.ws/$v/manifest.json")
+          [ "$code" = 301 ] || echo "::warning::qvp.quran.ws returned $code, expected 301 — check the redirect rule"
+
+          echo "pages, digests, bundle encoding and latest all ok"

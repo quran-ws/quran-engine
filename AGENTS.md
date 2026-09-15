@@ -32,7 +32,8 @@ scripts/check-parity.py               # header vs Rust vs every wrapper
 - Lossless only. Never simplify a curve.
 - Never commit page data. Regenerating it would add about 92 MB to history each time.
 - The engine is URL-agnostic: every wrapper takes bytes or a path, never a base URL. The
-  CDN (`docs/CDN.md`) is a data-release mirror, which CI builds from the signed tarball.
+  CDN (`docs/CDN.md`) mirrors the signed releases of this repo, quran-svg and
+  quran-svg-elements, each under its own folder on `cdn.quran.ws`.
 - Naming: `docs/standards/NAMING.md`. Quranic words: the Quran.ws terminology standard and
   `.terminology.json`. Run the audit before adding a word.
 - Writing: docs, comments and PR text follow the plain-writing rules in

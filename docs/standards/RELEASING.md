@@ -37,7 +37,7 @@ on 2029-09-13 and must be replaced in GitHub before then.
    version, engine commit, format version, page count, sha256 of every file), the upstream
    rights notice, and `dist/quran-engine-pages-hafs-kfgqpc.tar.gz` with its `.sha256`.
 5. `gh release create data-vX.Y.Z` with the tarball, the checksum and a sample page.
-   `publish-cdn.yml` mirrors it to `qvp.quran.ws` under an immutable prefix.
+   `publish-cdn.yml` mirrors it to `cdn.quran.ws/qvp/` under an immutable folder.
 
 A published data version is never rewritten. Cut a new one.
 
