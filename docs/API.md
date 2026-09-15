@@ -203,9 +203,23 @@ moves to another page.
 
 **How the rows come out.** `breaks` picks where the words are cut into rows. `greedy` fills
 each row until the next word does not fit, which is what leaves one row full and the next half
-empty when a long word falls at a boundary. `even`, the default, weighs every row of a block
-together and takes the cuts that leave them closest in width, costing a row the square of what
-it is left short. Over 150 pages that takes the rows left under 60% full from 2.48% to 0.70%.
+empty when a long word falls at a boundary. `even` weighs every row of a block together and
+takes the cuts that leave them closest in width, costing a row the square of what it is left
+short. `fitted`, the default, weighs a row by the width it can reach once its gaps have opened
+as far as `maxStretch` allows, so a shortfall the spacing can absorb costs little and one it
+cannot moves the cut; it also charges for the step between a row and the row above it, and for
+the spacing spent, which makes a better cut worth more than a wider gap.
+
+Over all 604 pages at zoom 1.3, 1.8 and 2.4:
+
+| breaks | median fill | 5th percentile | 5th-95th spread | rows under 60% | median step | 95th step | worst step |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| greedy | 92.2% | 62.2% | 36.8 pp | 4.40% | 6.2 pp | 29.1 pp | 87.1 pp |
+| even | 91.0% | 67.5% | 30.9 pp | 3.06% | 4.8 pp | 21.2 pp | 87.1 pp |
+| fitted | 90.3% | 69.0% | 29.2 pp | 1.90% | 4.5 pp | 19.5 pp | 64.8 pp |
+
+The step is the difference in fill between a row and the row above it. `fitted` costs 0.07 ms
+a page more than `even` on a warm layout and adds 7 rows over the whole mushaf.
 
 `fill` is `centred` (the default), `ragged` (the row starts at the right margin) or `justified`
 (gaps stretch to both margins, the row that ends a block excepted). `gaps` is `uniform` (the

@@ -37,6 +37,12 @@ pub enum Breaks {
     /// Choose the breaks that leave the rows of a block as even as they can be, by weighing how
     /// much every row of the block is left short rather than only the row in hand.
     Even = 1,
+    /// Weigh a row by the width it can reach once its gaps have opened as far as they may,
+    /// not by the width its words happen to take, and charge for the difference between one
+    /// row and the row above it. A row whose shortfall its gaps can close is cheap; a row of
+    /// three long words, whose two gaps can close almost nothing, is not, and the breaks move
+    /// instead.
+    Fitted = 2,
 }
 
 /// How a reflowed row fills the width.
@@ -79,7 +85,7 @@ impl Default for ReflowSpec {
         ReflowSpec {
             zoom: 1.0,
             fill: Fill::Centred,
-            breaks: Breaks::Even,
+            breaks: Breaks::Fitted,
             gaps: GapMode::Uniform,
             word_gap: 1.0,
             relax: crate::defaults::REFLOW_RELAX,
@@ -627,6 +633,81 @@ impl Page {
                             cuts.push(i);
                         }
                         j = i;
+                    }
+                    cuts.reverse();
+                    cuts
+                }
+                // Rows weighed by the width they can reach, against one another. A row's
+                // shortfall is measured after its own gaps have opened as far as the cap
+                // allows, so a shortfall the spacing can absorb costs little and one it cannot
+                // moves the break. Two further terms keep the page steady: the step between a
+                // row and the row above it, and the spacing actually spent to get there, which
+                // makes a better break worth more than a wider gap.
+                Breaks::Fitted => {
+                    // the gaps free to stretch in a run, and how far each may go
+                    let mut o = vec![0u32; n + 1];
+                    for i in 1..n {
+                        o[i + 1] = o[i] + u32::from(!interlocked(&atoms[i - 1], &atoms[i]));
+                    }
+                    let per_gap = (median * spec.word_gap.max(0.0) * (spec.max_stretch - 1.0)).max(0.0);
+                    let per_gap = if spec.max_stretch > 0.0 { per_gap } else { row_w };
+                    // fill from 0 to 1, natural and after opening
+                    let reach = |i: usize, j: usize| -> (f32, f32) {
+                        let used = width(i, j);
+                        let room = (o[j] - o[i + 1]) as f32 * per_gap;
+                        (used / row_w, (used + room).min(row_w) / row_w)
+                    };
+                    // The cost of a row against the row before it. The state has to carry that
+                    // row, so the table is over pairs: `best[i][j]` is the block broken up to
+                    // `j` with its last row running from `i`.
+                    const SHORT: f32 = 1.0;
+                    const STEP: f32 = 0.6;
+                    const SPEND: f32 = 0.25;
+                    let fits = |i: usize, j: usize| width(i, j) <= row_w + 0.01 || i + 1 == j;
+                    let mut best: Vec<Vec<f32>> = vec![vec![f32::INFINITY; n + 1]; n + 1];
+                    let mut from: Vec<Vec<usize>> = vec![vec![0usize; n + 1]; n + 1];
+                    for j in 1..=n {
+                        for i in (0..j).rev() {
+                            if !fits(i, j) {
+                                break;
+                            }
+                            let (natural, reached) = reach(i, j);
+                            // a block ends where its text ends, so its last row is not short
+                            let short = if j == n { 0.0 } else { (1.0 - reached).max(0.0) };
+                            let own = SHORT * short * short + SPEND * (reached - natural) * (reached - natural);
+                            if i == 0 {
+                                best[i][j] = own;
+                                continue;
+                            }
+                            for h in (0..i).rev() {
+                                if !fits(h, i) {
+                                    break;
+                                }
+                                if best[h][i].is_infinite() {
+                                    continue;
+                                }
+                                let step = reach(h, i).1 - reached;
+                                let cost = best[h][i] + own + STEP * step * step;
+                                if cost < best[i][j] {
+                                    best[i][j] = cost;
+                                    from[i][j] = h;
+                                }
+                            }
+                        }
+                    }
+                    let mut i = (0..n)
+                        .rev()
+                        .filter(|&i| best[i][n].is_finite())
+                        .min_by(|&a, &b| best[a][n].partial_cmp(&best[b][n]).unwrap_or(std::cmp::Ordering::Equal));
+                    let (mut cuts, mut j) = (vec![], n);
+                    while let Some(start) = i {
+                        if start == 0 {
+                            break;
+                        }
+                        cuts.push(start);
+                        let h = from[start][j];
+                        j = start;
+                        i = Some(h);
                     }
                     cuts.reverse();
                     cuts

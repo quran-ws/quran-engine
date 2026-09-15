@@ -32,7 +32,7 @@
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
-    reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'even', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
+    reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
     hlMode: 'both', hlMs: 250, revealOn: false,
   };
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };

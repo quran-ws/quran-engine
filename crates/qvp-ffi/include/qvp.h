@@ -96,7 +96,7 @@ typedef struct { uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; 
    the page out inside, 0 = the page's own (qvp_page_grid). crop_left/right: printed side margins to cut (page units,
    0 = none). max_aspect_slack: the content is never wider than viewport_h·page_w/page_h·slack (0 = no bound). */
 /* reflow_zoom: break the words onto rows of the page's own width, with ink reflow_zoom times the size it has at
-   fit-to-width (0 = lay the page out as printed). reflow_fill: 0 ragged, 1 justified, 2 centred, 255 the engine's own default. reflow_breaks: 0 greedy, 1 even, 255 default.
+   fit-to-width (0 = lay the page out as printed). reflow_fill: 0 ragged, 1 justified, 2 centred, 255 the engine's own default. reflow_breaks: 0 greedy, 1 even, 2 fitted, 255 default.
    reflow_relax: how far a row much shorter than the row beside it is opened towards it, 0 to 1 (negative = default). reflow_gaps: 0 the printed gap
    between the two words, 1 the page's median gap. reflow_word_gap: multiplier on every gap (0 = 1). reflow_max_stretch: how far a justified row's gaps may stretch,
    as a multiple of what they started with (0 = the engine's default, negative = no cap). */

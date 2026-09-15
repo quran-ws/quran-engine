@@ -366,7 +366,7 @@
       d.setFloat32(s + 48, r ? (r.zoom ?? 1) : 0, true);
       // 255 asks the engine for its own default
       const fill = { ragged: 0, justified: 1, centred: 2, centered: 2 }[r && r.fill] ?? 255;
-      const breaks = { greedy: 0, even: 1 }[r && r.breaks] ?? 255;
+      const breaks = { greedy: 0, even: 1, fitted: 2 }[r && r.breaks] ?? 255;
       d.setUint8(s + 52, fill); d.setUint8(s + 53, breaks); d.setUint8(s + 54, r && r.gaps === 'printed' ? 0 : 1);
       d.setFloat32(s + 56, r ? (r.wordGap ?? 1) : 1, true);
       d.setFloat32(s + 60, r ? (r.maxStretch ?? 0) : 0, true);
