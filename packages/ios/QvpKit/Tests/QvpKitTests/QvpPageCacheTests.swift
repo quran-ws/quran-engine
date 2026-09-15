@@ -73,7 +73,7 @@ final class QvpPageCacheTests: XCTestCase {
         cache = nil
         XCTAssertNil(releasedCache)
         XCTAssertTrue(controller.page?.isOpen == true)
-        controller.setBounds(CGSize(width: 345, height: 550))
+        controller.setBounds(CGSize(width: 345, height: 550), fromCanvas: 1)
         XCTAssertNotNil(controller.page?.currentLayout)
     }
 
@@ -82,7 +82,7 @@ final class QvpPageCacheTests: XCTestCase {
         let page = try QvpPage(bytes: Data(contentsOf: QvpKitTests.pages.appendingPathComponent("042.qvp")))
         let controller = QvpCanvasController()
         controller.page = page
-        controller.setBounds(CGSize(width: 345, height: 550))
+        controller.setBounds(CGSize(width: 345, height: 550), fromCanvas: 1)
         XCTAssertTrue(page.isOpen)
         page.close()
         page.close()
