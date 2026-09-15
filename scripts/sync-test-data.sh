@@ -10,7 +10,7 @@
 #
 # Environment:
 #   QVP_DATA_TAG   data release tag (default data-v0.2.0)
-#   QVP_SVG_TAG    quran-svg-elements release tag (default v1.1.1)
+#   QVP_SVG_TAG    quran-svg-elements release tag (default v1.1.2)
 #   QVP_KEEP_PAGES keep dist/pages as it is, whatever built it
 # Output: the directories above; a line per artifact saying fetched, kept or skipped.
 set -euo pipefail
@@ -36,7 +36,7 @@ else
   echo "fetched  dist/pages ($tag, checksum verified)"
 fi
 
-svg_tag="${QVP_SVG_TAG:-v1.1.1}"
+svg_tag="${QVP_SVG_TAG:-v1.1.2}"
 svg_asset="quran-svg-elements-hafs-kfgqpc.tar.gz"
 svg_base="https://github.com/quran-ws/quran-svg-elements/releases/download/$svg_tag"
 
