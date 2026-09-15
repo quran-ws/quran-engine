@@ -12,7 +12,7 @@ pub(crate) const SCHEMA: u32 = 1;
 /// The revision of the layout the steps were searched against.
 pub(crate) const LAYOUT_REVISION: u32 = 1;
 /// A content hash of the page data it was built from.
-pub(crate) const ARTWORK: u64 = 0x98f45a4be4c7328e;
+pub(crate) const ARTWORK: u64 = 0xd1fc2388e9c6c713;
 /// The zoom each step aims at, before the search.
 pub(crate) const NOMINALS: [f32; 3] = [1.4, 1.8, 2.2];
 /// How far either side of a nominal the search went, and in what steps.
