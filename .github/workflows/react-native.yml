@@ -32,3 +32,11 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
+      # Typecheck the example against the library it just built, for the same reason the
+      # other wrappers build theirs: nothing else calls the public API as an app does.
+      - name: Typecheck the example
+        working-directory: packages/react-native/example
+        run: |
+          set -o pipefail
+          npm install --no-audit --no-fund
+          npx tsc --noEmit

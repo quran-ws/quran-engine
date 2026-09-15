@@ -51,6 +51,11 @@ jobs:
       - name: Unit tests
         working-directory: packages/android
         run: ./gradlew --no-daemon :qvp:testDebugUnitTest
+      # The example is the only place that exercises the wrapper the way an app does, so a
+      # renamed member that no test calls shows up here and nowhere else.
+      - name: Build the example
+        working-directory: packages/android
+        run: ./gradlew --no-daemon :example:assembleDebug
       - name: Package AAR
         run: |
           version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"

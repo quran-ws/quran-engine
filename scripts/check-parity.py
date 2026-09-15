@@ -6,12 +6,14 @@ Inputs
   crates/qvp-ffi/src/lib.rs                    the #[no_mangle] exports
   packages/android/qvp/src/main/cpp/qvp.h      the Android copy of the header
   the wrapper sources listed in WRAPPERS
+  the published JavaScript entry points listed in JS_SURFACES
   docs/API-PARITY.md                           the "Declared gaps" table (symbol, wrapper, issue)
 
 Output
   docs/API-PARITY.md, regenerated between the parity markers (default), or checked
   against the current sources (--check). Exit 1 on: a header/Rust mismatch, a stale
-  Android header copy, or a symbol that a wrapper neither binds nor declares as a gap.
+  Android header copy, a symbol that a wrapper neither binds nor declares as a gap, or an
+  abbreviated field name in a published JavaScript entry point.
 
 A symbol counts as bound in a wrapper when the C name or its camelCase form (with or
 without the object-model noun) appears in that wrapper's sources.
@@ -90,6 +92,29 @@ def declared_gaps() -> dict[tuple[str, str], str]:
     return gaps
 
 
+# Every entry point of the npm package returns the same field names. The lite decoder
+# reads the format directly and binds no qvp_* symbol, so nothing else here covers it.
+JS_SURFACES = ["web/qvp.js", "web/index.mjs", "web/lite.mjs"]
+# The abbreviations docs/standards/NAMING.md replaced, as whole identifiers.
+BANNED_JS_NAMES = {
+    "idx": "index", "lineIdx": "lineIndex", "ayahIdx": "ayahIndex", "wordIdx": "wordIndex",
+    "nDecos": "nDecorations", "deco": "decoration", "decos": "decorations",
+    "lineNo": "lineNumber", "ayahNo": "ayahNumber",
+}
+
+
+def check_js_names(problems: list[str]) -> None:
+    for rel in JS_SURFACES:
+        path = ROOT / rel
+        if not path.exists():
+            problems.append(f"{rel} is listed as a published entry point but does not exist")
+            continue
+        text = path.read_text()
+        for old, new in BANNED_JS_NAMES.items():
+            if re.search(rf"\b{old}\b", text):
+                problems.append(f"{rel} uses `{old}`; the name is `{new}` (docs/standards/NAMING.md)")
+
+
 DEFAULT_SITES = {
     "core": "crates/qvp-core/src/defaults.rs",
     "web": "web/qvp.js",
@@ -143,6 +168,7 @@ def main(argv: list[str]) -> int:
     check = "--check" in argv
     problems: list[str] = []
     check_defaults(problems)
+    check_js_names(problems)
 
     symbols = header_symbols()
     exports = rust_exports()

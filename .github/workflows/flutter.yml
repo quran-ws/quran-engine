@@ -48,6 +48,11 @@ jobs:
       - name: Analyze
         working-directory: packages/flutter/qvp_flutter
         run: flutter pub get && flutter analyze
+      # The example is a package of its own, so the analyzer only resolves its imports
+      # after its own pub get. Without this step nothing checks the example's API use.
+      - name: Analyze the example
+        working-directory: packages/flutter/qvp_flutter/example
+        run: flutter pub get && flutter analyze
       - name: Test
         working-directory: packages/flutter/qvp_flutter
         env:
