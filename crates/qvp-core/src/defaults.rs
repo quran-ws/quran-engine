@@ -69,3 +69,12 @@ pub const CURVE_STEPS: u32 = 8;
 /// band compares ink that does not face ink: at 24 bands a pair the measure called 2.3 apart
 /// had strokes crossing by 4.6. These bands are about a third of a page unit.
 pub const SLICES_PER_LINE: u32 = 96;
+
+/// The zoom each step of the reader's zoom control aims at, above the printed page. The engine
+/// searches around these for the zoom that breaks the page best (`Page::zoom_levels`).
+pub const ZOOM_LEVEL_NOMINALS: [f32; 3] = [1.4, 1.8, 2.2];
+/// How far either side of a nominal the search may go, as a fraction of it. A wider band finds
+/// better rows and makes the ink change size more from one page to the next.
+pub const ZOOM_LEVEL_BAND: f32 = 0.06;
+/// The search step, in zoom.
+pub const ZOOM_LEVEL_STEP: f32 = 0.015;

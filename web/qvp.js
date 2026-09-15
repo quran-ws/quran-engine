@@ -414,6 +414,16 @@
     }
     /** the largest reflow zoom at which every word of this page still fits a row */
     reflowMaxZoom(spec) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_reflow_max_zoom(this.h, s); }
+    /** the zoom each step of a reader's zoom control lands on for this page, rising */
+    zoomLevels(spec, nominals, band) {
+      const s = this.e.scratch; this._writeLayoutSpec(spec, s);
+      const k = nominals ? nominals.length : 0;
+      const np = k ? this.e.buf(k * 4) : 0;
+      if (k) new Float32Array(this.e.mem.buffer, np, k).set(nominals);
+      const out = this.e.buf(8 * 4);
+      const n = this.e.ex.qvp_zoom_levels(this.h, s, np, k, band || 0, out, 8);
+      return Array.from(new Float32Array(this.e.mem.buffer, out, n));
+    }
     /** the words of a reflowed row, in reading order */
     rowWords(row) {
       const n = this.e.ex.qvp_layout_row_words(this.h, row, 0, 0);

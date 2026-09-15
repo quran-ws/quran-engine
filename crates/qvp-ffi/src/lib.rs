@@ -1440,6 +1440,36 @@ pub unsafe extern "C" fn qvp_reflow_max_zoom(page: *const Page, spec: *const Qvp
         (*page).reflow_max_zoom(&s.reflow.unwrap_or_default())
     })
 }
+/// The zoom each step of a reader's zoom control lands on for this page: the engine searches a
+/// band around each nominal zoom for the one whose rows come out best. Writes up to `n_out`
+/// zooms to `out`, rising, and returns how many it wrote. `nominals` null takes the engine's
+/// own, `band` of 0 its own band. The printed page, zoom 1, is not among them.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_levels(
+    page: *mut Page,
+    spec: *const QvpLayoutSpec,
+    nominals: *const f32,
+    n_nominals: u32,
+    band: f32,
+    out: *mut f32,
+    n_out: u32,
+) -> u32 {
+    guard(|| {
+        if page.is_null() || out.is_null() {
+            return 0;
+        }
+        let s = layout_spec(spec);
+        let noms: &[f32] = if nominals.is_null() || n_nominals == 0 {
+            &[]
+        } else {
+            std::slice::from_raw_parts(nominals, n_nominals as usize)
+        };
+        let levels = (*page).zoom_levels(&s, noms, band);
+        let n = levels.len().min(n_out as usize);
+        std::ptr::copy_nonoverlapping(levels.as_ptr(), out, n);
+        n as u32
+    })
+}
 /// The `line_spacing` multiplier that makes the page fill the padded viewport of `spec` when
 /// fitted to width; max <= 0 means unlimited. The padding is subtracted here, not by the host.
 #[no_mangle]

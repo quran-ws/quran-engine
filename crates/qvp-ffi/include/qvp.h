@@ -189,6 +189,8 @@ uint32_t qvp_layout_omitted_paths(const QvpPage*, uint32_t* out, uint32_t cap); 
 uint32_t qvp_layout_row_words(const QvpPage*, uint32_t row, uint32_t* out, uint32_t cap);     /* the words of a reflowed row */
 uint32_t qvp_layout_word_row(const QvpPage*, uint32_t word);                    /* the row a word landed on, or QVP_NONE */
 float    qvp_reflow_max_zoom(const QvpPage*, const QvpLayoutSpec*);              /* the largest reflow zoom whose rows still hold every word */
+uint32_t qvp_zoom_levels(QvpPage*, const QvpLayoutSpec*, const float* nominals, uint32_t n_nominals,
+                         float band, float* out, uint32_t n_out);                 /* the zoom each step of a zoom control lands on; returns how many were written */
 float    qvp_layout_line_spacing_to_fill(const QvpPage*, const QvpLayoutSpec*, float max /* <=0 unlimited */);   /* the multiplier that fills the padded viewport */
 float    qvp_layout_wasted_fraction(const QvpPage*, const QvpLayoutSpec*);       /* share of the padded viewport left empty at fit-to-width */
 int      qvp_word_bounds_view(const QvpPage*, uint32_t word_index, float out[4]);

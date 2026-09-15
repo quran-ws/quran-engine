@@ -33,7 +33,7 @@
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
     reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
-    hlMode: 'both', hlMs: 250, revealOn: false,
+    hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
   };
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
   const PALETTE = { [CATEGORY.HARAKAH]: '#1a73e8', [CATEGORY.TANWIN]: '#8e24aa', [CATEGORY.LETTER_DOT]: '#c62828', [CATEGORY.WAQF]: '#0a7d32', [CATEGORY.DABT]: '#ef6c00', [CATEGORY.ORTHOGRAPHIC]: '#00838f', [CATEGORY.STANDALONE]: '#6d4c41' };
@@ -99,11 +99,12 @@
     const page = engine.loadPage(bytes); page.buildPaths();
     S.loadMs = performance.now() - t;
     if (S.page) S.page.free();
-    S.page = page; S.n = n; S.bytes = bytes.length;
+    S.page = page; S.n = n; S.bytes = bytes.length; S.levels = null;
     S.selWord = -1; S.selAyah = null; S.hover = -1; S.playIdx = 0; S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.pathHandles.clear(); S.revealOn = false;
     S.themeHandle = S.tajwidHandle = S.hideHandle = S.ayahMarksHandle = 0;
     $('pageNo').value = n;
     applyTheme(); applyToggles();
+    if (S.level > 1) { const lv = S.page.zoomLevels(layoutSpec()); S.levels = lv; S.reflow.zoom = lv[S.level - 2] || S.reflow.zoom; }
     renderer.baseKey = '';
     fit(false);
     showSelection(); showMeta(); runSearch();
@@ -364,6 +365,9 @@
     fit();
     const L = S.page && S.page.currentLayout;
     $('reflowRows').textContent = L && L.reflowed ? `${L.rows} rows · ${Math.round(L.contentH)} px tall · max zoom ×${(+$('rZoom').max).toFixed(2)}` : 'off · as printed';
+    for (let n = 1; n <= 4; n++) $('lv' + n).classList.toggle('on', (S.level || (S.reflow.on ? 0 : 1)) === n);
+    const lv = levels();
+    $('lvlVal').textContent = lv.length ? lv.map(z => '×' + z.toFixed(2)).join(' · ') : '';
   };
   $('reflow').onclick = () => { S.reflow.on = !S.reflow.on; reflowUI(); };
   // the engine says how far this page can zoom before a word outgrows its row
@@ -372,7 +376,16 @@
     $('rZoom').max = Math.min(4, Math.max(1, max)).toFixed(2);
     if (S.reflow.zoom > +$('rZoom').max) { S.reflow.zoom = +$('rZoom').max; $('rZoom').value = S.reflow.zoom; }
   };
-  $('rZoom').oninput = e => { S.reflow.zoom = +e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rZoom').oninput = e => { S.reflow.zoom = +e.target.value; S.level = 0; S.reflow.on = true; reflowUI(); };
+  // The zoom steps this page offers, from the engine: level 1 is the printed page, the rest
+  // are the zooms whose rows come out best near each nominal size.
+  const levels = () => (S.levels = S.levels || (S.page ? S.page.zoomLevels(layoutSpec()) : []));
+  const setLevel = n => {
+    S.level = n;
+    if (n <= 1) { S.reflow.on = false; } else { S.reflow.on = true; S.reflow.zoom = levels()[n - 2] || S.reflow.zoom; $('rZoom').value = S.reflow.zoom; }
+    reflowUI();
+  };
+  for (let n = 1; n <= 4; n++) $('lv' + n).onclick = () => setLevel(n);
   $('rGap').oninput = e => { S.reflow.wordGap = +e.target.value; S.reflow.on = true; reflowUI(); };
   $('rFill').onchange = e => { S.reflow.fill = e.target.value; S.reflow.on = true; reflowUI(); };
   $('rGaps').onchange = e => { S.reflow.gaps = e.target.value; S.reflow.on = true; reflowUI(); };

@@ -223,6 +223,27 @@ The step is the difference in fill between a row and the row above it. `fitted` 
 over the whole mushaf and costs 0.05 ms a page on a warm layout: 0.25 ms against 0.20 ms at
 the median, 0.32 ms against 0.27 ms at the 95th percentile.
 
+**The zoom steps a reader gets.** `page.zoomLevels(spec)` returns the zoom each step of a
+reader's zoom control lands on for this page. The rows only rearrange at certain zooms, so a
+zoom that breaks a page well can sit beside one that breaks it badly. The engine searches a
+band around each nominal step and returns the zoom whose rows come out best, counting how
+short the rows are, how much each differs from the row above, how tall the page grows, and how
+far the zoom is from the step asked for. Each returned zoom is at least 8% above the one
+before it. Zoom 1, the printed page, is the step every control starts from and is not
+returned.
+
+Over all 604 pages, against the same three steps taken at their nominal zoom:
+
+| steps | median fill | standard deviation | rows under 60% | 95th step |
+|---|---:|---:|---:|---:|
+| nominal ×1.4, ×1.8, ×2.2 | 91.1% | 7.54 pp | 0.47% | 17.5 pp |
+| searched | 92.4% | 6.79 pp | 0.17% | 15.7 pp |
+
+The zooms chosen for a page differ from its neighbours' by 2.2% to 3.3% at the median and at
+most 12.4%, so the ink changes size a little from page to page. Widening the band finds better
+rows and makes that change larger. The search takes about 40 ms a page and its answer depends
+only on the page and the layout spec, so a host works it out once a page and keeps it.
+
 `fill` is `centred` (the default), `ragged` (the row starts at the right margin) or `justified`
 (gaps stretch to both margins, the row that ends a block excepted). `gaps` is `uniform` (the
 default) or `printed`, and `wordGap` scales whichever it picked.

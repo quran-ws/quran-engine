@@ -4,6 +4,7 @@
 //! tall screen leaves empty paper above and below, and the leading here fills it, so
 //! the page fills the screen. Expansion only: the printed spacing is the floor, and the
 //! text width is never a knob at all (the page is always fitted to the viewport width).
+use crate::defaults;
 use crate::reflow::{Placement, ReflowSpec, Reflowed};
 use crate::Page;
 
@@ -430,6 +431,89 @@ impl Page {
     }
 
     /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).
+    /// The zoom each step of a reader's zoom control lands on for this page.
+    ///
+    /// Zoom is continuous, but the rows are not: a word stops fitting and the page rearranges,
+    /// so some zooms break a page well and the zoom a hair above breaks it badly. A reader
+    /// stepping through fixed sizes never has to find the good ones. The engine searches a
+    /// band around each nominal zoom and returns the one whose rows come out best, which is a
+    /// property of the page and the layout, so a host works it out once and keeps it.
+    ///
+    /// The returned zooms rise, and each is at least 8% above the one before it, so the steps
+    /// stay apart. `nominals` empty takes [`defaults::ZOOM_LEVEL_NOMINALS`], `band` of 0 takes
+    /// [`defaults::ZOOM_LEVEL_BAND`]. The printed page, zoom 1, is not among them: it is the
+    /// step every control starts from.
+    pub fn zoom_levels(&mut self, spec: &LayoutSpec, nominals: &[f32], band: f32) -> Vec<f32> {
+        let owned;
+        let nominals = if nominals.is_empty() {
+            owned = defaults::ZOOM_LEVEL_NOMINALS.to_vec();
+            &owned[..]
+        } else {
+            nominals
+        };
+        let band = if band > 0.0 { band } else { defaults::ZOOM_LEVEL_BAND };
+        let reflow = spec.reflow.unwrap_or_default();
+        let cap = self.reflow_max_zoom(&reflow);
+        let mut out: Vec<f32> = Vec::with_capacity(nominals.len());
+        let mut floor = 1.0 + defaults::ZOOM_LEVEL_STEP;
+        for &nominal in nominals {
+            let (lo, hi) = ((nominal * (1.0 - band)).max(floor), (nominal * (1.0 + band)).min(cap));
+            let mut best = (f32::INFINITY, lo.min(hi));
+            let mut z = lo;
+            while z <= hi + 1e-6 {
+                // the zoom either side counts too, so a good zoom with bad neighbours does not
+                // win: a reader whose screen is a few pixels narrower gets the same page
+                let mut total = 0.0;
+                for step in [-defaults::ZOOM_LEVEL_STEP, 0.0, defaults::ZOOM_LEVEL_STEP] {
+                    let zz = (z + step).clamp(1.0 + defaults::ZOOM_LEVEL_STEP, cap);
+                    total += self.zoom_cost(spec, &reflow, zz, nominal);
+                }
+                if total < best.0 {
+                    best = (total, z);
+                }
+                z += defaults::ZOOM_LEVEL_STEP;
+            }
+            let pick = best.1.min(cap);
+            out.push(pick);
+            floor = pick * 1.08;
+        }
+        out
+    }
+
+    /// What the rows of this page cost at one zoom: how short its rows come out, how much they
+    /// differ from the row above, how tall the page grows, and how far the zoom is from the one
+    /// the reader asked for. Lower is better. The row that ends the page is not counted, since
+    /// it is short only because the text ran out.
+    fn zoom_cost(&mut self, spec: &LayoutSpec, reflow: &ReflowSpec, zoom: f32, nominal: f32) -> f32 {
+        let l = self.layout_reflow(spec, &ReflowSpec { zoom, ..*reflow });
+        let Some(flow) = l.reflow.as_ref() else { return f32::INFINITY };
+        let q = self.quant();
+        let mut fills: Vec<f32> = Vec::with_capacity(flow.row_words.len());
+        for words in flow.row_words.iter() {
+            if words.is_empty() {
+                continue;
+            }
+            let (mut x0, mut x1) = (f32::MAX, f32::MIN);
+            for &wi in words {
+                let w = &self.data.words[wi as usize];
+                let p = flow.word_place[wi as usize];
+                x0 = x0.min(p.apply(w.bbox.x0 as f32 / q, 0.0).0);
+                x1 = x1.max(p.apply(w.bbox.x1 as f32 / q, 0.0).0);
+            }
+            fills.push((x1 - x0) / flow.row_w);
+        }
+        fills.pop();
+        if fills.is_empty() {
+            return 0.0;
+        }
+        let n = fills.len() as f32;
+        let short: f32 = fills.iter().map(|v| (0.75 - v).max(0.0).powi(2)).sum::<f32>() / n;
+        let steps: f32 = fills.windows(2).map(|p| (p[1] - p[0]).powi(2)).sum::<f32>() / n;
+        let height = flow.row_words.len() as f32 / 15.0 / zoom;
+        let near = (zoom / nominal).ln();
+        3.0 * short + steps + 0.10 * height + 0.8 * near * near
+    }
+
     pub fn word_bounds_view(&self, wi: u32) -> (f32, f32, f32, f32) {
         let q = self.quant();
         let w = &self.data.words[wi as usize];
