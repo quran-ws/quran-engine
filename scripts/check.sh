@@ -64,6 +64,10 @@ for check in "$@"; do
       cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm
       node web/smoke.mjs
       node web/lite.test.mjs
+      # The example is plain JavaScript that no test loads, so parse it here. This is a
+      # syntax check, not a typecheck; it catches the file being left unrunnable.
+      node --check web/example/app.js
+      echo "ok  web/example/app.js parses"
       ;;
     *)
       echo "unknown check: $check (one of: ${ALL[*]})" >&2

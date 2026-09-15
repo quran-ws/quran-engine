@@ -47,13 +47,13 @@ export function decodeGeometry(buffer) {
   const nLines = u16(20)
   const nAyahs = u16(22)
   const nWords = u16(24)
-  const nDecos = u16(26)
+  const nDecorations = u16(26)
   const nPaths = u32(28)
   const nStrings = u16(32)
   const nGlyphs = u16(34)
   const nInstances = u16(36)
   if (nPaths > limits.paths || nLines > limits.records || nAyahs > limits.records ||
-      nWords > limits.records || nDecos > limits.records || nStrings > limits.records ||
+      nWords > limits.records || nDecorations > limits.records || nStrings > limits.records ||
       nGlyphs > limits.records || nInstances > limits.records) {
     throw new Error('QVP page exceeds decoder limits')
   }
@@ -100,7 +100,7 @@ export function decodeGeometry(buffer) {
 
   const metadataSize = sections[0].end - sections[0].start
   const minimumMetadataSize = nLines * 2 + nAyahs * 8 + nWords * 12 +
-    nPaths * 5 + nDecos * 7 + nGlyphs * 5 + nInstances * 26
+    nPaths * 5 + nDecorations * 7 + nGlyphs * 5 + nInstances * 26
   if (minimumMetadataSize > metadataSize) throw new Error('Invalid QVP metadata counts')
 
   const metadata = reader(sections[0])
@@ -121,23 +121,23 @@ export function decodeGeometry(buffer) {
   let surah = 0
   let ayah = 0
   let word = 0
-  let lineIdx = 0
-  let ayahIdx = 0
-  const wordRecords = Array.from({ length: nWords }, (_, idx) => {
+  let lineIndex = 0
+  let ayahIndex = 0
+  const wordRecords = Array.from({ length: nWords }, (_, index) => {
     const firstPathDelta = metadata.zigzag()
     surah += metadata.zigzag()
     ayah += metadata.zigzag()
     word += metadata.zigzag()
-    lineIdx += metadata.zigzag()
-    ayahIdx += metadata.zigzag()
+    lineIndex += metadata.zigzag()
+    ayahIndex += metadata.zigzag()
     for (let i = 0; i < 5; i++) metadata.varint()
     return {
-      idx,
+      index,
       surah,
       ayah,
       word,
-      lineIdx,
-      ayahIdx,
+      lineIndex,
+      ayahIndex,
       firstPathDelta,
       nPaths: metadata.varint()
     }
@@ -153,7 +153,7 @@ export function decodeGeometry(buffer) {
     const y1 = y0 + metadata.zigzag()
     return [Math.fround(x0 / quant), Math.fround(y0 / quant), Math.fround(x1 / quant), Math.fround(y1 / quant)]
   })
-  for (let i = 0; i < nDecos; i++) {
+  for (let i = 0; i < nDecorations; i++) {
     metadata.zigzag()
     metadata.byte()
     metadata.zigzag()
@@ -299,12 +299,12 @@ export function decodeGeometry(buffer) {
     previousWordEnd = endPath
     if (box.some(value => !Number.isFinite(value))) throw new Error('Invalid QVP word box')
     return {
-      idx: record.idx,
+      index: record.index,
       surah: record.surah,
       ayah: record.ayah,
       word: record.word,
-      lineIdx: record.lineIdx,
-      ayahIdx: record.ayahIdx,
+      lineIndex: record.lineIndex,
+      ayahIndex: record.ayahIndex,
       firstPath,
       nPaths: wordPathCount,
       box

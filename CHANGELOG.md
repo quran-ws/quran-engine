@@ -6,6 +6,9 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Changed
+- `@quran.ws/engine/lite` returns `index`, `lineIndex` and `ayahIndex`, the names the
+  main entry point already returned. It kept the abbreviations the naming standard
+  replaced, because the parity check read only `web/qvp.js` and `web/index.mjs`.
 - Page data is rebuilt from `quran-svg-elements` v1.1.1, which redraws the ayah
   medallions to the ones the printed mushaf uses. All 604 pages change. The
   decomposition is the same, 6,236 ayahs and 77,432 words, and every `NNN.words.json`,
@@ -19,6 +22,11 @@ All notable changes to the engine and its packages. The format follows
   in its own folder (`docs/CDN.md`).
 
 ### Added
+- Every example app is built by CI: the Android example, the React Native example's
+  typecheck, the Flutter example's analysis in its own package, and a parse of the web
+  example. An example that stops compiling now fails the build.
+- The parity check reads the published JavaScript entry points and rejects an
+  abbreviation the naming standard replaced.
 - `latest.json` beside each family names its current version, so a consumer can
   resolve the newest release without knowing the tag.
 - The wasm, Apple and Android builds are published to `cdn.quran.ws/engine/`.
@@ -27,6 +35,9 @@ All notable changes to the engine and its packages. The format follows
 
 ### Fixed
 
+- The React Native example typechecks again. It held the ayah word count as
+  `complete` where the API returns `isComplete`, and called a `setLineGap` that no
+  longer exists. Its lockfile recorded the linked library at 0.1.0.
 - The iOS demo builds again. It read `QvpAtlasSurah.n`, which the naming standard
   renamed to `number`, and the surah sheet was one expression larger than the
   Swift type checker would finish. The iOS job piped the build into `tail`, so it

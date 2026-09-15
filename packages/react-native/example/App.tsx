@@ -69,7 +69,7 @@ function Demo() {
   const [selWord, setSelWord] = useState<Word | null>(null);
   const [selAyah, setSelAyah] = useState<[number, number] | null>(null);
   const [selection, setSelection] = useState<SelectionInfo | null>(null);
-  const [ayahInfo, setAyahInfo] = useState<{ text: string; count: number; complete: boolean } | null>(null);
+  const [ayahInfo, setAyahInfo] = useState<{ text: string; count: number; isComplete: boolean } | null>(null);
   const [pathOn, setPathOn] = useState<Map<number, Selector>>(new Map());
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<Match[]>([]);
@@ -308,7 +308,7 @@ function Demo() {
         </View>
 
         <Section title="Layout (engine)" fg={th.fg} />
-        <Slider label="line spacing" min={1} max={2.2} step={0.01} value={lineSpacing} onChange={v => { setLineSpacing(v); setLineGap(0); setFillHeight(false); }} fg={th.fg} fmt={v => '×' + v.toFixed(2)} />
+        <Slider label="line spacing" min={1} max={2.2} step={0.01} value={lineSpacing} onChange={v => { setLineSpacing(v); setFillHeight(false); }} fg={th.fg} fmt={v => '×' + v.toFixed(2)} />
         <Slider label="pad top" min={0} max={120} value={padTop} onChange={setPadTop} fg={th.fg} />
         <Slider label="pad bottom" min={0} max={120} value={padBottom} onChange={setPadBottom} fg={th.fg} />
         <View style={st.row}>
