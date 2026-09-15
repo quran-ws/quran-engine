@@ -56,11 +56,15 @@ jobs:
           got=$(sha256sum /tmp/001.qvp | cut -d' ' -f1)
           [ "$want" = "$got" ] || { echo "001.qvp digest mismatch"; exit 1; }
 
-          # the bundle: the edge must pass the stored brotli through, not re-encode it
+          # the bundle: brotli is the file format here, not a transfer encoding, so the edge
+          # must hand back the stored bytes. Any Content-Encoding means it re-encoded them.
           name=$(jq -r .bundle.name /tmp/m.json)
-          enc=$(curl -fsS -o /dev/null -D - -H 'Accept-Encoding: gzip, deflate, br, zstd' \
-                  "$base/$name" | tr -d '\r' | awk 'tolower($1)=="content-encoding:"{print tolower($2)}')
-          [ "$enc" = br ] || { echo "bundle served as '${enc:-identity}', expected br — check the compression rules"; exit 1; }
+          curl -fsS -o /tmp/bundle -D /tmp/bh -H 'Accept-Encoding: gzip, deflate, br, zstd' "$base/$name"
+          enc=$(tr -d '\r' < /tmp/bh | awk 'tolower($1)=="content-encoding:"{print tolower($2)}')
+          [ -z "$enc" ] || { echo "bundle served with Content-Encoding '$enc'; the stored bytes are already brotli"; exit 1; }
+          want=$(jq -r .bundle.sha256 /tmp/m.json)
+          got=$(sha256sum /tmp/bundle | cut -d' ' -f1)
+          [ "$want" = "$got" ] || { echo "bundle digest mismatch: want $want got $got"; exit 1; }
 
           # latest.json must name this version, or consumers that follow it never see it
           got=$(curl -fsS "https://cdn.quran.ws/qvp/latest.json" | jq -r .version)
