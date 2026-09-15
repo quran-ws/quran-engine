@@ -24,8 +24,6 @@
   const canvas = $('cv'), stage = $('stage'), paper = $('paper');
   const renderer = new CanvasRenderer(canvas);
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  // pinch limits as multiples of the fitted scale; the same pair on every platform
-  const clampZoom = s => Math.max(0.5, Math.min(12, s));
 
   const S = {
     page: null, bytes: 0, loadMs: 0, n: src.pages[0],
@@ -34,6 +32,7 @@
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
+    reflow: { on: false, zoom: 1.6, fill: 'ragged', gaps: 'uniform', wordGap: 1 },
     hlMode: 'both', hlMs: 250, revealOn: false,
   };
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
@@ -52,11 +51,12 @@
     renderer.draw(p, v, dpr);
     // hover: a cheap UI overlay, not engine state
     if (S.hover >= 0 && S.hover !== S.selWord) {
-      const c = renderer.ctx, w = p.words[S.hover];
-      const [s, tx, ty] = renderer.lineTransform(p, v, w.lineIndex, dpr);
-      c.setTransform(s, 0, 0, s, tx, ty); c.globalCompositeOperation = 'destination-over';
+      // the engine places the band; the view adds only the reader's pan and zoom
+      const c = renderer.ctx;
+      c.setTransform(dpr * v.scale, 0, 0, dpr * v.scale, dpr * v.offsetX, dpr * v.offsetY);
+      c.globalCompositeOperation = 'destination-over';
       c.fillStyle = getComputedStyle(document.body).getPropertyValue('--hover'); c.beginPath();
-      for (const b of p.wordBands([S.hover], { height: 'ink', padX: 1.2, padY: 1.2 })) c.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 1.5);
+      for (const b of p.wordBandsView([S.hover], { height: 'ink', padX: 1.2, padY: 1.2 })) c.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 1.5);
       c.fill();
       c.globalCompositeOperation = 'source-over';
     }
@@ -67,7 +67,8 @@
   // ── view: engine layout + pan/zoom on top ──
   function layoutSpec() {
     const r = stage.getBoundingClientRect(), ls = S.layout;
-    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK };
+    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK,
+      reflow: S.reflow.on ? { zoom: S.reflow.zoom, fill: S.reflow.fill, gaps: S.reflow.gaps, wordGap: S.reflow.wordGap } : null };
   }
   function relayout() {
     const p = S.page; if (!p) return null;
@@ -75,7 +76,8 @@
   }
   function fit(redraw = true) {
     const L = relayout(); if (!L) return;
-    S.view = { scale: L.fitScale, offsetX: L.fitX, offsetY: L.fitY };
+    // a reflowed page is taller than the screen on purpose: show its top and let the reader scroll
+    S.view = L.reflowed ? { scale: 1, offsetX: L.fitX, offsetY: 0 } : { scale: L.fitScale, offsetX: L.fitX, offsetY: L.fitY };
     renderer.baseKey = '';
     if (redraw) draw();
   }
@@ -213,9 +215,11 @@
     const r = stage.getBoundingClientRect();
     if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
     if (pinch && pts.size === 2) {
+      // the engine owns the pinch arithmetic; the browser only reports the fingers
       const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      const k = clampZoom(pinch.scale * d / pinch.d) / pinch.scale, cx = pinch.cx - r.left, cy = pinch.cy - r.top;
-      S.view = { scale: pinch.scale * k, offsetX: cx - (cx - pinch.offsetX) * k, offsetY: cy - (cy - pinch.offsetY) * k }; moved = true; draw(); return;
+      const from = { scale: pinch.scale, offsetX: pinch.offsetX, offsetY: pinch.offsetY };
+      S.view = engine.viewZoomAbout(from, pinch.cx - r.left, pinch.cy - r.top, d / pinch.d);
+      moved = true; draw(); return;
     }
     const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
     if (drag && selecting) {
@@ -234,7 +238,7 @@
     }
     if (drag) {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); S.view.offsetX = drag.offsetX + dx; S.view.offsetY = drag.offsetY + dy; draw(); }
+      if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); S.view = engine.viewPan({ ...S.view, offsetX: drag.offsetX, offsetY: drag.offsetY }, dx, dy); draw(); }
       return;
     }
     const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 4 }); S.lastHitUs = (performance.now() - t) * 1000;
@@ -261,9 +265,8 @@
   stage.addEventListener('lostpointercapture', e => pts.delete(e.pointerId));
   stage.addEventListener('wheel', e => {
     e.preventDefault(); const r = stage.getBoundingClientRect();
-    const k = Math.exp(-e.deltaY * 0.0015), v = S.view, cx = e.clientX - r.left, cy = e.clientY - r.top;
-    const ns = clampZoom(v.scale * k), kk = ns / v.scale;
-    S.view = { scale: ns, offsetX: cx - (cx - v.offsetX) * kk, offsetY: cy - (cy - v.offsetY) * kk }; draw();
+    const k = Math.exp(-e.deltaY * 0.0015);
+    S.view = engine.viewZoomAbout(S.view, e.clientX - r.left, e.clientY - r.top, k); draw();
   }, { passive: false });
   stage.addEventListener('dblclick', () => fit());
 
@@ -348,6 +351,28 @@
   $('padTop').oninput = e => { S.layout.padTop = +e.target.value; $('padTopVal').textContent = e.target.value; relayoutUI(); };
   $('padBottom').oninput = e => { S.layout.padBottom = +e.target.value; $('padBottomVal').textContent = e.target.value; relayoutUI(); };
 
+  // ── reflow ──
+  const reflowUI = () => {
+    clampReflowZoom();
+    $('reflow').classList.toggle('on', S.reflow.on);
+    $('rZoomVal').textContent = '×' + S.reflow.zoom.toFixed(2);
+    $('rGapVal').textContent = '×' + S.reflow.wordGap.toFixed(2);
+    fit();
+    const L = S.page && S.page.currentLayout;
+    $('reflowRows').textContent = L && L.reflowed ? `${L.rows} rows · ${Math.round(L.contentH)} px tall · max zoom ×${(+$('rZoom').max).toFixed(2)}` : 'off · as printed';
+  };
+  $('reflow').onclick = () => { S.reflow.on = !S.reflow.on; reflowUI(); };
+  // the engine says how far this page can zoom before a word outgrows its row
+  const clampReflowZoom = () => {
+    const max = S.page ? S.page.reflowMaxZoom(layoutSpec()) : 4;
+    $('rZoom').max = Math.min(4, Math.max(1, max)).toFixed(2);
+    if (S.reflow.zoom > +$('rZoom').max) { S.reflow.zoom = +$('rZoom').max; $('rZoom').value = S.reflow.zoom; }
+  };
+  $('rZoom').oninput = e => { S.reflow.zoom = +e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rGap').oninput = e => { S.reflow.wordGap = +e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rFill').onchange = e => { S.reflow.fill = e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rGaps').onchange = e => { S.reflow.gaps = e.target.value; S.reflow.on = true; reflowUI(); };
+
   // ── navigation ──
   $('prev').onclick = () => loadPage(src.pages[Math.max(0, src.pages.indexOf(S.n) - 1)]);
   $('next').onclick = () => loadPage(src.pages[Math.min(src.pages.length - 1, src.pages.indexOf(S.n) + 1)]);
@@ -366,6 +391,7 @@
       `overlay       ${s.overlayPaths} styled paths + ${s.bands} band boxes in ${s.overlayMs.toFixed(2)} ms\n` +
       `hit-test      ${S.lastHitUs.toFixed(1)} µs (gap-aware, wasm)\n` +
       `styles        ${p.styleHandles().length} handles · ${p.highlightHandles().length} highlights${S.animating ? ' · animating' : ''}\n` +
+      `reflow        ${S.reflow.on ? `on · zoom ×${S.reflow.zoom.toFixed(2)} · ${S.reflow.fill} · ${S.reflow.gaps} gaps ×${S.reflow.wordGap.toFixed(2)} · ${L ? L.rows : 0} rows` : 'off (as printed)'}\n` +
       `layout        ${S.layout.fillHeight ? 'fill height' : 'spacing ×' + S.layout.lineSpacing.toFixed(2)} · lineSpacing ${(L ? L.lineSpacing : 0).toFixed(1)} u · pad ${S.layout.padTop}/${S.layout.padBottom}\n` +
       `zoom          ${(S.view.scale * (L ? L.scale : 1) * dpr).toFixed(2)}× device px per unit`;
   }

@@ -4,6 +4,7 @@
 //! tall screen leaves empty paper above and below, and the leading here fills it, so
 //! the page fills the screen. Expansion only: the printed spacing is the floor, and the
 //! text width is never a knob at all (the page is always fitted to the viewport width).
+use crate::reflow::{Placement, ReflowSpec, Reflowed};
 use crate::Page;
 
 /// How to place lines vertically. All lengths in *viewport pixels*.
@@ -40,6 +41,9 @@ pub struct LayoutSpec {
     /// `viewport_h · page_w / page_h · max_aspect_slack`, so a landscape screen does not
     /// stretch the lines to its full width. 0 turns the bound off.
     pub max_aspect_slack: f32,
+    /// Break the words onto other rows instead of drawing the printed lines. The page keeps
+    /// its width and grows taller; the host scrolls it. `None` lays the page out as printed.
+    pub reflow: Option<ReflowSpec>,
 }
 
 impl Default for LayoutSpec {
@@ -57,6 +61,7 @@ impl Default for LayoutSpec {
             crop_left: 0.0,
             crop_right: 0.0,
             max_aspect_slack: 0.0,
+            reflow: None,
         }
     }
 }
@@ -96,6 +101,36 @@ pub struct Layout {
     pub fit_scale: f32,
     pub fit_x: f32,
     pub fit_y: f32,
+    /// Where each group of paths is placed. Without reflow there is one group per printed
+    /// line, holding that line's `line_dy`. With reflow the groups are the page's words and
+    /// decorations: `path_group` says which group a path belongs to.
+    pub groups: Vec<Placement>,
+    /// Group of every path. Empty without reflow, where a path's group is its printed line.
+    pub path_group: Vec<u32>,
+    /// Paths this layout does not draw: the sheet's furniture on a reflowed page (running
+    /// head, page number), which the print puts outside the page box. Sorted.
+    pub omitted_paths: Vec<u32>,
+    /// The rows the words were broken onto, when this layout reflowed the page.
+    pub reflow: Option<Reflowed>,
+}
+
+impl Layout {
+    /// Placement of a path's group.
+    pub fn placement(&self, path: u32, line: u32) -> Placement {
+        let g = if self.path_group.is_empty() { line } else { self.path_group[path as usize] };
+        self.groups.get(g as usize).copied().unwrap_or(Placement::IDENTITY)
+    }
+    /// Placement of a word: where reflow put it, or its printed line's shift.
+    pub fn word_placement(&self, word: u32, line: usize) -> Placement {
+        match &self.reflow {
+            Some(r) => r.word_place[word as usize],
+            None => Placement::shifted(self.line_dy.get(line).copied().unwrap_or(0.0)),
+        }
+    }
+    /// True when this layout broke the words onto rows of its own.
+    pub fn is_reflowed(&self) -> bool {
+        self.reflow.is_some()
+    }
 }
 
 /// Leading (page units, between consecutive lines) that makes a page fill a
@@ -170,6 +205,14 @@ impl Page {
     }
 
     pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
+        // At the printed size the page is the printed page: the words are where the print has
+        // them, and every layout knob — leading, fill height, the grid a short page sits on —
+        // works exactly as it does without reflow. Rows only appear once the reader zooms in.
+        if let Some(r) = spec.reflow.filter(|r| r.zoom > 1.0 + 1e-4) {
+            let l = self.layout_reflow(spec, &r);
+            self.layout = Some(l);
+            return self.layout.as_ref().unwrap();
+        }
         let pw = self.width();
         let ph = self.height();
         // The content width: the viewport, bounded by the page's aspect ratio when the
@@ -256,7 +299,12 @@ impl Page {
             fit_x: 0.0,
             fit_y: 0.0,
             line_spacing,
+            groups: vec![],
+            path_group: vec![],
+            omitted_paths: vec![],
+            reflow: None,
         };
+        layout.groups = layout.line_dy.iter().map(|&d| Placement::shifted(d)).collect();
         // Fit: shrink to the viewport height when the content is taller, never enlarge;
         // centre the result. Offsets are never negative.
         let fit_scale = if layout.content_h > spec.viewport_h && layout.content_h > 0.0 {
@@ -271,6 +319,108 @@ impl Page {
         self.layout.as_ref().unwrap()
     }
 
+    /// Lay the page out by breaking its words onto rows of the padded viewport width.
+    ///
+    /// The ink is `zoom` times the size it has at fit-to-width, so a row holds
+    /// `page_w / zoom` page units and the page grows taller than the viewport. `fit_scale`
+    /// stays 1: the content is meant to be scrolled, never shrunk back to the screen.
+    fn layout_reflow(&mut self, spec: &LayoutSpec, r: &ReflowSpec) -> Layout {
+        let pw = self.width();
+        let ph = self.height();
+        let content_w = if spec.max_aspect_slack > 0.0 {
+            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
+        } else {
+            spec.viewport_w
+        };
+        let crop = (spec.crop_left.max(0.0), spec.crop_right.max(0.0));
+        let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
+        let zoom = r.zoom.max(0.01);
+        // A row holds the page's text block, not the whole sheet: the print keeps a margin on
+        // each side, and a row that ignored it would put the words somewhere the print never
+        // does. At zoom 1 this reproduces the printed lines where they are.
+        let block = self.text_block();
+        let page_w = (pw - crop.0 - crop.1).max(1.0);
+        let (margin_l, margin_r) = ((block.0 - crop.0).max(0.0), ((pw - crop.1) - block.1).max(0.0));
+        let row_w = (page_w - margin_l - margin_r).max(1.0) / zoom;
+        let scale = avail_w / (page_w / zoom);
+        let pitch = self.line_spacing * spec.line_spacing.max(1.0);
+        let top = spec.pad_top / scale + pitch / 2.0;
+        // the reader asked for no more leading than the print has, so a page whose rows come
+        // out as the printed lines can keep the printed line positions too
+        let printed_spacing = spec.line_spacing <= 1.0 + 1e-6 && !spec.fill_height;
+        let flow = self.reflow(
+            r,
+            &crate::reflow::RowSpec {
+                block,
+                margins: (margin_l / zoom, margin_r / zoom),
+                row_w,
+                pitch,
+                top,
+                printed_spacing,
+            },
+        );
+        // the content is the ink that was laid out; a page that came out as printed keeps the
+        // printed page's own height, so zoom 1 gives the printed layout back whole
+        let content_h = if flow.as_printed {
+            spec.pad_top + ph * scale + spec.pad_bottom
+        } else {
+            spec.pad_top + (flow.y1 - flow.y0).max(flow.row_band.len() as f32 * pitch) * scale + spec.pad_bottom
+        };
+        let line_slots: Vec<(f32, f32)> = flow.row_band.iter().map(|(t, b)| (t * scale, b * scale)).collect();
+        // one group per word, then one per decoration, then one per decoration's sajdah line:
+        // a path's group follows the job it does, not only the record it belongs to
+        let n_words = self.data.words.len();
+        let n_decos = self.data.decorations.len();
+        let mut groups: Vec<Placement> = Vec::with_capacity(n_words + n_decos * 2);
+        groups.extend_from_slice(&flow.word_place);
+        groups.extend_from_slice(&flow.deco_place);
+        groups.extend_from_slice(&flow.sajdah_place);
+        let stroke = self.sajdah_line_paths();
+        let path_group: Vec<u32> = (0..self.geom.table.len())
+            .map(|i| {
+                let g = &self.geom.table[i];
+                if g.word != u32::MAX {
+                    g.word
+                } else if self.path_deco[i] != u32::MAX {
+                    let di = self.path_deco[i];
+                    if stroke[i] {
+                        (n_words + n_decos) as u32 + di
+                    } else {
+                        n_words as u32 + di
+                    }
+                } else {
+                    0
+                }
+            })
+            .collect();
+        let mut omitted_paths: Vec<u32> = Vec::new();
+        for &di in &flow.omitted {
+            let deco = &self.data.decorations[di as usize];
+            omitted_paths.extend(deco.first_path..deco.first_path + deco.n_paths as u32);
+        }
+        omitted_paths.sort_unstable();
+        let mut layout = Layout {
+            scale,
+            // the block's own left margin, kept at the reader's size
+            offset_x: spec.pad_left + margin_l / zoom * scale,
+            offset_y: 0.0,
+            line_dy: vec![0.0; self.data.lines.len()],
+            line_slots,
+            content_h,
+            content_w,
+            line_spacing: pitch,
+            fit_scale: 1.0,
+            fit_x: 0.0,
+            fit_y: 0.0,
+            groups,
+            path_group,
+            omitted_paths,
+            reflow: Some(flow),
+        };
+        layout.fit_x = ((spec.viewport_w - layout.content_w) / 2.0).max(0.0);
+        layout
+    }
+
     pub fn current_layout(&self) -> Option<&Layout> {
         self.layout.as_ref()
     }
@@ -282,12 +432,14 @@ impl Page {
         let (x0, y0, x1, y1) = (w.bbox.x0 as f32 / q, w.bbox.y0 as f32 / q, w.bbox.x1 as f32 / q, w.bbox.y1 as f32 / q);
         match &self.layout {
             Some(l) => {
-                let d = l.line_dy[w.line_index as usize];
+                let p = l.word_placement(wi, w.line_index as usize);
+                let (ax0, ay0) = p.apply(x0, y0);
+                let (ax1, ay1) = p.apply(x1, y1);
                 (
-                    l.offset_x + x0 * l.scale,
-                    l.offset_y + (y0 + d) * l.scale,
-                    l.offset_x + x1 * l.scale,
-                    l.offset_y + (y1 + d) * l.scale,
+                    l.offset_x + ax0 * l.scale,
+                    l.offset_y + ay0 * l.scale,
+                    l.offset_x + ax1 * l.scale,
+                    l.offset_y + ay1 * l.scale,
                 )
             }
             None => (x0, y0, x1, y1),

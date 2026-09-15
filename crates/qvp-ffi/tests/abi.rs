@@ -61,6 +61,11 @@ fn abi_end_to_end() {
             crop_left: 0.0,
             crop_right: 0.0,
             max_aspect_slack: 0.0,
+            reflow_zoom: 0.0,
+            reflow_fill: 0,
+            reflow_gaps: 0,
+            reflow_word_gap: 0.0,
+            reflow_max_stretch: 0.0,
         };
         let mut lay = std::mem::zeroed::<QvpLayout>();
         qvp_layout(page, &spec, &mut lay);
@@ -68,6 +73,28 @@ fn abi_end_to_end() {
         assert!((lay.scale - 2.0).abs() < 1e-5);
         let mut wb = [0f32; 4];
         assert_eq!(qvp_word_bounds_view(page, 0, wb.as_mut_ptr()), 1);
+        // at the printed size a reflow spec changes nothing: the page is laid out as printed
+        let at_one = QvpLayoutSpec { reflow_zoom: 1.0, ..spec };
+        let mut lay1 = std::mem::zeroed::<QvpLayout>();
+        qvp_layout(page, &at_one, &mut lay1);
+        assert_eq!(lay1.reflowed, 0);
+        assert!((lay1.scale - lay.scale).abs() < 1e-5 && (lay1.content_h - lay.content_h).abs() < 1e-3);
+        let mut wb1 = [0f32; 4];
+        assert_eq!(qvp_word_bounds_view(page, 0, wb1.as_mut_ptr()), 1);
+        assert!(wb1.iter().zip(wb.iter()).all(|(a, b)| (a - b).abs() < 1e-3), "{wb1:?} vs {wb:?}");
+        // zoomed in, the words break onto rows of their own
+        let reflowed = QvpLayoutSpec { reflow_zoom: 2.0, ..spec };
+        let mut lay2 = std::mem::zeroed::<QvpLayout>();
+        qvp_layout(page, &reflowed, &mut lay2);
+        assert_eq!(lay2.reflowed, 1);
+        assert!(lay2.n_rows > lay.n_lines && lay2.content_h > lay.content_h);
+        let n_groups = qvp_layout_groups(page, std::ptr::null_mut(), 0);
+        let mut groups = vec![0f32; n_groups as usize * 4];
+        assert_eq!(qvp_layout_groups(page, groups.as_mut_ptr(), n_groups), n_groups);
+        let n_pg = qvp_layout_path_groups(page, std::ptr::null_mut(), 0);
+        assert!(n_pg > 0);
+        assert!(qvp_reflow_max_zoom(page, &reflowed) >= 1.0);
+        qvp_layout(page, &spec, &mut lay);
         let mut h = std::mem::zeroed::<QvpHit>();
         assert_eq!(qvp_hit_test_exact_view(page, (wb[0] + wb[2]) / 2.0, (wb[1] + wb[3]) / 2.0, &mut h), 1);
         assert_eq!(h.word, 0);

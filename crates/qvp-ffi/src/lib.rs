@@ -269,6 +269,18 @@ pub struct QvpLayoutSpec {
     pub crop_left: f32,
     pub crop_right: f32,
     pub max_aspect_slack: f32,
+    /// How much bigger the ink is than fit-to-width when the words are broken onto rows of
+    /// the page's own width. 0 lays the page out as printed (no reflow).
+    pub reflow_zoom: f32,
+    /// 0 ragged, 1 justified, 2 centred
+    pub reflow_fill: u8,
+    /// 0 the printed gap between the two words, 1 the page's median gap between letters
+    pub reflow_gaps: u8,
+    /// multiplier on every gap (1 = the gap `reflow_gaps` picked)
+    pub reflow_word_gap: f32,
+    /// how far a justified row's gaps may stretch, as a multiple of the gaps it started with
+    /// (0 = the engine's default, a negative value = no cap)
+    pub reflow_max_stretch: f32,
 }
 
 #[repr(C)]
@@ -294,6 +306,10 @@ pub struct QvpLayout {
     pub fit_scale: f32,
     pub fit_x: f32,
     pub fit_y: f32,
+    /// 1 when the words were broken onto rows of their own, 0 when the page is as printed.
+    pub reflowed: u32,
+    /// Rows the reflow produced (0 when not reflowed). `lines` then holds the rows.
+    pub n_rows: u32,
 }
 
 /// kind: 0 Page, 1 Word(a), 2 Words(words,n), 3 Ayah(a,b), 4 AyahRange(a,b,c), 5 Line(a), 6 Surah(a), 7 Range(a,b)
@@ -805,6 +821,28 @@ pub unsafe extern "C" fn qvp_ayah_marks(page: *const Page, out: *mut QvpAyahMark
         fill(out, cap, &v)
     })
 }
+/// The ayah medallions in viewport px through the current layout: where each is drawn.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_ayah_marks_view(page: *const Page, out: *mut QvpAyahMark, cap: u32) -> u32 {
+    guard(|| {
+        let v: Vec<QvpAyahMark> = (*page)
+            .ayah_marks_view()
+            .iter()
+            .map(|m| QvpAyahMark {
+                decoration: m.decoration,
+                surah: m.surah,
+                ayah: m.ayah,
+                line: m.line,
+                cx: m.cx,
+                cy: m.cy,
+                r: m.r,
+                ornament_path: m.ornament_path,
+                numeral_path: m.numeral_path,
+            })
+            .collect();
+        fill(out, cap, &v)
+    })
+}
 #[no_mangle]
 pub unsafe extern "C" fn qvp_rosettes(page: *const Page, out: *mut QvpRosette, cap: u32) -> u32 {
     guard(|| {
@@ -1077,6 +1115,30 @@ pub unsafe extern "C" fn qvp_line_bands(page: *const Page, out: *mut QvpLineBand
         fill(out, cap, &v)
     })
 }
+/// The hit boxes in viewport px through the current layout: the partition a tap is resolved
+/// with, so an overlay and a tap agree. On a reflowed page these are the rows' own boxes.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_hit_areas_view(page: *const Page, gap_bias: f32, out: *mut QvpHitArea, cap: u32) -> u32 {
+    guard(|| {
+        let v: Vec<QvpHitArea> = (*page)
+            .hit_areas_view(gap_bias)
+            .iter()
+            .map(|h| QvpHitArea {
+                word: h.word,
+                line: h.line,
+                x0: h.x0,
+                y0: h.y0,
+                x1: h.x1,
+                y1: h.y1,
+                ink_x0: h.ink_x0,
+                ink_y0: h.ink_y0,
+                ink_x1: h.ink_x1,
+                ink_y1: h.ink_y1,
+            })
+            .collect();
+        fill(out, cap, &v)
+    })
+}
 #[no_mangle]
 pub unsafe extern "C" fn qvp_hit_areas(page: *const Page, gap_bias: f32, out: *mut QvpHitArea, cap: u32) -> u32 {
     guard(|| {
@@ -1100,6 +1162,92 @@ pub unsafe extern "C" fn qvp_hit_areas(page: *const Page, gap_bias: f32, out: *m
     })
 }
 
+// ───────────── the reader's pan and zoom ─────────────
+
+/// Pan and zoom over a laid-out page: a point `p` in layout px draws at `offset + scale·p`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct QvpView {
+    pub scale: f32,
+    pub offset_x: f32,
+    pub offset_y: f32,
+}
+
+impl From<QvpView> for qvp_core::View {
+    fn from(v: QvpView) -> Self {
+        qvp_core::View { scale: v.scale, offset_x: v.offset_x, offset_y: v.offset_y }
+    }
+}
+impl From<qvp_core::View> for QvpView {
+    fn from(v: qvp_core::View) -> Self {
+        QvpView { scale: v.scale, offset_x: v.offset_x, offset_y: v.offset_y }
+    }
+}
+
+/// Zoom by `factor` about a point of the viewport, holding the scale between `min` and `max`
+/// (0 for the engine's own limits): what the point under two fingers asks for.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_view_zoom_about(
+    view: *const QvpView,
+    focal_x: f32,
+    focal_y: f32,
+    factor: f32,
+    min: f32,
+    max: f32,
+    out: *mut QvpView,
+) {
+    guard(|| *out = qvp_core::View::from(*view).zoom_about(focal_x, focal_y, factor, min, max).into())
+}
+/// Move the view by a drag, in viewport px.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_view_pan(view: *const QvpView, dx: f32, dy: f32, out: *mut QvpView) {
+    guard(|| *out = qvp_core::View::from(*view).pan(dx, dy).into())
+}
+/// Hold the content against the viewport: centre an axis it does not fill, cover the viewport
+/// on an axis it overflows, so no drag opens a blank strip beside the page.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_view_clamp(
+    view: *const QvpView,
+    content_w: f32,
+    content_h: f32,
+    viewport_w: f32,
+    viewport_h: f32,
+    out: *mut QvpView,
+) {
+    guard(|| *out = qvp_core::View::from(*view).clamp(content_w, content_h, viewport_w, viewport_h).into())
+}
+/// The view that puts a point inside a word (`nx`, `ny` from 0 to 1) at a place on the screen,
+/// then clamps. This is how a pinch holds its place when the layout reflows under it.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_view_anchor(
+    page: *const Page,
+    view: *const QvpView,
+    word: u32,
+    nx: f32,
+    ny: f32,
+    to_x: f32,
+    to_y: f32,
+    viewport_w: f32,
+    viewport_h: f32,
+    out: *mut QvpView,
+) {
+    guard(|| *out = (*page).view_anchor((*view).into(), word, (nx, ny), (to_x, to_y), (viewport_w, viewport_h)).into())
+}
+/// Where a viewport point lands in the laid-out page, for turning a touch into a hit test.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_view_to_layout(page: *const Page, view: *const QvpView, vx: f32, vy: f32, out: *mut f32) {
+    guard(|| {
+        let (x, y) = (*page).view_to_layout((*view).into(), vx, vy);
+        *out = x;
+        *out.add(1) = y;
+    })
+}
+/// +1 or -1 when a released drag is a page swipe, 0 when it is not.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_view_swipe(dx: f32, dy: f32, vx: f32, vy: f32) -> i32 {
+    guard(|| qvp_core::swipe_direction(dx, dy, vx, vy))
+}
+
 // ───────────── layout ─────────────
 
 unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
@@ -1117,19 +1265,37 @@ unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
         crop_left: s.crop_left,
         crop_right: s.crop_right,
         max_aspect_slack: s.max_aspect_slack,
+        reflow: (s.reflow_zoom > 0.0).then(|| qvp_core::ReflowSpec {
+            zoom: s.reflow_zoom,
+            fill: match s.reflow_fill {
+                1 => qvp_core::Fill::Justified,
+                2 => qvp_core::Fill::Centred,
+                _ => qvp_core::Fill::Ragged,
+            },
+            gaps: if s.reflow_gaps == 0 { qvp_core::GapMode::Printed } else { qvp_core::GapMode::Uniform },
+            word_gap: if s.reflow_word_gap > 0.0 { s.reflow_word_gap } else { 1.0 },
+            max_stretch: if s.reflow_max_stretch == 0.0 {
+                qvp_core::defaults::REFLOW_MAX_STRETCH
+            } else {
+                s.reflow_max_stretch.max(0.0)
+            },
+        }),
     }
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec, out: *mut QvpLayout) {
     guard(|| {
         let l = (*page).layout(&layout_spec(spec));
-        let mut buf = Vec::with_capacity(l.line_dy.len() * 3);
-        for (i, dy) in l.line_dy.iter().enumerate() {
-            buf.push(*dy);
+        // reflowed: the slots are the rows, and a printed line has no shift of its own
+        let n = if l.is_reflowed() { l.line_slots.len() } else { l.line_dy.len() };
+        let mut buf = Vec::with_capacity(n * 3);
+        for i in 0..n {
+            buf.push(l.line_dy.get(i).copied().unwrap_or(0.0));
             buf.push(l.line_slots[i].0);
             buf.push(l.line_slots[i].1);
         }
         let lines = buf.as_ptr();
+        let n_lines = n as u32;
         let res = QvpLayout {
             scale: l.scale,
             offset_x: l.offset_x,
@@ -1137,14 +1303,128 @@ pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec,
             content_w: l.content_w,
             content_h: l.content_h,
             line_spacing: l.line_spacing,
-            n_lines: l.line_dy.len() as u32,
+            n_lines,
             lines,
             fit_scale: l.fit_scale,
             fit_x: l.fit_x,
             fit_y: l.fit_y,
+            reflowed: l.is_reflowed() as u32,
+            n_rows: l.reflow.as_ref().map(|r| r.row_band.len() as u32).unwrap_or(0),
         };
         LAYOUT_BUF.with(|b| *b.borrow_mut() = buf);
         *out = res;
+    })
+}
+/// Where each group of paths is placed: `n × {dx, dy, kx, ky}`, a point `p` of the group
+/// being drawn at `(kx·p.x + dx, ky·p.y + dy)` in page units, before the layout's scale and
+/// offset. Without reflow there is one group per printed line; with it, one per word then one
+/// per decoration. Returns the number of groups, or the count needed when `cap` is too small.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_groups(page: *const Page, out: *mut f32, cap: u32) -> u32 {
+    guard(|| {
+        let Some(l) = (*page).current_layout() else { return 0 };
+        let n = l.groups.len() as u32;
+        if out.is_null() || cap < n {
+            return n;
+        }
+        for (i, g) in l.groups.iter().enumerate() {
+            *out.add(i * 4) = g.dx;
+            *out.add(i * 4 + 1) = g.dy;
+            *out.add(i * 4 + 2) = g.kx;
+            *out.add(i * 4 + 3) = g.ky;
+        }
+        n
+    })
+}
+/// Paths to draw a second time, at another placement: `n × {first_path, n_paths, dx, dy, kx,
+/// ky}` as floats, the first two whole numbers. A sajdah line whose words ended up on two rows
+/// is drawn over each of them. Returns the number of repeats, or the count needed.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_repeats(page: *const Page, out: *mut f32, cap: u32) -> u32 {
+    guard(|| {
+        let Some(flow) = (*page).current_layout().and_then(|l| l.reflow.as_ref()) else { return 0 };
+        let n = flow.repeats.len() as u32;
+        if out.is_null() || cap < n {
+            return n;
+        }
+        for (i, r) in flow.repeats.iter().enumerate() {
+            *out.add(i * 6) = r.first_path as f32;
+            *out.add(i * 6 + 1) = r.n_paths as f32;
+            *out.add(i * 6 + 2) = r.placement.dx;
+            *out.add(i * 6 + 3) = r.placement.dy;
+            *out.add(i * 6 + 4) = r.placement.kx;
+            *out.add(i * 6 + 5) = r.placement.ky;
+        }
+        n
+    })
+}
+/// The group of every path, for [`qvp_layout_groups`]. Empty without reflow, where a path's
+/// group is its line (`qvp_path_line`). Returns the number of paths, or the count needed.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_path_groups(page: *const Page, out: *mut u32, cap: u32) -> u32 {
+    guard(|| {
+        let Some(l) = (*page).current_layout() else { return 0 };
+        let n = l.path_group.len() as u32;
+        if out.is_null() || cap < n {
+            return n;
+        }
+        for (i, g) in l.path_group.iter().enumerate() {
+            *out.add(i) = *g;
+        }
+        n
+    })
+}
+/// Paths the current layout does not draw: on a reflowed page the running head and the page
+/// number, which the print puts outside the page box. Returns how many, or the count needed.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_omitted_paths(page: *const Page, out: *mut u32, cap: u32) -> u32 {
+    guard(|| {
+        let Some(l) = (*page).current_layout() else { return 0 };
+        let n = l.omitted_paths.len() as u32;
+        if out.is_null() || cap < n {
+            return n;
+        }
+        for (i, p) in l.omitted_paths.iter().enumerate() {
+            *out.add(i) = *p;
+        }
+        n
+    })
+}
+/// The words of a reflowed row, in reading order. Returns the number of words on the row,
+/// or the count needed when `cap` is too small; 0 when the page is not reflowed.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_row_words(page: *const Page, row: u32, out: *mut u32, cap: u32) -> u32 {
+    guard(|| {
+        let Some(flow) = (*page).current_layout().and_then(|l| l.reflow.as_ref()) else { return 0 };
+        let Some(words) = flow.row_words.get(row as usize) else { return 0 };
+        let n = words.len() as u32;
+        if out.is_null() || cap < n {
+            return n;
+        }
+        for (i, w) in words.iter().enumerate() {
+            *out.add(i) = *w;
+        }
+        n
+    })
+}
+/// The row a word landed on in a reflowed layout, or `QVP_NONE`.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_word_row(page: *const Page, word: u32) -> u32 {
+    guard(|| {
+        (*page)
+            .current_layout()
+            .and_then(|l| l.reflow.as_ref())
+            .and_then(|f| f.word_row.get(word as usize).copied())
+            .unwrap_or(u32::MAX)
+    })
+}
+/// The largest reflow `zoom` at which every word of the page still fits a row. A host clamps
+/// its pinch to this; the sajdah line is not counted, it is drawn over a span of words.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_reflow_max_zoom(page: *const Page, spec: *const QvpLayoutSpec) -> f32 {
+    guard(|| {
+        let s = layout_spec(spec);
+        (*page).reflow_max_zoom(&s.reflow.unwrap_or_default())
     })
 }
 /// The `line_spacing` multiplier that makes the page fill the padded viewport of `spec` when
@@ -1348,6 +1628,28 @@ pub unsafe extern "C" fn qvp_highlight_boxes_view(page: *const Page, out: *mut Q
     })
 }
 /// Raw band boxes (page units, no animation) for a word list.
+/// Band boxes for a word list in viewport px through the current layout.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_word_bands_view(
+    page: *const Page,
+    words: *const u32,
+    n: u32,
+    height: u8,
+    pad_x: f32,
+    pad_y: f32,
+    out: *mut QvpBox,
+    cap: u32,
+) -> u32 {
+    guard(|| {
+        let ws = std::slice::from_raw_parts(words, n as usize);
+        let v: Vec<QvpBox> = (*page)
+            .word_bands_view(ws, if height == 1 { BandHeight::Ink } else { BandHeight::LineSpacing }, pad_x, pad_y)
+            .iter()
+            .map(|b| QvpBox { id: 0, line: b.line, x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, color: 0, radius: 0.0 })
+            .collect();
+        fill(out, cap, &v)
+    })
+}
 #[no_mangle]
 pub unsafe extern "C" fn qvp_word_bands(
     page: *const Page,

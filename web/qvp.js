@@ -9,7 +9,8 @@
   /** The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). */
   const DEFAULTS = { INK: 0x231f20ff, HIGHLIGHT_INK: 0x1a73e8ff, HIGHLIGHT_BAND: 0xd6a3264d, HIGHLIGHT_PAD_X: 1.2, HIGHLIGHT_PAD_Y: 0, HIGHLIGHT_SEAM: 0.25,
     SELECTION_BAND: 0x2d6fd640, GAP_BIAS: 0.6, TAP_DISTANCE: 6, GRID_LINES: 15, ASPECT_SLACK: 1.15, MASK_BLOCK: 0xd9d4c8ff, MASK_PAD: 0.6, MASK_RADIUS: 0.8,
-    REVEAL_LIT: 1, REVEAL_GREY: 0xc9c4b8ff, CROP_PAD: 2 };
+    REVEAL_LIT: 1, REVEAL_GREY: 0xc9c4b8ff, CROP_PAD: 2,
+    MIN_ZOOM: 0.5, MAX_ZOOM: 12, ZOOMED_THRESHOLD: 1.02, SWIPE_AXIS_RATIO: 1.5, SWIPE_DISTANCE: 40, SWIPE_VELOCITY: 500 };
   const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, ORNAMENT: 5, PAGE_NUMBER: 6, RUNNING_HEAD: 7, OTHER: 255 };
   const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 };
   const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGRAPHIC: 4, DABT: 5, WAQF: 6, READING_SIGN: 7, STANDALONE: 8 };
@@ -76,6 +77,7 @@
       this.mem = this.ex.memory;
       this.scratch = this.ex.qvp_alloc(1 << 16);   // 64 KB for outputs
       this.scratch2 = this.ex.qvp_alloc(1 << 16);  // 64 KB for inputs
+      this._buf = 0; this._bufLen = 0;             // grown on demand for the bigger reads
       this.td = new TextDecoder();
       this.te = new TextEncoder();
       // Load every name table from the engine once; Sel and markId read them.
@@ -89,6 +91,24 @@
     dv() { return new DataView(this.mem.buffer); }
     str(ptr, len) { return this.td.decode(new Uint8Array(this.mem.buffer, ptr, len)); }
     qstr(at) { const d = this.dv(); return this.str(d.getUint32(at, true), d.getUint32(at + 4, true)); }
+    /** the reader's pan and zoom: {scale, offsetX, offsetY} in, the same out. The engine owns
+     * the arithmetic so every platform pinches alike; the host owns only the gesture. */
+    _putView(v, at) { const d = this.dv(); d.setFloat32(at, v.scale, true); d.setFloat32(at + 4, v.offsetX, true); d.setFloat32(at + 8, v.offsetY, true); return at; }
+    _getView(at) { const d = this.dv(); return { scale: d.getFloat32(at, true), offsetX: d.getFloat32(at + 4, true), offsetY: d.getFloat32(at + 8, true) }; }
+    /** zoom about a point of the viewport (the point between two fingers), clamped */
+    viewZoomAbout(view, focalX, focalY, factor, { min = 0, max = 0 } = {}) {
+      const i = this._putView(view, this.scratch2 + 32768);
+      this.ex.qvp_view_zoom_about(i, focalX, focalY, factor, min, max, this.scratch);
+      return this._getView(this.scratch);
+    }
+    /** move by a drag, in viewport px */
+    viewPan(view, dx, dy) { const i = this._putView(view, this.scratch2 + 32768); this.ex.qvp_view_pan(i, dx, dy, this.scratch); return this._getView(this.scratch); }
+    /** hold the content against the viewport: centre what does not fill it, cover what does */
+    viewClamp(view, contentW, contentH, viewportW, viewportH) { const i = this._putView(view, this.scratch2 + 32768); this.ex.qvp_view_clamp(i, contentW, contentH, viewportW, viewportH, this.scratch); return this._getView(this.scratch); }
+    /** +1 or -1 when a released drag is a page swipe, 0 when it is not */
+    viewSwipe(dx, dy, vx = 0, vy = 0) { return this.ex.qvp_view_swipe(dx, dy, vx, vy); }
+    /** a scratch buffer of at least `len` bytes, kept between calls */
+    buf(len) { if (len > this._bufLen) { this._buf = this.ex.qvp_alloc(len); this._bufLen = len; } return this._buf; }
     /** write a JS string into scratch2 at offset; returns [ptr, len] */
     putStr(s, off = 0) { const b = this.te.encode(s); new Uint8Array(this.mem.buffer, this.scratch2 + off, b.length).set(b); return [this.scratch2 + off, b.length]; }
     putU32(arr, off = 0) { const p = this.scratch2 + off; new Uint32Array(this.mem.buffer, p, arr.length).set(arr); return p; }
@@ -278,6 +298,12 @@
       for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
       return out;
     }
+    /** the ayah medallions in viewport px through the current layout: where each is drawn */
+    ayahMarksView() {
+      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_ayah_marks_view(this.h, s, 128), d = this.e.dv(), out = [];
+      for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
+      return out;
+    }
     rosettes() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_rosettes(this.h, s, 32), d = this.e.dv(), out = [];
       for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 20; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), juz: d.getUint16(o + 8, true), hizb: d.getUint16(o + 10, true), nisf: d.getUint16(o + 12, true), rubuAlHizb: d.getUint16(o + 14, true), rubuAlHizbInHizb: d.getUint16(o + 16, true) }); }
@@ -323,6 +349,8 @@
     /** gap-aware: every point on a printed line resolves to the word the user meant */
     hitTest(x, y, opt = {}) { return this.e.ex.qvp_hit_test(this.h, x, y, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
     hitTestView(viewX, viewY, opt = {}) { return this.e.ex.qvp_hit_test_view(this.h, viewX, viewY, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
+    /** the hit boxes in viewport px through the current layout: what a tap is resolved with */
+    hitAreasView(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas_view(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
     lineBands() { const n = this.e.ex.qvp_line_bands(this.h, this.e.scratch, 64), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 64); i++) { const o = this.e.scratch + i * 28; out.push({ line: d.getUint32(o, true), lineNumber: d.getUint32(o + 4, true), y0: d.getFloat32(o + 8, true), y1: d.getFloat32(o + 12, true), mid: d.getFloat32(o + 16, true), inkY0: d.getFloat32(o + 20, true), inkY1: d.getFloat32(o + 24, true) }); } return out; }
     hitAreas(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
 
@@ -334,6 +362,12 @@
       d.setFloat32(s + 16, spec.padLeft || 0, true); d.setFloat32(s + 20, spec.padRight || 0, true); d.setFloat32(s + 24, spec.lineSpacing ?? 1, true);
       d.setUint8(s + 28, spec.fillHeight ? 1 : 0); d.setUint32(s + 32, spec.gridLines || 0, true);
       d.setFloat32(s + 36, spec.cropLeft || 0, true); d.setFloat32(s + 40, spec.cropRight || 0, true); d.setFloat32(s + 44, spec.maxAspectSlack || 0, true);
+      const r = spec.reflow;
+      d.setFloat32(s + 48, r ? (r.zoom ?? 1) : 0, true);
+      const fill = { ragged: 0, justified: 1, centred: 2, centered: 2 }[r && r.fill] ?? 0;
+      d.setUint8(s + 52, fill); d.setUint8(s + 53, r && r.gaps === 'printed' ? 0 : 1);
+      d.setFloat32(s + 56, r ? (r.wordGap ?? 1) : 1, true);
+      d.setFloat32(s + 60, r ? (r.maxStretch ?? 0) : 0, true);
     }
     /** Leading (page units) that makes the page fill the padded viewport of `spec`; max 0 = unlimited. */
     layoutLineSpacingToFill(spec, max = 0) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_line_spacing_to_fill(this.h, s, max); }
@@ -344,14 +378,61 @@
     layout(spec) {
       const ex = this.e.ex, s = this.e.scratch; let d = this.e.dv();
       this._writeLayoutSpec(spec, s);
-      ex.qvp_layout(this.h, s, s + 64);
-      d = this.e.dv(); const o = s + 64;
+      ex.qvp_layout(this.h, s, s + 128);
+      d = this.e.dv(); const o = s + 128;
       const n = d.getUint32(o + 24, true), lp = d.getUint32(o + 28, true);
       const f = new Float32Array(this.e.mem.buffer.slice(lp, lp + n * 12));
       const lineDy = new Float32Array(n), slots = new Array(n);
       for (let i = 0; i < n; i++) { lineDy[i] = f[i * 3]; slots[i] = [f[i * 3 + 1], f[i * 3 + 2]]; }
-      return (this.currentLayout = { scale: d.getFloat32(o, true), offsetX: d.getFloat32(o + 4, true), offsetY: d.getFloat32(o + 8, true), contentW: d.getFloat32(o + 12, true), contentH: d.getFloat32(o + 16, true), lineSpacing: d.getFloat32(o + 20, true), lineDy, slots,
-        fitScale: d.getFloat32(o + 32, true), fitX: d.getFloat32(o + 36, true), fitY: d.getFloat32(o + 40, true) });
+      const reflowed = d.getUint32(o + 44, true) === 1, rows = d.getUint32(o + 48, true);
+      const L = { scale: d.getFloat32(o, true), offsetX: d.getFloat32(o + 4, true), offsetY: d.getFloat32(o + 8, true), contentW: d.getFloat32(o + 12, true), contentH: d.getFloat32(o + 16, true), lineSpacing: d.getFloat32(o + 20, true), lineDy, slots,
+        fitScale: d.getFloat32(o + 32, true), fitX: d.getFloat32(o + 36, true), fitY: d.getFloat32(o + 40, true), reflowed, rows };
+      // where each group of paths sits: {dx, dy, k} triples, and the group of every path
+      const ng = ex.qvp_layout_groups(this.h, 0, 0);
+      const gp = this.e.buf(ng * 16);
+      ex.qvp_layout_groups(this.h, gp, ng);
+      L.groups = new Float32Array(this.e.mem.buffer.slice(gp, gp + ng * 16));
+      const np = ex.qvp_layout_path_groups(this.h, 0, 0);
+      if (np) { const pp = this.e.buf(np * 4); ex.qvp_layout_path_groups(this.h, pp, np); L.pathGroup = new Uint32Array(this.e.mem.buffer.slice(pp, pp + np * 4)); }
+      else L.pathGroup = null;
+      // paths this layout leaves undrawn: the sheet's furniture on a reflowed page
+      const no = ex.qvp_layout_omitted_paths(this.h, 0, 0);
+      if (no) { const op = this.e.buf(no * 4); ex.qvp_layout_omitted_paths(this.h, op, no); L.omitted = new Set(new Uint32Array(this.e.mem.buffer, op, no)); }
+      else L.omitted = null;
+      // paths drawn a second time elsewhere: a sajdah line whose words ended up on two rows
+      const nr = ex.qvp_layout_repeats(this.h, 0, 0);
+      L.repeats = [];
+      if (nr) {
+        const rp = this.e.buf(nr * 24); ex.qvp_layout_repeats(this.h, rp, nr);
+        const f = new Float32Array(this.e.mem.buffer.slice(rp, rp + nr * 24));
+        for (let i = 0; i < nr; i++) L.repeats.push({ firstPath: f[i * 6], nPaths: f[i * 6 + 1], dx: f[i * 6 + 2], dy: f[i * 6 + 3], kx: f[i * 6 + 4], ky: f[i * 6 + 5] });
+      }
+      return (this.currentLayout = L);
+    }
+    /** the largest reflow zoom at which every word of this page still fits a row */
+    reflowMaxZoom(spec) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_reflow_max_zoom(this.h, s); }
+    /** the words of a reflowed row, in reading order */
+    rowWords(row) {
+      const n = this.e.ex.qvp_layout_row_words(this.h, row, 0, 0);
+      if (!n) return [];
+      const p = this.e.buf(n * 4); this.e.ex.qvp_layout_row_words(this.h, row, p, n);
+      return Array.from(new Uint32Array(this.e.mem.buffer, p, n));
+    }
+    /** the row a word landed on in a reflowed layout, or null */
+    wordRow(word) { const r = this.e.ex.qvp_layout_word_row(this.h, word); return r === 0xffffffff ? null : r; }
+    /** the view that puts a point inside a word (nx, ny from 0 to 1) at a place on the screen,
+     * then clamps: how a pinch holds its place when the layout reflows under it */
+    viewAnchor(view, word, nx, ny, toX, toY, viewportW, viewportH) {
+      const i = this.e._putView(view, this.e.scratch2 + 32768);
+      this.e.ex.qvp_view_anchor(this.h, i, word, nx, ny, toX, toY, viewportW, viewportH, this.e.scratch);
+      return this.e._getView(this.e.scratch);
+    }
+    /** where a viewport point lands in the laid-out page, for turning a touch into a hit test */
+    viewToLayout(view, vx, vy) {
+      const i = this.e._putView(view, this.e.scratch2 + 32768);
+      this.e.ex.qvp_view_to_layout(this.h, i, vx, vy, this.e.scratch);
+      const f = new Float32Array(this.e.mem.buffer, this.e.scratch, 2);
+      return { x: f[0], y: f[1] };
     }
     wordBoundsView(i) { this.e.ex.qvp_word_bounds_view(this.h, i, this.e.scratch); const f = new Float32Array(this.e.mem.buffer, this.e.scratch, 4); return { x0: f[0], y0: f[1], x1: f[2], y1: f[3] }; }
 
@@ -421,6 +502,8 @@
     unmask() { this.e.ex.qvp_unmask(this.h); }
     maskHidden() { const n = this.e.ex.qvp_mask_hidden(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     maskWords() { const n = this.e.ex.qvp_mask_words(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
+    /** band boxes for a word list in viewport px through the current layout */
+    wordBandsView(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_word_bands_view(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
     maskBoxesView() { const n = this.e.ex.qvp_mask_boxes_view(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
     /** greyed page with a lit window: {lit, byAyah, grey, ink, ayahMarks, ms} → steps */
     revealStart({ lit = DEFAULTS.REVEAL_LIT, byAyah = false, grey = DEFAULTS.REVEAL_GREY, ink = DEFAULTS.INK, ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms); }
@@ -468,11 +551,25 @@
       this.base = document.createElement('canvas'); this.baseKey = '';
       this.stats = { baseMs: 0, overlayMs: 0, basePaths: 0, overlayPaths: 0, bands: 0 };
     }
-    lineTransform(page, view, line, dpr) {
-      const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null };
-      const s = dpr * view.scale * L.scale, dy = L.lineDy ? L.lineDy[line] : 0;
-      return [s, dpr * (view.offsetX + view.scale * L.offsetX), dpr * (view.offsetY + view.scale * (L.offsetY + dy * L.scale))];
+    /** transform of one group of paths: a point p is drawn at (kx·p.x + dx, ky·p.y + dy), page units */
+    groupTransform(page, view, group, dpr) {
+      const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null, groups: null };
+      let dx = 0, dy = 0, kx = 1, ky = 1;
+      if (L.groups && L.groups.length > group * 4) { dx = L.groups[group * 4]; dy = L.groups[group * 4 + 1]; kx = L.groups[group * 4 + 2]; ky = L.groups[group * 4 + 3]; }
+      else if (L.lineDy) dy = L.lineDy[group] || 0;
+      return this.placementTransform(page, view, { dx, dy, kx, ky }, dpr);
     }
+    /** transform of one placement: [a, d, tx, ty] for setTransform(a, 0, 0, d, tx, ty) */
+    placementTransform(page, view, p, dpr) {
+      const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0 };
+      const s = dpr * view.scale * L.scale;
+      return [s * p.kx, s * p.ky, dpr * (view.offsetX + view.scale * (L.offsetX + p.dx * L.scale)), dpr * (view.offsetY + view.scale * (L.offsetY + p.dy * L.scale))];
+    }
+    lineTransform(page, view, line, dpr) { const [a, , tx, ty] = this.groupTransform(page, view, line, dpr); return [a, tx, ty]; }
+    /** put a context into one group's space, so a host overlay lands where the group is drawn */
+    setGroupTransform(c, page, view, group, dpr) { const [a, d, tx, ty] = this.groupTransform(page, view, group, dpr); c.setTransform(a, 0, 0, d, tx, ty); }
+    /** the group a path is drawn with: its reflow group, or its printed line */
+    pathGroup(page, i) { const L = page.currentLayout; return L && L.pathGroup ? L.pathGroup[i] : page.pathLine(i); }
     /** boxes are in layout viewport px; view adds pan/zoom on top */
     drawBoxes(c, boxes, view, dpr) {
       c.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.offsetX, dpr * view.offsetY);
@@ -490,9 +587,21 @@
       const styledSet = new Set(styled.map(s => s[0]));
       const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null, lineSpacing: 0 };
       const ink = page.defaultInk;
-      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${view.offsetY.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.lineSpacing}|${L.lineDy ? L.lineDy[0] : ''}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
+      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${view.offsetY.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.lineSpacing}|${L.lineDy ? L.lineDy[0] : ''}|${L.groups ? L.groups.length + ':' + L.groups[1] : ''}|${(L.repeats || []).length}|${L.omitted ? L.omitted.size : 0}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
       const W = this.canvas.width, H = this.canvas.height;
-      const setTf = (c, line) => { const [s, tx, ty] = this.lineTransform(page, view, line, dpr); c.setTransform(s, 0, 0, s, tx, ty); };
+      const setTf = (c, g) => { const [a, d, tx, ty] = this.groupTransform(page, view, g, dpr); c.setTransform(a, 0, 0, d, tx, ty); };
+      // a path the layout asks for twice: draw it again at its other placement
+      const drawRepeats = (c, wanted, colorOf) => {
+        for (const r of (L.repeats || [])) {
+          const [a, d, tx, ty] = this.placementTransform(page, view, r, dpr);
+          c.setTransform(a, 0, 0, d, tx, ty);
+          for (let i = r.firstPath; i < r.firstPath + r.nPaths; i++) {
+            if (!wanted(i)) continue;
+            if (colorOf) { const col = colorOf(i); if ((col & 255) === 0) continue; c.fillStyle = css(col); }
+            c.fill(paths[i], page.pathEvenOdd(i) ? 'evenodd' : 'nonzero');
+          }
+        }
+      };
       if (key !== this.baseKey || this.base.width !== W || this.base.height !== H) {
         const t0 = performance.now();
         this.base.width = W; this.base.height = H;
@@ -500,10 +609,11 @@
         b.fillStyle = css(ink);
         let n = 0, cur = -1;
         for (let i = 0; i < page.nPaths; i++) {
-          if (styledSet.has(i)) continue;
-          const ln = page.pathLine(i); if (ln !== cur) { setTf(b, ln); cur = ln; }
+          if (styledSet.has(i) || (L.omitted && L.omitted.has(i))) continue;
+          const ln = this.pathGroup(page, i); if (ln !== cur) { setTf(b, ln); cur = ln; }
           b.fill(paths[i], page.pathEvenOdd(i) ? 'evenodd' : 'nonzero'); n++;
         }
+        drawRepeats(b, i => !styledSet.has(i));
         this.baseKey = key; this.stats.baseMs = performance.now() - t0; this.stats.basePaths = n;
       }
       const t1 = performance.now();
@@ -515,10 +625,12 @@
       c.drawImage(this.base, 0, 0);
       let cur = -1;
       for (const [i, col] of styled) {
-        if ((col & 255) === 0) continue;
-        const ln = page.pathLine(i); if (ln !== cur) { setTf(c, ln); cur = ln; }
+        if ((col & 255) === 0 || (L.omitted && L.omitted.has(i))) continue;
+        const ln = this.pathGroup(page, i); if (ln !== cur) { setTf(c, ln); cur = ln; }
         c.fillStyle = css(col); c.fill(paths[i], page.pathEvenOdd(i) ? 'evenodd' : 'nonzero');
       }
+      const colors = new Map(styled);
+      drawRepeats(c, i => colors.has(i), i => colors.get(i));
       this.drawBoxes(c, page.maskBoxesView(), view, dpr);
       this.stats.overlayMs = performance.now() - t1; this.stats.overlayPaths = styled.length; this.stats.bands = bands.length;
     }

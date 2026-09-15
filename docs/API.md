@@ -165,6 +165,134 @@ default only when several pages must share one grid.
 
 `wordBoundsView(i)` gives a word's box in viewport px for scroll-into-view.
 
+## Reflow
+
+```js
+const L = page.layout({viewportW, viewportH, padLeft, padRight,
+                       reflow: {zoom: 1.6, fill: 'ragged' | 'justified' | 'centred', gaps: 'printed',
+                                wordGap: 1, maxStretch: 1.6}});
+// L.reflowed, L.rows, L.groups (dx, dy, kx, ky per group), L.pathGroup (the group of a path)
+page.reflowMaxZoom(spec)   // the largest zoom whose rows still hold every word of this page
+L.omitted                  // paths this layout does not draw (the sheet's own furniture)
+page.rowWords(row)         // the words of a reflowed row, in reading order
+page.wordRow(word)         // the row a word landed on, or null
+```
+
+Reflow keeps the page width and breaks the words onto rows of that width. A row is the page's
+printed text block, not the whole sheet, so the print's side margins stay. `zoom` is the ink
+size as a multiple of fit-to-width, so a row holds `blockW/zoom` page units and the page grows
+taller than the viewport: `fitScale` stays 1 and the host scrolls `contentH`. Without `reflow`
+the layout above is unchanged.
+
+**Zoom 1 is the printed page.** A `reflow` of `zoom: 1` or less lays the page out as printed:
+`reflowed` is 0, there are no rows, and every knob above — leading, `fillHeight`, the grid a
+short page sits on, the crops, the aspect bound — behaves exactly as it does without `reflow`.
+A reader returning to 1 gets the printed page back, whatever else they have set. Rows appear
+once the ink is bigger than the print, and text flows from one line into the next only once
+the rows are narrower than the printed lines.
+
+The running head (surah name and juz) and the page number are printed outside the page box.
+They belong to the sheet, and a reflowed page has none, so they are left out and their paths
+are listed in `L.omitted` for renderers to skip. A host that wants them draws its own, from
+`page.pageNumber` and the atlas.
+
+What the engine holds to: a word is placed whole and is never reshaped or resized, an ayah
+keeps the medallion that closes it on the same row, a sajdah line travels with its word, a
+surah name or basmalah keeps a row of its own and text never flows across it, and no word
+moves to another page. `fill` is `ragged` (words keep their gap and the row starts at the right margin), `justified`
+(gaps stretch to the margins, the row that ends a block excepted) or `centred` (words keep
+their gap and what is left over is split between the two margins). `gaps` is `uniform` (the default) or `printed`, and `wordGap` scales whichever it picked.
+
+**Words are spaced by the air between their strokes.** Not by the distance between their
+boxes: the calligraphy interlocks one word's opening stroke with the one before it, so the
+boxes of `سَاحِرٌ` and `كَذَّابٌ` overlap by 12 page units while the strokes stay 5 apart. Space
+that pair by its boxes and it comes apart, leaving a hole where the strokes used to interleave.
+
+The engine slices every word's letters into bands counted from its line's baseline
+(`defaults::SLICES_PER_LINE`) and measures the narrowest distance between two words over the
+bands they share: `page.wordsClearance(a, b, dx)`, with `page.shiftForClearance(a, b, air)` for
+the shift that leaves a given air. A reflowed row leaves every pair the air the print keeps on
+that page, which across the 604 pages holds the placed air to a median of 4.2 page units and a
+spread of 0.5, against a box gap that varies by 2.7.
+
+Marks are not in this measure. A word's box holds them, two words in three carry ink that
+reaches past their letters, and spacing to those would set such pairs tighter than the rest.
+
+**One word drawn inside another.** Strokes almost never meet: 10 of this mushaf's 68,612
+neighbouring pairs. Three of those are `ٱلرَّحْمَٰنِ ٱلرَّحِيمِ`, where `ٱلرَّحِيمِ` is set in the bowl
+of `ٱلرَّحْمَٰنِ`, overlapping by 19 to 26 page units where the next deepest reaches 3.8. Such a
+pair keeps the place the print gave it and justification does not stretch it; only a row break
+between the two sets them as ordinary words. `page.wordsInterlock(a, b)` reports it, and
+`defaults::INTERLOCK_DEPTH` is where the line is drawn.
+
+**Where each mark goes.** Where the print puts a mark decides how it travels. A mark printed
+inside the text block runs with the words: it takes the shift of the word printed before it,
+so the gap the print put between them survives, and it claims its own room on the row. In this
+mushaf every rub' al-hizb and sajdah mark is printed in the text, all 284 of them. A mark
+printed out in the sheet's margin, where a reflowed row has no room, keeps the margin and the
+side the print gives it and follows its word down to the new row. The medallion an ayah record
+names always runs with that record's last word.
+The sajdah line is drawn over the words it marks, wherever they now are: when the span breaks
+across rows, the stroke is drawn once per row, stretched along x to cover that row's part of
+the span, and carrying the same shift as those words so it keeps the height above them the
+print gave it. It is the one piece of ink the layout stretches, and only along x. A word is
+always placed with `kx == ky == 1`.
+
+One decoration can hold more than one mark: the sajdah of 16:50 on page 272 is a single
+record holding the stroke over its words *and* the sign printed in the margin. They are placed
+apart — the sign keeps its size and is drawn once, beside the word it stands next to — so a
+path's group follows the job it does, not only the record it belongs to.
+
+`reflowMaxZoom(spec)` is the largest zoom at which every word still fits a row (2.44 on page
+121, whose longest word is 121 of 345 page units). Clamp a pinch to it; past it the engine
+still lays the page out, but ink wider than a row runs past the margin.
+
+**Groups.** A reflowed page shifts words, not lines, so `L.lineDy[line]` no longer places a
+path. `L.groups` holds one `{dx, dy, kx, ky}` per group and `L.pathGroup[i]` the group of path
+`i`: draw the path's points at `(kx·p.x + dx, ky·p.y + dy)` in page units, then apply `scale`
+and the offsets as before. Without reflow there is one group per printed line, `dx` is 0, both
+scales are 1 and `dy` is that line's `lineDy`, so one code path serves both. `slots[]` holds
+the rows. `L.repeats` lists paths to draw a second time (`{firstPath, nPaths, dx, dy, kx,
+ky}`), which is how one sajdah line covers two rows; a renderer draws them after the main
+pass, in the same colour the path already has.
+
+## The reader's pan and zoom
+
+```js
+let view = {scale: 1, offsetX: 0, offsetY: 0};
+view = engine.viewZoomAbout(view, focalX, focalY, factor);   // a pinch, clamped
+view = engine.viewPan(view, dx, dy);                          // a drag
+view = engine.viewClamp(view, L.contentW, L.contentH, viewportW, viewportH);
+view = page.viewAnchor(view, word, nx, ny, toX, toY, viewportW, viewportH);
+const {x, y} = page.viewToLayout(view, touchX, touchY);       // a touch → the laid-out page
+engine.viewSwipe(dx, dy, vx, vy)                              // +1, -1 or 0
+```
+
+A layout places the page's ink; the reader pans and zooms on top of it. That arithmetic is the
+engine's, so the platforms cannot drift apart: a host reads the gesture from its own recognizer
+and asks for the view it produces. `viewZoomAbout` keeps the point under two fingers under
+them, `viewClamp` centres an axis the content does not fill and covers the viewport on one it
+overflows.
+
+`viewAnchor` is the one reflow needs. A relayout moves a word to another row, so a host cannot
+hold the page still by remembering pixels: it remembers the word under the fingers and the
+point inside it (`nx`, `ny` from 0 to 1) and asks for the view that brings that point back to a
+place on the screen. A word that moved rows cannot hold both axes on a page of fixed width —
+its new row decides its x — so the vertical place is the one this keeps.
+
+## Where geometry is answered
+
+Every call named `…View` answers in viewport pixels through the current layout:
+`wordBoundsView`, `wordBandsView`, `hitAreasView`, `ayahMarksView`, `highlightBoxesView`,
+`maskBoxesView`, `hitTestView`, `hitTestExactView`, and `L.slots`. A host drawing its own
+overlay uses these and never places ink itself.
+
+The calls without `View` answer in page units, as the print has them: `wordBands`, `hitAreas`,
+`lineBands`, `ayahMarks`, `hitTest`, `hitTestExact`, `cropBounds` and `cropSvg`. They describe
+the printed page, which is what a crop exports and what a reflowed page no longer looks like.
+`hitAreasView` is not `hitAreas` transformed: a row's words have other neighbours than a
+printed line's, so the partition is computed again.
+
 ## Styles
 
 ```js

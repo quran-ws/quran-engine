@@ -39,6 +39,7 @@ fn main() {
                 crop_left: crop,
                 crop_right: crop,
                 max_aspect_slack: slack,
+                reflow: None,
             };
             let to_fill = page.line_spacing_to_fill(&spec, f32::INFINITY);
             let wasted = page.wasted_fraction(&spec);

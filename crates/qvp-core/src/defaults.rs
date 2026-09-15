@@ -31,3 +31,27 @@ pub const REVEAL_LIT: u32 = 1;
 pub const REVEAL_GREY: Rgba = 0xc9c4b8ff;
 /// Padding (page units) around a crop.
 pub const CROP_PAD: f32 = 2.0;
+
+/// How far a reflowed row's gaps may stretch to reach the margins, as a multiple of the gaps
+/// the row started with. Past this the row is left right-aligned.
+pub const REFLOW_MAX_STRETCH: f32 = 1.6;
+
+/// The reader's pinch limits, as multiples of the layout's own scale, and the point at which
+/// a page counts as zoomed rather than settled.
+pub const MIN_ZOOM: f32 = 0.5;
+pub const MAX_ZOOM: f32 = 12.0;
+pub const ZOOMED_THRESHOLD: f32 = 1.02;
+/// A released drag is a page swipe when it is this much more sideways than up and down, and
+/// either this far (viewport px) or this fast (px per second).
+pub const SWIPE_AXIS_RATIO: f32 = 1.5;
+pub const SWIPE_DISTANCE: f32 = 40.0;
+pub const SWIPE_VELOCITY: f32 = 500.0;
+
+/// How far two words' strokes must overlap, as a share of the printed line spacing, for the
+/// pair to count as one piece of calligraphy rather than two words set close. Strokes almost
+/// never meet: 10 pairs of 68,612 in this mushaf, and the three the print draws as one
+/// (`ٱلرَّحْمَٰنِ ٱلرَّحِيمِ`) overlap by 19 to 26 page units where the next deepest reaches 3.8.
+pub const INTERLOCK_DEPTH: f32 = 0.15;
+
+/// How many bands a line is sliced into when measuring the air between two words' letters.
+pub const SLICES_PER_LINE: u32 = 24;
