@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-tag="${QVP_DATA_TAG:-v0.1.0}"
+tag="${QVP_DATA_TAG:-data-v0.2.0}"
 destination="packages/android/qvp/src/androidTest/assets"
 mkdir -p "$destination"
 
