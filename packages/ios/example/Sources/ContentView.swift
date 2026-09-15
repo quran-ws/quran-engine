@@ -153,43 +153,78 @@ struct GoToSheet: View {
         query.isEmpty ? surahs : (m.atlas?.searchSurahs(query) ?? [])
     }
 
+    // The sections are separate properties because one expression for the whole list
+    // exceeds what the Swift type checker will finish.
+    @ViewBuilder private var ayahSection: some View {
+        Section {
+            HStack {
+                TextField("Ayah, e.g. 2:255", text: $ayahKey)
+                    .keyboardType(.numbersAndPunctuation)
+                    .submitLabel(.go)
+                    .onSubmit(goAyah)
+                Button("Go", action: goAyah).disabled(ayahKey.isEmpty)
+            }
+        } footer: {
+            Text("The whole mushaf is bundled — 604 pages. Type an ayah key, pick a juz, or search a surah by name or number.")
+        }
+    }
+
+    @ViewBuilder private var juzSection: some View {
+        Section("Juz") {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(1...30, id: \.self) { j in
+                        Button("\(j)") { goJuz(j) }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func surahRow(_ s: QvpAtlasSurah) -> some View {
+        let number = Text("\(s.number)")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        let detail = Text("\(s.english) · \(s.ayahCount) ayahs · page \(s.page)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        Button {
+            m.loadPage(s.page)
+            dismiss()
+        } label: {
+            HStack {
+                number.frame(width: 30, alignment: .trailing)
+                VStack(alignment: .leading) {
+                    Text(s.latin).font(.body)
+                    detail
+                }
+                Spacer()
+                Text(s.arabic).font(.title3)
+            }
+        }
+        .tint(.primary)
+    }
+
+    @ViewBuilder private var surahSection: some View {
+        Section("Surahs") {
+            ForEach(filtered, id: \.number) { s in surahRow(s) }
+        }
+    }
+
+    private func goJuz(_ j: Int) {
+        guard let d = m.atlas?.juz(j) else { return }
+        m.loadPage(d.page)
+        dismiss()
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    HStack {
-                        TextField("Ayah, e.g. 2:255", text: $ayahKey).keyboardType(.numbersAndPunctuation).submitLabel(.go).onSubmit(goAyah)
-                        Button("Go", action: goAyah).disabled(ayahKey.isEmpty)
-                    }
-                } footer: {
-                    Text("The whole mushaf is bundled — 604 pages. Type an ayah key, pick a juz, or search a surah by name or number.")
-                }
-                Section("Juz") {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(1...30, id: \.self) { j in
-                                Button("\(j)") { if let d = m.atlas?.juz(j) { m.loadPage(d.page); dismiss() } }
-                                    .buttonStyle(.bordered).controlSize(.small)
-                            }
-                        }
-                    }
-                }
-                Section("Surahs") {
-                    ForEach(filtered, id: \.n) { s in
-                        Button { m.loadPage(s.page); dismiss() } label: {
-                            HStack {
-                                Text("\(s.n)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 30, alignment: .trailing)
-                                VStack(alignment: .leading) {
-                                    Text(s.latin).font(.body)
-                                    Text("\(s.english) · \(s.ayahCount) ayahs · page \(s.page)").font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text(s.arabic).font(.title3)
-                            }
-                        }
-                        .tint(.primary)
-                    }
-                }
+                ayahSection
+                juzSection
+                surahSection
             }
             .searchable(text: $query, prompt: "Surah name or number")
             .navigationTitle("Go to")

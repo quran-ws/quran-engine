@@ -48,6 +48,8 @@ jobs:
       - name: Generate and build the example for the simulator
         working-directory: packages/ios/example
         run: |
+          # Without pipefail the step takes tail's exit status, so a failed build reads as a pass.
+          set -o pipefail
           brew install xcodegen >/dev/null
           ./sync-pages.sh            # example/pages from the cached dist/pages; xcodegen needs the directory
           xcodegen generate
