@@ -36,7 +36,12 @@ jobs:
           cache: gradle
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # `packages` defaults to "tools platform-tools". Google removed the deprecated
+      # `tools` package from the SDK repository, so the default install now fails with
+      # "Failed to find package 'tools'". The next step installs what the build needs.
       - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
       - name: Install Android build tools
         run: sdkmanager "platforms;android-35" "ndk;$NDK_VERSION" "cmake;3.22.1"
       - name: Select NDK
@@ -76,7 +81,12 @@ jobs:
           cache: gradle
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # `packages` defaults to "tools platform-tools". Google removed the deprecated
+      # `tools` package from the SDK repository, so the default install now fails with
+      # "Failed to find package 'tools'". The next step installs what the build needs.
       - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
       - name: Install Android build tools
         run: sdkmanager "platforms;android-35" "system-images;android-35;google_apis;x86_64" "ndk;$NDK_VERSION" "cmake;3.22.1"
       - name: Select NDK
