@@ -6,6 +6,14 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Changed
+- Page data is rebuilt from `quran-svg-elements` v1.1.2, which moves ink that belongs to a
+  surah name out of the basmalah beside it, on pages 77, 282 and 428. The other 601 pages
+  are byte-identical to the previous data release. The release is `v0.3.0`;
+  `scripts/sync-test-data.sh`, the wrapper page sync scripts and CI default to it.
+- A data release is tagged with the version the CDN serves it under, so `v0.3.0` publishes
+  to `cdn.quran.ws/qvp/v0.3.0/`. The engine line of this repository is tagged
+  `engine-vX.Y.Z` from now on and still publishes under its version alone. The tags already
+  cut keep their names (`docs/CDN.md`).
 - `@quran.ws/engine/lite` returns `index`, `lineIndex` and `ayahIndex`, the names the
   main entry point already returned. It kept the abbreviations the naming standard
   replaced, because the parity check read only `web/qvp.js` and `web/index.mjs`.

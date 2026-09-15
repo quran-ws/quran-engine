@@ -23,11 +23,11 @@ jobs:
             dist/pages
             pages
             index
-          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.2.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.1' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+          key: test-data-${{ vars.QVP_DATA_TAG || 'v0.3.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.2' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
       - name: Fetch test data
         env:
-          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.2.0' }}
-          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.1' }}
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.3.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
         run: scripts/sync-test-data.sh
       - name: All pages
         run: QVP_REQUIRE_DATA=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity -- --nocapture
@@ -48,8 +48,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Fetch page data
         env:
-          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.2.0' }}
-          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.1' }}
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.3.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
         run: scripts/sync-test-data.sh
       - name: Run
         run: cargo run -p qvp-core --release --example bench -- dist/pages/042.qvp | tee bench.txt

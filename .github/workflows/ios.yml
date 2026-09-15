@@ -34,11 +34,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dist/pages
-          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.2.0' }}
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'v0.3.0' }}
       - name: Fetch page data
         env:
-          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.2.0' }}
-          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.1' }}
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'v0.3.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
         run: scripts/sync-test-data.sh
       - name: Build QvpEngine.xcframework
         run: scripts/build-engine-ios.sh

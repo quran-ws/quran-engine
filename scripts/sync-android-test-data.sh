@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-tag="${QVP_DATA_TAG:-data-v0.2.0}"
+tag="${QVP_DATA_TAG:-v0.3.0}"
 destination="packages/android/qvp/src/androidTest/assets"
 mkdir -p "$destination"
 
@@ -31,7 +31,8 @@ expected = {
     "001.qvp": "2792ceab5f3cfaa0d86d09a8ca11c80e49b2692de384705b57225c9e3899940a",
     "042.qvp": "0fc141ceb6b3f555a2590332bfe153a17ec185a76f81be05cdfc0b0d4bccadb2",
 }
-if sys.argv[2] == "data-v0.2.0":
+# 001 and 042 are byte-identical across these releases
+if sys.argv[2] in ("v0.3.0", "data-v0.2.0"):
     for name, digest in expected.items():
         actual = hashlib.sha256((root / name).read_bytes()).hexdigest()
         if actual != digest:
