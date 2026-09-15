@@ -27,6 +27,18 @@ pub enum GapMode {
     Uniform = 1,
 }
 
+/// How the words are broken onto rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Breaks {
+    /// Fill each row until the next word does not fit. What the print does, and what leaves one
+    /// row full and the next half empty when a long word falls at a boundary.
+    Greedy = 0,
+    /// Choose the breaks that leave the rows of a block as even as they can be, by weighing how
+    /// much every row of the block is left short rather than only the row in hand.
+    Even = 1,
+}
+
 /// How a reflowed row fills the width.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -36,7 +48,7 @@ pub enum Fill {
     /// Gaps stretch so the row spans the full width. The last row of a block stays ragged.
     Justified = 1,
     /// Words keep their gap and the row is centred: what is left over is split between the
-    /// two margins.
+    /// two margins. This is what a reflowed page does unless a host asks otherwise.
     Centred = 2,
 }
 
@@ -48,9 +60,14 @@ pub struct ReflowSpec {
     /// 2.0 gives ink twice as tall and rows that hold about half as much.
     pub zoom: f32,
     pub fill: Fill,
+    pub breaks: Breaks,
     pub gaps: GapMode,
     /// Multiplier on every gap (1.0 = the gap `gaps` picked).
     pub word_gap: f32,
+    /// How far a row is opened towards the row beside it when it comes out much shorter, from
+    /// 0 (left as it is) to 1 (opened all the way to its neighbour's width). The row is never
+    /// justified by this, and [`ReflowSpec::max_stretch`] still caps how far its gaps may go.
+    pub relax: f32,
     /// How far a gap may stretch under [`Fill::Justified`], as a multiple of the gap the row
     /// started with. A row that would need more than this stays as it is, right-aligned, so a
     /// short row is never gapped out to the margins. 0 means no cap.
@@ -61,9 +78,11 @@ impl Default for ReflowSpec {
     fn default() -> Self {
         ReflowSpec {
             zoom: 1.0,
-            fill: Fill::Ragged,
+            fill: Fill::Centred,
+            breaks: Breaks::Even,
             gaps: GapMode::Uniform,
             word_gap: 1.0,
+            relax: crate::defaults::REFLOW_RELAX,
             max_stretch: crate::defaults::REFLOW_MAX_STRETCH,
         }
     }
@@ -163,6 +182,9 @@ pub(crate) struct RowSpec {
     pub pitch: f32,
     pub top: f32,
     pub printed_spacing: bool,
+    /// How many rows the reader sees at once. Rows are evened out against the others of their
+    /// own screenful, because that is what a reader can compare. 0 weighs the whole page.
+    pub rows_per_view: usize,
 }
 
 /// One unit that a row holds whole: a word, the ink printed with it (the medallion that
@@ -468,7 +490,7 @@ impl Page {
     }
 
     pub(crate) fn reflow(&self, spec: &ReflowSpec, rows: &RowSpec) -> Reflowed {
-        let RowSpec { block, margins, row_w, pitch, top, printed_spacing } = *rows;
+        let RowSpec { block, margins, row_w, pitch, top, printed_spacing, rows_per_view } = *rows;
         let q = self.quant();
         let d = self.data();
         let median = self.median_word_gap();
@@ -484,7 +506,6 @@ impl Page {
         let mut rows: Vec<Vec<Atom>> = Vec::new();
         let mut header_rows: Vec<(usize, u32)> = Vec::new(); // (row index, printed line)
         let mut cur: Vec<Atom> = Vec::new();
-        let mut used = 0.0f32;
         // between two atoms, not two words: an atom's printed extent already holds the
         // medallion that closes its ayah, so the print's word-to-word distance would count
         // that medallion twice and tear the row open
@@ -526,38 +547,112 @@ impl Page {
         // the rows are narrower than the printed lines. At the printed size the page is the
         // printed page: every line keeps its own row, including the short ones a surah ends on.
         let flows_on = row_w + 0.01 < block.1 - block.0;
+        // The atoms of the page in reading order, cut into blocks by the banners that text
+        // never flows across.
+        enum Block {
+            Banner(u32),
+            Text(Vec<Atom>),
+        }
+        let mut blocks: Vec<Block> = Vec::new();
         for li in 0..d.lines.len() {
             if !flows_on && !cur.is_empty() {
-                rows.push(std::mem::take(&mut cur));
-                used = 0.0;
+                blocks.push(Block::Text(std::mem::take(&mut cur)));
             }
             if self.line_is_header(li) {
                 if !cur.is_empty() {
-                    rows.push(std::mem::take(&mut cur));
-                    used = 0.0;
+                    blocks.push(Block::Text(std::mem::take(&mut cur)));
                 }
-                header_rows.push((rows.len(), li as u32));
-                rows.push(Vec::new());
+                blocks.push(Block::Banner(li as u32));
                 continue;
             }
             // words of the line right to left
             for &(_, wi) in self.line_words[li].iter().rev() {
-                let atom = self.atom(wi, &word_decos[wi as usize], median, block);
-                let gap = match cur.last() {
-                    Some(prev) => gap_of(prev, &atom),
-                    None => 0.0,
-                };
-                if !cur.is_empty() && used + gap + atom.width > row_w + 0.01 {
-                    rows.push(std::mem::take(&mut cur));
-                    used = atom.width;
-                } else {
-                    used += gap + atom.width;
-                }
-                cur.push(atom);
+                cur.push(self.atom(wi, &word_decos[wi as usize], median, block));
             }
         }
         if !cur.is_empty() {
-            rows.push(cur);
+            blocks.push(Block::Text(cur));
+        }
+
+        // Where to break a block into rows. `width(i..j)` is a run of atoms with the gaps that
+        // fall between them, so both strategies read it off two prefix sums.
+        let cut_points = |atoms: &[Atom]| -> Vec<usize> {
+            let n = atoms.len();
+            if n == 0 {
+                return vec![];
+            }
+            let (mut w, mut g) = (vec![0.0f32; n + 1], vec![0.0f32; n + 1]);
+            for i in 0..n {
+                w[i + 1] = w[i] + atoms[i].width;
+                g[i + 1] = g[i] + if i > 0 { gap_of(&atoms[i - 1], &atoms[i]) } else { 0.0 };
+            }
+            let width = |i: usize, j: usize| (w[j] - w[i]) + (g[j] - g[i + 1]);
+            match spec.breaks {
+                Breaks::Greedy => {
+                    let (mut cuts, mut start) = (vec![], 0usize);
+                    for j in 1..n {
+                        if width(start, j + 1) > row_w + 0.01 {
+                            cuts.push(j);
+                            start = j;
+                        }
+                    }
+                    cuts
+                }
+                // the breaks that leave the block's rows as even as they can be: the cost of a
+                // row is the square of what it is left short, so one row far shorter than the
+                // rest costs more than several a little short. The block's last row is free,
+                // because a block ends where its text ends.
+                Breaks::Even => {
+                    let (mut best, mut from) = (vec![f32::INFINITY; n + 1], vec![0usize; n + 1]);
+                    best[0] = 0.0;
+                    for j in 1..=n {
+                        for i in (0..j).rev() {
+                            let used = width(i, j);
+                            // a row must hold at least one atom, however wide that atom is
+                            if used > row_w + 0.01 && i + 1 < j {
+                                break;
+                            }
+                            let slack = (row_w - used).max(0.0);
+                            let cost = if j == n { 0.0 } else { slack * slack };
+                            if best[i] + cost < best[j] {
+                                best[j] = best[i] + cost;
+                                from[j] = i;
+                            }
+                        }
+                    }
+                    let (mut cuts, mut j) = (vec![], n);
+                    while j > 0 {
+                        let i = from[j];
+                        if i > 0 {
+                            cuts.push(i);
+                        }
+                        j = i;
+                    }
+                    cuts.reverse();
+                    cuts
+                }
+            }
+        };
+        for item in blocks {
+            match item {
+                Block::Banner(li) => {
+                    header_rows.push((rows.len(), li));
+                    rows.push(Vec::new());
+                }
+                Block::Text(atoms) => {
+                    let cuts: std::collections::HashSet<usize> = cut_points(&atoms).into_iter().collect();
+                    let mut row: Vec<Atom> = Vec::new();
+                    for (i, a) in atoms.into_iter().enumerate() {
+                        if i > 0 && cuts.contains(&i) {
+                            rows.push(std::mem::take(&mut row));
+                        }
+                        row.push(a);
+                    }
+                    if !row.is_empty() {
+                        rows.push(row);
+                    }
+                }
+            }
         }
 
         // place every row right to left
@@ -614,6 +709,36 @@ impl Page {
         // Horizontal placement first: it does not depend on the heights, and the heights need
         // to know which ink of two rows ends up over which.
         let last_row = rows.len().saturating_sub(1);
+        // What each row holds before anything is opened up: its ink, the gaps the print or the
+        // page's own spacing give it, and which of those gaps may stretch.
+        struct Measured {
+            ink: f32,
+            gaps: Vec<f32>,
+            open: Vec<bool>,
+        }
+        let measured: Vec<Measured> = rows
+            .iter()
+            .map(|atoms| Measured {
+                ink: atoms.iter().map(|a| a.width).sum(),
+                gaps: atoms.windows(2).map(|p| gap_of(&p[0], &p[1])).collect(),
+                open: atoms.windows(2).map(|p| !interlocked(&p[0], &p[1])).collect(),
+            })
+            .collect();
+        let used = |r: usize| measured[r].ink + measured[r].gaps.iter().sum::<f32>();
+        // The widest row of each screenful: what the rows a reader sees together are evened
+        // against, since those are the rows that can be compared.
+        let view_of = |r: usize| r.checked_div(rows_per_view).unwrap_or(0);
+        let mut widest: Vec<f32> = Vec::new();
+        for (r, atoms) in rows.iter().enumerate() {
+            if headers.contains_key(&r) || atoms.is_empty() {
+                continue;
+            }
+            let v = view_of(r);
+            if widest.len() <= v {
+                widest.resize(v + 1, 0.0);
+            }
+            widest[v] = widest[v].max(used(r));
+        }
         let mut row_dx: Vec<Vec<f32>> = Vec::with_capacity(rows.len());
         for (r, atoms) in rows.iter().enumerate() {
             let mut dxs = Vec::with_capacity(atoms.len());
@@ -621,31 +746,50 @@ impl Page {
                 row_dx.push(dxs);
                 continue;
             }
-            let ink: f32 = atoms.iter().map(|a| a.width).sum();
-            let mut gaps: Vec<f32> = Vec::with_capacity(atoms.len().saturating_sub(1));
-            for pair in atoms.windows(2) {
-                gaps.push(gap_of(&pair[0], &pair[1]));
-            }
+            let Measured { ink, ref gaps, ref open } = measured[r];
+            let mut gaps = gaps.clone();
             let natural: f32 = gaps.iter().sum();
-            // justify: share what is left over between the gaps, except those holding two
-            // words whose letters run together. A row that ends a block (the page's last row,
-            // or the row before a banner) stays as printed.
-            let ends_block = r == last_row || headers.contains_key(&(r + 1));
-            let open: Vec<bool> = atoms.windows(2).map(|p| !interlocked(&p[0], &p[1])).collect();
             let n_open = open.iter().filter(|o| **o).count();
-            if spec.fill == Fill::Justified && !ends_block && n_open > 0 {
-                let slack = row_w - ink - natural;
-                let share = slack / n_open as f32;
-                // a row that would need its gaps stretched past the cap keeps them: gapped-out
-                // words read worse than a short row
-                let within =
-                    spec.max_stretch <= 0.0 || natural <= 0.0 || (natural + slack) <= natural * spec.max_stretch;
-                if slack > 0.0 && within {
-                    for (g, o) in gaps.iter_mut().zip(&open) {
-                        if *o {
-                            *g += share;
+            // A row that ends a block — the page's last row, or the row before a banner — is
+            // short because the text ran out, so it is left as it is.
+            let ends_block = r == last_row || headers.contains_key(&(r + 1));
+            // How much a row may be opened up, over the gaps that are free to stretch: never
+            // past the cap, because gapped-out words read worse than a short row.
+            let widen = |gaps: &mut Vec<f32>, extra: f32| {
+                // measured on the air a gap holds, not on the distance between the two boxes:
+                // a box gap goes negative wherever a word's stroke reaches over its neighbour,
+                // and a cap read off that would pin every such row shut
+                let room = if spec.max_stretch > 0.0 {
+                    (n_open as f32 * median * spec.word_gap.max(0.0) * (spec.max_stretch - 1.0)).max(0.0)
+                } else {
+                    f32::MAX
+                };
+                let extra = extra.min(room);
+                if extra <= 0.0 || n_open == 0 {
+                    return;
+                }
+                let share = extra / n_open as f32;
+                for (g, o) in gaps.iter_mut().zip(open) {
+                    if *o {
+                        *g += share;
+                    }
+                }
+            };
+            if !ends_block {
+                match spec.fill {
+                    Fill::Justified => widen(&mut gaps, row_w - ink - natural),
+                    // A row is opened towards the widest row of its own screenful, because
+                    // those are the rows a reader sees together and compares. It is a share of
+                    // the way and not the whole of it: the row is never justified, and
+                    // `max_stretch` still caps how far its gaps may go.
+                    _ if spec.relax > 0.0 => {
+                        let target = widest.get(view_of(r)).copied().unwrap_or(row_w).min(row_w);
+                        let mine = ink + natural;
+                        if target > mine {
+                            widen(&mut gaps, (target - mine) * spec.relax.min(1.0));
                         }
                     }
+                    _ => {}
                 }
             }
             if as_printed.is_some() {
@@ -657,7 +801,7 @@ impl Page {
             // a centred row starts half its leftover space in from the right margin
             let mut cursor = row_w;
             if spec.fill == Fill::Centred {
-                let slack = row_w - ink - natural;
+                let slack = row_w - ink - gaps.iter().sum::<f32>();
                 if slack > 0.0 {
                     cursor -= slack / 2.0;
                 }
@@ -815,6 +959,34 @@ impl Page {
                 }
             }
         }
+        // A medallion stands between the ayah it closes and the one that follows. Where both
+        // words share a row it is set midway between them, rather than at the distance the
+        // print happened to give it on a line it is no longer on. Moving it changes nothing
+        // else: the words either side stay where the row put them.
+        for atoms in rows.iter() {
+            for pair in atoms.windows(2) {
+                let (left_word, right_word) = (&pair[1], &pair[0]);
+                if out.word_row[right_word.word as usize] != out.word_row[left_word.word as usize] {
+                    continue;
+                }
+                for &di in &right_word.inline_decos {
+                    if d.decorations[di as usize].kind != DecoKind::AyahMark {
+                        continue;
+                    }
+                    let (dx_a, dx_b) =
+                        (out.word_place[right_word.word as usize].dx, out.word_place[left_word.word as usize].dx);
+                    let dx_m = out.deco_place[di as usize].dx;
+                    let before =
+                        Page::slice_clearance(self.word_slices(right_word.word), self.deco_slices(di), dx_m - dx_a);
+                    let after =
+                        Page::slice_clearance(self.deco_slices(di), self.word_slices(left_word.word), dx_b - dx_m);
+                    if let (Some(before), Some(after)) = (before, after) {
+                        out.deco_place[di as usize].dx += (before - after) / 2.0;
+                    }
+                }
+            }
+        }
+
         // the sajdah line: drawn over the words it marks, wherever they now are. The span can
         // break across rows, so the stroke is drawn once per row, stretched along x to cover
         // that row's part of it. Only this stroke is stretched; the words are not.

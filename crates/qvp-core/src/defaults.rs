@@ -32,9 +32,16 @@ pub const REVEAL_GREY: Rgba = 0xc9c4b8ff;
 /// Padding (page units) around a crop.
 pub const CROP_PAD: f32 = 2.0;
 
-/// How far a reflowed row's gaps may stretch to reach the margins, as a multiple of the gaps
-/// the row started with. Past this the row is left right-aligned.
-pub const REFLOW_MAX_STRETCH: f32 = 1.6;
+/// How far a row that comes out much shorter than the row beside it is opened towards it, as
+/// a share of the difference. Rows of a page vary in width, but one row far shorter than its
+/// neighbours reads as a mistake rather than as a line ending.
+pub const REFLOW_RELAX: f32 = 0.5;
+
+/// How far a reflowed row's gaps may open, as a multiple of the air the page keeps between two
+/// words. This is what bounds relaxing and justification alike, and it is why a row of few
+/// words opens less than a row of many: fewer gaps, less room, before the words stand apart.
+/// At this cap the gaps of a relaxed row run at about 4.5 page units against the print's 4.1.
+pub const REFLOW_MAX_STRETCH: f32 = 2.0;
 
 /// The reader's pinch limits, as multiples of the layout's own scale, and the point at which
 /// a page counts as zoomed rather than settled.

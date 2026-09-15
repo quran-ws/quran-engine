@@ -364,10 +364,13 @@
       d.setFloat32(s + 36, spec.cropLeft || 0, true); d.setFloat32(s + 40, spec.cropRight || 0, true); d.setFloat32(s + 44, spec.maxAspectSlack || 0, true);
       const r = spec.reflow;
       d.setFloat32(s + 48, r ? (r.zoom ?? 1) : 0, true);
-      const fill = { ragged: 0, justified: 1, centred: 2, centered: 2 }[r && r.fill] ?? 0;
-      d.setUint8(s + 52, fill); d.setUint8(s + 53, r && r.gaps === 'printed' ? 0 : 1);
+      // 255 asks the engine for its own default
+      const fill = { ragged: 0, justified: 1, centred: 2, centered: 2 }[r && r.fill] ?? 255;
+      const breaks = { greedy: 0, even: 1 }[r && r.breaks] ?? 255;
+      d.setUint8(s + 52, fill); d.setUint8(s + 53, breaks); d.setUint8(s + 54, r && r.gaps === 'printed' ? 0 : 1);
       d.setFloat32(s + 56, r ? (r.wordGap ?? 1) : 1, true);
       d.setFloat32(s + 60, r ? (r.maxStretch ?? 0) : 0, true);
+      d.setFloat32(s + 64, r && r.relax !== undefined ? r.relax : -1, true);
     }
     /** Leading (page units) that makes the page fill the padded viewport of `spec`; max 0 = unlimited. */
     layoutLineSpacingToFill(spec, max = 0) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_line_spacing_to_fill(this.h, s, max); }

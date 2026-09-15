@@ -348,6 +348,9 @@ impl Page {
         // the reader asked for no more leading than the print has, so a page whose rows come
         // out as the printed lines can keep the printed line positions too
         let printed_spacing = spec.line_spacing <= 1.0 + 1e-6 && !spec.fill_height;
+        // the rows a reader sees at once, which is what the evening out is measured against
+        let rows_per_view =
+            (((spec.viewport_h - spec.pad_top - spec.pad_bottom) / (pitch * scale)).floor() as i32).max(1) as usize;
         let flow = self.reflow(
             r,
             &crate::reflow::RowSpec {
@@ -357,6 +360,7 @@ impl Page {
                 pitch,
                 top,
                 printed_spacing,
+                rows_per_view,
             },
         );
         // the content is the ink that was laid out; a page that came out as printed keeps the

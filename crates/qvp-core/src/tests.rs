@@ -922,10 +922,10 @@ fn reflow_centred_splits_what_is_left_over_between_the_margins() {
 fn reflow_even_gaps_keep_the_letters_the_same_distance_apart() {
     let mut p = packed_page();
     let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    // nothing relaxed: this is about the gap the engine picks, not about evening the rows
     let spread = |p: &mut Page, gaps: GapMode| -> f32 {
-        let l = p
-            .layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 1.5, gaps, ..Default::default() }), ..base })
-            .clone();
+        let spec = ReflowSpec { zoom: 1.5, gaps, relax: 0.0, ..Default::default() };
+        let l = p.layout(&LayoutSpec { reflow: Some(spec), ..base }).clone();
         let flow = l.reflow.clone().unwrap();
         let mut v: Vec<f32> = Vec::new();
         for ws in &flow.row_words {

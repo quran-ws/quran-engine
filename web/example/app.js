@@ -32,7 +32,7 @@
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
-    reflow: { on: false, zoom: 1.6, fill: 'ragged', gaps: 'uniform', wordGap: 1 },
+    reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'even', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
     hlMode: 'both', hlMs: 250, revealOn: false,
   };
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
@@ -68,7 +68,9 @@
   function layoutSpec() {
     const r = stage.getBoundingClientRect(), ls = S.layout;
     return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK,
-      reflow: S.reflow.on ? { zoom: S.reflow.zoom, fill: S.reflow.fill, gaps: S.reflow.gaps, wordGap: S.reflow.wordGap } : null };
+      reflow: S.reflow.on
+        ? { zoom: S.reflow.zoom, fill: S.reflow.fill, breaks: S.reflow.breaks, gaps: S.reflow.gaps, wordGap: S.reflow.wordGap, relax: S.reflow.relax, maxStretch: S.reflow.maxStretch }
+        : null };
   }
   function relayout() {
     const p = S.page; if (!p) return null;
@@ -357,6 +359,8 @@
     $('reflow').classList.toggle('on', S.reflow.on);
     $('rZoomVal').textContent = '×' + S.reflow.zoom.toFixed(2);
     $('rGapVal').textContent = '×' + S.reflow.wordGap.toFixed(2);
+    $('rRelaxVal').textContent = (100 * S.reflow.relax).toFixed(0) + '%';
+    $('rStretchVal').textContent = '×' + S.reflow.maxStretch.toFixed(1);
     fit();
     const L = S.page && S.page.currentLayout;
     $('reflowRows').textContent = L && L.reflowed ? `${L.rows} rows · ${Math.round(L.contentH)} px tall · max zoom ×${(+$('rZoom').max).toFixed(2)}` : 'off · as printed';
@@ -372,6 +376,9 @@
   $('rGap').oninput = e => { S.reflow.wordGap = +e.target.value; S.reflow.on = true; reflowUI(); };
   $('rFill').onchange = e => { S.reflow.fill = e.target.value; S.reflow.on = true; reflowUI(); };
   $('rGaps').onchange = e => { S.reflow.gaps = e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rBreaks').onchange = e => { S.reflow.breaks = e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rRelax').oninput = e => { S.reflow.relax = +e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rStretch').oninput = e => { S.reflow.maxStretch = +e.target.value; S.reflow.on = true; reflowUI(); };
 
   // ── navigation ──
   $('prev').onclick = () => loadPage(src.pages[Math.max(0, src.pages.indexOf(S.n) - 1)]);
@@ -391,7 +398,7 @@
       `overlay       ${s.overlayPaths} styled paths + ${s.bands} band boxes in ${s.overlayMs.toFixed(2)} ms\n` +
       `hit-test      ${S.lastHitUs.toFixed(1)} µs (gap-aware, wasm)\n` +
       `styles        ${p.styleHandles().length} handles · ${p.highlightHandles().length} highlights${S.animating ? ' · animating' : ''}\n` +
-      `reflow        ${S.reflow.on ? `on · zoom ×${S.reflow.zoom.toFixed(2)} · ${S.reflow.fill} · ${S.reflow.gaps} gaps ×${S.reflow.wordGap.toFixed(2)} · ${L ? L.rows : 0} rows` : 'off (as printed)'}\n` +
+      `reflow        ${S.reflow.on ? `on · zoom ×${S.reflow.zoom.toFixed(2)} · ${S.reflow.fill} · ${S.reflow.breaks} breaks · ${S.reflow.gaps} gaps ×${S.reflow.wordGap.toFixed(2)} · relax ${(100 * S.reflow.relax).toFixed(0)}% · gap cap ×${S.reflow.maxStretch.toFixed(1)} · ${L ? L.rows : 0} rows` : 'off (as printed)'}\n` +
       `layout        ${S.layout.fillHeight ? 'fill height' : 'spacing ×' + S.layout.lineSpacing.toFixed(2)} · lineSpacing ${(L ? L.lineSpacing : 0).toFixed(1)} u · pad ${S.layout.padTop}/${S.layout.padBottom}\n` +
       `zoom          ${(S.view.scale * (L ? L.scale : 1) * dpr).toFixed(2)}× device px per unit`;
   }

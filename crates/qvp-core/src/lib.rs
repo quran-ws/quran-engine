@@ -26,7 +26,7 @@ pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
 pub use qvp_format;
 pub use qvp_format::atlas::Atlas;
-pub use reflow::{Fill, GapMode, Placement, ReflowSpec, Reflowed};
+pub use reflow::{Breaks, Fill, GapMode, Placement, ReflowSpec, Reflowed};
 pub use selection::Selection;
 pub use style::{
     Handle, Paint, Selector, StyleEngine, Theme, LAYER_BASE, LAYER_HIGHLIGHT, LAYER_SELECTION, LAYER_THEME, LAYER_TOP,
@@ -552,6 +552,15 @@ impl Page {
     pub fn words_clearance(&self, a: u32, b: u32, dx: f32) -> Option<f32> {
         let s = self.silhouettes();
         Self::slice_clearance(&s.words[a as usize], &s.words[b as usize], dx)
+    }
+
+    /// The bands of a word's own letters and marks.
+    pub(crate) fn word_slices(&self, word: u32) -> &[(i16, f32, f32)] {
+        &self.silhouettes().words[word as usize]
+    }
+    /// The bands of a decoration's ink.
+    pub(crate) fn deco_slices(&self, deco: u32) -> &[(i16, f32, f32)] {
+        &self.silhouettes().decorations[deco as usize]
     }
 
     /// The bands of a word together with the marks set inline with it, so a medallion standing

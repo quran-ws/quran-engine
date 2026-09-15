@@ -199,9 +199,26 @@ are listed in `L.omitted` for renderers to skip. A host that wants them draws it
 What the engine holds to: a word is placed whole and is never reshaped or resized, an ayah
 keeps the medallion that closes it on the same row, a sajdah line travels with its word, a
 surah name or basmalah keeps a row of its own and text never flows across it, and no word
-moves to another page. `fill` is `ragged` (words keep their gap and the row starts at the right margin), `justified`
-(gaps stretch to the margins, the row that ends a block excepted) or `centred` (words keep
-their gap and what is left over is split between the two margins). `gaps` is `uniform` (the default) or `printed`, and `wordGap` scales whichever it picked.
+moves to another page.
+
+**How the rows come out.** `breaks` picks where the words are cut into rows. `greedy` fills
+each row until the next word does not fit, which is what leaves one row full and the next half
+empty when a long word falls at a boundary. `even`, the default, weighs every row of a block
+together and takes the cuts that leave them closest in width, costing a row the square of what
+it is left short. Over 150 pages that takes the rows left under 60% full from 2.48% to 0.70%.
+
+`fill` is `centred` (the default), `ragged` (the row starts at the right margin) or `justified`
+(gaps stretch to both margins, the row that ends a block excepted). `gaps` is `uniform` (the
+default) or `printed`, and `wordGap` scales whichever it picked.
+
+`relax` opens a row that still comes out short. The page is cut into screenfuls — as many rows
+as the padded viewport height holds — and each row is opened a share of the way towards the
+widest row of its own screenful, because those are the rows a reader sees together. The row is
+never justified by this, and `maxStretch` caps how far a gap may open, as a multiple of the air
+the page keeps between two words. That cap is why a row of few words opens less than a row of
+many: fewer gaps, less room, before the words stand apart. Half way (`relax: 0.5`) is where a
+screenful comes out most even — past it only the rows with many gaps keep moving, and the
+screenful reads less even, not more.
 
 **Words are spaced by the air between their strokes.** Not by the distance between their
 boxes: the calligraphy interlocks one word's opening stroke with the one before it, so the
@@ -242,6 +259,9 @@ between the two sets them as ordinary words. `page.wordsInterlock(a, b)` reports
 then hold to what a reader expects of the page:
 
 - The medallion that closes an ayah runs with that ayah's last word, so no row opens with it.
+  Where the next word shares its row, the medallion is set midway between the two, measured as
+  the air on either side, rather than at the distance the print gave it on a line it is no
+  longer on.
 - A sajdah mark closes the word before it and runs with that word, so no row opens with it
   either. It is followed by the medallion of its own ayah, and the two are read as one sign, so
   the engine gives them the same word whatever their geometry says.

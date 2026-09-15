@@ -272,8 +272,10 @@ pub struct QvpLayoutSpec {
     /// How much bigger the ink is than fit-to-width when the words are broken onto rows of
     /// the page's own width. 0 lays the page out as printed (no reflow).
     pub reflow_zoom: f32,
-    /// 0 ragged, 1 justified, 2 centred
+    /// 0 ragged, 1 justified, 2 centred, 255 the engine's own default
     pub reflow_fill: u8,
+    /// how the words are broken onto rows: 0 greedy, 1 even, 255 the engine's own default
+    pub reflow_breaks: u8,
     /// 0 the printed gap between the two words, 1 the page's median gap between letters
     pub reflow_gaps: u8,
     /// multiplier on every gap (1 = the gap `reflow_gaps` picked)
@@ -281,6 +283,9 @@ pub struct QvpLayoutSpec {
     /// how far a justified row's gaps may stretch, as a multiple of the gaps it started with
     /// (0 = the engine's default, a negative value = no cap)
     pub reflow_max_stretch: f32,
+    /// how far a row much shorter than the row beside it is opened towards it, 0 to 1
+    /// (a negative value = the engine's default)
+    pub reflow_relax: f32,
 }
 
 #[repr(C)]
@@ -1268,11 +1273,18 @@ unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
         reflow: (s.reflow_zoom > 0.0).then(|| qvp_core::ReflowSpec {
             zoom: s.reflow_zoom,
             fill: match s.reflow_fill {
+                0 => qvp_core::Fill::Ragged,
                 1 => qvp_core::Fill::Justified,
                 2 => qvp_core::Fill::Centred,
-                _ => qvp_core::Fill::Ragged,
+                _ => qvp_core::ReflowSpec::default().fill,
+            },
+            breaks: match s.reflow_breaks {
+                0 => qvp_core::Breaks::Greedy,
+                1 => qvp_core::Breaks::Even,
+                _ => qvp_core::ReflowSpec::default().breaks,
             },
             gaps: if s.reflow_gaps == 0 { qvp_core::GapMode::Printed } else { qvp_core::GapMode::Uniform },
+            relax: if s.reflow_relax < 0.0 { qvp_core::defaults::REFLOW_RELAX } else { s.reflow_relax.min(1.0) },
             word_gap: if s.reflow_word_gap > 0.0 { s.reflow_word_gap } else { 1.0 },
             max_stretch: if s.reflow_max_stretch == 0.0 {
                 qvp_core::defaults::REFLOW_MAX_STRETCH
