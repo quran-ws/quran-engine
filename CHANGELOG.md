@@ -27,6 +27,9 @@ All notable changes to the engine and its packages. The format follows
 
 ### Fixed
 
+- The CDN publish verifies the bundle by its digest. It required a `br`
+  Content-Encoding, which the edge never sets, because brotli is the bundle's
+  file format and the client decodes it.
 - Publishing documentation now reflects the packages and versions available from Maven Central,
   Swift Package Manager, npm and crates.io.
 
