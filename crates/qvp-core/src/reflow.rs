@@ -237,12 +237,19 @@ impl Page {
         for (di, deco) in d.decorations.iter().enumerate() {
             if out[di] == NONE {
                 out[di] = match deco.kind {
-                    // a sajdah or division mark stands where the print puts it, so it travels
-                    // with the word it is printed after
-                    DecoKind::SajdahMark | DecoKind::DivisionMark => self
+                    // a sajdah mark closes the word it is printed after, so it travels with
+                    // that word and no row can open with it
+                    DecoKind::SajdahMark => self
                         .deco_other_paths(di)
                         .first()
                         .and_then(|&pi| self.word_before_path(pi, median))
+                        .unwrap_or(NONE),
+                    // a rub' al-hizb opens a division, so it travels with the word it opens
+                    // and no row can close with it
+                    DecoKind::DivisionMark => self
+                        .deco_other_paths(di)
+                        .first()
+                        .and_then(|&pi| self.word_after_path(pi, median))
                         .unwrap_or(NONE),
                     // a medallion closes its ayah, so it travels with that ayah's last word on
                     // the page; the record usually names it, and this is the fallback
@@ -257,7 +264,45 @@ impl Page {
                 };
             }
         }
+        // A sajdah mark is followed by the medallion that closes its ayah, and the two are read
+        // as one sign. Whatever the geometry says, they travel with the same word.
+        for di in 0..d.decorations.len() {
+            if d.decorations[di].kind != DecoKind::SajdahMark {
+                continue;
+            }
+            let (surah, ayah) = (d.decorations[di].surah, d.decorations[di].ayah);
+            let medallion =
+                d.decorations.iter().position(|x| x.kind == DecoKind::AyahMark && x.surah == surah && x.ayah == ayah);
+            if let Some(m) = medallion {
+                if out[m] != NONE {
+                    out[di] = out[m];
+                }
+            }
+        }
         out
+    }
+
+    /// The word that follows a mark in reading order: the one to its left on the line the mark
+    /// was resolved to. A rub' al-hizb stands where its division starts, so it travels with the
+    /// word it opens and can never be left at the end of a row.
+    pub(crate) fn word_after_path(&self, pi: u32, tolerance: f32) -> Option<u32> {
+        let d = self.data();
+        let q = self.quant();
+        let li = self.geometry().table.get(pi as usize)?.line as usize;
+        let b = &d.paths[pi as usize].bbox;
+        let reach = b.x0 + (tolerance * q) as i32;
+        let ws = self.line_words.get(li)?;
+        ws.iter()
+            .filter(|&&(_, wi)| d.words[wi as usize].bbox.x1 <= reach)
+            .min_by_key(|&&(_, wi)| reach - d.words[wi as usize].bbox.x1)
+            .or_else(|| {
+                let centre = (b.x0 + b.x1) / 2;
+                ws.iter().min_by_key(|(_, wi)| {
+                    let w = &d.words[*wi as usize];
+                    (w.bbox.x0 - centre).abs().min((w.bbox.x1 - centre).abs())
+                })
+            })
+            .map(|&(_, wi)| wi)
     }
 
     /// The word a mark belongs with: the one before it in reading order on the line the mark
