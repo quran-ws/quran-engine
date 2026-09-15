@@ -241,21 +241,29 @@ Over all 604 pages, against the same three steps taken at their nominal zoom:
 
 The zooms chosen for a page differ from its neighbours' by 2.2% to 3.3% at the median and at
 most 12.4%, so the ink changes size a little from page to page. Widening the band finds better
-rows and makes that change larger. The search takes about 40 ms a page and its answer depends
-only on the page and the layout spec, so a host works it out once a page and keeps it.
+rows and makes that change larger. The search takes about 40 ms a page. Its answer depends only on the page: the same zooms come
+back at every viewport measured, from 360x1200 to 820x1180, so a generator can work the table
+out once and ship it.
+
+`page.zoomLevelCandidates(spec, nominal, band, floor)` returns every zoom the search weighs for
+one step, with its cost, for a generator choosing the steps for a whole mushaf: weighing a
+page's own rows against how much the ink changes size from the page before it cuts the median
+change from one page to the next from 2.8% to 0.8%, and the largest from 12.4% to 7.0%, while
+the rows under 60% full go from 0.17% to 0.21%.
 
 `fill` is `centred` (the default), `ragged` (the row starts at the right margin) or `justified`
 (gaps stretch to both margins, the row that ends a block excepted). `gaps` is `uniform` (the
 default) or `printed`, and `wordGap` scales whichever it picked.
 
-`relax` opens a row that still comes out short. The page is cut into screenfuls — as many rows
-as the padded viewport height holds — and each row is opened a share of the way towards the
-widest row of its own screenful, because those are the rows a reader sees together. The row is
-never justified by this, and `maxStretch` caps how far a gap may open, as a multiple of the air
-the page keeps between two words. That cap is why a row of few words opens less than a row of
-many: fewer gaps, less room, before the words stand apart. Half way (`relax: 0.5`) is where a
-screenful comes out most even — past it only the rows with many gaps keep moving, and the
-screenful reads less even, not more.
+`relax` opens a row that still comes out short. Each row is opened a share of the way towards
+the widest row within three rows of it, because those are the rows a reader sees beside it and
+compares it with. The window slides, so a row is measured against its own neighbours rather
+than against whichever group of rows it fell in, and it holds a fixed number of rows, so the
+same page is set the same way on any screen. The row is never justified by this, and
+`maxStretch` caps how far a gap may open, as a multiple of the air the page keeps between two
+words. That cap is why a row of few words opens less than a row of many: fewer gaps, less room,
+before the words stand apart. Half way (`relax: 0.5`) is where a page comes out most even —
+past it only the rows with many gaps keep moving, and the page reads less even, not more.
 
 **Words are spaced by the air between their strokes.** Not by the distance between their
 boxes: the calligraphy interlocks one word's opening stroke with the one before it, so the

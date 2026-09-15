@@ -78,3 +78,7 @@ pub const ZOOM_LEVEL_NOMINALS: [f32; 3] = [1.4, 1.8, 2.2];
 pub const ZOOM_LEVEL_BAND: f32 = 0.06;
 /// The search step, in zoom.
 pub const ZOOM_LEVEL_STEP: f32 = 0.015;
+
+/// How many rows either side of a row are compared with it when a short row is opened up
+/// (`ReflowSpec::relax`). A fixed count, so the same page is set the same way on any screen.
+pub const RELAX_NEIGHBOURS: usize = 3;

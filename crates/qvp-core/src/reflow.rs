@@ -9,6 +9,7 @@
 //! split an ayah from its medallion, move a word to another page, or leave a sajdah line
 //! or a surah banner behind. A surah name or basmalah keeps a row of its own, and text
 //! never flows across it.
+use crate::defaults;
 use crate::Page;
 use qvp_format::{DecoKind, Mark, NONE_U16};
 
@@ -806,20 +807,20 @@ impl Page {
             })
             .collect();
         let used = |r: usize| measured[r].ink + measured[r].gaps.iter().sum::<f32>();
-        // The widest row of each screenful: what the rows a reader sees together are evened
-        // against, since those are the rows that can be compared.
-        let view_of = |r: usize| r.checked_div(rows_per_view).unwrap_or(0);
-        let mut widest: Vec<f32> = Vec::new();
-        for (r, atoms) in rows.iter().enumerate() {
-            if headers.contains_key(&r) || atoms.is_empty() {
-                continue;
-            }
-            let v = view_of(r);
-            if widest.len() <= v {
-                widest.resize(v + 1, 0.0);
-            }
-            widest[v] = widest[v].max(used(r));
-        }
+        // What a row is evened against: the widest row near it. The window slides, so a row is
+        // measured against its own neighbours rather than against whichever group of rows it
+        // happened to fall in, and it holds a fixed number of rows, so a taller screen does not
+        // change how a page is set.
+        let reach = defaults::RELAX_NEIGHBOURS;
+        let _ = rows_per_view;
+        let widest: Vec<f32> = (0..rows.len())
+            .map(|r| {
+                let (lo, hi) = (r.saturating_sub(reach), (r + reach).min(rows.len().saturating_sub(1)));
+                (lo..=hi)
+                    .filter(|&k| !headers.contains_key(&k) && !rows[k].is_empty())
+                    .fold(0.0f32, |w, k| w.max(used(k)))
+            })
+            .collect();
         let mut row_dx: Vec<Vec<f32>> = Vec::with_capacity(rows.len());
         for (r, atoms) in rows.iter().enumerate() {
             let mut dxs = Vec::with_capacity(atoms.len());
@@ -859,12 +860,12 @@ impl Page {
             if !ends_block {
                 match spec.fill {
                     Fill::Justified => widen(&mut gaps, row_w - ink - natural),
-                    // A row is opened towards the widest row of its own screenful, because
-                    // those are the rows a reader sees together and compares. It is a share of
-                    // the way and not the whole of it: the row is never justified, and
+                    // A row is opened towards the widest row near it, because those are the
+                    // rows a reader sees beside it and compares it with. It is a share of the
+                    // way and not the whole of it: the row is never justified, and
                     // `max_stretch` still caps how far its gaps may go.
                     _ if spec.relax > 0.0 => {
-                        let target = widest.get(view_of(r)).copied().unwrap_or(row_w).min(row_w);
+                        let target = widest.get(r).copied().unwrap_or(row_w).min(row_w);
                         let mine = ink + natural;
                         if target > mine {
                             widen(&mut gaps, (target - mine) * spec.relax.min(1.0));

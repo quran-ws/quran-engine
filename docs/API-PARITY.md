@@ -219,7 +219,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-131 symbols in the header, 131 Rust exports. web: 130 bound, android: 112 bound, flutter: 114 bound, ios: 113 bound, react-native: 76 bound.
+132 symbols in the header, 132 Rust exports. web: 131 bound, android: 112 bound, flutter: 114 bound, ios: 113 bound, react-native: 76 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -354,4 +354,5 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_word_form` | yes | yes | yes | yes | yes |
 | `qvp_word_info` | yes | yes | yes | yes | gap (list form: bound as `word(i)` and `words()`) |
 | `qvp_word_label` | yes | yes | yes | yes | yes |
+| `qvp_zoom_levels` | yes | **missing** | **missing** | **missing** | **missing** |
 <!-- parity:end -->

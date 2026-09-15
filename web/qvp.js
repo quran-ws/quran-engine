@@ -424,6 +424,15 @@
       const n = this.e.ex.qvp_zoom_levels(this.h, s, np, k, band || 0, out, 8);
       return Array.from(new Float32Array(this.e.mem.buffer, out, n));
     }
+    /** every zoom the search weighs for one step of a zoom control, with its cost */
+    zoomLevelCandidates(spec, nominal, band, floor) {
+      const s = this.e.scratch; this._writeLayoutSpec(spec, s);
+      // one block, two halves: `buf` hands back the same scratch every time
+      const N = 64, z = this.e.buf(N * 8), c = z + N * 4;
+      const n = this.e.ex.qvp_zoom_level_candidates(this.h, s, nominal, band || 0, floor || 0, z, c, N);
+      const zs = new Float32Array(this.e.mem.buffer, z, n), cs = new Float32Array(this.e.mem.buffer, c, n);
+      return Array.from(zs, (v, i) => ({ zoom: v, cost: cs[i] }));
+    }
     /** the words of a reflowed row, in reading order */
     rowWords(row) {
       const n = this.e.ex.qvp_layout_row_words(this.h, row, 0, 0);

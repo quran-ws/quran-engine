@@ -1470,6 +1470,35 @@ pub unsafe extern "C" fn qvp_zoom_levels(
         n as u32
     })
 }
+/// Every zoom the search considers for one step of a zoom control, with what its rows cost:
+/// what `qvp_zoom_levels` picks the least of. Writes up to `n_out` pairs to `out_zoom` and
+/// `out_cost` and returns how many it wrote. `floor` bounds the search from below, so a
+/// generator can keep the steps apart; 0 takes the engine's own floor.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_level_candidates(
+    page: *mut Page,
+    spec: *const QvpLayoutSpec,
+    nominal: f32,
+    band: f32,
+    floor: f32,
+    out_zoom: *mut f32,
+    out_cost: *mut f32,
+    n_out: u32,
+) -> u32 {
+    guard(|| {
+        if page.is_null() || out_zoom.is_null() || out_cost.is_null() {
+            return 0;
+        }
+        let s = layout_spec(spec);
+        let cand = (*page).zoom_level_candidates(&s, nominal, band, floor);
+        let n = cand.len().min(n_out as usize);
+        for (i, &(z, c)) in cand.iter().take(n).enumerate() {
+            *out_zoom.add(i) = z;
+            *out_cost.add(i) = c;
+        }
+        n as u32
+    })
+}
 /// The `line_spacing` multiplier that makes the page fill the padded viewport of `spec` when
 /// fitted to width; max <= 0 means unlimited. The padding is subtracted here, not by the host.
 #[no_mangle]

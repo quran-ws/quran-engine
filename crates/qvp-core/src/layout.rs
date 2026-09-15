@@ -451,31 +451,41 @@ impl Page {
         } else {
             nominals
         };
-        let band = if band > 0.0 { band } else { defaults::ZOOM_LEVEL_BAND };
-        let reflow = spec.reflow.unwrap_or_default();
-        let cap = self.reflow_max_zoom(&reflow);
         let mut out: Vec<f32> = Vec::with_capacity(nominals.len());
         let mut floor = 1.0 + defaults::ZOOM_LEVEL_STEP;
         for &nominal in nominals {
-            let (lo, hi) = ((nominal * (1.0 - band)).max(floor), (nominal * (1.0 + band)).min(cap));
-            let mut best = (f32::INFINITY, lo.min(hi));
-            let mut z = lo;
-            while z <= hi + 1e-6 {
-                // the zoom either side counts too, so a good zoom with bad neighbours does not
-                // win: a reader whose screen is a few pixels narrower gets the same page
-                let mut total = 0.0;
-                for step in [-defaults::ZOOM_LEVEL_STEP, 0.0, defaults::ZOOM_LEVEL_STEP] {
-                    let zz = (z + step).clamp(1.0 + defaults::ZOOM_LEVEL_STEP, cap);
-                    total += self.zoom_cost(spec, &reflow, zz, nominal);
-                }
-                if total < best.0 {
-                    best = (total, z);
-                }
-                z += defaults::ZOOM_LEVEL_STEP;
-            }
-            let pick = best.1.min(cap);
+            let cand = self.zoom_level_candidates(spec, nominal, band, floor);
+            let pick =
+                cand.iter().fold((f32::INFINITY, cand[0].0), |best, &(z, c)| if c < best.0 { (c, z) } else { best }).1;
             out.push(pick);
             floor = pick * 1.08;
+        }
+        out
+    }
+
+    /// Every zoom the search considers for one step, with what its rows cost: what
+    /// [`Page::zoom_levels`] picks the least of. A generator choosing the steps for a whole
+    /// mushaf uses this to weigh a page's own rows against how much the ink changes size from
+    /// the page before it.
+    pub fn zoom_level_candidates(&mut self, spec: &LayoutSpec, nominal: f32, band: f32, floor: f32) -> Vec<(f32, f32)> {
+        let band = if band > 0.0 { band } else { defaults::ZOOM_LEVEL_BAND };
+        let reflow = spec.reflow.unwrap_or_default();
+        let cap = self.reflow_max_zoom(&reflow);
+        let floor = floor.max(1.0 + defaults::ZOOM_LEVEL_STEP);
+        let (lo, hi) = ((nominal * (1.0 - band)).max(floor), (nominal * (1.0 + band)).min(cap));
+        let mut out = Vec::new();
+        let mut z = lo;
+        while z <= hi + 1e-6 {
+            let mut total = 0.0;
+            for step in [-defaults::ZOOM_LEVEL_STEP, 0.0, defaults::ZOOM_LEVEL_STEP] {
+                let zz = (z + step).clamp(1.0 + defaults::ZOOM_LEVEL_STEP, cap);
+                total += self.zoom_cost(spec, &reflow, zz, nominal);
+            }
+            out.push((z, total));
+            z += defaults::ZOOM_LEVEL_STEP;
+        }
+        if out.is_empty() {
+            out.push((lo.min(hi).min(cap), 0.0));
         }
         out
     }
