@@ -86,6 +86,8 @@ public final class QvpCanvasController {
     /// Cached base-ink layer. A plain class so draw-time rebuilds don't re-enter observation.
     @ObservationIgnored private let cache = BaseCache()
     @ObservationIgnored private var bounds = CGSize.zero
+    /// Creation order of the newest canvas that reported a size (see `setBounds`).
+    @ObservationIgnored private var newestCanvas = 0
     @ObservationIgnored private var fitScale: CGFloat = 1
     @ObservationIgnored private var selectionHandle = 0
     @ObservationIgnored private var selAnchor = -1
@@ -156,7 +158,13 @@ public final class QvpCanvasController {
     }
 
     // ── input (called by QvpPageCanvas) ──
-    func setBounds(_ size: CGSize) {
+    /// Takes a size only from the newest canvas of this controller. A host can show an outgoing
+    /// canvas and an incoming canvas for a moment, for example when a rotation moves the page from
+    /// a static layout to a scrolling layout. The outgoing canvas can report its transitional size
+    /// after the incoming canvas reported the real size, and the page then kept the wrong layout.
+    func setBounds(_ size: CGSize, fromCanvas order: Int) {
+        guard order >= newestCanvas else { return }
+        newestCanvas = order
         guard size != bounds else { return }
         bounds = size; relayout(); resetView()
     }
@@ -316,6 +324,9 @@ public final class QvpCanvasController {
 public struct QvpPageCanvas: View {
     @Bindable private var controller: QvpCanvasController
     @Environment(\.displayScale) private var displayScale
+    /// The order in which SwiftUI created this canvas. The controller ignores sizes from a canvas
+    /// that a newer canvas replaced.
+    @State private var order = QvpCanvasOrder.next()
 
     public init(controller: QvpCanvasController) { self.controller = controller }
 
@@ -323,7 +334,7 @@ public struct QvpPageCanvas: View {
         // read the observable state the renderer depends on, so the canvas redraws on it
         let _ = controller.revision
         let _ = controller.viewScale; let _ = controller.viewOx; let _ = controller.viewOy
-        GeometryReader { geo in
+        GeometryReader { _ in
             TimelineView(.animation(minimumInterval: nil, paused: !controller.animating)) { timeline in
                 Canvas(opaque: false, rendersAsynchronously: false) { ctx, size in
                     // The renderer reads the frame's date so every timeline tick is a different
@@ -339,9 +350,11 @@ public struct QvpPageCanvas: View {
             // always repaints; `.identity` keeps the swap from fading inside an animated transaction.
             .id(controller.revision)
             .transition(.identity)
-            .onAppear { controller.setBounds(geo.size) }
-            .onChange(of: geo.size) { _, s in controller.setBounds(s) }
         }
+        // The size comes from the GeometryReader. Its identity does not change. The view inside
+        // gets a new identity at each redraw, so a size change in the same update did not reach
+        // its onAppear or its onChange, and the page kept the layout of its old size.
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { controller.setBounds($0, fromCanvas: order) }
         .contentShape(Rectangle())
         .gesture(SpatialTapGesture(count: 2).onEnded { v in controller.doubleTap(v.location) }
             .exclusively(before: SpatialTapGesture().onEnded { v in controller.tap(v.location) }))
@@ -360,6 +373,16 @@ public struct QvpPageCanvas: View {
             .onEnded { _ in controller.selectEnded() },
                  including: controller.selectionEnabled ? .all : .subviews)
         .modifier(QvpLongPressAttachment(controller: controller))
+    }
+}
+
+/// Gives each canvas a number that increases in the order SwiftUI creates them.
+@MainActor
+enum QvpCanvasOrder {
+    private static var last = 0
+    static func next() -> Int {
+        last += 1
+        return last
     }
 }
 
