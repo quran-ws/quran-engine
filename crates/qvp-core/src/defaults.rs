@@ -53,5 +53,12 @@ pub const SWIPE_VELOCITY: f32 = 500.0;
 /// (`ٱلرَّحْمَٰنِ ٱلرَّحِيمِ`) overlap by 19 to 26 page units where the next deepest reaches 3.8.
 pub const INTERLOCK_DEPTH: f32 = 0.15;
 
+/// How many straight pieces a curve is walked as when tracing a word's silhouette.
+pub const CURVE_STEPS: u32 = 8;
+
 /// How many bands a line is sliced into when measuring the air between two words' letters.
-pub const SLICES_PER_LINE: u32 = 24;
+///
+/// A band reports one leftmost and one rightmost point for the whole of its height, so a tall
+/// band compares ink that does not face ink: at 24 bands a pair the measure called 2.3 apart
+/// had strokes crossing by 4.6. These bands are about a third of a page unit.
+pub const SLICES_PER_LINE: u32 = 96;

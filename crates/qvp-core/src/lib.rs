@@ -80,6 +80,12 @@ pub struct HitExact {
     pub decoration: u32,
 }
 
+/// The traced silhouettes of a page's words and decorations. See [`Page::silhouettes`].
+struct Silhouettes {
+    words: Vec<Vec<(i16, f32, f32)>>,
+    decorations: Vec<Vec<(i16, f32, f32)>>,
+}
+
 pub struct Page {
     data: PageData,
     geom: Geometry,
@@ -93,13 +99,14 @@ pub struct Page {
     word_body: Vec<(f32, f32)>,
     /// the baseline of each printed line: the height most of its words sit on
     line_baseline: Vec<f32>,
-    /// each word's letters sliced into horizontal bands, as (band, leftmost x, rightmost x).
-    /// Bands are counted from the word's own line baseline, so two words off different lines
-    /// can still be measured against each other once a row puts them on one baseline.
-    word_slices: Vec<Vec<(i16, f32, f32)>>,
-    /// the same for each decoration, so a medallion standing between two words is measured
-    /// with them
-    deco_slices: Vec<Vec<(i16, f32, f32)>>,
+    /// Each word's letters, and each decoration, traced into horizontal bands as
+    /// (band, leftmost x, rightmost x). Bands are counted from the line's baseline, so two
+    /// words off different lines can still be measured against each other once a row puts them
+    /// on one baseline.
+    ///
+    /// Tracing every outline costs more than the rest of loading a page, and only a reflow
+    /// needs it, so it waits until something asks.
+    silhouettes: std::cell::OnceCell<Silhouettes>,
     path_deco: Vec<u32>,
     pub(crate) path_ctx: Vec<PathCtx>,
     word_index: HashMap<(u16, u16, u16), u32>,
@@ -358,60 +365,6 @@ impl Page {
         // their boxes: the calligraphy interlocks one word's stroke with the next one's without
         // the ink ever meeting. Slicing each word into bands and recording where its ink starts
         // and ends in each is what makes that air measurable.
-        let band = line_spacing / defaults::SLICES_PER_LINE as f32;
-        let word_slices: Vec<Vec<(i16, f32, f32)>> = data
-            .words
-            .iter()
-            .enumerate()
-            .map(|(wi, w)| {
-                let base = line_baseline[w.line_index as usize];
-                let mut rows: std::collections::BTreeMap<i16, (f32, f32)> = std::collections::BTreeMap::new();
-                for pi in w.first_path..w.first_path + w.n_paths as u32 {
-                    let p = &data.paths[pi as usize];
-                    if p.kind != PathKind::Body {
-                        continue;
-                    }
-                    let g = &geom.table[pi as usize];
-                    for k in 0..g.pt_count / 2 {
-                        let x = geom.pts[(g.pt_start + k * 2) as usize];
-                        let y = geom.pts[(g.pt_start + k * 2 + 1) as usize];
-                        let r = (((y - base) / band).round() as i32).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
-                        let e = rows.entry(r).or_insert((f32::INFINITY, f32::NEG_INFINITY));
-                        e.0 = e.0.min(x);
-                        e.1 = e.1.max(x);
-                    }
-                }
-                let _ = wi;
-                rows.into_iter().map(|(r, (x0, x1))| (r, x0, x1)).collect()
-            })
-            .collect();
-        let slice_of = |first_path: u32, n_paths: u32, base: f32, body_only: bool| -> Vec<(i16, f32, f32)> {
-            let mut rows: std::collections::BTreeMap<i16, (f32, f32)> = std::collections::BTreeMap::new();
-            for pi in first_path..first_path + n_paths {
-                if body_only && data.paths[pi as usize].kind != PathKind::Body {
-                    continue;
-                }
-                let g = &geom.table[pi as usize];
-                for k in 0..g.pt_count / 2 {
-                    let x = geom.pts[(g.pt_start + k * 2) as usize];
-                    let y = geom.pts[(g.pt_start + k * 2 + 1) as usize];
-                    let r = (((y - base) / band).round() as i32).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
-                    let e = rows.entry(r).or_insert((f32::INFINITY, f32::NEG_INFINITY));
-                    e.0 = e.0.min(x);
-                    e.1 = e.1.max(x);
-                }
-            }
-            rows.into_iter().map(|(r, (x0, x1))| (r, x0, x1)).collect()
-        };
-        let deco_slices: Vec<Vec<(i16, f32, f32)>> = data
-            .decorations
-            .iter()
-            .map(|deco| {
-                let li = path_line[deco.first_path as usize] as usize;
-                let base = line_baseline.get(li).copied().unwrap_or(0.0);
-                slice_of(deco.first_path, deco.n_paths as u32, base, false)
-            })
-            .collect();
         let word_index = data.words.iter().enumerate().map(|(i, w)| ((w.surah, w.ayah, w.word), i as u32)).collect();
         let n = data.paths.len();
         Page {
@@ -423,8 +376,7 @@ impl Page {
             line_words,
             word_body,
             line_baseline,
-            word_slices,
-            deco_slices,
+            silhouettes: std::cell::OnceCell::new(),
             path_deco,
             path_ctx,
             word_index,
@@ -475,6 +427,119 @@ impl Page {
         self.word_body[wi as usize]
     }
 
+    /// Trace a set of paths into bands: where the ink starts and ends at each height.
+    // The silhouette of a set of paths, band by band: where its ink starts and ends at
+    // each height. Walking the outline and not its points is the whole of it — a curve's
+    // control points are far apart, so a band between two of them would read as empty and
+    // two words would be measured against ink that is not facing them.
+    fn trace(&self, first_path: u32, n_paths: u32, base: f32, body_only: bool) -> Vec<(i16, f32, f32)> {
+        let (data, geom) = (&self.data, &self.geom);
+        let band = self.line_spacing / defaults::SLICES_PER_LINE as f32;
+        let mut rows: std::collections::BTreeMap<i16, (f32, f32)> = std::collections::BTreeMap::new();
+        let mark = |y: f32, x: f32, rows: &mut std::collections::BTreeMap<i16, (f32, f32)>| {
+            let r = (((y - base) / band).floor() as i32).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+            let e = rows.entry(r).or_insert((f32::INFINITY, f32::NEG_INFINITY));
+            e.0 = e.0.min(x);
+            e.1 = e.1.max(x);
+        };
+        // a straight run of the outline, marked into every band it crosses
+        let segment = |a: (f32, f32), b: (f32, f32), rows: &mut std::collections::BTreeMap<i16, (f32, f32)>| {
+            let steps = (((b.1 - a.1).abs() / band).ceil() as u32).clamp(1, 512);
+            for i in 0..=steps {
+                let t = i as f32 / steps as f32;
+                mark(a.1 + (b.1 - a.1) * t, a.0 + (b.0 - a.0) * t, rows);
+            }
+        };
+        for pi in first_path..first_path + n_paths {
+            if body_only && data.paths[pi as usize].kind != PathKind::Body {
+                continue;
+            }
+            let g = &geom.table[pi as usize];
+            let (ops, pts) = (&geom.ops, &geom.pts);
+            let (mut k, mut here, mut start) = (g.pt_start as usize, (0.0f32, 0.0f32), (0.0f32, 0.0f32));
+            let at = |k: usize| (pts[k], pts[k + 1]);
+            for oi in g.op_start..g.op_start + g.op_count {
+                match ops[oi as usize] {
+                    OP_MOVE => {
+                        here = at(k);
+                        start = here;
+                        mark(here.1, here.0, &mut rows);
+                        k += 2;
+                    }
+                    OP_LINE => {
+                        let to = at(k);
+                        segment(here, to, &mut rows);
+                        here = to;
+                        k += 2;
+                    }
+                    // a curve is walked as a run of short straight pieces: close enough to
+                    // its outline for a band to know where the ink is
+                    OP_QUAD => {
+                        let (c, to) = (at(k), at(k + 2));
+                        let mut prev = here;
+                        for i in 1..=defaults::CURVE_STEPS {
+                            let t = i as f32 / defaults::CURVE_STEPS as f32;
+                            let (u, tt) = (1.0 - t, t);
+                            let p = (
+                                u * u * here.0 + 2.0 * u * tt * c.0 + tt * tt * to.0,
+                                u * u * here.1 + 2.0 * u * tt * c.1 + tt * tt * to.1,
+                            );
+                            segment(prev, p, &mut rows);
+                            prev = p;
+                        }
+                        here = to;
+                        k += 4;
+                    }
+                    OP_CUBIC => {
+                        let (c1, c2, to) = (at(k), at(k + 2), at(k + 4));
+                        let mut prev = here;
+                        for i in 1..=defaults::CURVE_STEPS {
+                            let t = i as f32 / defaults::CURVE_STEPS as f32;
+                            let u = 1.0 - t;
+                            let p = (
+                                u * u * u * here.0 + 3.0 * u * u * t * c1.0 + 3.0 * u * t * t * c2.0 + t * t * t * to.0,
+                                u * u * u * here.1 + 3.0 * u * u * t * c1.1 + 3.0 * u * t * t * c2.1 + t * t * t * to.1,
+                            );
+                            segment(prev, p, &mut rows);
+                            prev = p;
+                        }
+                        here = to;
+                        k += 6;
+                    }
+                    OP_CLOSE => {
+                        segment(here, start, &mut rows);
+                        here = start;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        rows.into_iter().map(|(r, (x0, x1))| (r, x0, x1)).collect()
+    }
+
+    /// The page's traced outlines, built the first time something measures the air between two
+    /// words and kept from then on.
+    fn silhouettes(&self) -> &Silhouettes {
+        self.silhouettes.get_or_init(|| Silhouettes {
+            words: self
+                .data
+                .words
+                .iter()
+                .map(|w| self.trace(w.first_path, w.n_paths as u32, self.line_baseline[w.line_index as usize], true))
+                .collect(),
+            decorations: self
+                .data
+                .decorations
+                .iter()
+                .map(|deco| {
+                    let li = self.geom.table[deco.first_path as usize].line as usize;
+                    let base = self.line_baseline.get(li).copied().unwrap_or(0.0);
+                    self.trace(deco.first_path, deco.n_paths as u32, base, false)
+                })
+                .collect(),
+        })
+    }
+
     /// The air between the letters of two words placed side by side, in page units: the
     /// narrowest distance between them over the bands they share, with `b` shifted by `dx`.
     ///
@@ -483,15 +548,17 @@ impl Page {
     /// preceding `ر` so the two boxes overlap by 12 page units while the strokes stay 5 apart.
     /// `None` when the two share no band, which is the case for a mark set above the line.
     pub fn words_clearance(&self, a: u32, b: u32, dx: f32) -> Option<f32> {
-        Self::slice_clearance(&self.word_slices[a as usize], &self.word_slices[b as usize], dx)
+        let s = self.silhouettes();
+        Self::slice_clearance(&s.words[a as usize], &s.words[b as usize], dx)
     }
 
     /// The bands of a word together with the marks set inline with it, so a medallion standing
     /// between two words is measured with the word it closes.
     pub(crate) fn slices_with(&self, word: u32, decos: &[u32]) -> Vec<(i16, f32, f32)> {
-        let mut out = self.word_slices[word as usize].clone();
+        let s = self.silhouettes();
+        let mut out = s.words[word as usize].clone();
         for &di in decos {
-            for &(r, x0, x1) in &self.deco_slices[di as usize] {
+            for &(r, x0, x1) in &s.decorations[di as usize] {
                 match out.binary_search_by_key(&r, |e| e.0) {
                     Ok(i) => {
                         out[i].1 = out[i].1.min(x0);
