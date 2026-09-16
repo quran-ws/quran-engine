@@ -34,6 +34,8 @@
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
     reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
     hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
+    // the reader's zoom control, which the engine owns: mode, step and the size in force
+    zoom: { mode: 'stepped', step: 0, zoom: 1 },
   };
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
   const PALETTE = { [CATEGORY.HARAKAH]: '#1a73e8', [CATEGORY.TANWIN]: '#8e24aa', [CATEGORY.LETTER_DOT]: '#c62828', [CATEGORY.WAQF]: '#0a7d32', [CATEGORY.DABT]: '#ef6c00', [CATEGORY.ORTHOGRAPHIC]: '#00838f', [CATEGORY.STANDALONE]: '#6d4c41' };
@@ -212,16 +214,21 @@
       drag = { x: e.clientX, y: e.clientY, offsetX: S.view.offsetX, offsetY: S.view.offsetY };
       selecting = h && h.word >= 0 && (e.shiftKey || e.pointerType !== 'touch') ? { anchor: h.word, active: false } : null;
     }
-    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: S.view.scale, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, offsetX: S.view.offsetX, offsetY: S.view.offsetY }; drag = null; selecting = null; }
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { zoom: S.zoom, d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: S.view.scale, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, offsetX: S.view.offsetX, offsetY: S.view.offsetY }; drag = null; selecting = null; }
   });
   stage.addEventListener('pointermove', e => {
     const r = stage.getBoundingClientRect();
     if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
     if (pinch && pts.size === 2) {
-      // the engine owns the pinch arithmetic; the browser only reports the fingers
+      // the engine owns the whole pinch: which step it lands on, when it commits, and what
+      // holds the reader's place when the page reflows under the fingers
       const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
       const from = { scale: pinch.scale, offsetX: pinch.offsetX, offsetY: pinch.offsetY };
-      S.view = engine.viewZoomAbout(from, pinch.cx - r.left, pinch.cy - r.top, d / pinch.d);
+      // `pinch.zoom` stays where the gesture began: the engine measures the fingers against
+      // that, so a slow pinch walks the steps one at a time instead of running away
+      const c = S.page.zoomPinch(layoutSpec(), pinch.zoom, from, d / pinch.d, pinch.cx - r.left, pinch.cy - r.top);
+      S.view = c.view;
+      if (c.relaid) { S.zoom = c.zoom; syncZoomUI(); }
       moved = true; draw(); return;
     }
     const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
@@ -241,7 +248,15 @@
     }
     if (drag) {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); S.view = engine.viewPan({ ...S.view, offsetX: drag.offsetX, offsetY: drag.offsetY }, dx, dy); draw(); }
+      if (Math.hypot(dx, dy) > 3) {
+        moved = true; stage.classList.add('dragging');
+        // A reflowed page is the viewport's own width: there is nothing to pan sideways, so it
+        // scrolls up and down and a sideways drag turns the page instead.
+        const L = S.page.currentLayout;
+        const v = engine.viewPan({ ...S.view, offsetX: drag.offsetX, offsetY: drag.offsetY }, L && L.reflowed ? 0 : dx, dy);
+        S.view = L && L.reflowed ? engine.viewClamp(v, L.contentW, L.contentH, stage.clientWidth, stage.clientHeight) : v;
+        draw();
+      }
       return;
     }
     const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 4 }); S.lastHitUs = (performance.now() - t) * 1000;
@@ -254,6 +269,14 @@
     if (pts.size === 0) {
       stage.classList.remove('dragging'); stage.classList.remove('selecting');
       if (selecting && selecting.active) { showSelection(); selecting = null; drag = null; return; }
+      if (drag && moved) {
+        const L = S.page.currentLayout;
+        if (L && L.reflowed) {
+          const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+          const dir = engine.viewSwipe(dx, dy);
+          if (dir) { const i = src.pages.indexOf(S.n); loadPage(src.pages[Math.min(src.pages.length - 1, Math.max(0, i - dir))]); drag = null; return; }
+        }
+      }
       if (drag && !moved) {
         const r = stage.getBoundingClientRect(); const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
         const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 6 }); S.lastHitUs = (performance.now() - t) * 1000;
@@ -269,7 +292,10 @@
   stage.addEventListener('wheel', e => {
     e.preventDefault(); const r = stage.getBoundingClientRect();
     const k = Math.exp(-e.deltaY * 0.0015);
-    S.view = engine.viewZoomAbout(S.view, e.clientX - r.left, e.clientY - r.top, k); draw();
+    const c = S.page.zoomPinch(layoutSpec(), S.zoom, S.view, k, e.clientX - r.left, e.clientY - r.top);
+    S.view = c.view;
+    if (c.relaid) { S.zoom = c.zoom; syncZoomUI(); }
+    draw();
   }, { passive: false });
   stage.addEventListener('dblclick', () => fit());
 
@@ -355,20 +381,24 @@
   $('padBottom').oninput = e => { S.layout.padBottom = +e.target.value; $('padBottomVal').textContent = e.target.value; relayoutUI(); };
 
   // ── reflow ──
-  const reflowUI = () => {
+  // the labels only: what a pinch needs, because the engine has already placed the view and a
+  // refit would throw that away
+  const reflowReadout = (relaid = true) => {
     clampReflowZoom();
     $('reflow').classList.toggle('on', S.reflow.on);
     $('rZoomVal').textContent = '×' + S.reflow.zoom.toFixed(2);
     $('rGapVal').textContent = '×' + S.reflow.wordGap.toFixed(2);
     $('rRelaxVal').textContent = (100 * S.reflow.relax).toFixed(0) + '%';
     $('rStretchVal').textContent = '×' + S.reflow.maxStretch.toFixed(1);
-    fit();
+    if (relaid) fit(); else relayout();
     const L = S.page && S.page.currentLayout;
     $('reflowRows').textContent = L && L.reflowed ? `${L.rows} rows · ${Math.round(L.contentH)} px tall · max zoom ×${(+$('rZoom').max).toFixed(2)}` : 'off · as printed';
     for (let n = 1; n <= 4; n++) $('lv' + n).classList.toggle('on', (S.level || (S.reflow.on ? 0 : 1)) === n);
     const lv = levels();
     $('lvlVal').textContent = lv.length ? lv.map(z => '×' + z.toFixed(2)).join(' · ') : '';
+    $('zoomVal').textContent = `${$('zMode').value === 'stepped' ? 'step ' + S.zoom.step : ''} ×${S.zoom.zoom.toFixed(2)}`;
   };
+  const reflowUI = () => reflowReadout(true);
   $('reflow').onclick = () => { S.reflow.on = !S.reflow.on; reflowUI(); };
   // the engine says how far this page can zoom before a word outgrows its row
   const clampReflowZoom = () => {
@@ -376,15 +406,26 @@
     $('rZoom').max = Math.min(4, Math.max(1, max)).toFixed(2);
     if (S.reflow.zoom > +$('rZoom').max) { S.reflow.zoom = +$('rZoom').max; $('rZoom').value = S.reflow.zoom; }
   };
-  $('rZoom').oninput = e => { S.reflow.zoom = +e.target.value; S.level = 0; S.reflow.on = true; reflowUI(); };
+  $('rZoom').oninput = e => { S.reflow.zoom = +e.target.value; S.level = 0; S.reflow.on = true; S.zoom = { ...S.zoom, zoom: +e.target.value }; reflowUI(); };
+  $('zMode').onchange = e => { S.zoom = S.page.zoomMode(layoutSpec(), S.zoom, e.target.value); syncZoomUI(); };
   // The zoom steps this page offers, from the engine: level 1 is the printed page, the rest
   // are the zooms whose rows come out best near each nominal size.
   const levels = () => (S.levels = S.levels || (S.page ? S.page.zoomSteps(layoutSpec()) : []));
   const setLevel = n => {
     S.level = n;
-    if (n <= 1) { S.reflow.on = false; } else { S.reflow.on = true; S.reflow.zoom = levels()[n - 2] || S.reflow.zoom; $('rZoom').value = S.reflow.zoom; }
-    reflowUI();
+    const c = S.page.zoomToStep(layoutSpec(), S.zoom, n - 1, S.view);
+    S.zoom = c.zoom; S.view = c.view;
+    syncZoomUI();
   };
+  // The control owns the zoom; the sliders own everything else about a reflowed row. This
+  // keeps the two in step, so the readout and the zoom slider follow a pinch.
+  function syncZoomUI() {
+    S.level = S.zoom.step + 1;
+    S.reflow.on = S.zoom.zoom > 1.0001;
+    if (S.reflow.on) { S.reflow.zoom = S.zoom.zoom; $('rZoom').value = S.zoom.zoom; }
+    reflowReadout(false);
+    draw();
+  }
   for (let n = 1; n <= 4; n++) $('lv' + n).onclick = () => setLevel(n);
   $('rGap').oninput = e => { S.reflow.wordGap = +e.target.value; S.reflow.on = true; reflowUI(); };
   $('rFill').onchange = e => { S.reflow.fill = e.target.value; S.reflow.on = true; reflowUI(); };

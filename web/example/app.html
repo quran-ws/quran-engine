@@ -123,6 +123,11 @@
         <span class="hint" id="lvlVal"></span>
       </div>
       <div class="hint">The steps a reader gets instead of a free zoom. The rows only rearrange at certain zooms, so the engine searches a band around each step for the zoom whose rows come out best on this page. The sizes differ a little from page to page for that reason.</div>
+      <div class="row" style="margin-top:6px">
+        <label>pinch <select id="zMode"><option value="stepped">steps, reflowed</option><option value="continuous">free, reflowed</option><option value="magnify">magnify the print</option></select></label>
+        <span class="hint" id="zoomVal"></span>
+      </div>
+      <div class="hint">What two fingers do to the page. Stepped is what a reader gets: the pinch lands on one of the sizes above and the page breaks its rows again. Free reflows to whatever the fingers ask for. Magnify scales the printed page and leaves every row where the print has it.</div>
       <div class="grid3" style="margin-top:6px">
         <b>zoom</b><input id="rZoom" type="range" min="1" max="4" step="0.05" value="1.6"><span id="rZoomVal">×1.60</span>
         <b>word gap</b><input id="rGap" type="range" min="0.5" max="3" step="0.05" value="1"><span id="rGapVal">×1.00</span>
