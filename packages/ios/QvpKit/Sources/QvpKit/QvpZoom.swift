@@ -20,6 +20,13 @@ public enum QvpZoomMode: UInt32 {
 /// Where the reader's zoom control stands. A host keeps this beside its view transform, and the
 /// default is the control a page opens on: stepped, on the printed page.
 public struct QvpZoom: Equatable {
+    /// True once the reader has zoomed in, by either road: the view magnified past the size the
+    /// page is fitted at, or the page reflowed above the printed size.
+    public func isZoomed(_ view: QvpView, fitScale: Float) -> Bool {
+        var z = c, v = view.c
+        return qvp_zoom_is_zoomed(&z, &v, fitScale) != 0
+    }
+
     public var mode: QvpZoomMode
     /// 0 is the printed page, 1 upwards the page's own steps.
     public var step: Int
@@ -29,6 +36,9 @@ public struct QvpZoom: Equatable {
     var c: QvpFFI.QvpZoom { QvpFFI.QvpZoom(mode: mode.rawValue, step: UInt32(step), zoom: zoom) }
     init(_ z: QvpFFI.QvpZoom) { self.mode = QvpZoomMode(rawValue: z.mode) ?? .stepped; self.step = Int(z.step); self.zoom = z.zoom }
 }
+
+/// What a sideways drag on a page means.
+public enum QvpSideways { case pan, turnPage }
 
 /// What a gesture produced: the control to keep, the view to draw with, and whether the page was
 /// laid out again under it. A host redraws its overlays when `relaid` is true.
@@ -68,6 +78,24 @@ extension QvpPage {
         qvp_zoom_to_step(p, &s, &z, UInt32(step), &v, &out)
         if out.relaid != 0 { readLayout() }
         return QvpZoomChange(zoom: QvpZoom(out.zoom), view: QvpView(out.view), relaid: out.relaid != 0)
+    }
+    /// The same control on this page: what the reader was reading at, carried onto the page they
+    /// turned to. A step carries as a step, because every page's steps are its own; a free zoom
+    /// carries as a size, held inside what this page can reach.
+    public func zoomCarried(_ spec: QvpLayoutSpec, _ zoom: QvpZoom) -> QvpZoom {
+        var s = spec.c, z = zoom.c, out = QvpFFI.QvpZoom()
+        qvp_zoom_carried(p, &s, &z, &out)
+        return QvpZoom(out)
+    }
+    /// The reflow zoom one step of this page's control means; step 0 is the printed page.
+    public func zoomAtStep(_ spec: QvpLayoutSpec, _ step: Int) -> Float {
+        var s = spec.c
+        return qvp_zoom_at_step(p, &s, UInt32(step))
+    }
+    /// What a sideways drag on this page means: pan it, or turn the page.
+    public func sidewaysDrag(_ zoom: QvpZoom, _ view: QvpView, fitScale: Float) -> QvpSideways {
+        var z = zoom.c, v = view.c
+        return qvp_sideways_drag(p, &z, &v, fitScale) == 1 ? .turnPage : .pan
     }
     /// `spec` with this control's zoom in it: what the host lays out, draws and hit-tests with.
     public func zoomSpec(_ spec: QvpLayoutSpec, _ zoom: QvpZoom) -> QvpLayoutSpec {

@@ -19,11 +19,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
             // and the new page says what it means. Carrying the size instead and rounding it to
             // the new page's steps loses a step on every turn, because a step that sits a
             // little higher on the next page rounds down.
-            if let p = page, p.isOpen, bounds.width > 0, zoomMode == .stepped, zoom.step > 0 {
-                var z = QvpZoom(mode: .stepped, step: min(zoom.step, p.zoomSteps(baseSpec).count), zoom: 1)
-                z.zoom = p.zoomSpec(baseSpec, z).reflow?.zoom ?? 1
-                zoom = z
-            }
+            if let p = page, p.isOpen, bounds.width > 0 { zoom = p.zoomCarried(baseSpec, zoom) }
             relayout(); resetView(); invalidateContent()
         }
     }
@@ -117,14 +113,17 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     private var spring: QvpZoomSpring?
     private var springLink: CADisplayLink?
     private var pinchStart: CGFloat = 1
-    private var panTotal: CGSize = .zero
     private var pinchZoom = QvpZoom()
     private var pinchView = QvpView()
     private var fitScale: CGFloat = 1
-    /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
     /// True once the reader has zoomed in, by either road: the view magnified past the fitted
-    /// size, or the page reflowed to a size above the printed one.
-    public var isZoomed: Bool { viewScale > fitScale * QvpViewPolicy.zoomedThreshold || zoom.zoom > Float(QvpViewPolicy.zoomedThreshold) }
+    /// size, or the page reflowed to a size above the printed one. The engine decides, so every
+    /// platform draws the line in the same place.
+    public var isZoomed: Bool { zoom.isZoomed(currentView, fitScale: Float(fitScale)) }
+    /// What a sideways drag means here: pan a magnified page, or turn the page.
+    private var sideways: QvpSideways {
+        page?.sidewaysDrag(zoom, currentView, fitScale: Float(fitScale)) ?? .turnPage
+    }
 
     public override init(frame: CGRect) { super.init(frame: frame); setup() }
     public required init?(coder: NSCoder) { super.init(coder: coder); setup() }
@@ -160,6 +159,10 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
             sw.direction = dir
             sw.delegate = self
             addGestureRecognizer(sw)
+            // The scroll view waits for the swipe to fail before it scrolls. A swipe fails as
+            // soon as the finger is going the other way, so an up-and-down drag loses almost
+            // nothing of its start, and a sideways flick is never eaten by the scroll.
+            scroller.panGestureRecognizer.require(toFail: sw)
         }
     }
     deinit { link?.invalidate(); springLink?.invalidate() }
@@ -214,34 +217,15 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     }
     @objc private func onPan(_ g: UIPanGestureRecognizer) {
         guard zoomEnabled, !selecting, spring == nil else { return }
-        // A reflowed page is the screen's own width: there is nothing to pan sideways, so it
-        // scrolls up and down and a sideways drag turns the page, whether or not the reader has
-        // zoomed in. Only a magnified page is dragged in both directions.
-        let reflowed = page?.currentLayout?.reflowed ?? false
-        // the scroll view owns a reflowed page: its own pan scrolls it and turns the page
-        if reflowed { return }
-        if g.state == .began { panTotal = .zero }
+        // A reflowed page is the screen's own width and the scroll view owns the one axis it
+        // has. A printed page nobody has zoomed is not dragged either: a sideways flick on it
+        // turns the page, and that is the swipe recogniser's to answer, not this one's. Both
+        // answering it turned two pages at a time.
+        guard sideways == .pan else { return }
         let d = g.translation(in: self)
-        // The drag is read frame by frame and the recognizer reset each time, so the whole
-        // gesture is kept here: a swipe is judged on where the finger has travelled since it
-        // went down, not on the last frame of it.
-        panTotal = CGSize(width: panTotal.width + d.x, height: panTotal.height + d.y)
-        if g.state == .ended, onSwipe != nil, !isZoomed || reflowed {
-            let v = g.velocity(in: self)
-            if let dir = QvpViewPolicy.swipeDirection(translation: panTotal, velocity: CGSize(width: v.x, height: v.y)) {
-                g.setTranslation(.zero, in: self)
-                onSwipe?(dir)
-                return
-            }
-        }
-        if !isZoomed, !reflowed, onSwipe != nil { return }
-        if !reflowed { viewOx += d.x }
+        viewOx += d.x
         viewOy += d.y
         g.setTranslation(.zero, in: self)
-        if reflowed, let l = page?.currentLayout, let p = page {
-            let v = p.viewClamp(currentView, contentW: l.contentW, contentH: l.contentH, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
-            viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
-        }
         refresh()
     }
     @objc private func handleLongPress(_ g: UILongPressGestureRecognizer) {
@@ -469,6 +453,14 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// repositions that layer and draws nothing; everything else rebuilds it.
     public override func draw(_ rect: CGRect) {}
 
+    /// A host that has changed what the page shows — a style, a highlight, the reveal — says so
+    /// the way it says so to any view. The content is drawn again, since this view's drawing is
+    /// an image it keeps rather than something UIKit asks it for each time.
+    public override func setNeedsDisplay() {
+        super.setNeedsDisplay()
+        invalidateContent()
+    }
+
     /// The content has changed — a style, the selection, the layout, the page — so the band is
     /// built again.
     private func invalidateContent() { baseKey = ""; refresh() }
@@ -517,7 +509,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// A sideways swipe turns the page. The scroll view owns the up-and-down axis and locks the
     /// sideways one, so the gesture is free to mean this whether or not the reader has zoomed in.
     @objc private func onSwipeGesture(_ g: UISwipeGestureRecognizer) {
-        guard let cb = onSwipe, !selecting, isReflowed || !isZoomed else { return }
+        guard let cb = onSwipe, !selecting, sideways == .turnPage else { return }
         cb(g.direction == .right ? 1 : -1)
     }
 
