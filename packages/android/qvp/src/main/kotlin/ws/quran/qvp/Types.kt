@@ -21,6 +21,10 @@ object QvpDefaults {
     const val GRID_LINES = 15; const val ASPECT_SLACK = 1.15f
     const val MASK_BLOCK = 0xd9d4c8ff.toInt(); const val MASK_PAD = 0.6f; const val MASK_RADIUS = 0.8f
     const val REVEAL_LIT = 1; const val REVEAL_GREY = 0xc9c4b8ff.toInt(); const val CROP_PAD = 2f
+    // the reader's pinch and swipe: the engine's own limits, which every platform holds to
+    const val MIN_ZOOM = 0.5f; const val MAX_ZOOM = 12f; const val ZOOMED_THRESHOLD = 1.02f
+    const val SWIPE_AXIS_RATIO = 1.5f; const val SWIPE_DISTANCE = 40f; const val SWIPE_VELOCITY = 500f
+    const val ZOOM_SNAP_HYSTERESIS = 0.03f; const val ZOOM_QUANTUM = 0.01f
 }
 
 /** A mark id by its name, from the engine (255 = unknown). */

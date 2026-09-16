@@ -219,7 +219,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-132 symbols in the header, 132 Rust exports. web: 131 bound, android: 112 bound, flutter: 114 bound, ios: 113 bound, react-native: 76 bound.
+141 symbols in the header, 141 Rust exports. web: 140 bound, android: 112 bound, flutter: 114 bound, ios: 129 bound, react-native: 76 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -276,12 +276,15 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_hit_test_view` | yes | yes | yes | yes | yes |
 | `qvp_kind_name` | yes | yes | yes | yes | yes |
 | `qvp_layout` | yes | yes | yes | yes | yes |
-| `qvp_layout_groups` | yes | **missing** | **missing** | **missing** | **missing** |
+| `qvp_layout_current` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_layout_draw_list` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_layout_groups` | yes | **missing** | **missing** | yes | **missing** |
 | `qvp_layout_line_spacing_to_fill` | yes | yes | yes | yes | yes |
-| `qvp_layout_omitted_paths` | yes | **missing** | **missing** | **missing** | **missing** |
-| `qvp_layout_path_groups` | yes | **missing** | **missing** | **missing** | **missing** |
-| `qvp_layout_repeats` | yes | **missing** | **missing** | **missing** | **missing** |
-| `qvp_layout_row_words` | yes | **missing** | **missing** | **missing** | **missing** |
+| `qvp_layout_omitted_paths` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_layout_path_groups` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_layout_placements` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_layout_repeats` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_layout_row_words` | yes | **missing** | **missing** | yes | **missing** |
 | `qvp_layout_wasted_fraction` | yes | yes | yes | yes | yes |
 | `qvp_layout_word_row` | yes | **missing** | **missing** | **missing** | **missing** |
 | `qvp_line_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
@@ -308,7 +311,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_page_line_spacing` | yes | yes | yes | yes | gap (other shape: `info().lineSpacing`) |
 | `qvp_page_load` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript (`pageUri` prop)) |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |
-| `qvp_reflow_max_zoom` | yes | **missing** | **missing** | **missing** | **missing** |
+| `qvp_reflow_max_zoom` | yes | **missing** | **missing** | yes | **missing** |
 | `qvp_reveal_goto` | yes | yes | yes | yes | yes |
 | `qvp_reveal_position` | yes | yes | yes | yes | yes |
 | `qvp_reveal_start` | yes | yes | yes | yes | yes |
@@ -342,8 +345,8 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_unmask_next` | yes | yes | yes | yes | yes |
 | `qvp_unmask_word` | yes | yes | yes | yes | yes |
 | `qvp_version` | yes | yes | yes | yes | yes |
-| `qvp_view_anchor` | yes | **missing** | **missing** | **missing** | **missing** |
-| `qvp_view_clamp` | yes | **missing** | **missing** | **missing** | **missing** |
+| `qvp_view_anchor` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_view_clamp` | yes | **missing** | **missing** | yes | **missing** |
 | `qvp_view_pan` | yes | **missing** | **missing** | **missing** | **missing** |
 | `qvp_view_swipe` | yes | **missing** | **missing** | **missing** | **missing** |
 | `qvp_view_to_layout` | yes | **missing** | **missing** | **missing** | **missing** |
@@ -354,5 +357,11 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_word_form` | yes | yes | yes | yes | yes |
 | `qvp_word_info` | yes | yes | yes | yes | gap (list form: bound as `word(i)` and `words()`) |
 | `qvp_word_label` | yes | yes | yes | yes | yes |
+| `qvp_zoom_level_candidates` | yes | **missing** | **missing** | **missing** | **missing** |
 | `qvp_zoom_levels` | yes | **missing** | **missing** | **missing** | **missing** |
+| `qvp_zoom_mode` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_zoom_pinch` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_zoom_spec` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_zoom_steps` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_zoom_to_step` | yes | **missing** | **missing** | yes | **missing** |
 <!-- parity:end -->

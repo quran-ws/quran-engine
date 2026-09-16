@@ -65,6 +65,10 @@ abstract final class QvpDefaults {
   static const int ink = 0x231f20ff, highlightInk = 0x1a73e8ff, highlightBand = 0xd6a3264d, selectionBand = 0x2d6fd640, maskBlock = 0xd9d4c8ff, revealGrey = 0xc9c4b8ff;
   static const double highlightPadX = 1.2, highlightPadY = 0, highlightSeam = 0.25, gapBias = 0.6, tapDistance = 6, aspectSlack = 1.15, maskPad = 0.6, maskRadius = 0.8, cropPad = 2;
   static const int gridLines = 15, revealLit = 1;
+  /// The reader's pinch and swipe: the engine's own limits, which every platform holds to.
+  static const double minZoom = 0.5, maxZoom = 12, zoomedThreshold = 1.02;
+  static const double swipeAxisRatio = 1.5, swipeDistance = 40, swipeVelocity = 500;
+  static const double zoomSnapHysteresis = 0.03, zoomQuantum = 0.01;
 }
 
 /// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
