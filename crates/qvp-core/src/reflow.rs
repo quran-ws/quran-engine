@@ -212,12 +212,6 @@ struct Atom {
     width: f32,
 }
 
-/// How far a banner is shrunk to sit on a row: the row against the printed text block, never
-/// enlarged. A surah name is one drawing, so it is fitted, not broken.
-fn header_scale(row_w: f32, block: (f32, f32)) -> f32 {
-    (row_w / (block.1 - block.0).max(1.0)).min(1.0)
-}
-
 impl Page {
     /// The air the print keeps between the letters of two neighbouring words, taken over the
     /// whole page: what a reflowed row leaves between any two words.
@@ -934,7 +928,7 @@ impl Page {
             // the banner is drawn at, which is the size `place_header` fits to the row.
             if let Some(&li) = headers.get(&r) {
                 let c = self.line_centre(li as usize);
-                let k = header_scale(row_w, block);
+                let k = self.header_scale(li as usize, row_w);
                 for deco in d.decorations.iter().filter(|x| x.line != NONE_U16 && x.line as u32 == li) {
                     asc = asc.max(k * (c - deco.bbox.y0 as f32 / q));
                     desc = desc.max(k * (deco.bbox.y1 as f32 / q - c));
@@ -968,12 +962,15 @@ impl Page {
                     // from the ayah under it, and a banner set tight against the first row
                     // reads as part of it.
                     if headers.contains_key(&prev) || headers.contains_key(&r) {
-                        let air = header_scale(row_w, block)
-                            * headers
-                                .get(&prev)
-                                .map(|&li| self.header_air(li as usize).1)
-                                .or_else(|| headers.get(&r).map(|&li| self.header_air(li as usize).0))
-                                .unwrap_or(0.0);
+                        let air = headers
+                            .get(&prev)
+                            .map(|&li| self.header_scale(li as usize, row_w) * self.header_air(li as usize).1)
+                            .or_else(|| {
+                                headers
+                                    .get(&r)
+                                    .map(|&li| self.header_scale(li as usize, row_w) * self.header_air(li as usize).0)
+                            })
+                            .unwrap_or(0.0);
                         need = need.max(descents[prev] + ascents[r] + air);
                     }
                     row_y[prev] + pitch.max(need)
@@ -1031,7 +1028,7 @@ impl Page {
             if let Some(&li) = headers.get(&r) {
                 // on its own ink centre: a band beside a banner stops half a line spacing out,
                 // so it is narrower than the banner and its middle is not where the ink goes
-                self.place_header(&mut out, li, centres[r], block, row_w);
+                self.place_header(&mut out, li, centres[r], row_w);
                 continue;
             }
             for (i, a) in atoms.iter().enumerate() {
@@ -1251,6 +1248,35 @@ impl Page {
     /// The air the print keeps above and below a banner line, in page units: from its own ink
     /// to the nearest ink on the line above and the line below. A banner line holds no words,
     /// so its ink is the decorations drawn on it.
+    /// The horizontal extent of a banner line's own ink, in page units: a banner line holds
+    /// no words, so its ink is the decorations drawn on it.
+    fn header_ink(&self, li: usize) -> (f32, f32) {
+        let d = self.data();
+        let q = self.quant();
+        let (mut x0, mut x1) = (f32::INFINITY, f32::NEG_INFINITY);
+        for deco in d.decorations.iter().filter(|x| x.line != NONE_U16 && x.line as usize == li) {
+            x0 = x0.min(deco.bbox.x0 as f32 / q);
+            x1 = x1.max(deco.bbox.x1 as f32 / q);
+        }
+        if x0 <= x1 {
+            (x0, x1)
+        } else {
+            (0.0, 0.0)
+        }
+    }
+
+    /// How far a banner is shrunk to sit on a row: its own ink against the row, never enlarged.
+    /// A surah name is one drawing, so it is fitted, not broken.
+    ///
+    /// The ink is what is measured, not the text block the banner sits in. A surah name is a
+    /// fifth of the block wide and a basmalah about half, so both keep their printed size as
+    /// the reader zooms in — growing with the words around them, which is what the reader
+    /// asked for — and start to shrink only once the row itself is narrower than they are.
+    fn header_scale(&self, li: usize, row_w: f32) -> f32 {
+        let ink = self.header_ink(li);
+        (row_w / (ink.1 - ink.0).max(1.0)).min(1.0)
+    }
+
     fn header_air(&self, li: usize) -> (f32, f32) {
         let d = self.data();
         let q = self.quant();
@@ -1270,10 +1296,11 @@ impl Page {
         (above, below)
     }
 
-    fn place_header(&self, out: &mut Reflowed, li: u32, centre: f32, block: (f32, f32), row_w: f32) {
+    fn place_header(&self, out: &mut Reflowed, li: u32, centre: f32, row_w: f32) {
         let d = self.data();
-        let k = header_scale(row_w, block);
-        let cx = (block.0 + block.1) / 2.0;
+        let k = self.header_scale(li as usize, row_w);
+        let ink = self.header_ink(li as usize);
+        let cx = (ink.0 + ink.1) / 2.0;
         for (di, deco) in d.decorations.iter().enumerate() {
             if deco.line != NONE_U16 && deco.line as u32 == li {
                 let c = self.line_centre(li as usize);
