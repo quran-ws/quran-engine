@@ -38,6 +38,26 @@ const canvas = document.querySelector('canvas')
 page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
 ```
 
+### Canvas resolution
+
+Canvas2D rasterises these unhinted vector outlines. Give the canvas at least two backing
+pixels per CSS pixel. Above that floor, use the display's device-pixel ratio rather than a
+multiple of it. Extra supersampling makes the browser downsample the result and can leave
+thin strokes and diacritics soft or uneven.
+
+```js
+const rect = canvas.getBoundingClientRect()
+const pixelRatio = Math.max(2, window.devicePixelRatio || 1)
+canvas.width = Math.round(rect.width * pixelRatio)
+canvas.height = Math.round(rect.height * pixelRatio)
+canvas.style.width = `${rect.width}px`
+canvas.style.height = `${rect.height}px`
+page.draw(canvas.getContext('2d'), page.fit(canvas, 24 * pixelRatio))
+```
+
+An app may cap the backing dimensions or total pixel count to control memory use. The web
+example uses this rule and caps its ratio at three.
+
 Page files are served from `cdn.quran.ws` under immutable, versioned URLs, so a
 browser can load one page without shipping the data — `docs/CDN.md`:
 
