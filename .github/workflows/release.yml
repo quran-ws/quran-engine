@@ -125,6 +125,10 @@ jobs:
           path: |
             dist/android/*.aar
             dist/android/*.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flutter-android
+          path: packages/flutter/qvp_flutter/android/src/main/jniLibs
       - name: Maven Central
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -149,6 +153,9 @@ jobs:
     needs: [verify, xcframework, android]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
@@ -191,12 +198,22 @@ jobs:
         with:
           node-version: "20"
           registry-url: https://registry.npmjs.org
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: crates-auth
       - name: crates.io
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
-          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then echo "::notice::crates.io skipped: CARGO_REGISTRY_TOKEN is not set"; exit 0; fi
-          for c in qvp-format qvp-core qvp-convert qvp-ffi; do cargo publish -p "$c" --no-verify; sleep 30; done
+          for crate in qvp-format qvp-core qvp-convert qvp-ffi; do
+            if curl -fsS -A quran-engine-release \
+              "https://crates.io/api/v1/crates/$crate/$VERSION" >/dev/null; then
+              echo "::notice::$crate $VERSION already exists on crates.io"
+              continue
+            fi
+            cargo publish -p "$crate" --no-verify
+            sleep 30
+          done
       - name: npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -205,8 +222,25 @@ jobs:
           cp artifacts/qvp_ffi.wasm/qvp_ffi.wasm web/qvp_ffi.wasm
           npm publish --access public --ignore-scripts
           (cd packages/react-native/qvp-react-native && npm install --no-audit --no-fund && npm run build && npm publish --access public)
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: dart-lang/setup-dart@v1
       - name: pub.dev
-        run: echo "::notice::pub.dev publishing is not wired yet (see docs/standards/RELEASING.md); the package is consumable from this release's tag"
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          if curl -fsS "https://pub.dev/api/packages/qvp_flutter/versions/$VERSION" >/dev/null; then
+            echo "::notice::qvp_flutter $VERSION already exists on pub.dev"
+            exit 0
+          fi
+          mkdir -p packages/flutter/qvp_flutter/android/src/main/jniLibs
+          cp -R artifacts/flutter-android/. \
+            packages/flutter/qvp_flutter/android/src/main/jniLibs/
+          cd packages/flutter/qvp_flutter
+          flutter pub publish --dry-run
+          flutter pub publish --force
 
   cdn:
     name: engine builds to cdn.quran.ws

@@ -11,13 +11,11 @@ apply one to one. The package ships **no page data**.
 
 ```yaml
 dependencies:
-  qvp_flutter:
-    path: ../packages/flutter/qvp_flutter      # or a git dependency
+  qvp_flutter: ^0.2.2
 ```
 
-Produce the engine library once (writes
-`qvp_flutter/android/src/main/jniLibs/<abi>/libqvp_ffi.so` for arm64-v8a,
-armeabi-v7a and x86_64 — a build artefact, gitignored on purpose):
+The pub.dev package includes the Android engine for arm64-v8a, armeabi-v7a and x86_64.
+When developing this repository, produce those libraries with:
 
 ```sh
 export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
