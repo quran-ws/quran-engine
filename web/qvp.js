@@ -465,6 +465,33 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const v = this.e.dv().getFloat32(at, true);
       return { ...spec, reflow: v > 0 ? { ...(spec.reflow || {}), zoom: v } : null };
     }
+    /** The same control on this page: what the reader was reading at, carried onto the page they
+     * turned to. A step carries as a step, because every page's steps are its own; a free zoom
+     * carries as a size, held inside what this page can reach. */
+    zoomCarried(spec, zoom) {
+      const s = this.e.scratch2 + 40960; this._writeLayoutSpec(spec, s);
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      this.e.ex.qvp_zoom_carried(this.h, s, z, this.e.scratch);
+      return this._getZoom(this.e.scratch);
+    }
+    /** the reflow zoom one step of this page's control means; step 0 is the printed page */
+    zoomAtStep(spec, step) {
+      const s = this.e.scratch2 + 40960; this._writeLayoutSpec(spec, s);
+      return this.e.ex.qvp_zoom_at_step(this.h, s, step);
+    }
+    /** true once the reader has zoomed in, by either road: a magnified view, or a page reflowed
+     * above the printed size. `fitScale` is the scale the page is fitted at (0 = it is at it). */
+    zoomIsZoomed(zoom, view, fitScale = 0) {
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      const v = this.e._putView(view, this.e.scratch2 + 42000);
+      return !!this.e.ex.qvp_zoom_is_zoomed(z, v, fitScale);
+    }
+    /** what a sideways drag on this page means: 'pan' it, or 'turnPage' */
+    sidewaysDrag(zoom, view, fitScale = 0) {
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      const v = this.e._putView(view, this.e.scratch2 + 42000);
+      return this.e.ex.qvp_sideways_drag(this.h, z, v, fitScale) === 1 ? 'turnPage' : 'pan';
+    }
     /** The layout the page already has, without computing one: what to read after a call that
      * laid the page out itself, as the zoom control does. */
     layoutCurrent() {

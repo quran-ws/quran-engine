@@ -94,6 +94,16 @@
   const toView = (cx, cy) => [(cx - S.view.offsetX) / S.view.scale, (cy - S.view.offsetY) / S.view.scale];
 
   // ── page loading ──
+  // A page turn keeps the size the reader chose: the engine carries the control onto the page
+  // they turned to, since every page's steps are its own.
+  function carryZoom() {
+    if (!S.page) return;
+    S.zoom = S.page.zoomCarried(layoutSpec(), S.zoom);
+    S.levels = null;
+    S.level = S.zoom.step + 1;
+    S.reflow.on = S.zoom.zoom > 1.0001;
+    if (S.reflow.on) { S.reflow.zoom = S.zoom.zoom; $('rZoom').value = S.zoom.zoom; }
+  }
   async function loadPage(n) {
     if (!src.pages.includes(n)) n = src.pages.reduce((a, b) => Math.abs(b - n) < Math.abs(a - n) ? b : a);
     const bytes = await src.page(n);
@@ -106,7 +116,7 @@
     S.themeHandle = S.tajwidHandle = S.hideHandle = S.ayahMarksHandle = 0;
     $('pageNo').value = n;
     applyTheme(); applyToggles();
-    if (S.level > 1) { const lv = S.page.zoomSteps(layoutSpec()); S.levels = lv; S.reflow.zoom = lv[S.level - 2] || S.reflow.zoom; }
+    carryZoom();
     renderer.baseKey = '';
     fit(false);
     showSelection(); showMeta(); runSearch();
@@ -250,11 +260,12 @@
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.hypot(dx, dy) > 3) {
         moved = true; stage.classList.add('dragging');
-        // A reflowed page is the viewport's own width: there is nothing to pan sideways, so it
-        // scrolls up and down and a sideways drag turns the page instead.
+        // the engine says whether this page has sideways travel to spend, or whether the drag
+        // belongs to a page turn
         const L = S.page.currentLayout;
-        const v = engine.viewPan({ ...S.view, offsetX: drag.offsetX, offsetY: drag.offsetY }, L && L.reflowed ? 0 : dx, dy);
-        S.view = L && L.reflowed ? engine.viewClamp(v, L.contentW, L.contentH, stage.clientWidth, stage.clientHeight) : v;
+        const turns = S.page.sidewaysDrag(S.zoom, S.view, L ? L.fitScale : 0) === 'turnPage';
+        const v = engine.viewPan({ ...S.view, offsetX: drag.offsetX, offsetY: drag.offsetY }, turns ? 0 : dx, dy);
+        S.view = turns && L ? engine.viewClamp(v, L.contentW, L.contentH, stage.clientWidth, stage.clientHeight) : v;
         draw();
       }
       return;
@@ -271,7 +282,7 @@
       if (selecting && selecting.active) { showSelection(); selecting = null; drag = null; return; }
       if (drag && moved) {
         const L = S.page.currentLayout;
-        if (L && L.reflowed) {
+        if (S.page.sidewaysDrag(S.zoom, S.view, L ? L.fitScale : 0) === 'turnPage') {
           const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
           const dir = engine.viewSwipe(dx, dy);
           if (dir) { const i = src.pages.indexOf(S.n); loadPage(src.pages[Math.min(src.pages.length - 1, Math.max(0, i - dir))]); drag = null; return; }
