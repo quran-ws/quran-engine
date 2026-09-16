@@ -11,3 +11,5 @@ android/local.properties
 *.iml
 *.log
 .DS_Store
+!android/src/main/jniLibs/
+!android/src/main/jniLibs/**
