@@ -39,7 +39,7 @@ pub use text::{
     Match, SearchMode, SearchOptions, WordForms,
 };
 pub use view::{swipe_direction, View};
-pub use zoom::{Zoom, ZoomChange, ZoomMode};
+pub use zoom::{Sideways, Zoom, ZoomChange, ZoomMode};
 
 use qvp_format::*;
 use std::collections::HashMap;

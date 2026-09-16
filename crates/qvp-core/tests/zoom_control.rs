@@ -2,7 +2,7 @@
 //!
 //! Needs dist/pages from scripts/sync-test-data.sh. Skipped when the data is missing unless
 //! QVP_REQUIRE_DATA is set.
-use qvp_core::{LayoutSpec, Page, View, Zoom, ZoomMode};
+use qvp_core::{LayoutSpec, Page, Sideways, View, Zoom, ZoomMode};
 use std::path::{Path, PathBuf};
 
 fn page_path(n: u32) -> PathBuf {
@@ -231,4 +231,65 @@ fn one_gesture_walks_up_the_steps_and_back_down() {
     assert_eq!(seen.first().copied(), Some(1), "a small pinch should reach the first step, got {seen:?}");
     assert_eq!(seen.iter().max().copied(), Some(3), "a wide pinch should reach the last step, got {seen:?}");
     assert!(seen.last().copied().unwrap() < 3, "closing the fingers should come back down, got {seen:?}");
+}
+
+/// A reader who turns pages keeps the size they chose. Every page has its own steps, so
+/// carrying the size instead of the step rounds it down whenever the next page's step sits a
+/// little higher, and ten turns walked a reader from the largest step back to the printed page.
+#[test]
+fn the_size_survives_a_run_of_page_turns() {
+    let Some(mut first) = page(420) else { return };
+    let s = spec();
+    first.layout(&s);
+    let top = first.zoom_steps(&s).len() as u32;
+    let mut z = Zoom { mode: ZoomMode::Stepped, step: top, zoom: first.zoom_at_step(&s, top) };
+    let mut seen = Vec::new();
+    for n in 421..=430 {
+        let Some(mut p) = page(n) else { return };
+        p.layout(&s);
+        z = p.zoom_carried(&s, z);
+        seen.push(z.step);
+        // the size is this page's own value for that step, not the page before's
+        let want = p.zoom_steps(&s)[z.step as usize - 1];
+        assert!((z.zoom - want).abs() < 1e-4, "page {n}: {} is not its own step {}", z.zoom, z.step);
+    }
+    assert!(seen.iter().all(|&x| x == top), "the reader lost the size they chose: {seen:?}");
+}
+
+/// A free zoom carries as a size, and no further than the page it lands on can reach.
+#[test]
+fn a_free_zoom_carries_inside_the_new_page_s_limit() {
+    let Some(mut p) = page(428) else { return };
+    let s = spec();
+    p.layout(&s);
+    let cap = p.reflow_max_zoom(&Default::default());
+    let carried = p.zoom_carried(&s, Zoom { mode: ZoomMode::Continuous, step: 0, zoom: cap + 5.0 });
+    assert!(carried.zoom <= cap + 1e-3, "{} is past this page's limit of {cap}", carried.zoom);
+    assert_eq!(carried.mode, ZoomMode::Continuous);
+}
+
+/// A sideways drag turns the page wherever there is no sideways travel to spend.
+#[test]
+fn a_sideways_drag_turns_the_page_unless_there_is_room_to_pan() {
+    let Some(mut p) = page(428) else { return };
+    let s = spec();
+    p.layout(&s);
+    let settled = View::default();
+    assert_eq!(p.sideways_drag(Zoom::default(), settled, 1.0), Sideways::TurnPage, "a page nobody zoomed");
+    let magnified = View { scale: 2.0, ..View::default() };
+    let z = Zoom { mode: ZoomMode::Magnify, step: 0, zoom: 1.0 };
+    assert_eq!(p.sideways_drag(z, magnified, 1.0), Sideways::Pan, "a magnified page has room to pan");
+    // the same magnified view, but the page is reflowed: its width is the screen's
+    let stepped = p.zoom_to_step(&s, Zoom::default(), 2, settled).zoom;
+    assert_eq!(p.sideways_drag(stepped, magnified, 1.0), Sideways::TurnPage, "a reflowed page has none");
+}
+
+/// The reader has zoomed in by either road: a magnified view, or a reflowed page.
+#[test]
+fn zoomed_in_counts_both_roads() {
+    let settled = View::default();
+    assert!(!Zoom::default().is_zoomed(settled, 1.0));
+    assert!(Zoom::default().is_zoomed(View { scale: 2.0, ..settled }, 1.0), "a magnified view");
+    let reflowed = Zoom { mode: ZoomMode::Stepped, step: 1, zoom: 1.35 };
+    assert!(reflowed.is_zoomed(settled, 1.0), "a reflowed page, whatever the view is at");
 }

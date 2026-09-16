@@ -193,6 +193,10 @@ void     qvp_zoom_mode(QvpPage*, const QvpLayoutSpec*, const QvpZoom*, uint32_t 
 void     qvp_zoom_pinch(QvpPage*, const QvpLayoutSpec*, const QvpZoom*, const QvpView*, float factor /* against the fingers' distance when they went down */, float focal_x, float focal_y, QvpZoomChange* out);
 void     qvp_zoom_to_step(QvpPage*, const QvpLayoutSpec*, const QvpZoom*, uint32_t step /* 0 = the printed page */, const QvpView*, QvpZoomChange* out);
 void     qvp_zoom_spec(QvpPage*, const QvpLayoutSpec*, const QvpZoom*, QvpLayoutSpec* out);   /* the spec this control asks for */
+void     qvp_zoom_carried(QvpPage*, const QvpLayoutSpec*, const QvpZoom*, QvpZoom* out);   /* the same control on this page: what a page turn keeps */
+float    qvp_zoom_at_step(QvpPage*, const QvpLayoutSpec*, uint32_t step);        /* the reflow zoom one step means; 0 = the printed page */
+int      qvp_zoom_is_zoomed(const QvpZoom*, const QvpView*, float fit_scale /* 0 = the page is at its fitted size */);   /* has the reader zoomed in, by either road */
+uint32_t qvp_sideways_drag(const QvpPage*, const QvpZoom*, const QvpView*, float fit_scale);   /* what a sideways drag means: 0 pan, 1 turn the page */
 
 void     qvp_layout(QvpPage*, const QvpLayoutSpec*, QvpLayout* out);        /* out.lines valid until next call */
 int      qvp_layout_current(const QvpPage*, QvpLayout* out);                /* the layout the page already has, without computing one; 0 when it has none */

@@ -61,6 +61,32 @@ impl Default for Zoom {
     }
 }
 
+impl Zoom {
+    /// True once the reader has zoomed in, by either road: the view magnified past the size the
+    /// page is fitted at, or the page reflowed to a size above the printed one. Panning then
+    /// moves the page rather than the book.
+    ///
+    /// `fit_scale` is the view scale the page sits at when nobody has touched it
+    /// ([`crate::Layout::fit_scale`]); 0 means the page is at that size already.
+    pub fn is_zoomed(&self, view: View, fit_scale: f32) -> bool {
+        let fit = if fit_scale > 0.0 { fit_scale } else { 1.0 };
+        view.scale > fit * defaults::ZOOMED_THRESHOLD || self.zoom > defaults::ZOOMED_THRESHOLD
+    }
+}
+
+/// What a sideways drag on a page means.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Sideways {
+    /// Drag the page under the finger: a magnified page is wider than the screen, so there is
+    /// somewhere to go.
+    Pan = 0,
+    /// Turn to the next page or the one before. A reflowed page is the screen's own width and a
+    /// page nobody has zoomed is fitted to it, so in both there is no sideways travel to spend
+    /// and the gesture is free to mean this.
+    TurnPage = 1,
+}
+
 /// What a gesture produced: the control to keep, the view to draw with, and whether the page
 /// was laid out again under it. A host that redraws its own overlays reads `relaid` to know
 /// the geometry it cached has moved.
@@ -113,6 +139,49 @@ impl Page {
                 let step = steps.iter().filter(|&&s| s <= z + 1e-4).count() as u32;
                 Zoom { mode, step, zoom: self.zoom_of(spec, Zoom { mode, step, zoom: z }) }
             }
+        }
+    }
+
+    /// The reflow zoom one step of this page's control means. Step 0 is the printed page.
+    pub fn zoom_at_step(&mut self, spec: &LayoutSpec, step: u32) -> f32 {
+        self.zoom_of(spec, Zoom { mode: ZoomMode::Stepped, step, zoom: 1.0 })
+    }
+
+    /// The same control on this page: what the reader was reading at, carried onto the page
+    /// they have turned to.
+    ///
+    /// A step carries as a step, never as the size it happened to mean on the page before. Every
+    /// page has its own steps — the engine chose them so the ink barely changes across a turn —
+    /// and rounding a size onto them loses a step whenever the new page's step sits a little
+    /// higher, so a reader turning pages walks back to the printed size. A free zoom carries as
+    /// a size, held inside what this page can reach.
+    pub fn zoom_carried(&mut self, spec: &LayoutSpec, zoom: Zoom) -> Zoom {
+        match zoom.mode {
+            ZoomMode::Magnify => zoom,
+            ZoomMode::Continuous => {
+                let cap = self.reflow_max_zoom(&spec.reflow.unwrap_or_default()).max(1.0);
+                Zoom { zoom: zoom.zoom.clamp(1.0, cap), ..zoom }
+            }
+            ZoomMode::Stepped => {
+                let step = zoom.step.min(self.zoom_steps(spec).len() as u32);
+                let next = Zoom { step, ..zoom };
+                Zoom { zoom: self.zoom_of(spec, next), ..next }
+            }
+        }
+    }
+
+    /// What a sideways drag on this page means: something to pan, or a page to turn.
+    ///
+    /// A reflowed page is the screen's own width and a page nobody has zoomed is fitted to it,
+    /// so neither has any sideways travel and the gesture turns the page. Only a magnified page
+    /// is dragged. A host reads this rather than deciding for itself, so the platforms answer
+    /// the same gesture the same way.
+    pub fn sideways_drag(&self, zoom: Zoom, view: View, fit_scale: f32) -> Sideways {
+        let reflowed = self.current_layout().map(|l| l.is_reflowed()).unwrap_or(false);
+        if reflowed || !zoom.is_zoomed(view, fit_scale) {
+            Sideways::TurnPage
+        } else {
+            Sideways::Pan
         }
     }
 

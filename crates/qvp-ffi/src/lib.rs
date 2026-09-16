@@ -1390,6 +1390,48 @@ pub unsafe extern "C" fn qvp_zoom_to_step(
     })
 }
 
+/// The same control on another page: what the reader was reading at, carried onto the page they
+/// turned to. A step carries as a step, a free zoom as a size held inside what the page can reach.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_carried(
+    page: *mut Page,
+    spec: *const QvpLayoutSpec,
+    zoom: *const QvpZoom,
+    out: *mut QvpZoom,
+) {
+    guard(|| {
+        let s = layout_spec(spec);
+        *out = (*page).zoom_carried(&s, (*zoom).into()).into()
+    })
+}
+
+/// The reflow zoom one step of this page's control means; step 0 is the printed page.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_at_step(page: *mut Page, spec: *const QvpLayoutSpec, step: u32) -> f32 {
+    guard(|| {
+        let s = layout_spec(spec);
+        (*page).zoom_at_step(&s, step)
+    })
+}
+
+/// 1 once the reader has zoomed in, by either road: a magnified view, or a page reflowed above
+/// the printed size. `fit_scale` is the view scale the page is fitted at (0 = it is at it).
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_is_zoomed(zoom: *const QvpZoom, view: *const QvpView, fit_scale: f32) -> i32 {
+    guard(|| qvp_core::Zoom::from(*zoom).is_zoomed((*view).into(), fit_scale) as i32)
+}
+
+/// What a sideways drag on this page means: 0 pan it, 1 turn the page.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_sideways_drag(
+    page: *const Page,
+    zoom: *const QvpZoom,
+    view: *const QvpView,
+    fit_scale: f32,
+) -> u32 {
+    guard(|| (*page).sideways_drag((*zoom).into(), (*view).into(), fit_scale) as u32)
+}
+
 /// `spec` with this control's zoom in it: what the host lays out, draws and hit-tests with.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_zoom_spec(

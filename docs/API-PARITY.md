@@ -219,7 +219,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-141 symbols in the header, 141 Rust exports. web: 140 bound, android: 112 bound, flutter: 114 bound, ios: 129 bound, react-native: 76 bound.
+145 symbols in the header, 145 Rust exports. web: 140 bound, android: 112 bound, flutter: 114 bound, ios: 133 bound, react-native: 76 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -324,6 +324,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_select` | yes | yes | yes | yes | yes |
 | `qvp_selection` | yes | yes | yes | yes | yes |
 | `qvp_selection_text` | yes | yes | yes | yes | yes |
+| `qvp_sideways_drag` | **missing** | **missing** | **missing** | yes | **missing** |
 | `qvp_style_add` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_add_target` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_clear` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
@@ -357,6 +358,9 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_word_form` | yes | yes | yes | yes | yes |
 | `qvp_word_info` | yes | yes | yes | yes | gap (list form: bound as `word(i)` and `words()`) |
 | `qvp_word_label` | yes | yes | yes | yes | yes |
+| `qvp_zoom_at_step` | **missing** | **missing** | **missing** | yes | **missing** |
+| `qvp_zoom_carried` | **missing** | **missing** | **missing** | yes | **missing** |
+| `qvp_zoom_is_zoomed` | **missing** | **missing** | **missing** | yes | **missing** |
 | `qvp_zoom_level_candidates` | yes | **missing** | **missing** | **missing** | **missing** |
 | `qvp_zoom_levels` | yes | **missing** | **missing** | **missing** | **missing** |
 | `qvp_zoom_mode` | yes | **missing** | **missing** | yes | **missing** |
