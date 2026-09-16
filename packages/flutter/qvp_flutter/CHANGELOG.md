@@ -1,3 +1,7 @@
+## 0.2.2
+
+- The package includes the Android engine and is available from pub.dev.
+
 ## 0.2.0
 
 - ABI 0.2: the header and every wrapper follow the naming standard (hit tests, rectangles,

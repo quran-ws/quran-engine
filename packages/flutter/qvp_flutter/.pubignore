@@ -1,0 +1,13 @@
+.dart_tool/
+build/
+coverage/
+example/.dart_tool/
+example/build/
+example/assets/pages/
+example/pubspec.lock
+android/.gradle/
+android/.cxx/
+android/local.properties
+*.iml
+*.log
+.DS_Store
