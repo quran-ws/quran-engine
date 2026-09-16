@@ -29,6 +29,8 @@ extern "C" {
 #define QVP_DEFAULT_MIN_ZOOM       0.5f
 #define QVP_DEFAULT_MAX_ZOOM       12.0f
 #define QVP_DEFAULT_ZOOMED_THRESHOLD 1.02f
+#define QVP_DEFAULT_ZOOM_SNAP_HYSTERESIS 0.03f
+#define QVP_DEFAULT_ZOOM_QUANTUM   0.01f
 #define QVP_DEFAULT_SWIPE_AXIS_RATIO 1.5f
 #define QVP_DEFAULT_SWIPE_DISTANCE 40.0f
 #define QVP_DEFAULT_SWIPE_VELOCITY 500.0f
@@ -181,11 +183,25 @@ void     qvp_view_anchor(const QvpPage*, const QvpView*, uint32_t word, float nx
 void     qvp_view_to_layout(const QvpPage*, const QvpView*, float vx, float vy, float* out /* x, y */);
 int32_t  qvp_view_swipe(float dx, float dy, float vx, float vy);                 /* +1 / -1 page swipe, or 0 */
 
+/* The reader's zoom control: what a pinch does to the page. Stepped reflows onto the page's own zoom steps and is what a
+   host gets for free (a zeroed QvpZoom is stepped, on the printed page); continuous reflows to the zoom the fingers ask
+   for; magnify scales the printed page and never changes a row. The engine picks the step, lays the page out and holds
+   the word under the fingers; the host owns only the gesture. */
+typedef struct { uint32_t mode /* 0 stepped, 1 continuous, 2 magnify */, step; float zoom; } QvpZoom;
+typedef struct { QvpZoom zoom; QvpView view; uint32_t relaid; } QvpZoomChange;
+void     qvp_zoom_mode(QvpPage*, const QvpLayoutSpec*, const QvpZoom*, uint32_t mode, QvpZoom* out);   /* another policy, keeping the size the reader is at */
+void     qvp_zoom_pinch(QvpPage*, const QvpLayoutSpec*, const QvpZoom*, const QvpView*, float factor /* against the fingers' distance when they went down */, float focal_x, float focal_y, QvpZoomChange* out);
+void     qvp_zoom_to_step(QvpPage*, const QvpLayoutSpec*, const QvpZoom*, uint32_t step /* 0 = the printed page */, const QvpView*, QvpZoomChange* out);
+void     qvp_zoom_spec(QvpPage*, const QvpLayoutSpec*, const QvpZoom*, QvpLayoutSpec* out);   /* the spec this control asks for */
+
 void     qvp_layout(QvpPage*, const QvpLayoutSpec*, QvpLayout* out);        /* out.lines valid until next call */
+int      qvp_layout_current(const QvpPage*, QvpLayout* out);                /* the layout the page already has, without computing one; 0 when it has none */
 uint32_t qvp_layout_groups(const QvpPage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);   /* where each group of paths is placed */
 uint32_t qvp_layout_repeats(const QvpPage*, float* out /* n × {first_path, n_paths, dx, dy, kx, ky} */, uint32_t cap);   /* paths drawn again elsewhere (a sajdah line over two rows) */
 uint32_t qvp_layout_path_groups(const QvpPage*, uint32_t* out, uint32_t cap);    /* the group of every path; empty unless reflowed */
 uint32_t qvp_layout_omitted_paths(const QvpPage*, uint32_t* out, uint32_t cap);  /* paths this layout does not draw (sheet furniture when reflowed) */
+uint32_t qvp_layout_draw_list(const QvpPage*, float band_top, float band_bottom /* <= top = the whole page */, uint32_t* out /* n × {path, placement} */, uint32_t cap);   /* everything this layout draws inside a band of it, in drawing order: one loop draws any page */
+uint32_t qvp_layout_placements(const QvpPage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);   /* what a draw list's `placement` indexes: the groups, then the repeats */
 uint32_t qvp_layout_row_words(const QvpPage*, uint32_t row, uint32_t* out, uint32_t cap);     /* the words of a reflowed row */
 uint32_t qvp_layout_word_row(const QvpPage*, uint32_t word);                    /* the row a word landed on, or QVP_NONE */
 float    qvp_reflow_max_zoom(const QvpPage*, const QvpLayoutSpec*);              /* the largest reflow zoom whose rows still hold every word */

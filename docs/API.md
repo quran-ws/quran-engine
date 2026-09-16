@@ -346,6 +346,28 @@ record holding the stroke over its words *and* the sign printed in the margin. T
 apart — the sign keeps its size and is drawn once, beside the word it stands next to — so a
 path's group follows the job it does, not only the record it belongs to.
 
+**What a renderer draws.** `page.layoutDrawList(bandTop, bandBottom)` is every drawing this
+layout makes, in drawing order: `{path, placement}` pairs into `page.layoutPlacements()`. A
+path the layout leaves out — the sheet's furniture on a reflowed page — never appears, a sajdah
+line stroked over the two rows its words landed on appears twice, and a printed page hands back
+each path under its own line. So one loop draws any page, and no host has to know which case it
+is in:
+
+```js
+for (const {path, placement} of drawList) { setTransform(places[placement]); fill(paths[path]); }
+```
+
+The band holds it to a part of the laid-out page, in viewport px, as `L.slots` and every
+`…View` answer are; a band no taller than nothing means the whole page.
+
+A reflowed page is several screens of ink, so a renderer draws it into an image once and lets
+the reader scroll that image, rather than drawing again on every frame. Both reference
+renderers keep the whole page when it fits their ink budget — about 18 MB for a page of this
+muṣḥaf at its largest step on a phone — and fall back to a band two screens tall when it does
+not, which is redrawn only when the reader scrolls out of it. That is what the band argument is
+for. On iOS the image is the content of a `UIScrollView`, so the scroll itself — the
+deceleration, the rubber band at the ends, the indicator — is the platform's own.
+
 `reflowMaxZoom(spec)` is the largest zoom at which every word still fits a row (2.44 on page
 121, whose longest word is 121 of 345 page units). Clamp a pinch to it; past it the engine
 still lays the page out, but ink wider than a row runs past the margin.
@@ -382,6 +404,55 @@ hold the page still by remembering pixels: it remembers the word under the finge
 point inside it (`nx`, `ny` from 0 to 1) and asks for the view that brings that point back to a
 place on the screen. A word that moved rows cannot hold both axes on a page of fixed width —
 its new row decides its x — so the vertical place is the one this keeps.
+
+## The reader's zoom control
+
+```js
+let zoom = {};                                           // stepped, on the printed page
+const c = page.zoomPinch(spec, zoom, view, factor, x, y); // one frame of a pinch
+zoom = c.zoom; view = c.view;                             // c.relaid: the page moved under it
+spec = page.zoomSpec(spec, zoom);                         // the spec to lay out and hit-test with
+page.zoomToStep(spec, zoom, 2, view);                     // a size button, a double tap, a reset
+page.zoomMode(spec, zoom, 'continuous');                  // another policy, same size
+```
+
+A pinch means two different things on a muṣḥaf page. It can scale the printed page, the way it
+scales a photograph, and leave the reader panning across lines that no longer fit. Or it can
+ask for bigger ink at the same page width, which is reflow: fewer words to a row, the rest
+moved down. Which of those it means, where it lands, when it commits and what holds the
+reader's place across the relayout is one policy, and it is the engine's — a host reads the
+gesture from its own recognizer and asks what it produced.
+
+`factor` is the distance between the fingers against their distance when they went down: the
+whole gesture every time, not the change since the last frame. There is no call when the
+fingers lift.
+
+**Three modes.** `stepped` is what a reader gets unless a host says otherwise: the pinch lands
+on one of the page's own steps (`zoomSteps`) and the page breaks its rows again at that size,
+so a reader never ends up at a zoom that breaks the page badly. `continuous` reflows to
+whatever the fingers ask for, between the printed page and `reflowMaxZoom`, quantized to 0.01
+so a pinch never asks for a layout that moves no word. `magnify` scales the laid-out page and
+never changes a row. A zeroed control is `stepped` on the printed page, so a host that sets
+nothing gets the reader's behaviour.
+
+**Where a step commits.** Two neighbouring steps meet at their geometric mean, because a zoom
+is a ratio and not a distance, and the commit is held off by 3% either way so a finger resting
+on the boundary does not flicker between two layouts. The steps are at least 1.08 apart
+(`zoomLevels`), and `1.03² < 1.08`, which is what keeps the two thresholds of one step clear of
+each other. The commit happens mid-gesture, one step per crossing: the reflow is the loud
+event, and a pinch that does nothing until release reads as broken.
+
+**Holding the reader's place.** On every commit the engine hit-tests the point between the
+fingers against the layout in hand, lays the page out at the new size, and anchors that point
+back under them with `viewAnchor`. The word is found again on each commit rather than
+remembered from the start of the gesture: `viewAnchor` can only promise the vertical place, so
+a remembered word slides sideways out from under the fingers while the word found now is the
+one they are on. The host never sees the word.
+
+The control owns one field of the spec and leaves the reader's spacing knobs alone, so
+`zoomSpec` is what a host lays out, draws and hit-tests with. `zoomPinch` and `zoomToStep` lay
+the page out themselves when they commit, and the wrapper reads that layout back — a host does
+not lay out again after `relaid`.
 
 ## Where geometry is answered
 

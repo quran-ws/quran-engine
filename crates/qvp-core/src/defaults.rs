@@ -48,6 +48,20 @@ pub const REFLOW_MAX_STRETCH: f32 = 2.0;
 pub const MIN_ZOOM: f32 = 0.5;
 pub const MAX_ZOOM: f32 = 12.0;
 pub const ZOOMED_THRESHOLD: f32 = 1.02;
+/// How far past the midpoint between two zoom steps a pinch must reach before it commits to
+/// the next one, either way. The midpoint is where the steps meet; this holds a finger resting
+/// on it from flickering between two layouts.
+///
+/// It cannot simply be raised. `Page::zoom_levels` leaves neighbouring steps at least 1.08
+/// apart, and the two thresholds of one step stay clear of each other only while
+/// `(1 + this)² < 1.08`.
+pub const ZOOM_SNAP_HYSTERESIS: f32 = 0.03;
+
+/// The smallest change in reflow zoom a free pinch asks the page for. Below this the rows come
+/// out the same and the layout is work no reader can see: at the sizes a reader uses, a
+/// hundredth is under half a percent.
+pub const ZOOM_QUANTUM: f32 = 0.01;
+
 /// A released drag is a page swipe when it is this much more sideways than up and down, and
 /// either this far (viewport px) or this fast (px per second).
 pub const SWIPE_AXIS_RATIO: f32 = 1.5;

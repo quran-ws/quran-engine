@@ -1253,6 +1253,159 @@ pub unsafe extern "C" fn qvp_view_swipe(dx: f32, dy: f32, vx: f32, vy: f32) -> i
     guard(|| qvp_core::swipe_direction(dx, dy, vx, vy))
 }
 
+/// Everything the current layout draws, in drawing order: `{path, placement}` pairs indexing
+/// `qvp_layout_placements`. Omitted paths never appear and a repeated one appears twice, so one
+/// loop draws any page. Returns the number of pairs, or the count needed.
+///
+/// `band_top`/`band_bottom` hold it to a band of the laid-out page, in viewport px: what keeps
+/// a reflowed page smooth, since it is taller than the screen on purpose. `band_bottom` at or
+/// below `band_top` means the whole page.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_draw_list(
+    page: *const Page,
+    band_top: f32,
+    band_bottom: f32,
+    out: *mut u32,
+    cap: u32,
+) -> u32 {
+    guard(|| {
+        let band = (band_bottom > band_top).then_some((band_top, band_bottom));
+        let list = (*page).layout_draw_list_in(band);
+        let n = list.len().min(cap as usize);
+        for (i, d) in list.iter().take(n).enumerate() {
+            *out.add(i * 2) = d.path;
+            *out.add(i * 2 + 1) = d.placement;
+        }
+        list.len() as u32
+    })
+}
+
+/// Every placement the current layout draws under: one per group, then one for each repeat.
+/// Returns the number of placements, or the count needed.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_placements(page: *const Page, out: *mut f32, cap: u32) -> u32 {
+    guard(|| {
+        let Some(l) = (*page).current_layout() else { return 0 };
+        let ps = l.placements();
+        let n = ps.len().min(cap as usize);
+        for (i, q) in ps.iter().take(n).enumerate() {
+            *out.add(i * 4) = q.dx;
+            *out.add(i * 4 + 1) = q.dy;
+            *out.add(i * 4 + 2) = q.kx;
+            *out.add(i * 4 + 3) = q.ky;
+        }
+        ps.len() as u32
+    })
+}
+
+// ───────────── the reader's zoom control ─────────────
+
+/// Where the reader's zoom control stands. All zero is the control a page opens on: stepped,
+/// on the printed page.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct QvpZoom {
+    /// 0 stepped, 1 continuous, 2 magnify. Anything else is stepped.
+    pub mode: u32,
+    /// 0 is the printed page, 1 upwards the page's own steps. What stepped reads.
+    pub step: u32,
+    /// The reflow zoom in force, 1.0 at the printed page. What continuous reads.
+    pub zoom: f32,
+}
+
+/// What a gesture produced: the control to keep, the view to draw with, and whether the page
+/// was laid out again under it.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct QvpZoomChange {
+    pub zoom: QvpZoom,
+    pub view: QvpView,
+    pub relaid: u32,
+}
+
+impl From<QvpZoom> for qvp_core::Zoom {
+    fn from(z: QvpZoom) -> Self {
+        qvp_core::Zoom { mode: qvp_core::ZoomMode::from_u32(z.mode), step: z.step, zoom: z.zoom }
+    }
+}
+impl From<qvp_core::Zoom> for QvpZoom {
+    fn from(z: qvp_core::Zoom) -> Self {
+        QvpZoom { mode: z.mode as u32, step: z.step, zoom: z.zoom }
+    }
+}
+impl From<qvp_core::ZoomChange> for QvpZoomChange {
+    fn from(c: qvp_core::ZoomChange) -> Self {
+        QvpZoomChange { zoom: c.zoom.into(), view: c.view.into(), relaid: c.relaid as u32 }
+    }
+}
+
+/// The same control under another policy, keeping the size the reader is already at.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_mode(
+    page: *mut Page,
+    spec: *const QvpLayoutSpec,
+    zoom: *const QvpZoom,
+    mode: u32,
+    out: *mut QvpZoom,
+) {
+    guard(|| {
+        let s = layout_spec(spec);
+        *out = (*page).zoom_mode(&s, (*zoom).into(), qvp_core::ZoomMode::from_u32(mode)).into()
+    })
+}
+
+/// One frame of a pinch. `factor` is the distance between the fingers against the distance
+/// when they went down — the whole gesture every time, not the change since the last frame.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_pinch(
+    page: *mut Page,
+    spec: *const QvpLayoutSpec,
+    zoom: *const QvpZoom,
+    view: *const QvpView,
+    factor: f32,
+    focal_x: f32,
+    focal_y: f32,
+    out: *mut QvpZoomChange,
+) {
+    guard(|| {
+        let s = layout_spec(spec);
+        *out = (*page).zoom_pinch(&s, (*zoom).into(), (*view).into(), factor, (focal_x, focal_y)).into()
+    })
+}
+
+/// The control moved straight to a step: a size button, a double tap, a reset. Step 0 is the
+/// printed page.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_to_step(
+    page: *mut Page,
+    spec: *const QvpLayoutSpec,
+    zoom: *const QvpZoom,
+    step: u32,
+    view: *const QvpView,
+    out: *mut QvpZoomChange,
+) {
+    guard(|| {
+        let s = layout_spec(spec);
+        *out = (*page).zoom_to_step(&s, (*zoom).into(), step, (*view).into()).into()
+    })
+}
+
+/// `spec` with this control's zoom in it: what the host lays out, draws and hit-tests with.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_zoom_spec(
+    page: *mut Page,
+    spec: *const QvpLayoutSpec,
+    zoom: *const QvpZoom,
+    out: *mut QvpLayoutSpec,
+) {
+    guard(|| {
+        let s = layout_spec(spec);
+        // the control owns one field of the spec and leaves the reader's spacing knobs alone
+        let z = (*page).zoom_spec(&s, (*zoom).into()).reflow.map(|r| r.zoom).unwrap_or(0.0);
+        *out = QvpLayoutSpec { reflow_zoom: z, ..*spec };
+    })
+}
+
 // ───────────── layout ─────────────
 
 unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
@@ -1299,6 +1452,25 @@ unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
 pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec, out: *mut QvpLayout) {
     guard(|| {
         let l = (*page).layout(&layout_spec(spec));
+        *out = read_layout(l);
+    })
+}
+
+/// The layout the page already has, without computing one: what a host reads after a call that
+/// laid the page out itself, such as the zoom control. Zero when the page has no layout yet.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_current(page: *const Page, out: *mut QvpLayout) -> u32 {
+    guard(|| match (*page).current_layout() {
+        Some(l) => {
+            *out = read_layout(l);
+            1
+        }
+        None => 0,
+    })
+}
+
+unsafe fn read_layout(l: &qvp_core::Layout) -> QvpLayout {
+    {
         // reflowed: the slots are the rows, and a printed line has no shift of its own
         let n = if l.is_reflowed() { l.line_slots.len() } else { l.line_dy.len() };
         let mut buf = Vec::with_capacity(n * 3);
@@ -1325,8 +1497,8 @@ pub unsafe extern "C" fn qvp_layout(page: *mut Page, spec: *const QvpLayoutSpec,
             n_rows: l.reflow.as_ref().map(|r| r.row_band.len() as u32).unwrap_or(0),
         };
         LAYOUT_BUF.with(|b| *b.borrow_mut() = buf);
-        *out = res;
-    })
+        res
+    }
 }
 /// Where each group of paths is placed: `n × {dx, dy, kx, ky}`, a point `p` of the group
 /// being drawn at `(kx·p.x + dx, ky·p.y + dy)` in page units, before the layout's scale and

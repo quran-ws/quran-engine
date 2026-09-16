@@ -115,6 +115,14 @@ pub struct Layout {
     pub reflow: Option<Reflowed>,
 }
 
+/// One drawing of one path: the path, and which of [`Layout::placements`] it is drawn under.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct Draw {
+    pub path: u32,
+    pub placement: u32,
+}
+
 impl Layout {
     /// Placement of a path's group.
     pub fn placement(&self, path: u32, line: u32) -> Placement {
@@ -128,6 +136,16 @@ impl Layout {
             None => Placement::shifted(self.line_dy.get(line).copied().unwrap_or(0.0)),
         }
     }
+    /// Every placement this layout draws under: one per group, then one for each repeat, so a
+    /// `Draw` indexes this one array and a renderer needs no second list.
+    pub fn placements(&self) -> Vec<Placement> {
+        let mut out = self.groups.clone();
+        if let Some(r) = &self.reflow {
+            out.extend(r.repeats.iter().map(|x| x.placement));
+        }
+        out
+    }
+
     /// True when this layout broke the words onto rows of its own.
     pub fn is_reflowed(&self) -> bool {
         self.reflow.is_some()
@@ -428,6 +446,63 @@ impl Page {
 
     pub fn current_layout(&self) -> Option<&Layout> {
         self.layout.as_ref()
+    }
+
+    /// Everything the current layout draws, in drawing order: each path once under the
+    /// placement it belongs to, and again for every row a decoration is repeated over.
+    ///
+    /// This is the whole of what a renderer needs to know about a laid-out page. The paths a
+    /// layout leaves out never appear, a sajdah line stroked over two rows appears twice, and a
+    /// printed page hands back each path under its own line — so one loop draws any page, and
+    /// no host has to know which of those cases it is in.
+    pub fn layout_draw_list(&self) -> Vec<Draw> {
+        self.layout_draw_list_in(None)
+    }
+
+    /// The same, holding it to a band of the laid-out page: `(top, bottom)` in viewport px, as
+    /// `Layout::line_slots` and every `…_view` answer are. Nothing else is drawn.
+    ///
+    /// This is what keeps a reflowed page smooth under a finger. The page is taller than the
+    /// screen on purpose — at the largest step it is five screens of ink — and a renderer that
+    /// walks the whole page on every frame spends most of it on rows nobody can see. The band a
+    /// host asks for is its viewport, usually with a screen of slack either side so a fast drag
+    /// has somewhere to go.
+    pub fn layout_draw_list_in(&self, band: Option<(f32, f32)>) -> Vec<Draw> {
+        let Some(l) = self.current_layout() else { return Vec::new() };
+        let q = self.quant();
+        // A path is kept when its ink reaches into the band. Its box is in page units, so it
+        // goes through the placement it is drawn under and then the layout's own scale.
+        let visible = |path: u32, placement: &Placement| -> bool {
+            let Some((top, bottom)) = band else { return true };
+            let bb = self.data.paths[path as usize].bbox;
+            let (y0, y1) = (bb.y0 as f32 / q, bb.y1 as f32 / q);
+            let at = |y: f32| l.offset_y + l.scale * (placement.ky * y + placement.dy);
+            at(y1) >= top && at(y0) <= bottom
+        };
+        let group = |i: usize| l.groups.get(i).copied().unwrap_or(Placement::IDENTITY);
+        let n = self.geom.table.len();
+        let mut out = Vec::with_capacity(n);
+        for path in 0..n as u32 {
+            if l.omitted_paths.binary_search(&path).is_ok() {
+                continue;
+            }
+            let placement =
+                if l.path_group.is_empty() { self.geom.table[path as usize].line } else { l.path_group[path as usize] };
+            if visible(path, &group(placement as usize)) {
+                out.push(Draw { path, placement });
+            }
+        }
+        if let Some(r) = &l.reflow {
+            let base = l.groups.len() as u32;
+            for (i, rep) in r.repeats.iter().enumerate() {
+                for path in rep.first_path..rep.first_path + rep.n_paths {
+                    if visible(path, &rep.placement) {
+                        out.push(Draw { path, placement: base + i as u32 });
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).

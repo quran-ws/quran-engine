@@ -17,12 +17,13 @@ pub mod style;
 pub mod target;
 pub mod text;
 pub mod view;
+pub mod zoom;
 mod zoom_table;
 
 pub use crop::CropBounds;
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
 pub use hit::{Hit, HitArea, HitOptions, LineBand};
-pub use layout::{Grid, Layout, LayoutSpec};
+pub use layout::{Draw, Grid, Layout, LayoutSpec};
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
 pub use qvp_format;
@@ -38,6 +39,7 @@ pub use text::{
     Match, SearchMode, SearchOptions, WordForms,
 };
 pub use view::{swipe_direction, View};
+pub use zoom::{Zoom, ZoomChange, ZoomMode};
 
 use qvp_format::*;
 use std::collections::HashMap;
