@@ -28,6 +28,29 @@ public enum QvpDefaults {
     public static let GRID_LINES = 15, ASPECT_SLACK: Float = 1.15
     public static let MASK_BLOCK: UInt32 = 0xd9d4c8ff, MASK_PAD: Float = 0.6, MASK_RADIUS: Float = 0.8
     public static let REVEAL_LIT = 1, REVEAL_GREY: UInt32 = 0xc9c4b8ff, CROP_PAD: Float = 2
+    public static let REFLOW_RELAX: Float = 0.5, REFLOW_MAX_STRETCH: Float = 2
+    public static let MIN_ZOOM: Float = 0.5, MAX_ZOOM: Float = 12, ZOOMED_THRESHOLD: Float = 1.02
+    public static let ZOOM_SNAP_HYSTERESIS: Float = 0.03, ZOOM_QUANTUM: Float = 0.01
+    public static let SWIPE_AXIS_RATIO: Float = 1.5, SWIPE_DISTANCE: Float = 40, SWIPE_VELOCITY: Float = 500
+}
+
+/// How a reflowed row fills the width, how the words are broken onto rows, and where the air
+/// between two words comes from.
+public enum QvpFill: Int { case ragged = 0, justified, centred }
+public enum QvpBreaks: Int { case greedy = 0, even, fitted }
+public enum QvpGapMode: Int { case printed = 0, uniform }
+
+/// Ask for a reflowed page: the same page width with bigger ink, so fewer words fit a row and
+/// the rest move down. `zoom` is the ink size as a multiple of fit-to-width; 1 is the printed
+/// page. Every other field has a default the engine picked and a reader never needs to change.
+public struct QvpReflowSpec: Equatable {
+    public var zoom: Float, fill: QvpFill, breaks: QvpBreaks, gaps: QvpGapMode
+    public var wordGap: Float, relax: Float, maxStretch: Float
+    public init(zoom: Float, fill: QvpFill = .centred, breaks: QvpBreaks = .fitted, gaps: QvpGapMode = .uniform,
+                wordGap: Float = 1, relax: Float = QvpDefaults.REFLOW_RELAX, maxStretch: Float = QvpDefaults.REFLOW_MAX_STRETCH) {
+        self.zoom = zoom; self.fill = fill; self.breaks = breaks; self.gaps = gaps
+        self.wordGap = wordGap; self.relax = relax; self.maxStretch = maxStretch
+    }
 }
 
 /// A mark id by its name, from the engine (255 = unknown).
@@ -161,15 +184,26 @@ public struct QvpLayoutSpec: Equatable {
     public var cropLeft: Float, cropRight: Float
     /// The content is never wider than `viewportH · pageW / pageH · maxAspectSlack` (0 = no bound).
     public var maxAspectSlack: Float
+    /// Break the words onto rows of the page's own width. `nil` lays the page out as printed.
+    public var reflow: QvpReflowSpec?
     public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, fillHeight: Bool = false, gridLines: Int = 0,
-                cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0) {
+                cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0, reflow: QvpReflowSpec? = nil) {
         self.viewportW = viewportW; self.viewportH = viewportH; self.padTop = padTop; self.padBottom = padBottom; self.padLeft = padLeft; self.padRight = padRight
         self.lineSpacing = lineSpacing; self.fillHeight = fillHeight; self.gridLines = gridLines
-        self.cropLeft = cropLeft; self.cropRight = cropRight; self.maxAspectSlack = maxAspectSlack
+        self.cropLeft = cropLeft; self.cropRight = cropRight; self.maxAspectSlack = maxAspectSlack; self.reflow = reflow
     }
     var c: QvpFFI.QvpLayoutSpec {
-        QvpFFI.QvpLayoutSpec(viewport_w: viewportW, viewport_h: viewportH, pad_top: padTop, pad_bottom: padBottom, pad_left: padLeft, pad_right: padRight, line_spacing: lineSpacing,
-                             fill_height: fillHeight ? 1 : 0, grid_lines: UInt32(gridLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack)
+        // a zoom of 0 is the printed page, and 255 asks the engine for its own default
+        let r = reflow
+        return QvpFFI.QvpLayoutSpec(viewport_w: viewportW, viewport_h: viewportH, pad_top: padTop, pad_bottom: padBottom, pad_left: padLeft, pad_right: padRight, line_spacing: lineSpacing,
+                             fill_height: fillHeight ? 1 : 0, grid_lines: UInt32(gridLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack,
+                             reflow_zoom: r?.zoom ?? 0,
+                             reflow_fill: r.map { UInt8($0.fill.rawValue) } ?? 255,
+                             reflow_breaks: r.map { UInt8($0.breaks.rawValue) } ?? 255,
+                             reflow_gaps: r.map { UInt8($0.gaps.rawValue) } ?? 1,
+                             reflow_word_gap: r?.wordGap ?? 1,
+                             reflow_max_stretch: r?.maxStretch ?? 0,
+                             reflow_relax: r?.relax ?? -1)
     }
 }
 /// The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units).
@@ -180,11 +214,30 @@ public final class QvpLayout {
     public let scale: Float, offsetX: Float, offsetY: Float, contentW: Float, contentH: Float, lineSpacing: Float
     public let lineDy: [Float], slotTop: [Float], slotBottom: [Float]
     public let fitScale: Float, fitX: Float, fitY: Float
-    init(scale: Float, offsetX: Float, offsetY: Float, contentW: Float, contentH: Float, lineSpacing: Float, lineDy: [Float], slotTop: [Float], slotBottom: [Float], fitScale: Float = 1, fitX: Float = 0, fitY: Float = 0) {
+    /// True when this layout broke the words onto rows of its own, and how many rows it made.
+    /// A reflowed page places paths by group (`QvpPage.layoutGroups`), not by printed line.
+    public let reflowed: Bool, rows: Int
+    init(scale: Float, offsetX: Float, offsetY: Float, contentW: Float, contentH: Float, lineSpacing: Float, lineDy: [Float], slotTop: [Float], slotBottom: [Float], fitScale: Float = 1, fitX: Float = 0, fitY: Float = 0, reflowed: Bool = false, rows: Int = 0) {
         self.scale = scale; self.offsetX = offsetX; self.offsetY = offsetY; self.contentW = contentW; self.contentH = contentH; self.lineSpacing = lineSpacing; self.lineDy = lineDy; self.slotTop = slotTop; self.slotBottom = slotBottom
         self.fitScale = fitScale; self.fitX = fitX; self.fitY = fitY
+        self.reflowed = reflowed; self.rows = rows
     }
 }
+
+/// Where one group of paths is placed on a reflowed page: a point `p` in page units is drawn at
+/// `(kx·p.x + dx, ky·p.y + dy)`, still in page units, before the layout's own scale and offset.
+/// A word is always placed with `kx == ky == 1`: it moves, it is never resized or reshaped.
+public struct QvpPlacement: Equatable {
+    public let dx: Float, dy: Float, kx: Float, ky: Float
+    public static let identity = QvpPlacement(dx: 0, dy: 0, kx: 1, ky: 1)
+}
+
+/// One drawing of one path: the path, and which of `QvpPage.layoutPlacements()` it goes under.
+public struct QvpDraw: Equatable { public let path: Int, placement: Int }
+
+/// One more drawing of a decoration's paths, at another placement: the sajdah line uses it when
+/// the words it marks end up on two rows.
+public struct QvpRepeat: Equatable { public let firstPath: Int, nPaths: Int, placement: QvpPlacement }
 public struct QvpHighlightStyle: Equatable {
     public var mode: HighlightMode, ink: UInt32, band: UInt32, height: BandHeight, padX: Float, padY: Float, radius: Float, seam: Float, transitionMs: Int, layer: Int
     public init(mode: HighlightMode = .band, ink: UInt32 = QvpDefaults.HIGHLIGHT_INK, band: UInt32 = QvpDefaults.HIGHLIGHT_BAND, height: BandHeight = .lineSpacing, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y, radius: Float = 0, seam: Float = QvpDefaults.HIGHLIGHT_SEAM, transitionMs: Int = 0, layer: Int = QvpLayer.HIGHLIGHT) {

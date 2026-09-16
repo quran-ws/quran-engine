@@ -296,6 +296,7 @@ final class QvpKitTests: XCTestCase {
         c.doubleTap(pt)
         XCTAssertEqual(doubleTapped, 0)
         // pinch past the fitted scale flips isZoomed; resetView clears it
+        c.zoomMode = .magnify
         c.pinch(2.0, at: CGPoint(x: 345, y: 550))
         XCTAssertTrue(c.isZoomed)
         c.resetView()
@@ -342,6 +343,8 @@ final class QvpKitTests: XCTestCase {
         let c = QvpCanvasController()
         c.page = p
         c.setBounds(CGSize(width: 690, height: 1100), fromCanvas: 1)
+        // springing back is the magnifying pinch's own behaviour: a peek, not a reading zoom
+        c.zoomMode = .magnify
         let fitted = (c.viewScale, c.viewOx, c.viewOy)
         c.pinch(2.0, at: CGPoint(x: 345, y: 550)); c.pinchEnded()
         XCTAssertTrue(c.isZoomed, "without zoomSpringsBack the zoom stays")

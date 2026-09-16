@@ -44,6 +44,13 @@ final class DemoModel: ObservableObject {
     @Published var padTop: Double = 12 { didSet { if padTop != oldValue { view.padTop = CGFloat(padTop); view.relayout(); view.resetView(); hud() } } }
     @Published var padBottom: Double = 12 { didSet { if padBottom != oldValue { view.padBottom = CGFloat(padBottom); view.relayout(); view.resetView(); hud() } } }
     @Published var fillHeight = true { didSet { if fillHeight != oldValue { if fillHeight { controlsShown = false }; view.fillHeight = fillHeight; view.relayout(); view.resetView(); hud() } } }
+    /// What a pinch does to the page: 0 steps and reflows, 1 reflows freely, 2 magnifies the
+    /// print. The engine owns the behaviour; this only picks which.
+    @Published var zoomModeIdx = 0 { didSet { if zoomModeIdx != oldValue { view.zoomMode = [.stepped, .continuous, .magnify][zoomModeIdx]; hud() } } }
+    /// The size the reader is at, as a step of the page's own control: 0 is the printed page.
+    @Published var zoomStep = 0 { didSet { if zoomStep != oldValue { view.zoomToStep(zoomStep); hud() } } }
+    /// The zoom steps this page offers, so a control knows how many positions it has.
+    var zoomSteps: [Float] { view.zoomSteps }
     /// While `fillHeight` is on the bars are hidden; this brings them back until the reader hides them again.
     @Published var controlsShown = false
     @Published var meta = ""
@@ -79,6 +86,9 @@ final class DemoModel: ObservableObject {
     }
     /// Scripted states for screenshots / QA, e.g. `-qvpPage 582 -qvpSearch الله -qvpWord 5 -qvpTheme dark -qvpMarks 1`.
     /// `-qvpFill 0` turns fill-screen off; `-qvpControls 1` starts with the bars visible in fill-screen mode.
+    /// `-qvpPinch 0|1|2` picks steps / free / magnify; `-qvpZoom 2` opens at that zoom step;
+    /// `-qvpScroll 900` scrolls that many points down a reflowed page; `-qvpTurns 6` turns
+    /// that many pages forward, to check what a page turn keeps.
     private func applyLaunchArguments() {
         let d = UserDefaults.standard
         if let t = d.string(forKey: "qvpTheme"), Self.themes[t] != nil { theme = t }
@@ -91,6 +101,16 @@ final class DemoModel: ObservableObject {
         if d.bool(forKey: "qvpGold") { goldAyahMarks = true }
         if d.bool(forKey: "qvpMask") { maskModeIdx = 1; maskAyah() }
         if d.object(forKey: "qvpFill") != nil { fillHeight = d.bool(forKey: "qvpFill") }
+        if let m = d.string(forKey: "qvpPinch").flatMap(Int.init) { zoomModeIdx = min(max(m, 0), 2) }
+        if let z = d.string(forKey: "qvpZoom").flatMap(Int.init) { zoomStep = z }
+        if let t = d.string(forKey: "qvpTurns").flatMap(Int.init), t > 0 {
+            for i in 1...t {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35 * Double(i)) { [weak self] in self?.stepPage(1) }
+            }
+        }
+        if let y = d.string(forKey: "qvpScroll").flatMap(Double.init) {
+            DispatchQueue.main.async { [weak self] in self?.view.scroll(by: -CGFloat(y)) }
+        }
         if d.bool(forKey: "qvpControls") { controlsShown = true }
     }
 
@@ -137,6 +157,31 @@ final class DemoModel: ObservableObject {
         p.setDefaultColor(themeSpec.ink)
         view.page = p
         announce(); showMeta(); showTitle(); runSearch(); hud()
+        prepareNeighbours(around: target)
+    }
+
+    /// Draw the pages on either side at the size the reader is reading, once this turn has
+    /// settled, so the next turn shows ink that is already drawn. Kept off the turn itself: it
+    /// is work, and the point is that the reader never waits for it.
+    private var prepared: [Int: QvpPage] = [:]
+    private func prepareNeighbours(around n: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self, self.pageNo == n else { return }
+            for m in [n + 1, n - 1] where Self.pages.contains(m) {
+                let name = String(format: "%03d", m)
+                let p: QvpPage
+                if let kept = self.prepared[m] { p = kept } else {
+                    guard let u = Bundle.main.url(forResource: name, withExtension: "qvp", subdirectory: "pages"),
+                          let bytes = try? Data(contentsOf: u), let loaded = try? QvpPage(bytes: bytes) else { continue }
+                    loaded.setDefaultColor(self.themeSpec.ink)
+                    self.prepared[m] = loaded
+                    p = loaded
+                }
+                self.view.prepare(p)
+            }
+            // only the two beside the reader are worth keeping open
+            for (k, v) in self.prepared where k < n - 1 || k > n + 1 { v.close(); self.prepared[k] = nil }
+        }
     }
     private func showTitle() {
         guard let p = page else { return }
