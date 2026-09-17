@@ -257,6 +257,17 @@ impl Page {
                 }
             }
         }
+        // A page's viewBox is what the page is. The artwork may carry ink beyond it — p17 of the
+        // Hafs KFGQPC mushaf draws its page number and its running head outside the box, and it is
+        // the only page that does — and the format keeps that ink rather than drop it, so a crop
+        // or an SVG export still has every stroke the artwork drew. Drawing is the other question:
+        // an SVG viewport clips to the viewBox, and ink outside it is not part of the page, so the
+        // geometry gives that ink no outline to draw. Its record stays, and so does its box, its
+        // kind and its place in the path numbering every other call is indexed by.
+        let on_page = |bb: &IBox| -> bool {
+            let (w, h) = (data.header.width, data.header.height);
+            (bb.x1 as f32 / q) > 0.0 && (bb.y1 as f32 / q) > 0.0 && (bb.x0 as f32 / q) < w && (bb.y0 as f32 / q) < h
+        };
         for (i, p) in data.paths.iter().enumerate() {
             let op_start = geom.ops.len() as u32;
             let pt_start = geom.pts.len() as u32;
@@ -264,7 +275,9 @@ impl Page {
                 geom.pts.push(x);
                 geom.pts.push(y);
             };
-            if let Some(inst) = data.path_inst(i) {
+            if !on_page(&p.bbox) {
+                // no outline: every host draws it as nothing, without knowing to ask
+            } else if let Some(inst) = data.path_inst(i) {
                 let m = |x: i32, y: i32| -> (f32, f32) {
                     let (gx, gy) = (x as f64 / q as f64, y as f64 / q as f64);
                     (
