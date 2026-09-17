@@ -599,7 +599,7 @@ says which wrapper binds which.
 | page | `qvp_page_load` | `engine.loadPage(bytes)` | Decode a page file into a page handle; null on a malformed file; the bytes are copied. |
 | page | `qvp_page_free` | `page.free()` | Free the page handle. |
 | page | `qvp_page_info` | `page.width`, `.height`, `.page`, `.nLines`, `.nAyahs`, `.nWords`, `.nPaths`, `.nDecorations` | Return the page's dimensions and element counts. |
-| page | `qvp_geometry` | `page.paths`, `page.buildPaths()` | Return the outline streams and the per-path table a renderer draws from; they live as long as the page. |
+| page | `qvp_geometry` | `page.paths`, `page.buildPaths()` | Return the outline streams and the per-path table a renderer draws from; they live as long as the page. Ink outside the page's box gets no outline, so a host draws the page and not what the artwork left beyond it. |
 | page | `qvp_word_info` | `page.words[i]` | Return one word: key, line, ayah fragment, bounds, text and its path range. |
 | page | `qvp_word_form` | `page.wordForm(i, form)` | Return one of a word's text forms; the derived forms need the words sidecar. |
 | page | `qvp_ayah_info` | `page.ayahs[i]` | Return one ayah fragment: key, fragment index and count, flags, word range, ayah-mark decoration, bounds. |
