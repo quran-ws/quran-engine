@@ -27,6 +27,8 @@ All notable changes to the engine and its packages. The format follows
   in its own folder (`docs/CDN.md`).
 
 ### Added
+- Rust releases use crates.io trusted publishing, and Flutter releases include the Android
+  engine and publish `qvp_flutter` to pub.dev.
 - Every example app is built by CI: the Android example, the React Native example's
   typecheck, the Flutter example's analysis in its own package, and a parse of the web
   example. An example that stops compiling now fails the build.

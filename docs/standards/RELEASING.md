@@ -12,13 +12,16 @@
    - npm: `@quran.ws/engine`, `@quran.ws/qvp-react-native`
    - crates.io: `qvp-format`, `qvp-core`, `qvp-convert`, `qvp-ffi`
    - Maven Central: `ws.quran:qvp-android`
+   - pub.dev: `qvp_flutter`
    - the Android AAR, XCFramework zip, and their checksums as release assets. `Package.swift`
      points at the prepared XCFramework URL and checksum
    The release notes are the changelog section.
 4. Nobody publishes by hand. If a step fails, fix and re-run the workflow for the same
    tag. The workflow skips and reports any registry that refuses the same version twice.
 
-pub.dev is not wired yet. Until a registry is live, its release step is a no-op that says so.
+crates.io and pub.dev use GitHub trusted publishing with short-lived OpenID Connect tokens.
+Each crate trusts `.github/workflows/release.yml`. The pub.dev package trusts this repository
+and the `v{{version}}` tag pattern. Neither registry needs a repository secret.
 
 Maven Central requires the `ws.quran` namespace to be verified in the Central Portal and four
 repository secrets: `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `MAVEN_SIGNING_KEY`, and

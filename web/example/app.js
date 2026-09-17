@@ -23,7 +23,9 @@
 
   const canvas = $('cv'), stage = $('stage'), paper = $('paper');
   const renderer = new CanvasRenderer(canvas);
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  // Keep at least two backing pixels per CSS pixel for smooth unhinted paths. Above that,
+  // match the display instead of supersampling again; the browser would only downsample it.
+  const dpr = Math.min(Math.max(2, window.devicePixelRatio || 1), 3);
 
   const S = {
     page: null, bytes: 0, loadMs: 0, n: src.pages[0],
