@@ -121,10 +121,15 @@ class QvpPageView extends StatefulWidget {
     this.paperShadow = true,
     this.minScale = kMinZoom,
     this.maxScale = kMaxZoom,
+    this.onZoomChanged,
   });
 
   final QvpPage page;
   final QvpViewLayout layout;
+
+  /// The size the reader is at changed: a pinch committed, or a step was asked for. The page
+  /// reflows as they zoom, so this is where a host redraws its own furniture.
+  final void Function(QvpZoom)? onZoomChanged;
 
   /// Paper colour behind the ink (null = transparent).
   final Color? paper;
@@ -168,7 +173,9 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
 
   // scale gesture
   double _gScale = 1, _gOx = 0, _gOy = 0;
-  Offset _gFocal = Offset.zero;
+  /// Where the reader's zoom control stands, and where it stood when a pinch began.
+  QvpZoom _zoom = const QvpZoom();
+  QvpZoom _gZoom = const QvpZoom();
 
   QvpViewController get controller => _ctl;
   QvpPage get page => widget.page;
@@ -249,9 +256,15 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   }
 
   // ── layout & fit (engine layout, then pan/zoom on top) ──
+  /// The spec the page is laid out under: the reader's layout, with the size their zoom control
+  /// asks for written onto it. The engine decides what that is.
+  QvpLayoutSpec _spec(Size size) {
+    final base = widget.layout.toSpec(size.width, size.height);
+    return page.zoomSpec(base, _zoom);
+  }
+
   void _relayout(Size size) {
-    final p = page;
-    p.layout(widget.layout.toSpec(size.width, size.height));
+    page.layout(_spec(size));
     _laidOut = widget.layout;
     _size = size;
     _ctl.viewport = size;
@@ -259,9 +272,11 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
 
   void _fit(Size size) {
     final l = page.currentLayout!;
-    _ctl.scale = l.fitScale;
+    // A reflowed page is taller than the screen because the reader asked for it: show the top
+    // and let them scroll, rather than shrinking it back to fit.
+    _ctl.scale = l.reflowed ? 1 : l.fitScale;
     _ctl.offsetX = l.fitX;
-    _ctl.offsetY = l.fitY;
+    _ctl.offsetY = l.reflowed ? 0 : l.fitY;
     _ctl._fitRequested = false;
   }
 
@@ -294,16 +309,49 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     _gScale = _ctl.scale;
     _gOx = _ctl.offsetX;
     _gOy = _ctl.offsetY;
-    _gFocal = d.localFocalPoint;
+    // where the control stood when the fingers went down: the engine measures them against this,
+    // so a slow pinch walks the steps one at a time instead of running away through them
+    _gZoom = _zoom;
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
-    if (!widget.panZoomEnabled) return;
-    final ns = (_gScale * d.scale).clamp(widget.minScale, widget.maxScale);
-    final k = ns / _gScale;
+    if (!widget.panZoomEnabled || _size == Size.zero) return;
     final f = d.localFocalPoint;
-    _ctl.set(scale: ns, offsetX: f.dx - (_gFocal.dx - _gOx) * k, offsetY: f.dy - (_gFocal.dy - _gOy) * k);
+    // The engine owns the whole pinch: which step it lands on, when it commits, and what holds
+    // the reader's place when the page reflows under the fingers.
+    final c = page.zoomPinch(
+      widget.layout.toSpec(_size.width, _size.height),
+      _gZoom,
+      QvpView(scale: _gScale, offsetX: _gOx, offsetY: _gOy),
+      d.scale,
+      f.dx,
+      f.dy,
+    );
+    if (c.relaid) {
+      _zoom = c.zoom;
+      page.readLayout();
+      widget.onZoomChanged?.call(c.zoom);
+    }
+    _ctl.set(scale: c.view.scale, offsetX: c.view.offsetX, offsetY: c.view.offsetY);
   }
+
+  /// Move the control to one of the page's steps: 0 is the printed page.
+  void zoomToStep(int step) {
+    if (_size == Size.zero) return;
+    final c = page.zoomToStep(
+      widget.layout.toSpec(_size.width, _size.height),
+      _zoom,
+      step,
+      QvpView(scale: _ctl.scale, offsetX: _ctl.offsetX, offsetY: _ctl.offsetY),
+    );
+    setState(() => _zoom = c.zoom);
+    page.readLayout();
+    _ctl.set(scale: c.view.scale, offsetX: c.view.offsetX, offsetY: c.view.offsetY);
+    widget.onZoomChanged?.call(c.zoom);
+  }
+
+  /// Where the reader's zoom control stands.
+  QvpZoom get zoom => _zoom;
 
   void _onLongPressStart(LongPressStartDetails d) {
     if (!widget.selectionEnabled) return;
@@ -466,11 +514,14 @@ class _QvpPainter extends CustomPainter {
   final Color? paper;
   final bool paperShadow;
 
-  /// Transform of one line: (scale, tx, ty) in logical px.
-  (double, double, double) _lineTf(QvpLayout? l, int line) {
-    final ls = l?.scale ?? 1, lox = l?.offsetX ?? 0, loy = l?.offsetY ?? 0;
-    final dy = l != null && line < l.lineDy.length ? l.lineDy[line] : 0.0;
-    return (view.scale * ls, view.offsetX + view.scale * lox, view.offsetY + view.scale * (loy + dy * ls));
+  /// Put the canvas under one placement of the draw list: page units in, logical px out. A
+  /// reflowed page moves words between rows, so a path is placed by the group the engine put it
+  /// in and not by the line it was printed on.
+  void _placeAt(ui.Canvas c, QvpLayout? l, QvpPlacement q) {
+    final ls = l?.scale ?? 1;
+    final s = view.scale * ls;
+    c.translate(view.offsetX + view.scale * ((l?.offsetX ?? 0) + q.dx * ls), view.offsetY + view.scale * ((l?.offsetY ?? 0) + q.dy * ls));
+    c.scale(s * q.kx, s * q.ky);
   }
 
   void _drawBoxes(ui.Canvas c, List<QvpBox> boxes) {
@@ -535,20 +586,22 @@ class _QvpPainter extends CustomPainter {
       final paint = ui.Paint()
         ..color = QvpColor.toColor(ink)
         ..isAntiAlias = true;
+      // The engine says what this layout draws and where: `{path, placement}` pairs in drawing
+      // order, with omitted paths already gone and a repeated one appearing twice. One loop
+      // draws any page, printed or reflowed.
+      final draws = page.layoutDrawList();
+      final places = page.layoutPlacements();
       var cur = -1, n = 0, open = false;
-      for (var i = 0; i < page.nPaths; i++) {
-        if (styledSet.contains(i)) continue;
-        final ln = page.pathLine(i);
-        if (ln != cur) {
+      for (final d in draws) {
+        if (styledSet.contains(d.path)) continue;
+        if (d.placement != cur) {
           if (open) c.restore();
-          final (s, tx, ty) = _lineTf(l, ln);
           c.save();
-          c.translate(tx, ty);
-          c.scale(s);
+          _placeAt(c, l, d.placement < places.length ? places[d.placement] : QvpPlacement.identity);
           open = true;
-          cur = ln;
+          cur = d.placement;
         }
-        c.drawPath(paths[i], paint);
+        c.drawPath(paths[d.path], paint);
         n++;
       }
       if (open) c.restore();
@@ -581,21 +634,26 @@ class _QvpPainter extends CustomPainter {
       canvas.restore();
     }
 
-    // 3. styled paths
+    // 3. styled paths, placed the same way the ink under them was: by the group the engine put
+    // the path in, which is the only answer that holds once a page has reflowed.
     if (styled.isNotEmpty) {
+      final places = page.layoutPlacements();
+      final ofPath = <int, int>{};
+      for (final d in page.layoutDrawList()) {
+        ofPath.putIfAbsent(d.path, () => d.placement);
+      }
       final paint = ui.Paint()..isAntiAlias = true;
       var cur = -1, open = false;
       for (final s in styled) {
         if ((s.color & 0xff) == 0) continue;
-        final ln = page.pathLine(s.path);
-        if (ln != cur) {
+        final pi = ofPath[s.path];
+        if (pi == null) continue; // this layout does not draw it
+        if (pi != cur) {
           if (open) canvas.restore();
-          final (sc, tx, ty) = _lineTf(l, ln);
           canvas.save();
-          canvas.translate(tx, ty);
-          canvas.scale(sc);
+          _placeAt(canvas, l, pi < places.length ? places[pi] : QvpPlacement.identity);
           open = true;
-          cur = ln;
+          cur = pi;
         }
         paint.color = QvpColor.toColor(s.color);
         canvas.drawPath(paths[s.path], paint);
