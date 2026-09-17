@@ -118,6 +118,11 @@ export interface Mask { target?: Target; from?: number; mode?: MaskMode; blockCo
 export interface Reveal { lit?: number; byAyah?: boolean; grey?: Color; ink?: Color; ayahMarks?: boolean; ms?: number; at?: number }
 
 // ── the view ─────────────────────────────────────────────────────────────────────────────────
+/** What a pinch does to the page: the engine owns the policy, this names which one. */
+export type ZoomMode = 'stepped' | 'continuous' | 'magnify';
+/** Where the reader's zoom control stands: the mode, the step, and the size in force. */
+export interface Zoom { mode: ZoomMode; step: number; zoom: number }
+
 export interface QvpPageViewProps extends ViewProps {
   /** 'asset://pages/042.qvp' | 'file:///…' | '/abs/path' | 'base64:…' — the package ships no page data. */
   pageUri?: string;
@@ -129,6 +134,13 @@ export interface QvpPageViewProps extends ViewProps {
   lineSpacing?: number; fillHeight?: boolean;
   paperColor?: Color; defaultInk?: Color; selectionBand?: Color;
   selectionEnabled?: boolean; zoomEnabled?: boolean; hitMaxDistance?: number;
+  /** What a pinch does to the page. `stepped` reflows onto the page's own zoom steps and is
+   * the default a reader gets; `continuous` reflows to the zoom the fingers ask for; `magnify`
+   * scales the printed page and leaves the rows alone. */
+  zoomMode?: ZoomMode;
+  /** The step to sit on: 0 is the printed page, 1 upwards the page's own steps. Leave it out
+   * to let the reader's pinch drive it. */
+  zoomStep?: number;
   theme?: Theme | null;
   styles?: StyleRule[];
   highlights?: Highlight[];
@@ -140,15 +152,23 @@ export interface QvpPageViewProps extends ViewProps {
   onSelectionChanged?: (e: SelectionInfo) => void;
   onPageLoad?: (e: PageInfo) => void;
   onRevealChanged?: (e: { steps: number; at: number | null }) => void;
+  /** A sideways flick the engine read as a page turn, in pages, in reading order: a mushaf is
+   * read right to left, so a flick to the right gives +1. Which page that is belongs to the
+   * app, so the view turns nothing by itself. */
+  onSwipe?: (e: { pages: number }) => void;
+  /** The size the reader is at changed: a pinch committed, or a step was asked for. */
+  onZoomChanged?: (e: Zoom) => void;
   onError?: (e: { message: string }) => void;
 }
-type NativeProps = ViewProps & Omit<QvpPageViewProps, 'onWordTap' | 'onDecorationTap' | 'onEmptyTap' | 'onSelectionChanged' | 'onPageLoad' | 'onRevealChanged' | 'onError'> & {
+type NativeProps = ViewProps & Omit<QvpPageViewProps, 'onWordTap' | 'onDecorationTap' | 'onEmptyTap' | 'onSelectionChanged' | 'onPageLoad' | 'onRevealChanged' | 'onSwipe' | 'onZoomChanged' | 'onError'> & {
   onWordTap?: (e: NativeSyntheticEvent<{ word: Word; hit: Hit }>) => void;
   onDecorationTap?: (e: NativeSyntheticEvent<{ decoration: Deco; hit: Hit }>) => void;
   onEmptyTap?: (e: NativeSyntheticEvent<{}>) => void;
   onSelectionChanged?: (e: NativeSyntheticEvent<SelectionInfo>) => void;
   onPageLoad?: (e: NativeSyntheticEvent<PageInfo>) => void;
   onRevealChanged?: (e: NativeSyntheticEvent<{ steps: number; at: number | null }>) => void;
+  onSwipe?: (e: NativeSyntheticEvent<{ pages: number }>) => void;
+  onZoomChanged?: (e: NativeSyntheticEvent<Zoom>) => void;
   onError?: (e: NativeSyntheticEvent<{ message: string }>) => void;
 };
 const NativeQvpPageView = requireNativeComponent<NativeProps>('QvpPageView') as HostComponent<NativeProps>;
@@ -172,7 +192,7 @@ export type QvpPageViewHandle = PageApi & { tag: () => number };
 
 export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(function QvpPageView(props, ref) {
   const native = useRef<any>(null);
-  const { theme, styles, highlights, mask, reveal, paperColor, defaultInk, selectionBand, onWordTap, onDecorationTap, onEmptyTap, onSelectionChanged, onPageLoad, onRevealChanged, onError, ...rest } = props;
+  const { theme, styles, highlights, mask, reveal, paperColor, defaultInk, selectionBand, onWordTap, onDecorationTap, onEmptyTap, onSelectionChanged, onPageLoad, onRevealChanged, onSwipe, onZoomChanged, onError, ...rest } = props;
   const tag = () => findNodeHandle(native.current) ?? -1;
   useImperativeHandle(ref, () => ({ tag, ...bindPage(tag) }), []);
   const nTheme = useMemo(() => (theme ? normColors(theme) : null), [theme]);
@@ -198,6 +218,8 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
       onSelectionChanged={onSelectionChanged ? (e: NativeSyntheticEvent<SelectionInfo>) => onSelectionChanged(e.nativeEvent) : undefined}
       onPageLoad={onPageLoad ? (e: NativeSyntheticEvent<PageInfo>) => onPageLoad(e.nativeEvent) : undefined}
       onRevealChanged={onRevealChanged ? (e: NativeSyntheticEvent<{ steps: number; at: number | null }>) => onRevealChanged(e.nativeEvent) : undefined}
+      onSwipe={onSwipe ? (e: NativeSyntheticEvent<{ pages: number }>) => onSwipe(e.nativeEvent) : undefined}
+      onZoomChanged={onZoomChanged ? (e: NativeSyntheticEvent<Zoom>) => onZoomChanged(e.nativeEvent) : undefined}
       onError={onError ? (e: NativeSyntheticEvent<{ message: string }>) => onError(e.nativeEvent) : undefined}
     />
   );

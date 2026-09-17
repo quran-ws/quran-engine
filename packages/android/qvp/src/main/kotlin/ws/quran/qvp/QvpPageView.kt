@@ -53,6 +53,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
      * after this one, -1 the page before it. The muṣḥaf's own order, so a host adds it to the
      * page it is on and never has to think about which way the book runs. */
     var onSwipe: ((Int) -> Unit)? = null
+    /** The size the reader is at changed: a pinch committed, or a step was asked for. */
+    var onZoomChanged: ((QvpZoom) -> Unit)? = null
     var zoomEnabled = true
     var selectionEnabled = true
     /** What a pinch does to the page. Stepped is what a reader gets: the pinch lands on one of
@@ -300,7 +302,9 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     /** Take what a gesture produced: the page is already laid out at the new size, and the view
      * already holds the word the fingers were on. */
     private fun apply(c: QvpZoomChange) {
+        val moved = c.zoom.step != zoom.step || c.zoom.zoom != zoom.zoom || c.zoom.mode != zoom.mode
         zoom = c.zoom
+        if (moved) onZoomChanged?.invoke(c.zoom)
         viewScale = c.view.scale; viewOx = c.view.offsetX; viewOy = c.view.offsetY
         if (c.relaid) { baseKey = "" }
         invalidate()

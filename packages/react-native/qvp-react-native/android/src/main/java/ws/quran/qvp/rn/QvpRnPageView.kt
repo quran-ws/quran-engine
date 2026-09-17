@@ -72,6 +72,10 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         inner.onWordTap = { w, h -> page?.let { p -> emit("onWordTap", mapOf("word" to Marshal.word(p, w), "hit" to Marshal.hit(p, h))) } }
         inner.onDecorationTap = { d, h -> page?.let { p -> emit("onDecorationTap", mapOf("decoration" to Marshal.decoration(d), "hit" to Marshal.hit(p, h))) } }
         inner.onEmptyTap = { emit("onEmptyTap", emptyMap()) }
+        // The engine says a flick turns the page and by how many, in reading order. Which page
+        // that is belongs to the app, so this is an event and not a page change.
+        inner.onSwipe = { pages -> emit("onSwipe", mapOf("pages" to pages)) }
+        inner.onZoomChanged = { z -> emit("onZoomChanged", mapOf("mode" to z.mode.name.lowercase(), "step" to z.step, "zoom" to z.zoom)) }
         inner.onSelectionChanged = { page?.let { p -> emit("onSelectionChanged", Marshal.selection(p)) } }
     }
 
@@ -85,6 +89,29 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     fun setPadBottomDp(v: Float) { inner.padBottom = v * density; layoutDirty = true }
     fun setPadSideDp(v: Float) { inner.padSide = v * density; layoutDirty = true }
     fun setLineSpacingProp(v: Float) { inner.lineSpacing = v; layoutDirty = true }
+
+    // ── the reader's zoom control ──
+    // What a pinch does to the page: reflow onto the page's own steps (the default), reflow to
+    // the zoom the fingers ask for, or magnify the printed page. The engine owns the policy;
+    // these props only say which one the app wants and which step to sit on.
+    var zoomModeProp: String? = null
+    var zoomStepProp: Int = -1
+    /** The zooms this page's steps land on, for an app drawing its own size control. */
+    val zoomSteps: FloatArray get() = page?.zoomSteps(inner.layoutSpec()) ?: FloatArray(0)
+
+    private fun commitZoom() {
+        val p = page ?: return
+        if (!p.isOpen) return
+        zoomModeProp?.let { name ->
+            val mode = when (name) {
+                "continuous" -> QvpZoomMode.CONTINUOUS
+                "magnify" -> QvpZoomMode.MAGNIFY
+                else -> QvpZoomMode.STEPPED
+            }
+            if (mode != inner.zoomMode) inner.zoomMode = mode
+        }
+        if (zoomStepProp >= 0 && zoomStepProp != inner.zoom.step) inner.zoomToStep(zoomStepProp)
+    }
     fun setFillHeightProp(v: Boolean) { inner.fillHeight = v; layoutDirty = true }
 
     // ── bytes ──
@@ -109,6 +136,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
                 applyInk(p); applyTheme(p); applyStyles(p); applyHighlights(p); applyMask(p); applyReveal(p)
             }
             if (layoutDirty) { layoutDirty = false; inner.relayout(); resetView() }
+            commitZoom()
             inner.invalidate()
         } catch (e: Exception) {
             Log.e("QvpRn", "commit failed", e)
