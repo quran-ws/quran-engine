@@ -5,6 +5,13 @@ All notable changes to the engine and its packages. The format follows
 `docs/standards/VERSIONING.md`. Every package shares the version listed here.
 
 ## [Unreleased]
+### Fixed
+- A page draws what is inside its own box and nothing beyond it. The artwork for page 17
+  puts that page's printed page number below the box and its running head above it — it is
+  the only page of 604 that draws anything outside — and every host drew that ink wherever
+  the layout happened to put it. The paths, their boxes and the path numbering are all
+  unchanged, so a crop and an SVG export still carry every stroke the artwork drew.
+
 ### Changed
 - Page data is rebuilt from `quran-svg-elements` v1.1.2, which moves ink that belongs to a
   surah name out of the basmalah beside it, on pages 77, 282 and 428. The other 601 pages
