@@ -64,12 +64,23 @@ fn spec() -> LayoutSpec {
     }
 }
 
+/// A page file of the directory, and not something a filesystem left beside one.
+///
+/// macOS writes an AppleDouble sidecar named `._<file>` next to a file on a filesystem that
+/// cannot hold its metadata, and those survive into a tar built there: `._001.qvp` carries the
+/// `.qvp` extension and none of the data, so a walk that asks only for the extension reads it
+/// and fails on the magic.
+fn is_page(p: &Path) -> bool {
+    p.extension().is_some_and(|x| x == "qvp")
+        && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| !n.starts_with('.'))
+}
+
 /// Build the table from a directory of `.qvp` pages.
 pub fn generate(pages_dir: &Path) -> Result<Table, String> {
     let mut files: Vec<_> = std::fs::read_dir(pages_dir)
         .map_err(|e| format!("{}: {e}", pages_dir.display()))?
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|x| x == "qvp"))
+        .filter(|p| is_page(p))
         .collect();
     files.sort();
     if files.is_empty() {
@@ -157,7 +168,7 @@ pub fn validate(pages_dir: &Path, table: &Table) -> Result<(), String> {
     let mut files: Vec<_> = std::fs::read_dir(pages_dir)
         .map_err(|e| format!("{}: {e}", pages_dir.display()))?
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|x| x == "qvp"))
+        .filter(|p| is_page(p))
         .collect();
     files.sort();
     for f in &files {

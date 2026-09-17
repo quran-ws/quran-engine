@@ -146,7 +146,10 @@ fn main() {
             let mut files: Vec<PathBuf> = fs::read_dir(&args[2])
                 .expect("read dir")
                 .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.extension().map(|x| x == "svg").unwrap_or(false))
+                // ._<file> is the AppleDouble sidecar macOS leaves beside a file; it carries
+                // the extension and none of the drawing
+                .filter(|p| p.extension().is_some_and(|x| x == "svg"))
+                .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| !n.starts_with('.')))
                 .collect();
             files.sort();
             let results: Vec<_> = files
