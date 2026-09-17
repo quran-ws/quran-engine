@@ -40,6 +40,8 @@ object QvpEngine {
 class QvpPage(bytes: ByteArray) : AutoCloseable {
     private var nativeHandle: Long = QvpNative.pageLoad(bytes)
     private val h: Long get() = nativeHandle.takeIf { it != 0L } ?: error("QvpPage is closed")
+    /** False once [close] has been called. Every call into the engine needs an open page. */
+    val isOpen: Boolean get() = nativeHandle != 0L
     init { require(nativeHandle != 0L) { "qvp_page_load failed (not a QVP1 file?)" } }
 
     val isClosed: Boolean get() = nativeHandle == 0L
@@ -53,7 +55,6 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     val lineSpacing: Float
     var currentLayout: QvpLayout? = null; private set
     var defaultInk: Int = QvpDefaults.INK; private set
-    private var paths: Array<Path>? = null
 
     init {
         val i = QvpNative.pageInfo(h)
@@ -78,25 +79,43 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun pathNthInWord(i: Int) = (table[i * 8 + 7] shr 8) and 0xff
     fun pathNthMark(i: Int) = ((table[i * 8 + 7] shr 16) and 0xff).let { if (it == 0xff) -1 else it }
     /** android.graphics.Path per engine path, in page units, built once. */
+    /** Every path of the page, each one built the first time it is drawn.
+     *
+     * A page carries hundreds of outlines and a reader sees one screen of them, so building them
+     * all before the page appears is work done in front of the reader for ink they may never
+     * scroll to. Each is built once and kept.
+     */
     fun buildPaths(): Array<Path> {
-        paths?.let { return it }
-        val out = Array(nPaths) { Path() }
-        for (i in 0 until nPaths) {
-            val p = out[i]; var o = table[i * 8]; val oe = o + table[i * 8 + 1]; var k = table[i * 8 + 2]
-            while (o < oe) {
-                when (ops[o].toInt()) {
-                    0 -> { p.moveTo(pts[k], pts[k + 1]); k += 2 }
-                    1 -> { p.lineTo(pts[k], pts[k + 1]); k += 2 }
-                    2 -> { p.quadTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3]); k += 4 }
-                    3 -> { p.cubicTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3], pts[k + 4], pts[k + 5]); k += 6 }
-                    4 -> p.close()
-                }
-                o++
-            }
-            p.fillType = if (pathEvenOdd(i)) Path.FillType.EVEN_ODD else Path.FillType.WINDING
-        }
-        paths = out; return out
+        lazyPaths?.let { return it }
+        val out = Array(nPaths) { LAZY }
+        lazyPaths = out
+        return out
     }
+
+    /** The path at [i], built if this is the first time it is asked for. */
+    fun path(i: Int): Path {
+        val all = buildPaths()
+        val kept = all[i]
+        if (kept !== LAZY) return kept
+        val p = Path()
+        var o = table[i * 8]; val oe = o + table[i * 8 + 1]; var k = table[i * 8 + 2]
+        while (o < oe) {
+            when (ops[o].toInt()) {
+                0 -> { p.moveTo(pts[k], pts[k + 1]); k += 2 }
+                1 -> { p.lineTo(pts[k], pts[k + 1]); k += 2 }
+                2 -> { p.quadTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3]); k += 4 }
+                3 -> { p.cubicTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3], pts[k + 4], pts[k + 5]); k += 6 }
+                4 -> p.close()
+            }
+            o++
+        }
+        p.fillType = if (pathEvenOdd(i)) Path.FillType.EVEN_ODD else Path.FillType.WINDING
+        all[i] = p
+        return p
+    }
+
+    private var lazyPaths: Array<Path>? = null
+    private companion object { val LAZY = Path() }
 
     // ── words / text ──
     fun wordKey(i: Int) = words[i].wordKey
@@ -153,6 +172,71 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun layoutLineSpacingToFill(spec: QvpLayoutSpec, max: Float = 0f): Float = QvpNative.layoutLineSpacingToFill(h, spec.floats(), max)
     /** The share of the padded viewport left empty when the page is fitted to width. */
     fun layoutWastedFraction(spec: QvpLayoutSpec): Float = QvpNative.layoutWastedFraction(h, spec.floats())
+    /** Read back the layout the page already has, without computing one: what to call after the
+     * engine laid the page out itself, as the zoom control does. */
+    fun readLayout(): QvpLayout? {
+        val v = QvpNative.layoutCurrent(h) ?: return null
+        val n = v[6].toInt()
+        return QvpLayout(v[0], v[1], v[2], v[3], v[4], v[5], FloatArray(n) { v[12 + it * 3] }, FloatArray(n) { v[13 + it * 3] }, FloatArray(n) { v[14 + it * 3] },
+                         v[7], v[8], v[9], v[10] != 0f, v[11].toInt()).also { currentLayout = it }
+    }
+
+    // ── the reader's zoom control ──
+    /** One frame of a pinch: `factor` is the distance between the fingers against their distance
+     * when they went down, and (x, y) the point between them. */
+    fun zoomPinch(spec: QvpLayoutSpec, zoom: QvpZoom, view: QvpView, factor: Float, x: Float, y: Float): QvpZoomChange =
+        change(QvpNative.zoomPinch(h, spec.floats(), zoom.floats(), view.floats(), factor, x, y))
+    /** The control moved straight to a step: a size button, a double tap, a reset. Step 0 is printed. */
+    fun zoomToStep(spec: QvpLayoutSpec, zoom: QvpZoom, step: Int, view: QvpView): QvpZoomChange =
+        change(QvpNative.zoomToStep(h, spec.floats(), zoom.floats(), step, view.floats()))
+    /** The same control under another policy, keeping the size the reader is at. */
+    fun zoomMode(spec: QvpLayoutSpec, zoom: QvpZoom, mode: QvpZoomMode): QvpZoom =
+        QvpZoom.of(QvpNative.zoomMode(h, spec.floats(), zoom.floats(), mode.id))
+    /** The same control on this page: what a page turn keeps. A step carries as a step. */
+    fun zoomCarried(spec: QvpLayoutSpec, zoom: QvpZoom): QvpZoom =
+        QvpZoom.of(QvpNative.zoomCarried(h, spec.floats(), zoom.floats()))
+    /** `spec` with this control's zoom in it: what the host lays out and draws with. */
+    fun zoomSpec(spec: QvpLayoutSpec, zoom: QvpZoom): QvpLayoutSpec {
+        val v = QvpNative.zoomSpec(h, spec.floats(), zoom.floats())
+        val r = if (v[12] > 0f) QvpReflowSpec(v[12], spec.reflow?.fill ?: QvpFill.CENTRED, spec.reflow?.breaks ?: QvpBreaks.FITTED,
+                                              spec.reflow?.gaps ?: QvpGapMode.UNIFORM, spec.reflow?.wordGap ?: 1f,
+                                              spec.reflow?.relax ?: QvpDefaults.REFLOW_RELAX, spec.reflow?.maxStretch ?: QvpDefaults.REFLOW_MAX_STRETCH) else null
+        return spec.copy(reflow = r)
+    }
+    /** The reflow zoom one step of this page's control means; step 0 is the printed page. */
+    fun zoomAtStep(spec: QvpLayoutSpec, step: Int): Float = QvpNative.zoomAtStep(h, spec.floats(), step)
+    /** The zoom steps this page ships with, lowest first. Zoom 1, the printed page, is the step before them. */
+    fun zoomSteps(spec: QvpLayoutSpec): FloatArray = QvpNative.zoomSteps(h, spec.floats())
+    /** The zoom each step of a reader's control lands on for this page, searched rather than read. */
+    fun zoomLevels(spec: QvpLayoutSpec, nominals: FloatArray? = null, band: Float = 0f): FloatArray = QvpNative.zoomLevels(h, spec.floats(), nominals, band)
+    /** Every zoom the search weighs for one step, as {zoom, cost} pairs. */
+    fun zoomLevelCandidates(spec: QvpLayoutSpec, nominal: Float, band: Float = 0f, floor: Float = 0f): FloatArray =
+        QvpNative.zoomLevelCandidates(h, spec.floats(), nominal, band, floor)
+    /** The largest reflow zoom at which every word of this page still fits a row. */
+    fun reflowMaxZoom(spec: QvpLayoutSpec): Float = QvpNative.reflowMaxZoom(h, spec.floats())
+    /** What a sideways drag on this page means: pan it, or turn the page. */
+    fun sidewaysDrag(zoom: QvpZoom, view: QvpView, fitScale: Float = 0f): QvpSideways =
+        if (QvpNative.sidewaysDrag(h, zoom.floats(), view.floats(), fitScale) == 1) QvpSideways.TURN_PAGE else QvpSideways.PAN
+    private fun change(v: FloatArray) = QvpZoomChange(QvpZoom.of(v), QvpView(v[3], v[4], v[5]), v[6] != 0f)
+        .also { if (it.relaid) readLayout() }
+
+    // ── a reflowed page: where the ink went ──
+    /** Everything the current layout draws, in drawing order. `band` holds it to a band of the
+     * laid-out page, in viewport px; null draws the whole page. */
+    fun layoutDrawList(band: Pair<Float, Float>? = null): List<QvpDraw> {
+        val v = QvpNative.layoutDrawList(h, band?.first ?: 0f, band?.second ?: 0f)
+        return (0 until v.size / 2).map { QvpDraw(v[it * 2], v[it * 2 + 1]) }
+    }
+    /** What a draw list's placement indexes: every group, then every repeat. */
+    fun layoutPlacements(): List<QvpPlacement> {
+        val v = QvpNative.layoutPlacements(h)
+        return (0 until v.size / 4).map { QvpPlacement(v[it * 4], v[it * 4 + 1], v[it * 4 + 2], v[it * 4 + 3]) }
+    }
+    /** The words of a reflowed row, in reading order. */
+    fun rowWords(row: Int): IntArray = QvpNative.layoutRowWords(h, row)
+    /** The row a word landed on in a reflowed layout, or null. */
+    fun wordRow(word: Int): Int? = QvpNative.layoutWordRow(h, word).let { if (it == -1) null else it }
+
     /** The grid this page is laid out inside. */
     val grid: QvpGrid get() = QvpNative.pageGrid(h).let { QvpGrid(it[0].toInt(), it[1]) }
     fun wordBoundsView(i: Int): FloatArray? = QvpNative.wordBoundsView(h, i)
