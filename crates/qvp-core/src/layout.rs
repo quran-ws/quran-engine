@@ -397,7 +397,7 @@ impl Page {
         let mut groups: Vec<Placement> = Vec::with_capacity(n_words + n_decos * 2);
         groups.extend_from_slice(&flow.word_place);
         groups.extend_from_slice(&flow.deco_place);
-        groups.extend_from_slice(&flow.sajdah_place);
+        groups.extend_from_slice(&flow.sajdah_line_place);
         let stroke = self.sajdah_line_paths();
         let path_group: Vec<u32> = (0..self.geom.table.len())
             .map(|i| {

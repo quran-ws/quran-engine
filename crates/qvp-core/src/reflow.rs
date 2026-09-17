@@ -156,10 +156,10 @@ pub struct Reflowed {
     pub word_row: Vec<u32>,
     /// Placement of every decoration, indexed by decoration. A decoration's sajdah line is not
     /// placed by this: the stroke goes over the words it marks, wherever they are, so it has
-    /// [`Reflowed::sajdah_place`] of its own.
+    /// [`Reflowed::sajdah_line_place`] of its own.
     pub deco_place: Vec<Placement>,
     /// Placement of a decoration's sajdah line stroke, indexed by decoration.
-    pub sajdah_place: Vec<Placement>,
+    pub sajdah_line_place: Vec<Placement>,
     /// Extra drawings of a decoration, one per further row its words occupy.
     pub repeats: Vec<Repeat>,
     /// Width of a row in page units.
@@ -273,7 +273,7 @@ impl Page {
                         .first()
                         .and_then(|&pi| self.word_before_path(pi, median))
                         .unwrap_or(NONE),
-                    // a rub' al-hizb opens a division, so it travels with the word it opens
+                    // a rubu_al_hizb opens a division, so it travels with the word it opens
                     // and no row can close with it
                     DecoKind::DivisionMark => self
                         .deco_other_paths(di)
@@ -312,7 +312,7 @@ impl Page {
     }
 
     /// The word that follows a mark in reading order: the one to its left on the line the mark
-    /// was resolved to. A rub' al-hizb stands where its division starts, so it travels with the
+    /// was resolved to. A rubu_al_hizb stands where its division starts, so it travels with the
     /// word it opens and can never be left at the end of a row.
     pub(crate) fn word_after_path(&self, pi: u32, tolerance: f32) -> Option<u32> {
         let d = self.data();
@@ -746,7 +746,7 @@ impl Page {
             word_place: vec![Placement::IDENTITY; d.words.len()],
             word_row: vec![NONE; d.words.len()],
             deco_place: vec![Placement::IDENTITY; d.decorations.len()],
-            sajdah_place: vec![Placement::IDENTITY; d.decorations.len()],
+            sajdah_line_place: vec![Placement::IDENTITY; d.decorations.len()],
             repeats: Vec::new(),
             as_printed: false,
             omitted: Vec::new(),
@@ -1144,7 +1144,7 @@ impl Page {
                     .unwrap_or(0.0);
                 let p = Placement { dx: sx0 - kx * bx0, dy, kx, ky: 1.0 };
                 if n == 0 {
-                    out.sajdah_place[di] = p;
+                    out.sajdah_line_place[di] = p;
                 } else {
                     // only the stroke is drawn again; the sign beside it is printed once
                     for pi in deco.first_path..deco.first_path + deco.n_paths as u32 {
@@ -1191,7 +1191,8 @@ impl Page {
         if y0.is_finite() {
             // the print reproduced: the page keeps its own origin, so its top margin survives
             let shift = if printed_y.is_some() { top - pitch / 2.0 } else { top - pitch / 2.0 - y0 };
-            for p in out.word_place.iter_mut().chain(out.deco_place.iter_mut()).chain(out.sajdah_place.iter_mut()) {
+            for p in out.word_place.iter_mut().chain(out.deco_place.iter_mut()).chain(out.sajdah_line_place.iter_mut())
+            {
                 p.dy += shift;
             }
             for r in out.repeats.iter_mut() {

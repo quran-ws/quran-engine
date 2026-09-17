@@ -329,10 +329,10 @@ then hold to what a reader expects of the page:
 - A sajdah mark closes the word before it and runs with that word, so no row opens with it
   either. It is followed by the medallion of its own ayah, and the two are read as one sign, so
   the engine gives them the same word whatever their geometry says.
-- A rub' al-hizb opens a division, so it runs with the word it opens and no row closes with it.
+- A rubu_al_hizb opens a division, so it runs with the word it opens and no row closes with it.
 
 A mark printed inside the text block claims its own room on the row and keeps the distance the
-print put between it and its word. In this mushaf every rub' al-hizb and sajdah mark is printed
+print put between it and its word. In this mushaf every rubu_al_hizb and sajdah mark is printed
 in the text. A mark printed out in the sheet's margin, where a reflowed row has no room, keeps
 the margin and the side the print gives it and follows its word down to the new row.
 The sajdah line is drawn over the words it marks, wherever they now are: when the span breaks
