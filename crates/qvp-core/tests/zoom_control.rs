@@ -39,25 +39,53 @@ fn a_control_opens_on_the_printed_page() {
     assert!(p.zoom_spec(&s, z).reflow.is_none(), "step 0 is the printed page, and asks for no reflow");
 }
 
+/// A step is left on the nearer of the midpoint to the next step and a fixed small reach, so
+/// this measures against whichever of the two the page in hand puts first.
+fn leaves_at(from: f32, to: f32) -> f32 {
+    let midpoint = (from * to).sqrt();
+    let reach = from * (1.0 + qvp_core::defaults::ZOOM_LEAVE_EFFORT);
+    midpoint.min(reach) * (1.0 + qvp_core::defaults::ZOOM_SNAP_HYSTERESIS)
+}
+
 #[test]
-fn a_pinch_short_of_the_midpoint_moves_nothing() {
+fn a_pinch_short_of_the_reach_moves_nothing() {
     let Some(mut p) = page(428) else { return };
     let s = spec();
     p.layout(&s);
     let first = p.zoom_steps(&s)[0];
-    // just under the midpoint between the printed page and the first step
-    let c = p.zoom_pinch(&s, Zoom::default(), View::default(), first.sqrt() * 0.99, middle(&s));
+    // just short of what it takes to leave the printed page
+    let line = leaves_at(1.0, first);
+    let c = p.zoom_pinch(&s, Zoom::default(), View::default(), line * 0.99, middle(&s));
     assert!(!c.relaid, "the page was laid out again for a pinch that changed no row");
     assert_eq!(c.zoom.step, 0);
 }
 
+/// The reader's report: the control stuck at a step because that step sat above a wider gap
+/// than its neighbours, so leaving it took a much bigger squeeze.
 #[test]
-fn a_pinch_past_the_midpoint_lands_on_the_step_exactly() {
+fn every_step_takes_the_same_reach_to_leave() {
+    let Some(mut p) = page(428) else { return };
+    let s = spec();
+    p.layout(&s);
+    let n = p.zoom_steps(&s).len() as u32;
+    let reach = 1.0 + qvp_core::defaults::ZOOM_LEAVE_EFFORT;
+    let h = 1.0 + qvp_core::defaults::ZOOM_SNAP_HYSTERESIS;
+    for step in 1..=n {
+        let z = Zoom { mode: ZoomMode::Stepped, step, zoom: 0.0 };
+        // closing the fingers by the reach and a hair leaves the step, whichever step it is
+        let c = p.zoom_pinch(&s, z, View::default(), 0.99 / (reach * h), middle(&s));
+        assert_eq!(c.zoom.step, step - 1, "step {step} would not let go of a pinch out");
+    }
+}
+
+#[test]
+fn a_pinch_past_the_reach_lands_on_the_step_exactly() {
     let Some(mut p) = page(428) else { return };
     let s = spec();
     p.layout(&s);
     let first = p.zoom_steps(&s)[0];
-    let c = p.zoom_pinch(&s, Zoom::default(), View::default(), first.sqrt() * 1.1, middle(&s));
+    let line = leaves_at(1.0, first);
+    let c = p.zoom_pinch(&s, Zoom::default(), View::default(), line * 1.01, middle(&s));
     assert!(c.relaid);
     assert_eq!(c.zoom.step, 1);
     let r = p.zoom_spec(&s, c.zoom).reflow.expect("a step above the printed page reflows");
@@ -70,14 +98,17 @@ fn the_hysteresis_does_not_oscillate_at_a_boundary() {
     let s = spec();
     p.layout(&s);
     let steps = p.zoom_steps(&s);
-    let mid = (steps[0] * steps[1]).sqrt();
-    // fingers resting exactly on the boundary between the first two steps
-    let mut z = Zoom { mode: ZoomMode::Stepped, step: 1, zoom: 1.0 };
+    // fingers resting exactly on the line that leaves the first step
+    let held = Zoom { mode: ZoomMode::Stepped, step: 1, zoom: 1.0 };
+    let line = leaves_at(steps[0], steps[1]);
+    let factor = line / steps[0];
+    // A host holds the zoom the gesture began on and measures the fingers against that, so a
+    // hand resting still asks for the same step every frame however many frames it rests for.
+    let mut seen = Vec::new();
     for _ in 0..8 {
-        let c = p.zoom_pinch(&s, z, View::default(), mid / steps[0], middle(&s));
-        assert_eq!(c.zoom.step, 1, "a pinch sitting on the midpoint moved the page");
-        z = c.zoom;
+        seen.push(p.zoom_pinch(&s, held, View::default(), factor, middle(&s)).zoom.step);
     }
+    assert!(seen.windows(2).all(|w| w[0] == w[1]), "a hand resting still walked the steps: {seen:?}");
 }
 
 #[test]
@@ -292,4 +323,63 @@ fn zoomed_in_counts_both_roads() {
     assert!(Zoom::default().is_zoomed(View { scale: 2.0, ..settled }, 1.0), "a magnified view");
     let reflowed = Zoom { mode: ZoomMode::Stepped, step: 1, zoom: 1.35 };
     assert!(reflowed.is_zoomed(settled, 1.0), "a reflowed page, whatever the view is at");
+}
+
+/// A muṣḥaf is read right to left: a flick to the right turns to the next page. Every host used
+/// to work this out for itself, and a host that got the sign the wrong way round turned the
+/// book backwards.
+#[test]
+fn a_flick_to_the_right_turns_to_the_next_page() {
+    use qvp_core::{swipe_direction, swipe_pages};
+    let far = 200.0;
+    assert_eq!(swipe_pages(far, 0.0, 0.0, 0.0), 1, "a flick right is the next page");
+    assert_eq!(swipe_pages(-far, 0.0, 0.0, 0.0), -1, "a flick left is the page before");
+    assert_eq!(swipe_pages(0.0, far, 0.0, 0.0), 0, "a drag up and down turns nothing");
+    // the physical answer is still there for a host that wants it
+    assert_eq!(swipe_direction(far, 0.0, 0.0, 0.0), 1);
+}
+
+/// The reader's report: the control sticks at a step and a pinch out will not leave it, while
+/// the same pinch from a step above walks all the way down.
+#[test]
+fn a_pinch_out_leaves_every_step() {
+    let Some(mut p) = page(428) else { return };
+    let s = spec();
+    let f = middle(&s);
+    let n = p.zoom_steps(&s).len() as u32;
+    for start in 1..=n {
+        // the reader is at `start`, having got there however; now they pinch out
+        let mut z = Zoom { mode: ZoomMode::Stepped, step: start, zoom: 0.0 };
+        z.zoom = p.zoom_at_step(&s, start);
+        let held = z;
+        // what a host actually passes: the spec its current layout is in, which moves with every
+        // commit, while the gesture keeps measuring from where the fingers went down
+        let mut live_zoom = held;
+        let mut view = View::default();
+        let mut reached = start;
+        // one gesture, closing the fingers the whole way
+        let mut factor = 1.0f32;
+        while factor > 0.05 {
+            factor *= 0.97;
+            let in_force = p.zoom_spec(&s, live_zoom);
+            let c = p.zoom_pinch(&in_force, held, view, factor, f);
+            view = c.view;
+            live_zoom = c.zoom;
+            reached = reached.min(c.zoom.step);
+        }
+        assert_eq!(reached, 0, "a pinch out from step {start} only reached step {reached}");
+    }
+}
+
+#[test]
+fn a_magnifying_pinch_never_shrinks_the_page_inside_the_screen() {
+    let Some(mut p) = page(428) else { return };
+    let s = spec();
+    let fit = p.layout(&s).fit_scale;
+    let z = Zoom { mode: ZoomMode::Magnify, step: 0, zoom: 1.0 };
+    let settled = View { scale: fit, offset_x: 0.0, offset_y: 0.0 };
+    for factor in [0.9, 0.5, 0.1, 0.01] {
+        let c = p.zoom_pinch(&s, z, settled, factor, middle(&s));
+        assert!(c.view.scale >= fit - 1e-4, "a pinch out took the page to {} below its settled {fit}", c.view.scale);
+    }
 }

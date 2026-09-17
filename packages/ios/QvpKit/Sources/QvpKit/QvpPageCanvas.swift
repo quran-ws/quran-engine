@@ -275,7 +275,7 @@ public final class QvpCanvasController {
         }
         guard let p = page, p.isOpen, zoomMode != .magnify else {
             // the printed page under a magnifying glass: the rows never move
-            let ns = QvpViewPolicy.clampZoom(pinchStart * magnification); let k = ns / viewScale
+            let ns = QvpViewPolicy.clampZoom(pinchStart * magnification, fit: fitScale); let k = ns / viewScale
             viewOx = focus.x - (focus.x - viewOx) * k; viewOy = focus.y - (focus.y - viewOy) * k; viewScale = ns
             return
         }

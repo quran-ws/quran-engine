@@ -4,6 +4,7 @@
 // the same page width — which is reflow: fewer words to a row, the rest moved down. Which of
 // those a pinch means, where it lands, when it commits and what holds the reader's place across
 // the relayout is the engine's, so every platform pinches alike.
+import CoreGraphics
 import QvpFFI
 
 /// What a pinch does to the page.
@@ -35,6 +36,14 @@ public struct QvpZoom: Equatable {
     public init(mode: QvpZoomMode = .stepped, step: Int = 0, zoom: Float = 1) { self.mode = mode; self.step = step; self.zoom = zoom }
     var c: QvpFFI.QvpZoom { QvpFFI.QvpZoom(mode: mode.rawValue, step: UInt32(step), zoom: zoom) }
     init(_ z: QvpFFI.QvpZoom) { self.mode = QvpZoomMode(rawValue: z.mode) ?? .stepped; self.step = Int(z.step); self.zoom = z.zoom }
+}
+
+/// How many pages a released drag turns, in reading order: +1 the page after this one, -1 the
+/// page before it, nil when the drag is not a swipe. A muṣḥaf is read right to left, so a flick
+/// to the right turns to the next page — the engine says so, rather than each platform deciding.
+public func qvpSwipePages(translation t: CGSize, velocity v: CGSize) -> Int? {
+    let pages = qvp_swipe_pages(Float(t.width), Float(t.height), Float(v.width), Float(v.height))
+    return pages == 0 ? nil : Int(pages)
 }
 
 /// What a sideways drag on a page means.

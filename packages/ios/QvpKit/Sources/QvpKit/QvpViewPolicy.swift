@@ -16,9 +16,16 @@ public enum QvpViewPolicy {
 
     /// The pinch clamp every renderer applies.
     public static func clampZoom(_ scale: CGFloat) -> CGFloat { min(max(scale, minZoom), maxZoom) }
-    /// +1 or -1 when a released drag is a page swipe, nil otherwise.
+
+    /// The same clamp with the page's settled size as the floor: a pinch magnifies the print and
+    /// never shrinks the page inside the screen. `fit` is `QvpLayout.scale` for the page in hand.
+    public static func clampZoom(_ scale: CGFloat, fit: CGFloat) -> CGFloat {
+        min(max(scale, max(fit, minZoom)), maxZoom)
+    }
+    /// How many pages a released drag turns, in the muṣḥaf's own order: +1 the page after this
+    /// one, -1 the page before it, nil when it is not a swipe. The engine decides, so no platform
+    /// can read the book backwards.
     public static func swipeDirection(translation t: CGSize, velocity v: CGSize) -> Int? {
-        guard abs(t.width) > abs(t.height) * swipeAxisRatio, abs(t.width) > swipeDistance || abs(v.width) > swipeVelocity else { return nil }
-        return t.width > 0 ? 1 : -1
+        qvpSwipePages(translation: t, velocity: v)
     }
 }

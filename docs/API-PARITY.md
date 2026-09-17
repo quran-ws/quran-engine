@@ -219,7 +219,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-145 symbols in the header, 145 Rust exports. web: 144 bound, android: 112 bound, flutter: 114 bound, ios: 133 bound, react-native: 76 bound.
+146 symbols in the header, 146 Rust exports. web: 145 bound, android: 140 bound, flutter: 114 bound, ios: 134 bound, react-native: 76 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -276,17 +276,17 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_hit_test_view` | yes | yes | yes | yes | yes |
 | `qvp_kind_name` | yes | yes | yes | yes | yes |
 | `qvp_layout` | yes | yes | yes | yes | yes |
-| `qvp_layout_current` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_layout_draw_list` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_layout_groups` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_layout_current` | yes | yes | **missing** | yes | **missing** |
+| `qvp_layout_draw_list` | yes | yes | **missing** | yes | **missing** |
+| `qvp_layout_groups` | yes | yes | **missing** | yes | **missing** |
 | `qvp_layout_line_spacing_to_fill` | yes | yes | yes | yes | yes |
-| `qvp_layout_omitted_paths` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_layout_path_groups` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_layout_placements` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_layout_repeats` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_layout_row_words` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_layout_omitted_paths` | yes | yes | **missing** | yes | **missing** |
+| `qvp_layout_path_groups` | yes | yes | **missing** | yes | **missing** |
+| `qvp_layout_placements` | yes | yes | **missing** | yes | **missing** |
+| `qvp_layout_repeats` | yes | yes | **missing** | yes | **missing** |
+| `qvp_layout_row_words` | yes | yes | **missing** | yes | **missing** |
 | `qvp_layout_wasted_fraction` | yes | yes | yes | yes | yes |
-| `qvp_layout_word_row` | yes | **missing** | **missing** | **missing** | **missing** |
+| `qvp_layout_word_row` | yes | yes | **missing** | **missing** | **missing** |
 | `qvp_line_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_line_info` | yes | yes | yes | yes | gap (list form: bound as `lines()`) |
 | `qvp_mark_category` | yes | yes | yes | yes | yes |
@@ -311,7 +311,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_page_line_spacing` | yes | yes | yes | yes | gap (other shape: `info().lineSpacing`) |
 | `qvp_page_load` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript (`pageUri` prop)) |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |
-| `qvp_reflow_max_zoom` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_reflow_max_zoom` | yes | yes | **missing** | yes | **missing** |
 | `qvp_reveal_goto` | yes | yes | yes | yes | yes |
 | `qvp_reveal_position` | yes | yes | yes | yes | yes |
 | `qvp_reveal_start` | yes | yes | yes | yes | yes |
@@ -324,7 +324,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_select` | yes | yes | yes | yes | yes |
 | `qvp_selection` | yes | yes | yes | yes | yes |
 | `qvp_selection_text` | yes | yes | yes | yes | yes |
-| `qvp_sideways_drag` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_sideways_drag` | yes | yes | **missing** | yes | **missing** |
 | `qvp_style_add` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_add_target` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_clear` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
@@ -337,6 +337,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_styled_paths` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_surah_at` | yes | yes | yes | yes | gap (list form: bound as `surahs()`) |
 | `qvp_surah_count` | yes | yes | yes | yes | gap (list form: bound as `surahs().length`) |
+| `qvp_swipe_pages` | yes | yes | **missing** | yes | **missing** |
 | `qvp_target_words` | yes | yes | yes | yes | yes |
 | `qvp_text` | yes | yes | yes | yes | yes |
 | `qvp_theme` | yes | yes | yes | yes | yes |
@@ -346,26 +347,26 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_unmask_next` | yes | yes | yes | yes | yes |
 | `qvp_unmask_word` | yes | yes | yes | yes | yes |
 | `qvp_version` | yes | yes | yes | yes | yes |
-| `qvp_view_anchor` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_view_clamp` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_view_pan` | yes | **missing** | **missing** | **missing** | **missing** |
-| `qvp_view_swipe` | yes | **missing** | **missing** | **missing** | **missing** |
-| `qvp_view_to_layout` | yes | **missing** | **missing** | **missing** | **missing** |
-| `qvp_view_zoom_about` | yes | **missing** | **missing** | **missing** | **missing** |
+| `qvp_view_anchor` | yes | yes | **missing** | yes | **missing** |
+| `qvp_view_clamp` | yes | yes | **missing** | yes | **missing** |
+| `qvp_view_pan` | yes | yes | **missing** | **missing** | **missing** |
+| `qvp_view_swipe` | yes | yes | **missing** | **missing** | **missing** |
+| `qvp_view_to_layout` | yes | yes | **missing** | **missing** | **missing** |
+| `qvp_view_zoom_about` | yes | yes | **missing** | **missing** | **missing** |
 | `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bands_view` | yes | **missing** | **missing** | **missing** | **missing** |
 | `qvp_word_bounds_view` | yes | yes | yes | yes | yes |
 | `qvp_word_form` | yes | yes | yes | yes | yes |
 | `qvp_word_info` | yes | yes | yes | yes | gap (list form: bound as `word(i)` and `words()`) |
 | `qvp_word_label` | yes | yes | yes | yes | yes |
-| `qvp_zoom_at_step` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_zoom_carried` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_zoom_is_zoomed` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_zoom_level_candidates` | yes | **missing** | **missing** | **missing** | **missing** |
-| `qvp_zoom_levels` | yes | **missing** | **missing** | **missing** | **missing** |
-| `qvp_zoom_mode` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_zoom_pinch` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_zoom_spec` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_zoom_steps` | yes | **missing** | **missing** | yes | **missing** |
-| `qvp_zoom_to_step` | yes | **missing** | **missing** | yes | **missing** |
+| `qvp_zoom_at_step` | yes | yes | **missing** | yes | **missing** |
+| `qvp_zoom_carried` | yes | yes | **missing** | yes | **missing** |
+| `qvp_zoom_is_zoomed` | yes | yes | **missing** | yes | **missing** |
+| `qvp_zoom_level_candidates` | yes | yes | **missing** | **missing** | **missing** |
+| `qvp_zoom_levels` | yes | yes | **missing** | **missing** | **missing** |
+| `qvp_zoom_mode` | yes | yes | **missing** | yes | **missing** |
+| `qvp_zoom_pinch` | yes | yes | **missing** | yes | **missing** |
+| `qvp_zoom_spec` | yes | yes | **missing** | yes | **missing** |
+| `qvp_zoom_steps` | yes | yes | **missing** | yes | **missing** |
+| `qvp_zoom_to_step` | yes | yes | **missing** | yes | **missing** |
 <!-- parity:end -->

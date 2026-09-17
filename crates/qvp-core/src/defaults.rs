@@ -45,6 +45,10 @@ pub const REFLOW_MAX_STRETCH: f32 = 2.0;
 
 /// The reader's pinch limits, as multiples of the layout's own scale, and the point at which
 /// a page counts as zoomed rather than settled.
+///
+/// `MIN_ZOOM` is a floor of last resort for a caller that names no floor of its own. A reader's
+/// pinch is held at the page's settled size instead ([`crate::Layout::fit_scale`]), because a
+/// page smaller than the screen it sits in is not a size anyone reads at.
 pub const MIN_ZOOM: f32 = 0.5;
 pub const MAX_ZOOM: f32 = 12.0;
 pub const ZOOMED_THRESHOLD: f32 = 1.02;
@@ -56,6 +60,17 @@ pub const ZOOMED_THRESHOLD: f32 = 1.02;
 /// apart, and the two thresholds of one step stay clear of each other only while
 /// `(1 + this)² < 1.08`.
 pub const ZOOM_SNAP_HYSTERESIS: f32 = 0.03;
+
+/// How far the fingers must move to leave the step they are on, when the midpoint to the next
+/// step is further away than this.
+///
+/// A page's steps are not evenly spaced, so the midpoint between two of them sits at a
+/// different distance above each step and a different distance below. Left at the midpoint
+/// alone, a step above a wide gap takes a much bigger squeeze to leave than one above a narrow
+/// gap, and a reader finds the control sticking at that step. This gives every step the same
+/// small reach in either direction, and the midpoint still holds wherever it is nearer, so a
+/// pinch never crosses into a step the fingers have not reached.
+pub const ZOOM_LEAVE_EFFORT: f32 = 0.08;
 
 /// The smallest change in reflow zoom a free pinch asks the page for. Below this the rows come
 /// out the same and the layout is work no reader can see: at the sizes a reader uses, a

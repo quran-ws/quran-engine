@@ -203,7 +203,11 @@ impl Page {
         let factor = if factor.is_finite() && factor > 0.0 { factor } else { 1.0 };
         match zoom.mode {
             ZoomMode::Magnify => {
-                ZoomChange { zoom, view: view.zoom_about(focal.0, focal.1, factor, 0.0, 0.0), relaid: false }
+                // The settled page is the floor. A pinch magnifies the print; it never shrinks
+                // the page inside the screen, which leaves the reader looking at a smaller page
+                // in a frame of paper and nothing to pinch back out of.
+                let floor = self.layout(spec).fit_scale.max(1e-4);
+                ZoomChange { zoom, view: view.zoom_about(focal.0, focal.1, factor, floor, 0.0), relaid: false }
             }
             ZoomMode::Continuous => {
                 let q = defaults::ZOOM_QUANTUM.max(1e-4);
@@ -234,16 +238,24 @@ impl Page {
                         step = i;
                     }
                 }
-                // The hysteresis holds fingers resting on a boundary from flickering between
-                // two layouts. It applies to the step the page is on, so a gesture that has
-                // already reached further is not dragged back by it.
+                // What it takes to leave the step the gesture began on. The midpoint says where
+                // two steps meet, but it sits at an uneven distance from each of them, so on its
+                // own it makes a step above a wide gap far harder to leave than its neighbours.
+                // A step is left on the nearer of the two: the midpoint, or a fixed small reach.
+                // The hysteresis then holds fingers resting on that line from flickering between
+                // two layouts.
                 let h = 1.0 + defaults::ZOOM_SNAP_HYSTERESIS.max(0.0);
+                let reach = 1.0 + defaults::ZOOM_LEAVE_EFFORT.max(0.0);
                 let now = zoom.step;
-                let inside_the_deadband = (step == now + 1 && live < boundary(step) * h)
-                    || (now > 0 && step + 1 == now && live > boundary(now) / h);
-                if inside_the_deadband {
-                    step = now;
-                }
+                let here = at(now);
+                step = if now < n && live >= boundary(now + 1).min(here * reach) * h {
+                    // far enough out to leave; the scan says how many steps the fingers reached
+                    step.max(now + 1)
+                } else if now > 0 && live <= boundary(now).max(here / reach) / h {
+                    step.min(now - 1)
+                } else {
+                    now
+                };
                 self.commit(spec, zoom, Zoom { step, ..zoom }, view, focal)
             }
         }

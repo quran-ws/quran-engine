@@ -37,7 +37,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     public var onDecorationTap: ((QvpDecoration, QvpHit) -> Void)?
     public var onEmptyTap: (() -> Void)?
     public var onSelectionChanged: (([Int]) -> Void)?
-    /// Horizontal swipe while the page is not zoomed in: +1 = finger moved right, -1 = left. The host flips pages.
+    /// A sideways flick, in pages: +1 the page after this one, -1 the page before it. The
+    /// muṣḥaf's own order, so a host adds it to the page it is on.
     public var onSwipe: ((Int) -> Void)?
     /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
     /// (e.g. marking reading progress) can still call `resetView()` itself — `isZoomed` says when.
@@ -206,7 +207,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         if zoomSpringsBack, zoomMode == .magnify, [.ended, .cancelled, .failed].contains(g.state) { springBack(); return }
         let f = g.location(in: self)
         guard let p = page, p.isOpen, zoomMode != .magnify else {
-            let ns = QvpViewPolicy.clampZoom(pinchStart * g.scale); let k = ns / viewScale
+            let ns = QvpViewPolicy.clampZoom(pinchStart * g.scale, fit: fitScale); let k = ns / viewScale
             viewOx = f.x - (f.x - viewOx) * k; viewOy = f.y - (f.y - viewOy) * k; viewScale = ns
             invalidateContent()
             return
@@ -510,7 +511,10 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// sideways one, so the gesture is free to mean this whether or not the reader has zoomed in.
     @objc private func onSwipeGesture(_ g: UISwipeGestureRecognizer) {
         guard let cb = onSwipe, !selecting, sideways == .turnPage else { return }
-        cb(g.direction == .right ? 1 : -1)
+        // the muṣḥaf runs right to left: a flick right is the next page. The engine's own
+        // classifier says which, from a drag that stands for the flick.
+        let w: CGFloat = g.direction == .right ? 200 : -200
+        cb(qvpSwipePages(translation: CGSize(width: w, height: 0), velocity: .zero) ?? 0)
     }
 
     private func rebuildBand() {
