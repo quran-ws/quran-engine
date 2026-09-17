@@ -38,7 +38,7 @@ pub use text::{
     fold, is_mark, loose_key, normalize_query, parse_words_sidecar, search_key, search_variants, strip_marks, Form,
     Match, SearchMode, SearchOptions, WordForms,
 };
-pub use view::{swipe_direction, View};
+pub use view::{swipe_direction, swipe_pages, View};
 pub use zoom::{Sideways, Zoom, ZoomChange, ZoomMode};
 
 use qvp_format::*;

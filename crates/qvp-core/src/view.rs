@@ -63,8 +63,20 @@ impl View {
     }
 }
 
-/// A released drag that is a page swipe: +1 or -1, or 0 when it is not one. Mostly sideways,
-/// and either far enough or fast enough.
+/// How many pages a released drag turns, in reading order: +1 the page after this one, -1 the
+/// page before it, 0 when the drag is not a swipe at all.
+///
+/// A muṣḥaf is read right to left, so a flick to the right turns to the next page. That is the
+/// whole of the difference from [`swipe_direction`], and the reason this exists: every host was
+/// turning the physical direction into a page of its own accord, and a host that got the sign
+/// the wrong way round turned the book backwards.
+pub fn swipe_pages(dx: f32, dy: f32, vx: f32, vy: f32) -> i32 {
+    swipe_direction(dx, dy, vx, vy)
+}
+
+/// Which way a released drag went: +1 the finger moved right, -1 left, 0 when it is not a swipe.
+/// Mostly sideways, and either far enough or fast enough. A host turning pages wants
+/// [`swipe_pages`], which reads this in the muṣḥaf's own order.
 pub fn swipe_direction(dx: f32, dy: f32, vx: f32, vy: f32) -> i32 {
     let _ = vy;
     if dx.abs() <= dy.abs() * defaults::SWIPE_AXIS_RATIO {

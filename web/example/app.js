@@ -284,8 +284,8 @@
         const L = S.page.currentLayout;
         if (S.page.sidewaysDrag(S.zoom, S.view, L ? L.fitScale : 0) === 'turnPage') {
           const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-          const dir = engine.viewSwipe(dx, dy);
-          if (dir) { const i = src.pages.indexOf(S.n); loadPage(src.pages[Math.min(src.pages.length - 1, Math.max(0, i - dir))]); drag = null; return; }
+          const pages = engine.swipePages(dx, dy);
+          if (pages) { const i = src.pages.indexOf(S.n); loadPage(src.pages[Math.min(src.pages.length - 1, Math.max(0, i + pages))]); drag = null; return; }
         }
       }
       if (drag && !moved) {

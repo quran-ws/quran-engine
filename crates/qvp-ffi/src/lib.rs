@@ -1247,10 +1247,18 @@ pub unsafe extern "C" fn qvp_view_to_layout(page: *const Page, view: *const QvpV
         *out.add(1) = y;
     })
 }
-/// +1 or -1 when a released drag is a page swipe, 0 when it is not.
+/// +1 or -1 when a released drag is a page swipe, 0 when it is not. This is the direction the
+/// finger went; `qvp_swipe_pages` reads it in the muṣḥaf's own order.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_view_swipe(dx: f32, dy: f32, vx: f32, vy: f32) -> i32 {
     guard(|| qvp_core::swipe_direction(dx, dy, vx, vy))
+}
+
+/// How many pages a released drag turns, in reading order: +1 the next page, -1 the one before,
+/// 0 when it is not a swipe. A muṣḥaf is read right to left, so a flick right turns to the next.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_swipe_pages(dx: f32, dy: f32, vx: f32, vy: f32) -> i32 {
+    guard(|| qvp_core::swipe_pages(dx, dy, vx, vy))
 }
 
 /// Everything the current layout draws, in drawing order: `{path, placement}` pairs indexing

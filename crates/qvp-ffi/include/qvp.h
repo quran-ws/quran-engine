@@ -181,7 +181,8 @@ void     qvp_view_pan(const QvpView*, float dx, float dy, QvpView* out);
 void     qvp_view_clamp(const QvpView*, float content_w, float content_h, float viewport_w, float viewport_h, QvpView* out);
 void     qvp_view_anchor(const QvpPage*, const QvpView*, uint32_t word, float nx, float ny, float to_x, float to_y, float viewport_w, float viewport_h, QvpView* out);  /* hold a word's point on screen across a relayout */
 void     qvp_view_to_layout(const QvpPage*, const QvpView*, float vx, float vy, float* out /* x, y */);
-int32_t  qvp_view_swipe(float dx, float dy, float vx, float vy);                 /* +1 / -1 page swipe, or 0 */
+int32_t  qvp_view_swipe(float dx, float dy, float vx, float vy);                 /* which way the finger went: +1 right, -1 left, 0 not a swipe */
+int32_t  qvp_swipe_pages(float dx, float dy, float vx, float vy);                /* how many pages that turns, in reading order: a mushaf is read right to left */
 
 /* The reader's zoom control: what a pinch does to the page. Stepped reflows onto the page's own zoom steps and is what a
    host gets for free (a zeroed QvpZoom is stepped, on the printed page); continuous reflows to the zoom the fingers ask

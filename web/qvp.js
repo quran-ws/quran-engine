@@ -111,6 +111,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     viewClamp(view, contentW, contentH, viewportW, viewportH) { const i = this._putView(view, this.scratch2 + 32768); this.ex.qvp_view_clamp(i, contentW, contentH, viewportW, viewportH, this.scratch); return this._getView(this.scratch); }
     /** +1 or -1 when a released drag is a page swipe, 0 when it is not */
     viewSwipe(dx, dy, vx = 0, vy = 0) { return this.ex.qvp_view_swipe(dx, dy, vx, vy); }
+    /** how many pages a released drag turns, in reading order: a mushaf runs right to left, so a
+     * flick to the right is the next page. Add it to the page you are on. */
+    swipePages(dx, dy, vx = 0, vy = 0) { return this.ex.qvp_swipe_pages(dx, dy, vx, vy); }
     /** a scratch buffer of at least `len` bytes, kept between calls */
     buf(len) { if (len > this._bufLen) { this._buf = this.ex.qvp_alloc(len); this._bufLen = len; } return this._buf; }
     /** write a JS string into scratch2 at offset; returns [ptr, len] */
