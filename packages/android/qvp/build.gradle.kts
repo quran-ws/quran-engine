@@ -1,12 +1,10 @@
-import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
-
+// Publishing is applied and configured by this build's root (packages/android/build.gradle.kts),
+// so a root that only wants the module to compile — the React Native example — can include it
+// without the publishing plugin.
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("com.vanniktech.maven.publish")
 }
-
-val qvpVersion = providers.gradleProperty("qvpVersion").getOrElse("0.1.0-SNAPSHOT")
 
 android {
     namespace = "ws.quran.qvp"
@@ -32,36 +30,4 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
-}
-
-mavenPublishing {
-    configure(AndroidSingleVariantLibrary(variant = "release", sourcesJar = true, publishJavadocJar = true))
-    coordinates("ws.quran", "qvp-android", qvpVersion)
-    publishToMavenCentral()
-
-    pom {
-        name.set("QVP Android")
-        description.set("Android wrapper and Canvas renderer for the QVP vector Mushaf engine")
-        inceptionYear.set("2026")
-        url.set("https://github.com/quran-ws/quran-engine")
-        licenses {
-            license {
-                name.set("MIT")
-                url.set("https://opensource.org/license/mit/")
-                distribution.set("repo")
-            }
-        }
-        developers {
-            developer {
-                id.set("quran-ws")
-                name.set("Quran.ws")
-                url.set("https://quran.ws")
-            }
-        }
-        scm {
-            url.set("https://github.com/quran-ws/quran-engine")
-            connection.set("scm:git:https://github.com/quran-ws/quran-engine.git")
-            developerConnection.set("scm:git:ssh://git@github.com/quran-ws/quran-engine.git")
-        }
-    }
 }

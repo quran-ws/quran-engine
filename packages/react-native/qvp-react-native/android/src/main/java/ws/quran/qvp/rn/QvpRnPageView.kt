@@ -36,7 +36,8 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         val w = r - l; val h = b - t
         inner.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
         inner.layout(0, 0, w, h)
-        centre()
+        // A size change reaches the child's onSizeChanged, which lays the page out again and
+        // fits it; a pass that changed nothing leaves the reader's view where it is.
     }
     /** Fit and centre, as the engine's layout says. */
     fun resetView() { inner.resetView() }
