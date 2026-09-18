@@ -28,12 +28,14 @@ for check in "$@"; do
       cargo test --workspace --release
       ;;
     gates)
-      step "data gates: identity (8 pages), line shift, ABI, conformance"
+      step "data gates: identity (8 pages), line shift, zoom control, ABI, conformance, zoom steps"
       QVP_REQUIRE_DATA=1 cargo test -p qvp-convert --release --test identity
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test line_shift
+      QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test zoom_control
       QVP_REQUIRE_DATA=1 cargo test -p qvp-ffi --release --test abi
       node web/lite.test.mjs
       scripts/gen-conformance.sh --check
+      cargo run -p qvp-convert --release -- zoom-levels dist/pages crates/qvp-core/src/zoom_table.rs --check
       cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
       cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm
       node web/scenarios.test.mjs

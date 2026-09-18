@@ -65,6 +65,25 @@ public final class QvpCanvasController {
     /// Zoom lasts only while the fingers are down: on release the page eases back to its fitted
     /// size — a peek, not a reading zoom — so a pinch never leaves the page holding a pager's swipe.
     public var zoomSpringsBack = false
+    /// What a pinch does to the page. `.stepped` is what a reader gets: the pinch lands on one
+    /// of the page's own zoom steps and the page breaks its rows again at that size. `.magnify`
+    /// is the old behaviour, scaling the printed page. The engine owns the policy; this only
+    /// says which one.
+    public var zoomMode: QvpZoomMode = .stepped {
+        didSet {
+            guard let p = page, p.isOpen, oldValue != zoomMode else { return }
+            zoom = p.zoomMode(baseSpec, zoom, zoomMode); relayout(); resetView()
+        }
+    }
+    /// Where the reader's zoom control stands, as the engine last answered.
+    public private(set) var zoom = QvpZoom()
+    /// The zoom steps this page ships with: what `.stepped` lands on, lowest first.
+    public var zoomSteps: [Float] { page.map { $0.isOpen ? $0.zoomSteps(baseSpec) : [] } ?? [] }
+    /// Move the control straight to a step. 0 is the printed page.
+    public func zoomToStep(_ step: Int) {
+        guard let p = page, p.isOpen, bounds.width > 0 else { return }
+        apply(p.zoomToStep(layoutSpec, zoom, step, currentView))
+    }
     public var selectionEnabled = true
     public var hitOptions = QvpHitOptions(maxDistance: QvpDefaults.TAP_DISTANCE)
 
@@ -94,10 +113,15 @@ public final class QvpCanvasController {
     @ObservationIgnored var selecting = false
     @ObservationIgnored var pinching = false
     @ObservationIgnored var pinchStart: CGFloat = 1
+    @ObservationIgnored var pinchZoom = QvpZoom()
+    @ObservationIgnored var pinchView = QvpView()
     @ObservationIgnored var lastDrag = CGSize.zero
     @ObservationIgnored private var springTask: Task<Void, Never>?
     /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
-    public var isZoomed: Bool { viewScale > fitScale * QvpViewPolicy.zoomedThreshold }
+    /// True once the reader has zoomed in, by either road: the view magnified past the fitted
+    /// size, or the page reflowed to a size above the printed one. Panning then moves the page
+    /// rather than the book.
+    public var isZoomed: Bool { viewScale > fitScale * QvpViewPolicy.zoomedThreshold || zoom.zoom > Float(QvpViewPolicy.zoomedThreshold) }
 
     final class BaseCache { var image: CGImage?; var key = "" }
 
@@ -119,14 +143,24 @@ public final class QvpCanvasController {
         return true
     }
 
+    /// The layout the current size and knobs ask for, before the zoom control has its say.
+    var baseSpec: QvpLayoutSpec {
+        QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height),
+                      padTop: Float(padTop), padBottom: Float(padBottom),
+                      padLeft: Float(padSide), padRight: Float(padSide),
+                      lineSpacing: lineSpacing, fillHeight: fillHeight,
+                      cropLeft: cropLeft, cropRight: cropRight)
+    }
+    /// The spec in force: the knobs above with the reader's zoom control folded in.
+    public var layoutSpec: QvpLayoutSpec {
+        guard let p = page, p.isOpen else { return baseSpec }
+        return p.zoomSpec(baseSpec, zoom)
+    }
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
         guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
-        _ = p.layout(QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height),
-                                   padTop: Float(padTop), padBottom: Float(padBottom),
-                                   padLeft: Float(padSide), padRight: Float(padSide),
-                                   lineSpacing: lineSpacing, fillHeight: fillHeight,
-                                   cropLeft: cropLeft, cropRight: cropRight))
+        _ = p.layout(layoutSpec)
+        placements = nil
         cache.key = ""; invalidate()
     }
     /// Fit the content height and centre it.
@@ -139,6 +173,9 @@ public final class QvpCanvasController {
     /// The transform `resetView()` applies: content height fitted, centred.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
+        // A reflowed page is taller than the screen on purpose: fitting its height would undo
+        // the size the reader asked for. It opens at its top and the reader scrolls.
+        if let l, l.reflowed { return (1, CGFloat(l.fitX), 0) }
         return (CGFloat(l?.fitScale ?? 1), CGFloat(l?.fitX ?? 0), CGFloat(l?.fitY ?? 0))
     }
     /// Clear the selection band and the engine selection.
@@ -150,11 +187,47 @@ public final class QvpCanvasController {
     /// Page units of `line` → view points (engine layout + pan/zoom).
     public func lineTransform(_ line: Int) -> CGAffineTransform {
         let l = page?.currentLayout
-        let ls = CGFloat(l?.scale ?? 1), lox = CGFloat(l?.offsetX ?? 0)
         let dy = (l.flatMap { line < $0.lineDy.count ? $0.lineDy[line] : nil }) ?? 0
-        let loy = CGFloat(l?.offsetY ?? 0) + CGFloat(dy) * ls
+        return transform(QvpPlacement(dx: 0, dy: dy, kx: 1, ky: 1))
+    }
+    /// Page units → view points under one placement (engine layout + pan/zoom).
+    func transform(_ q: QvpPlacement, offsetY: CGFloat? = nil) -> CGAffineTransform {
+        let l = page?.currentLayout
+        let ls = CGFloat(l?.scale ?? 1)
         let s = viewScale * ls
-        return CGAffineTransform(a: s, b: 0, c: 0, d: s, tx: viewOx + viewScale * lox, ty: viewOy + viewScale * loy)
+        return CGAffineTransform(a: s * CGFloat(q.kx), b: 0, c: 0, d: s * CGFloat(q.ky),
+                                 tx: viewOx + viewScale * (CGFloat(l?.offsetX ?? 0) + CGFloat(q.dx) * ls),
+                                 ty: (offsetY ?? viewOy) + viewScale * (CGFloat(l?.offsetY ?? 0) + CGFloat(q.dy) * ls))
+    }
+    /// Where the cached band of ink starts, in view points. It moves in half-screen steps, so a
+    /// drag inside the band is a blit and nothing is drawn again.
+    var bandTop: CGFloat {
+        let step = max(bounds.height / 2, 1)
+        return ((-viewOy - step) / step).rounded(.down) * step
+    }
+    var bandHeight: CGFloat { max(bounds.height * 2, 1) }
+    /// What the layout in hand draws and where: the engine's own answer, read once per layout.
+    /// A printed page and a reflowed one come back in the same shape, so nothing here has to
+    /// know which it is looking at.
+    struct DrawList { let draws: [QvpDraw], places: [QvpPlacement], band: ClosedRange<Float> }
+    var placements: DrawList?
+    /// The band of the laid-out page worth drawing: the screen, with a screen of slack either
+    /// side so a fast drag has somewhere to go before the next frame asks again.
+    /// The same band in layout points: what the engine is asked to draw.
+    private var visibleBand: (top: Float, bottom: Float) {
+        let s = viewScale == 0 ? 1 : viewScale
+        return (Float(bandTop / s), Float((bandTop + bandHeight) / s))
+    }
+    func drawListNow() -> DrawList? {
+        let b = visibleBand
+        if let q = placements, q.band == b.top...b.bottom { return q }
+        guard let p = page, p.isOpen, p.currentLayout != nil else { return nil }
+        let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: b.top...b.bottom)
+        placements = q; return q
+    }
+    /// The transform one entry of the draw list is drawn under.
+    func transform(_ q: DrawList, _ placement: Int, offsetY: CGFloat? = nil) -> CGAffineTransform {
+        transform(placement < q.places.count ? q.places[placement] : .identity, offsetY: offsetY)
     }
 
     // ── input (called by QvpPageCanvas) ──
@@ -184,15 +257,36 @@ public final class QvpCanvasController {
     }
     func doubleTap(_ pt: CGPoint) { if let cb = onDoubleTap { cb(hitAt(pt)) } else { resetView() } }
     func longPress(_ pt: CGPoint) { onLongPress?(hitAt(pt)) }
+    /// The reader's pan and zoom as the engine has it.
+    var currentView: QvpView { QvpView(scale: Float(viewScale), offsetX: Float(viewOx), offsetY: Float(viewOy)) }
+    /// Take what a gesture produced: the page is already laid out at the new size, and the view
+    /// already holds the word the fingers were on.
+    private func apply(_ c: QvpZoomChange) {
+        zoom = c.zoom
+        viewScale = CGFloat(c.view.scale); viewOx = CGFloat(c.view.offsetX); viewOy = CGFloat(c.view.offsetY)
+        if c.relaid { placements = nil; cache.key = "" }
+        invalidate()
+    }
     func pinch(_ magnification: CGFloat, at focus: CGPoint) {
         guard zoomEnabled, !selecting else { return }
-        if !pinching { springTask?.cancel(); springTask = nil; pinching = true; pinchStart = viewScale }
-        let ns = QvpViewPolicy.clampZoom(pinchStart * magnification); let k = ns / viewScale
-        viewOx = focus.x - (focus.x - viewOx) * k; viewOy = focus.y - (focus.y - viewOy) * k; viewScale = ns
+        if !pinching {
+            springTask?.cancel(); springTask = nil; pinching = true
+            pinchStart = viewScale; pinchZoom = zoom; pinchView = currentView
+        }
+        guard let p = page, p.isOpen, zoomMode != .magnify else {
+            // the printed page under a magnifying glass: the rows never move
+            let ns = QvpViewPolicy.clampZoom(pinchStart * magnification, fit: fitScale); let k = ns / viewScale
+            viewOx = focus.x - (focus.x - viewOx) * k; viewOy = focus.y - (focus.y - viewOy) * k; viewScale = ns
+            return
+        }
+        // `pinchZoom` stays where the gesture began: the engine measures the fingers against
+        // that, so a slow pinch walks the steps one at a time instead of running away.
+        apply(p.zoomPinch(layoutSpec, pinchZoom, pinchView, factor: Float(magnification), focalX: Float(focus.x), focalY: Float(focus.y)))
     }
     func pinchEnded() {
         pinching = false
-        if zoomSpringsBack { springBack() }
+        // A reflowed page is a size the reader chose, not a peek: it stays until they change it.
+        if zoomSpringsBack && zoomMode == .magnify { springBack() }
     }
     /// Ease from the released transform to the fitted one, one step per display frame or so.
     private func springBack() {
@@ -210,14 +304,25 @@ public final class QvpCanvasController {
             }
         }
     }
+    /// A reflowed page is the screen's own width: nothing to pan sideways, so it scrolls up and
+    /// down only, and a sideways drag turns the page.
+    private var isReflowed: Bool { page?.currentLayout?.reflowed ?? false }
     func pan(_ translation: CGSize) {
-        guard zoomEnabled, !selecting, isZoomed, springTask == nil else { return }
-        viewOx += translation.width - lastDrag.width; viewOy += translation.height - lastDrag.height
-        lastDrag = translation; invalidate()
+        guard zoomEnabled, !selecting, isZoomed || isReflowed, springTask == nil else { return }
+        if !isReflowed { viewOx += translation.width - lastDrag.width }
+        viewOy += translation.height - lastDrag.height
+        lastDrag = translation
+        if isReflowed, let l = page?.currentLayout, let p = page {
+            let v = p.viewClamp(currentView, contentW: l.contentW, contentH: l.contentH, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
+            viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
+        }
+        invalidate()
     }
+    /// A sideways drag turns the page whether or not the reader has zoomed in: a reflowed page
+    /// has nothing to pan sideways, so the gesture is free to mean this.
     func panEnded(_ t: CGSize, velocity v: CGSize) {
         lastDrag = .zero
-        guard !isZoomed, !selecting, onSwipe != nil else { return }
+        guard !isZoomed || isReflowed, !selecting, onSwipe != nil else { return }
         if let dir = QvpViewPolicy.swipeDirection(translation: t, velocity: v) { onSwipe?(dir) }
     }
     func selectTo(_ pt: CGPoint) {
@@ -252,7 +357,11 @@ public final class QvpCanvasController {
         let ink = p.defaultInk
         let W = Int(size.width * displayScale), H = Int(size.height * displayScale)
         var hasher = Hasher(); hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
-        let key = "\(viewScale)|\(viewOx)|\(viewOy)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(H)"
+        // The cached ink is a band of the page, not the screen, so a drag inside it is one blit
+        // and nothing is drawn again.
+        let top = bandTop, bandH = bandHeight
+        let bandPx = Int((bandH * displayScale).rounded(.up))
+        let key = "\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(zoom.zoom)|\(l.rows)"
 
         if let paper = paperColor {
             ctx.fill(Path(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale)),
@@ -261,19 +370,22 @@ public final class QvpCanvasController {
         let bands = p.highlightBoxesView()
         drawBoxes(ctx, bands)
 
-        if cache.image == nil || key != cache.key || cache.image!.width != W || cache.image!.height != H, W > 0, H > 0 {
+        if cache.image == nil || key != cache.key || cache.image!.width != W || cache.image!.height != bandPx, W > 0, bandPx > 0 {
             let t0 = now()
             let cs = CGColorSpaceCreateDeviceRGB()
-            if let bc = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8, bytesPerRow: 0, space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
+            if let bc = CGContext(data: nil, width: W, height: bandPx, bitsPerComponent: 8, bytesPerRow: 0, space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
                 // flip to y-down page space so `makeImage()` comes out upright
-                bc.translateBy(x: 0, y: CGFloat(H)); bc.scaleBy(x: displayScale, y: -displayScale)
+                bc.translateBy(x: 0, y: CGFloat(bandPx)); bc.scaleBy(x: displayScale, y: -displayScale)
                 bc.setFillColor(QvpColor.cgColor(ink))
                 bc.setAllowsAntialiasing(true); bc.setShouldAntialias(true)
                 var cur = -1, n = 0
-                for pi in 0..<p.nPaths where !styledSet.contains(pi) {
-                    let ln = p.pathLine(pi)
-                    if ln != cur { if cur >= 0 { bc.restoreGState() }; bc.saveGState(); bc.concatenate(lineTransform(ln)); cur = ln }
-                    bc.addPath(paths[pi]); bc.fillPath(using: p.pathEvenOdd(pi) ? .evenOdd : .winding); n += 1
+                if let q = drawListNow() {
+                    for d in q.draws where !styledSet.contains(d.path) {
+                        // one state per placement, not per path: the list runs in that order
+                        // the band is drawn under its own vertical offset: its top row is `top`
+                        if d.placement != cur { if cur >= 0 { bc.restoreGState() }; bc.saveGState(); bc.concatenate(transform(q, d.placement, offsetY: -top)); cur = d.placement }
+                        bc.addPath(paths[d.path]); bc.fillPath(using: p.pathEvenOdd(d.path) ? .evenOdd : .winding); n += 1
+                    }
                 }
                 if cur >= 0 { bc.restoreGState() }
                 cache.image = bc.makeImage(); cache.key = key
@@ -281,13 +393,17 @@ public final class QvpCanvasController {
             }
         }
         if let img = cache.image {
-            ctx.draw(Image(decorative: img, scale: displayScale), in: CGRect(origin: .zero, size: size))
+            ctx.draw(Image(decorative: img, scale: displayScale), in: CGRect(x: 0, y: viewOy + top, width: size.width, height: bandH))
         }
         let t1 = now()
-        for (pi, col) in styled where col & 0xff != 0 {
-            var c = ctx
-            c.concatenate(lineTransform(p.pathLine(pi)))
-            c.fill(Path(paths[pi]), with: .color(color(col)), style: FillStyle(eoFill: p.pathEvenOdd(pi)))
+        if let q = drawListNow() {
+            let colors = Dictionary(styled, uniquingKeysWith: { a, _ in a })
+            for d in q.draws {
+                guard let col = colors[d.path], col & 0xff != 0 else { continue }
+                var c = ctx
+                c.concatenate(transform(q, d.placement))
+                c.fill(Path(paths[d.path]), with: .color(color(col)), style: FillStyle(eoFill: p.pathEvenOdd(d.path)))
+            }
         }
         drawBoxes(ctx, p.maskBoxesView())
         lastOverlayMs = (now() - t1) * 1000; lastOverlayPaths = styled.count; lastBands = bands.count

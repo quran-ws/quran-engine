@@ -26,8 +26,6 @@
   // Keep at least two backing pixels per CSS pixel for smooth unhinted paths. Above that,
   // match the display instead of supersampling again; the browser would only downsample it.
   const dpr = Math.min(Math.max(2, window.devicePixelRatio || 1), 3);
-  // pinch limits as multiples of the fitted scale; the same pair on every platform
-  const clampZoom = s => Math.max(0.5, Math.min(12, s));
 
   const S = {
     page: null, bytes: 0, loadMs: 0, n: src.pages[0],
@@ -36,7 +34,10 @@
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
-    hlMode: 'both', hlMs: 250, revealOn: false,
+    reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
+    hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
+    // the reader's zoom control, which the engine owns: mode, step and the size in force
+    zoom: { mode: 'stepped', step: 0, zoom: 1 },
   };
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
   const PALETTE = { [CATEGORY.HARAKAH]: '#1a73e8', [CATEGORY.TANWIN]: '#8e24aa', [CATEGORY.LETTER_DOT]: '#c62828', [CATEGORY.WAQF]: '#0a7d32', [CATEGORY.DABT]: '#ef6c00', [CATEGORY.ORTHOGRAPHIC]: '#00838f', [CATEGORY.STANDALONE]: '#6d4c41' };
@@ -54,11 +55,12 @@
     renderer.draw(p, v, dpr);
     // hover: a cheap UI overlay, not engine state
     if (S.hover >= 0 && S.hover !== S.selWord) {
-      const c = renderer.ctx, w = p.words[S.hover];
-      const [s, tx, ty] = renderer.lineTransform(p, v, w.lineIndex, dpr);
-      c.setTransform(s, 0, 0, s, tx, ty); c.globalCompositeOperation = 'destination-over';
+      // the engine places the band; the view adds only the reader's pan and zoom
+      const c = renderer.ctx;
+      c.setTransform(dpr * v.scale, 0, 0, dpr * v.scale, dpr * v.offsetX, dpr * v.offsetY);
+      c.globalCompositeOperation = 'destination-over';
       c.fillStyle = getComputedStyle(document.body).getPropertyValue('--hover'); c.beginPath();
-      for (const b of p.wordBands([S.hover], { height: 'ink', padX: 1.2, padY: 1.2 })) c.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 1.5);
+      for (const b of p.wordBandsView([S.hover], { height: 'ink', padX: 1.2, padY: 1.2 })) c.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 1.5);
       c.fill();
       c.globalCompositeOperation = 'source-over';
     }
@@ -69,7 +71,10 @@
   // ── view: engine layout + pan/zoom on top ──
   function layoutSpec() {
     const r = stage.getBoundingClientRect(), ls = S.layout;
-    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK };
+    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK,
+      reflow: S.reflow.on
+        ? { zoom: S.reflow.zoom, fill: S.reflow.fill, breaks: S.reflow.breaks, gaps: S.reflow.gaps, wordGap: S.reflow.wordGap, relax: S.reflow.relax, maxStretch: S.reflow.maxStretch }
+        : null };
   }
   function relayout() {
     const p = S.page; if (!p) return null;
@@ -77,7 +82,8 @@
   }
   function fit(redraw = true) {
     const L = relayout(); if (!L) return;
-    S.view = { scale: L.fitScale, offsetX: L.fitX, offsetY: L.fitY };
+    // a reflowed page is taller than the screen on purpose: show its top and let the reader scroll
+    S.view = L.reflowed ? { scale: 1, offsetX: L.fitX, offsetY: 0 } : { scale: L.fitScale, offsetX: L.fitX, offsetY: L.fitY };
     renderer.baseKey = '';
     if (redraw) draw();
   }
@@ -90,6 +96,16 @@
   const toView = (cx, cy) => [(cx - S.view.offsetX) / S.view.scale, (cy - S.view.offsetY) / S.view.scale];
 
   // ── page loading ──
+  // A page turn keeps the size the reader chose: the engine carries the control onto the page
+  // they turned to, since every page's steps are its own.
+  function carryZoom() {
+    if (!S.page) return;
+    S.zoom = S.page.zoomCarried(layoutSpec(), S.zoom);
+    S.levels = null;
+    S.level = S.zoom.step + 1;
+    S.reflow.on = S.zoom.zoom > 1.0001;
+    if (S.reflow.on) { S.reflow.zoom = S.zoom.zoom; $('rZoom').value = S.zoom.zoom; }
+  }
   async function loadPage(n) {
     if (!src.pages.includes(n)) n = src.pages.reduce((a, b) => Math.abs(b - n) < Math.abs(a - n) ? b : a);
     const bytes = await src.page(n);
@@ -97,11 +113,12 @@
     const page = engine.loadPage(bytes); page.buildPaths();
     S.loadMs = performance.now() - t;
     if (S.page) S.page.free();
-    S.page = page; S.n = n; S.bytes = bytes.length;
+    S.page = page; S.n = n; S.bytes = bytes.length; S.levels = null;
     S.selWord = -1; S.selAyah = null; S.hover = -1; S.playIdx = 0; S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.pathHandles.clear(); S.revealOn = false;
     S.themeHandle = S.tajwidHandle = S.hideHandle = S.ayahMarksHandle = 0;
     $('pageNo').value = n;
     applyTheme(); applyToggles();
+    carryZoom();
     renderer.baseKey = '';
     fit(false);
     showSelection(); showMeta(); runSearch();
@@ -209,15 +226,22 @@
       drag = { x: e.clientX, y: e.clientY, offsetX: S.view.offsetX, offsetY: S.view.offsetY };
       selecting = h && h.word >= 0 && (e.shiftKey || e.pointerType !== 'touch') ? { anchor: h.word, active: false } : null;
     }
-    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: S.view.scale, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, offsetX: S.view.offsetX, offsetY: S.view.offsetY }; drag = null; selecting = null; }
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { zoom: S.zoom, d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: S.view.scale, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, offsetX: S.view.offsetX, offsetY: S.view.offsetY }; drag = null; selecting = null; }
   });
   stage.addEventListener('pointermove', e => {
     const r = stage.getBoundingClientRect();
     if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
     if (pinch && pts.size === 2) {
+      // the engine owns the whole pinch: which step it lands on, when it commits, and what
+      // holds the reader's place when the page reflows under the fingers
       const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      const k = clampZoom(pinch.scale * d / pinch.d) / pinch.scale, cx = pinch.cx - r.left, cy = pinch.cy - r.top;
-      S.view = { scale: pinch.scale * k, offsetX: cx - (cx - pinch.offsetX) * k, offsetY: cy - (cy - pinch.offsetY) * k }; moved = true; draw(); return;
+      const from = { scale: pinch.scale, offsetX: pinch.offsetX, offsetY: pinch.offsetY };
+      // `pinch.zoom` stays where the gesture began: the engine measures the fingers against
+      // that, so a slow pinch walks the steps one at a time instead of running away
+      const c = S.page.zoomPinch(layoutSpec(), pinch.zoom, from, d / pinch.d, pinch.cx - r.left, pinch.cy - r.top);
+      S.view = c.view;
+      if (c.relaid) { S.zoom = c.zoom; syncZoomUI(); }
+      moved = true; draw(); return;
     }
     const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
     if (drag && selecting) {
@@ -236,7 +260,16 @@
     }
     if (drag) {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (Math.hypot(dx, dy) > 3) { moved = true; stage.classList.add('dragging'); S.view.offsetX = drag.offsetX + dx; S.view.offsetY = drag.offsetY + dy; draw(); }
+      if (Math.hypot(dx, dy) > 3) {
+        moved = true; stage.classList.add('dragging');
+        // the engine says whether this page has sideways travel to spend, or whether the drag
+        // belongs to a page turn
+        const L = S.page.currentLayout;
+        const turns = S.page.sidewaysDrag(S.zoom, S.view, L ? L.fitScale : 0) === 'turnPage';
+        const v = engine.viewPan({ ...S.view, offsetX: drag.offsetX, offsetY: drag.offsetY }, turns ? 0 : dx, dy);
+        S.view = turns && L ? engine.viewClamp(v, L.contentW, L.contentH, stage.clientWidth, stage.clientHeight) : v;
+        draw();
+      }
       return;
     }
     const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 4 }); S.lastHitUs = (performance.now() - t) * 1000;
@@ -249,6 +282,14 @@
     if (pts.size === 0) {
       stage.classList.remove('dragging'); stage.classList.remove('selecting');
       if (selecting && selecting.active) { showSelection(); selecting = null; drag = null; return; }
+      if (drag && moved) {
+        const L = S.page.currentLayout;
+        if (S.page.sidewaysDrag(S.zoom, S.view, L ? L.fitScale : 0) === 'turnPage') {
+          const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+          const pages = engine.swipePages(dx, dy);
+          if (pages) { const i = src.pages.indexOf(S.n); loadPage(src.pages[Math.min(src.pages.length - 1, Math.max(0, i + pages))]); drag = null; return; }
+        }
+      }
       if (drag && !moved) {
         const r = stage.getBoundingClientRect(); const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
         const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 6 }); S.lastHitUs = (performance.now() - t) * 1000;
@@ -263,9 +304,11 @@
   stage.addEventListener('lostpointercapture', e => pts.delete(e.pointerId));
   stage.addEventListener('wheel', e => {
     e.preventDefault(); const r = stage.getBoundingClientRect();
-    const k = Math.exp(-e.deltaY * 0.0015), v = S.view, cx = e.clientX - r.left, cy = e.clientY - r.top;
-    const ns = clampZoom(v.scale * k), kk = ns / v.scale;
-    S.view = { scale: ns, offsetX: cx - (cx - v.offsetX) * kk, offsetY: cy - (cy - v.offsetY) * kk }; draw();
+    const k = Math.exp(-e.deltaY * 0.0015);
+    const c = S.page.zoomPinch(layoutSpec(), S.zoom, S.view, k, e.clientX - r.left, e.clientY - r.top);
+    S.view = c.view;
+    if (c.relaid) { S.zoom = c.zoom; syncZoomUI(); }
+    draw();
   }, { passive: false });
   stage.addEventListener('dblclick', () => fit());
 
@@ -350,6 +393,60 @@
   $('padTop').oninput = e => { S.layout.padTop = +e.target.value; $('padTopVal').textContent = e.target.value; relayoutUI(); };
   $('padBottom').oninput = e => { S.layout.padBottom = +e.target.value; $('padBottomVal').textContent = e.target.value; relayoutUI(); };
 
+  // ── reflow ──
+  // the labels only: what a pinch needs, because the engine has already placed the view and a
+  // refit would throw that away
+  const reflowReadout = (relaid = true) => {
+    clampReflowZoom();
+    $('reflow').classList.toggle('on', S.reflow.on);
+    $('rZoomVal').textContent = '×' + S.reflow.zoom.toFixed(2);
+    $('rGapVal').textContent = '×' + S.reflow.wordGap.toFixed(2);
+    $('rRelaxVal').textContent = (100 * S.reflow.relax).toFixed(0) + '%';
+    $('rStretchVal').textContent = '×' + S.reflow.maxStretch.toFixed(1);
+    if (relaid) fit(); else relayout();
+    const L = S.page && S.page.currentLayout;
+    $('reflowRows').textContent = L && L.reflowed ? `${L.rows} rows · ${Math.round(L.contentH)} px tall · max zoom ×${(+$('rZoom').max).toFixed(2)}` : 'off · as printed';
+    for (let n = 1; n <= 4; n++) $('lv' + n).classList.toggle('on', (S.level || (S.reflow.on ? 0 : 1)) === n);
+    const lv = levels();
+    $('lvlVal').textContent = lv.length ? lv.map(z => '×' + z.toFixed(2)).join(' · ') : '';
+    $('zoomVal').textContent = `${$('zMode').value === 'stepped' ? 'step ' + S.zoom.step : ''} ×${S.zoom.zoom.toFixed(2)}`;
+  };
+  const reflowUI = () => reflowReadout(true);
+  $('reflow').onclick = () => { S.reflow.on = !S.reflow.on; reflowUI(); };
+  // the engine says how far this page can zoom before a word outgrows its row
+  const clampReflowZoom = () => {
+    const max = S.page ? S.page.reflowMaxZoom(layoutSpec()) : 4;
+    $('rZoom').max = Math.min(4, Math.max(1, max)).toFixed(2);
+    if (S.reflow.zoom > +$('rZoom').max) { S.reflow.zoom = +$('rZoom').max; $('rZoom').value = S.reflow.zoom; }
+  };
+  $('rZoom').oninput = e => { S.reflow.zoom = +e.target.value; S.level = 0; S.reflow.on = true; S.zoom = { ...S.zoom, zoom: +e.target.value }; reflowUI(); };
+  $('zMode').onchange = e => { S.zoom = S.page.zoomMode(layoutSpec(), S.zoom, e.target.value); syncZoomUI(); };
+  // The zoom steps this page offers, from the engine: level 1 is the printed page, the rest
+  // are the zooms whose rows come out best near each nominal size.
+  const levels = () => (S.levels = S.levels || (S.page ? S.page.zoomSteps(layoutSpec()) : []));
+  const setLevel = n => {
+    S.level = n;
+    const c = S.page.zoomToStep(layoutSpec(), S.zoom, n - 1, S.view);
+    S.zoom = c.zoom; S.view = c.view;
+    syncZoomUI();
+  };
+  // The control owns the zoom; the sliders own everything else about a reflowed row. This
+  // keeps the two in step, so the readout and the zoom slider follow a pinch.
+  function syncZoomUI() {
+    S.level = S.zoom.step + 1;
+    S.reflow.on = S.zoom.zoom > 1.0001;
+    if (S.reflow.on) { S.reflow.zoom = S.zoom.zoom; $('rZoom').value = S.zoom.zoom; }
+    reflowReadout(false);
+    draw();
+  }
+  for (let n = 1; n <= 4; n++) $('lv' + n).onclick = () => setLevel(n);
+  $('rGap').oninput = e => { S.reflow.wordGap = +e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rFill').onchange = e => { S.reflow.fill = e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rGaps').onchange = e => { S.reflow.gaps = e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rBreaks').onchange = e => { S.reflow.breaks = e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rRelax').oninput = e => { S.reflow.relax = +e.target.value; S.reflow.on = true; reflowUI(); };
+  $('rStretch').oninput = e => { S.reflow.maxStretch = +e.target.value; S.reflow.on = true; reflowUI(); };
+
   // ── navigation ──
   $('prev').onclick = () => loadPage(src.pages[Math.max(0, src.pages.indexOf(S.n) - 1)]);
   $('next').onclick = () => loadPage(src.pages[Math.min(src.pages.length - 1, src.pages.indexOf(S.n) + 1)]);
@@ -368,6 +465,7 @@
       `overlay       ${s.overlayPaths} styled paths + ${s.bands} band boxes in ${s.overlayMs.toFixed(2)} ms\n` +
       `hit-test      ${S.lastHitUs.toFixed(1)} µs (gap-aware, wasm)\n` +
       `styles        ${p.styleHandles().length} handles · ${p.highlightHandles().length} highlights${S.animating ? ' · animating' : ''}\n` +
+      `reflow        ${S.reflow.on ? `on · zoom ×${S.reflow.zoom.toFixed(2)} · ${S.reflow.fill} · ${S.reflow.breaks} breaks · ${S.reflow.gaps} gaps ×${S.reflow.wordGap.toFixed(2)} · relax ${(100 * S.reflow.relax).toFixed(0)}% · gap cap ×${S.reflow.maxStretch.toFixed(1)} · ${L ? L.rows : 0} rows` : 'off (as printed)'}\n` +
       `layout        ${S.layout.fillHeight ? 'fill height' : 'spacing ×' + S.layout.lineSpacing.toFixed(2)} · lineSpacing ${(L ? L.lineSpacing : 0).toFixed(1)} u · pad ${S.layout.padTop}/${S.layout.padBottom}\n` +
       `zoom          ${(S.view.scale * (L ? L.scale : 1) * dpr).toFixed(2)}× device px per unit`;
   }

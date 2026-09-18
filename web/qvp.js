@@ -6,10 +6,15 @@
   'use strict';
 
   const NONE = 0xffffffff;
+// the reader's zoom control: what a pinch does to the page
+const ZOOM_MODE = { stepped: 0, continuous: 1, magnify: 2 };
+const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   /** The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). */
   const DEFAULTS = { INK: 0x231f20ff, HIGHLIGHT_INK: 0x1a73e8ff, HIGHLIGHT_BAND: 0xd6a3264d, HIGHLIGHT_PAD_X: 1.2, HIGHLIGHT_PAD_Y: 0, HIGHLIGHT_SEAM: 0.25,
     SELECTION_BAND: 0x2d6fd640, GAP_BIAS: 0.6, TAP_DISTANCE: 6, GRID_LINES: 15, ASPECT_SLACK: 1.15, MASK_BLOCK: 0xd9d4c8ff, MASK_PAD: 0.6, MASK_RADIUS: 0.8,
-    REVEAL_LIT: 1, REVEAL_GREY: 0xc9c4b8ff, CROP_PAD: 2 };
+    REVEAL_LIT: 1, REVEAL_GREY: 0xc9c4b8ff, CROP_PAD: 2,
+    MIN_ZOOM: 0.5, MAX_ZOOM: 12, ZOOMED_THRESHOLD: 1.02, SWIPE_AXIS_RATIO: 1.5, SWIPE_DISTANCE: 40, SWIPE_VELOCITY: 500,
+    ZOOM_SNAP_HYSTERESIS: 0.03, ZOOM_QUANTUM: 0.01 };
   const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, ORNAMENT: 5, PAGE_NUMBER: 6, RUNNING_HEAD: 7, OTHER: 255 };
   const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 };
   const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGRAPHIC: 4, DABT: 5, WAQF: 6, READING_SIGN: 7, STANDALONE: 8 };
@@ -76,6 +81,7 @@
       this.mem = this.ex.memory;
       this.scratch = this.ex.qvp_alloc(1 << 16);   // 64 KB for outputs
       this.scratch2 = this.ex.qvp_alloc(1 << 16);  // 64 KB for inputs
+      this._buf = 0; this._bufLen = 0;             // grown on demand for the bigger reads
       this.td = new TextDecoder();
       this.te = new TextEncoder();
       // Load every name table from the engine once; Sel and markId read them.
@@ -89,6 +95,27 @@
     dv() { return new DataView(this.mem.buffer); }
     str(ptr, len) { return this.td.decode(new Uint8Array(this.mem.buffer, ptr, len)); }
     qstr(at) { const d = this.dv(); return this.str(d.getUint32(at, true), d.getUint32(at + 4, true)); }
+    /** the reader's pan and zoom: {scale, offsetX, offsetY} in, the same out. The engine owns
+     * the arithmetic so every platform pinches alike; the host owns only the gesture. */
+    _putView(v, at) { const d = this.dv(); d.setFloat32(at, v.scale, true); d.setFloat32(at + 4, v.offsetX, true); d.setFloat32(at + 8, v.offsetY, true); return at; }
+    _getView(at) { const d = this.dv(); return { scale: d.getFloat32(at, true), offsetX: d.getFloat32(at + 4, true), offsetY: d.getFloat32(at + 8, true) }; }
+    /** zoom about a point of the viewport (the point between two fingers), clamped */
+    viewZoomAbout(view, focalX, focalY, factor, { min = 0, max = 0 } = {}) {
+      const i = this._putView(view, this.scratch2 + 32768);
+      this.ex.qvp_view_zoom_about(i, focalX, focalY, factor, min, max, this.scratch);
+      return this._getView(this.scratch);
+    }
+    /** move by a drag, in viewport px */
+    viewPan(view, dx, dy) { const i = this._putView(view, this.scratch2 + 32768); this.ex.qvp_view_pan(i, dx, dy, this.scratch); return this._getView(this.scratch); }
+    /** hold the content against the viewport: centre what does not fill it, cover what does */
+    viewClamp(view, contentW, contentH, viewportW, viewportH) { const i = this._putView(view, this.scratch2 + 32768); this.ex.qvp_view_clamp(i, contentW, contentH, viewportW, viewportH, this.scratch); return this._getView(this.scratch); }
+    /** +1 or -1 when a released drag is a page swipe, 0 when it is not */
+    viewSwipe(dx, dy, vx = 0, vy = 0) { return this.ex.qvp_view_swipe(dx, dy, vx, vy); }
+    /** how many pages a released drag turns, in reading order: a mushaf runs right to left, so a
+     * flick to the right is the next page. Add it to the page you are on. */
+    swipePages(dx, dy, vx = 0, vy = 0) { return this.ex.qvp_swipe_pages(dx, dy, vx, vy); }
+    /** a scratch buffer of at least `len` bytes, kept between calls */
+    buf(len) { if (len > this._bufLen) { this._buf = this.ex.qvp_alloc(len); this._bufLen = len; } return this._buf; }
     /** write a JS string into scratch2 at offset; returns [ptr, len] */
     putStr(s, off = 0) { const b = this.te.encode(s); new Uint8Array(this.mem.buffer, this.scratch2 + off, b.length).set(b); return [this.scratch2 + off, b.length]; }
     putU32(arr, off = 0) { const p = this.scratch2 + off; new Uint32Array(this.mem.buffer, p, arr.length).set(arr); return p; }
@@ -278,6 +305,12 @@
       for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
       return out;
     }
+    /** the ayah medallions in viewport px through the current layout: where each is drawn */
+    ayahMarksView() {
+      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_ayah_marks_view(this.h, s, 128), d = this.e.dv(), out = [];
+      for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
+      return out;
+    }
     rosettes() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_rosettes(this.h, s, 32), d = this.e.dv(), out = [];
       for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 20; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), juz: d.getUint16(o + 8, true), hizb: d.getUint16(o + 10, true), nisf: d.getUint16(o + 12, true), rubuAlHizb: d.getUint16(o + 14, true), rubuAlHizbInHizb: d.getUint16(o + 16, true) }); }
@@ -323,6 +356,8 @@
     /** gap-aware: every point on a printed line resolves to the word the user meant */
     hitTest(x, y, opt = {}) { return this.e.ex.qvp_hit_test(this.h, x, y, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
     hitTestView(viewX, viewY, opt = {}) { return this.e.ex.qvp_hit_test_view(this.h, viewX, viewY, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
+    /** the hit boxes in viewport px through the current layout: what a tap is resolved with */
+    hitAreasView(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas_view(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
     lineBands() { const n = this.e.ex.qvp_line_bands(this.h, this.e.scratch, 64), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 64); i++) { const o = this.e.scratch + i * 28; out.push({ line: d.getUint32(o, true), lineNumber: d.getUint32(o + 4, true), y0: d.getFloat32(o + 8, true), y1: d.getFloat32(o + 12, true), mid: d.getFloat32(o + 16, true), inkY0: d.getFloat32(o + 20, true), inkY1: d.getFloat32(o + 24, true) }); } return out; }
     hitAreas(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
 
@@ -334,6 +369,15 @@
       d.setFloat32(s + 16, spec.padLeft || 0, true); d.setFloat32(s + 20, spec.padRight || 0, true); d.setFloat32(s + 24, spec.lineSpacing ?? 1, true);
       d.setUint8(s + 28, spec.fillHeight ? 1 : 0); d.setUint32(s + 32, spec.gridLines || 0, true);
       d.setFloat32(s + 36, spec.cropLeft || 0, true); d.setFloat32(s + 40, spec.cropRight || 0, true); d.setFloat32(s + 44, spec.maxAspectSlack || 0, true);
+      const r = spec.reflow;
+      d.setFloat32(s + 48, r ? (r.zoom ?? 1) : 0, true);
+      // 255 asks the engine for its own default
+      const fill = { ragged: 0, justified: 1, centred: 2, centered: 2 }[r && r.fill] ?? 255;
+      const breaks = { greedy: 0, even: 1, fitted: 2 }[r && r.breaks] ?? 255;
+      d.setUint8(s + 52, fill); d.setUint8(s + 53, breaks); d.setUint8(s + 54, r && r.gaps === 'printed' ? 0 : 1);
+      d.setFloat32(s + 56, r ? (r.wordGap ?? 1) : 1, true);
+      d.setFloat32(s + 60, r ? (r.maxStretch ?? 0) : 0, true);
+      d.setFloat32(s + 64, r && r.relax !== undefined ? r.relax : -1, true);
     }
     /** Leading (page units) that makes the page fill the padded viewport of `spec`; max 0 = unlimited. */
     layoutLineSpacingToFill(spec, max = 0) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_line_spacing_to_fill(this.h, s, max); }
@@ -342,16 +386,188 @@
     /** the grid this page is laid out inside: the mushaf's line count and the printed line spacing */
     get grid() { this.e.ex.qvp_page_grid(this.h, this.e.scratch); const d = this.e.dv(); return { lines: d.getUint32(this.e.scratch, true), lineSpacing: d.getFloat32(this.e.scratch + 4, true) }; }
     layout(spec) {
-      const ex = this.e.ex, s = this.e.scratch; let d = this.e.dv();
+      const ex = this.e.ex, s = this.e.scratch;
       this._writeLayoutSpec(spec, s);
-      ex.qvp_layout(this.h, s, s + 64);
-      d = this.e.dv(); const o = s + 64;
+      ex.qvp_layout(this.h, s, s + 128);
+      return this._readLayout(s + 128);
+    }
+    /** read a QvpLayout the engine has written at `o`, and everything that goes with it */
+    _readLayout(o) {
+      const ex = this.e.ex; let d = this.e.dv();
       const n = d.getUint32(o + 24, true), lp = d.getUint32(o + 28, true);
       const f = new Float32Array(this.e.mem.buffer.slice(lp, lp + n * 12));
       const lineDy = new Float32Array(n), slots = new Array(n);
       for (let i = 0; i < n; i++) { lineDy[i] = f[i * 3]; slots[i] = [f[i * 3 + 1], f[i * 3 + 2]]; }
-      return (this.currentLayout = { scale: d.getFloat32(o, true), offsetX: d.getFloat32(o + 4, true), offsetY: d.getFloat32(o + 8, true), contentW: d.getFloat32(o + 12, true), contentH: d.getFloat32(o + 16, true), lineSpacing: d.getFloat32(o + 20, true), lineDy, slots,
-        fitScale: d.getFloat32(o + 32, true), fitX: d.getFloat32(o + 36, true), fitY: d.getFloat32(o + 40, true) });
+      const reflowed = d.getUint32(o + 44, true) === 1, rows = d.getUint32(o + 48, true);
+      const L = { scale: d.getFloat32(o, true), offsetX: d.getFloat32(o + 4, true), offsetY: d.getFloat32(o + 8, true), contentW: d.getFloat32(o + 12, true), contentH: d.getFloat32(o + 16, true), lineSpacing: d.getFloat32(o + 20, true), lineDy, slots,
+        fitScale: d.getFloat32(o + 32, true), fitX: d.getFloat32(o + 36, true), fitY: d.getFloat32(o + 40, true), reflowed, rows };
+      // where each group of paths sits: {dx, dy, k} triples, and the group of every path
+      const ng = ex.qvp_layout_groups(this.h, 0, 0);
+      const gp = this.e.buf(ng * 16);
+      ex.qvp_layout_groups(this.h, gp, ng);
+      L.groups = new Float32Array(this.e.mem.buffer.slice(gp, gp + ng * 16));
+      const np = ex.qvp_layout_path_groups(this.h, 0, 0);
+      if (np) { const pp = this.e.buf(np * 4); ex.qvp_layout_path_groups(this.h, pp, np); L.pathGroup = new Uint32Array(this.e.mem.buffer.slice(pp, pp + np * 4)); }
+      else L.pathGroup = null;
+      // paths this layout leaves undrawn: the sheet's furniture on a reflowed page
+      const no = ex.qvp_layout_omitted_paths(this.h, 0, 0);
+      if (no) { const op = this.e.buf(no * 4); ex.qvp_layout_omitted_paths(this.h, op, no); L.omitted = new Set(new Uint32Array(this.e.mem.buffer, op, no)); }
+      else L.omitted = null;
+      // paths drawn a second time elsewhere: a sajdah line whose words ended up on two rows
+      const nr = ex.qvp_layout_repeats(this.h, 0, 0);
+      L.repeats = [];
+      if (nr) {
+        const rp = this.e.buf(nr * 24); ex.qvp_layout_repeats(this.h, rp, nr);
+        const f = new Float32Array(this.e.mem.buffer.slice(rp, rp + nr * 24));
+        for (let i = 0; i < nr; i++) L.repeats.push({ firstPath: f[i * 6], nPaths: f[i * 6 + 1], dx: f[i * 6 + 2], dy: f[i * 6 + 3], kx: f[i * 6 + 4], ky: f[i * 6 + 5] });
+      }
+      return (this.currentLayout = L);
+    }
+    // ── the reader's zoom control ──
+    /** where the zoom control stands: {mode, step, zoom}. All zero is what a page opens on:
+     * stepped, on the printed page. */
+    _putZoom(z, at) { const d = this.e.dv(); d.setUint32(at, ZOOM_MODE[z && z.mode] ?? 0, true); d.setUint32(at + 4, (z && z.step) || 0, true); d.setFloat32(at + 8, (z && z.zoom) || 1, true); return at; }
+    _getZoom(at) { const d = this.e.dv(); return { mode: ZOOM_MODE_NAME[d.getUint32(at, true)] || 'stepped', step: d.getUint32(at + 4, true), zoom: d.getFloat32(at + 8, true) }; }
+    _getZoomChange(at) { return { zoom: this._getZoom(at), view: this.e._getView(at + 12), relaid: !!this.e.dv().getUint32(at + 24, true) }; }
+    /** the same control under another policy, keeping the size the reader is at */
+    zoomMode(spec, zoom, mode) {
+      const s = this.e.scratch2 + 40960; this._writeLayoutSpec(spec, s);
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      this.e.ex.qvp_zoom_mode(this.h, s, z, ZOOM_MODE[mode] ?? 0, this.e.scratch);
+      return this._getZoom(this.e.scratch);
+    }
+    /** one frame of a pinch: `factor` is the fingers' distance against their distance when
+     * they went down, and (x, y) the point between them. Returns {zoom, view, relaid}. */
+    zoomPinch(spec, zoom, view, factor, x, y) {
+      const s = this.e.scratch2 + 40960; this._writeLayoutSpec(spec, s);
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      const v = this.e._putView(view, this.e.scratch2 + 42000);
+      this.e.ex.qvp_zoom_pinch(this.h, s, z, v, factor, x, y, this.e.scratch);
+      const c = this._getZoomChange(this.e.scratch);
+      // the engine laid the page out inside the call: keep the cached layout with it
+      if (c.relaid) this.layoutCurrent();
+      return c;
+    }
+    /** the control moved straight to a step: a size button, a double tap, a reset. Step 0 is
+     * the printed page. */
+    zoomToStep(spec, zoom, step, view) {
+      const s = this.e.scratch2 + 40960; this._writeLayoutSpec(spec, s);
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      const v = this.e._putView(view, this.e.scratch2 + 42000);
+      this.e.ex.qvp_zoom_to_step(this.h, s, z, step, v, this.e.scratch);
+      const c = this._getZoomChange(this.e.scratch);
+      if (c.relaid) this.layoutCurrent();
+      return c;
+    }
+    /** `spec` with this control's zoom in it: what the host lays out and draws with */
+    zoomSpec(spec, zoom) {
+      const s = this.e.scratch2 + 40960; this._writeLayoutSpec(spec, s);
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      this.e.ex.qvp_zoom_spec(this.h, s, z, this.e.scratch);
+      const at = this.e.scratch + 48;
+      const v = this.e.dv().getFloat32(at, true);
+      return { ...spec, reflow: v > 0 ? { ...(spec.reflow || {}), zoom: v } : null };
+    }
+    /** The same control on this page: what the reader was reading at, carried onto the page they
+     * turned to. A step carries as a step, because every page's steps are its own; a free zoom
+     * carries as a size, held inside what this page can reach. */
+    zoomCarried(spec, zoom) {
+      const s = this.e.scratch2 + 40960; this._writeLayoutSpec(spec, s);
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      this.e.ex.qvp_zoom_carried(this.h, s, z, this.e.scratch);
+      return this._getZoom(this.e.scratch);
+    }
+    /** the reflow zoom one step of this page's control means; step 0 is the printed page */
+    zoomAtStep(spec, step) {
+      const s = this.e.scratch2 + 40960; this._writeLayoutSpec(spec, s);
+      return this.e.ex.qvp_zoom_at_step(this.h, s, step);
+    }
+    /** true once the reader has zoomed in, by either road: a magnified view, or a page reflowed
+     * above the printed size. `fitScale` is the scale the page is fitted at (0 = it is at it). */
+    zoomIsZoomed(zoom, view, fitScale = 0) {
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      const v = this.e._putView(view, this.e.scratch2 + 42000);
+      return !!this.e.ex.qvp_zoom_is_zoomed(z, v, fitScale);
+    }
+    /** what a sideways drag on this page means: 'pan' it, or 'turnPage' */
+    sidewaysDrag(zoom, view, fitScale = 0) {
+      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
+      const v = this.e._putView(view, this.e.scratch2 + 42000);
+      return this.e.ex.qvp_sideways_drag(this.h, z, v, fitScale) === 1 ? 'turnPage' : 'pan';
+    }
+    /** The layout the page already has, without computing one: what to read after a call that
+     * laid the page out itself, as the zoom control does. */
+    layoutCurrent() {
+      const s = this.e.scratch;
+      if (!this.e.ex.qvp_layout_current(this.h, s + 128)) return this.currentLayout;
+      return this._readLayout(s + 128);
+    }
+    /** Everything the current layout draws, in drawing order: `{path, placement}` pairs into
+     * `layoutPlacements()`. Omitted paths are already gone and a repeated one is already there
+     * twice, so one loop draws any page — printed or reflowed. */
+    layoutDrawList(bandTop = 0, bandBottom = 0) {
+      const n = this.e.ex.qvp_layout_draw_list(this.h, bandTop, bandBottom, 0, 0);
+      if (!n) return new Uint32Array(0);
+      const p = this.e.buf(n * 8); this.e.ex.qvp_layout_draw_list(this.h, bandTop, bandBottom, p, n);
+      return new Uint32Array(this.e.mem.buffer.slice(p, p + n * 8));
+    }
+    /** what a draw list's `placement` indexes: every group, then every repeat */
+    layoutPlacements() {
+      const n = this.e.ex.qvp_layout_placements(this.h, 0, 0);
+      if (!n) return new Float32Array(0);
+      const p = this.e.buf(n * 16); this.e.ex.qvp_layout_placements(this.h, p, n);
+      return new Float32Array(this.e.mem.buffer.slice(p, p + n * 16));
+    }
+    /** the largest reflow zoom at which every word of this page still fits a row */
+    reflowMaxZoom(spec) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_reflow_max_zoom(this.h, s); }
+    /** the zoom each step of a reader's zoom control lands on for this page, rising */
+    zoomLevels(spec, nominals, band) {
+      const s = this.e.scratch; this._writeLayoutSpec(spec, s);
+      const k = nominals ? nominals.length : 0;
+      const np = k ? this.e.buf(k * 4) : 0;
+      if (k) new Float32Array(this.e.mem.buffer, np, k).set(nominals);
+      const out = this.e.buf(8 * 4);
+      const n = this.e.ex.qvp_zoom_levels(this.h, s, np, k, band || 0, out, 8);
+      return Array.from(new Float32Array(this.e.mem.buffer, out, n));
+    }
+    /** the zoom steps this page ships with, lowest first; zoom 1 is the step before them */
+    zoomSteps(spec) {
+      const s = this.e.scratch; this._writeLayoutSpec(spec, s);
+      const out = this.e.buf(8 * 4);
+      const n = this.e.ex.qvp_zoom_steps(this.h, s, out, 8);
+      return Array.from(new Float32Array(this.e.mem.buffer, out, n));
+    }
+    /** every zoom the search weighs for one step of a zoom control, with its cost */
+    zoomLevelCandidates(spec, nominal, band, floor) {
+      const s = this.e.scratch; this._writeLayoutSpec(spec, s);
+      // one block, two halves: `buf` hands back the same scratch every time
+      const N = 64, z = this.e.buf(N * 8), c = z + N * 4;
+      const n = this.e.ex.qvp_zoom_level_candidates(this.h, s, nominal, band || 0, floor || 0, z, c, N);
+      const zs = new Float32Array(this.e.mem.buffer, z, n), cs = new Float32Array(this.e.mem.buffer, c, n);
+      return Array.from(zs, (v, i) => ({ zoom: v, cost: cs[i] }));
+    }
+    /** the words of a reflowed row, in reading order */
+    rowWords(row) {
+      const n = this.e.ex.qvp_layout_row_words(this.h, row, 0, 0);
+      if (!n) return [];
+      const p = this.e.buf(n * 4); this.e.ex.qvp_layout_row_words(this.h, row, p, n);
+      return Array.from(new Uint32Array(this.e.mem.buffer, p, n));
+    }
+    /** the row a word landed on in a reflowed layout, or null */
+    wordRow(word) { const r = this.e.ex.qvp_layout_word_row(this.h, word); return r === 0xffffffff ? null : r; }
+    /** the view that puts a point inside a word (nx, ny from 0 to 1) at a place on the screen,
+     * then clamps: how a pinch holds its place when the layout reflows under it */
+    viewAnchor(view, word, nx, ny, toX, toY, viewportW, viewportH) {
+      const i = this.e._putView(view, this.e.scratch2 + 32768);
+      this.e.ex.qvp_view_anchor(this.h, i, word, nx, ny, toX, toY, viewportW, viewportH, this.e.scratch);
+      return this.e._getView(this.e.scratch);
+    }
+    /** where a viewport point lands in the laid-out page, for turning a touch into a hit test */
+    viewToLayout(view, vx, vy) {
+      const i = this.e._putView(view, this.e.scratch2 + 32768);
+      this.e.ex.qvp_view_to_layout(this.h, i, vx, vy, this.e.scratch);
+      const f = new Float32Array(this.e.mem.buffer, this.e.scratch, 2);
+      return { x: f[0], y: f[1] };
     }
     wordBoundsView(i) { this.e.ex.qvp_word_bounds_view(this.h, i, this.e.scratch); const f = new Float32Array(this.e.mem.buffer, this.e.scratch, 4); return { x0: f[0], y0: f[1], x1: f[2], y1: f[3] }; }
 
@@ -421,6 +637,8 @@
     unmask() { this.e.ex.qvp_unmask(this.h); }
     maskHidden() { const n = this.e.ex.qvp_mask_hidden(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     maskWords() { const n = this.e.ex.qvp_mask_words(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
+    /** band boxes for a word list in viewport px through the current layout */
+    wordBandsView(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_word_bands_view(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
     maskBoxesView() { const n = this.e.ex.qvp_mask_boxes_view(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
     /** greyed page with a lit window: {lit, byAyah, grey, ink, ayahMarks, ms} → steps */
     revealStart({ lit = DEFAULTS.REVEAL_LIT, byAyah = false, grey = DEFAULTS.REVEAL_GREY, ink = DEFAULTS.INK, ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms); }
@@ -466,13 +684,32 @@
     constructor(canvas) {
       this.canvas = canvas; this.ctx = canvas.getContext('2d');
       this.base = document.createElement('canvas'); this.baseKey = '';
+      // the engine's draw list for the band in hand, kept until the band moves
+      this.list = null; this.places = null; this.listKey = '';
+      /// How much ink to keep ready at once: a page that fits is drawn once and scrolling never
+      /// draws again. About 17 MB for a page of this mushaf at the first zoom step.
+      this.inkBudget = 64 << 20;
       this.stats = { baseMs: 0, overlayMs: 0, basePaths: 0, overlayPaths: 0, bands: 0 };
     }
-    lineTransform(page, view, line, dpr) {
-      const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null };
-      const s = dpr * view.scale * L.scale, dy = L.lineDy ? L.lineDy[line] : 0;
-      return [s, dpr * (view.offsetX + view.scale * L.offsetX), dpr * (view.offsetY + view.scale * (L.offsetY + dy * L.scale))];
+    /** transform of one group of paths: a point p is drawn at (kx·p.x + dx, ky·p.y + dy), page units */
+    groupTransform(page, view, group, dpr) {
+      const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null, groups: null };
+      let dx = 0, dy = 0, kx = 1, ky = 1;
+      if (L.groups && L.groups.length > group * 4) { dx = L.groups[group * 4]; dy = L.groups[group * 4 + 1]; kx = L.groups[group * 4 + 2]; ky = L.groups[group * 4 + 3]; }
+      else if (L.lineDy) dy = L.lineDy[group] || 0;
+      return this.placementTransform(page, view, { dx, dy, kx, ky }, dpr);
     }
+    /** transform of one placement: [a, d, tx, ty] for setTransform(a, 0, 0, d, tx, ty) */
+    placementTransform(page, view, p, dpr) {
+      const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0 };
+      const s = dpr * view.scale * L.scale;
+      return [s * p.kx, s * p.ky, dpr * (view.offsetX + view.scale * (L.offsetX + p.dx * L.scale)), dpr * (view.offsetY + view.scale * (L.offsetY + p.dy * L.scale))];
+    }
+    lineTransform(page, view, line, dpr) { const [a, , tx, ty] = this.groupTransform(page, view, line, dpr); return [a, tx, ty]; }
+    /** put a context into one group's space, so a host overlay lands where the group is drawn */
+    setGroupTransform(c, page, view, group, dpr) { const [a, d, tx, ty] = this.groupTransform(page, view, group, dpr); c.setTransform(a, 0, 0, d, tx, ty); }
+    /** the group a path is drawn with: its reflow group, or its printed line */
+    pathGroup(page, i) { const L = page.currentLayout; return L && L.pathGroup ? L.pathGroup[i] : page.pathLine(i); }
     /** boxes are in layout viewport px; view adds pan/zoom on top */
     drawBoxes(c, boxes, view, dpr) {
       c.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.offsetX, dpr * view.offsetY);
@@ -490,18 +727,50 @@
       const styledSet = new Set(styled.map(s => s[0]));
       const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null, lineSpacing: 0 };
       const ink = page.defaultInk;
-      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${view.offsetY.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.lineSpacing}|${L.lineDy ? L.lineDy[0] : ''}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
       const W = this.canvas.width, H = this.canvas.height;
-      const setTf = (c, line) => { const [s, tx, ty] = this.lineTransform(page, view, line, dpr); c.setTransform(s, 0, 0, s, tx, ty); };
-      if (key !== this.baseKey || this.base.width !== W || this.base.height !== H) {
+      // The cached ink is a band of the page, not the screen, so scrolling inside it is one
+      // blit and nothing is drawn again. A page that is several screens of ink used to redraw
+      // every path on every frame of a drag, because the cache was keyed on where the reader
+      // had scrolled to. The band is rebuilt only when the drag has travelled half a screen.
+      const viewH = H / dpr, slack = viewH / 2, step = viewH / 2;
+      const scale = view.scale || 1;
+      // A page that fits the ink budget is drawn once, the parts past both ends of the screen
+      // included, and then scrolling draws nothing at all. A taller one keeps a band of itself,
+      // two screens tall, redrawn when the reader scrolls out of it.
+      const contentH = (L.contentH || 0) * scale;
+      const whole = contentH > 0 && W * contentH * dpr * 4 <= this.inkBudget && contentH * dpr <= 16384;
+      const bandTop = whole ? 0 : Math.floor((-view.offsetY - slack) / step) * step;   // view px
+      const bandH = whole ? contentH : viewH + 2 * slack;
+      // the ink drawn into the band, in layout px: what the engine is asked for
+      const cullTop = bandTop / scale, cullBottom = (bandTop + bandH) / scale;
+      // the view the band is rendered under: the reader's, less where the band starts
+      const bandView = { ...view, offsetY: -bandTop };
+      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${bandTop.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.lineSpacing}|${L.lineDy ? L.lineDy[0] : ''}|${L.groups ? L.groups.length + ':' + L.groups[1] : ''}|${(L.repeats || []).length}|${L.omitted ? L.omitted.size : 0}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
+      // The engine says what is drawn and where: each path once under its placement, again for
+      // every row a decoration repeats over, and nothing for a path this layout leaves out. It
+      // is asked once per band, not once per frame: a scroll inside the band changes neither.
+      const listKey = `${page.page}|${cullTop.toFixed(1)}|${cullBottom.toFixed(1)}|${L.scale}|${L.rows}|${L.contentH}`;
+      if (listKey !== this.listKey) {
+        this.list = page.layoutDrawList(cullTop, cullBottom);
+        this.places = page.layoutPlacements();
+        this.listKey = listKey;
+      }
+      const list = this.list, places = this.places;
+      const setPlace = (c, g, v = view) => {
+        const [a, d, tx, ty] = this.placementTransform(page, v, { dx: places[g * 4], dy: places[g * 4 + 1], kx: places[g * 4 + 2], ky: places[g * 4 + 3] }, dpr);
+        c.setTransform(a, 0, 0, d, tx, ty);
+      };
+      const baseH = Math.ceil(bandH * dpr);
+      if (key !== this.baseKey || this.base.width !== W || this.base.height !== baseH) {
         const t0 = performance.now();
-        this.base.width = W; this.base.height = H;
+        this.base.width = W; this.base.height = baseH;
         const b = this.base.getContext('2d');
         b.fillStyle = css(ink);
         let n = 0, cur = -1;
-        for (let i = 0; i < page.nPaths; i++) {
+        for (let k = 0; k < list.length; k += 2) {
+          const i = list[k], g = list[k + 1];
           if (styledSet.has(i)) continue;
-          const ln = page.pathLine(i); if (ln !== cur) { setTf(b, ln); cur = ln; }
+          if (g !== cur) { setPlace(b, g, bandView); cur = g; }
           b.fill(paths[i], page.pathEvenOdd(i) ? 'evenodd' : 'nonzero'); n++;
         }
         this.baseKey = key; this.stats.baseMs = performance.now() - t0; this.stats.basePaths = n;
@@ -512,11 +781,14 @@
       const bands = page.highlightBoxesView();
       this.drawBoxes(c, bands, view, dpr);
       c.setTransform(1, 0, 0, 1, 0, 0);
-      c.drawImage(this.base, 0, 0);
+      c.drawImage(this.base, 0, Math.round(dpr * (view.offsetY + bandTop)));
+      const colors = new Map(styled);
       let cur = -1;
-      for (const [i, col] of styled) {
-        if ((col & 255) === 0) continue;
-        const ln = page.pathLine(i); if (ln !== cur) { setTf(c, ln); cur = ln; }
+      for (let k = 0; k < list.length; k += 2) {
+        const i = list[k], g = list[k + 1];
+        const col = colors.get(i);
+        if (col === undefined || (col & 255) === 0) continue;
+        if (g !== cur) { setPlace(c, g); cur = g; }
         c.fillStyle = css(col); c.fill(paths[i], page.pathEvenOdd(i) ? 'evenodd' : 'nonzero');
       }
       this.drawBoxes(c, page.maskBoxesView(), view, dpr);

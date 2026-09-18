@@ -11,19 +11,24 @@ pub mod hit;
 pub mod layout;
 pub mod memorize;
 pub mod meta;
+pub mod reflow;
 pub mod selection;
 pub mod style;
 pub mod target;
 pub mod text;
+pub mod view;
+pub mod zoom;
+mod zoom_table;
 
 pub use crop::CropBounds;
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
 pub use hit::{Hit, HitArea, HitOptions, LineBand};
-pub use layout::{Grid, Layout, LayoutSpec};
+pub use layout::{Draw, Grid, Layout, LayoutSpec};
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
 pub use qvp_format;
 pub use qvp_format::atlas::Atlas;
+pub use reflow::{Breaks, Fill, GapMode, Placement, ReflowSpec, Reflowed};
 pub use selection::Selection;
 pub use style::{
     Handle, Paint, Selector, StyleEngine, Theme, LAYER_BASE, LAYER_HIGHLIGHT, LAYER_SELECTION, LAYER_THEME, LAYER_TOP,
@@ -33,6 +38,8 @@ pub use text::{
     fold, is_mark, loose_key, normalize_query, parse_words_sidecar, search_key, search_variants, strip_marks, Form,
     Match, SearchMode, SearchOptions, WordForms,
 };
+pub use view::{swipe_direction, swipe_pages, View};
+pub use zoom::{Sideways, Zoom, ZoomChange, ZoomMode};
 
 use qvp_format::*;
 use std::collections::HashMap;
@@ -76,6 +83,12 @@ pub struct HitExact {
     pub decoration: u32,
 }
 
+/// The traced silhouettes of a page's words and decorations. See [`Page::silhouettes`].
+struct Silhouettes {
+    words: Vec<Vec<(i16, f32, f32)>>,
+    decorations: Vec<Vec<(i16, f32, f32)>>,
+}
+
 pub struct Page {
     data: PageData,
     geom: Geometry,
@@ -84,6 +97,22 @@ pub struct Page {
     layout: Option<Layout>,
     /// words of each line sorted by bbox.x0 ascending: (x0, word idx)
     line_words: Vec<Vec<(i32, u32)>>,
+    /// horizontal extent of each word's letters, page units, without the marks drawn over and
+    /// under them
+    word_body: Vec<(f32, f32)>,
+    /// the baseline of each printed line: the height most of its words sit on
+    line_baseline: Vec<f32>,
+    /// Each word's letters, and each decoration, traced into horizontal bands as
+    /// (band, leftmost x, rightmost x). Bands are counted from the line's baseline, so two
+    /// words off different lines can still be measured against each other once a row puts them
+    /// on one baseline.
+    ///
+    /// Tracing every outline costs more than the rest of loading a page, and only a reflow
+    /// needs it, so it waits until something asks.
+    silhouettes: std::cell::OnceCell<Silhouettes>,
+    /// The searched zoom steps of a page the shipped table does not cover, kept so the search
+    /// runs at most once a page. See [`Page::zoom_steps`].
+    pub(crate) searched_steps: Option<Vec<f32>>,
     path_deco: Vec<u32>,
     pub(crate) path_ctx: Vec<PathCtx>,
     word_index: HashMap<(u16, u16, u16), u32>,
@@ -318,6 +347,43 @@ impl Page {
             v.sort_unstable();
             line_words.push(v);
         }
+        // a word's letters, without its marks: 2 words in 3 carry ink outside them
+        let word_body: Vec<(f32, f32)> = data
+            .words
+            .iter()
+            .map(|w| {
+                let (mut x0, mut x1) = (f32::INFINITY, f32::NEG_INFINITY);
+                for pi in w.first_path..w.first_path + w.n_paths as u32 {
+                    if data.paths[pi as usize].kind != PathKind::Body {
+                        continue;
+                    }
+                    let b = &data.paths[pi as usize].bbox;
+                    x0 = x0.min(b.x0 as f32 / q);
+                    x1 = x1.max(b.x1 as f32 / q);
+                }
+                if x0 < x1 {
+                    (x0, x1)
+                } else {
+                    (w.bbox.x0 as f32 / q, w.bbox.x1 as f32 / q)
+                }
+            })
+            .collect();
+        // the baseline of a line is the height most of its words end on
+        let line_baseline: Vec<f32> = (0..data.lines.len())
+            .map(|li| {
+                let mut bottoms: Vec<f32> =
+                    line_words[li].iter().map(|&(_, wi)| data.words[wi as usize].bbox.y1 as f32 / q).collect();
+                if bottoms.is_empty() {
+                    return line_centre[li];
+                }
+                bottoms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                bottoms[bottoms.len() / 2]
+            })
+            .collect();
+        // Two words are spaced by the air between their letters, not by the distance between
+        // their boxes: the calligraphy interlocks one word's stroke with the next one's without
+        // the ink ever meeting. Slicing each word into bands and recording where its ink starts
+        // and ends in each is what makes that air measurable.
         let word_index = data.words.iter().enumerate().map(|(i, w)| ((w.surah, w.ayah, w.word), i as u32)).collect();
         let n = data.paths.len();
         Page {
@@ -327,6 +393,10 @@ impl Page {
             line_spacing,
             layout: None,
             line_words,
+            word_body,
+            line_baseline,
+            silhouettes: std::cell::OnceCell::new(),
+            searched_steps: None,
             path_deco,
             path_ctx,
             word_index,
@@ -370,6 +440,211 @@ impl Page {
     }
     pub fn page_number(&self) -> u16 {
         self.data.header.page
+    }
+    /// The horizontal extent of a word's letters in page units, without the marks drawn over
+    /// and under them: what the eye reads as the distance between two words.
+    pub fn word_body(&self, wi: u32) -> (f32, f32) {
+        self.word_body[wi as usize]
+    }
+
+    /// Trace a set of paths into bands: where the ink starts and ends at each height.
+    // The silhouette of a set of paths, band by band: where its ink starts and ends at
+    // each height. Walking the outline and not its points is the whole of it — a curve's
+    // control points are far apart, so a band between two of them would read as empty and
+    // two words would be measured against ink that is not facing them.
+    fn trace(&self, first_path: u32, n_paths: u32, base: f32, body_only: bool) -> Vec<(i16, f32, f32)> {
+        let (data, geom) = (&self.data, &self.geom);
+        let band = self.line_spacing / defaults::SLICES_PER_LINE as f32;
+        let mut rows: std::collections::BTreeMap<i16, (f32, f32)> = std::collections::BTreeMap::new();
+        let mark = |y: f32, x: f32, rows: &mut std::collections::BTreeMap<i16, (f32, f32)>| {
+            let r = (((y - base) / band).floor() as i32).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+            let e = rows.entry(r).or_insert((f32::INFINITY, f32::NEG_INFINITY));
+            e.0 = e.0.min(x);
+            e.1 = e.1.max(x);
+        };
+        // a straight run of the outline, marked into every band it crosses
+        let segment = |a: (f32, f32), b: (f32, f32), rows: &mut std::collections::BTreeMap<i16, (f32, f32)>| {
+            let steps = (((b.1 - a.1).abs() / band).ceil() as u32).clamp(1, 512);
+            for i in 0..=steps {
+                let t = i as f32 / steps as f32;
+                mark(a.1 + (b.1 - a.1) * t, a.0 + (b.0 - a.0) * t, rows);
+            }
+        };
+        for pi in first_path..first_path + n_paths {
+            if body_only && data.paths[pi as usize].kind != PathKind::Body {
+                continue;
+            }
+            let g = &geom.table[pi as usize];
+            let (ops, pts) = (&geom.ops, &geom.pts);
+            let (mut k, mut here, mut start) = (g.pt_start as usize, (0.0f32, 0.0f32), (0.0f32, 0.0f32));
+            let at = |k: usize| (pts[k], pts[k + 1]);
+            for oi in g.op_start..g.op_start + g.op_count {
+                match ops[oi as usize] {
+                    OP_MOVE => {
+                        here = at(k);
+                        start = here;
+                        mark(here.1, here.0, &mut rows);
+                        k += 2;
+                    }
+                    OP_LINE => {
+                        let to = at(k);
+                        segment(here, to, &mut rows);
+                        here = to;
+                        k += 2;
+                    }
+                    // a curve is walked as a run of short straight pieces: close enough to
+                    // its outline for a band to know where the ink is
+                    OP_QUAD => {
+                        let (c, to) = (at(k), at(k + 2));
+                        let mut prev = here;
+                        for i in 1..=defaults::CURVE_STEPS {
+                            let t = i as f32 / defaults::CURVE_STEPS as f32;
+                            let (u, tt) = (1.0 - t, t);
+                            let p = (
+                                u * u * here.0 + 2.0 * u * tt * c.0 + tt * tt * to.0,
+                                u * u * here.1 + 2.0 * u * tt * c.1 + tt * tt * to.1,
+                            );
+                            segment(prev, p, &mut rows);
+                            prev = p;
+                        }
+                        here = to;
+                        k += 4;
+                    }
+                    OP_CUBIC => {
+                        let (c1, c2, to) = (at(k), at(k + 2), at(k + 4));
+                        let mut prev = here;
+                        for i in 1..=defaults::CURVE_STEPS {
+                            let t = i as f32 / defaults::CURVE_STEPS as f32;
+                            let u = 1.0 - t;
+                            let p = (
+                                u * u * u * here.0 + 3.0 * u * u * t * c1.0 + 3.0 * u * t * t * c2.0 + t * t * t * to.0,
+                                u * u * u * here.1 + 3.0 * u * u * t * c1.1 + 3.0 * u * t * t * c2.1 + t * t * t * to.1,
+                            );
+                            segment(prev, p, &mut rows);
+                            prev = p;
+                        }
+                        here = to;
+                        k += 6;
+                    }
+                    OP_CLOSE => {
+                        segment(here, start, &mut rows);
+                        here = start;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        rows.into_iter().map(|(r, (x0, x1))| (r, x0, x1)).collect()
+    }
+
+    /// The page's traced outlines, built the first time something measures the air between two
+    /// words and kept from then on.
+    fn silhouettes(&self) -> &Silhouettes {
+        self.silhouettes.get_or_init(|| Silhouettes {
+            words: self
+                .data
+                .words
+                .iter()
+                // marks included: a mark reaching past its letters still has to clear the next
+                // word, and a band knows the height it reaches at
+                .map(|w| self.trace(w.first_path, w.n_paths as u32, self.line_baseline[w.line_index as usize], false))
+                .collect(),
+            decorations: self
+                .data
+                .decorations
+                .iter()
+                .map(|deco| {
+                    let li = self.geom.table[deco.first_path as usize].line as usize;
+                    let base = self.line_baseline.get(li).copied().unwrap_or(0.0);
+                    self.trace(deco.first_path, deco.n_paths as u32, base, false)
+                })
+                .collect(),
+        })
+    }
+
+    /// The air between the letters of two words placed side by side, in page units: the
+    /// narrowest distance between them over the bands they share, with `b` shifted by `dx`.
+    ///
+    /// This is what the eye reads as the space between two words, and what the calligraphy
+    /// keeps even. Their boxes say something else: an initial `ك` reaches its arm back over a
+    /// preceding `ر` so the two boxes overlap by 12 page units while the strokes stay 5 apart.
+    /// `None` when the two share no band, which is the case for a mark set above the line.
+    pub fn words_clearance(&self, a: u32, b: u32, dx: f32) -> Option<f32> {
+        let s = self.silhouettes();
+        Self::slice_clearance(&s.words[a as usize], &s.words[b as usize], dx)
+    }
+
+    /// The bands of a word's own letters and marks.
+    pub(crate) fn word_slices(&self, word: u32) -> &[(i16, f32, f32)] {
+        &self.silhouettes().words[word as usize]
+    }
+    /// The bands of a decoration's ink.
+    pub(crate) fn deco_slices(&self, deco: u32) -> &[(i16, f32, f32)] {
+        &self.silhouettes().decorations[deco as usize]
+    }
+
+    /// The bands of a word together with the marks set inline with it, so a medallion standing
+    /// between two words is measured with the word it closes.
+    pub(crate) fn slices_with(&self, word: u32, decos: &[u32]) -> Vec<(i16, f32, f32)> {
+        let s = self.silhouettes();
+        let mut out = s.words[word as usize].clone();
+        for &di in decos {
+            for &(r, x0, x1) in &s.decorations[di as usize] {
+                match out.binary_search_by_key(&r, |e| e.0) {
+                    Ok(i) => {
+                        out[i].1 = out[i].1.min(x0);
+                        out[i].2 = out[i].2.max(x1);
+                    }
+                    Err(i) => out.insert(i, (r, x0, x1)),
+                }
+            }
+        }
+        out
+    }
+
+    /// The air between two sets of bands, with the second shifted by `dx`.
+    pub(crate) fn slice_clearance(sa: &[(i16, f32, f32)], sb: &[(i16, f32, f32)], dx: f32) -> Option<f32> {
+        let mut air = f32::INFINITY;
+        let (mut i, mut j) = (0usize, 0usize);
+        while i < sa.len() && j < sb.len() {
+            match sa[i].0.cmp(&sb[j].0) {
+                std::cmp::Ordering::Less => i += 1,
+                std::cmp::Ordering::Greater => j += 1,
+                std::cmp::Ordering::Equal => {
+                    // `a` is the right-hand word: the air is from its leftmost ink in this band
+                    // to `b`'s rightmost
+                    air = air.min(sa[i].1 - (sb[j].2 + dx));
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        air.is_finite().then_some(air)
+    }
+
+    /// The shift that leaves `air` between two words' letters, as an offset applied to `b`.
+    pub fn shift_for_clearance(&self, a: u32, b: u32, air: f32) -> Option<f32> {
+        self.words_clearance(a, b, 0.0).map(|now| now - air)
+    }
+
+    /// How deeply two words' strokes overlap, when the print draws them as one piece of
+    /// calligraphy. `None` for every other pair.
+    ///
+    /// Words interlock all over the mushaf without their strokes ever meeting: an initial `ك`
+    /// reaches its arm back over a preceding `ر` so the two boxes overlap by 12 page units
+    /// while the strokes stay 5 apart. That is kerning, and it survives being respaced, which
+    /// is what [`Page::words_clearance`] measures. What does not survive is one word drawn
+    /// inside another, where `ٱلرَّحِيمِ` sits in the bowl of `ٱلرَّحْمَٰنِ`. Strokes meet in 10 of
+    /// this mushaf's 68,612 neighbouring pairs, and those three overlap by 19 to 26 page units
+    /// where the next deepest reaches 3.8, so the two are far apart in the data.
+    pub fn words_interlock(&self, a: u32, b: u32) -> Option<f32> {
+        let d = self.data();
+        let (wa, wb) = (&d.words[a as usize], &d.words[b as usize]);
+        if wa.line_index != wb.line_index || b != a + 1 {
+            return None;
+        }
+        let overlap = -self.words_clearance(a, b, 0.0)?;
+        (overlap >= self.line_spacing * defaults::INTERLOCK_DEPTH).then_some(overlap)
     }
     pub fn word_text(&self, wi: u32) -> &str {
         self.word_form(wi, Form::RasmUthmani)
@@ -442,6 +717,30 @@ impl Page {
         let x = (vx - l.offset_x) / l.scale;
         let y = (vy - l.offset_y) / l.scale;
         let q = self.quant();
+        // reflowed: every word carries its own placement, so undo it word by word
+        if let Some(flow) = &l.reflow {
+            if let Some(r) = flow.row_band.iter().position(|(t, b)| y >= *t && y <= *b) {
+                for &wi in &flow.row_words[r] {
+                    let w = &self.data.words[wi as usize];
+                    let (px, py) = flow.word_place[wi as usize].invert(x, y);
+                    let (qx, qy) = ((px * q).round() as i32, (py * q).round() as i32);
+                    if !w.bbox.contains(qx, qy) {
+                        continue;
+                    }
+                    let pi = self.exact_path_hit(w.first_path, w.n_paths as u32, px, py).unwrap_or(NONE);
+                    return Some(HitExact { word: wi, path: pi, decoration: NONE });
+                }
+            }
+            for (di, d) in self.data.decorations.iter().enumerate() {
+                let (px, py) = flow.deco_place[di].invert(x, y);
+                let (qx, qy) = ((px * q).round() as i32, (py * q).round() as i32);
+                if d.bbox.contains(qx, qy) {
+                    let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, px, py).unwrap_or(NONE);
+                    return Some(HitExact { word: NONE, path: pi, decoration: di as u32 });
+                }
+            }
+            return None;
+        }
         for (li, line) in self.data.lines.iter().enumerate() {
             let py = y - l.line_dy[li];
             let (y0, y1) = (line.bbox.y0 as f32 / q, line.bbox.y1 as f32 / q);

@@ -94,6 +94,7 @@ Never `lineHeight`: printed lines are not equally tall, and the name would promi
 | `_of(surah, ayah)` | the thing that contains this ayah |
 | `_count` | how many. A plural noun is always a list, never a count |
 | `mask` / `unmask`, `hide` / `show` | the memorisation and style subsystems' own pairs |
+| `zoom…` | the reader's zoom control: `zoomPinch` (a gesture), `zoomToStep` (a control naming a size), `zoomMode` (the policy), `zoomSpec` (the spec it asks for). `zoomSteps` stays the list of a page's steps, so the setter is `zoomToStep` and never `zoomStep` |
 
 A new verb needs a row here first.
 

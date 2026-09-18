@@ -55,6 +55,38 @@ internal object QvpNative {
     // layout
     @JvmStatic external fun layout(h: Long, spec: FloatArray): FloatArray
     @JvmStatic external fun layoutLineSpacingToFill(h: Long, spec: FloatArray, max: Float): Float
+    // the reader's pan and zoom: view FloatArray {scale, offsetX, offsetY}
+    @JvmStatic external fun viewZoomAbout(view: FloatArray, fx: Float, fy: Float, factor: Float, min: Float, max: Float): FloatArray
+    @JvmStatic external fun viewPan(view: FloatArray, dx: Float, dy: Float): FloatArray
+    @JvmStatic external fun viewClamp(view: FloatArray, contentW: Float, contentH: Float, viewportW: Float, viewportH: Float): FloatArray
+    @JvmStatic external fun viewAnchor(h: Long, view: FloatArray, word: Int, nx: Float, ny: Float, toX: Float, toY: Float, viewportW: Float, viewportH: Float): FloatArray
+    @JvmStatic external fun viewToLayout(h: Long, view: FloatArray, vx: Float, vy: Float): FloatArray
+    @JvmStatic external fun viewSwipe(dx: Float, dy: Float, vx: Float, vy: Float): Int
+    @JvmStatic external fun swipePages(dx: Float, dy: Float, vx: Float, vy: Float): Int
+    // the reader's zoom control: zoom FloatArray {mode, step, zoom}; a gesture answers
+    // {mode, step, zoom, scale, offsetX, offsetY, relaid}
+    @JvmStatic external fun zoomMode(h: Long, spec: FloatArray, zoom: FloatArray, mode: Int): FloatArray
+    @JvmStatic external fun zoomPinch(h: Long, spec: FloatArray, zoom: FloatArray, view: FloatArray, factor: Float, fx: Float, fy: Float): FloatArray
+    @JvmStatic external fun zoomToStep(h: Long, spec: FloatArray, zoom: FloatArray, step: Int, view: FloatArray): FloatArray
+    @JvmStatic external fun zoomSpec(h: Long, spec: FloatArray, zoom: FloatArray): FloatArray
+    @JvmStatic external fun zoomCarried(h: Long, spec: FloatArray, zoom: FloatArray): FloatArray
+    @JvmStatic external fun zoomAtStep(h: Long, spec: FloatArray, step: Int): Float
+    @JvmStatic external fun zoomIsZoomed(zoom: FloatArray, view: FloatArray, fitScale: Float): Boolean
+    @JvmStatic external fun sidewaysDrag(h: Long, zoom: FloatArray, view: FloatArray, fitScale: Float): Int
+    @JvmStatic external fun zoomSteps(h: Long, spec: FloatArray): FloatArray
+    @JvmStatic external fun zoomLevels(h: Long, spec: FloatArray, nominals: FloatArray?, band: Float): FloatArray
+    @JvmStatic external fun zoomLevelCandidates(h: Long, spec: FloatArray, nominal: Float, band: Float, floor: Float): FloatArray
+    @JvmStatic external fun reflowMaxZoom(h: Long, spec: FloatArray): Float
+    // a reflowed page: where the ink went
+    @JvmStatic external fun layoutDrawList(h: Long, bandTop: Float, bandBottom: Float): IntArray
+    @JvmStatic external fun layoutPlacements(h: Long): FloatArray
+    @JvmStatic external fun layoutGroups(h: Long): FloatArray
+    @JvmStatic external fun layoutPathGroups(h: Long): IntArray
+    @JvmStatic external fun layoutOmittedPaths(h: Long): IntArray
+    @JvmStatic external fun layoutRepeats(h: Long): FloatArray
+    @JvmStatic external fun layoutRowWords(h: Long, row: Int): IntArray
+    @JvmStatic external fun layoutWordRow(h: Long, word: Int): Int
+    @JvmStatic external fun layoutCurrent(h: Long): FloatArray?
     @JvmStatic external fun layoutWastedFraction(h: Long, spec: FloatArray): Float
     @JvmStatic external fun wordBoundsView(h: Long, i: Int): FloatArray?
     // styles

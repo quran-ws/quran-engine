@@ -235,9 +235,73 @@ impl Page {
         Some(Hit { word: chosen, path: NONE, decoration: NONE, line: li as u32, distance, is_exact: false })
     }
 
+    /// Gap-aware hit test on a reflowed page: the row holding the point, then the word,
+    /// with a gap between two words split by `gap_bias` towards the preceding one.
+    fn hit_test_reflow_view(&self, vx: f32, vy: f32, opt: &HitOptions) -> Option<Hit> {
+        let l = self.current_layout()?;
+        let flow = l.reflow.as_ref()?;
+        let q = self.quant();
+        let x = (vx - l.offset_x) / l.scale;
+        let y = (vy - l.offset_y) / l.scale;
+        let r = flow.row_band.iter().position(|(t, b)| y >= *t && y <= *b)?;
+        let words = &flow.row_words[r];
+        if words.is_empty() {
+            return None;
+        }
+        // placed ink boxes of the row, right to left in reading order
+        let boxes: Vec<(u32, f32, f32, f32, f32)> = words
+            .iter()
+            .map(|&wi| {
+                let w = &self.data().words[wi as usize];
+                let p = flow.word_place[wi as usize];
+                let (x0, y0) = p.apply(w.bbox.x0 as f32 / q, w.bbox.y0 as f32 / q);
+                let (x1, y1) = p.apply(w.bbox.x1 as f32 / q, w.bbox.y1 as f32 / q);
+                (wi, x0, y0, x1, y1)
+            })
+            .collect();
+        let mut chosen = boxes[boxes.len() - 1].0;
+        for (k, b) in boxes.iter().enumerate() {
+            if x >= b.1 && x <= b.3 {
+                chosen = b.0;
+                break;
+            }
+            if k == 0 && x > b.3 {
+                chosen = b.0;
+                break;
+            }
+            if let Some(next) = boxes.get(k + 1) {
+                if x < b.1 && x > next.3 {
+                    // the gap goes to the preceding (right-hand) word by `gap_bias`
+                    let gap = b.1 - next.3;
+                    chosen = if x >= b.1 - gap * opt.gap_bias { b.0 } else { next.0 };
+                    break;
+                }
+            }
+        }
+        let b = boxes.iter().find(|b| b.0 == chosen)?;
+        let dx = (b.1 - x).max(x - b.3).max(0.0);
+        let dy = (b.2 - y).max(y - b.4).max(0.0);
+        let distance = (dx * dx + dy * dy).sqrt();
+        if distance > opt.max_distance {
+            return None;
+        }
+        let exact = opt.prefer_exact.then(|| self.hit_test_exact_view(vx, vy)).flatten();
+        Some(Hit {
+            word: chosen,
+            path: exact.filter(|h| h.word == chosen).map(|h| h.path).unwrap_or(NONE),
+            decoration: NONE,
+            line: self.data().words[chosen as usize].line_index as u32,
+            distance,
+            is_exact: false,
+        })
+    }
+
     /// Gap-aware hit test in viewport px through the current layout.
     pub fn hit_test_view(&self, vx: f32, vy: f32, opt: &HitOptions) -> Option<Hit> {
         let Some(l) = self.current_layout() else { return self.hit_test(vx, vy, opt) };
+        if l.is_reflowed() {
+            return self.hit_test_reflow_view(vx, vy, opt);
+        }
         let x = (vx - l.offset_x) / l.scale;
         let y = (vy - l.offset_y) / l.scale;
         // exact first through the layout

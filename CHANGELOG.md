@@ -5,12 +5,31 @@ All notable changes to the engine and its packages. The format follows
 `docs/standards/VERSIONING.md`. Every package shares the version listed here.
 
 ## [Unreleased]
+### Added
+- A reader who zooms in gets the page reflowed onto rows of the screen's own width: the ink
+  grows, fewer words fit a row, the rest move down, and the page scrolls. Each page carries
+  its own zoom steps, chosen so the rows break best near each nominal size.
+- The reader's zoom control, which the engine owns: `qvp_zoom_pinch`, `qvp_zoom_to_step`,
+  `qvp_zoom_mode`, `qvp_zoom_spec`, `qvp_zoom_carried`, `qvp_zoom_at_step` and
+  `qvp_zoom_is_zoomed`. A pinch reflows onto the page's own steps by default; a free reflow
+  zoom and a plain magnify are the other two modes. A step takes the same small reach to
+  leave either way, and a pinch never shrinks the page inside the screen.
+- `qvp_layout_draw_list` gives the whole of what a layout draws as `{path, placement}`
+  pairs, so one loop draws any page, reflowed or not.
+- `qvp_sideways_drag` says whether a sideways drag pans the page or turns it, and
+  `qvp_swipe_pages` says how many pages a released drag turns, in reading order: a mushaf
+  is read right to left, so a flick to the right turns to the next page.
+- iOS and Android draw a reflowed page, cache the ink as a band of the page rather than
+  redrawing on every scroll event, and turn one page per swipe. The Android demo is built
+  on Material 3.
+
 ### Fixed
 - A page draws what is inside its own box and nothing beyond it. The artwork for page 17
   puts that page's printed page number below the box and its running head above it — it is
   the only page of 604 that draws anything outside — and every host drew that ink wherever
   the layout happened to put it. The paths, their boxes and the path numbering are all
   unchanged, so a crop and an SVG export still carry every stroke the artwork drew.
+
 
 ### Changed
 - Page data is rebuilt from `quran-svg-elements` v1.1.2, which moves ink that belongs to a

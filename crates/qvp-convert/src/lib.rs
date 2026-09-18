@@ -2,6 +2,7 @@ pub mod affine;
 pub mod atlas;
 pub mod qvp2svg;
 pub mod svg2qvp;
+pub mod zoom_levels;
 
 pub use qvp2svg::to_svg;
 pub use svg2qvp::{convert, Converted, WordText};

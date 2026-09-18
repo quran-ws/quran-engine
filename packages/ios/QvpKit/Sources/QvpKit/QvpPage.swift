@@ -65,7 +65,8 @@ public final class QvpPage {
     /// must check this before calling into the engine — every engine call on
     /// a closed page traps.
     public var isOpen: Bool { h != nil }
-    private var p: OpaquePointer { h! }
+    /// The engine handle. Internal: the wrapper marshals through it, no app ever sees it.
+    var p: OpaquePointer { h! }
 
     // ── geometry ──
     public func pathOpStart(_ i: Int) -> Int { Int(table[i * 8]) }
@@ -179,8 +180,70 @@ public final class QvpPage {
         let n = Int(l.n_lines); let f = Array(UnsafeBufferPointer(start: l.lines, count: n * 3))
         let out = QvpLayout(scale: l.scale, offsetX: l.offset_x, offsetY: l.offset_y, contentW: l.content_w, contentH: l.content_h, lineSpacing: l.line_spacing,
                             lineDy: (0..<n).map { f[$0 * 3] }, slotTop: (0..<n).map { f[$0 * 3 + 1] }, slotBottom: (0..<n).map { f[$0 * 3 + 2] },
-                            fitScale: l.fit_scale, fitX: l.fit_x, fitY: l.fit_y)
+                            fitScale: l.fit_scale, fitX: l.fit_x, fitY: l.fit_y,
+                            reflowed: l.reflowed != 0, rows: Int(l.n_rows))
         currentLayout = out; return out
+    }
+
+    /// Read back the layout the page already has, without computing one: what to call after the
+    /// engine laid the page out itself, as the zoom control does.
+    @discardableResult
+    public func readLayout() -> QvpLayout? {
+        var l = QvpFFI.QvpLayout()
+        guard qvp_layout_current(p, &l) != 0 else { return nil }
+        let n = Int(l.n_lines); let f = Array(UnsafeBufferPointer(start: l.lines, count: n * 3))
+        let out = QvpLayout(scale: l.scale, offsetX: l.offset_x, offsetY: l.offset_y, contentW: l.content_w, contentH: l.content_h, lineSpacing: l.line_spacing,
+                            lineDy: (0..<n).map { f[$0 * 3] }, slotTop: (0..<n).map { f[$0 * 3 + 1] }, slotBottom: (0..<n).map { f[$0 * 3 + 2] },
+                            fitScale: l.fit_scale, fitX: l.fit_x, fitY: l.fit_y,
+                            reflowed: l.reflowed != 0, rows: Int(l.n_rows))
+        currentLayout = out; return out
+    }
+
+    // ── a reflowed page: where the ink went ──
+    /// Where each group of paths is placed. Without reflow there is one group per printed line,
+    /// holding that line's shift; with reflow the groups are the page's words and decorations.
+    public func layoutGroups() -> [QvpPlacement] {
+        let f: [Float] = collect(1024) { o, c in qvp_layout_groups(p, o, c / 4) * 4 }
+        return stride(from: 0, to: f.count, by: 4).map { QvpPlacement(dx: f[$0], dy: f[$0 + 1], kx: f[$0 + 2], ky: f[$0 + 3]) }
+    }
+    /// The group of every path. Empty without reflow, where a path's group is its printed line.
+    public func layoutPathGroups() -> [Int] { collect(4096) { (o: UnsafeMutablePointer<UInt32>, c) in qvp_layout_path_groups(p, o, c) }.map(Int.init) }
+    /// Paths this layout does not draw: the sheet's furniture on a reflowed page.
+    public func layoutOmittedPaths() -> [Int] { collect(64) { (o: UnsafeMutablePointer<UInt32>, c) in qvp_layout_omitted_paths(p, o, c) }.map(Int.init) }
+    /// Everything the current layout draws, in drawing order: each path once under the
+    /// placement it belongs to, and again for every row a decoration is repeated over. A path
+    /// this layout leaves out never appears, so one loop draws any page, printed or reflowed.
+    /// `band` holds it to a band of the laid-out page, in viewport px, as `QvpLayout.slotTop`
+    /// and every `…View` answer are: what keeps a page taller than the screen smooth under a
+    /// finger. `nil` draws the whole page.
+    public func layoutDrawList(band: (top: Float, bottom: Float)? = nil) -> [QvpDraw] {
+        let (t, b) = band ?? (0, 0)
+        let f: [UInt32] = collect(4096) { o, c in qvp_layout_draw_list(p, t, b, o, c / 2) * 2 }
+        return stride(from: 0, to: f.count, by: 2).map { QvpDraw(path: Int(f[$0]), placement: Int(f[$0 + 1])) }
+    }
+    /// What a draw list's `placement` indexes: every group, then every repeat.
+    public func layoutPlacements() -> [QvpPlacement] {
+        let f: [Float] = collect(1024) { o, c in qvp_layout_placements(p, o, c / 4) * 4 }
+        return stride(from: 0, to: f.count, by: 4).map { QvpPlacement(dx: f[$0], dy: f[$0 + 1], kx: f[$0 + 2], ky: f[$0 + 3]) }
+    }
+    /// Paths drawn again elsewhere: a sajdah line over the two rows its words landed on.
+    public func layoutRepeats() -> [QvpRepeat] {
+        let f: [Float] = collect(64) { o, c in qvp_layout_repeats(p, o, c / 6) * 6 }
+        return stride(from: 0, to: f.count, by: 6).map {
+            QvpRepeat(firstPath: Int(f[$0]), nPaths: Int(f[$0 + 1]), placement: QvpPlacement(dx: f[$0 + 2], dy: f[$0 + 3], kx: f[$0 + 4], ky: f[$0 + 5]))
+        }
+    }
+    /// The words of a reflowed row, in reading order.
+    public func rowWords(_ row: Int) -> [Int] { collect(64) { (o: UnsafeMutablePointer<UInt32>, c) in qvp_layout_row_words(p, UInt32(row), o, c) }.map(Int.init) }
+    /// The largest reflow zoom at which every word of this page still fits a row.
+    public func reflowMaxZoom(_ spec: QvpLayoutSpec) -> Float { var s = spec.c; return qvp_reflow_max_zoom(p, &s) }
+    /// The zoom steps this page ships with, lowest first. Zoom 1, the printed page, is the step
+    /// before them, so a control has one more position than this has entries.
+    public func zoomSteps(_ spec: QvpLayoutSpec) -> [Float] {
+        var s = spec.c
+        var out = [Float](repeating: 0, count: 8)
+        let n = out.withUnsafeMutableBufferPointer { qvp_zoom_steps(p, &s, $0.baseAddress!, 8) }
+        return Array(out.prefix(Int(n)))
     }
     /// The `lineSpacing` multiplier that makes this page fill the padded viewport of `spec`; `max` 0 = unlimited.
     public func layoutLineSpacingToFill(_ spec: QvpLayoutSpec, max: Float = 0) -> Float { var s = spec.c; return qvp_layout_line_spacing_to_fill(p, &s, max) }
@@ -302,7 +365,8 @@ public final class QvpAtlas {
     }
     deinit { close() }
     public func close() { if let a = h { qvp_atlas_free(a); h = nil } }
-    private var p: OpaquePointer { h! }
+    /// The engine handle. Internal: the wrapper marshals through it, no app ever sees it.
+    var p: OpaquePointer { h! }
     private func surah(_ ok: Int32, _ s: QvpFFI.QvpAtlasSurah) -> QvpAtlasSurah? {
         ok != 0 ? QvpAtlasSurah(number: Int(s.number), page: Int(s.first_page), ayahCount: Int(s.ayah_count), place: place(s.place), arabic: s.arabic.string, latin: s.latin.string, english: s.english.string) : nil
     }

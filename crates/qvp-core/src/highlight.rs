@@ -99,6 +99,34 @@ pub(crate) struct Highlight {
 }
 
 impl Page {
+    /// Band boxes for a word list on a reflowed page, one per row (page units, placed).
+    pub(crate) fn reflow_bands(&self, words: &[u32], height: BandHeight, pad_x: f32, pad_y: f32) -> Vec<BandBox> {
+        let q = self.quant();
+        let Some(flow) = self.current_layout().and_then(|l| l.reflow.as_ref()) else { return vec![] };
+        let mut by_row: Vec<Option<BandBox>> = vec![None; flow.row_band.len()];
+        for &wi in words {
+            let r = flow.word_row[wi as usize];
+            if r as usize >= by_row.len() {
+                continue;
+            }
+            let w = &self.data().words[wi as usize];
+            let p = flow.word_place[wi as usize];
+            let (x0, x1) = (p.apply(w.bbox.x0 as f32 / q, 0.0).0 - pad_x, p.apply(w.bbox.x1 as f32 / q, 0.0).0 + pad_x);
+            let (y0, y1) = match height {
+                BandHeight::LineSpacing => flow.row_band[r as usize],
+                BandHeight::Ink => {
+                    (p.apply(0.0, w.bbox.y0 as f32 / q).1 - pad_y, p.apply(0.0, w.bbox.y1 as f32 / q).1 + pad_y)
+                }
+            };
+            let b = by_row[r as usize].get_or_insert(BandBox { line: r, x0, y0, x1, y1 });
+            b.x0 = b.x0.min(x0);
+            b.x1 = b.x1.max(x1);
+            b.y0 = b.y0.min(y0);
+            b.y1 = b.y1.max(y1);
+        }
+        by_row.into_iter().flatten().collect()
+    }
+
     /// Band boxes for a word list (page units, before seams).
     pub fn word_bands(&self, words: &[u32], height: BandHeight, pad_x: f32, pad_y: f32) -> Vec<BandBox> {
         let q = self.quant();
@@ -282,12 +310,18 @@ impl Page {
     pub fn highlight_boxes_view(&self) -> Vec<ViewBox> {
         let now = self.clock_ms;
         let mut out = Vec::new();
+        let reflowed = self.current_layout().map(|l| l.is_reflowed()).unwrap_or(false);
         let (scale, ox, oy, dy): (f32, f32, f32, Vec<f32>) = match self.current_layout() {
             Some(l) => (l.scale, l.offset_x, l.offset_y, l.line_dy.clone()),
             None => (1.0, 0.0, 0.0, vec![0.0; self.data().lines.len()]),
         };
         for h in &self.highlights {
-            let boxes = current_boxes(h, now);
+            // a reflowed page has rows, not printed lines: rebuild the bands from where the
+            // words actually landed (they slide with the reflow, not between it and the print)
+            let boxes = match self.current_layout().and_then(|l| l.reflow.as_ref()) {
+                Some(_) => self.reflow_bands(&h.words, h.style.height, h.style.pad_x, h.style.pad_y),
+                None => current_boxes(h, now),
+            };
             let color = current_color(h, now);
             if color & 0xff == 0 {
                 continue;
@@ -297,7 +331,8 @@ impl Page {
                 .iter()
                 .map(|b| {
                     let li = b.line as usize;
-                    let d = dy.get(li).copied().unwrap_or(0.0);
+                    // reflow bands are already placed; printed bands still take their line's shift
+                    let d = if reflowed { 0.0 } else { dy.get(li).copied().unwrap_or(0.0) };
                     ViewBox {
                         highlight: h.handle,
                         line: b.line,

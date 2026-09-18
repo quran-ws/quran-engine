@@ -286,6 +286,21 @@ struct SettingsSheet: View {
                     Toggle("Hide tashkil", isOn: $m.hideMarks)
                     Toggle("Gold ayah marks", isOn: $m.goldAyahMarks)
                 }
+                Section("Pinch") {
+                    Picker("Pinch", selection: $m.zoomModeIdx) { Text("Steps").tag(0); Text("Free").tag(1); Text("Magnify").tag(2) }.pickerStyle(.segmented)
+                    Text(m.zoomModeIdx == 2
+                         ? "Magnify scales the printed page: the rows stay where the print has them and the reader pans."
+                         : "The page keeps the screen's width and the ink grows: fewer words fit a row, the rest move down, and the page scrolls. Steps land on the sizes this page breaks best at; Free takes whatever the fingers ask for.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if m.zoomModeIdx != 2 {
+                        Picker("Size", selection: $m.zoomStep) {
+                            Text("printed").tag(0)
+                            ForEach(Array(m.zoomSteps.enumerated()), id: \.offset) { i, z in
+                                Text(String(format: "×%.2f", z)).tag(i + 1)
+                            }
+                        }.pickerStyle(.segmented)
+                    }
+                }
                 Section("Layout") {
                     Toggle("Fill screen height", isOn: $m.fillHeight)
                     LabeledContent("Line spacing") { Text(String(format: "×%.2f", m.lineSpacing / 100)).monospacedDigit() }

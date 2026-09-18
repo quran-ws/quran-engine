@@ -31,3 +31,90 @@ pub const REVEAL_LIT: u32 = 1;
 pub const REVEAL_GREY: Rgba = 0xc9c4b8ff;
 /// Padding (page units) around a crop.
 pub const CROP_PAD: f32 = 2.0;
+
+/// How far a row that comes out much shorter than the row beside it is opened towards it, as
+/// a share of the difference. Rows of a page vary in width, but one row far shorter than its
+/// neighbours reads as a mistake rather than as a line ending.
+pub const REFLOW_RELAX: f32 = 0.5;
+
+/// How far a reflowed row's gaps may open, as a multiple of the air the page keeps between two
+/// words. This is what bounds relaxing and justification alike, and it is why a row of few
+/// words opens less than a row of many: fewer gaps, less room, before the words stand apart.
+/// At this cap the gaps of a relaxed row run at about 4.5 page units against the print's 4.1.
+pub const REFLOW_MAX_STRETCH: f32 = 2.0;
+
+/// The reader's pinch limits, as multiples of the layout's own scale, and the point at which
+/// a page counts as zoomed rather than settled.
+///
+/// `MIN_ZOOM` is a floor of last resort for a caller that names no floor of its own. A reader's
+/// pinch is held at the page's settled size instead ([`crate::Layout::fit_scale`]), because a
+/// page smaller than the screen it sits in is not a size anyone reads at.
+pub const MIN_ZOOM: f32 = 0.5;
+pub const MAX_ZOOM: f32 = 12.0;
+pub const ZOOMED_THRESHOLD: f32 = 1.02;
+/// How far past the midpoint between two zoom steps a pinch must reach before it commits to
+/// the next one, either way. The midpoint is where the steps meet; this holds a finger resting
+/// on it from flickering between two layouts.
+///
+/// It cannot simply be raised. `Page::zoom_levels` leaves neighbouring steps at least 1.08
+/// apart, and the two thresholds of one step stay clear of each other only while
+/// `(1 + this)² < 1.08`.
+pub const ZOOM_SNAP_HYSTERESIS: f32 = 0.03;
+
+/// How far the fingers must move to leave the step they are on, when the midpoint to the next
+/// step is further away than this.
+///
+/// A page's steps are not evenly spaced, so the midpoint between two of them sits at a
+/// different distance above each step and a different distance below. Left at the midpoint
+/// alone, a step above a wide gap takes a much bigger squeeze to leave than one above a narrow
+/// gap, and a reader finds the control sticking at that step. This gives every step the same
+/// small reach in either direction, and the midpoint still holds wherever it is nearer, so a
+/// pinch never crosses into a step the fingers have not reached.
+pub const ZOOM_LEAVE_EFFORT: f32 = 0.08;
+
+/// The smallest change in reflow zoom a free pinch asks the page for. Below this the rows come
+/// out the same and the layout is work no reader can see: at the sizes a reader uses, a
+/// hundredth is under half a percent.
+pub const ZOOM_QUANTUM: f32 = 0.01;
+
+/// A released drag is a page swipe when it is this much more sideways than up and down, and
+/// either this far (viewport px) or this fast (px per second).
+pub const SWIPE_AXIS_RATIO: f32 = 1.5;
+pub const SWIPE_DISTANCE: f32 = 40.0;
+pub const SWIPE_VELOCITY: f32 = 500.0;
+
+/// How far two words' strokes must overlap, as a share of the printed line spacing, for the
+/// pair to count as one piece of calligraphy rather than two words set close. Strokes almost
+/// never meet: 10 pairs of 68,612 in this mushaf, and the three the print draws as one
+/// (`ٱلرَّحْمَٰنِ ٱلرَّحِيمِ`) overlap by 19 to 26 page units where the next deepest reaches 3.8.
+pub const INTERLOCK_DEPTH: f32 = 0.15;
+
+/// How many straight pieces a curve is walked as when tracing a word's silhouette.
+pub const CURVE_STEPS: u32 = 8;
+
+/// How many bands a line is sliced into when measuring the air between two words' letters.
+///
+/// A band reports one leftmost and one rightmost point for the whole of its height, so a tall
+/// band compares ink that does not face ink: at 24 bands a pair the measure called 2.3 apart
+/// had strokes crossing by 4.6. These bands are about a third of a page unit.
+pub const SLICES_PER_LINE: u32 = 96;
+
+/// The revision of the layout itself: how words are broken onto rows, how the air between two
+/// words is measured, and how a short row is opened up. Raise it whenever a change to any of
+/// those moves words, so the shipped zoom steps (`zoom_table`) are known to be stale. The
+/// settings those steps were searched with are recorded beside it, and the regeneration check
+/// in `scripts/check.sh gates` catches a change that reaches the rows without passing here.
+pub const LAYOUT_REVISION: u32 = 1;
+
+/// The zoom each step of the reader's zoom control aims at, above the printed page. The engine
+/// searches around these for the zoom that breaks the page best (`Page::zoom_levels`).
+pub const ZOOM_LEVEL_NOMINALS: [f32; 3] = [1.4, 1.8, 2.2];
+/// How far either side of a nominal the search may go, as a fraction of it. A wider band finds
+/// better rows and makes the ink change size more from one page to the next.
+pub const ZOOM_LEVEL_BAND: f32 = 0.06;
+/// The search step, in zoom.
+pub const ZOOM_LEVEL_STEP: f32 = 0.015;
+
+/// How many rows either side of a row are compared with it when a short row is opened up
+/// (`ReflowSpec::relax`). A fixed count, so the same page is set the same way on any screen.
+pub const RELAX_NEIGHBOURS: usize = 3;

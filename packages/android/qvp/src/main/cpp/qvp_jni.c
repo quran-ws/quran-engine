@@ -220,11 +220,191 @@ jfloatArray FN(hitAreas)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) {
 }
 
 /* ───────── layout ───────── */
-/* spec {vw, vh, padTop, padBottom, padLeft, padRight, lineSpacing, lineGap, fillHeight, nominal, cropLeft, cropRight, maxAspectSlack} */
+/* spec {vw, vh, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft,
+   cropRight, maxAspectSlack} and, when the array carries them, the reflow seven:
+   {zoom, fill, breaks, gaps, wordGap, maxStretch, relax}. A shorter array is a page as printed. */
 static QvpLayoutSpec layout_spec(JNIEnv* env, jfloatArray spec) {
-    jfloat f[12]; (*env)->GetFloatArrayRegion(env, spec, 0, 12, f);
-    QvpLayoutSpec s = { f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7] > 0.5f ? 1u : 0u, (uint32_t)f[8], f[9], f[10], f[11] };
+    jfloat f[19] = { 0 };
+    jsize n = (*env)->GetArrayLength(env, spec);
+    if (n > 19) n = 19;
+    (*env)->GetFloatArrayRegion(env, spec, 0, n, f);
+    QvpLayoutSpec s = { f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7] > 0.5f ? 1u : 0u, (uint32_t)f[8], f[9], f[10], f[11],
+                        /* reflow_zoom */ n > 12 ? f[12] : 0.0f,
+                        /* fill, breaks, gaps: 255 asks the engine for its own default */
+                        n > 13 ? (uint8_t)f[13] : 255u, n > 14 ? (uint8_t)f[14] : 255u, n > 15 ? (uint8_t)f[15] : 1u,
+                        n > 16 ? f[16] : 1.0f, n > 17 ? f[17] : 0.0f, n > 18 ? f[18] : -1.0f };
     return s;
+}
+
+/* ───────── the reader's pan and zoom ───────── */
+/* view {scale, offsetX, offsetY} in and out */
+static QvpView view_of(JNIEnv* env, jfloatArray view) {
+    jfloat f[3]; (*env)->GetFloatArrayRegion(env, view, 0, 3, f);
+    QvpView v = { f[0], f[1], f[2] };
+    return v;
+}
+static jfloatArray view_out(JNIEnv* env, QvpView v) { float f[3] = { v.scale, v.offset_x, v.offset_y }; return floats(env, f, 3); }
+
+jfloatArray FN(viewZoomAbout)(JNIEnv* env, jclass c, jfloatArray view, jfloat fx, jfloat fy, jfloat factor, jfloat min, jfloat max) {
+    QvpView in = view_of(env, view), out; qvp_view_zoom_about(&in, fx, fy, factor, min, max, &out); return view_out(env, out);
+}
+jfloatArray FN(viewPan)(JNIEnv* env, jclass c, jfloatArray view, jfloat dx, jfloat dy) {
+    QvpView in = view_of(env, view), out; qvp_view_pan(&in, dx, dy, &out); return view_out(env, out);
+}
+jfloatArray FN(viewClamp)(JNIEnv* env, jclass c, jfloatArray view, jfloat cw, jfloat ch, jfloat vw, jfloat vh) {
+    QvpView in = view_of(env, view), out; qvp_view_clamp(&in, cw, ch, vw, vh, &out); return view_out(env, out);
+}
+jfloatArray FN(viewAnchor)(JNIEnv* env, jclass c, jlong h, jfloatArray view, jint word, jfloat nx, jfloat ny, jfloat toX, jfloat toY, jfloat vw, jfloat vh) {
+    QvpView in = view_of(env, view), out; qvp_view_anchor(PG(h), &in, (uint32_t)word, nx, ny, toX, toY, vw, vh, &out); return view_out(env, out);
+}
+jfloatArray FN(viewToLayout)(JNIEnv* env, jclass c, jlong h, jfloatArray view, jfloat vx, jfloat vy) {
+    QvpView in = view_of(env, view); float out[2]; qvp_view_to_layout(PG(h), &in, vx, vy, out); return floats(env, out, 2);
+}
+jint FN(viewSwipe)(JNIEnv* env, jclass c, jfloat dx, jfloat dy, jfloat vx, jfloat vy) { return qvp_view_swipe(dx, dy, vx, vy); }
+/* how many pages that drag turns, in the mushaf's own right-to-left order */
+jint FN(swipePages)(JNIEnv* env, jclass c, jfloat dx, jfloat dy, jfloat vx, jfloat vy) { return qvp_swipe_pages(dx, dy, vx, vy); }
+
+/* ───────── the reader's zoom control ───────── */
+/* zoom {mode, step, zoom} in and out */
+static QvpZoom zoom_of(JNIEnv* env, jfloatArray zoom) {
+    jfloat f[3]; (*env)->GetFloatArrayRegion(env, zoom, 0, 3, f);
+    QvpZoom z = { (uint32_t)f[0], (uint32_t)f[1], f[2] };
+    return z;
+}
+static jfloatArray zoom_out(JNIEnv* env, QvpZoom z) { float f[3] = { (float)z.mode, (float)z.step, z.zoom }; return floats(env, f, 3); }
+/* a gesture's answer {mode, step, zoom, scale, offsetX, offsetY, relaid} */
+static jfloatArray change_out(JNIEnv* env, QvpZoomChange c) {
+    float f[7] = { (float)c.zoom.mode, (float)c.zoom.step, c.zoom.zoom, c.view.scale, c.view.offset_x, c.view.offset_y, (float)c.relaid };
+    return floats(env, f, 7);
+}
+
+jfloatArray FN(zoomMode)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray zoom, jint mode) {
+    QvpLayoutSpec s = layout_spec(env, spec); QvpZoom z = zoom_of(env, zoom), out;
+    qvp_zoom_mode(PG(h), &s, &z, (uint32_t)mode, &out); return zoom_out(env, out);
+}
+jfloatArray FN(zoomPinch)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray zoom, jfloatArray view, jfloat factor, jfloat fx, jfloat fy) {
+    QvpLayoutSpec s = layout_spec(env, spec); QvpZoom z = zoom_of(env, zoom); QvpView v = view_of(env, view); QvpZoomChange out;
+    qvp_zoom_pinch(PG(h), &s, &z, &v, factor, fx, fy, &out); return change_out(env, out);
+}
+jfloatArray FN(zoomToStep)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray zoom, jint step, jfloatArray view) {
+    QvpLayoutSpec s = layout_spec(env, spec); QvpZoom z = zoom_of(env, zoom); QvpView v = view_of(env, view); QvpZoomChange out;
+    qvp_zoom_to_step(PG(h), &s, &z, (uint32_t)step, &v, &out); return change_out(env, out);
+}
+/* the spec this control asks for: the same array back, with its reflow zoom in place */
+jfloatArray FN(zoomSpec)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray zoom) {
+    QvpLayoutSpec s = layout_spec(env, spec); QvpZoom z = zoom_of(env, zoom); QvpLayoutSpec out;
+    qvp_zoom_spec(PG(h), &s, &z, &out);
+    float f[19] = { out.viewport_w, out.viewport_h, out.pad_top, out.pad_bottom, out.pad_left, out.pad_right, out.line_spacing,
+                    out.fill_height ? 1.0f : 0.0f, (float)out.grid_lines, out.crop_left, out.crop_right, out.max_aspect_slack,
+                    out.reflow_zoom, (float)out.reflow_fill, (float)out.reflow_breaks, (float)out.reflow_gaps,
+                    out.reflow_word_gap, out.reflow_max_stretch, out.reflow_relax };
+    return floats(env, f, 19);
+}
+jfloatArray FN(zoomCarried)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray zoom) {
+    QvpLayoutSpec s = layout_spec(env, spec); QvpZoom z = zoom_of(env, zoom), out;
+    qvp_zoom_carried(PG(h), &s, &z, &out); return zoom_out(env, out);
+}
+jfloat FN(zoomAtStep)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jint step) {
+    QvpLayoutSpec s = layout_spec(env, spec); return qvp_zoom_at_step(PG(h), &s, (uint32_t)step);
+}
+jboolean FN(zoomIsZoomed)(JNIEnv* env, jclass c, jfloatArray zoom, jfloatArray view, jfloat fitScale) {
+    QvpZoom z = zoom_of(env, zoom); QvpView v = view_of(env, view);
+    return qvp_zoom_is_zoomed(&z, &v, fitScale) ? JNI_TRUE : JNI_FALSE;
+}
+jint FN(sidewaysDrag)(JNIEnv* env, jclass c, jlong h, jfloatArray zoom, jfloatArray view, jfloat fitScale) {
+    QvpZoom z = zoom_of(env, zoom); QvpView v = view_of(env, view);
+    return (jint)qvp_sideways_drag(PG(h), &z, &v, fitScale);
+}
+jfloatArray FN(zoomSteps)(JNIEnv* env, jclass c, jlong h, jfloatArray spec) {
+    QvpLayoutSpec s = layout_spec(env, spec); float out[8];
+    uint32_t n = qvp_zoom_steps(PG(h), &s, out, 8); if (n > 8) n = 8;
+    return floats(env, out, (jsize)n);
+}
+jfloatArray FN(zoomLevels)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray nominals, jfloat band) {
+    QvpLayoutSpec s = layout_spec(env, spec); float out[8];
+    jsize k = nominals ? (*env)->GetArrayLength(env, nominals) : 0;
+    float* nv = NULL;
+    if (k) { nv = (float*)malloc(k * sizeof(float)); (*env)->GetFloatArrayRegion(env, nominals, 0, k, nv); }
+    uint32_t n = qvp_zoom_levels(PG(h), &s, nv, (uint32_t)k, band, out, 8);
+    free(nv); if (n > 8) n = 8;
+    return floats(env, out, (jsize)n);
+}
+/* every zoom the search weighs for one step, as {zoom, cost} pairs */
+jfloatArray FN(zoomLevelCandidates)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloat nominal, jfloat band, jfloat floor_) {
+    QvpLayoutSpec s = layout_spec(env, spec);
+    float z[64], cost[64];
+    uint32_t n = qvp_zoom_level_candidates(PG(h), &s, nominal, band, floor_, z, cost, 64); if (n > 64) n = 64;
+    float* v = (float*)malloc(n * 2 * sizeof(float));
+    for (uint32_t i = 0; i < n; i++) { v[i * 2] = z[i]; v[i * 2 + 1] = cost[i]; }
+    jfloatArray a = floats(env, v, (jsize)(n * 2)); free(v); return a;
+}
+jfloat FN(reflowMaxZoom)(JNIEnv* env, jclass c, jlong h, jfloatArray spec) {
+    QvpLayoutSpec s = layout_spec(env, spec); return qvp_reflow_max_zoom(PG(h), &s);
+}
+
+/* ───────── a reflowed page: where the ink went ───────── */
+/* {path, placement} pairs, in drawing order, inside a band of the laid-out page */
+jintArray FN(layoutDrawList)(JNIEnv* env, jclass c, jlong h, jfloat top, jfloat bottom) {
+    uint32_t n = qvp_layout_draw_list(PG(h), top, bottom, NULL, 0);
+    if (!n) return ints(env, NULL, 0);
+    uint32_t* v = (uint32_t*)malloc(n * 2 * sizeof(uint32_t));
+    qvp_layout_draw_list(PG(h), top, bottom, v, n);
+    jintArray a = ints(env, (const jint*)v, (jsize)(n * 2)); free(v); return a;
+}
+/* what a draw list's placement indexes: {dx, dy, kx, ky} each */
+jfloatArray FN(layoutPlacements)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_layout_placements(PG(h), NULL, 0);
+    if (!n) return floats(env, NULL, 0);
+    float* v = (float*)malloc(n * 4 * sizeof(float));
+    qvp_layout_placements(PG(h), v, n);
+    jfloatArray a = floats(env, v, (jsize)(n * 4)); free(v); return a;
+}
+jfloatArray FN(layoutGroups)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_layout_groups(PG(h), NULL, 0);
+    if (!n) return floats(env, NULL, 0);
+    float* v = (float*)malloc(n * 4 * sizeof(float));
+    qvp_layout_groups(PG(h), v, n);
+    jfloatArray a = floats(env, v, (jsize)(n * 4)); free(v); return a;
+}
+jintArray FN(layoutPathGroups)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_layout_path_groups(PG(h), NULL, 0);
+    if (!n) return ints(env, NULL, 0);
+    uint32_t* v = (uint32_t*)malloc(n * sizeof(uint32_t));
+    qvp_layout_path_groups(PG(h), v, n);
+    jintArray a = ints(env, (const jint*)v, (jsize)n); free(v); return a;
+}
+jintArray FN(layoutOmittedPaths)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_layout_omitted_paths(PG(h), NULL, 0);
+    if (!n) return ints(env, NULL, 0);
+    uint32_t* v = (uint32_t*)malloc(n * sizeof(uint32_t));
+    qvp_layout_omitted_paths(PG(h), v, n);
+    jintArray a = ints(env, (const jint*)v, (jsize)n); free(v); return a;
+}
+/* {firstPath, nPaths, dx, dy, kx, ky} each */
+jfloatArray FN(layoutRepeats)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_layout_repeats(PG(h), NULL, 0);
+    if (!n) return floats(env, NULL, 0);
+    float* v = (float*)malloc(n * 6 * sizeof(float));
+    qvp_layout_repeats(PG(h), v, n);
+    jfloatArray a = floats(env, v, (jsize)(n * 6)); free(v); return a;
+}
+jintArray FN(layoutRowWords)(JNIEnv* env, jclass c, jlong h, jint row) {
+    uint32_t n = qvp_layout_row_words(PG(h), (uint32_t)row, NULL, 0);
+    if (!n) return ints(env, NULL, 0);
+    uint32_t* v = (uint32_t*)malloc(n * sizeof(uint32_t));
+    qvp_layout_row_words(PG(h), (uint32_t)row, v, n);
+    jintArray a = ints(env, (const jint*)v, (jsize)n); free(v); return a;
+}
+jint FN(layoutWordRow)(JNIEnv* env, jclass c, jlong h, jint word) { return (jint)qvp_layout_word_row(PG(h), (uint32_t)word); }
+/* the layout the page already has, without computing one; null when it has none */
+jfloatArray FN(layoutCurrent)(JNIEnv* env, jclass c, jlong h) {
+    QvpLayout l;
+    if (!qvp_layout_current(PG(h), &l)) return NULL;
+    jsize n = 12 + l.n_lines * 3; float* v = (float*)malloc(n * sizeof(float));
+    v[0] = l.scale; v[1] = l.offset_x; v[2] = l.offset_y; v[3] = l.content_w; v[4] = l.content_h; v[5] = l.line_spacing; v[6] = (float)l.n_lines;
+    v[7] = l.fit_scale; v[8] = l.fit_x; v[9] = l.fit_y; v[10] = (float)l.reflowed; v[11] = (float)l.n_rows;
+    memcpy(v + 12, l.lines, l.n_lines * 3 * sizeof(float));
+    jfloatArray a = floats(env, v, n); free(v); return a;
 }
 /* spec → {scale, offsetX, offsetY, contentW, contentH, lineSpacing, nLines, fitScale, fitX, fitY, then nLines × (dy, slotTop, slotBottom)} */
 jfloatArray FN(layout)(JNIEnv* env, jclass c, jlong h, jfloatArray spec) {

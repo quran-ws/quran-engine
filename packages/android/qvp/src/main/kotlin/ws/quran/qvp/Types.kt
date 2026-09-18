@@ -21,6 +21,11 @@ object QvpDefaults {
     const val GRID_LINES = 15; const val ASPECT_SLACK = 1.15f
     const val MASK_BLOCK = 0xd9d4c8ff.toInt(); const val MASK_PAD = 0.6f; const val MASK_RADIUS = 0.8f
     const val REVEAL_LIT = 1; const val REVEAL_GREY = 0xc9c4b8ff.toInt(); const val CROP_PAD = 2f
+    // the reader's pinch and swipe: the engine's own limits, which every platform holds to
+    const val MIN_ZOOM = 0.5f; const val MAX_ZOOM = 12f; const val ZOOMED_THRESHOLD = 1.02f
+    const val SWIPE_AXIS_RATIO = 1.5f; const val SWIPE_DISTANCE = 40f; const val SWIPE_VELOCITY = 500f
+    const val ZOOM_SNAP_HYSTERESIS = 0.03f; const val ZOOM_QUANTUM = 0.01f
+    const val REFLOW_RELAX = 0.5f; const val REFLOW_MAX_STRETCH = 2f
 }
 
 /** A mark id by its name, from the engine (255 = unknown). */
@@ -108,18 +113,64 @@ data class QvpBox(val id: Int, val line: Int, val x0: Float, val y0: Float, val 
 data class QvpHitArea(val word: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val inkX0: Float, val inkY0: Float, val inkX1: Float, val inkY1: Float)
 data class QvpLineBand(val line: Int, val lineNumber: Int, val y0: Float, val y1: Float, val mid: Float, val inkY0: Float, val inkY1: Float)
 /** Spacing only opens up: `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid. */
+/** How a reflowed row fills the width, how the words are broken onto rows, and where the air
+ * between two words comes from. */
+enum class QvpFill(val id: Int) { RAGGED(0), JUSTIFIED(1), CENTRED(2) }
+enum class QvpBreaks(val id: Int) { GREEDY(0), EVEN(1), FITTED(2) }
+enum class QvpGapMode(val id: Int) { PRINTED(0), UNIFORM(1) }
+
+/** Ask for a reflowed page: the same page width with bigger ink, so fewer words fit a row and the
+ * rest move down. [zoom] is the ink size as a multiple of fit-to-width; 1 is the printed page.
+ * Every other field has a default the engine picked and a reader never needs to change. */
+data class QvpReflowSpec(val zoom: Float, val fill: QvpFill = QvpFill.CENTRED, val breaks: QvpBreaks = QvpBreaks.FITTED,
+                         val gaps: QvpGapMode = QvpGapMode.UNIFORM, val wordGap: Float = 1f,
+                         val relax: Float = QvpDefaults.REFLOW_RELAX, val maxStretch: Float = QvpDefaults.REFLOW_MAX_STRETCH)
+
 data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop: Float = 0f, val padBottom: Float = 0f, val padLeft: Float = 0f, val padRight: Float = 0f,
                          val lineSpacing: Float = 1f, val fillHeight: Boolean = false, val gridLines: Int = 0,
                          /** Printed side margins to cut, page units (0 = keep). */ val cropLeft: Float = 0f, val cropRight: Float = 0f,
-                         /** The content is never wider than viewportH·pageW/pageH·slack (0 = no bound). */ val maxAspectSlack: Float = 0f) {
-    internal fun floats() = floatArrayOf(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, if (fillHeight) 1f else 0f, gridLines.toFloat(), cropLeft, cropRight, maxAspectSlack)
+                         /** The content is never wider than viewportH·pageW/pageH·slack (0 = no bound). */ val maxAspectSlack: Float = 0f,
+                         /** Break the words onto rows of the page's own width; null lays it out as printed. */ val reflow: QvpReflowSpec? = null) {
+    internal fun floats(): FloatArray {
+        val base = floatArrayOf(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, if (fillHeight) 1f else 0f, gridLines.toFloat(), cropLeft, cropRight, maxAspectSlack)
+        val r = reflow ?: return base
+        return base + floatArrayOf(r.zoom, r.fill.id.toFloat(), r.breaks.id.toFloat(), r.gaps.id.toFloat(), r.wordGap, r.maxStretch, r.relax)
+    }
+}
+
+/** What a pinch does to the page. */
+enum class QvpZoomMode(val id: Int) { STEPPED(0), CONTINUOUS(1), MAGNIFY(2) }
+/** Where the reader's zoom control stands. The default is what a page opens on: stepped, printed. */
+data class QvpZoom(val mode: QvpZoomMode = QvpZoomMode.STEPPED, val step: Int = 0, val zoom: Float = 1f) {
+    internal fun floats() = floatArrayOf(mode.id.toFloat(), step.toFloat(), zoom)
+    internal companion object {
+        fun of(v: FloatArray) = QvpZoom(QvpZoomMode.entries.firstOrNull { it.id == v[0].toInt() } ?: QvpZoomMode.STEPPED, v[1].toInt(), v[2])
+    }
+}
+/** Pan and zoom over a laid-out page: a point p draws at offset + scale·p. */
+data class QvpView(val scale: Float = 1f, val offsetX: Float = 0f, val offsetY: Float = 0f) {
+    internal fun floats() = floatArrayOf(scale, offsetX, offsetY)
+    internal companion object { fun of(v: FloatArray) = QvpView(v[0], v[1], v[2]) }
+}
+/** What a gesture produced: the control to keep, the view to draw with, and whether the page was
+ * laid out again under it. */
+data class QvpZoomChange(val zoom: QvpZoom, val view: QvpView, val relaid: Boolean)
+/** What a sideways drag on a page means. */
+enum class QvpSideways { PAN, TURN_PAGE }
+/** One drawing of one path: the path, and which of the layout's placements it goes under. */
+data class QvpDraw(val path: Int, val placement: Int)
+/** Where one group of paths is placed: a point p is drawn at (kx·p.x + dx, ky·p.y + dy), page units. */
+data class QvpPlacement(val dx: Float, val dy: Float, val kx: Float, val ky: Float) {
+    companion object { val IDENTITY = QvpPlacement(0f, 0f, 1f, 1f) }
 }
 /** The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units). */
 data class QvpGrid(val lines: Int, val lineSpacing: Float)
 /** Page → viewport: viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. [fitScale], [fitX], [fitY] show the
  *  whole content in the viewport (shrink to height, never enlarge, centred): the host's pan and zoom go on top. */
 class QvpLayout(val scale: Float, val offsetX: Float, val offsetY: Float, val contentW: Float, val contentH: Float, val lineSpacing: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray,
-                val fitScale: Float = 1f, val fitX: Float = 0f, val fitY: Float = 0f)
+                val fitScale: Float = 1f, val fitX: Float = 0f, val fitY: Float = 0f,
+                /** True when this layout broke the words onto rows of its own, and how many it made. */
+                val reflowed: Boolean = false, val rows: Int = 0)
 data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val ink: Int = QvpDefaults.HIGHLIGHT_INK, val band: Int = QvpDefaults.HIGHLIGHT_BAND, val height: BandHeight = BandHeight.LINE_SPACING,
                              val padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, val padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y, val radius: Float = 0f, val seam: Float = QvpDefaults.HIGHLIGHT_SEAM, val transitionMs: Int = 0, val layer: Int = QvpLayer.HIGHLIGHT) {
     internal fun ints() = intArrayOf(mode.id, height.id, ink, band, transitionMs, layer)

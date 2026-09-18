@@ -585,6 +585,382 @@ fn layout_fit_crop_and_aspect_bound() {
     assert!((p.line_spacing_to_fill(&spec, f32::INFINITY) - 1.0).abs() > 0.0 || true);
 }
 
+#[test]
+fn reflow_breaks_words_onto_rows_of_the_same_width() {
+    let mut p = packed_page();
+    let printed = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    let wide = p.layout(&printed).clone();
+    let zoom = 3.0;
+    let spec = LayoutSpec { reflow: Some(ReflowSpec { zoom, ..Default::default() }), ..printed };
+    let l = p.layout(&spec).clone();
+    // the page keeps its width and the ink grows by the zoom
+    assert!((l.content_w - wide.content_w).abs() < 1e-3);
+    assert!((l.scale - wide.scale * zoom).abs() < 1e-3);
+    // zooming in breaks the words onto more rows, and the page grows taller
+    let easy = LayoutSpec { reflow: Some(ReflowSpec { zoom: 1.5, ..Default::default() }), ..printed };
+    let rows_at_1 = p.layout(&easy).reflow.as_ref().unwrap().row_band.len();
+    let l = p.layout(&spec).clone();
+    let flow = l.reflow.clone().unwrap();
+    assert!(flow.row_band.len() > rows_at_1, "rows {} vs {rows_at_1}", flow.row_band.len());
+    assert!(l.content_h > wide.content_h);
+    // a scrolled page is never shrunk back to the viewport
+    assert_eq!(l.fit_scale, 1.0);
+    // every word sits inside its row, and rows never run backwards in reading order
+    let q = p.quant();
+    for (r, words) in flow.row_words.iter().enumerate() {
+        let mut last_x1 = f32::INFINITY;
+        for &wi in words {
+            let w = &p.data().words[wi as usize];
+            let pl = flow.word_place[wi as usize];
+            let x0 = pl.apply(w.bbox.x0 as f32 / q, 0.0).0;
+            let x1 = pl.apply(w.bbox.x1 as f32 / q, 0.0).0;
+            // a word wider than the row is the documented overflow case (see reflow_max_zoom)
+            if x1 - x0 <= flow.row_w + 0.01 {
+                assert!(x0 >= -0.01 && x1 <= flow.row_w + 0.01, "word {wi} out of row: {x0}..{x1}");
+            }
+            assert!(x1 <= last_x1 + 0.01, "word {wi} overlaps its right neighbour on row {r}");
+            last_x1 = x0;
+            assert_eq!(flow.word_row[wi as usize], r as u32);
+        }
+    }
+    // words keep their printed size: only whole words move
+    for (wi, pl) in flow.word_place.iter().enumerate() {
+        assert_eq!((pl.kx, pl.ky), (1.0, 1.0), "word {wi} was resized");
+    }
+    // a tap on a placed word finds that word
+    for wi in 0..p.data().words.len() as u32 {
+        let (x0, y0, x1, y1) = p.word_bounds_view(wi);
+        let h = p.hit_test_view((x0 + x1) / 2.0, (y0 + y1) / 2.0, &HitOptions::default());
+        assert_eq!(h.map(|h| h.word), Some(wi), "tap on word {wi}");
+    }
+}
+
+/// A page wide enough to reflow onto mixed rows: 3 lines of 4 words, each word 16 units wide
+/// with 4-unit gaps, inside a 100-unit page with 6-unit margins.
+fn packed_page() -> Page {
+    let mut ops = Vec::new();
+    let mut paths = Vec::new();
+    let mut words = Vec::new();
+    let mut lines = Vec::new();
+    let mut ayahs = Vec::new();
+    let mut strings = vec!["كلمة".to_owned()];
+    for li in 0..3u8 {
+        let y0 = 10 + 30 * li as i32;
+        let mut lb = IBox::default();
+        let first = words.len() as u16;
+        for w in 0..4u16 {
+            // right to left: the first word of a line is the rightmost
+            let x1 = 94 - 20 * w as i32;
+            let (x0, y1) = (x1 - 16, y0 + 16);
+            let cmds = square(x0 * 100, y0 * 100, x1 * 100, y1 * 100);
+            let bb = cmds_bbox(&cmds);
+            let off = ops.len() as u32;
+            encode_cmds(&cmds, bb.x0, bb.y0, &mut ops);
+            paths.push(PathRec {
+                kind: PathKind::Body,
+                mark: Mark::None,
+                family: Family::None,
+                flags: 0,
+                ox: bb.x0,
+                oy: bb.y0,
+                op_off: off,
+                op_len: ops.len() as u32 - off,
+                bbox: bb,
+            });
+            if w == 0 {
+                lb = bb;
+            } else {
+                lb.union(&bb);
+            }
+            words.push(WordRec {
+                surah: 1,
+                ayah: li as u16 + 1,
+                word: w + 1,
+                line_index: li as u16,
+                ayah_index: li as u16,
+                text: 0,
+                rasm_imlai: 0,
+                qpc: 0,
+                rasm: 0,
+                search: 0,
+                first_path: paths.len() as u32 - 1,
+                n_paths: 1,
+                bbox: bb,
+            });
+        }
+        lines.push(LineRec { line_number: li + 1, first_word: first, n_words: 4, bbox: lb });
+        ayahs.push(AyahRec {
+            surah: 1,
+            ayah: li as u16 + 1,
+            fragment: 1,
+            fragments: 1,
+            flags: 0,
+            first_word: first,
+            n_words: 4,
+            ayah_mark_decoration: NONE_U16,
+            rubu_al_hizb: 0,
+            bbox: lb,
+        });
+    }
+    let data = PageData {
+        header: Header { version: VERSION, quant: 100, page: 1, flags: 0, width: 100.0, height: 100.0 },
+        lines,
+        ayahs,
+        words,
+        paths,
+        decorations: vec![],
+        glyphs: vec![],
+        insts: vec![],
+        ops,
+        strings: std::mem::take(&mut strings),
+    };
+    Page::load(&encode(&data)).unwrap()
+}
+
+#[test]
+fn reflow_justified_fills_every_row_but_the_last() {
+    let mut p = packed_page();
+    let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    let spec = LayoutSpec {
+        // no cap: every row that can reach the margins must
+        reflow: Some(ReflowSpec { zoom: 1.5, fill: Fill::Justified, max_stretch: 0.0, ..Default::default() }),
+        ..base
+    };
+    let l = p.layout(&spec).clone();
+    let flow = l.reflow.clone().unwrap();
+    let q = p.quant();
+    let rows = flow.row_band.len();
+    for (r, words) in flow.row_words.iter().enumerate() {
+        if words.len() < 2 || r + 1 == rows {
+            continue;
+        }
+        let first = &p.data().words[words[0] as usize];
+        let last = &p.data().words[words[words.len() - 1] as usize];
+        let right = flow.word_place[words[0] as usize].apply(first.bbox.x1 as f32 / q, 0.0).0;
+        let left = flow.word_place[words[words.len() - 1] as usize].apply(last.bbox.x0 as f32 / q, 0.0).0;
+        assert!((right - flow.row_w).abs() < 0.01, "row {r} does not touch the right margin");
+        assert!(left.abs() < 0.01, "row {r} does not reach the left margin");
+    }
+}
+
+#[test]
+fn reflow_justified_leaves_a_row_ragged_rather_than_gap_it_out() {
+    let mut p = packed_page();
+    let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    let spec = |max_stretch| LayoutSpec {
+        reflow: Some(ReflowSpec { zoom: 1.5, fill: Fill::Justified, max_stretch, ..Default::default() }),
+        ..base
+    };
+    let q = p.quant();
+    let reach = |p: &mut Page, max_stretch: f32| -> Vec<f32> {
+        let l = p.layout(&spec(max_stretch)).clone();
+        let flow = l.reflow.clone().unwrap();
+        flow.row_words
+            .iter()
+            .filter(|ws| ws.len() > 1)
+            .map(|ws| {
+                let last = &p.data().words[ws[ws.len() - 1] as usize];
+                flow.word_place[ws[ws.len() - 1] as usize].apply(last.bbox.x0 as f32 / q, 0.0).0
+            })
+            .collect()
+    };
+    let uncapped = reach(&mut p, 0.0);
+    // a cap of 1.0 forbids any stretch at all, so no row is pulled out to the left margin
+    let capped = reach(&mut p, 1.0);
+    assert_eq!(uncapped.len(), capped.len());
+    assert!(
+        capped.iter().zip(&uncapped).any(|(c, u)| c > u),
+        "with gaps capped, at least one row should stay short instead of reaching the margin"
+    );
+}
+
+#[test]
+fn reflow_at_zoom_1_gives_the_printed_page_back() {
+    let mut p = packed_page();
+    let base = LayoutSpec {
+        viewport_w: 200.0,
+        viewport_h: 400.0,
+        pad_top: 12.0,
+        pad_left: 8.0,
+        pad_right: 8.0,
+        ..Default::default()
+    };
+    let printed = p.layout(&base).clone();
+    let boxes: Vec<(f32, f32, f32, f32)> = (0..p.data().words.len() as u32).map(|i| p.word_bounds_view(i)).collect();
+    let l = p.layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 1.0, ..Default::default() }), ..base }).clone();
+    assert!(!l.is_reflowed(), "at the printed size the page is laid out as printed");
+    // same scale, same page height, same word in the same pixel
+    assert!((l.scale - printed.scale).abs() < 1e-4);
+    assert!((l.content_h - printed.content_h).abs() < 1e-3, "{} vs {}", l.content_h, printed.content_h);
+    for (i, want) in boxes.iter().enumerate() {
+        let got = p.word_bounds_view(i as u32);
+        assert!(
+            (got.0 - want.0).abs() < 1e-3 && (got.1 - want.1).abs() < 1e-3,
+            "word {i} moved: {:?} vs {:?}",
+            got,
+            want
+        );
+    }
+    // and the leading still opens the lines up, as it does without reflow
+    let spread = LayoutSpec { line_spacing: 1.5, ..base };
+    let want = p.layout(&spread).clone();
+    let got = p.layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 1.0, ..Default::default() }), ..spread }).clone();
+    assert_eq!(want.line_dy, got.line_dy, "line spacing must work at the printed size");
+    assert!((want.content_h - got.content_h).abs() < 1e-3);
+}
+
+#[test]
+fn view_zoom_pans_about_the_fingers_and_clamps() {
+    let v = View { scale: 1.0, offset_x: 0.0, offset_y: 0.0 };
+    // the point under the fingers stays under them
+    let z = v.zoom_about(100.0, 50.0, 2.0, 0.0, 0.0);
+    assert_eq!(z.scale, 2.0);
+    assert!((z.offset_x + 100.0).abs() < 1e-4 && (z.offset_y + 50.0).abs() < 1e-4);
+    // and still does when the clamp cuts the factor down
+    let hit = v.zoom_about(100.0, 50.0, 100.0, 0.0, 4.0);
+    assert_eq!(hit.scale, 4.0);
+    assert!((100.0 - (100.0 - hit.offset_x) / 4.0).abs() < 1e-3);
+    // content smaller than the viewport is centred; larger content keeps it covered
+    let small = View { scale: 1.0, offset_x: -80.0, offset_y: 0.0 }.clamp(100.0, 100.0, 300.0, 300.0);
+    assert!((small.offset_x - 100.0).abs() < 1e-4);
+    let big = View { scale: 1.0, offset_x: 50.0, offset_y: -900.0 }.clamp(400.0, 1000.0, 300.0, 300.0);
+    assert_eq!((big.offset_x, big.offset_y), (0.0, -700.0));
+    assert_eq!(swipe_direction(60.0, 5.0, 0.0, 0.0), 1);
+    assert_eq!(swipe_direction(-60.0, 5.0, 0.0, 0.0), -1);
+    assert_eq!(swipe_direction(10.0, 5.0, 0.0, 0.0), 0);
+    assert_eq!(swipe_direction(60.0, 300.0, 0.0, 0.0), 0);
+}
+
+#[test]
+fn view_anchor_holds_a_word_across_a_relayout() {
+    let mut p = packed_page();
+    let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    p.layout(&base);
+    let word = 5u32;
+    let v = View { scale: 1.0, offset_x: 0.0, offset_y: 0.0 };
+    let (_, y0, _, y1) = p.word_bounds_view(word);
+    let was = y0 + 0.5 * (y1 - y0);
+    // the reader zooms in: the page reflows and the word moves to another row
+    p.layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }), ..base });
+    let moved = {
+        let (_, a, _, b) = p.word_bounds_view(word);
+        a + 0.5 * (b - a)
+    };
+    assert!((moved - was).abs() > 1.0, "the relayout should have moved the word");
+    // anchoring brings that point back to where the fingers are
+    let v2 = p.view_anchor(v, word, (0.5, 0.5), (0.0, was), (200.0, 400.0));
+    let (_, a, _, b) = p.word_bounds_view(word);
+    let now = v2.offset_y + v2.scale * (a + 0.5 * (b - a));
+    assert!((now - was).abs() < 0.01, "anchored to {now}, wanted {was}");
+}
+
+#[test]
+fn view_geometry_follows_the_words_it_describes() {
+    let mut p = packed_page();
+    let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    for reflow in [None, Some(ReflowSpec { zoom: 1.6, ..Default::default() })] {
+        p.layout(&LayoutSpec { reflow, ..base });
+        let tag = if reflow.is_some() { "reflowed" } else { "printed" };
+        for w in 0..p.data().words.len() as u32 {
+            let (x0, y0, x1, y1) = p.word_bounds_view(w);
+            // an ink band sits on the word's own ink
+            let b = p.word_bands_view(&[w], BandHeight::Ink, 0.0, 0.0);
+            assert_eq!(b.len(), 1, "{tag}: one band per word");
+            assert!(
+                (b[0].x0 - x0).abs() < 0.01 && (b[0].y0 - y0).abs() < 0.01 && (b[0].x1 - x1).abs() < 0.01,
+                "{tag}: band {:?} off word {w} {:?}",
+                (b[0].x0, b[0].y0, b[0].x1, b[0].y1),
+                (x0, y0, x1, y1)
+            );
+            // and the hit box contains that ink, and answers where a tap in it does
+            let area = p.hit_areas_view(0.6).into_iter().find(|a| a.word == w).expect("an area per word");
+            assert!(
+                area.x0 <= x0 + 0.01 && area.x1 >= x1 - 0.01 && area.y0 <= y0 + 0.01 && area.y1 >= y1 - 0.01,
+                "{tag}: area misses word {w}"
+            );
+            let hit = p.hit_test_view((area.x0 + area.x1) / 2.0, (area.y0 + area.y1) / 2.0, &HitOptions::default());
+            assert_eq!(hit.map(|h| h.word), Some(w), "{tag}: a tap in word {w}'s box");
+        }
+    }
+}
+
+#[test]
+fn reflow_centred_splits_what_is_left_over_between_the_margins() {
+    let mut p = packed_page();
+    let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    let q = p.quant();
+    let edges = |p: &mut Page, fill: Fill| -> Vec<(f32, f32)> {
+        let l = p
+            .layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 1.5, fill, ..Default::default() }), ..base })
+            .clone();
+        let flow = l.reflow.clone().unwrap();
+        flow.row_words
+            .iter()
+            .filter(|ws| !ws.is_empty())
+            .map(|ws| {
+                let (first, last) = (&p.data().words[ws[0] as usize], &p.data().words[ws[ws.len() - 1] as usize]);
+                (
+                    flow.row_w - flow.word_place[ws[0] as usize].apply(first.bbox.x1 as f32 / q, 0.0).0,
+                    flow.word_place[ws[ws.len() - 1] as usize].apply(last.bbox.x0 as f32 / q, 0.0).0,
+                )
+            })
+            .collect()
+    };
+    let ragged = edges(&mut p, Fill::Ragged);
+    let centred = edges(&mut p, Fill::Centred);
+    assert_eq!(ragged.len(), centred.len());
+    for (r, c) in ragged.iter().zip(&centred) {
+        // ragged rows start at the right margin; centred rows share the leftover evenly
+        assert!(r.0.abs() < 0.01, "a ragged row starts at the right margin");
+        assert!((c.0 - c.1).abs() < 0.01, "a centred row has equal margins: {} and {}", c.0, c.1);
+    }
+    // a row that fills its width is left where it is
+    assert!(centred.iter().any(|(l, _)| *l > 0.01), "some row should have room to centre");
+}
+
+#[test]
+fn reflow_even_gaps_keep_the_letters_the_same_distance_apart() {
+    let mut p = packed_page();
+    let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    // nothing relaxed: this is about the gap the engine picks, not about evening the rows
+    let spread = |p: &mut Page, gaps: GapMode| -> f32 {
+        let spec = ReflowSpec { zoom: 1.5, gaps, relax: 0.0, ..Default::default() };
+        let l = p.layout(&LayoutSpec { reflow: Some(spec), ..base }).clone();
+        let flow = l.reflow.clone().unwrap();
+        let mut v: Vec<f32> = Vec::new();
+        for ws in &flow.row_words {
+            for pair in ws.windows(2) {
+                // the distance between the letters of two words, as placed
+                let a = flow.word_place[pair[0] as usize].apply(p.word_body(pair[0]).0, 0.0).0;
+                let b = flow.word_place[pair[1] as usize].apply(p.word_body(pair[1]).1, 0.0).0;
+                v.push(a - b);
+            }
+        }
+        let mean = v.iter().sum::<f32>() / v.len() as f32;
+        (v.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / v.len() as f32).sqrt()
+    };
+    let even = spread(&mut p, GapMode::Uniform);
+    assert!(even < 0.01, "even gaps should not vary: spread {even}");
+    // and the engine asks for them by default
+    assert_eq!(ReflowSpec::default().gaps, GapMode::Uniform);
+}
+
+#[test]
+fn words_are_spaced_by_the_air_between_their_strokes() {
+    let p = packed_page();
+    // the test page sets its words apart, so none of them is drawn inside another
+    for w in 0..p.data().words.len() as u32 - 1 {
+        assert_eq!(p.words_interlock(w, w + 1), None, "word {w} should not be drawn inside the next");
+    }
+    // its words are plain squares 16 wide with 4 between them, so the air is that 4
+    let air = p.words_clearance(1, 2, 0.0).expect("the two share a band");
+    assert!((air - 4.0).abs() < 0.01, "air {air}");
+    // and the shift that would leave 10 units of air moves the second word by the difference
+    let shift = p.shift_for_clearance(1, 2, 10.0).unwrap();
+    assert!((shift + 6.0).abs() < 0.01, "shift {shift}");
+    assert!((p.words_clearance(1, 2, shift).unwrap() - 10.0).abs() < 0.01);
+}
+
 /// A page's viewBox is what the page is, and ink outside it gets no outline to draw.
 ///
 /// p17 of the Hafs KFGQPC mushaf is the only page of 604 whose artwork draws anything outside

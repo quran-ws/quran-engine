@@ -29,6 +29,7 @@
   .paths { display:flex; flex-wrap:wrap; gap:4px }
   .chip { font-size:11px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; cursor:pointer; user-select:none }
   .chip.on { background:var(--accent2); color:#fff; border-color:var(--accent2) }
+  button.lvl { padding:5px 12px; min-width:38px }
   .hud { font:11px/1.6 'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace; color:var(--muted); white-space:pre }
   .hint { color:var(--muted); font-size:12px }
   .sw { width:14px; height:14px; border-radius:3px; display:inline-block; vertical-align:-2px; margin-inline-end:4px }
@@ -112,6 +113,34 @@
       </div>
       <div class="row" style="margin-top:6px"><button id="fillH">Fill screen height</button><button id="fitGap">Leading to fill</button></div>
       <div class="hint">Leading only grows: the printed lineSpacing is the floor, so the lines can never close up, and the text width is always the viewport's. The knobs spend the empty paper a tall screen leaves above and below the printed page.</div>
+    </section>
+    <section>
+      <h2>Reflow (engine)</h2>
+      <div class="row"><button id="reflow">Reflow the page</button><span class="hint" id="reflowRows"></span></div>
+      <div class="row" style="margin-top:6px">
+        <b style="font-size:12px;color:var(--muted)">size</b>
+        <button id="lv1" class="lvl">printed</button><button id="lv2" class="lvl">2</button><button id="lv3" class="lvl">3</button><button id="lv4" class="lvl">4</button>
+        <span class="hint" id="lvlVal"></span>
+      </div>
+      <div class="hint">The steps a reader gets instead of a free zoom. The rows only rearrange at certain zooms, so the engine searches a band around each step for the zoom whose rows come out best on this page. The sizes differ a little from page to page for that reason.</div>
+      <div class="row" style="margin-top:6px">
+        <label>pinch <select id="zMode"><option value="stepped">steps, reflowed</option><option value="continuous">free, reflowed</option><option value="magnify">magnify the print</option></select></label>
+        <span class="hint" id="zoomVal"></span>
+      </div>
+      <div class="hint">What two fingers do to the page. Stepped is what a reader gets: the pinch lands on one of the sizes above and the page breaks its rows again. Free reflows to whatever the fingers ask for. Magnify scales the printed page and leaves every row where the print has it.</div>
+      <div class="grid3" style="margin-top:6px">
+        <b>zoom</b><input id="rZoom" type="range" min="1" max="4" step="0.05" value="1.6"><span id="rZoomVal">×1.60</span>
+        <b>word gap</b><input id="rGap" type="range" min="0.5" max="3" step="0.05" value="1"><span id="rGapVal">×1.00</span>
+        <b>relax short rows</b><input id="rRelax" type="range" min="0" max="1" step="0.05" value="0.5"><span id="rRelaxVal">50%</span>
+        <b>gap cap</b><input id="rStretch" type="range" min="1" max="3.5" step="0.1" value="2"><span id="rStretchVal">×2.0</span>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label>fill <select id="rFill"><option value="centred">centred</option><option value="ragged">ragged</option><option value="justified">justified</option></select></label>
+        <label>gaps <select id="rGaps"><option value="uniform">even</option><option value="printed">as printed</option></select></label>
+        <label>breaks <select id="rBreaks"><option value="fitted">fitted rows</option><option value="even">even rows</option><option value="greedy">greedy</option></select></label>
+      </div>
+      <div class="hint">Relaxing gives a row's gaps a share of the space it has left over, so the emptier a row is the more it opens. The gap cap bounds that: a row of few words has few gaps and so opens less, whatever the slider says.</div>
+      <div class="hint">The page keeps the viewport width and the ink grows: fewer words fit a row, the rest move down, and the page scrolls. Words are never reshaped, an ayah keeps its medallion, and a surah banner keeps a row of its own.</div>
     </section>
     <section>
       <h2>Page</h2>

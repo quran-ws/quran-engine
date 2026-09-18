@@ -306,4 +306,64 @@ void main() {
     }
     expect(cases.length, 40);
   });
+
+  test('the reader\'s zoom control reflows the page and one loop draws it', () {
+    const spec = QvpLayoutSpec(viewportW: 390, viewportH: 844, padTop: 12, padBottom: 12, padLeft: 8, padRight: 8);
+
+    // a zeroed control is stepped, on the printed page, and asks for no reflow
+    const printed = QvpZoom();
+    expect(printed.mode, QvpZoomMode.stepped);
+    expect(page.zoomSpec(spec, printed).reflow, isNull);
+
+    // the page ships its own steps, each larger than the last
+    final steps = page.zoomSteps(spec);
+    expect(steps, isNotEmpty);
+    for (var i = 1; i < steps.length; i++) {
+      expect(steps[i], greaterThan(steps[i - 1]));
+    }
+    expect(page.zoomAtStep(spec, 0), 1);
+    expect(page.zoomAtStep(spec, 1), closeTo(steps[0], 1e-4));
+    expect(page.reflowMaxZoom(spec), greaterThan(1));
+
+    // a size button lands on a step exactly, and the spec it asks for reflows to it
+    final c = page.zoomToStep(spec, printed, 1, const QvpView());
+    expect(c.zoom.step, 1);
+    expect(c.relaid, isTrue);
+    final reflowed = page.zoomSpec(spec, c.zoom);
+    expect(reflowed.reflow, isNotNull);
+    expect(reflowed.reflow!.zoom, closeTo(steps[0], 1e-4));
+
+    // laid out under it, the page is rows rather than the print's lines
+    final l = page.layout(reflowed);
+    expect(l.reflowed, isTrue);
+    expect(l.rows, greaterThan(0));
+    expect(page.readLayout()!.reflowed, isTrue);
+
+    // and one loop draws it: every draw names a path and a placement that exists
+    final places = page.layoutPlacements();
+    final draws = page.layoutDrawList();
+    expect(draws, isNotEmpty);
+    expect(places, isNotEmpty);
+    for (final d in draws) {
+      expect(d.path, lessThan(page.nPaths));
+      expect(d.placement, lessThan(places.length));
+    }
+
+    // a pinch that has not reached the next step commits nothing
+    final held = page.zoomPinch(spec, printed, const QvpView(), 1.0, 195, 422);
+    expect(held.relaid, isFalse);
+    expect(held.zoom.step, 0);
+
+    // the printed page is the floor: a magnifying pinch never shrinks it inside the screen
+    final fit = page.layout(spec).fitScale;
+    const mag = QvpZoom(mode: QvpZoomMode.magnify);
+    final out = page.zoomPinch(spec, mag, QvpView(scale: fit), 0.2, 195, 422);
+    expect(out.view.scale, greaterThanOrEqualTo(fit - 1e-4));
+
+    // a page turn keeps the step, because every page's steps are its own
+    expect(page.zoomCarried(spec, c.zoom).step, 1);
+
+    // and the page laid out again is the printed one when the control goes back to it
+    page.layout(spec);
+  });
 }

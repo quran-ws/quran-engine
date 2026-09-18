@@ -65,6 +65,10 @@ abstract final class QvpDefaults {
   static const int ink = 0x231f20ff, highlightInk = 0x1a73e8ff, highlightBand = 0xd6a3264d, selectionBand = 0x2d6fd640, maskBlock = 0xd9d4c8ff, revealGrey = 0xc9c4b8ff;
   static const double highlightPadX = 1.2, highlightPadY = 0, highlightSeam = 0.25, gapBias = 0.6, tapDistance = 6, aspectSlack = 1.15, maskPad = 0.6, maskRadius = 0.8, cropPad = 2;
   static const int gridLines = 15, revealLit = 1;
+  /// The reader's pinch and swipe: the engine's own limits, which every platform holds to.
+  static const double minZoom = 0.5, maxZoom = 12, zoomedThreshold = 1.02;
+  static const double swipeAxisRatio = 1.5, swipeDistance = 40, swipeVelocity = 500;
+  static const double zoomSnapHysteresis = 0.03, zoomQuantum = 0.01;
 }
 
 /// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
@@ -365,6 +369,118 @@ final class QvpLineBand {
 /// Input of [QvpPage.layout]; lengths in viewport px. Spacing only opens up:
 /// `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid.
 @immutable
+/// How a page reflows when the reader zooms in: the ink grows, fewer words fit a row, the rest
+/// move down and the page scrolls. Every field but [zoom] is a typographic knob with a default
+/// the engine chose; a reader's control only ever moves [zoom].
+@immutable
+final class QvpReflowSpec {
+  const QvpReflowSpec({
+    this.zoom = 1,
+    this.fill = 'centred',
+    this.breaks = 'fitted',
+    this.gaps = 'uniform',
+    this.wordGap = 1,
+    this.maxStretch = 2,
+    this.relax = 0.5,
+  });
+
+  /// 1 is the printed page. The largest this page can reach is [QvpPage.reflowMaxZoom].
+  final double zoom;
+  /// `ragged` | `justified` | `centred`; `greedy` | `even` | `fitted`; `printed` | `uniform`.
+  final String fill, breaks, gaps;
+  final double wordGap, maxStretch, relax;
+
+  @override
+  bool operator ==(Object other) =>
+      other is QvpReflowSpec &&
+      other.zoom == zoom &&
+      other.fill == fill &&
+      other.breaks == breaks &&
+      other.gaps == gaps &&
+      other.wordGap == wordGap &&
+      other.maxStretch == maxStretch &&
+      other.relax == relax;
+
+  @override
+  int get hashCode => Object.hash(zoom, fill, breaks, gaps, wordGap, maxStretch, relax);
+}
+
+/// What a pinch does to the page.
+enum QvpZoomMode {
+  /// The pinch lands on the page's own zoom steps and the page reflows onto one. The default:
+  /// a reader never ends up at a zoom that breaks the page badly.
+  stepped,
+
+  /// The pinch drives the reflow zoom freely, between the printed page and [QvpPage.reflowMaxZoom].
+  continuous,
+
+  /// The pinch scales the printed page as it is. The rows never change.
+  magnify,
+}
+
+/// Where the reader's zoom control stands. A host keeps this beside its [QvpView]; all zero is
+/// the default control, stepped and on the printed page.
+@immutable
+final class QvpZoom {
+  const QvpZoom({this.mode = QvpZoomMode.stepped, this.step = 0, this.zoom = 1});
+
+  final QvpZoomMode mode;
+
+  /// 0 is the printed page, 1 upwards the page's own steps. What [QvpZoomMode.stepped] reads.
+  final int step;
+
+  /// The size in force, 1 at the printed page, whichever field the mode steers by.
+  final double zoom;
+
+  @override
+  bool operator ==(Object other) => other is QvpZoom && other.mode == mode && other.step == step && other.zoom == zoom;
+
+  @override
+  int get hashCode => Object.hash(mode, step, zoom);
+}
+
+/// A point `p` draws at `offset + scale · p`. The reader's pan and zoom, which the engine moves.
+@immutable
+final class QvpView {
+  const QvpView({this.scale = 1, this.offsetX = 0, this.offsetY = 0});
+  final double scale, offsetX, offsetY;
+
+  @override
+  bool operator ==(Object other) =>
+      other is QvpView && other.scale == scale && other.offsetX == offsetX && other.offsetY == offsetY;
+
+  @override
+  int get hashCode => Object.hash(scale, offsetX, offsetY);
+}
+
+/// What a gesture produced: the control to keep, the view to draw with, and whether the page was
+/// laid out again under it.
+@immutable
+final class QvpZoomChange {
+  const QvpZoomChange({required this.zoom, required this.view, required this.relaid});
+  final QvpZoom zoom;
+  final QvpView view;
+  final bool relaid;
+}
+
+/// What a sideways drag means on the page in hand.
+enum QvpSideways { pan, turnPage }
+
+/// Where a group of paths is drawn: `x' = kx · x + dx`, `y' = ky · y + dy`, in page units.
+@immutable
+final class QvpPlacement {
+  const QvpPlacement(this.dx, this.dy, this.kx, this.ky);
+  static const identity = QvpPlacement(0, 0, 1, 1);
+  final double dx, dy, kx, ky;
+}
+
+/// One stroke of a layout: the path to draw, under the placement of that index.
+@immutable
+final class QvpDraw {
+  const QvpDraw(this.path, this.placement);
+  final int path, placement;
+}
+
 final class QvpLayoutSpec {
   const QvpLayoutSpec({
     this.viewportW = 0,
@@ -379,8 +495,13 @@ final class QvpLayoutSpec {
     this.cropLeft = 0,
     this.cropRight = 0,
     this.maxAspectSlack = 0,
+    this.reflow,
   });
   final double viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing;
+
+  /// Reflow the page onto rows of the viewport's own width, or null for the printed page.
+  /// The reader's zoom control writes this: see [QvpPage.zoomSpec].
+  final QvpReflowSpec? reflow;
   final bool fillHeight;
   final int gridLines;
 
@@ -403,6 +524,7 @@ final class QvpLayoutSpec {
     double? cropLeft,
     double? cropRight,
     double? maxAspectSlack,
+    QvpReflowSpec? reflow,
   }) =>
       QvpLayoutSpec(
         viewportW: viewportW ?? this.viewportW,
@@ -417,6 +539,7 @@ final class QvpLayoutSpec {
         cropLeft: cropLeft ?? this.cropLeft,
         cropRight: cropRight ?? this.cropRight,
         maxAspectSlack: maxAspectSlack ?? this.maxAspectSlack,
+        reflow: reflow ?? this.reflow,
       );
 
   @override
@@ -433,17 +556,24 @@ final class QvpLayoutSpec {
       other.gridLines == gridLines &&
       other.cropLeft == cropLeft &&
       other.cropRight == cropRight &&
-      other.maxAspectSlack == maxAspectSlack;
+      other.maxAspectSlack == maxAspectSlack &&
+      other.reflow == reflow;
 
   @override
-  int get hashCode => Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft, cropRight, maxAspectSlack);
+  int get hashCode =>
+      Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft, cropRight, maxAspectSlack, reflow);
 }
 
 /// Output of [QvpPage.layout]. Page → viewport: `viewX = offsetX + x*scale`, `viewY = offsetY + (y + lineDy[line])*scale`.
 @immutable
 final class QvpLayout {
-  const QvpLayout({required this.scale, required this.offsetX, required this.offsetY, required this.contentW, required this.contentH, required this.lineSpacing, required this.lineDy, required this.slots, this.fitScale = 1, this.fitX = 0, this.fitY = 0});
+  const QvpLayout({required this.scale, required this.offsetX, required this.offsetY, required this.contentW, required this.contentH, required this.lineSpacing, required this.lineDy, required this.slots, this.fitScale = 1, this.fitX = 0, this.fitY = 0, this.reflowed = false, this.rows = 0});
   final double scale, offsetX, offsetY, contentW, contentH, lineSpacing;
+
+  /// Whether the page was reflowed onto rows of the viewport's width, and how many rows it made.
+  /// When it was, [lineDy] and [slots] describe the rows rather than the printed lines.
+  final bool reflowed;
+  final int rows;
 
   /// The view transform that shows the whole content in the viewport (shrink to height, never
   /// enlarge, centred). The host's pan and zoom go on top.
@@ -1209,7 +1339,7 @@ class QvpPage extends ChangeNotifier {
       lineDy[i] = f[i * 3];
       return (f[i * 3 + 1], f[i * 3 + 2]);
     }, growable: false);
-    final l = QvpLayout(scale: o.scale, offsetX: o.offsetX, offsetY: o.offsetY, contentW: o.contentW, contentH: o.contentH, lineSpacing: o.lineSpacing, lineDy: lineDy, slots: slots, fitScale: o.fitScale, fitX: o.fitX, fitY: o.fitY);
+    final l = QvpLayout(scale: o.scale, offsetX: o.offsetX, offsetY: o.offsetY, contentW: o.contentW, contentH: o.contentH, lineSpacing: o.lineSpacing, lineDy: lineDy, slots: slots, fitScale: o.fitScale, fitX: o.fitX, fitY: o.fitY, reflowed: o.reflowed != 0, rows: o.nRows);
     currentLayout = l;
     _touch();
     return l;
@@ -1230,6 +1360,249 @@ class QvpPage extends ChangeNotifier {
     s.cropLeft = spec.cropLeft;
     s.cropRight = spec.cropRight;
     s.maxAspectSlack = spec.maxAspectSlack;
+    final r = spec.reflow;
+    // reflow_zoom 0 means "no reflow": the printed page, and every other knob ignored
+    s.reflowZoom = r == null ? 0 : r.zoom;
+    // 255 is "the engine's own default" for the two that have one
+    s.reflowFill = r == null ? 255 : (_fill[r.fill] ?? 255);
+    s.reflowBreaks = r == null ? 255 : (_breaks[r.breaks] ?? 255);
+    s.reflowGaps = r == null ? 1 : (r.gaps == 'printed' ? 0 : 1);
+    s.reflowWordGap = r == null ? 0 : r.wordGap;
+    s.reflowMaxStretch = r == null ? 0 : r.maxStretch;
+    s.reflowRelax = r == null ? -1 : r.relax;
+  }
+
+  static const _fill = {'ragged': 0, 'justified': 1, 'centred': 2, 'centered': 2};
+  static const _breaks = {'greedy': 0, 'even': 1, 'fitted': 2};
+
+  // ── the reader's zoom control ──
+  // The engine owns the policy: which step a pinch lands on, when it commits, and what holds
+  // the reader's place when the page reflows under the fingers. A host reads the gesture and
+  // keeps the [QvpZoom] it gets back.
+
+  void _writeZoom(ffi.Pointer<QvpZoomC> z, QvpZoom v) {
+    z.ref.mode = v.mode.index;
+    z.ref.step = v.step;
+    z.ref.zoom = v.zoom;
+  }
+
+  void _writeView(ffi.Pointer<QvpViewC> p, QvpView v) {
+    p.ref.scale = v.scale;
+    p.ref.offsetX = v.offsetX;
+    p.ref.offsetY = v.offsetY;
+  }
+
+  QvpZoom _readZoom(QvpZoomC z) =>
+      QvpZoom(mode: QvpZoomMode.values[z.mode.clamp(0, QvpZoomMode.values.length - 1)], step: z.step, zoom: z.zoom);
+
+  QvpView _readView(QvpViewC v) => QvpView(scale: v.scale, offsetX: v.offsetX, offsetY: v.offsetY);
+
+  /// One frame of a pinch. [factor] is the distance between the fingers against the distance
+  /// when they went down — the whole gesture, not the step since the last frame — and [focal] is
+  /// the point between them, in viewport px. Pass the [QvpZoom] the gesture began on every
+  /// frame: measured against that, a slow pinch walks the steps one at a time.
+  QvpZoomChange zoomPinch(QvpLayoutSpec spec, QvpZoom zoom, QvpView view, double factor, double focalX, double focalY) {
+    _writeSpec(spec);
+    final z = pffi.calloc<QvpZoomC>(), v = pffi.calloc<QvpViewC>(), out = pffi.calloc<QvpZoomChangeC>();
+    try {
+      _writeZoom(z, zoom);
+      _writeView(v, view);
+      _b.zoomPinch(_p, _e._spec, z, v, factor, focalX, focalY, out);
+      return QvpZoomChange(zoom: _readZoom(out.ref.zoom), view: _readView(out.ref.view), relaid: out.ref.relaid != 0);
+    } finally {
+      pffi.calloc.free(z);
+      pffi.calloc.free(v);
+      pffi.calloc.free(out);
+    }
+  }
+
+  /// The control moved to a step directly: a size button, a double tap, a reset. Step 0 is the
+  /// printed page.
+  QvpZoomChange zoomToStep(QvpLayoutSpec spec, QvpZoom zoom, int step, QvpView view) {
+    _writeSpec(spec);
+    final z = pffi.calloc<QvpZoomC>(), v = pffi.calloc<QvpViewC>(), out = pffi.calloc<QvpZoomChangeC>();
+    try {
+      _writeZoom(z, zoom);
+      _writeView(v, view);
+      _b.zoomToStep(_p, _e._spec, z, step, v, out);
+      return QvpZoomChange(zoom: _readZoom(out.ref.zoom), view: _readView(out.ref.view), relaid: out.ref.relaid != 0);
+    } finally {
+      pffi.calloc.free(z);
+      pffi.calloc.free(v);
+      pffi.calloc.free(out);
+    }
+  }
+
+  /// The same control under another policy, keeping the size the reader is already at.
+  QvpZoom zoomMode(QvpLayoutSpec spec, QvpZoom zoom, QvpZoomMode mode) {
+    _writeSpec(spec);
+    final z = pffi.calloc<QvpZoomC>(), out = pffi.calloc<QvpZoomC>();
+    try {
+      _writeZoom(z, zoom);
+      _b.zoomMode(_p, _e._spec, z, mode.index, out);
+      return _readZoom(out.ref);
+    } finally {
+      pffi.calloc.free(z);
+      pffi.calloc.free(out);
+    }
+  }
+
+  /// The spec this control asks for: what to lay out, draw and hit-test with.
+  QvpLayoutSpec zoomSpec(QvpLayoutSpec spec, QvpZoom zoom) {
+    _writeSpec(spec);
+    final z = pffi.calloc<QvpZoomC>(), out = pffi.calloc<QvpLayoutSpecC>();
+    try {
+      _writeZoom(z, zoom);
+      _b.zoomSpec(_p, _e._spec, z, out);
+      final o = out.ref;
+      // Built rather than copied: a control on the printed page asks for no reflow at all, and
+      // `copyWith` cannot say "none" — its `??` would keep the reflow the spec came in with.
+      final knobs = spec.reflow ?? const QvpReflowSpec();
+      return QvpLayoutSpec(
+        viewportW: spec.viewportW,
+        viewportH: spec.viewportH,
+        padTop: spec.padTop,
+        padBottom: spec.padBottom,
+        padLeft: spec.padLeft,
+        padRight: spec.padRight,
+        lineSpacing: spec.lineSpacing,
+        fillHeight: spec.fillHeight,
+        gridLines: spec.gridLines,
+        cropLeft: spec.cropLeft,
+        cropRight: spec.cropRight,
+        maxAspectSlack: spec.maxAspectSlack,
+        reflow: o.reflowZoom > 1.0001
+            ? QvpReflowSpec(
+                zoom: o.reflowZoom,
+                fill: knobs.fill,
+                breaks: knobs.breaks,
+                gaps: knobs.gaps,
+                wordGap: knobs.wordGap,
+                maxStretch: knobs.maxStretch,
+                relax: knobs.relax,
+              )
+            : null,
+      );
+    } finally {
+      pffi.calloc.free(z);
+      pffi.calloc.free(out);
+    }
+  }
+
+  /// The same control on this page: what a page turn keeps. A step carries as a step, because
+  /// every page's steps are its own; a free zoom carries as a size, held inside what this page
+  /// can reach.
+  QvpZoom zoomCarried(QvpLayoutSpec spec, QvpZoom zoom) {
+    _writeSpec(spec);
+    final z = pffi.calloc<QvpZoomC>(), out = pffi.calloc<QvpZoomC>();
+    try {
+      _writeZoom(z, zoom);
+      _b.zoomCarried(_p, _e._spec, z, out);
+      return _readZoom(out.ref);
+    } finally {
+      pffi.calloc.free(z);
+      pffi.calloc.free(out);
+    }
+  }
+
+  /// The reflow zoom one step of this page's control means. Step 0 is the printed page.
+  double zoomAtStep(QvpLayoutSpec spec, int step) {
+    _writeSpec(spec);
+    return _b.zoomAtStep(_p, _e._spec, step);
+  }
+
+  /// The zoom steps this page ships with, above the printed page.
+  Float32List zoomSteps(QvpLayoutSpec spec) {
+    _writeSpec(spec);
+    final o = _e._out<ffi.Float>(), cap = _e._cap(4);
+    final n = _b.zoomSteps(_p, _e._spec, o, cap).clamp(0, cap);
+    return Float32List.fromList(o.asTypedList(n));
+  }
+
+  /// The largest reflow zoom whose rows still hold every word of this page.
+  double reflowMaxZoom(QvpLayoutSpec spec) {
+    _writeSpec(spec);
+    return _b.reflowMaxZoom(_p, _e._spec);
+  }
+
+  /// Has the reader zoomed in, by either road: a magnified view or a reflowed page.
+  /// [fitScale] is [QvpLayout.fitScale]; 0 means the page is at its fitted size.
+  bool isZoomed(QvpZoom zoom, QvpView view, [double fitScale = 0]) {
+    final z = pffi.calloc<QvpZoomC>(), v = pffi.calloc<QvpViewC>();
+    try {
+      _writeZoom(z, zoom);
+      _writeView(v, view);
+      return _b.zoomIsZoomed(z, v, fitScale) != 0;
+    } finally {
+      pffi.calloc.free(z);
+      pffi.calloc.free(v);
+    }
+  }
+
+  /// What a sideways drag means on the page in hand: pan it, or turn it.
+  QvpSideways sidewaysDrag(QvpZoom zoom, QvpView view, [double fitScale = 0]) {
+    final z = pffi.calloc<QvpZoomC>(), v = pffi.calloc<QvpViewC>();
+    try {
+      _writeZoom(z, zoom);
+      _writeView(v, view);
+      return _b.sidewaysDrag(_p, z, v, fitScale) == 1 ? QvpSideways.turnPage : QvpSideways.pan;
+    } finally {
+      pffi.calloc.free(z);
+      pffi.calloc.free(v);
+    }
+  }
+
+  // ── what the layout draws ──
+
+  /// Everything the current layout draws, in drawing order. Each [QvpDraw] names a path and the
+  /// index of the placement to draw it under, from [layoutPlacements]. Omitted paths never
+  /// appear and a repeated one appears twice, so one loop draws any page, reflowed or not.
+  ///
+  /// [bandTop] and [bandBottom] cut it to a band of the page, in viewport px; leave them out for
+  /// the whole page.
+  List<QvpDraw> layoutDrawList({double bandTop = 0, double bandBottom = 0}) {
+    final o = _e._out<ffi.Uint32>(), cap = _e._cap(8);
+    final n = _b.layoutDrawList(_p, bandTop, bandBottom, o, cap).clamp(0, cap);
+    final f = o.asTypedList(n * 2);
+    return List.generate(n, (i) => QvpDraw(f[i * 2], f[i * 2 + 1]), growable: false);
+  }
+
+  /// What a draw list's `placement` indexes: the groups, then the repeats.
+  List<QvpPlacement> layoutPlacements() {
+    final o = _e._out<ffi.Float>(), cap = _e._cap(16);
+    final n = _b.layoutPlacements(_p, o, cap).clamp(0, cap);
+    final f = o.asTypedList(n * 4);
+    return List.generate(n, (i) => QvpPlacement(f[i * 4], f[i * 4 + 1], f[i * 4 + 2], f[i * 4 + 3]), growable: false);
+  }
+
+  /// The layout the page already has, without computing one, or null when it has none. A zoom
+  /// call lays the page out again, so this is how a host reads what it must now draw.
+  QvpLayout? readLayout() {
+    if (_b.layoutCurrent(_p, _e._layout) == 0) return null;
+    final o = _e._layout.ref;
+    final n = o.nLines;
+    final f = o.lines == ffi.nullptr ? Float32List(0) : o.lines.asTypedList(n * 3);
+    final lineDy = Float32List(n);
+    final slots = List<(double, double)>.generate(n, (i) {
+      lineDy[i] = f[i * 3];
+      return (f[i * 3 + 1], f[i * 3 + 2]);
+    }, growable: false);
+    final l = QvpLayout(scale: o.scale, offsetX: o.offsetX, offsetY: o.offsetY, contentW: o.contentW, contentH: o.contentH, lineSpacing: o.lineSpacing, lineDy: lineDy, slots: slots, fitScale: o.fitScale, fitX: o.fitX, fitY: o.fitY, reflowed: o.reflowed != 0, rows: o.nRows);
+    currentLayout = l;
+    return l;
+  }
+
+  /// The row a word landed on when the page reflowed, or null when it did not.
+  int? layoutWordRow(int word) {
+    final r = _b.layoutWordRow(_p, word);
+    return r == 0xFFFFFFFF ? null : r;
+  }
+
+  /// The words of one reflowed row, in drawing order.
+  Uint32List layoutRowWords(int row) {
+    final o = _e._out<ffi.Uint32>(), cap = _e._cap(4);
+    final n = _b.layoutRowWords(_p, row, o, cap).clamp(0, cap);
+    return Uint32List.fromList(o.asTypedList(n));
   }
 
   /// The grid this page is laid out inside: the mushaf's line count and the printed line spacing.

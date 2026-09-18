@@ -24,6 +24,47 @@ is owed.
 | symbol | wrapper | why |
 |---|---|---|
 | `qvp_alloc` | android | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
+| `qvp_ayah_marks_view` | android | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_ayah_marks_view` | ios | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_ayah_marks_view` | react-native | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_hit_areas_view` | android | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_hit_areas_view` | ios | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_hit_areas_view` | react-native | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_layout_current` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_draw_list` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_groups` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_omitted_paths` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_path_groups` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_placements` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_repeats` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_row_words` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_word_row` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
+| `qvp_layout_word_row` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_reflow_max_zoom` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_sideways_drag` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_swipe_pages` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_view_anchor` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_view_clamp` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_view_pan` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
+| `qvp_view_pan` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_view_swipe` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
+| `qvp_view_swipe` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_view_to_layout` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
+| `qvp_view_to_layout` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_view_zoom_about` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
+| `qvp_view_zoom_about` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_word_bands_view` | android | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_word_bands_view` | ios | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_word_bands_view` | react-native | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_zoom_at_step` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_zoom_carried` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_zoom_is_zoomed` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_zoom_level_candidates` | ios | not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives |
+| `qvp_zoom_level_candidates` | react-native | not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives |
+| `qvp_zoom_levels` | ios | not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives |
+| `qvp_zoom_levels` | react-native | not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives |
+| `qvp_zoom_pinch` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_zoom_spec` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_alloc` | ios | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
 | `qvp_alloc` | react-native | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
 | `qvp_dealloc` | android | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
@@ -219,7 +260,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-115 symbols in the header, 115 Rust exports. web: 114 bound, android: 112 bound, flutter: 114 bound, ios: 113 bound, react-native: 76 bound.
+146 symbols in the header, 146 Rust exports. web: 145 bound, android: 140 bound, flutter: 145 bound, ios: 134 bound, react-native: 79 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -243,6 +284,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_ayah_keys` | yes | yes | yes | yes | yes |
 | `qvp_ayah_label` | yes | yes | yes | yes | yes |
 | `qvp_ayah_marks` | yes | yes | yes | yes | yes |
+| `qvp_ayah_marks_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_ayah_word_count` | yes | yes | yes | yes | yes |
 | `qvp_category_name` | yes | yes | yes | yes | yes |
 | `qvp_citation` | yes | yes | yes | yes | yes |
@@ -268,14 +310,24 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_highlight_restyle` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_highlight_words` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_hit_areas` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_hit_areas_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_hit_test` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_exact` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_exact_view` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_view` | yes | yes | yes | yes | yes |
 | `qvp_kind_name` | yes | yes | yes | yes | yes |
 | `qvp_layout` | yes | yes | yes | yes | yes |
+| `qvp_layout_current` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_draw_list` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_groups` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_line_spacing_to_fill` | yes | yes | yes | yes | yes |
+| `qvp_layout_omitted_paths` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_path_groups` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_placements` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_repeats` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_row_words` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_wasted_fraction` | yes | yes | yes | yes | yes |
+| `qvp_layout_word_row` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_line_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_line_info` | yes | yes | yes | yes | gap (list form: bound as `lines()`) |
 | `qvp_mark_category` | yes | yes | yes | yes | yes |
@@ -300,6 +352,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_page_line_spacing` | yes | yes | yes | yes | gap (other shape: `info().lineSpacing`) |
 | `qvp_page_load` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript (`pageUri` prop)) |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |
+| `qvp_reflow_max_zoom` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_reveal_goto` | yes | yes | yes | yes | yes |
 | `qvp_reveal_position` | yes | yes | yes | yes | yes |
 | `qvp_reveal_start` | yes | yes | yes | yes | yes |
@@ -312,6 +365,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_select` | yes | yes | yes | yes | yes |
 | `qvp_selection` | yes | yes | yes | yes | yes |
 | `qvp_selection_text` | yes | yes | yes | yes | yes |
+| `qvp_sideways_drag` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_style_add` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_add_target` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_clear` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
@@ -324,6 +378,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_styled_paths` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_surah_at` | yes | yes | yes | yes | gap (list form: bound as `surahs()`) |
 | `qvp_surah_count` | yes | yes | yes | yes | gap (list form: bound as `surahs().length`) |
+| `qvp_swipe_pages` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_target_words` | yes | yes | yes | yes | yes |
 | `qvp_text` | yes | yes | yes | yes | yes |
 | `qvp_theme` | yes | yes | yes | yes | yes |
@@ -333,9 +388,26 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_unmask_next` | yes | yes | yes | yes | yes |
 | `qvp_unmask_word` | yes | yes | yes | yes | yes |
 | `qvp_version` | yes | yes | yes | yes | yes |
+| `qvp_view_anchor` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_clamp` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_pan` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_swipe` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_to_layout` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_zoom_about` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_word_bands_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_word_bounds_view` | yes | yes | yes | yes | yes |
 | `qvp_word_form` | yes | yes | yes | yes | yes |
 | `qvp_word_info` | yes | yes | yes | yes | gap (list form: bound as `word(i)` and `words()`) |
 | `qvp_word_label` | yes | yes | yes | yes | yes |
+| `qvp_zoom_at_step` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_zoom_carried` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_zoom_is_zoomed` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_zoom_level_candidates` | yes | yes | yes | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) |
+| `qvp_zoom_levels` | yes | yes | yes | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) |
+| `qvp_zoom_mode` | yes | yes | yes | yes | yes |
+| `qvp_zoom_pinch` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_zoom_spec` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_zoom_steps` | yes | yes | yes | yes | yes |
+| `qvp_zoom_to_step` | yes | yes | yes | yes | yes |
 <!-- parity:end -->

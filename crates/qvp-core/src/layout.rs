@@ -4,6 +4,8 @@
 //! tall screen leaves empty paper above and below, and the leading here fills it, so
 //! the page fills the screen. Expansion only: the printed spacing is the floor, and the
 //! text width is never a knob at all (the page is always fitted to the viewport width).
+use crate::defaults;
+use crate::reflow::{Placement, ReflowSpec, Reflowed};
 use crate::Page;
 
 /// How to place lines vertically. All lengths in *viewport pixels*.
@@ -40,6 +42,9 @@ pub struct LayoutSpec {
     /// `viewport_h · page_w / page_h · max_aspect_slack`, so a landscape screen does not
     /// stretch the lines to its full width. 0 turns the bound off.
     pub max_aspect_slack: f32,
+    /// Break the words onto other rows instead of drawing the printed lines. The page keeps
+    /// its width and grows taller; the host scrolls it. `None` lays the page out as printed.
+    pub reflow: Option<ReflowSpec>,
 }
 
 impl Default for LayoutSpec {
@@ -57,6 +62,7 @@ impl Default for LayoutSpec {
             crop_left: 0.0,
             crop_right: 0.0,
             max_aspect_slack: 0.0,
+            reflow: None,
         }
     }
 }
@@ -96,6 +102,54 @@ pub struct Layout {
     pub fit_scale: f32,
     pub fit_x: f32,
     pub fit_y: f32,
+    /// Where each group of paths is placed. Without reflow there is one group per printed
+    /// line, holding that line's `line_dy`. With reflow the groups are the page's words and
+    /// decorations: `path_group` says which group a path belongs to.
+    pub groups: Vec<Placement>,
+    /// Group of every path. Empty without reflow, where a path's group is its printed line.
+    pub path_group: Vec<u32>,
+    /// Paths this layout does not draw: the sheet's furniture on a reflowed page (running
+    /// head, page number), which the print puts outside the page box. Sorted.
+    pub omitted_paths: Vec<u32>,
+    /// The rows the words were broken onto, when this layout reflowed the page.
+    pub reflow: Option<Reflowed>,
+}
+
+/// One drawing of one path: the path, and which of [`Layout::placements`] it is drawn under.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct Draw {
+    pub path: u32,
+    pub placement: u32,
+}
+
+impl Layout {
+    /// Placement of a path's group.
+    pub fn placement(&self, path: u32, line: u32) -> Placement {
+        let g = if self.path_group.is_empty() { line } else { self.path_group[path as usize] };
+        self.groups.get(g as usize).copied().unwrap_or(Placement::IDENTITY)
+    }
+    /// Placement of a word: where reflow put it, or its printed line's shift.
+    pub fn word_placement(&self, word: u32, line: usize) -> Placement {
+        match &self.reflow {
+            Some(r) => r.word_place[word as usize],
+            None => Placement::shifted(self.line_dy.get(line).copied().unwrap_or(0.0)),
+        }
+    }
+    /// Every placement this layout draws under: one per group, then one for each repeat, so a
+    /// `Draw` indexes this one array and a renderer needs no second list.
+    pub fn placements(&self) -> Vec<Placement> {
+        let mut out = self.groups.clone();
+        if let Some(r) = &self.reflow {
+            out.extend(r.repeats.iter().map(|x| x.placement));
+        }
+        out
+    }
+
+    /// True when this layout broke the words onto rows of its own.
+    pub fn is_reflowed(&self) -> bool {
+        self.reflow.is_some()
+    }
 }
 
 /// Leading (page units, between consecutive lines) that makes a page fill a
@@ -170,6 +224,14 @@ impl Page {
     }
 
     pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
+        // At the printed size the page is the printed page: the words are where the print has
+        // them, and every layout knob — leading, fill height, the grid a short page sits on —
+        // works exactly as it does without reflow. Rows only appear once the reader zooms in.
+        if let Some(r) = spec.reflow.filter(|r| r.zoom > 1.0 + 1e-4) {
+            let l = self.layout_reflow(spec, &r);
+            self.layout = Some(l);
+            return self.layout.as_ref().unwrap();
+        }
         let pw = self.width();
         let ph = self.height();
         // The content width: the viewport, bounded by the page's aspect ratio when the
@@ -256,7 +318,12 @@ impl Page {
             fit_x: 0.0,
             fit_y: 0.0,
             line_spacing,
+            groups: vec![],
+            path_group: vec![],
+            omitted_paths: vec![],
+            reflow: None,
         };
+        layout.groups = layout.line_dy.iter().map(|&d| Placement::shifted(d)).collect();
         // Fit: shrink to the viewport height when the content is taller, never enlarge;
         // centre the result. Offsets are never negative.
         let fit_scale = if layout.content_h > spec.viewport_h && layout.content_h > 0.0 {
@@ -271,23 +338,302 @@ impl Page {
         self.layout.as_ref().unwrap()
     }
 
+    /// Lay the page out by breaking its words onto rows of the padded viewport width.
+    ///
+    /// The ink is `zoom` times the size it has at fit-to-width, so a row holds
+    /// `page_w / zoom` page units and the page grows taller than the viewport. `fit_scale`
+    /// stays 1: the content is meant to be scrolled, never shrunk back to the screen.
+    fn layout_reflow(&mut self, spec: &LayoutSpec, r: &ReflowSpec) -> Layout {
+        let pw = self.width();
+        let ph = self.height();
+        let content_w = if spec.max_aspect_slack > 0.0 {
+            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
+        } else {
+            spec.viewport_w
+        };
+        let crop = (spec.crop_left.max(0.0), spec.crop_right.max(0.0));
+        let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
+        let zoom = r.zoom.max(0.01);
+        // A row holds the page's text block, not the whole sheet: the print keeps a margin on
+        // each side, and a row that ignored it would put the words somewhere the print never
+        // does. At zoom 1 this reproduces the printed lines where they are.
+        let block = self.text_block();
+        let page_w = (pw - crop.0 - crop.1).max(1.0);
+        let (margin_l, margin_r) = ((block.0 - crop.0).max(0.0), ((pw - crop.1) - block.1).max(0.0));
+        let row_w = (page_w - margin_l - margin_r).max(1.0) / zoom;
+        let scale = avail_w / (page_w / zoom);
+        let pitch = self.line_spacing * spec.line_spacing.max(1.0);
+        let top = spec.pad_top / scale + pitch / 2.0;
+        // the reader asked for no more leading than the print has, so a page whose rows come
+        // out as the printed lines can keep the printed line positions too
+        let printed_spacing = spec.line_spacing <= 1.0 + 1e-6 && !spec.fill_height;
+        // the rows a reader sees at once, which is what the evening out is measured against
+        let rows_per_view =
+            (((spec.viewport_h - spec.pad_top - spec.pad_bottom) / (pitch * scale)).floor() as i32).max(1) as usize;
+        let flow = self.reflow(
+            r,
+            &crate::reflow::RowSpec {
+                block,
+                margins: (margin_l / zoom, margin_r / zoom),
+                row_w,
+                pitch,
+                top,
+                printed_spacing,
+                rows_per_view,
+            },
+        );
+        // the content is the ink that was laid out; a page that came out as printed keeps the
+        // printed page's own height, so zoom 1 gives the printed layout back whole
+        let content_h = if flow.as_printed {
+            spec.pad_top + ph * scale + spec.pad_bottom
+        } else {
+            spec.pad_top + (flow.y1 - flow.y0).max(flow.row_band.len() as f32 * pitch) * scale + spec.pad_bottom
+        };
+        let line_slots: Vec<(f32, f32)> = flow.row_band.iter().map(|(t, b)| (t * scale, b * scale)).collect();
+        // one group per word, then one per decoration, then one per decoration's sajdah line:
+        // a path's group follows the job it does, not only the record it belongs to
+        let n_words = self.data.words.len();
+        let n_decos = self.data.decorations.len();
+        let mut groups: Vec<Placement> = Vec::with_capacity(n_words + n_decos * 2);
+        groups.extend_from_slice(&flow.word_place);
+        groups.extend_from_slice(&flow.deco_place);
+        groups.extend_from_slice(&flow.sajdah_line_place);
+        let stroke = self.sajdah_line_paths();
+        let path_group: Vec<u32> = (0..self.geom.table.len())
+            .map(|i| {
+                let g = &self.geom.table[i];
+                if g.word != u32::MAX {
+                    g.word
+                } else if self.path_deco[i] != u32::MAX {
+                    let di = self.path_deco[i];
+                    if stroke[i] {
+                        (n_words + n_decos) as u32 + di
+                    } else {
+                        n_words as u32 + di
+                    }
+                } else {
+                    0
+                }
+            })
+            .collect();
+        let mut omitted_paths: Vec<u32> = Vec::new();
+        for &di in &flow.omitted {
+            let deco = &self.data.decorations[di as usize];
+            omitted_paths.extend(deco.first_path..deco.first_path + deco.n_paths as u32);
+        }
+        omitted_paths.sort_unstable();
+        let mut layout = Layout {
+            scale,
+            // the block's own left margin, kept at the reader's size
+            offset_x: spec.pad_left + margin_l / zoom * scale,
+            offset_y: 0.0,
+            line_dy: vec![0.0; self.data.lines.len()],
+            line_slots,
+            content_h,
+            content_w,
+            line_spacing: pitch,
+            fit_scale: 1.0,
+            fit_x: 0.0,
+            fit_y: 0.0,
+            groups,
+            path_group,
+            omitted_paths,
+            reflow: Some(flow),
+        };
+        layout.fit_x = ((spec.viewport_w - layout.content_w) / 2.0).max(0.0);
+        layout
+    }
+
     pub fn current_layout(&self) -> Option<&Layout> {
         self.layout.as_ref()
     }
 
+    /// Everything the current layout draws, in drawing order: each path once under the
+    /// placement it belongs to, and again for every row a decoration is repeated over.
+    ///
+    /// This is the whole of what a renderer needs to know about a laid-out page. The paths a
+    /// layout leaves out never appear, a sajdah line stroked over two rows appears twice, and a
+    /// printed page hands back each path under its own line — so one loop draws any page, and
+    /// no host has to know which of those cases it is in.
+    pub fn layout_draw_list(&self) -> Vec<Draw> {
+        self.layout_draw_list_in(None)
+    }
+
+    /// The same, holding it to a band of the laid-out page: `(top, bottom)` in viewport px, as
+    /// `Layout::line_slots` and every `…_view` answer are. Nothing else is drawn.
+    ///
+    /// This is what keeps a reflowed page smooth under a finger. The page is taller than the
+    /// screen on purpose — at the largest step it is five screens of ink — and a renderer that
+    /// walks the whole page on every frame spends most of it on rows nobody can see. The band a
+    /// host asks for is its viewport, usually with a screen of slack either side so a fast drag
+    /// has somewhere to go.
+    pub fn layout_draw_list_in(&self, band: Option<(f32, f32)>) -> Vec<Draw> {
+        let Some(l) = self.current_layout() else { return Vec::new() };
+        let q = self.quant();
+        // A path is kept when its ink reaches into the band. Its box is in page units, so it
+        // goes through the placement it is drawn under and then the layout's own scale.
+        let visible = |path: u32, placement: &Placement| -> bool {
+            let Some((top, bottom)) = band else { return true };
+            let bb = self.data.paths[path as usize].bbox;
+            let (y0, y1) = (bb.y0 as f32 / q, bb.y1 as f32 / q);
+            let at = |y: f32| l.offset_y + l.scale * (placement.ky * y + placement.dy);
+            at(y1) >= top && at(y0) <= bottom
+        };
+        let group = |i: usize| l.groups.get(i).copied().unwrap_or(Placement::IDENTITY);
+        let n = self.geom.table.len();
+        let mut out = Vec::with_capacity(n);
+        for path in 0..n as u32 {
+            if l.omitted_paths.binary_search(&path).is_ok() {
+                continue;
+            }
+            let placement =
+                if l.path_group.is_empty() { self.geom.table[path as usize].line } else { l.path_group[path as usize] };
+            if visible(path, &group(placement as usize)) {
+                out.push(Draw { path, placement });
+            }
+        }
+        if let Some(r) = &l.reflow {
+            let base = l.groups.len() as u32;
+            for (i, rep) in r.repeats.iter().enumerate() {
+                for path in rep.first_path..rep.first_path + rep.n_paths {
+                    if visible(path, &rep.placement) {
+                        out.push(Draw { path, placement: base + i as u32 });
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).
+    /// The zoom each step of a reader's zoom control lands on for this page.
+    ///
+    /// Zoom is continuous, but the rows are not: a word stops fitting and the page rearranges,
+    /// so some zooms break a page well and the zoom a hair above breaks it badly. A reader
+    /// stepping through fixed sizes never has to find the good ones. The engine searches a
+    /// band around each nominal zoom and returns the one whose rows come out best, which is a
+    /// property of the page and the layout, so a host works it out once and keeps it.
+    ///
+    /// The returned zooms rise, and each is at least 8% above the one before it, so the steps
+    /// stay apart. `nominals` empty takes [`defaults::ZOOM_LEVEL_NOMINALS`], `band` of 0 takes
+    /// [`defaults::ZOOM_LEVEL_BAND`]. The printed page, zoom 1, is not among them: it is the
+    /// step every control starts from.
+    pub fn zoom_levels(&mut self, spec: &LayoutSpec, nominals: &[f32], band: f32) -> Vec<f32> {
+        let owned;
+        let nominals = if nominals.is_empty() {
+            owned = defaults::ZOOM_LEVEL_NOMINALS.to_vec();
+            &owned[..]
+        } else {
+            nominals
+        };
+        let mut out: Vec<f32> = Vec::with_capacity(nominals.len());
+        let mut floor = 1.0 + defaults::ZOOM_LEVEL_STEP;
+        for &nominal in nominals {
+            let cand = self.zoom_level_candidates(spec, nominal, band, floor);
+            let pick =
+                cand.iter().fold((f32::INFINITY, cand[0].0), |best, &(z, c)| if c < best.0 { (c, z) } else { best }).1;
+            out.push(pick);
+            floor = pick * 1.08;
+        }
+        out
+    }
+
+    /// The zoom each step of this page's zoom control lands on, lowest first, read from the
+    /// table the engine carries. The printed page, zoom 1, is the step every control starts
+    /// from and is not among them.
+    ///
+    /// The steps were chosen for the engine's own breaking and spacing, and for the whole
+    /// mushaf at once, so the ink changes size as little as it can from one page to the next.
+    /// A reader who changes a spacing knob keeps these steps and gets a page laid out with the
+    /// settings they asked for, so a spacing knob never resizes the text. A page the table does
+    /// not cover falls back to [`Page::zoom_levels`], which searches.
+    pub fn zoom_steps(&mut self, spec: &LayoutSpec) -> Vec<f32> {
+        if let Some(row) = crate::zoom_table::steps(self.page_number()) {
+            return row.to_vec();
+        }
+        // a page the table does not cover searches, once: the answer is the page's, so a
+        // second call cannot put 40 ms into a reader's hands
+        if self.searched_steps.is_none() {
+            self.searched_steps = Some(self.zoom_levels(spec, &[], 0.0));
+        }
+        self.searched_steps.clone().unwrap_or_default()
+    }
+
+    /// Every zoom the search considers for one step, with what its rows cost: what
+    /// [`Page::zoom_levels`] picks the least of. A generator choosing the steps for a whole
+    /// mushaf uses this to weigh a page's own rows against how much the ink changes size from
+    /// the page before it.
+    pub fn zoom_level_candidates(&mut self, spec: &LayoutSpec, nominal: f32, band: f32, floor: f32) -> Vec<(f32, f32)> {
+        let band = if band > 0.0 { band } else { defaults::ZOOM_LEVEL_BAND };
+        let reflow = spec.reflow.unwrap_or_default();
+        let cap = self.reflow_max_zoom(&reflow);
+        let floor = floor.max(1.0 + defaults::ZOOM_LEVEL_STEP);
+        let (lo, hi) = ((nominal * (1.0 - band)).max(floor), (nominal * (1.0 + band)).min(cap));
+        let mut out = Vec::new();
+        let mut z = lo;
+        while z <= hi + 1e-6 {
+            let mut total = 0.0;
+            for step in [-defaults::ZOOM_LEVEL_STEP, 0.0, defaults::ZOOM_LEVEL_STEP] {
+                let zz = (z + step).clamp(1.0 + defaults::ZOOM_LEVEL_STEP, cap);
+                total += self.zoom_cost(spec, &reflow, zz, nominal);
+            }
+            out.push((z, total));
+            z += defaults::ZOOM_LEVEL_STEP;
+        }
+        if out.is_empty() {
+            out.push((lo.min(hi).min(cap), 0.0));
+        }
+        out
+    }
+
+    /// What the rows of this page cost at one zoom: how short its rows come out, how much they
+    /// differ from the row above, how tall the page grows, and how far the zoom is from the one
+    /// the reader asked for. Lower is better. The row that ends the page is not counted, since
+    /// it is short only because the text ran out.
+    fn zoom_cost(&mut self, spec: &LayoutSpec, reflow: &ReflowSpec, zoom: f32, nominal: f32) -> f32 {
+        let l = self.layout_reflow(spec, &ReflowSpec { zoom, ..*reflow });
+        let Some(flow) = l.reflow.as_ref() else { return f32::INFINITY };
+        let q = self.quant();
+        let mut fills: Vec<f32> = Vec::with_capacity(flow.row_words.len());
+        for words in flow.row_words.iter() {
+            if words.is_empty() {
+                continue;
+            }
+            let (mut x0, mut x1) = (f32::MAX, f32::MIN);
+            for &wi in words {
+                let w = &self.data.words[wi as usize];
+                let p = flow.word_place[wi as usize];
+                x0 = x0.min(p.apply(w.bbox.x0 as f32 / q, 0.0).0);
+                x1 = x1.max(p.apply(w.bbox.x1 as f32 / q, 0.0).0);
+            }
+            fills.push((x1 - x0) / flow.row_w);
+        }
+        fills.pop();
+        if fills.is_empty() {
+            return 0.0;
+        }
+        let n = fills.len() as f32;
+        let short: f32 = fills.iter().map(|v| (0.75 - v).max(0.0).powi(2)).sum::<f32>() / n;
+        let steps: f32 = fills.windows(2).map(|p| (p[1] - p[0]).powi(2)).sum::<f32>() / n;
+        let height = flow.row_words.len() as f32 / 15.0 / zoom;
+        let near = (zoom / nominal).ln();
+        3.0 * short + steps + 0.10 * height + 0.8 * near * near
+    }
+
     pub fn word_bounds_view(&self, wi: u32) -> (f32, f32, f32, f32) {
         let q = self.quant();
         let w = &self.data.words[wi as usize];
         let (x0, y0, x1, y1) = (w.bbox.x0 as f32 / q, w.bbox.y0 as f32 / q, w.bbox.x1 as f32 / q, w.bbox.y1 as f32 / q);
         match &self.layout {
             Some(l) => {
-                let d = l.line_dy[w.line_index as usize];
+                let p = l.word_placement(wi, w.line_index as usize);
+                let (ax0, ay0) = p.apply(x0, y0);
+                let (ax1, ay1) = p.apply(x1, y1);
                 (
-                    l.offset_x + x0 * l.scale,
-                    l.offset_y + (y0 + d) * l.scale,
-                    l.offset_x + x1 * l.scale,
-                    l.offset_y + (y1 + d) * l.scale,
+                    l.offset_x + ax0 * l.scale,
+                    l.offset_y + ay0 * l.scale,
+                    l.offset_x + ax1 * l.scale,
+                    l.offset_y + ay1 * l.scale,
                 )
             }
             None => (x0, y0, x1, y1),

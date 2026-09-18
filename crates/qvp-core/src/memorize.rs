@@ -192,23 +192,31 @@ impl Page {
             return vec![];
         }
         let q = self.quant();
-        let (scale, ox, oy, dy): (f32, f32, f32, Vec<f32>) = match self.current_layout() {
-            Some(l) => (l.scale, l.offset_x, l.offset_y, l.line_dy.clone()),
-            None => (1.0, 0.0, 0.0, vec![0.0; self.data().lines.len()]),
+        let (scale, ox, oy) = match self.current_layout() {
+            Some(l) => (l.scale, l.offset_x, l.offset_y),
+            None => (1.0, 0.0, 0.0),
+        };
+        let place = |wi: u32, li: usize| match self.current_layout() {
+            Some(l) => l.word_placement(wi, li),
+            None => crate::Placement::IDENTITY,
         };
         self.mask
             .hidden
             .iter()
             .map(|&wi| {
                 let w = &self.data().words[wi as usize];
-                let d = dy[w.line_index as usize];
+                let p = place(wi, w.line_index as usize);
+                let (bx0, by0) =
+                    p.apply(w.bbox.x0 as f32 / q - self.mask.pad_x, w.bbox.y0 as f32 / q - self.mask.pad_y);
+                let (bx1, by1) =
+                    p.apply(w.bbox.x1 as f32 / q + self.mask.pad_x, w.bbox.y1 as f32 / q + self.mask.pad_y);
                 crate::highlight::ViewBox {
                     highlight: 0,
                     line: w.line_index as u32,
-                    x0: ox + (w.bbox.x0 as f32 / q - self.mask.pad_x) * scale,
-                    y0: oy + (w.bbox.y0 as f32 / q - self.mask.pad_y + d) * scale,
-                    x1: ox + (w.bbox.x1 as f32 / q + self.mask.pad_x) * scale,
-                    y1: oy + (w.bbox.y1 as f32 / q + self.mask.pad_y + d) * scale,
+                    x0: ox + bx0 * scale,
+                    y0: oy + by0 * scale,
+                    x1: ox + bx1 * scale,
+                    y1: oy + by1 * scale,
                     color: self.mask.block_color,
                     radius: crate::highlight::clamp_radius(
                         self.mask.radius * scale,
