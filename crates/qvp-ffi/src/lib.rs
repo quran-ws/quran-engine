@@ -1490,10 +1490,12 @@ unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
             gaps: if s.reflow_gaps == 0 { qvp_core::GapMode::Printed } else { qvp_core::GapMode::Uniform },
             relax: if s.reflow_relax < 0.0 { qvp_core::defaults::REFLOW_RELAX } else { s.reflow_relax.min(1.0) },
             word_gap: if s.reflow_word_gap > 0.0 { s.reflow_word_gap } else { 1.0 },
+            // 0 is the default; a negative value reaches the core as it is, which reads any
+            // value at or below 0 as no cap.
             max_stretch: if s.reflow_max_stretch == 0.0 {
                 qvp_core::defaults::REFLOW_MAX_STRETCH
             } else {
-                s.reflow_max_stretch.max(0.0)
+                s.reflow_max_stretch
             },
         }),
     }

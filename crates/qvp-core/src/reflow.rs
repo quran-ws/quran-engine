@@ -77,7 +77,7 @@ pub struct ReflowSpec {
     pub relax: f32,
     /// How far a gap may stretch under [`Fill::Justified`], as a multiple of the gap the row
     /// started with. A row that would need more than this stays as it is, right-aligned, so a
-    /// short row is never gapped out to the margins. 0 means no cap.
+    /// short row is never gapped out to the margins. 0 or below means no cap.
     pub max_stretch: f32,
 }
 
@@ -404,7 +404,12 @@ impl Page {
     ///
     /// The sajdah line is left out of the measure: it is drawn over a span of words, not over
     /// one, so it is not what bounds the zoom.
-    pub fn reflow_max_zoom(&self, spec: &ReflowSpec) -> f32 {
+    ///
+    /// The atoms are measured the way [`Page::layout`] builds them for a reflowed page, with the page's own median
+    /// gap as the tolerance that sorts a mark into the row or the margin. `word_gap` is a
+    /// multiplier on the gaps *between* atoms; it does not change what an atom holds, so it
+    /// takes no part in the measure. The spec stays in the signature because the ABI passes it.
+    pub fn reflow_max_zoom(&self, _spec: &ReflowSpec) -> f32 {
         let d = self.data();
         let median = self.median_word_gap();
         let anchors = self.deco_anchor_words();
@@ -417,7 +422,7 @@ impl Page {
         }
         let block = self.text_block();
         let widest = (0..d.words.len() as u32)
-            .map(|wi| self.atom(wi, &word_decos[wi as usize], median * spec.word_gap.max(0.0), block).width)
+            .map(|wi| self.atom(wi, &word_decos[wi as usize], median, block).width)
             .fold(0.0f32, f32::max);
         if widest > 0.0 {
             ((block.1 - block.0) / widest).max(1.0)
