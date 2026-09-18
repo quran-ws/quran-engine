@@ -6,6 +6,7 @@ import com.facebook.react.uimanager.SimpleViewManager
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.annotations.ReactProp
 import ws.quran.qvp.QvpColor
+import ws.quran.qvp.QvpDefaults
 
 /** `<QvpPageView />`: props are marshalled onto [QvpRnPageView]; [onAfterUpdateTransaction] commits them in one pass. */
 class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {

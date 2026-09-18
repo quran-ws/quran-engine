@@ -29,7 +29,15 @@ All notable changes to the engine and its packages. The format follows
   the only page of 604 that draws anything outside — and every host drew that ink wherever
   the layout happened to put it. The paths, their boxes and the path numbering are all
   unchanged, so a crop and an SVG export still carry every stroke the artwork drew.
-
+- The Kotlin library module (`packages/android/qvp`) no longer applies the Maven publishing
+  plugin itself; the Android SDK's root build applies and configures it. A root build that
+  only needs the module to compile — the React Native example, which includes it as
+  `:qvp` — configured with `Plugin [id: 'com.vanniktech.maven.publish'] was not found`
+  since the plugin arrived, so the React Native Android module could not be built in this
+  repository (#83). `:qvp:publishAndReleaseToMavenCentral` is unchanged.
+- The React Native Android module compiles: its view manager was missing the import of
+  `QvpDefaults`, and its page view called a `centre()` that does not exist. Both had
+  never been through a compiler, which is what #84 is for.
 
 ### Changed
 - Page data is rebuilt from `quran-svg-elements` v1.1.2, which moves ink that belongs to a
