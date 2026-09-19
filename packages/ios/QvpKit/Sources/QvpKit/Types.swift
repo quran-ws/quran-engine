@@ -186,11 +186,22 @@ public struct QvpLayoutSpec: Equatable {
     public var maxAspectSlack: Float
     /// Break the words onto rows of the page's own width. `nil` lays the page out as printed.
     public var reflow: QvpReflowSpec?
+    /// How big a banner — a surah name, a basmalah — may get as the reader zooms in, as a
+    /// multiple of its PRINTED size. 0 leaves it uncapped: the drawing grows with the words
+    /// around it until it fills the row, which for a surah name is about five times the print.
+    /// 1 holds it at the printed size however far the reader zooms — what a host drawing its
+    /// own frame around the name wants, since the frame has a shape to keep.
+    ///
+    /// It sits here and not on `reflow` because it must survive the zoom control: a host that
+    /// pinches never builds a `QvpReflowSpec` itself — `QvpPage.zoomSpec` does, from the base
+    /// spec this is part of — and only a reflowed page can grow a banner anyway.
+    public var bannerZoom: Float
     public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, fillHeight: Bool = false, gridLines: Int = 0,
-                cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0, reflow: QvpReflowSpec? = nil) {
+                cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0, reflow: QvpReflowSpec? = nil, bannerZoom: Float = 0) {
         self.viewportW = viewportW; self.viewportH = viewportH; self.padTop = padTop; self.padBottom = padBottom; self.padLeft = padLeft; self.padRight = padRight
         self.lineSpacing = lineSpacing; self.fillHeight = fillHeight; self.gridLines = gridLines
         self.cropLeft = cropLeft; self.cropRight = cropRight; self.maxAspectSlack = maxAspectSlack; self.reflow = reflow
+        self.bannerZoom = bannerZoom
     }
     var c: QvpFFI.QvpLayoutSpec {
         // a zoom of 0 is the printed page, and 255 asks the engine for its own default
@@ -203,7 +214,8 @@ public struct QvpLayoutSpec: Equatable {
                              reflow_gaps: r.map { UInt8($0.gaps.rawValue) } ?? 1,
                              reflow_word_gap: r?.wordGap ?? 1,
                              reflow_max_stretch: r?.maxStretch ?? 0,
-                             reflow_relax: r?.relax ?? -1)
+                             reflow_relax: r?.relax ?? -1,
+                             banner_zoom: bannerZoom)
     }
 }
 /// The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units).

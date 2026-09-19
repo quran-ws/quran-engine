@@ -109,7 +109,7 @@ print. `hitAreas()` returns the same partition as boxes (no dead zones on a line
 ```js
 const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRight,
                        lineSpacing: 1.0, fillHeight: false, gridLines: 0,
-                       cropLeft: 0, cropRight: 0, maxAspectSlack: 0});
+                       cropLeft: 0, cropRight: 0, maxAspectSlack: 0, bannerZoom: 0});
 // L = {scale, offsetX, offsetY, contentW, contentH, lineSpacing, lineDy[], slots[], fitScale, fitX, fitY}
 page.layoutLineSpacingToFill(spec)   // the lineSpacing multiplier that fills the padded viewport of spec
 page.layoutWastedFraction(spec)      // the share of the padded viewport left empty at fit-to-width
@@ -125,6 +125,15 @@ and applies its own pan and zoom on top. `maxAspectSlack` bounds the content wid
 bound; the examples use 1.15). `cropLeft`/`cropRight` cut the printed side margins (page
 units) so the ink spans the padded width. Wrappers compute none of this; the engine's
 answers for forty viewport cases are in `conformance/scenarios/layout.json`.
+
+**`bannerZoom` caps how big a surah name or a basmalah gets as the reader zooms in**, as a
+multiple of its PRINTED size. 0 (the default) leaves it uncapped: the drawing grows with the
+words around it until it fills the row, which for a surah name is about five times the print.
+1 holds it at the printed size however far the reader zooms — what a host that draws its own
+frame around the printed name wants, since the frame has a shape to keep. It is a LAYOUT knob
+and not one of the reflow knobs, because the reader's zoom control fills those in itself
+(`page.zoomSpec`), so a host that pinches never gets to set one; only a reflowed page grows a
+banner at all.
 
 **What this is for.** A printed mushaf page is squatter than a phone screen: fitted to the
 width of a tall viewport it leaves a band of empty paper top and bottom. The layout knobs

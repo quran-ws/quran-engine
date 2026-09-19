@@ -99,10 +99,12 @@ typedef struct { uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; 
    0 = none). max_aspect_slack: the content is never wider than viewport_h·page_w/page_h·slack (0 = no bound). */
 /* reflow_zoom: break the words onto rows of the page's own width, with ink reflow_zoom times the size it has at
    fit-to-width (0 = lay the page out as printed). reflow_fill: 0 ragged, 1 justified, 2 centred, 255 the engine's own default. reflow_breaks: 0 greedy, 1 even, 2 fitted, 255 default.
-   reflow_relax: how far a row much shorter than the row beside it is opened towards it, 0 to 1 (negative = default). reflow_gaps: 0 the printed gap
+   reflow_relax: how far a row much shorter than the row beside it is opened towards it, 0 to 1 (negative = default). banner_zoom: how big a banner (surah
+   name, basmalah) may get as the reader zooms, as a multiple of its printed size (0 or below = uncapped, 1 = held at the print); it is not a reflow
+   knob, because the zoom control fills those in itself. reflow_gaps: 0 the printed gap
    between the two words, 1 the page's median gap. reflow_word_gap: multiplier on every gap (0 = 1). reflow_max_stretch: how far a justified row's gaps may stretch,
    as a multiple of what they started with (0 = the engine's default, negative = no cap). */
-typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint8_t fill_height; uint32_t grid_lines; float crop_left, crop_right, max_aspect_slack, reflow_zoom; uint8_t reflow_fill, reflow_breaks, reflow_gaps; float reflow_word_gap, reflow_max_stretch, reflow_relax; } QvpLayoutSpec;
+typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint8_t fill_height; uint32_t grid_lines; float crop_left, crop_right, max_aspect_slack, reflow_zoom; uint8_t reflow_fill, reflow_breaks, reflow_gaps; float reflow_word_gap, reflow_max_stretch, reflow_relax, banner_zoom; } QvpLayoutSpec;
 /* the grid a page is designed on: the mushaf's line count (15 here, or more when a page has more) and the printed spacing */
 typedef struct { uint32_t lines; float line_spacing; } QvpGrid;
 /* fit_*: the view transform that shows the whole content (shrink to the viewport height, never enlarge, centred):

@@ -6,6 +6,17 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Added
+- `banner_zoom` on the layout spec caps how big a surah name or a basmalah gets as the reader
+  zooms in, as a multiple of its printed size. Left at 0 a banner grows with the words around
+  it until it fills the row — about five times the print for a surah name — which a host that
+  draws its own frame around the printed name cannot follow. 1 holds it at the print. It is a
+  layout knob, not a reflow one: the zoom control fills the reflow knobs in itself, so a host
+  that pinches never gets to set one there.
+- `QvpCanvasController.printedPitch` (iOS): what a PRINTED row is worth in the canvas's box,
+  in page units — the print's pitch opened up by `fillHeight`. A host that sizes its own
+  furniture to a printed row needs one answer whichever layout is in force, and
+  `currentLayout.lineSpacing` is not it: that reports the spread pitch on a printed page and
+  the printed pitch once the page has reflowed onto rows of its own.
 - A reader who zooms in gets the page reflowed onto rows of the screen's own width: the ink
   grows, fewer words fit a row, the rest move down, and the page scrolls. Each page carries
   its own zoom steps, chosen so the rows break best near each nominal size.
@@ -24,6 +35,18 @@ All notable changes to the engine and its packages. The format follows
   on Material 3.
 
 ### Fixed
+- `qvp_layout_line_spacing_to_fill` answers the spacing the page is really laid out at. It
+  measured the full printed width and the page's own height against the viewport, while
+  `qvp_layout` fits the CROPPED width and sits a short page on the grid a full page fills —
+  so a host that crops the printed side margins was told a multiplier several percent above
+  the one in force, and a quarter above it on a page whose margins are most of its width.
+  Both read one answer now, so they cannot drift again. `conformance/scenarios/layout.json`
+  carries the corrected value for every cropped case.
+- The Flutter `QvpPage.zoomSpec` carries `bannerZoom` through. It rebuilds the spec field by
+  field and left that one out, dropping the cap on the only layout it applies to.
+- `QvpCanvasController.zoomSteps` (iOS) is empty until the canvas has a size, as
+  `QvpPageView.zoomSteps` already was: `zoomToStep` refuses without one, so a host drawing a
+  size control off it showed the control live over a page it could not move.
 - A page draws what is inside its own box and nothing beyond it. The artwork for page 17
   puts that page's printed page number below the box and its running head above it — it is
   the only page of 604 that draws anything outside — and every host drew that ink wherever

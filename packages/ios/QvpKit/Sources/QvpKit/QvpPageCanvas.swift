@@ -26,7 +26,7 @@ import UIKit
 @MainActor @Observable
 public final class QvpCanvasController {
     public var page: QvpPage? {
-        didSet { cache.image = nil; cache.key = ""; selectionHandle = 0; relayout(); resetView() }
+        didSet { cache.image = nil; cache.key = ""; selectionHandle = 0; relayout(); resetView(); applyPendingCarry() }
     }
     // layout knobs (viewport size comes from the canvas)
     public var padTop: CGFloat = 0 { didSet { relayout() } }
@@ -41,6 +41,11 @@ public final class QvpCanvasController {
     /// Line spacing only opens up; the engine clamps values below 1 to the printed lineSpacing.
     public var lineSpacing: Float = 1 { didSet { relayout() } }
     public var fillHeight = false { didSet { relayout() } }
+    /// How big a banner — a surah name, a basmalah — may get as the reader zooms in, as a
+    /// multiple of its PRINTED size; 0 (the default) lets it grow with the words around it
+    /// until it fills the row. A host that draws its own frame around the printed name caps
+    /// it, or the name outgrows the frame. Only a reflowed page grows a banner at all.
+    public var bannerZoom: Float = 0 { didSet { guard oldValue != bannerZoom else { return }; relayout() } }
     /// Paper behind the page content, 0xRRGGBBAA (nil = transparent).
     public var paperColor: UInt32?
     /// 0xRRGGBBAA band colour of the drag selection.
@@ -61,7 +66,12 @@ public final class QvpCanvasController {
     /// so it never takes a swipe from an enclosing pager.
     public var onLongPress: ((QvpHit?) -> Void)?
     public var longPressDuration: Double = 0.35
-    public var zoomEnabled = true
+    public var zoomEnabled = true {
+        // A canvas that may not zoom must not take up a zoom handed to it before it had a
+        // size: a host turns this off for a box the reading size does not belong in, and the
+        // carry would otherwise land on the next `setBounds` and reflow it anyway.
+        didSet { if !zoomEnabled { pendingCarry = nil } }
+    }
     /// Zoom lasts only while the fingers are down: on release the page eases back to its fitted
     /// size — a peek, not a reading zoom — so a pinch never leaves the page holding a pager's swipe.
     public var zoomSpringsBack = false
@@ -71,25 +81,89 @@ public final class QvpCanvasController {
     /// says which one.
     public var zoomMode: QvpZoomMode = .stepped {
         didSet {
-            guard let p = page, p.isOpen, oldValue != zoomMode else { return }
+            guard oldValue != zoomMode else { return }
+            // Cleared before the page is even looked at: the policy the host has just set
+            // outranks a carry still waiting for a canvas, and a step carried from another
+            // page means nothing under the glass.
+            pendingCarry = nil
+            guard let p = page, p.isOpen else { return }
             zoom = p.zoomMode(baseSpec, zoom, zoomMode); relayout(); resetView()
         }
     }
     /// Where the reader's zoom control stands, as the engine last answered.
     public private(set) var zoom = QvpZoom()
-    /// The zoom steps this page ships with: what `.stepped` lands on, lowest first.
-    public var zoomSteps: [Float] { page.map { $0.isOpen ? $0.zoomSteps(baseSpec) : [] } ?? [] }
+    /// The zoom steps this page ships with: what `.stepped` lands on, lowest first. Empty until
+    /// the canvas has a size, like `QvpPageView`'s: `zoomToStep` refuses without one, so a host
+    /// that draws a size control off this would otherwise show it live and act on nothing.
+    public var zoomSteps: [Float] { page.map { $0.isOpen && bounds.width > 0 ? $0.zoomSteps(baseSpec) : [] } ?? [] }
     /// Move the control straight to a step. 0 is the printed page.
     public func zoomToStep(_ step: Int) {
+        // An explicit step outranks a carry still waiting for the canvas.
+        pendingCarry = nil
         guard let p = page, p.isOpen, bounds.width > 0 else { return }
         apply(p.zoomToStep(layoutSpec, zoom, step, currentView))
     }
+    /// Take up another page's zoom control on this one: what the reader was reading at,
+    /// carried onto the page they turned to (`QvpPage.zoomCarried` — a step as a step, since
+    /// every page's steps are its own; a free zoom as a size this page can reach). The page
+    /// opens at its top. Nothing happens when this page already stands there, so a host may
+    /// call it on every page turn.
+    public func carryZoom(_ other: QvpZoom) {
+        // Remembered, not dropped: a neighbouring page is handed the zoom before its canvas
+        // has reported a size, and the reader must not see it open printed and then jump.
+        // `setBounds` and a page attach take it up the moment they can.
+        pendingCarry = other
+        applyPendingCarry()
+    }
+    /// The zoom handed to this page that it could not yet take up.
+    @ObservationIgnored private var pendingCarry: QvpZoom?
+    private func applyPendingCarry() {
+        guard let other = pendingCarry, let p = page, p.isOpen, bounds.width > 0 else { return }
+        pendingCarry = nil
+        let carried = p.zoomCarried(baseSpec, other)
+        guard carried != zoom else { return }
+        zoom = carried; placements = nil; cache.key = ""
+        relayout(); resetView()
+    }
+    /// The host scrolls a reflowed page itself: it puts the canvas inside its own scroll view,
+    /// sized to the laid-out page (`currentLayout.contentH`). The canvas then attaches no drag
+    /// of its own — the scroll view takes every vertical drag, with the momentum, bounce and
+    /// indicator a reader expects — keeps the page at its top, and caches the ink for its whole
+    /// bounds, which ARE the page, rather than a band around a screen that no longer moves.
+    /// A pinch still reaches the engine's zoom control. A host may switch it at any time: the
+    /// pinch band's box height is taken from the bounds in hand, or from the next `setBounds`.
+    public var hostScrolls = false {
+        // Only on a real change: a host that re-states its policy on every page turn or mode
+        // check would otherwise re-read the box height from bounds that, once the page has
+        // reflowed, ARE the page — and a pinch would then paint the whole of it every frame.
+        didSet {
+            guard oldValue != hostScrolls else { return }
+            derivedBoxHeight = hostScrolls && bounds.height > 0 ? bounds.height : 0
+        }
+    }
+    /// The height of the host's own scroll viewport in view points — the box the page is
+    /// looked at through, which is what a pinch's repaint band is measured in. Only a host
+    /// that scrolls the page itself (`hostScrolls`) has one, and only that host knows it:
+    /// under `hostScrolls` the canvas is sized to the whole laid-out page, so the controller's
+    /// own bounds are the PAGE and say nothing about the screen.
+    ///
+    /// 0 (the default) falls back to the smallest bounds this controller has ever been given.
+    /// That is right only while the host's first layout is the printed page; a canvas whose
+    /// very first bounds are already a reflowed page — a zoom carried in before it was ever
+    /// shown printed — never learns the screen height, and the band silently degrades to the
+    /// whole page. A host that knows its box says so and the guess is not used.
+    public var hostViewportHeight: CGFloat = 0
     public var selectionEnabled = true
     public var hitOptions = QvpHitOptions(maxDistance: QvpDefaults.TAP_DISTANCE)
 
     public private(set) var viewScale: CGFloat = 1
     public private(set) var viewOx: CGFloat = 0
     public private(set) var viewOy: CGFloat = 0
+    /// Bumped by every relayout. A host's overlay reads this beside the view transform: a page
+    /// laid out into a box it fits exactly leaves `viewScale`/`viewOx`/`viewOy` at their
+    /// defaults, so the transform alone never tells the overlay that the geometry it draws
+    /// from now exists.
+    public private(set) var layoutRevision = 0
     /// True while an engine transition is fading — the canvas keeps drawing frames.
     public private(set) var animating = false
     // stats for a HUD
@@ -111,10 +185,23 @@ public final class QvpCanvasController {
     @ObservationIgnored private var selectionHandle = 0
     @ObservationIgnored private var selAnchor = -1
     @ObservationIgnored var selecting = false
-    @ObservationIgnored var pinching = false
+    /// True while the reader's fingers are on the page. A host that shares ONE zoom across
+    /// several pages publishes it when this goes false, never while it is true: `zoom` moves
+    /// at the gesture's own frame rate, and following every move has every other page it
+    /// holds lay itself out again inside the gesture.
+    public private(set) var isPinching = false
     @ObservationIgnored var pinchStart: CGFloat = 1
     @ObservationIgnored var pinchZoom = QvpZoom()
     @ObservationIgnored var pinchView = QvpView()
+    /// Where the fingers went down, in view points — the band a pinch paints is built around
+    /// it, and held there for the whole gesture (a band that followed the fingers would repaint
+    /// every frame, since it is part of the cache key).
+    @ObservationIgnored private var pinchFocalY: CGFloat = 0
+    /// Under `hostScrolls` the bounds are the page; the smallest bounds ever reported are a
+    /// GUESS at the host's box — see `hostViewportHeight`, which replaces it when set.
+    @ObservationIgnored private var derivedBoxHeight: CGFloat = 0
+    /// The box a pinch's repaint band is measured in: what the host said, or the guess.
+    private var hostBoxHeight: CGFloat { hostViewportHeight > 0 ? hostViewportHeight : derivedBoxHeight }
     @ObservationIgnored var lastDrag = CGSize.zero
     @ObservationIgnored private var springTask: Task<Void, Never>?
     /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
@@ -149,18 +236,38 @@ public final class QvpCanvasController {
                       padTop: Float(padTop), padBottom: Float(padBottom),
                       padLeft: Float(padSide), padRight: Float(padSide),
                       lineSpacing: lineSpacing, fillHeight: fillHeight,
-                      cropLeft: cropLeft, cropRight: cropRight)
+                      cropLeft: cropLeft, cropRight: cropRight, bannerZoom: bannerZoom)
     }
     /// The spec in force: the knobs above with the reader's zoom control folded in.
     public var layoutSpec: QvpLayoutSpec {
         guard let p = page, p.isOpen else { return baseSpec }
         return p.zoomSpec(baseSpec, zoom)
     }
+    /// The pitch a PRINTED row is laid out at in this box, in page units: the print's own
+    /// pitch opened up by `fillHeight` and `lineSpacing`. A host that sizes its own furniture
+    /// to a printed row — a frame drawn over a printed surah name — reads this rather than
+    /// `currentLayout.lineSpacing`, which answers the SPREAD pitch on a printed page and the
+    /// printed one once the page has reflowed onto rows of its own. Sizing off that directly
+    /// drew the frame a fill-height's worth too small on every reflowed page.
+    ///
+    /// 0 before the canvas has a size or a page.
+    public var printedPitch: Float {
+        guard let p = page, p.isOpen, bounds.width > 0 else { return 0 }
+        // Measured in the box the READER looks through, never this canvas's own bounds: under
+        // `hostScrolls` the canvas is sized to the whole laid-out page, so on a reflowed page
+        // its height is the page's, and asking what pitch would fill THAT with fifteen printed
+        // lines answers several times the truth. `hostViewportHeight` is the box.
+        var spec = baseSpec
+        if hostScrolls, hostViewportHeight > 0 { spec.viewportH = Float(hostViewportHeight) }
+        let opened = fillHeight ? p.layoutLineSpacingToFill(spec) : max(lineSpacing, 1)
+        return p.lineSpacing * opened
+    }
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
         guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
         _ = p.layout(layoutSpec)
         placements = nil
+        layoutRevision &+= 1
         cache.key = ""; invalidate()
     }
     /// Fit the content height and centre it.
@@ -190,6 +297,29 @@ public final class QvpCanvasController {
         let dy = (l.flatMap { line < $0.lineDy.count ? $0.lineDy[line] : nil }) ?? 0
         return transform(QvpPlacement(dx: 0, dy: dy, kx: 1, ky: 1))
     }
+    /// Page units of a decoration's own box → view points, wherever the current layout put
+    /// it: on the printed page that is its line's transform; on a reflowed page a decoration
+    /// is a group of its own (a surah name keeps a row to itself), and this is that group's
+    /// placement. A host drawing its own frame over a printed surah name reads this and
+    /// never guesses where a row landed.
+    public func decorationTransform(_ index: Int) -> CGAffineTransform {
+        guard let p = page, p.isOpen, p.decorations.indices.contains(index) else { return .identity }
+        let deco = p.decorations[index]
+        guard p.currentLayout?.reflowed == true else { return lineTransform(deco.line) }
+        // Read once per layout, like the draw list: both answers copy a table the size of the
+        // page's paths, and this is called from a host overlay that re-runs on every pan and
+        // zoom tick — once per surah name each time.
+        if decoGroups?.revision != layoutRevision {
+            decoGroups = (layoutRevision, p.layoutPathGroups(), p.layoutGroups())
+        }
+        guard let g = decoGroups, g.paths.indices.contains(deco.firstPath) else { return lineTransform(deco.line) }
+        let group = g.paths[deco.firstPath]
+        guard g.places.indices.contains(group) else { return lineTransform(deco.line) }
+        return transform(g.places[group])
+    }
+    /// The reflowed layout's path→group map and group placements, held for the layout that
+    /// answered them — `layoutRevision` is the count of layouts, so a stale pair cannot be read.
+    @ObservationIgnored private var decoGroups: (revision: Int, paths: [Int], places: [QvpPlacement])?
     /// Page units → view points under one placement (engine layout + pan/zoom).
     func transform(_ q: QvpPlacement, offsetY: CGFloat? = nil) -> CGAffineTransform {
         let l = page?.currentLayout
@@ -202,10 +332,26 @@ public final class QvpCanvasController {
     /// Where the cached band of ink starts, in view points. It moves in half-screen steps, so a
     /// drag inside the band is a blit and nothing is drawn again.
     var bandTop: CGFloat {
+        if hostScrolls {
+            // While a pinch runs, the engine reflows live at every step the fingers cross, and
+            // painting the whole page each time is what made a pinch stutter: paint two boxes
+            // around the fingers, and the whole page once the pinch ends. Otherwise the bounds
+            // are the page and nothing moves under the canvas, so the band is the page itself.
+            if isPinching, hostBoxHeight > 0 {
+                return max(min(pinchFocalY - hostBoxHeight, bounds.height - hostBoxHeight * 2), 0)
+            }
+            return -viewOy
+        }
         let step = max(bounds.height / 2, 1)
         return ((-viewOy - step) / step).rounded(.down) * step
     }
-    var bandHeight: CGFloat { max(bounds.height * 2, 1) }
+    var bandHeight: CGFloat {
+        if hostScrolls {
+            if isPinching, hostBoxHeight > 0 { return max(min(hostBoxHeight * 2, bounds.height), 1) }
+            return max(bounds.height, 1)
+        }
+        return max(bounds.height * 2, 1)
+    }
     /// What the layout in hand draws and where: the engine's own answer, read once per layout.
     /// A printed page and a reflowed one come back in the same shape, so nothing here has to
     /// know which it is looking at.
@@ -239,7 +385,9 @@ public final class QvpCanvasController {
         guard order >= newestCanvas else { return }
         newestCanvas = order
         guard size != bounds else { return }
+        if hostScrolls, size.height > 0 { derivedBoxHeight = derivedBoxHeight > 0 ? min(derivedBoxHeight, size.height) : size.height }
         bounds = size; relayout(); resetView()
+        applyPendingCarry()
     }
     func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHit? {
         guard let p = page, p.isOpen else { return nil }
@@ -264,14 +412,17 @@ public final class QvpCanvasController {
     private func apply(_ c: QvpZoomChange) {
         zoom = c.zoom
         viewScale = CGFloat(c.view.scale); viewOx = CGFloat(c.view.offsetX); viewOy = CGFloat(c.view.offsetY)
-        if c.relaid { placements = nil; cache.key = "" }
+        // The engine laid the page out inside the call rather than through `relayout()`, so the
+        // revision is bumped here too — it is the count of LAYOUTS, and a host overlay keying on
+        // it must not be told a pinch left the geometry where it was.
+        if c.relaid { placements = nil; cache.key = ""; layoutRevision &+= 1 }
         invalidate()
     }
     func pinch(_ magnification: CGFloat, at focus: CGPoint) {
         guard zoomEnabled, !selecting else { return }
-        if !pinching {
-            springTask?.cancel(); springTask = nil; pinching = true
-            pinchStart = viewScale; pinchZoom = zoom; pinchView = currentView
+        if !isPinching {
+            springTask?.cancel(); springTask = nil; isPinching = true
+            pinchStart = viewScale; pinchZoom = zoom; pinchView = currentView; pinchFocalY = focus.y
         }
         guard let p = page, p.isOpen, zoomMode != .magnify else {
             // the printed page under a magnifying glass: the rows never move
@@ -284,9 +435,11 @@ public final class QvpCanvasController {
         apply(p.zoomPinch(layoutSpec, pinchZoom, pinchView, factor: Float(magnification), focalX: Float(focus.x), focalY: Float(focus.y)))
     }
     func pinchEnded() {
-        pinching = false
+        isPinching = false
         // A reflowed page is a size the reader chose, not a peek: it stays until they change it.
         if zoomSpringsBack && zoomMode == .magnify { springBack() }
+        // The pinch painted a band around the fingers; the page is painted whole once, now.
+        if hostScrolls { invalidate() }
     }
     /// Ease from the released transform to the fitted one, one step per display frame or so.
     private func springBack() {
@@ -308,7 +461,7 @@ public final class QvpCanvasController {
     /// down only, and a sideways drag turns the page.
     private var isReflowed: Bool { page?.currentLayout?.reflowed ?? false }
     func pan(_ translation: CGSize) {
-        guard zoomEnabled, !selecting, isZoomed || isReflowed, springTask == nil else { return }
+        guard zoomEnabled, !hostScrolls, !selecting, isZoomed || isReflowed, springTask == nil else { return }
         if !isReflowed { viewOx += translation.width - lastDrag.width }
         viewOy += translation.height - lastDrag.height
         lastDrag = translation
@@ -355,7 +508,7 @@ public final class QvpCanvasController {
         let styled = p.styledPaths()
         let styledSet = Set(styled.map { $0.path })
         let ink = p.defaultInk
-        let W = Int(size.width * displayScale), H = Int(size.height * displayScale)
+        let W = Int(size.width * displayScale)
         var hasher = Hasher(); hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
         // The cached ink is a band of the page, not the screen, so a drag inside it is one blit
         // and nothing is drawn again.
@@ -482,7 +635,7 @@ public struct QvpPageCanvas: View {
         .highPriorityGesture(DragGesture(minimumDistance: 12)
             .onChanged { v in controller.pan(v.translation) }
             .onEnded { v in controller.panEnded(v.translation, velocity: v.velocity) },
-                             including: controller.isZoomed || controller.onSwipe != nil ? .all : .subviews)
+                             including: !controller.hostScrolls && (controller.isZoomed || controller.onSwipe != nil) ? .all : .subviews)
         .gesture(LongPressGesture(minimumDuration: 0.35)
             .sequenced(before: DragGesture(minimumDistance: 0))
             .onChanged { v in if case .second(true, let drag) = v, let d = drag { controller.selectTo(d.location) } }

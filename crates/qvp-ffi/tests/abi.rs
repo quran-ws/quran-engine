@@ -68,6 +68,7 @@ fn abi_end_to_end() {
             reflow_word_gap: 0.0,
             reflow_max_stretch: 0.0,
             reflow_relax: -1.0,
+            banner_zoom: 0.0,
         };
         let mut lay = std::mem::zeroed::<QvpLayout>();
         qvp_layout(page, &spec, &mut lay);

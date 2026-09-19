@@ -286,6 +286,12 @@ pub struct QvpLayoutSpec {
     /// how far a row much shorter than the row beside it is opened towards it, 0 to 1
     /// (a negative value = the engine's default)
     pub reflow_relax: f32,
+    /// how big a banner (a surah name, a basmalah) may get as the reader zooms in, as a
+    /// multiple of its printed size (0 or below = uncapped, which grows it with the words
+    /// around it until it fills the row; 1 holds it at the printed size). It is not part of
+    /// the reflow knobs: the zoom control fills those in itself, so a host that pinches would
+    /// never get to set it there.
+    pub banner_zoom: f32,
 }
 
 #[repr(C)]
@@ -1473,6 +1479,7 @@ unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
         crop_left: s.crop_left,
         crop_right: s.crop_right,
         max_aspect_slack: s.max_aspect_slack,
+        banner_zoom: s.banner_zoom,
         reflow: (s.reflow_zoom > 0.0).then(|| qvp_core::ReflowSpec {
             zoom: s.reflow_zoom,
             fill: match s.reflow_fill {

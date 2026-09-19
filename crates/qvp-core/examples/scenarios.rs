@@ -40,6 +40,7 @@ fn main() {
                 crop_right: crop,
                 max_aspect_slack: slack,
                 reflow: None,
+                banner_zoom: 0.0,
             };
             let to_fill = page.line_spacing_to_fill(&spec, f32::INFINITY);
             let wasted = page.wasted_fraction(&spec);

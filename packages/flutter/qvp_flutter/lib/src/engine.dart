@@ -496,6 +496,7 @@ final class QvpLayoutSpec {
     this.cropRight = 0,
     this.maxAspectSlack = 0,
     this.reflow,
+    this.bannerZoom = 0,
   });
   final double viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing;
 
@@ -511,6 +512,15 @@ final class QvpLayoutSpec {
   /// The content is never wider than `viewportH · pageW / pageH · maxAspectSlack` (0 = no bound).
   final double maxAspectSlack;
 
+  /// How big a banner — a surah name, a basmalah — may get as the reader zooms in, as a
+  /// multiple of its PRINTED size. 0 leaves it uncapped: the drawing grows with the words
+  /// around it until it fills the row. 1 holds it at the printed size however far the reader
+  /// zooms, which is what a host drawing its own frame around the name wants.
+  ///
+  /// It sits here and not on [reflow] because it must survive the zoom control: a host that
+  /// pinches never builds a [QvpReflowSpec] itself — [QvpPage.zoomSpec] does, from this spec.
+  final double bannerZoom;
+
   QvpLayoutSpec copyWith({
     double? viewportW,
     double? viewportH,
@@ -525,6 +535,7 @@ final class QvpLayoutSpec {
     double? cropRight,
     double? maxAspectSlack,
     QvpReflowSpec? reflow,
+    double? bannerZoom,
   }) =>
       QvpLayoutSpec(
         viewportW: viewportW ?? this.viewportW,
@@ -540,6 +551,7 @@ final class QvpLayoutSpec {
         cropRight: cropRight ?? this.cropRight,
         maxAspectSlack: maxAspectSlack ?? this.maxAspectSlack,
         reflow: reflow ?? this.reflow,
+        bannerZoom: bannerZoom ?? this.bannerZoom,
       );
 
   @override
@@ -557,11 +569,12 @@ final class QvpLayoutSpec {
       other.cropLeft == cropLeft &&
       other.cropRight == cropRight &&
       other.maxAspectSlack == maxAspectSlack &&
-      other.reflow == reflow;
+      other.reflow == reflow &&
+      other.bannerZoom == bannerZoom;
 
   @override
-  int get hashCode =>
-      Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft, cropRight, maxAspectSlack, reflow);
+  int get hashCode => Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft,
+      cropRight, maxAspectSlack, reflow, bannerZoom);
 }
 
 /// Output of [QvpPage.layout]. Page → viewport: `viewX = offsetX + x*scale`, `viewY = offsetY + (y + lineDy[line])*scale`.
@@ -1370,6 +1383,9 @@ class QvpPage extends ChangeNotifier {
     s.reflowWordGap = r == null ? 0 : r.wordGap;
     s.reflowMaxStretch = r == null ? 0 : r.maxStretch;
     s.reflowRelax = r == null ? -1 : r.relax;
+    // Not a reflow knob in the wrappers: the zoom control builds the reflow spec itself, so a
+    // cap that lives on it would never reach a page the reader pinched.
+    s.bannerZoom = spec.bannerZoom;
   }
 
   static const _fill = {'ragged': 0, 'justified': 1, 'centred': 2, 'centered': 2};
@@ -1471,6 +1487,10 @@ class QvpPage extends ChangeNotifier {
         cropLeft: spec.cropLeft,
         cropRight: spec.cropRight,
         maxAspectSlack: spec.maxAspectSlack,
+        // Carried over like every other layout knob. A spec rebuilt without it drops the cap on
+        // exactly the layout it is for: only a reflowed page grows a banner, and this is the
+        // spec every reflowed page is laid out with.
+        bannerZoom: spec.bannerZoom,
         reflow: o.reflowZoom > 1.0001
             ? QvpReflowSpec(
                 zoom: o.reflowZoom,

@@ -260,7 +260,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-146 symbols in the header, 146 Rust exports. web: 145 bound, android: 140 bound, flutter: 145 bound, ios: 134 bound, react-native: 79 bound.
+146 symbols in the header, 146 Rust exports. web: 145 bound, android: 140 bound, flutter: 145 bound, ios: 137 bound, react-native: 79 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -284,7 +284,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_ayah_keys` | yes | yes | yes | yes | yes |
 | `qvp_ayah_label` | yes | yes | yes | yes | yes |
 | `qvp_ayah_marks` | yes | yes | yes | yes | yes |
-| `qvp_ayah_marks_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
+| `qvp_ayah_marks_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_ayah_word_count` | yes | yes | yes | yes | yes |
 | `qvp_category_name` | yes | yes | yes | yes | yes |
 | `qvp_citation` | yes | yes | yes | yes | yes |
@@ -310,7 +310,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_highlight_restyle` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_highlight_words` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_hit_areas` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_hit_areas_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
+| `qvp_hit_areas_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_hit_test` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_exact` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_exact_view` | yes | yes | yes | yes | yes |
@@ -395,7 +395,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_view_to_layout` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_zoom_about` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_word_bands_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
+| `qvp_word_bands_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_word_bounds_view` | yes | yes | yes | yes | yes |
 | `qvp_word_form` | yes | yes | yes | yes | yes |
 | `qvp_word_info` | yes | yes | yes | yes | gap (list form: bound as `word(i)` and `words()`) |
