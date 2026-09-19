@@ -125,13 +125,17 @@ public final class QvpCanvasController {
         zoom = carried; placements = nil; cache.key = ""
         relayout(); resetView()
     }
-    /// The host scrolls a reflowed page itself: it puts the canvas inside its own scroll view,
-    /// sized to the laid-out page (`currentLayout.contentH`). The canvas then attaches no drag
-    /// of its own — the scroll view takes every vertical drag, with the momentum, bounce and
-    /// indicator a reader expects — keeps the page at its top, and caches the ink for its whole
-    /// bounds, which ARE the page, rather than a band around a screen that no longer moves.
-    /// A pinch still reaches the engine's zoom control. A host may switch it at any time: the
-    /// pinch band's box height is taken from the bounds in hand, or from the next `setBounds`.
+    /// The host scrolls the page itself: it puts the canvas inside its own scroll view, sized
+    /// to the laid-out page (`currentLayout.contentH`) — a reflowed page, or a printed one too
+    /// tall for the box. The canvas then attaches no drag of its own — the scroll view takes
+    /// every vertical drag, with the momentum, bounce and indicator a reader expects — never
+    /// shrinks the page to the box (`fitScale` is the host's to ignore) nor centres it as if
+    /// it had (`fitX` goes with `fitScale`), keeps it at its top,
+    /// and caches the ink for its whole bounds, which ARE the page, rather than a band around a
+    /// screen that no longer moves. A pinch still reaches the engine's zoom control.
+    ///
+    /// The layout is then measured in `hostViewportHeight`, not in the canvas: see there. A
+    /// host may switch this at any time; the page is laid out again for the box it now has.
     public var hostScrolls = false {
         // Only on a real change: a host that re-states its policy on every page turn or mode
         // check would otherwise re-read the box height from bounds that, once the page has
@@ -139,20 +143,32 @@ public final class QvpCanvasController {
         didSet {
             guard oldValue != hostScrolls else { return }
             derivedBoxHeight = hostScrolls && bounds.height > 0 ? bounds.height : 0
+            // The box the layout is measured in just changed hands (`baseSpec`), and a page
+            // fitted to the canvas before the policy arrived must un-shrink.
+            relayout(); resetView()
         }
     }
     /// The height of the host's own scroll viewport in view points — the box the page is
-    /// looked at through, which is what a pinch's repaint band is measured in. Only a host
-    /// that scrolls the page itself (`hostScrolls`) has one, and only that host knows it:
-    /// under `hostScrolls` the canvas is sized to the whole laid-out page, so the controller's
-    /// own bounds are the PAGE and say nothing about the screen.
+    /// looked at through. Under `hostScrolls` this is what the layout is measured in (what
+    /// `fillHeight` fills, what a pinch's repaint band is cut to, what decides that a page is
+    /// taller than the screen): the canvas is sized to the whole laid-out page, so the
+    /// controller's own bounds are the PAGE and say nothing about the screen. Only that host
+    /// knows the box, and it says so here.
     ///
-    /// 0 (the default) falls back to the smallest bounds this controller has ever been given.
-    /// That is right only while the host's first layout is the printed page; a canvas whose
-    /// very first bounds are already a reflowed page — a zoom carried in before it was ever
-    /// shown printed — never learns the screen height, and the band silently degrades to the
-    /// whole page. A host that knows its box says so and the guess is not used.
-    public var hostViewportHeight: CGFloat = 0
+    /// 0 (the default) falls back to the smallest bounds this controller has ever been given
+    /// for the band, and to the canvas for the layout. That is right only while the host's
+    /// first layout is the printed page in a box the page fits: a canvas whose very first
+    /// bounds are already a reflowed page — a zoom carried in before it was ever shown
+    /// printed — never learns the screen height, and the band silently degrades to the whole
+    /// page. A host that knows its box says so and the guess is not used.
+    public var hostViewportHeight: CGFloat = 0 {
+        // A new box is a new fill target: the page is laid out again, and a changed `contentH`
+        // reaches the host through `layoutRevision`, which is how it resizes the canvas.
+        didSet {
+            guard oldValue != hostViewportHeight, hostScrolls else { return }
+            relayout()
+        }
+    }
     public var selectionEnabled = true
     public var hitOptions = QvpHitOptions(maxDistance: QvpDefaults.TAP_DISTANCE)
 
@@ -232,11 +248,18 @@ public final class QvpCanvasController {
 
     /// The layout the current size and knobs ask for, before the zoom control has its say.
     var baseSpec: QvpLayoutSpec {
-        QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height),
-                      padTop: Float(padTop), padBottom: Float(padBottom),
-                      padLeft: Float(padSide), padRight: Float(padSide),
-                      lineSpacing: lineSpacing, fillHeight: fillHeight,
-                      cropLeft: cropLeft, cropRight: cropRight, bannerZoom: bannerZoom)
+        // Under `hostScrolls` the canvas is the laid-out page, so its height is this layout's
+        // OUTPUT. The box the layout is measured in — what `fillHeight` fills, what the printed
+        // pitch is opened up to, what decides whether the page is taller than the screen — is
+        // the one the host looks through. Read the canvas back as the viewport and a host that
+        // pads the page grows it by that padding on every pass, and a page that fits is spread
+        // to fill a box that is already the page.
+        let viewportH = hostScrolls && hostViewportHeight > 0 ? hostViewportHeight : bounds.height
+        return QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(viewportH),
+                             padTop: Float(padTop), padBottom: Float(padBottom),
+                             padLeft: Float(padSide), padRight: Float(padSide),
+                             lineSpacing: lineSpacing, fillHeight: fillHeight,
+                             cropLeft: cropLeft, cropRight: cropRight, bannerZoom: bannerZoom)
     }
     /// The spec in force: the knobs above with the reader's zoom control folded in.
     public var layoutSpec: QvpLayoutSpec {
@@ -253,13 +276,10 @@ public final class QvpCanvasController {
     /// 0 before the canvas has a size or a page.
     public var printedPitch: Float {
         guard let p = page, p.isOpen, bounds.width > 0 else { return 0 }
-        // Measured in the box the READER looks through, never this canvas's own bounds: under
-        // `hostScrolls` the canvas is sized to the whole laid-out page, so on a reflowed page
-        // its height is the page's, and asking what pitch would fill THAT with fifteen printed
-        // lines answers several times the truth. `hostViewportHeight` is the box.
-        var spec = baseSpec
-        if hostScrolls, hostViewportHeight > 0 { spec.viewportH = Float(hostViewportHeight) }
-        let opened = fillHeight ? p.layoutLineSpacingToFill(spec) : max(lineSpacing, 1)
+        // `baseSpec` is already measured in the box the reader looks through, never this
+        // canvas's own bounds — on a reflowed page those are the page's, and asking what pitch
+        // would fill THAT with fifteen printed lines answers several times the truth.
+        let opened = fillHeight ? p.layoutLineSpacingToFill(baseSpec) : max(lineSpacing, 1)
         return p.lineSpacing * opened
     }
     /// Recompute the engine layout for the current size / knobs.
@@ -281,8 +301,18 @@ public final class QvpCanvasController {
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
         // A reflowed page is taller than the screen on purpose: fitting its height would undo
-        // the size the reader asked for. It opens at its top and the reader scrolls.
+        // the size the reader asked for. It opens at its top and the reader scrolls. So does
+        // any page a host scrolls itself: a printed page too tall for the box is what that
+        // host's scroll view is FOR, and the engine still answers `fitScale` for a host that
+        // would rather shrink it — this renderer just no longer applies it. Nor, then, the
+        // centring that goes with it: a printed layout's `fitX` centres the page SHRUNK by
+        // `fitScale`, so at scale 1 it pushes the page off to one side by half the width
+        // the shrink would have freed. Centred at scale 1 instead — the reflow's own rule.
         if let l, l.reflowed { return (1, CGFloat(l.fitX), 0) }
+        if hostScrolls {
+            let contentW = CGFloat(l?.contentW ?? 0)
+            return (1, contentW > 0 ? max((bounds.width - contentW) / 2, 0) : 0, 0)
+        }
         return (CGFloat(l?.fitScale ?? 1), CGFloat(l?.fitX ?? 0), CGFloat(l?.fitY ?? 0))
     }
     /// Clear the selection band and the engine selection.
@@ -338,7 +368,14 @@ public final class QvpCanvasController {
             // around the fingers, and the whole page once the pinch ends. Otherwise the bounds
             // are the page and nothing moves under the canvas, so the band is the page itself.
             if isPinching, hostBoxHeight > 0 {
-                return max(min(pinchFocalY - hostBoxHeight, bounds.height - hostBoxHeight * 2), 0)
+                // The band is cut in the SCALED page, which is what `visibleBand` divides back
+                // to layout points: the fingers' canvas y less the pan under it. A stepped
+                // reflow keeps the page at its top, so that is the same number; a magnify peek
+                // moves `viewOy` and `viewScale`, and a band cut in canvas points drifted off
+                // the fingers as the page grew under them — a blank box exactly where they were.
+                let focal = pinchFocalY - viewOy
+                let pageHeight = bounds.height * viewScale
+                return max(min(focal - hostBoxHeight, pageHeight - hostBoxHeight * 2), 0)
             }
             return -viewOy
         }
@@ -347,7 +384,7 @@ public final class QvpCanvasController {
     }
     var bandHeight: CGFloat {
         if hostScrolls {
-            if isPinching, hostBoxHeight > 0 { return max(min(hostBoxHeight * 2, bounds.height), 1) }
+            if isPinching, hostBoxHeight > 0 { return max(min(hostBoxHeight * 2, bounds.height * viewScale), 1) }
             return max(bounds.height, 1)
         }
         return max(bounds.height * 2, 1)
