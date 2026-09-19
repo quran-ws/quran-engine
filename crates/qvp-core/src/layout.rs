@@ -45,6 +45,18 @@ pub struct LayoutSpec {
     /// Break the words onto other rows instead of drawing the printed lines. The page keeps
     /// its width and grows taller; the host scrolls it. `None` lays the page out as printed.
     pub reflow: Option<ReflowSpec>,
+    /// How big a banner — a surah name, a basmalah — may get as the reader zooms in, as a
+    /// multiple of its PRINTED size. 0 or below leaves it uncapped, which is the drawing
+    /// growing with the words around it until it fills the row: a surah name is about a fifth
+    /// of the block wide, so uncapped it reaches roughly five times the print before it stops.
+    /// 1.0 holds it at the printed size however far the reader zooms, and a host that draws
+    /// its own frame around a banner wants something near that — the frame has a shape, and a
+    /// name that has outgrown the text it decorates is a frame that no longer fits.
+    ///
+    /// It belongs here and not to [`ReflowSpec`] because the reader's zoom control builds that
+    /// spec itself ([`crate::Page::zoom_spec`]), so a host that pinches never fills one in —
+    /// and a banner only grows on a page that reflowed anyway.
+    pub banner_zoom: f32,
 }
 
 impl Default for LayoutSpec {
@@ -63,6 +75,7 @@ impl Default for LayoutSpec {
             crop_right: 0.0,
             max_aspect_slack: 0.0,
             reflow: None,
+            banner_zoom: 0.0,
         }
     }
 }
@@ -152,24 +165,12 @@ impl Layout {
     }
 }
 
-/// Leading (page units, between consecutive lines) that makes a page fill a
-/// viewport when fitted to width: `needed = pageW·viewH/viewW`,
-/// `gap = (needed − pageH)/(lines − 1)`, clamped at 0 and `max`.
-fn gap_to_fill(page_w: f32, page_h: f32, lines: u32, view_w: f32, view_h: f32, max: f32) -> f32 {
-    if lines < 2 || view_w <= 0.0 {
-        return 0.0;
-    }
-    let needed = page_w * view_h / view_w;
-    ((needed - page_h) / (lines as f32 - 1.0)).clamp(0.0, max)
-}
-
-/// Fraction of the viewport left empty when the page is fitted to width.
-fn wasted_fraction(page_w: f32, page_h: f32, view_w: f32, view_h: f32) -> f32 {
-    if view_w <= 0.0 || view_h <= 0.0 {
-        return 0.0;
-    }
-    let shown_h = page_h * view_w / page_w;
-    ((view_h - shown_h) / view_h).clamp(0.0, 1.0)
+/// What a printed layout of a spec is measured against — see [`Page::printed_metrics`].
+struct PrintedMetrics {
+    content_w: f32,
+    scale: f32,
+    nominal: f32,
+    avail_h: f32,
 }
 
 impl Page {
@@ -205,22 +206,59 @@ impl Page {
     /// when fitted to width; `max` bounds the multiplier (`INFINITY` for none). 1 when the
     /// page already fills it.
     pub fn line_spacing_to_fill(&self, spec: &LayoutSpec, max: f32) -> f32 {
-        let view_w = spec.viewport_w - spec.pad_left - spec.pad_right;
-        let view_h = spec.viewport_h - spec.pad_top - spec.pad_bottom;
-        let lines = self.grid_lines(spec).max(self.data.lines.len() as u32);
+        if self.line_spacing <= 0.0 {
+            return 1.0;
+        }
         let max_gap = if max.is_finite() && max > 1.0 { (max - 1.0) * self.line_spacing } else { f32::INFINITY };
-        let gap = gap_to_fill(self.width(), self.height(), lines, view_w, view_h, max_gap);
-        if self.line_spacing > 0.0 {
-            1.0 + gap / self.line_spacing
+        1.0 + self.fill_delta(spec).min(max_gap) / self.line_spacing
+    }
+    /// The leading fill-height adds between consecutive lines for `spec`, in page units: enough
+    /// that the page — or the grid a short page sits on — fills the padded viewport. Never
+    /// negative, because leading only opens up and the printed spacing is the floor.
+    ///
+    /// [`Page::layout`] and [`Page::line_spacing_to_fill`] both read this, so the spacing a host
+    /// is told about is the spacing the page is laid out with. Measured on the CROPPED width and
+    /// the bounded content width, as the layout scales it: a crop draws the page bigger, so less
+    /// paper is left over and it takes less leading to fill it. Derived apart from the layout,
+    /// the answer was several percent high on an ordinary page and a quarter high on one whose
+    /// printed margins are most of its width — and a host sizing its own furniture to a printed
+    /// row drew it that much too big.
+    fn fill_delta(&self, spec: &LayoutSpec) -> f32 {
+        let m = self.printed_metrics(spec);
+        if (self.data.lines.len() as f32) < m.nominal {
+            (m.avail_h / (m.nominal * m.scale) - self.line_spacing).max(0.0)
         } else {
-            1.0
+            ((m.avail_h / m.scale - self.height()) / (m.nominal - 1.0)).max(0.0)
+        }
+    }
+    /// What a PRINTED layout of `spec` is measured against: the content width the page is fitted
+    /// into, the scale that fits it once the printed side margins are cropped, the grid it sits
+    /// on, and the padded height there is to fill.
+    fn printed_metrics(&self, spec: &LayoutSpec) -> PrintedMetrics {
+        let (pw, ph) = (self.width(), self.height());
+        // The content width: the viewport, bounded by the page's aspect ratio when the
+        // host asks for it, so a wide screen does not stretch the lines.
+        let content_w = if spec.max_aspect_slack > 0.0 {
+            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
+        } else {
+            spec.viewport_w
+        };
+        let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
+        PrintedMetrics {
+            content_w,
+            scale: avail_w / (pw - spec.crop_left.max(0.0) - spec.crop_right.max(0.0)).max(1.0),
+            nominal: self.grid_lines(spec).max(self.data.lines.len() as u32).max(2) as f32,
+            avail_h: (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0),
         }
     }
     /// The share of the padded viewport of `spec` left empty when the page is fitted to width.
+    ///
+    /// Measured the way the layout measures itself — `printed_metrics` — because a crop draws the
+    /// page bigger and an aspect bound draws it narrower, and a caller asking how much paper
+    /// is left over means the page the layout will actually draw.
     pub fn wasted_fraction(&self, spec: &LayoutSpec) -> f32 {
-        let view_w = spec.viewport_w - spec.pad_left - spec.pad_right;
-        let view_h = spec.viewport_h - spec.pad_top - spec.pad_bottom;
-        wasted_fraction(self.width(), self.height(), view_w, view_h)
+        let m = self.printed_metrics(spec);
+        ((m.avail_h - self.height() * m.scale) / m.avail_h).clamp(0.0, 1.0)
     }
 
     pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
@@ -232,33 +270,17 @@ impl Page {
             self.layout = Some(l);
             return self.layout.as_ref().unwrap();
         }
-        let pw = self.width();
         let ph = self.height();
-        // The content width: the viewport, bounded by the page's aspect ratio when the
-        // host asks for it, so a wide screen does not stretch the lines.
-        let content_w = if spec.max_aspect_slack > 0.0 {
-            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
-        } else {
-            spec.viewport_w
-        };
         let crop = (spec.crop_left.max(0.0), spec.crop_right.max(0.0));
-        let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
-        let scale = avail_w / (pw - crop.0 - crop.1).max(1.0);
+        let PrintedMetrics { content_w, scale, nominal, .. } = self.printed_metrics(spec);
         let n = self.data.lines.len();
-        let nominal = self.grid_lines(spec).max(n as u32).max(2) as f32;
         let natural = self.line_spacing;
-        let avail_h = (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0);
         // a short page has no height of its own to fill: it takes the rows a
         // full page fills the viewport with
         let on_grid = spec.fill_height && (n as f32) < nominal;
         // leading only opens up: the printed line spacing is the floor
-        let delta = if on_grid {
-            (avail_h / (nominal * scale) - natural).max(0.0)
-        } else if spec.fill_height {
-            ((avail_h / scale - ph) / (nominal - 1.0)).max(0.0)
-        } else {
-            (natural * (spec.line_spacing - 1.0)).max(0.0)
-        };
+        let delta =
+            if spec.fill_height { self.fill_delta(spec) } else { (natural * (spec.line_spacing - 1.0)).max(0.0) };
         let line_spacing = natural + delta;
         // laid-out height in page units: the grid's rows, or the printed page
         // with the leading added
@@ -380,6 +402,15 @@ impl Page {
                 top,
                 printed_spacing,
                 rows_per_view,
+                // A banner is drawn at `header_scale · layout scale`, and the layout scale
+                // carries the reader's zoom — so a banner left at scale 1 grows with it. Its
+                // size against the print is `header_scale · zoom`, and this holds that to what
+                // the host asked for.
+                banner_k: if spec.banner_zoom > 0.0 {
+                    spec.banner_zoom / r.zoom.max(f32::EPSILON)
+                } else {
+                    f32::INFINITY
+                },
             },
         );
         // the content is the ink that was laid out; a page that came out as printed keeps the

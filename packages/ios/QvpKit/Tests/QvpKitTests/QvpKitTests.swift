@@ -325,6 +325,220 @@ final class QvpKitTests: XCTestCase {
         XCTAssertNotEqual(try XCTUnwrap(p.currentLayout).scale, scale, "the newest canvas's size lays the page out")
     }
 
+    /// A zoom handed to a canvas that cannot take it up yet is REMEMBERED, not dropped: a host
+    /// hands the reading size to a page the reader has not reached, whose canvas has not
+    /// reported a size, and the reader must not see it open printed and then jump to size.
+    @MainActor func testCarriedZoomWaitsForTheCanvasSize() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let reading = try readingZoom()
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.page = p
+        c.carryZoom(reading)
+        XCTAssertEqual(c.zoom.step, 0, "no size yet: there is nothing to lay the page out against")
+        c.setBounds(Self.readingBox, fromCanvas: 1)
+        XCTAssertEqual(c.zoom.step, reading.step, "the size arrived, and the carry with it")
+        XCTAssertTrue(try XCTUnwrap(p.currentLayout).reflowed)
+    }
+
+    /// The other order: the canvas has a size and the PAGE arrives later — page data is cached
+    /// and reattaches to a controller that is already on screen.
+    @MainActor func testCarriedZoomWaitsForThePageData() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let reading = try readingZoom()
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.setBounds(Self.readingBox, fromCanvas: 1)
+        c.carryZoom(reading)
+        XCTAssertEqual(c.zoom.step, 0, "no page yet")
+        c.page = p
+        XCTAssertEqual(c.zoom.step, reading.step, "the page arrived, and the carry with it")
+    }
+
+    /// A carry still waiting is DROPPED by the policy that outranks it. A host turns zooming
+    /// off for a box the reading size does not belong in (a landscape page scrolls at the
+    /// printed pitch) or switches the pinch to the magnifier — and must not find the page
+    /// reflowed anyway a moment later, when its canvas finally reports a size.
+    @MainActor func testWaitingCarryIsDroppedByThePolicy() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let reading = try readingZoom()
+
+        let noZoom = try Self.loadPage(); defer { noZoom.close() }
+        let a = QvpCanvasController()
+        a.page = noZoom
+        a.carryZoom(reading)
+        a.zoomEnabled = false
+        a.setBounds(Self.readingBox, fromCanvas: 1)
+        XCTAssertEqual(a.zoom.step, 0, "zooming was turned off while the carry waited")
+        XCTAssertFalse(try XCTUnwrap(noZoom.currentLayout).reflowed)
+
+        let glass = try Self.loadPage(); defer { glass.close() }
+        let b = QvpCanvasController()
+        b.page = glass
+        b.carryZoom(reading)
+        b.zoomMode = .magnify
+        b.setBounds(Self.readingBox, fromCanvas: 1)
+        XCTAssertEqual(b.zoom.step, 0, "a step means nothing under the magnifier")
+        XCTAssertFalse(try XCTUnwrap(glass.currentLayout).reflowed)
+
+        // An explicit step outranks a waiting carry too, and it is the step that is kept.
+        let picked = try Self.loadPage(); defer { picked.close() }
+        let d = QvpCanvasController()
+        d.page = picked
+        d.carryZoom(reading)
+        d.zoomToStep(0)
+        d.setBounds(Self.readingBox, fromCanvas: 1)
+        XCTAssertEqual(d.zoom.step, 0, "the host asked for the printed page after handing over the carry")
+    }
+
+    /// A banner grows with the page as the reader zooms in, until the host caps it. A host that
+    /// draws its own frame around the printed surah name has a shape to keep, and an uncapped
+    /// name reaches about five times the print before the row stops it.
+    @MainActor func testBannerZoomCapsTheSurahName() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        // 582 opens سورة النبأ, so it carries a surah name to measure.
+        let bytes = try Data(contentsOf: Self.pages.appendingPathComponent("582.qvp"))
+
+        /// The name's drawn size against its printed size: the scale the layout placed it
+        /// under, over the scale the printed page is drawn at.
+        func nameAgainstPrint(bannerZoom: Float) throws -> CGFloat {
+            let p = try QvpPage(bytes: bytes); defer { p.close() }
+            let c = QvpCanvasController()
+            c.hostScrolls = true
+            c.bannerZoom = bannerZoom
+            c.page = p
+            c.setBounds(Self.readingBox, fromCanvas: 1)
+            let printed = try XCTUnwrap(p.currentLayout).scale
+            c.zoomToStep(2)
+            XCTAssertTrue(try XCTUnwrap(p.currentLayout).reflowed)
+            let deco = try XCTUnwrap(p.decorations.firstIndex { $0.decoration == QvpDecorationKind.SURAH_NAME })
+            // `decorationTransform` is the engine layout and the view transform together, so the
+            // view scale comes back out to leave the name's own size.
+            return c.decorationTransform(deco).d / (c.viewScale * CGFloat(printed))
+        }
+
+        let uncapped = try nameAgainstPrint(bannerZoom: 0)
+        XCTAssertGreaterThan(uncapped, 1.5, "left alone, the name grows with the words around it")
+        let held = try nameAgainstPrint(bannerZoom: 1)
+        XCTAssertEqual(held, 1, accuracy: 0.01, "capped at 1, it stays the size it is printed at")
+        let grown = try nameAgainstPrint(bannerZoom: 1.5)
+        XCTAssertEqual(grown, 1.5, accuracy: 0.01, "and at 1.5 it stops half again bigger")
+    }
+
+    /// What a printed row is worth in the reader's box, which a host sizes its own furniture
+    /// to. It must not change when the page reflows — and under `hostScrolls` the canvas is
+    /// sized to the whole laid-out page, so the controller's own bounds are the PAGE and
+    /// answer several times the truth.
+    @MainActor func testPrintedPitchIsMeasuredInTheReadersBox() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.fillHeight = true
+        c.hostScrolls = true
+        c.hostViewportHeight = Self.readingBox.height
+        c.page = p
+        c.setBounds(Self.readingBox, fromCanvas: 1)
+        // On the printed page the layout's own pitch IS the answer: fill-height opened it up.
+        let printed = c.printedPitch
+        XCTAssertEqual(printed, try XCTUnwrap(p.currentLayout).lineSpacing, accuracy: 0.01)
+        XCTAssertGreaterThan(printed, p.lineSpacing, "fill-height opens the printed pitch up")
+
+        // Reflow, and let the host size the canvas to the page as it really does.
+        c.zoomToStep(2)
+        let tall = CGFloat(try XCTUnwrap(p.currentLayout).contentH)
+        XCTAssertGreaterThan(tall, Self.readingBox.height * 2, "the reflowed page is taller than the box")
+        c.setBounds(CGSize(width: Self.readingBox.width, height: tall), fromCanvas: 1)
+        XCTAssertEqual(c.printedPitch, printed, accuracy: 0.01, "a printed row is worth the same, whatever the canvas grew to")
+    }
+
+    /// The same answer for a host that crops the printed side margins, which is what a reader
+    /// replacing ink-cropped page images does: the crop draws the page bigger, so it fills the
+    /// box with less leading, and a pitch measured off the uncropped width is simply too large.
+    @MainActor func testPrintedPitchFollowsTheCrop() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try Self.loadPage(); defer { p.close() }
+        let ink = try XCTUnwrap(p.cropBounds("page", pad: 1))
+        let c = QvpCanvasController()
+        c.fillHeight = true
+        c.hostScrolls = true
+        c.hostViewportHeight = Self.readingBox.height
+        c.cropLeft = max(ink.x0, 0)
+        c.cropRight = max(p.width - ink.x1, 0)
+        c.page = p
+        c.setBounds(Self.readingBox, fromCanvas: 1)
+        XCTAssertGreaterThan(c.cropLeft + c.cropRight, 0, "page 042 has printed margins to crop")
+        XCTAssertEqual(c.printedPitch, try XCTUnwrap(p.currentLayout).lineSpacing, accuracy: 0.01)
+    }
+
+    /// The box a reading zoom is carried in, and a page loaded fresh for a controller to own
+    /// (the shared `page` is laid out by every test that touches it).
+    static let readingBox = CGSize(width: 390, height: 700)
+    static func loadPage() throws -> QvpPage {
+        try QvpPage(bytes: try Data(contentsOf: pages.appendingPathComponent("042.qvp")))
+    }
+
+    /// What a reader pinched to on one page: the control a carry hands to the next.
+    @MainActor private func readingZoom() throws -> QvpZoom {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.page = p
+        c.setBounds(Self.readingBox, fromCanvas: 1)
+        c.zoomToStep(2)
+        XCTAssertGreaterThan(c.zoom.step, 0, "the source page is zoomed in")
+        XCTAssertGreaterThan(c.zoom.zoom, 1, "and its ink is bigger than the print")
+        return c.zoom
+    }
+
+    /// The view-space geometry a host draws its overlays from. On the printed page every
+    /// answer is the page-unit one through the layout's scale and offset; on a reflowed page
+    /// it is wherever the rows put the words, and every word still has one.
+    func testViewSpaceGeometryFollowsTheLayout() throws {
+        let l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100))
+        XCTAssertFalse(l.reflowed)
+        let marks = page.ayahMarks(), marksView = page.ayahMarksView()
+        XCTAssertEqual(marks.count, marksView.count)
+        XCTAssertEqual(marksView[0].cx, l.offsetX + marks[0].cx * l.scale, accuracy: 0.01)
+        XCTAssertEqual(marksView[0].cy, l.offsetY + (marks[0].cy + l.lineDy[marks[0].line]) * l.scale, accuracy: 0.01)
+        let areas = page.hitAreas(), areasView = page.hitAreasView()
+        XCTAssertEqual(areas.count, areasView.count)
+        XCTAssertEqual(areasView[0].x0, l.offsetX + areas[0].x0 * l.scale, accuracy: 0.01)
+        let bands = page.wordBands([0, 1]), bandsView = page.wordBandsView([0, 1])
+        XCTAssertEqual(bands.count, bandsView.count)
+        XCTAssertEqual(bandsView[0].x0, l.offsetX + bands[0].x0 * l.scale, accuracy: 0.01)
+
+        let r = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, reflow: QvpReflowSpec(zoom: 1.8)))
+        XCTAssertTrue(r.reflowed)
+        XCTAssertEqual(page.hitAreasView().count, page.nWords, "every word keeps a hit area on a reflowed page")
+        XCTAssertEqual(page.ayahMarksView().count, marks.count)
+        XCTAssertFalse(page.wordBandsView(Array(0..<page.nWords)).isEmpty)
+        _ = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100))
+    }
+
+    /// A decoration's transform is its line's on the printed page, and its own group's once
+    /// the page has reflowed — where a surah name keeps a row to itself.
+    @MainActor func testDecorationTransformFollowsTheReflow() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try QvpPage(bytes: try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp")))
+        defer { p.close() }
+        let c = QvpCanvasController()
+        c.page = p
+        c.setBounds(CGSize(width: 690, height: 1100), fromCanvas: 1)
+        let deco = try XCTUnwrap(p.decorations.indices.first { p.decorations[$0].decoration == QvpDecorationKind.AYAH_MARK })
+        XCTAssertEqual(c.decorationTransform(deco), c.lineTransform(p.decorations[deco].line))
+        c.zoomMode = .continuous
+        c.zoomToStep(2)
+        XCTAssertTrue(p.currentLayout?.reflowed == true)
+        let t = c.decorationTransform(deco)
+        XCTAssertNotEqual(t, .identity)
+        let printed = CGPoint(x: CGFloat(p.decorations[deco].x0), y: CGFloat(p.decorations[deco].y0)).applying(c.lineTransform(p.decorations[deco].line))
+        let placed = CGPoint(x: CGFloat(p.decorations[deco].x0), y: CGFloat(p.decorations[deco].y0)).applying(t)
+        XCTAssertNotEqual(printed, placed, "a reflowed page moved the decoration off its printed line")
+    }
+
     /// zoomSpringsBack: a released pinch eases back to the fitted transform; without it the zoom stays.
     @MainActor func testZoomSpringsBack() async throws {
         guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }

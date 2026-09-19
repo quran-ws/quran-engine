@@ -130,11 +130,20 @@ data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop:
                          val lineSpacing: Float = 1f, val fillHeight: Boolean = false, val gridLines: Int = 0,
                          /** Printed side margins to cut, page units (0 = keep). */ val cropLeft: Float = 0f, val cropRight: Float = 0f,
                          /** The content is never wider than viewportH·pageW/pageH·slack (0 = no bound). */ val maxAspectSlack: Float = 0f,
-                         /** Break the words onto rows of the page's own width; null lays it out as printed. */ val reflow: QvpReflowSpec? = null) {
+                         /** Break the words onto rows of the page's own width; null lays it out as printed. */ val reflow: QvpReflowSpec? = null,
+                         /** How big a banner (surah name, basmalah) may get as the reader zooms in, as a multiple of
+                          * its printed size. 0 = uncapped (it grows until it fills the row); 1 = held at the print.
+                          * It lives here, not on [reflow], because a host that pinches never builds a reflow spec —
+                          * the zoom control does, from this one. */
+                         val bannerZoom: Float = 0f) {
     internal fun floats(): FloatArray {
         val base = floatArrayOf(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, if (fillHeight) 1f else 0f, gridLines.toFloat(), cropLeft, cropRight, maxAspectSlack)
-        val r = reflow ?: return base
-        return base + floatArrayOf(r.zoom, r.fill.id.toFloat(), r.breaks.id.toFloat(), r.gaps.id.toFloat(), r.wordGap, r.maxStretch, r.relax)
+        val r = reflow
+        // The reflow slots are always written, with the engine's own defaults where there is no
+        // reflow spec (zoom 0 = the printed page, 255 = "ask the engine"), so a knob that
+        // outlives the reflow — bannerZoom — reaches the engine on a printed page too.
+        return base + floatArrayOf(r?.zoom ?: 0f, (r?.fill?.id ?: 255).toFloat(), (r?.breaks?.id ?: 255).toFloat(),
+                                   (r?.gaps?.id ?: 1).toFloat(), r?.wordGap ?: 1f, r?.maxStretch ?: 0f, r?.relax ?: -1f, bannerZoom)
     }
 }
 

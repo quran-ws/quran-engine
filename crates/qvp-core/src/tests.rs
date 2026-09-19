@@ -487,11 +487,25 @@ fn layout_fill_height_and_view_hit() {
         assert!((l.line_spacing - p.line_spacing()).abs() < 1e-3, "line spacing {} for {:?}", l.line_spacing, spec);
         assert!(l.line_dy[1] - l.line_dy[0] >= -1e-6, "lines never move closer");
     }
-    // a 345×550 page in a 390×844 viewport: the multiplier that fills it, and none when it already does
+    // the multiplier that fills a viewport IS the spacing fill-height lays the page out at —
+    // the crop, the aspect bound and the grid a short page sits on all included, because a host
+    // that sizes its own furniture to a printed row reads it instead of laying the page out
     let tall = LayoutSpec { viewport_w: 390.0, viewport_h: 844.0, ..Default::default() };
-    let m = p.line_spacing_to_fill(&tall, f32::INFINITY);
+    let grid2 = LayoutSpec { grid_lines: 2, ..tall };
+    for spec in [
+        tall,
+        grid2,
+        LayoutSpec { crop_left: 20.0, crop_right: 30.0, ..grid2 },
+        LayoutSpec { max_aspect_slack: 1.15, ..grid2 },
+    ] {
+        let m = p.line_spacing_to_fill(&spec, f32::INFINITY);
+        let filled = p.layout(&LayoutSpec { fill_height: true, ..spec }).line_spacing;
+        assert!((filled - p.line_spacing() * m).abs() < 1e-3, "multiplier {m}, laid out at {filled}, for {spec:?}");
+    }
+    // a crop draws the page bigger, so less paper is left over and it takes less leading to fill
     assert!(
-        m > 1.0 && (p.layout(&tall).line_spacing - p.line_spacing() * m).abs() < 1e-3 * m.max(1.0) + 1e-3 || m > 1.0
+        p.line_spacing_to_fill(&LayoutSpec { crop_left: 20.0, crop_right: 30.0, ..grid2 }, f32::INFINITY)
+            < p.line_spacing_to_fill(&grid2, f32::INFINITY)
     );
     assert_eq!(
         p.line_spacing_to_fill(&LayoutSpec { viewport_w: 820.0, viewport_h: 300.0, ..Default::default() }, 100.0),

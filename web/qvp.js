@@ -362,7 +362,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     hitAreas(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
 
     // ── layout ──
-    /** Write a layout spec (QvpLayoutSpec, 52 bytes) at scratch offset `s`. */
+    /** Write a layout spec (QvpLayoutSpec, 72 bytes) at scratch offset `s`. */
     _writeLayoutSpec(spec, s) {
       const d = this.e.dv();
       d.setFloat32(s, spec.viewportW, true); d.setFloat32(s + 4, spec.viewportH, true); d.setFloat32(s + 8, spec.padTop || 0, true); d.setFloat32(s + 12, spec.padBottom || 0, true);
@@ -378,6 +378,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       d.setFloat32(s + 56, r ? (r.wordGap ?? 1) : 1, true);
       d.setFloat32(s + 60, r ? (r.maxStretch ?? 0) : 0, true);
       d.setFloat32(s + 64, r && r.relax !== undefined ? r.relax : -1, true);
+      // bannerZoom: how big a surah name or basmalah may get against its printed size as the
+      // reader zooms; 0 lets it grow with the page until it fills the row.
+      d.setFloat32(s + 68, spec.bannerZoom ?? 0, true);
     }
     /** Leading (page units) that makes the page fill the padded viewport of `spec`; max 0 = unlimited. */
     layoutLineSpacingToFill(spec, max = 0) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_line_spacing_to_fill(this.h, s, max); }

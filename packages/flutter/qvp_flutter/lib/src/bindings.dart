@@ -291,6 +291,8 @@ final class QvpLayoutSpecC extends ffi.Struct {
   external double reflowMaxStretch;
   @ffi.Float()
   external double reflowRelax;
+  @ffi.Float()
+  external double bannerZoom;
 }
 
 /// `{ uint32_t lines; float line_spacing; }`
