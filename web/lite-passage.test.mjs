@@ -75,6 +75,15 @@ for (const page of pages) for (const path of page.paths) {
 assert.throws(() => passage.draw(ctx, {}), /another passage/)
 assert.throws(() => passage.draw(ctx, narrow, { pixelRatio: 0 }), RangeError)
 
+// Individually valid outline operations must not amplify into unbounded work/maps.
+for (const unbounded of [true, false]) {
+  const oversized = synthetic()
+  const pts = [0, 0]
+  for (let i = 1; i <= 4000; i++) pts.push(0, unbounded ? i * 63 : (i % 2) * 200)
+  oversized.paths[0] = { ...oversized.paths[0], ops: [0, ...Array(4000).fill(1)], pts }
+  assert.throws(() => new QvpPassage([oversized], { surah: 1, from: 1 }), /measurement limit/)
+}
+
 const fixture_hex = (await readFile(new URL('../conformance/qvp1-lite.hex', import.meta.url), 'utf8')).trim()
 const fixture = decodeGeometry(Buffer.from(fixture_hex, 'hex'))
 const fixture_passage = new QvpPassage([fixture], { surah: 2, from: 3 })

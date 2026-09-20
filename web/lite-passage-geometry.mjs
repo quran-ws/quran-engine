@@ -22,15 +22,19 @@ export function median(values, fallback = 0) {
 }
 
 // A shared band height lets words from different printed pages share one row.
-function trace(paths, baseline) {
+function trace(paths, baseline, budget) {
   const bands = new Map()
   const mark = (x, y) => {
+    if (--budget.points < 0) throw new RangeError('QVP passage measurement limit exceeded')
     const row = Math.floor((y - baseline) / band_height)
     const span = bands.get(row)
     if (span) {
       span[0] = Math.min(span[0], x)
       span[1] = Math.max(span[1], x)
-    } else bands.set(row, [x, x])
+    } else {
+      if (--budget.bands < 0) throw new RangeError('QVP passage measurement limit exceeded')
+      bands.set(row, [x, x])
+    }
   }
   const segment = (a, b) => {
     const steps = Math.max(1, Math.min(512, Math.ceil(Math.abs(b[1] - a[1]) / band_height)))
@@ -101,6 +105,9 @@ function merged_slices(groups) {
 
 export function preparePage(page) {
   if (prepared_pages.has(page)) return prepared_pages.get(page)
+  // Shared across the page: large coordinates must not amplify bounded QVP input
+  // into unbounded maps or work. Current pages use <447k samples and <13k bands.
+  const budget = { points: 2000000, bands: 32768 }
   const paths_of = record => page.paths.slice(record.firstPath, record.firstPath + record.nPaths)
   const line_words = page.lines.map(line => page.words.slice(line.firstWord, line.firstWord + line.nWords))
   const centres = page.lines.map((line, i) => {
@@ -110,7 +117,7 @@ export function preparePage(page) {
   })
   const pitch = median(centres.slice(1).map((y, i) => Math.abs(y - centres[i])).filter(gap => gap > 1), page.height / 15)
   const baselines = line_words.map((words, i) => median(words.map(word => word.box[3]), centres[i]))
-  const word_slices = page.words.map(word => trace(paths_of(word), baselines[word.lineIndex]))
+  const word_slices = page.words.map(word => trace(paths_of(word), baselines[word.lineIndex], budget))
   const gaps = []
   for (const words of line_words) for (let i = 1; i < words.length; i++) {
     const a = words[i - 1]
@@ -149,7 +156,7 @@ export function preparePage(page) {
     }
     if (!word) throw new Error('QVP passage decoration has no word')
     attached[word.index].push({ indices, box, decoration: decoration.index,
-      slices: trace(indices.map(index => page.paths[index]), baselines[word.lineIndex]) })
+      slices: trace(indices.map(index => page.paths[index]), baselines[word.lineIndex], budget) })
   }
   const atoms = page.words.map(word => {
     const decorations = attached[word.index]

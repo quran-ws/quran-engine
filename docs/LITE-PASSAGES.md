@@ -45,7 +45,7 @@ The passage module measures outlines in thin bands rather than separating word b
 
 Ayah medallions and sajdah signs travel with the word that closes their ayah. A division mark travels with the word it opens. A sajdah stroke belongs to the words geometrically underneath it, which can be in an earlier ayah than the closing sign. If those words wrap, the stroke is drawn on each affected row; only that stroke is stretched horizontally.
 
-Decoded pages are immutable inputs. Preparation and Canvas paths use weak caches keyed by those pages. Keep a bounded app-owned page cache; dropping a passage, its layouts and unused pages releases the associated data. Reuse the passage when its container changes width. Do not lay it out on every scroll event.
+Decoded pages are immutable inputs. Preparation is bounded per page to two million sample points and 32,768 allocated measurement bands; exceeding either limit throws. This prevents extreme coordinates or repeated geometry from expanding an otherwise bounded QVP file into unbounded work or memory. The complete 604-page dataset is checked against these limits. Preparation and Canvas paths use weak caches keyed by those pages. Keep a bounded app-owned page cache; dropping a passage, its layouts and unused pages releases the associated data. Reuse the passage when its container changes width. Do not lay it out on every scroll event.
 
 A canvas is not an accessible text document. Supply a Unicode text layer for screen readers and copying. The module's text is optional to the host; an app may keep its existing verified text corpus. Theme changes require drawing with a new ink colour, not recomputing the layout.
 
