@@ -1642,6 +1642,14 @@ class QvpPage extends ChangeNotifier {
     return _b.layoutWastedFraction(_p, _e._spec);
   }
 
+  /// The page's height laid out for [spec] at the printed pitch, in viewport px: `contentH`
+  /// before fill-height adds any leading, padding included. What a host asks before it sizes
+  /// the canvas.
+  double layoutPrintedHeight(QvpLayoutSpec spec) {
+    _writeSpec(spec);
+    return _b.layoutPrintedHeight(_p, _e._spec);
+  }
+
   double layoutLineSpacingToFill(QvpLayoutSpec spec, [double max = 0]) {
     _writeSpec(spec);
     return _b.layoutLineSpacingToFill(_p, _e._spec, max);

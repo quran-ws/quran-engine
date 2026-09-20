@@ -174,6 +174,7 @@ to every language.
 | layout | `qvp_layout_gap_to_fill` | `qvp_layout_line_spacing_to_fill` | `page.layoutGapToFill` | `page.layoutLineSpacingToFill` | returns the multiplier, not a gap: `line_gap` is gone |
 | layout | `qvp_wasted_fraction` | `qvp_layout_wasted_fraction` | `engine.wastedFraction(pageW, …)` | `page.layoutWastedFraction(spec)` | takes the page and a spec |
 | layout | (new) | `qvp_page_grid` |  | `page.grid` | `{lines, line_spacing}` of the mushaf's design grid; replaces `QvpLayoutSpec.nominal_lines` |
+| layout | (new) | `qvp_layout_printed_height` |  | `page.layoutPrintedHeight(spec)` | the page's height at the printed pitch for a spec, before fill-height adds leading |
 | version | `qvp_version` | `qvp_format_version` | `engine.version` | `engine.formatVersion` | the page format version |
 | version | (new) | `qvp_version` |  | `engine.version` | the engine version as a string, `0.2.0` |
 
@@ -260,7 +261,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-146 symbols in the header, 146 Rust exports. web: 145 bound, android: 140 bound, flutter: 145 bound, ios: 137 bound, react-native: 79 bound.
+147 symbols in the header, 147 Rust exports. web: 146 bound, android: 141 bound, flutter: 146 bound, ios: 138 bound, react-native: 80 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -324,6 +325,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_layout_omitted_paths` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_path_groups` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_placements` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_printed_height` | yes | yes | yes | yes | yes |
 | `qvp_layout_repeats` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_row_words` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_wasted_fraction` | yes | yes | yes | yes | yes |

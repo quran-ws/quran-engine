@@ -6,6 +6,11 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Added
+- `qvp_layout_printed_height`: the page's height laid out for a spec at the printed pitch, in
+  viewport px — `content_h` before fill-height adds any leading. A host deciding whether a page
+  fits a box, or how far to shrink it to keep it whole, asks this before it sizes the canvas,
+  instead of re-deriving the crop and the grid a short page sits on. The iOS controller
+  answers it for a width with its own knobs (`printedHeight(forWidth:)`).
 - `banner_zoom` on the layout spec caps how big a surah name or a basmalah gets as the reader
   zooms in, as a multiple of its printed size. Left at 0 a banner grows with the words around
   it until it fills the row — about five times the print for a surah name — which a host that

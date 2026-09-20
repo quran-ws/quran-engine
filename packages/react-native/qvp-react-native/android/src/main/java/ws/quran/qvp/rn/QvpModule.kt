@@ -92,6 +92,8 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     /** The leading that fills this view's viewport, from the spec the view lays out with. */
     @ReactMethod fun layoutLineSpacingToFill(tag: Int, max: Double, promise: Promise) = withPage(tag, promise) { v, p -> p.layoutLineSpacingToFill(v.inner.layoutSpec(), max.toFloat()) }
     @ReactMethod fun layoutWastedFraction(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.layoutWastedFraction(v.inner.layoutSpec()) }
+    /** The page's height at the printed pitch for the spec this view lays out with. */
+    @ReactMethod fun layoutPrintedHeight(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.layoutPrintedHeight(v.inner.layoutSpec()) }
     @ReactMethod fun grid(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> mapOf("lines" to p.grid.lines, "lineSpacing" to p.grid.lineSpacing) }
     @ReactMethod fun stats(tag: Int, promise: Promise) = ui(promise) { view(tag)?.stats() }
     @ReactMethod fun invalidate(tag: Int, promise: Promise) = ui(promise) { view(tag)?.inner?.invalidate(); null }

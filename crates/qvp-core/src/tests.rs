@@ -512,6 +512,16 @@ fn layout_fill_height_and_view_hit() {
         1.0
     );
     assert!(p.wasted_fraction(&tall) > 0.0 && p.wasted_fraction(&tall) < 1.0);
+    // printed_height is content_h before any leading: exactly the flat layout's, never more
+    // than the filled one's, and the filled one's again where the box is too short to fill
+    let flat = LayoutSpec { fill_height: false, line_spacing: 1.0, ..tall };
+    assert!((p.layout(&flat).content_h - p.printed_height(&flat)).abs() < 1e-3);
+    let filled = LayoutSpec { fill_height: true, ..tall };
+    assert!(p.layout(&filled).content_h >= p.printed_height(&filled) - 1e-3);
+    let short = LayoutSpec { viewport_h: 200.0, fill_height: true, ..tall };
+    assert!((p.layout(&short).content_h - p.printed_height(&short)).abs() < 1e-3);
+    // a crop draws the page bigger, so it is taller for the same width
+    assert!(p.printed_height(&LayoutSpec { crop_left: 20.0, crop_right: 30.0, ..grid2 }) > p.printed_height(&grid2));
     let wb = p.word_bounds_view(2);
     assert!(wb.1 > 0.0);
 }

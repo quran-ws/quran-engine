@@ -282,6 +282,21 @@ public final class QvpCanvasController {
         let opened = fillHeight ? p.layoutLineSpacingToFill(baseSpec) : max(lineSpacing, 1)
         return p.lineSpacing * opened
     }
+    /// The page's height at the printed pitch when laid out for `width` with this controller's
+    /// knobs (crop, padding, the grid a short page sits on), in points — what `contentH` will be
+    /// before fill-height adds any leading. A host sizing the page's box asks this BEFORE it
+    /// sizes the canvas: the layout answers the same number, but only for the bounds it already
+    /// has. nil before a page is attached.
+    public func printedHeight(forWidth width: CGFloat) -> CGFloat? {
+        guard let p = page, p.isOpen, width > 0 else { return nil }
+        let base = baseSpec
+        let spec = QvpLayoutSpec(viewportW: Float(width), viewportH: base.viewportH,
+                                 padTop: base.padTop, padBottom: base.padBottom,
+                                 padLeft: base.padLeft, padRight: base.padRight,
+                                 lineSpacing: base.lineSpacing, fillHeight: base.fillHeight,
+                                 cropLeft: base.cropLeft, cropRight: base.cropRight, bannerZoom: base.bannerZoom)
+        return CGFloat(p.layoutPrintedHeight(spec))
+    }
     /// Recompute the engine layout for the current size / knobs.
     public func relayout() {
         guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }

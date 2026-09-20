@@ -219,6 +219,7 @@ uint32_t qvp_zoom_level_candidates(QvpPage*, const QvpLayoutSpec*, float nominal
                          float* out_zoom, float* out_cost, uint32_t n_out);        /* every zoom the search weighs for one step, with its cost */
 float    qvp_layout_line_spacing_to_fill(const QvpPage*, const QvpLayoutSpec*, float max /* <=0 unlimited */);   /* the multiplier that fills the padded viewport */
 float    qvp_layout_wasted_fraction(const QvpPage*, const QvpLayoutSpec*);       /* share of the padded viewport left empty at fit-to-width */
+float    qvp_layout_printed_height(const QvpPage*, const QvpLayoutSpec*);        /* the page's height at the printed pitch: content_h before fill-height adds leading */
 int      qvp_word_bounds_view(const QvpPage*, uint32_t word_index, float out[4]);
 
 /* styles: layered rules, handles undo exactly ------------------------------------------ */

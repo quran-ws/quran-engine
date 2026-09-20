@@ -150,6 +150,11 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(page.grid.lines, 15)
         let wf = page.layoutWastedFraction(QvpLayoutSpec(viewportW: 600, viewportH: 1000))
         XCTAssertTrue(wf >= 0 && wf <= 1)
+        // The printed height is the flat layout's contentH, and grows with the width.
+        let flat = QvpLayoutSpec(viewportW: 600, viewportH: 1000)
+        XCTAssertEqual(page.layoutPrintedHeight(flat), page.layout(flat).contentH, accuracy: 0.01)
+        XCTAssertGreaterThan(page.layoutPrintedHeight(QvpLayoutSpec(viewportW: 900, viewportH: 1000)),
+                             page.layoutPrintedHeight(flat))
     }
 
     func testStyles() {

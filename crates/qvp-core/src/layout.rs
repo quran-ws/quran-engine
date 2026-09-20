@@ -260,6 +260,21 @@ impl Page {
         let m = self.printed_metrics(spec);
         ((m.avail_h - self.height() * m.scale) / m.avail_h).clamp(0.0, 1.0)
     }
+    /// The height of the page laid out for `spec` at the printed pitch, in viewport px: what
+    /// [`Page::layout`] answers as `content_h` before fill-height adds any leading — the page
+    /// fitted to the cropped width, or the grid a short page sits on, plus the padding.
+    ///
+    /// A host deciding whether a page fits a box, or how far it would have to shrink the page
+    /// to keep it whole, asks this BEFORE it sizes the page's canvas — the layout answers the
+    /// same number, but only for the viewport it is given. Measured the way the layout
+    /// measures itself (`printed_metrics`), so the crop and the grid are never re-derived by
+    /// the host.
+    pub fn printed_height(&self, spec: &LayoutSpec) -> f32 {
+        let m = self.printed_metrics(spec);
+        let on_grid = spec.fill_height && (self.data.lines.len() as f32) < m.nominal;
+        let block_h = if on_grid { m.nominal * self.line_spacing } else { self.height() };
+        spec.pad_top + block_h * m.scale + spec.pad_bottom
+    }
 
     pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
         // At the printed size the page is the printed page: the words are where the print has

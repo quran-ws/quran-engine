@@ -55,6 +55,7 @@ internal object QvpNative {
     // layout
     @JvmStatic external fun layout(h: Long, spec: FloatArray): FloatArray
     @JvmStatic external fun layoutLineSpacingToFill(h: Long, spec: FloatArray, max: Float): Float
+    @JvmStatic external fun layoutPrintedHeight(h: Long, spec: FloatArray): Float
     // the reader's pan and zoom: view FloatArray {scale, offsetX, offsetY}
     @JvmStatic external fun viewZoomAbout(view: FloatArray, fx: Float, fy: Float, factor: Float, min: Float, max: Float): FloatArray
     @JvmStatic external fun viewPan(view: FloatArray, dx: Float, dy: Float): FloatArray

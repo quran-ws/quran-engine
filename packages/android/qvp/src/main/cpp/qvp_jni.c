@@ -425,6 +425,10 @@ jfloat FN(layoutWastedFraction)(JNIEnv* env, jclass c, jlong h, jfloatArray spec
     QvpLayoutSpec s = layout_spec(env, spec);
     return qvp_layout_wasted_fraction(PG(h), &s);
 }
+jfloat FN(layoutPrintedHeight)(JNIEnv* env, jclass c, jlong h, jfloatArray spec) {
+    QvpLayoutSpec s = layout_spec(env, spec);
+    return qvp_layout_printed_height(PG(h), &s);
+}
 jfloatArray FN(wordBoundsView)(JNIEnv* env, jclass c, jlong h, jint i) { float v[4]; if (!qvp_word_bounds_view(PG(h), i, v)) return NULL; return floats(env, v, 4); }
 
 /* ───────── styles ───────── */
