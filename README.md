@@ -87,7 +87,9 @@ elements such as ayah markers, surah banners, basmalahs, division and sajdah
 marks, running heads and page numbers. Both accept the same `scale`, `x`, `y`
 and `ink` options as `draw()` and leave clearing and sizing to the caller.
 
-Use the main package for layout, exact hit-testing, search, styling, selection,
+For a standalone verse excerpt that wraps to its container without Wasm, import the optional `QvpPassage` from `@quran.ws/engine/lite/passage`. It takes `decodeGeometry()` pages and a complete ayah range, including ranges across pages, and preserves verse medallions and sajdah signs. See [Lite passages](docs/LITE-PASSAGES.md). The base lite import does not load this layout code.
+
+Use the main package for full-page layout, exact hit-testing, search, styling, selection,
 masks and animation.
 
 On iOS and macOS, add the repository as a Swift package and use its `QvpKit` product:

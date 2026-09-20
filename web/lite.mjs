@@ -11,6 +11,8 @@
  * page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
  */
 
+import { buildPath } from './lite-path.mjs'
+
 const limits = {
   fileBytes: 2 * 1024 * 1024,
   paths: 20000,
@@ -104,20 +106,33 @@ export function decodeGeometry(buffer) {
   if (minimumMetadataSize > metadataSize) throw new Error('Invalid QVP metadata counts')
 
   const metadata = reader(sections[0])
-  for (let i = 0; i < nLines; i++) {
-    metadata.byte()
-    metadata.varint()
-  }
-  for (let i = 0; i < nAyahs; i++) {
-    metadata.zigzag()
-    metadata.zigzag()
-    metadata.byte()
-    metadata.byte()
-    metadata.byte()
-    metadata.varint()
-    metadata.varint()
-    metadata.varint()
-  }
+  let firstWord = 0
+  const lines = Array.from({ length: nLines }, (_, index) => {
+    const lineNumber = metadata.byte()
+    const nWords = metadata.varint()
+    const line = { index, lineNumber, firstWord, nWords }
+    firstWord += nWords
+    return line
+  })
+  if (firstWord !== nWords) throw new Error('Invalid QVP line word count')
+  firstWord = 0
+  let ayahSurah = 0
+  let ayahNumber = 0
+  const ayahs = Array.from({ length: nAyahs }, (_, index) => {
+    ayahSurah += metadata.zigzag()
+    ayahNumber += metadata.zigzag()
+    const fragment = metadata.byte()
+    const fragments = metadata.byte()
+    const flags = metadata.byte()
+    const nWords = metadata.varint()
+    const ayahMarkDecoration = metadata.varint() - 1
+    const rubuAlHizb = metadata.varint()
+    const ayah = { index, surah: ayahSurah, ayah: ayahNumber, fragment, fragments,
+      flags, firstWord, nWords, ayahMarkDecoration, rubuAlHizb }
+    firstWord += nWords
+    return ayah
+  })
+  if (firstWord !== nWords) throw new Error('Invalid QVP ayah word count')
   let surah = 0
   let ayah = 0
   let word = 0
@@ -130,8 +145,10 @@ export function decodeGeometry(buffer) {
     word += metadata.zigzag()
     lineIndex += metadata.zigzag()
     ayahIndex += metadata.zigzag()
-    for (let i = 0; i < 5; i++) metadata.varint()
+    const textIndex = metadata.varint() - 1
+    for (let i = 0; i < 4; i++) metadata.varint()
     return {
+      textIndex,
       index,
       surah,
       ayah,
@@ -153,12 +170,19 @@ export function decodeGeometry(buffer) {
     const y1 = y0 + metadata.zigzag()
     return [Math.fround(x0 / quant), Math.fround(y0 / quant), Math.fround(x1 / quant), Math.fround(y1 / quant)]
   })
-  for (let i = 0; i < nDecorations; i++) {
-    metadata.zigzag()
-    metadata.byte()
-    metadata.zigzag()
-    for (let j = 0; j < 4; j++) metadata.varint()
-  }
+  let decorationEnd = 0
+  let decorationSurah = 0
+  const decorationRecords = Array.from({ length: nDecorations }, (_, index) => {
+    const firstPath = decorationEnd + metadata.zigzag()
+    const decoration = metadata.byte()
+    decorationSurah += metadata.zigzag()
+    const ayah = metadata.varint()
+    const textIndex = metadata.varint() - 1
+    const nPaths = metadata.varint()
+    const lineIndex = metadata.varint() - 1
+    decorationEnd = firstPath + nPaths
+    return { index, firstPath, nPaths, decoration, surah: decorationSurah, ayah, textIndex, lineIndex }
+  })
   const glyphCounts = Array.from({ length: nGlyphs }, () => {
     const count = metadata.varint()
     for (let i = 0; i < 4; i++) metadata.zigzag()
@@ -224,11 +248,14 @@ export function decodeGeometry(buffer) {
   }
 
   const strings = reader(sections[5])
-  for (let i = 0; i < nStrings; i++) {
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  const texts = Array.from({ length: nStrings }, () => {
     const length = strings.varint()
+    const start = strings.position
     strings.position += length
     if (strings.position > sections[5].end) throw new Error('Truncated QVP string')
-  }
+    return decoder.decode(bytes.subarray(start, strings.position))
+  })
   if (strings.position !== sections[5].end) throw new Error('Invalid QVP strings')
 
   let directShape = 0
@@ -278,6 +305,9 @@ export function decodeGeometry(buffer) {
       ops: Uint8Array.from(shape.ops),
       pts,
       box,
+      kind: columns[0][i],
+      mark: columns[1][i],
+      family: columns[2][i],
       rule: columns[3][i] & 1 ? 'evenodd' : 'nonzero'
     }
   })
@@ -298,7 +328,20 @@ export function decodeGeometry(buffer) {
     }
     previousWordEnd = endPath
     if (box.some(value => !Number.isFinite(value))) throw new Error('Invalid QVP word box')
+    if (record.lineIndex < 0 || record.lineIndex >= lines.length ||
+        record.ayahIndex < 0 || record.ayahIndex >= ayahs.length ||
+        record.textIndex < -1 || record.textIndex >= texts.length) {
+      throw new Error('Invalid QVP word metadata')
+    }
+    const line = lines[record.lineIndex]
+    const owner = ayahs[record.ayahIndex]
+    if (record.index < line.firstWord || record.index >= line.firstWord + line.nWords ||
+        record.index < owner.firstWord || record.index >= owner.firstWord + owner.nWords ||
+        record.surah !== owner.surah || record.ayah !== owner.ayah) {
+      throw new Error('Invalid QVP word ownership')
+    }
     return {
+      text: texts[record.textIndex] ?? '',
       index: record.index,
       surah: record.surah,
       ayah: record.ayah,
@@ -310,7 +353,36 @@ export function decodeGeometry(buffer) {
       box
     }
   })
-  return { width, height, number, paths, words }
+  const decorations = decorationRecords.map(({ textIndex, ...record }) => {
+    const { firstPath, nPaths: count, lineIndex } = record
+    if (firstPath < 0 || firstPath + count > paths.length || lineIndex < -1 ||
+        lineIndex >= lines.length || textIndex < -1 || textIndex >= texts.length) {
+      throw new Error('Invalid QVP decoration metadata')
+    }
+    const box = bounds(paths.slice(firstPath, firstPath + count))
+    return { ...record, text: texts[textIndex] ?? '', box }
+  })
+  for (const line of lines) line.box = bounds(words.slice(line.firstWord, line.firstWord + line.nWords))
+  for (const ayah of ayahs) {
+    if (ayah.fragment < 1 || ayah.fragment > ayah.fragments ||
+        ayah.ayahMarkDecoration < -1 || ayah.ayahMarkDecoration >= decorations.length) {
+      throw new Error('Invalid QVP ayah decoration')
+    }
+    ayah.box = bounds(words.slice(ayah.firstWord, ayah.firstWord + ayah.nWords))
+  }
+  return { width, height, number, paths, words, lines, ayahs, decorations }
+}
+
+function bounds(records) {
+  if (!records.length) return null
+  const box = [Infinity, Infinity, -Infinity, -Infinity]
+  for (const record of records) {
+    box[0] = Math.min(box[0], record.box[0])
+    box[1] = Math.min(box[1], record.box[1])
+    box[2] = Math.max(box[2], record.box[2])
+    box[3] = Math.max(box[3], record.box[3])
+  }
+  return box
 }
 
 export class QvpLitePage {
@@ -322,21 +394,7 @@ export class QvpLitePage {
     this.height = height
     this.number = number
     this.words = words
-    this.#paths = paths.map(({ ops, pts, rule }) => {
-      const path = new Path2D()
-      let point = 0
-      for (const operation of ops) {
-        switch (operation) {
-          case 0: path.moveTo(pts[point++], pts[point++]); break
-          case 1: path.lineTo(pts[point++], pts[point++]); break
-          case 2: path.quadraticCurveTo(pts[point++], pts[point++], pts[point++], pts[point++]); break
-          case 3: path.bezierCurveTo(pts[point++], pts[point++], pts[point++], pts[point++], pts[point++], pts[point++]); break
-          case 4: path.closePath(); break
-          default: throw new Error(`Unknown QVP operation: ${operation}`)
-        }
-      }
-      return { path, rule }
-    })
+    this.#paths = paths.map(shape => ({ path: buildPath(shape), rule: shape.rule }))
     const wordPaths = new Uint8Array(this.#paths.length)
     for (const { firstPath, nPaths } of words) {
       for (let path = firstPath; path < firstPath + nPaths; path++) {

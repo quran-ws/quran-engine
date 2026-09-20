@@ -6,17 +6,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f dist/pages/042.qvp ] || { echo "error: dist/pages/042.qvp is missing; run scripts/sync-test-data.sh" >&2; exit 1; }
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-cargo run -q -p qvp-core --release --example scenarios -- dist/pages/042.qvp "$tmp/layout.json"
-if [ "${1:-}" = "--check" ]; then
-  if cmp -s "$tmp/layout.json" conformance/scenarios/layout.json; then
-    echo "ok   conformance/scenarios/layout.json matches the engine"
+mkdir -p "$tmp/scenarios"
+cargo run -q -p qvp-core --release --example scenarios -- dist/pages/042.qvp "$tmp/scenarios/layout.json"
+cargo run -q -p qvp-core --release --example lite_passage_metrics -- dist/pages > "$tmp/lite-passage-metrics.json"
+for file in scenarios/layout.json lite-passage-metrics.json; do
+  if [ "${1:-}" = "--check" ]; then
+    if cmp -s "$tmp/$file" "conformance/$file"; then
+      echo "ok   conformance/$file matches the engine"
+    else
+      echo "FAIL conformance/$file is stale; run scripts/gen-conformance.sh" >&2
+      diff "$tmp/$file" "conformance/$file" | head -20 >&2 || true
+      exit 1
+    fi
   else
-    echo "FAIL conformance/scenarios/layout.json is stale; run scripts/gen-conformance.sh" >&2
-    diff "$tmp/layout.json" conformance/scenarios/layout.json | head -20 >&2 || true
-    exit 1
+    mkdir -p conformance/scenarios
+    cp "$tmp/$file" "conformance/$file"
+    echo "wrote conformance/$file"
   fi
-else
-  mkdir -p conformance/scenarios
-  cp "$tmp/layout.json" conformance/scenarios/layout.json
-  echo "wrote conformance/scenarios/layout.json"
-fi
+done

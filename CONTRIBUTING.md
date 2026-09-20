@@ -9,7 +9,7 @@ page links them and gives the short version.
 One Rust core computes everything: hit testing, layout, styles, highlights, selection,
 masks, search, crop, atlas. The C header `crates/qvp-ffi/include/qvp.h` is the only
 contract. The five wrappers (web, Android, Flutter, React Native, iOS) marshal calls and
-render results, and compute nothing themselves. Read `docs/HOW-IT-WORKS.md` first if the engine is new to you.
+render results, and compute nothing themselves. The optional JavaScript lite passage layout is a narrow exception for apps that must not load Wasm; `docs/LITE-PASSAGES.md` states its scope and checks. Read `docs/HOW-IT-WORKS.md` first if the engine is new to you.
 
 ## First ten minutes
 
@@ -79,6 +79,7 @@ State the tier in the pull request:
 - **Core behaviour**: changed in Rust once. Every platform receives it with the next
   native build.
 - **Engine API**: a C symbol. Bound everywhere or declared as a gap.
+- **Lite passage layout**: JavaScript-only excerpt layout in `web/lite-passage.mjs`, with no C ABI change. Keep it separately importable and test it against the codec fixtures, Rust measurements and complete page data. Do not duplicate unrelated engine systems.
 - **Platform convenience**: one platform's idiom. Documented in that package's README.
   Must not compute anything the engine can compute. A fit scale, a clamp or a table of
   names is such a computation.
