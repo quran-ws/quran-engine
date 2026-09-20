@@ -27,7 +27,7 @@ stage="$(mktemp -d)/$name"; trap 'rm -rf "$(dirname "$stage")"' EXIT
 mkdir -p "$stage/surah-names"
 cp dist/pages/*.qvp dist/pages/*.words.json dist/pages/atlas.qva dist/pages/atlas.json "$stage/"
 cp dist/pages/surah-names/*.svg "$stage/surah-names/"
-python - "$stage" "$v" "$(cat pages/.tag 2>/dev/null || echo unknown)" "$(git rev-parse HEAD)" <<'PY'
+python3 - "$stage" "$v" "$(cat pages/.tag 2>/dev/null || echo unknown)" "$(git rev-parse HEAD)" <<'PY'
 import hashlib, json, pathlib, sys, datetime
 stage, v, svg_tag, commit = sys.argv[1:5]
 root = pathlib.Path(stage)
