@@ -155,6 +155,8 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(page.layoutPrintedHeight(flat), page.layout(flat).contentH, accuracy: 0.01)
         XCTAssertGreaterThan(page.layoutPrintedHeight(QvpLayoutSpec(viewportW: 900, viewportH: 1000)),
                              page.layoutPrintedHeight(flat))
+        XCTAssertEqual(QvpLayoutSpec(viewportW: 600, viewportH: 1000).c.surah_frames, 1)
+        XCTAssertEqual(QvpLayoutSpec(viewportW: 600, viewportH: 1000, surahFrames: false).c.surah_frames, 0)
     }
 
     func testStyles() {

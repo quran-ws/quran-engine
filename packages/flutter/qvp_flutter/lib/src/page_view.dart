@@ -23,18 +23,19 @@ const double kMaxZoom = 12;
 
 @immutable
 class QvpViewLayout {
-  const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.fillHeight = false, this.gridLines = 0});
+  const QvpViewLayout({this.padTop = 24, this.padBottom = 24, this.padSide = 16, this.lineSpacing = 1, this.fillHeight = false, this.gridLines = 0, this.surahFrames = true});
   final double padTop, padBottom, padSide, lineSpacing;
-  final bool fillHeight;
+  final bool fillHeight, surahFrames;
   final int gridLines;
 
-  QvpViewLayout copyWith({double? padTop, double? padBottom, double? padSide, double? lineSpacing, bool? fillHeight, int? gridLines}) => QvpViewLayout(
+  QvpViewLayout copyWith({double? padTop, double? padBottom, double? padSide, double? lineSpacing, bool? fillHeight, int? gridLines, bool? surahFrames}) => QvpViewLayout(
         padTop: padTop ?? this.padTop,
         padBottom: padBottom ?? this.padBottom,
         padSide: padSide ?? this.padSide,
         lineSpacing: lineSpacing ?? this.lineSpacing,
         fillHeight: fillHeight ?? this.fillHeight,
         gridLines: gridLines ?? this.gridLines,
+        surahFrames: surahFrames ?? this.surahFrames,
       );
 
   QvpLayoutSpec toSpec(double viewportW, double viewportH) => QvpLayoutSpec(
@@ -48,6 +49,7 @@ class QvpViewLayout {
         fillHeight: fillHeight,
         gridLines: gridLines,
         maxAspectSlack: QvpDefaults.aspectSlack,
+        surahFrames: surahFrames,
       );
 
   @override
@@ -58,10 +60,11 @@ class QvpViewLayout {
       other.padSide == padSide &&
       other.lineSpacing == lineSpacing &&
       other.fillHeight == fillHeight &&
-      other.gridLines == gridLines;
+      other.gridLines == gridLines &&
+      other.surahFrames == surahFrames;
 
   @override
-  int get hashCode => Object.hash(padTop, padBottom, padSide, lineSpacing, fillHeight, gridLines);
+  int get hashCode => Object.hash(padTop, padBottom, padSide, lineSpacing, fillHeight, gridLines, surahFrames);
 }
 
 /// Pan / zoom on top of the engine layout. `view px = offsetX + layout px * scale`.

@@ -132,6 +132,8 @@ export interface QvpPageViewProps extends ViewProps {
   padTop?: number; padBottom?: number; padSide?: number;
   /** spacing only opens up: lineSpacing < 1 is clamped by the engine */
   lineSpacing?: number; fillHeight?: boolean;
+  /** Draw source-native frames around surah names on the printed page. */
+  surahFrames?: boolean;
   paperColor?: Color; defaultInk?: Color; selectionBand?: Color;
   selectionEnabled?: boolean; zoomEnabled?: boolean; hitMaxDistance?: number;
   /** What a pinch does to the page. `stepped` reflows onto the page's own zoom steps and is

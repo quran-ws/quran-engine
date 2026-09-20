@@ -37,6 +37,8 @@ class QvpAndroidTest {
             assertSame(paths, page.buildPaths())
 
             val layout = page.layout(QvpLayoutSpec(690f, 1100f, 24f, 24f, 16f, 16f))
+            assertEquals(1f, QvpLayoutSpec(690f, 1100f).floats().last())
+            assertEquals(0f, QvpLayoutSpec(690f, 1100f, surahFrames = false).floats().last())
             assertTrue(layout.scale > 0)
             assertEquals(page.nLines, layout.lineDy.size)
             assertFalse(page.isClosed)

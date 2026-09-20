@@ -292,6 +292,8 @@ pub struct QvpLayoutSpec {
     /// the reflow knobs: the zoom control fills those in itself, so a host that pinches would
     /// never get to set it there.
     pub banner_zoom: f32,
+    /// 1 draws source-native surah frames on the printed page; 0 omits them. Reflow omits them.
+    pub surah_frames: u8,
 }
 
 #[repr(C)]
@@ -1480,6 +1482,7 @@ unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
         crop_right: s.crop_right,
         max_aspect_slack: s.max_aspect_slack,
         banner_zoom: s.banner_zoom,
+        surah_frames: s.surah_frames != 0,
         reflow: (s.reflow_zoom > 0.0).then(|| qvp_core::ReflowSpec {
             zoom: s.reflow_zoom,
             fill: match s.reflow_fill {

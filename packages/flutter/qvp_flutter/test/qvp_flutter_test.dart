@@ -309,12 +309,13 @@ void main() {
   });
 
   test('the reader\'s zoom control reflows the page and one loop draws it', () {
-    const spec = QvpLayoutSpec(viewportW: 390, viewportH: 844, padTop: 12, padBottom: 12, padLeft: 8, padRight: 8);
+    const spec = QvpLayoutSpec(viewportW: 390, viewportH: 844, padTop: 12, padBottom: 12, padLeft: 8, padRight: 8, surahFrames: false);
 
     // a zeroed control is stepped, on the printed page, and asks for no reflow
     const printed = QvpZoom();
     expect(printed.mode, QvpZoomMode.stepped);
     expect(page.zoomSpec(spec, printed).reflow, isNull);
+    expect(page.zoomSpec(spec, printed).surahFrames, isFalse);
 
     // the page ships its own steps, each larger than the last
     final steps = page.zoomSteps(spec);
@@ -333,6 +334,7 @@ void main() {
     final reflowed = page.zoomSpec(spec, c.zoom);
     expect(reflowed.reflow, isNotNull);
     expect(reflowed.reflow!.zoom, closeTo(steps[0], 1e-4));
+    expect(reflowed.surahFrames, isFalse);
 
     // laid out under it, the page is rows rather than the print's lines
     final l = page.layout(reflowed);

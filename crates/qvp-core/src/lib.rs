@@ -760,21 +760,21 @@ impl Page {
             if py < y0 - 0.5 || py > y1 + 0.5 {
                 continue;
             }
-            if let Some(h) = self.hit_test_in_line(li, x, py) {
+            if let Some(h) = self.hit_test_in_line(li, x, py, &l.omitted_paths) {
                 return Some(h);
             }
         }
         for (di, d) in self.data.decorations.iter().enumerate() {
             let li = self.geom.table[d.first_path as usize].line as usize;
             let py = y - l.line_dy[li];
-            if let Some(hit) = self.exact_decoration_hit(di, x, py, &[]) {
+            if let Some(hit) = self.exact_decoration_hit(di, x, py, &l.omitted_paths) {
                 return Some(hit);
             }
         }
         None
     }
 
-    fn hit_test_in_line(&self, li: usize, x: f32, y: f32) -> Option<HitExact> {
+    fn hit_test_in_line(&self, li: usize, x: f32, y: f32, omitted: &[u32]) -> Option<HitExact> {
         let q = self.quant();
         let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
         let ws = &self.line_words[li];
@@ -801,7 +801,7 @@ impl Page {
             if self.geom.table[d.first_path as usize].line as usize != li {
                 continue;
             }
-            if let Some(hit) = self.exact_decoration_hit(di, x, y, &[]) {
+            if let Some(hit) = self.exact_decoration_hit(di, x, y, omitted) {
                 return Some(hit);
             }
         }

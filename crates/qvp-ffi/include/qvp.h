@@ -103,8 +103,9 @@ typedef struct { uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; 
    name, basmalah) may get as the reader zooms, as a multiple of its printed size (0 or below = uncapped, 1 = held at the print); it is not a reflow
    knob, because the zoom control fills those in itself. reflow_gaps: 0 the printed gap
    between the two words, 1 the page's median gap. reflow_word_gap: multiplier on every gap (0 = 1). reflow_max_stretch: how far a justified row's gaps may stretch,
-   as a multiple of what they started with (0 = the engine's default, negative = no cap). */
-typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint8_t fill_height; uint32_t grid_lines; float crop_left, crop_right, max_aspect_slack, reflow_zoom; uint8_t reflow_fill, reflow_breaks, reflow_gaps; float reflow_word_gap, reflow_max_stretch, reflow_relax, banner_zoom; } QvpLayoutSpec;
+   as a multiple of what they started with (0 = the engine's default, negative = no cap). surah_frames: 1 draws source-native
+   frames around surah names on the printed page, 0 omits them; reflow omits them. */
+typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint8_t fill_height; uint32_t grid_lines; float crop_left, crop_right, max_aspect_slack, reflow_zoom; uint8_t reflow_fill, reflow_breaks, reflow_gaps; float reflow_word_gap, reflow_max_stretch, reflow_relax, banner_zoom; uint8_t surah_frames; } QvpLayoutSpec;
 /* the grid a page is designed on: the mushaf's line count (15 here, or more when a page has more) and the printed spacing */
 typedef struct { uint32_t lines; float line_spacing; } QvpGrid;
 /* fit_*: the view transform that shows the whole content (shrink to the viewport height, never enlarge, centred):

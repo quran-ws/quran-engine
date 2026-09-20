@@ -46,7 +46,8 @@ the whole mushaf: the page that holds ayah 2:255, the ayah where each juz starts
 (`NNN.words.json`) carries the other spellings of each word, such as the plain modern
 spelling used for search. The **surah-name assets** (`surah-names/NNN.svg`) contain only
 the tightly cropped calligraphic title ink, for reuse in a list without loading its full
-page. The page file still owns and renders the frame.
+page. The page file still owns the frame. Printed layouts render it by default; a host
+that supplies its own frame sets `surahFrames: false`.
 
 ## Load, draw, tap
 

@@ -196,6 +196,8 @@ pub(crate) struct RowSpec {
     /// own [`crate::LayoutSpec::banner_zoom`] against the zoom it is reflowing at, worked out
     /// once. Infinite leaves the banner growing with the page.
     pub banner_k: f32,
+    /// Whether a row that still reproduces the printed page keeps a native surah frame.
+    pub surah_frames: bool,
 }
 
 /// One unit that a row holds whole: a word, the ink printed with it (the medallion that
@@ -538,7 +540,8 @@ impl Page {
     }
 
     pub(crate) fn reflow(&self, spec: &ReflowSpec, rows: &RowSpec) -> Reflowed {
-        let RowSpec { block, margins, row_w, pitch, top, printed_spacing, rows_per_view, banner_k } = *rows;
+        let RowSpec { block, margins, row_w, pitch, top, printed_spacing, rows_per_view, banner_k, surah_frames } =
+            *rows;
         let q = self.quant();
         let d = self.data();
         let median = self.median_word_gap();
@@ -831,7 +834,8 @@ impl Page {
         let printed_y = printed_spacing.then_some(()).and(as_printed.clone());
         // The native surah frame belongs to the printed page. Once the page has truly reflowed,
         // the title grows with the reader on its own; the frame neither draws nor constrains it.
-        let omitted_header_paths = if printed_y.is_some() { Vec::new() } else { self.surah_name_ornament_paths() };
+        let omitted_header_paths =
+            if printed_y.is_some() && surah_frames { Vec::new() } else { self.surah_name_ornament_paths() };
         // Horizontal placement first: it does not depend on the heights, and the heights need
         // to know which ink of two rows ends up over which.
         let last_row = rows.len().saturating_sub(1);

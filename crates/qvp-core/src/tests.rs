@@ -811,6 +811,22 @@ fn reflow_omits_a_native_surah_frame_without_constraining_its_title() {
     assert_eq!(framed.hit_test_exact(25.0, 0.0), None);
     assert_eq!(framed.hit_test_exact_view(hollow_point.0, hollow_point.1), None);
 
+    let hidden_spec = LayoutSpec { surah_frames: false, ..printed_spec };
+    let hidden = framed.layout(&hidden_spec).clone();
+    let bare_printed = bare.layout(&printed_spec).clone();
+    assert_eq!(hidden.omitted_paths, vec![frame_path]);
+    assert!(!framed.layout_draw_list().iter().any(|draw| draw.path == frame_path));
+    assert!(framed.layout_draw_list().iter().any(|draw| draw.path == title_path));
+    assert_eq!(hidden.content_h, bare_printed.content_h);
+    assert_eq!(hidden.line_slots, bare_printed.line_slots);
+    let hidden_frame_point = placed_point(&framed, &hidden, frame_path, 11.0, -9.0);
+    assert_eq!(framed.hit_test_exact_view(hidden_frame_point.0, hidden_frame_point.1), None);
+    let hidden_title_point = placed_point(&framed, &hidden, title_path, 25.0, 5.0);
+    assert_eq!(
+        framed.hit_test_exact_view(hidden_title_point.0, hidden_title_point.1),
+        Some(HitExact { word: NONE, path: title_path, decoration })
+    );
+
     let reflow_spec = LayoutSpec { reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }), ..printed_spec };
     let framed_layout = framed.layout(&reflow_spec).clone();
     let bare_layout = bare.layout(&reflow_spec).clone();

@@ -41,6 +41,7 @@ fn main() {
                 max_aspect_slack: slack,
                 reflow: None,
                 banner_zoom: 0.0,
+                surah_frames: true,
             };
             let to_fill = page.line_spacing_to_fill(&spec, f32::INFINITY);
             let wasted = page.wasted_fraction(&spec);

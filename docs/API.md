@@ -110,7 +110,8 @@ print. `hitAreas()` returns the same partition as boxes (no dead zones on a line
 ```js
 const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRight,
                        lineSpacing: 1.0, fillHeight: false, gridLines: 0,
-                       cropLeft: 0, cropRight: 0, maxAspectSlack: 0, bannerZoom: 0});
+                       cropLeft: 0, cropRight: 0, maxAspectSlack: 0, bannerZoom: 0,
+                       surahFrames: true});
 // L = {scale, offsetX, offsetY, contentW, contentH, lineSpacing, lineDy[], slots[], fitScale, fitX, fitY}
 page.layoutLineSpacingToFill(spec)   // the lineSpacing multiplier that fills the padded viewport of spec
 page.layoutWastedFraction(spec)      // the share of the padded viewport left empty at fit-to-width
@@ -136,6 +137,11 @@ frame around the printed name wants, since the frame has a shape to keep. It is 
 and not one of the reflow knobs, because the reader's zoom control fills those in itself
 (`page.zoomSpec`), so a host that pinches never gets to set one; only a reflowed page grows a
 banner at all.
+
+**`surahFrames` controls the source-native frame around a surah name.** It defaults to
+`true`, preserving the printed page. Set it to `false` when the host supplies its own frame;
+the native frame is then omitted from drawing and exact hit testing. Reflowed titles and the
+reusable title SVGs are frameless either way.
 
 **What this is for.** A printed mushaf page is squatter than a phone screen: fitted to the
 width of a tall viewport it leaves a band of empty paper top and bottom. The layout knobs

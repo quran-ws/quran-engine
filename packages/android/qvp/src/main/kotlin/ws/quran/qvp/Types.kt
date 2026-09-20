@@ -135,7 +135,9 @@ data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop:
                           * its printed size. 0 = uncapped (it grows until it fills the row); 1 = held at the print.
                           * It lives here, not on [reflow], because a host that pinches never builds a reflow spec —
                           * the zoom control does, from this one. */
-                         val bannerZoom: Float = 0f) {
+                         val bannerZoom: Float = 0f,
+                         /** Draw source-native frames around surah names on the printed page. Reflow stays frameless. */
+                         val surahFrames: Boolean = true) {
     internal fun floats(): FloatArray {
         val base = floatArrayOf(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, if (fillHeight) 1f else 0f, gridLines.toFloat(), cropLeft, cropRight, maxAspectSlack)
         val r = reflow
@@ -143,7 +145,8 @@ data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop:
         // reflow spec (zoom 0 = the printed page, 255 = "ask the engine"), so a knob that
         // outlives the reflow — bannerZoom — reaches the engine on a printed page too.
         return base + floatArrayOf(r?.zoom ?: 0f, (r?.fill?.id ?: 255).toFloat(), (r?.breaks?.id ?: 255).toFloat(),
-                                   (r?.gaps?.id ?: 1).toFloat(), r?.wordGap ?: 1f, r?.maxStretch ?: 0f, r?.relax ?: -1f, bannerZoom)
+                                   (r?.gaps?.id ?: 1).toFloat(), r?.wordGap ?: 1f, r?.maxStretch ?: 0f, r?.relax ?: -1f, bannerZoom,
+                                   if (surahFrames) 1f else 0f)
     }
 }
 

@@ -222,18 +222,20 @@ jfloatArray FN(hitAreas)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) {
 /* ───────── layout ───────── */
 /* spec {vw, vh, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft,
    cropRight, maxAspectSlack} and, when the array carries them, the reflow seven:
-   {zoom, fill, breaks, gaps, wordGap, maxStretch, relax}. A shorter array is a page as printed. */
+   {zoom, fill, breaks, gaps, wordGap, maxStretch, relax}, bannerZoom and surahFrames. A shorter
+   array is a page as printed and keeps native surah frames. */
 static QvpLayoutSpec layout_spec(JNIEnv* env, jfloatArray spec) {
-    jfloat f[20] = { 0 };
+    jfloat f[21] = { 0 };
     jsize n = (*env)->GetArrayLength(env, spec);
-    if (n > 20) n = 20;
+    if (n > 21) n = 21;
     (*env)->GetFloatArrayRegion(env, spec, 0, n, f);
     QvpLayoutSpec s = { f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7] > 0.5f ? 1u : 0u, (uint32_t)f[8], f[9], f[10], f[11],
                         /* reflow_zoom */ n > 12 ? f[12] : 0.0f,
                         /* fill, breaks, gaps: 255 asks the engine for its own default */
                         n > 13 ? (uint8_t)f[13] : 255u, n > 14 ? (uint8_t)f[14] : 255u, n > 15 ? (uint8_t)f[15] : 1u,
                         n > 16 ? f[16] : 1.0f, n > 17 ? f[17] : 0.0f, n > 18 ? f[18] : -1.0f,
-                        /* banner_zoom: 0 leaves a banner growing with the page */ n > 19 ? f[19] : 0.0f };
+                        /* banner_zoom: 0 leaves a banner growing with the page */ n > 19 ? f[19] : 0.0f,
+                        /* surah_frames: native frames are on unless the host turns them off */ n > 20 ? f[20] > 0.5f : 1u };
     return s;
 }
 
@@ -295,11 +297,12 @@ jfloatArray FN(zoomToStep)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfl
 jfloatArray FN(zoomSpec)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray zoom) {
     QvpLayoutSpec s = layout_spec(env, spec); QvpZoom z = zoom_of(env, zoom); QvpLayoutSpec out;
     qvp_zoom_spec(PG(h), &s, &z, &out);
-    float f[20] = { out.viewport_w, out.viewport_h, out.pad_top, out.pad_bottom, out.pad_left, out.pad_right, out.line_spacing,
+    float f[21] = { out.viewport_w, out.viewport_h, out.pad_top, out.pad_bottom, out.pad_left, out.pad_right, out.line_spacing,
                     out.fill_height ? 1.0f : 0.0f, (float)out.grid_lines, out.crop_left, out.crop_right, out.max_aspect_slack,
                     out.reflow_zoom, (float)out.reflow_fill, (float)out.reflow_breaks, (float)out.reflow_gaps,
-                    out.reflow_word_gap, out.reflow_max_stretch, out.reflow_relax, out.banner_zoom };
-    return floats(env, f, 20);
+                    out.reflow_word_gap, out.reflow_max_stretch, out.reflow_relax, out.banner_zoom,
+                    out.surah_frames ? 1.0f : 0.0f };
+    return floats(env, f, 21);
 }
 jfloatArray FN(zoomCarried)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray zoom) {
     QvpLayoutSpec s = layout_spec(env, spec); QvpZoom z = zoom_of(env, zoom), out;
