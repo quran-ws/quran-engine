@@ -1618,8 +1618,8 @@ pub unsafe extern "C" fn qvp_layout_path_groups(page: *const Page, out: *mut u32
         n
     })
 }
-/// Paths the current layout does not draw: on a reflowed page the running head and the page
-/// number, which the print puts outside the page box. Returns how many, or the count needed.
+/// Paths the current layout does not draw: sheet furniture, and a native surah frame once
+/// the page has reflowed. Returns how many, or the count needed.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_layout_omitted_paths(page: *const Page, out: *mut u32, cap: u32) -> u32 {
     guard(|| {

@@ -4,15 +4,18 @@ The engine ships code; an app loads page data. For the web that data has to come
 with CORS, so each release is mirrored to a CDN under versioned, immutable URLs:
 
 ```
-https://cdn.quran.ws/qvp/v0.3.0/manifest.json
-https://cdn.quran.ws/qvp/v0.3.0/001.qvp
-https://cdn.quran.ws/qvp/v0.3.0/001.words.json
-https://cdn.quran.ws/qvp/v0.3.0/atlas.qva
-https://cdn.quran.ws/qvp/v0.3.0/hafs-kfgqpc.tar.br
+https://cdn.quran.ws/qvp/<version>/manifest.json
+https://cdn.quran.ws/qvp/<version>/001.qvp
+https://cdn.quran.ws/qvp/<version>/001.words.json
+https://cdn.quran.ws/qvp/<version>/atlas.qva
+https://cdn.quran.ws/qvp/<version>/surah-names/001.svg
+https://cdn.quran.ws/qvp/<version>/hafs-kfgqpc.tar.br
 ```
 
-A reader fetches the pages near its position and caches them; a service worker can prefetch
-a juz from the manifest. Nothing needs the whole 92 MB up front.
+A reader fetches the pages near its position and caches them. Surah lists can load the 114
+small title SVGs without loading any page file; the atlas supplies aggregate lookup and
+search metadata. A service worker can prefetch a juz from the manifest. Nothing needs the
+whole data set up front.
 
 ## The layout
 
@@ -62,20 +65,19 @@ resolve.
   That is what lets everything be served `Cache-Control: public, max-age=31536000, immutable`,
   and why `cdn-put.sh` refuses a folder that already exists. Rewriting a published object
   needs a manual cache purge to take effect.
-- **Pages are stored raw and compressed at the edge**, negotiating zstd, brotli or gzip per
-  client: about 67 KB per page, 41.8 MB for the whole mushaf fetched page by page. Storing
-  raw means the bytes a client verifies are the bytes the release signed.
+- **Pages and surah-name SVGs are stored raw and compressed at the edge**, negotiating
+  zstd, brotli or gzip per client. The bytes a client verifies are the bytes the release
+  signed.
 - **`manifest.json`** lists every file with its size and sha256, the bundle, and the data
   release's own `VERSION.json`. It is how a client prefetches a page range and verifies what
   it got without 604 HEAD requests. It is the one object **not** cached as immutable — five
   minutes, because an index cached for a year cannot be corrected without a purge.
-- **Two shapes of the same data.** The per-page objects are what a reader fetches. The bundle
-  is for downloading the whole mushaf: one request instead of 1,212, and 26 MB instead of
-  41.8 MB, because one brotli stream over all 604 pages finds the repetition between them.
-  gzip cannot — its 32 KB window never holds two pages at once — which is why the release
-  `.tar.gz` is 42 MB and saves nothing.
+- **Two shapes of the same data.** The individual objects are what a reader fetches. The
+  bundle carries all 604 pages, 604 word sidecars, both atlas files, release metadata and
+  114 surah-title assets in one request. One brotli stream finds repetition across files;
+  gzip's 32 KB window cannot exploit repetition across distant archive members.
 - **The bundle is an opaque brotli file.** No `Content-Encoding`: every client receives the
-  same 26 MB and decodes it. iOS uses `COMPRESSION_BROTLI` (iOS 15+), which takes 0.31 s for
+  same bytes and decodes them. iOS uses `COMPRESSION_BROTLI` (iOS 15+), which takes 0.31 s for
   the whole mushaf. Browsers have no brotli decoder in JavaScript — `DecompressionStream`
   supports only gzip, deflate and deflate-raw — so a web app should fetch pages individually
   instead; 20 pages arrive in 36 ms.
@@ -89,7 +91,7 @@ signed tarball, never from a working tree:
 
 ```
 scripts/publish-cdn.sh v0.2.0 --from-release    # verify sha256, extract, stage, upload
-scripts/publish-cdn.sh v0.2.0 --stage-only      # build dist/cdn/v0.2.0, upload nothing
+scripts/publish-cdn.sh v0.2.0 --from-release --stage-only  # stage, upload nothing
 ```
 
 `.github/workflows/publish-cdn.yml` runs the first form when a release is published, then
@@ -121,8 +123,8 @@ Each repository publishes its own folder. To add one:
 ## Infrastructure
 
 Cloudflare R2 bucket `cdn-quran-ws`, with `cdn.quran.ws` as its custom domain. Serving this
-data needs control of compression and of cache headers, and a per-version copy of a 92 MB
-dataset needs room to grow.
+data needs control of compression and cache headers, and every immutable data version needs
+room to grow.
 
 Zone settings these URLs depend on, all on `quran.ws`:
 

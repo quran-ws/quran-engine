@@ -595,18 +595,6 @@ fn layout_fit_crop_and_aspect_bound() {
         })
         .clone();
     assert!((l.scale - 2.5).abs() < 1e-6 && (l.offset_x + 25.0).abs() < 1e-6, "{l:?}");
-    // the spec-aware gap subtracts the padding once, in the engine
-    let spec = LayoutSpec {
-        viewport_w: 220.0,
-        viewport_h: 600.0,
-        pad_left: 10.0,
-        pad_right: 10.0,
-        pad_top: 25.0,
-        pad_bottom: 25.0,
-        grid_lines: 15,
-        ..Default::default()
-    };
-    assert!((p.line_spacing_to_fill(&spec, f32::INFINITY) - 1.0).abs() > 0.0 || true);
 }
 
 #[test]
@@ -739,6 +727,119 @@ fn packed_page() -> Page {
         strings: std::mem::take(&mut strings),
     };
     Page::load(&encode(&data)).unwrap()
+}
+
+fn page_with_surah_frame(frame: bool) -> (Page, Option<u32>, u32, u32) {
+    let mut data = page_data();
+    for line in &mut data.lines {
+        line.line_number += 1;
+    }
+    data.lines.insert(0, LineRec { line_number: 1, first_word: 0, n_words: 0, bbox: IBox::EMPTY });
+    for word in &mut data.words {
+        word.line_index += 1;
+    }
+
+    let add = |data: &mut PageData, cmds: &[Cmd], kind: PathKind| {
+        let bbox = cmds_bbox(cmds);
+        let op_off = data.ops.len() as u32;
+        encode_cmds(cmds, bbox.x0, bbox.y0, &mut data.ops);
+        let pi = data.paths.len() as u32;
+        data.paths.push(PathRec {
+            kind,
+            mark: Mark::None,
+            family: Family::None,
+            flags: PF_EVENODD,
+            ox: bbox.x0,
+            oy: bbox.y0,
+            op_off,
+            op_len: data.ops.len() as u32 - op_off,
+            bbox,
+        });
+        pi
+    };
+
+    // The frame spans the printed text column and deliberately sits off the title's vertical
+    // centre. It is hollow, like the real opening frames: empty space inside it must not become
+    // a decoration hit. Reflow must ignore both extents, not merely hide paint after measuring it.
+    let frame_path = frame.then(|| {
+        let mut outline = square(1000, -1000, 4000, 1000);
+        outline.extend(square(1200, -800, 3800, 800));
+        add(&mut data, &outline, PathKind::Ornament)
+    });
+    let title_path = add(&mut data, &square(2000, 300, 3000, 700), PathKind::HeaderInk);
+    let first_path = frame_path.unwrap_or(title_path);
+    let mut bbox = data.paths[title_path as usize].bbox;
+    if let Some(frame_path) = frame_path {
+        bbox.union(&data.paths[frame_path as usize].bbox);
+    }
+    let decoration = data.decorations.len() as u32;
+    data.decorations.push(DecoRec {
+        kind: DecoKind::SurahName,
+        surah: 1,
+        ayah: 0,
+        text: NONE_U16,
+        first_path,
+        n_paths: u16::from(frame) + 1,
+        line: 0,
+        bbox,
+    });
+    data.canonicalize_ops();
+    (Page::from_data(data), frame_path, title_path, decoration)
+}
+
+fn placed_point(page: &Page, layout: &Layout, path: u32, x: f32, y: f32) -> (f32, f32) {
+    let line = page.geometry().table[path as usize].line;
+    let (x, y) = layout.placement(path, line).apply(x, y);
+    (layout.offset_x + x * layout.scale, layout.offset_y + y * layout.scale)
+}
+
+#[test]
+fn reflow_omits_a_native_surah_frame_without_constraining_its_title() {
+    let (mut framed, Some(frame_path), title_path, decoration) = page_with_surah_frame(true) else { unreachable!() };
+    let (mut bare, None, bare_title, _) = page_with_surah_frame(false) else { unreachable!() };
+    let printed_spec = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+
+    let printed = framed.layout(&printed_spec).clone();
+    assert!(printed.omitted_paths.is_empty());
+    assert!(framed.layout_draw_list().iter().any(|draw| draw.path == frame_path));
+    let frame_point = placed_point(&framed, &printed, frame_path, 11.0, -9.0);
+    assert_eq!(
+        framed.hit_test_exact_view(frame_point.0, frame_point.1),
+        Some(HitExact { word: NONE, path: frame_path, decoration })
+    );
+    let hollow_point = placed_point(&framed, &printed, frame_path, 25.0, 0.0);
+    assert_eq!(framed.hit_test_exact(25.0, 0.0), None);
+    assert_eq!(framed.hit_test_exact_view(hollow_point.0, hollow_point.1), None);
+
+    let reflow_spec = LayoutSpec { reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }), ..printed_spec };
+    let framed_layout = framed.layout(&reflow_spec).clone();
+    let bare_layout = bare.layout(&reflow_spec).clone();
+    assert!(!framed_layout.reflow.as_ref().unwrap().as_printed);
+    assert_eq!(framed_layout.omitted_paths, vec![frame_path]);
+    assert!(!framed.layout_draw_list().iter().any(|draw| draw.path == frame_path));
+    assert!(framed.layout_draw_list().iter().any(|draw| draw.path == title_path));
+
+    let title_placement = framed_layout.placement(title_path, 0);
+    let bare_placement = bare_layout.placement(bare_title, 0);
+    assert_eq!(title_placement, bare_placement, "the frame must not move or resize the title");
+    assert!((framed_layout.content_h - bare_layout.content_h).abs() < 0.01);
+    assert_eq!(framed_layout.line_slots, bare_layout.line_slots);
+
+    let omitted_point = placed_point(&framed, &framed_layout, frame_path, 15.0, -5.0);
+    assert_eq!(framed.hit_test_exact_view(omitted_point.0, omitted_point.1), None);
+    let title_point = placed_point(&framed, &framed_layout, title_path, 25.0, 5.0);
+    assert_eq!(
+        framed.hit_test_exact_view(title_point.0, title_point.1),
+        Some(HitExact { word: NONE, path: title_path, decoration })
+    );
+
+    // Asking for reflow at the printed size dispatches to the printed layout, so the native
+    // frame remains. Only a page actually broken onto enlarged rows omits it.
+    let at_print = framed
+        .layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 1.0, ..Default::default() }), ..printed_spec })
+        .clone();
+    assert!(at_print.omitted_paths.is_empty());
+    assert!(framed.layout_draw_list().iter().any(|draw| draw.path == frame_path));
 }
 
 #[test]

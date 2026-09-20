@@ -6,6 +6,9 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Added
+- The page-data build emits `surah-names/001.svg` through `114.svg`: tightly cropped,
+  title-only KFGQPC calligraphy for lists and navigation. Frames remain in the page
+  files; `atlas.qva` remains the cross-Mushaf lookup and search index.
 - `qvp_layout_printed_height`: the page's height laid out for a spec at the printed pitch, in
   viewport px — `content_h` before fill-height adds any leading. A host deciding whether a page
   fits a box, or how far to shrink it to keep it whole, asks this before it sizes the canvas,
@@ -50,6 +53,11 @@ All notable changes to the engine and its packages. The format follows
   stays the engine's answer for a host that would rather shrink. Both knobs lay the page out again
   when set, and the band a pinch paints follows the view transform, so a magnify peek on a
   host-scrolled page no longer leaves a blank box under the fingers.
+- A native surah frame stored as `PathKind::Ornament` stays with the printed page but no
+  longer freezes the title at the frame's width when the page reflows. The reflow omits the
+  frame from drawing, sizing and hit testing; the title keeps growing with the reader. On the
+  printed page, exact hit testing follows the visible frame ink instead of treating its large
+  transparent centre as part of the title.
 - `qvp_layout_line_spacing_to_fill` answers the spacing the page is really laid out at. It
   measured the full printed width and the page's own height against the viewport, while
   `qvp_layout` fits the CROPPED width and sits a short page on the grid a full page fills —

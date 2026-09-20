@@ -12,10 +12,12 @@ and under what terms an app may use it.
 | `NNN.words.json` | that page's five text forms per word key: `rasm_uthmani`, `rasm_imlai`, `qpc`, `rasm`, `search` |
 | `atlas.qva` | the cross-page index in the QVA1 format: pages, surahs, the 240 `rubu_al_hizb` boundaries |
 | `atlas.json` | the same atlas as JSON, for tooling |
-| `VERSION.json` | provenance: data version, source release, engine commit, format version, page count, a digest of every file |
+| `surah-names/NNN.svg` | the calligraphic title ink for surah `NNN`, tightly cropped for lists and navigation |
+| `VERSION.json` | provenance: data version, source release, engine commit, format version, page and surah-name counts, and digests of every generated data file |
 
-Sizes, for the whole mushaf: 604 pages, 77,432 words, 6,236 ayahs, 114 surahs; about 82 MB
-raw, 42 MB as the release tarball, 37 MB brotli-compressed on the CDN.
+The data covers 604 pages, 77,432 words, 6,236 ayahs and 114 surahs. The reusable
+surah-title SVGs add about 1.8 MB before transport compression; each release manifest records
+exact sizes and digests.
 
 ## Where it comes from
 
@@ -31,9 +33,15 @@ and fixed there; the converter never patches data.
 ```sh
 scripts/sync-test-data.sh                                    # the source bundle by tag, checksum verified
 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity   # every page passes the pixel gate
-cargo run -p qvp-convert --release -- batch pages dist/pages  # NNN.qvp, NNN.words.json, atlas.qva, atlas.json
+cargo run -p qvp-convert --release -- batch pages dist/pages  # pages, sidecars, atlas, surah-names/
 scripts/package-data.sh X.Y.Z                                # VERSION.json, the tarball, its checksum
 ```
+
+The batch also projects each converted `SurahName` decoration into
+`surah-names/001.svg` through `114.svg`. Each file contains only the calligraphic
+`header_ink`, tightly bounded and styleable through `currentColor`; the page file keeps its
+frame. The root carries the surah number, source page, Arabic, Latin and English names,
+revelation place and ayah count. `atlas.qva` remains the aggregate lookup and search index.
 
 The identity gate renders each source page and its converted page at four times the page
 size and compares them pixel by pixel; the conversion keeps every curve and point, and
@@ -46,7 +54,8 @@ that naming) and is never rewritten; a correction is a new version.
 - The GitHub release: `https://github.com/quran-ws/quran-engine/releases`, the
   `quran-engine-pages-hafs-kfgqpc.tar.gz` asset and its `.sha256`.
 - The CDN, for apps that load pages over HTTP:
-  `https://cdn.quran.ws/qvp/<version>/NNN.qvp`, immutable per version, with a
+  `https://cdn.quran.ws/qvp/<version>/NNN.qvp` and
+  `https://cdn.quran.ws/qvp/<version>/surah-names/NNN.svg`, immutable per version, with a
   `manifest.json` of digests (`docs/CDN.md`).
 - `scripts/sync-test-data.sh` fetches the release into `dist/pages/` for development and
   tests; `scripts/sync-example-data.sh` copies the 29-page example set into an example app.

@@ -91,7 +91,8 @@ pixel-diff gate against the source SVG. A source problem goes in
 
 ## Data is not code
 
-Packages ship code only. Apps load page data (`NNN.qvp`, `atlas.qva`, `NNN.words.json`).
+Packages ship code only. Apps load page data (`NNN.qvp`, `atlas.qva`,
+`NNN.words.json`, `surah-names/NNN.svg`).
 The built data is published as a GitHub release with a CDN mirror and is not committed.
 Examples bundle a sample as gitignored assets.
 

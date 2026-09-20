@@ -121,8 +121,8 @@ pub struct Layout {
     pub groups: Vec<Placement>,
     /// Group of every path. Empty without reflow, where a path's group is its printed line.
     pub path_group: Vec<u32>,
-    /// Paths this layout does not draw: the sheet's furniture on a reflowed page (running
-    /// head, page number), which the print puts outside the page box. Sorted.
+    /// Paths this layout does not draw: sheet furniture and a printed surah frame once the
+    /// page has reflowed onto rows of its own. Sorted.
     pub omitted_paths: Vec<u32>,
     /// The rows the words were broken onto, when this layout reflowed the page.
     pub reflow: Option<Reflowed>,
@@ -467,7 +467,11 @@ impl Page {
             let deco = &self.data.decorations[di as usize];
             omitted_paths.extend(deco.first_path..deco.first_path + deco.n_paths as u32);
         }
+        if !flow.as_printed {
+            omitted_paths.extend(self.surah_name_ornament_paths());
+        }
         omitted_paths.sort_unstable();
+        omitted_paths.dedup();
         let mut layout = Layout {
             scale,
             // the block's own left margin, kept at the reader's size

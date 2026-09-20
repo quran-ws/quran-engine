@@ -569,3 +569,40 @@ impl<'a> Ctx<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::convert;
+    use qvp_format::{decode, encode, DecoKind, PathKind, PF_EVENODD};
+
+    #[test]
+    fn surah_name_keeps_ornament_before_title() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" data-page="1">
+          <g class="line" data-line="1">
+            <g class="surah-name" data-sid="3" data-surah-name-ar="آل عمران">
+              <path data-kind="ornament" fill-rule="evenodd" d="M0 0H100V20H0ZM20 5V15H80V5Z"/>
+              <path data-kind="header_ink" d="M45 7H55V13H45Z"/>
+            </g>
+          </g>
+        </svg>"#;
+        let converted = convert(svg).unwrap();
+        assert!(converted.report.warnings.is_empty(), "{:?}", converted.report.warnings);
+        assert_eq!(converted.page.lines.len(), 1);
+        assert_eq!(converted.page.decorations.len(), 1);
+        let decoration = converted.page.decorations[0];
+        assert_eq!(decoration.kind, DecoKind::SurahName);
+        assert_eq!(decoration.surah, 3);
+        assert_eq!(decoration.n_paths, 2);
+        let paths = &converted.page.paths
+            [decoration.first_path as usize..(decoration.first_path + decoration.n_paths as u32) as usize];
+        assert_eq!(paths[0].kind, PathKind::Ornament);
+        assert_ne!(paths[0].flags & PF_EVENODD, 0);
+        assert_eq!(paths[1].kind, PathKind::HeaderInk);
+
+        let mut page = converted.page;
+        page.canonicalize_ops();
+        let decoded = decode(&encode(&page)).unwrap();
+        assert_eq!(decoded.paths[decoration.first_path as usize].kind, PathKind::Ornament);
+        assert_eq!(decoded.paths[decoration.first_path as usize + 1].kind, PathKind::HeaderInk);
+    }
+}

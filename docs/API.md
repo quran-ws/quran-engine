@@ -28,8 +28,9 @@ and `qvp_hit_test(...)` in C.
   `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.decoration('ayah-mark')`, `Sel.decorationIndex(d)`.
 - **The engine computes, the host renders.** Hit-testing, layout, styling, highlight bands,
   masks and search are engine calls. A wrapper marshals the calls and renders the results.
-- **Data is separate from code.** Pages (`NNN.qvp`), the atlas (`atlas.qva`) and the
-  optional text sidecars (`NNN.words.json`) are assets your app loads; no package bundles them.
+- **Data is separate from code.** Pages (`NNN.qvp`), the atlas (`atlas.qva`), optional text
+  sidecars (`NNN.words.json`) and reusable title-only `surah-names/NNN.svg` assets are loaded
+  by the app; no package bundles them.
 
 ## Loading
 
@@ -358,7 +359,7 @@ path's group follows the job it does, not only the record it belongs to.
 
 **What a renderer draws.** `page.layoutDrawList(bandTop, bandBottom)` is every drawing this
 layout makes, in drawing order: `{path, placement}` pairs into `page.layoutPlacements()`. A
-path the layout leaves out — the sheet's furniture on a reflowed page — never appears, a sajdah
+path the layout leaves out — sheet furniture, or a native surah frame once the page reflows — never appears, a sajdah
 line stroked over the two rows its words landed on appears twice, and a printed page hands back
 each path under its own line. So one loop draws any page, and no host has to know which case it
 is in:

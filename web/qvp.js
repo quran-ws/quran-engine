@@ -414,7 +414,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const np = ex.qvp_layout_path_groups(this.h, 0, 0);
       if (np) { const pp = this.e.buf(np * 4); ex.qvp_layout_path_groups(this.h, pp, np); L.pathGroup = new Uint32Array(this.e.mem.buffer.slice(pp, pp + np * 4)); }
       else L.pathGroup = null;
-      // paths this layout leaves undrawn: the sheet's furniture on a reflowed page
+      // paths this layout leaves undrawn: sheet furniture and a native surah frame in reflow
       const no = ex.qvp_layout_omitted_paths(this.h, 0, 0);
       if (no) { const op = this.e.buf(no * 4); ex.qvp_layout_omitted_paths(this.h, op, no); L.omitted = new Set(new Uint32Array(this.e.mem.buffer, op, no)); }
       else L.omitted = null;

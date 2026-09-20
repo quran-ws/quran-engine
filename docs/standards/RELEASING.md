@@ -35,10 +35,12 @@ on 2029-09-13 and must be replaced in GitHub before then.
 1. `scripts/sync-test-data.sh` fetches the `quran-svg-elements` bundle (`pages/`, `index/`); note its tag.
 2. `QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity`: all 604 pages
    must pass the pixel gate.
-3. `cargo run -p qvp-convert --release -- batch pages dist/pages`
+3. `cargo run -p qvp-convert --release -- batch pages dist/pages`; this also writes the 114
+   reusable, title-only `surah-names/NNN.svg` assets.
 4. `scripts/package-data.sh X.Y.Z`: writes `VERSION.json` (data version, source bundle
-   version, engine commit, format version, page count, sha256 of every file), the upstream
-   rights notice, and `dist/quran-engine-pages-hafs-kfgqpc.tar.gz` with its `.sha256`.
+   version, engine commit, format version, page and surah-name counts, and SHA-256 digests
+   of every generated page, sidecar, atlas and surah-name asset), the upstream rights notice,
+   and `dist/quran-engine-pages-hafs-kfgqpc.tar.gz` with its `.sha256`.
 5. `gh release create data-vX.Y.Z` with the tarball, the checksum and a sample page.
    `publish-cdn.yml` mirrors it to `cdn.quran.ws/qvp/` under an immutable folder.
 

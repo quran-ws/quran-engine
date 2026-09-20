@@ -213,7 +213,7 @@ public final class QvpPage {
     }
     /// The group of every path. Empty without reflow, where a path's group is its printed line.
     public func layoutPathGroups() -> [Int] { collect(4096) { (o: UnsafeMutablePointer<UInt32>, c) in qvp_layout_path_groups(p, o, c) }.map(Int.init) }
-    /// Paths this layout does not draw: the sheet's furniture on a reflowed page.
+    /// Paths this layout does not draw: sheet furniture and a native surah frame in reflow.
     public func layoutOmittedPaths() -> [Int] { collect(64) { (o: UnsafeMutablePointer<UInt32>, c) in qvp_layout_omitted_paths(p, o, c) }.map(Int.init) }
     /// Everything the current layout draws, in drawing order: each path once under the
     /// placement it belongs to, and again for every row a decoration is repeated over. A path
