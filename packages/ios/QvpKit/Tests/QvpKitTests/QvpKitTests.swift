@@ -150,6 +150,11 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(page.grid.lines, 15)
         let wf = page.layoutWastedFraction(QvpLayoutSpec(viewportW: 600, viewportH: 1000))
         XCTAssertTrue(wf >= 0 && wf <= 1)
+        // The printed height is the flat layout's contentH, and grows with the width.
+        let flat = QvpLayoutSpec(viewportW: 600, viewportH: 1000)
+        XCTAssertEqual(page.layoutPrintedHeight(flat), page.layout(flat).contentH, accuracy: 0.01)
+        XCTAssertGreaterThan(page.layoutPrintedHeight(QvpLayoutSpec(viewportW: 900, viewportH: 1000)),
+                             page.layoutPrintedHeight(flat))
     }
 
     func testStyles() {
@@ -470,6 +475,112 @@ final class QvpKitTests: XCTestCase {
         c.setBounds(Self.readingBox, fromCanvas: 1)
         XCTAssertGreaterThan(c.cropLeft + c.cropRight, 0, "page 042 has printed margins to crop")
         XCTAssertEqual(c.printedPitch, try XCTUnwrap(p.currentLayout).lineSpacing, accuracy: 0.01)
+    }
+
+    /// A host that scrolls the page itself puts a PRINTED page too tall for its box in that
+    /// scroll view, whole: the engine still answers `fitScale` for a host that would rather
+    /// shrink it, and this renderer no longer applies it. The layout is measured in the box
+    /// the host named, so sizing the canvas to the page — which host scrolling requires —
+    /// changes nothing.
+    @MainActor func testHostScrolledPrintedPageIsNotShrunk() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.fillHeight = true
+        c.hostScrolls = true
+        c.hostViewportHeight = 400   // a box the page cannot fit at its printed pitch
+        c.page = p
+        c.setBounds(CGSize(width: Self.readingBox.width, height: 400), fromCanvas: 1)
+        let l = try XCTUnwrap(p.currentLayout)
+        XCTAssertGreaterThan(l.contentH, 400, "the page is taller than the box at its printed pitch")
+        XCTAssertLessThan(l.fitScale, 1, "the engine still says how much a host would have to shrink it")
+        XCTAssertEqual(c.viewScale, 1, "and this renderer does not")
+        XCTAssertEqual(c.viewOy, 0, "the page opens at its top and the host scrolls it")
+        XCTAssertGreaterThan(l.fitX, 0, "the engine centres the page it would have shrunk")
+        XCTAssertEqual(c.viewOx, 0, accuracy: 0.01,
+                       "the unshrunk page fills the width, so that centring is not applied either")
+        // The host sizes the canvas to the page it was just told about.
+        c.setBounds(CGSize(width: Self.readingBox.width, height: CGFloat(l.contentH)), fromCanvas: 1)
+        XCTAssertEqual(try XCTUnwrap(p.currentLayout).contentH, l.contentH, accuracy: 0.01,
+                       "measured in the box, the layout does not follow the canvas it drew")
+        XCTAssertEqual(c.viewScale, 1)
+    }
+
+    /// The layout is measured in `hostViewportHeight`, never in the canvas: a page that fits
+    /// is spread to fill the BOX, a canvas the host padded does not grow the page by that
+    /// padding on every pass, and a new box is a new layout.
+    @MainActor func testHostScrolledLayoutIsMeasuredInTheBox() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.fillHeight = true
+        c.hostScrolls = true
+        c.hostViewportHeight = 800   // a box the page fits, with room fill-height spreads into
+        c.page = p
+        c.setBounds(CGSize(width: Self.readingBox.width, height: 800), fromCanvas: 1)
+        XCTAssertEqual(try XCTUnwrap(p.currentLayout).contentH, 800, accuracy: 0.01, "fill-height fills the box")
+        // A host that pads the page hands back a canvas 12pt taller than the page it was told.
+        c.setBounds(CGSize(width: Self.readingBox.width, height: 812), fromCanvas: 1)
+        XCTAssertEqual(try XCTUnwrap(p.currentLayout).contentH, 800, accuracy: 0.01,
+                       "the canvas is the layout's output, not its viewport — no feedback")
+        let before = c.layoutRevision
+        c.hostViewportHeight = 700
+        XCTAssertEqual(try XCTUnwrap(p.currentLayout).contentH, 700, accuracy: 0.01, "a new box is a new fill target")
+        XCTAssertGreaterThan(c.layoutRevision, before, "and the host hears of it")
+    }
+
+    /// A magnify peek under host scrolling moves the view transform, and the band a pinch
+    /// paints is cut in the SCALED page — it must stay under the fingers as the page grows.
+    @MainActor func testMagnifyPeekUnderHostScrollsKeepsTheBandUnderTheFingers() async throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.fillHeight = true
+        c.hostScrolls = true
+        c.hostViewportHeight = 400
+        c.zoomMode = .magnify
+        c.zoomSpringsBack = true
+        c.page = p
+        c.setBounds(CGSize(width: Self.readingBox.width, height: 400), fromCanvas: 1)
+        let pageHeight = CGFloat(try XCTUnwrap(p.currentLayout).contentH)
+        c.setBounds(CGSize(width: Self.readingBox.width, height: pageHeight), fromCanvas: 1)
+        XCTAssertEqual(c.bandTop, 0); XCTAssertEqual(c.bandHeight, pageHeight, accuracy: 0.01)
+
+        let focal = CGPoint(x: Self.readingBox.width / 2, y: 500)
+        c.pinch(2, at: focal)
+        XCTAssertEqual(c.viewScale, 2, accuracy: 1e-6)
+        // Where the fingers' point on the page is now, in the scaled page.
+        let scaledFocal = focal.y - c.viewOy
+        XCTAssertEqual(scaledFocal, focal.y * 2, accuracy: 1e-3, "the point under the fingers scaled about them")
+        XCTAssertLessThanOrEqual(c.bandTop, scaledFocal, "the band starts at or above the fingers")
+        XCTAssertGreaterThanOrEqual(c.bandTop + c.bandHeight, scaledFocal, "and ends at or below them")
+        XCTAssertEqual(c.bandHeight, min(800, pageHeight * 2), accuracy: 0.01, "two boxes, or the whole scaled page")
+
+        // The peek springs back and the whole page is painted again.
+        c.pinchEnded()
+        for _ in 0..<200 where abs(c.viewScale - 1) > 1e-6 { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(c.viewScale, 1, accuracy: 1e-6)
+        XCTAssertEqual(c.viewOy, 0, accuracy: 1e-3)
+        XCTAssertEqual(c.bandTop, 0, accuracy: 1e-3); XCTAssertEqual(c.bandHeight, pageHeight, accuracy: 0.01)
+    }
+
+    /// The zoom steps are the box's, not the canvas's: a page that reflowed and grew its canvas
+    /// offers the same steps it did when the canvas was the box.
+    @MainActor func testZoomStepsUnderHostScrollsFollowTheBox() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        func steps(canvasHeight: CGFloat) throws -> [Float] {
+            let p = try Self.loadPage(); defer { p.close() }
+            let c = QvpCanvasController()
+            c.fillHeight = true
+            c.hostScrolls = true
+            c.hostViewportHeight = Self.readingBox.height
+            c.page = p
+            c.setBounds(CGSize(width: Self.readingBox.width, height: canvasHeight), fromCanvas: 1)
+            return c.zoomSteps
+        }
+        let short = try steps(canvasHeight: 400), tall = try steps(canvasHeight: 1200)
+        XCTAssertFalse(short.isEmpty)
+        XCTAssertEqual(short, tall)
     }
 
     /// The box a reading zoom is carried in, and a page loaded fresh for a controller to own

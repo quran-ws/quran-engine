@@ -172,6 +172,9 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun layoutLineSpacingToFill(spec: QvpLayoutSpec, max: Float = 0f): Float = QvpNative.layoutLineSpacingToFill(h, spec.floats(), max)
     /** The share of the padded viewport left empty when the page is fitted to width. */
     fun layoutWastedFraction(spec: QvpLayoutSpec): Float = QvpNative.layoutWastedFraction(h, spec.floats())
+    /** The page's height laid out for [spec] at the printed pitch, in viewport px: `contentH` before
+     * fill-height adds any leading, padding included. What a host asks before it sizes the canvas. */
+    fun layoutPrintedHeight(spec: QvpLayoutSpec): Float = QvpNative.layoutPrintedHeight(h, spec.floats())
     /** Read back the layout the page already has, without computing one: what to call after the
      * engine laid the page out itself, as the zoom control does. */
     fun readLayout(): QvpLayout? {

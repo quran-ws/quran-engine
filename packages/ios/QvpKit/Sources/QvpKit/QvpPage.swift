@@ -254,6 +254,9 @@ public final class QvpPage {
     public func layoutLineSpacingToFill(_ spec: QvpLayoutSpec, max: Float = 0) -> Float { var s = spec.c; return qvp_layout_line_spacing_to_fill(p, &s, max) }
     /// The share of the padded viewport of `spec` left empty when the page is fitted to width.
     public func layoutWastedFraction(_ spec: QvpLayoutSpec) -> Float { var s = spec.c; return qvp_layout_wasted_fraction(p, &s) }
+    /// The page's height laid out for `spec` at the printed pitch, in viewport px: `contentH` before
+    /// fill-height adds any leading, padding included. What a host asks before it sizes the canvas.
+    public func layoutPrintedHeight(_ spec: QvpLayoutSpec) -> Float { var s = spec.c; return qvp_layout_printed_height(p, &s) }
     /// The grid this page is laid out inside: the mushaf's line count and the printed line spacing.
     public var grid: QvpGrid { var g = QvpFFI.QvpGrid(); qvp_page_grid(p, &g); return QvpGrid(lines: Int(g.lines), lineSpacing: g.line_spacing) }
     /// A word's box in viewport px through the current layout (x0, y0, x1, y1).

@@ -6,6 +6,11 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Added
+- `qvp_layout_printed_height`: the page's height laid out for a spec at the printed pitch, in
+  viewport px — `content_h` before fill-height adds any leading. A host deciding whether a page
+  fits a box, or how far to shrink it to keep it whole, asks this before it sizes the canvas,
+  instead of re-deriving the crop and the grid a short page sits on. The iOS controller
+  answers it for a width with its own knobs (`printedHeight(forWidth:)`).
 - `banner_zoom` on the layout spec caps how big a surah name or a basmalah gets as the reader
   zooms in, as a multiple of its printed size. Left at 0 a banner grows with the words around
   it until it fills the row — about five times the print for a surah name — which a host that
@@ -35,6 +40,16 @@ All notable changes to the engine and its packages. The format follows
   on Material 3.
 
 ### Fixed
+- iOS `QvpCanvasController` under `hostScrolls` measures the layout in `hostViewportHeight`,
+  the box the host looks through, never in its own canvas — which, once the host sizes it to
+  the page, is the layout's output: fill-height read it back as the viewport and grew the
+  page by the host's padding on every pass. A printed page too tall for that box is no longer
+  shrunk to it either, nor centred as if it had been — a printed layout's `fitX` goes with its
+  `fitScale`, and applied at scale 1 it pushed the page off to one side by half the width the
+  shrink would have freed. That page is what the host's scroll view is for, and `fitScale`
+  stays the engine's answer for a host that would rather shrink. Both knobs lay the page out again
+  when set, and the band a pinch paints follows the view transform, so a magnify peek on a
+  host-scrolled page no longer leaves a blank box under the fingers.
 - `qvp_layout_line_spacing_to_fill` answers the spacing the page is really laid out at. It
   measured the full printed width and the page's own height against the viewport, while
   `qvp_layout` fits the CROPPED width and sits a short page on the grid a full page fills —

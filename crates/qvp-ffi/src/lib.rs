@@ -1761,6 +1761,12 @@ pub unsafe extern "C" fn qvp_layout_line_spacing_to_fill(
 pub unsafe extern "C" fn qvp_layout_wasted_fraction(page: *const Page, spec: *const QvpLayoutSpec) -> f32 {
     guard(|| (*page).wasted_fraction(&layout_spec(spec)))
 }
+/// The page's height laid out for `spec` at the printed pitch, in viewport px: `content_h` before
+/// fill-height adds any leading, padding included. What a host asks before it sizes the canvas.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_printed_height(page: *const Page, spec: *const QvpLayoutSpec) -> f32 {
+    guard(|| (*page).printed_height(&layout_spec(spec)))
+}
 /// out: x0,y0,x1,y1 in viewport px through the current layout
 #[no_mangle]
 pub unsafe extern "C" fn qvp_word_bounds_view(page: *const Page, word_index: u32, out: *mut f32) -> i32 {

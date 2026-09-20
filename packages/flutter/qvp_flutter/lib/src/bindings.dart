@@ -701,6 +701,7 @@ final class QvpBindings {
       ffi.Float Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, ffi.Float),
       double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>, double)>('qvp_layout_line_spacing_to_fill');
   late final double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>) layoutWastedFraction = lib.lookupFunction<ffi.Float Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>), double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>)>('qvp_layout_wasted_fraction');
+  late final double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>) layoutPrintedHeight = lib.lookupFunction<ffi.Float Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>), double Function(PtrPage, ffi.Pointer<QvpLayoutSpecC>)>('qvp_layout_printed_height');
   late final int Function(PtrPage, int, PtrF32) wordBoundsView =
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, PtrF32), int Function(PtrPage, int, PtrF32)>('qvp_word_bounds_view');
 

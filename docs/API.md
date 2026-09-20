@@ -113,6 +113,7 @@ const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRigh
 // L = {scale, offsetX, offsetY, contentW, contentH, lineSpacing, lineDy[], slots[], fitScale, fitX, fitY}
 page.layoutLineSpacingToFill(spec)   // the lineSpacing multiplier that fills the padded viewport of spec
 page.layoutWastedFraction(spec)      // the share of the padded viewport left empty at fit-to-width
+page.layoutPrintedHeight(spec)       // the page's height at the printed pitch: contentH before fill-height adds leading
 page.grid                            // {lines, lineSpacing}: the mushaf's line count and the printed spacing
 page.lineSpacing                     // the printed line spacing of this page, in page units
 ```
@@ -644,6 +645,7 @@ says which wrapper binds which.
 | layout | `qvp_layout` | `page.layout(spec)` | Lay the page out for a viewport: scale, per-line shifts, slots, content size and the fit transform. |
 | layout | `qvp_layout_line_spacing_to_fill` | `page.layoutLineSpacingToFill(spec, max)` | Return the `lineSpacing` multiplier that fills the padded viewport of a spec when fitted to width. |
 | layout | `qvp_layout_wasted_fraction` | `page.layoutWastedFraction(spec)` | Return the share of the padded viewport of a spec left empty when the page is fitted to width. |
+| layout | `qvp_layout_printed_height` | `page.layoutPrintedHeight(spec)` | Return the page's height laid out for a spec at the printed pitch, in viewport px: `contentH` before fill-height adds any leading. |
 | layout | `qvp_word_bounds_view` | `page.wordBoundsView(i)` | Return a word's bounds in viewport pixels through the current layout. |
 | styles | `qvp_style_add` | `page.style(selector, colour, ms, layer)` | Add a colour rule for a selector on a layer; returns a handle, 0 for a bad selector. |
 | styles | `qvp_style_add_target` | `page.styleTarget(target, colour, ms, layer)` | Add a colour rule for a target's words. |
