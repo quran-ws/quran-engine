@@ -6,6 +6,20 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 Nothing yet.
 
+## [0.3.0] - 2026-09-21
+
+- Engine 0.3.0: the reader's zoom control (`zoomPinch`, `zoomToStep`, and the mode, spec,
+  carried, at-step and is-zoomed calls), a page reflowed onto rows of the screen's own width
+  when the reader zooms in, `layoutDrawList`, `layoutPrintedHeight`, `sidewaysDrag` and
+  `swipePages`, and the `surahFrames` and `bannerZoom` layout knobs.
+- `surahHeaders` and `surahHeadersView`: the box a surah frame fills and the title ink
+  inside it, for a host that draws its own frame.
+- The demo draws a reflowed page, caches the ink as a band of the page rather than redrawing
+  on every scroll event, turns one page per swipe, and is built on Material 3.
+- The library module no longer applies the Maven publishing plugin itself; the Android SDK's
+  root build applies and configures it, so another root can include `:qvp` (#83).
+  `:qvp:publishAndReleaseToMavenCentral` is unchanged.
+
 ## [0.2.1] - 2026-09-14
 
 - Releases publish `ws.quran:qvp-android` to Maven Central when its credentials are configured.

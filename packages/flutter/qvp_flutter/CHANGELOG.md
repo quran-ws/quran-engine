@@ -1,3 +1,13 @@
+## 0.3.0
+
+- Engine 0.3.0: the reader's zoom control (`zoomPinch`, `zoomToStep`, and the mode, spec,
+  carried, at-step and is-zoomed calls), a page reflowed onto rows of the screen's own width
+  when the reader zooms in, `layoutDrawList`, `layoutPrintedHeight`, `sidewaysDrag` and
+  `swipePages`, and the `surahFrames` and `bannerZoom` layout knobs.
+- `surahHeaders` and `surahHeadersView`: the box a surah frame fills and the title ink
+  inside it, for a host that draws its own frame.
+- Fixed: `QvpPage.zoomSpec` carries `bannerZoom` through.
+
 ## 0.2.2
 
 - The package includes the Android engine and is available from pub.dev.

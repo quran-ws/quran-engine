@@ -5,6 +5,11 @@ All notable changes to the engine and its packages. The format follows
 `docs/standards/VERSIONING.md`. Every package shares the version listed here.
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [0.3.0] - 2026-09-21
+
 ### Added
 - Optional `@quran.ws/engine/lite/passage` lays out complete ayah ranges in JavaScript without Wasm, including ranges across pages. It keeps the original word outlines, every ayah medallion, and the relevant division and sajdah signs. Synthetic, Rust-fixture and 604-page checks cover it.
 - The lite geometry decoder exposes line, ayah, decoration and text metadata already present in QVP files. The wire format is unchanged.
@@ -51,6 +56,44 @@ All notable changes to the engine and its packages. The format follows
 - iOS and Android draw a reflowed page, cache the ink as a band of the page rather than
   redrawing on every scroll event, and turn one page per swipe. The Android demo is built
   on Material 3.
+- Rust releases use crates.io trusted publishing, and Flutter releases include the Android
+  engine and publish `qvp_flutter` to pub.dev.
+- Every example app is built by CI: the Android example, the React Native example's
+  typecheck, the Flutter example's analysis in its own package, and a parse of the web
+  example. An example that stops compiling now fails the build.
+- The parity check reads the published JavaScript entry points and rejects an
+  abbreviation the naming standard replaced.
+- `latest.json` beside each family names its current version, so a consumer can
+  resolve the newest release without knowing the tag.
+- The wasm, Apple and Android builds are published to `cdn.quran.ws/engine/`.
+- `scripts/cdn-put.sh`, the shared upload library, and
+  `scripts/migrate-cdn-prefix.sh` for the one-time move of the published data.
+
+### Changed
+- Page data release `data-v0.4.0` adds the surah-name assets under `surah-names/`: the 114
+  titles as individual and combined QVP and SVG, and the WOFF2 font with its CSS and metadata
+  map. Every page, word sidecar and atlas is byte-identical to `data-v0.3.0`. It is served as
+  `cdn.quran.ws/qvp/v0.4.0/`; `scripts/sync-test-data.sh`, the wrapper page sync scripts and
+  CI default to it.
+- Page data is rebuilt from `quran-svg-elements` v1.1.2, which moves ink that belongs to a
+  surah name out of the basmalah beside it, on pages 77, 282 and 428. The other 601 pages
+  are byte-identical to the previous data release. The release is `data-v0.3.0`, served as
+  `cdn.quran.ws/qvp/v0.3.0/`; `scripts/sync-test-data.sh`, the wrapper page sync scripts and
+  CI default to it.
+- `@quran.ws/engine/lite` returns `index`, `lineIndex` and `ayahIndex`, the names the
+  main entry point already returned. It kept the abbreviations the naming standard
+  replaced, because the parity check read only `web/qvp.js` and `web/index.mjs`.
+- Page data is rebuilt from `quran-svg-elements` v1.1.1, which redraws the ayah
+  medallions to the ones the printed mushaf uses. All 604 pages change. The
+  decomposition is the same, 6,236 ayahs and 77,432 words, and every `NNN.words.json`,
+  `atlas.qva` and `atlas.json` is byte-identical to the previous data release. Pages 1
+  and 2 no longer carry a duplicate ornament, so the ornament count matches the marker
+  count on every page. The release is `data-v0.2.0`. `scripts/sync-test-data.sh` and CI
+  default to it.
+- Page data is published to `cdn.quran.ws/qvp/<version>/` instead of
+  `qvp.quran.ws/<version>/`. The old hostname redirects, so existing URLs still
+  resolve. One host now carries the releases of the whole stack, each repository
+  in its own folder (`docs/CDN.md`).
 
 ### Fixed
 - iOS `QvpCanvasController` under `hostScrolls` measures the layout in `hostViewportHeight`,
@@ -94,44 +137,6 @@ All notable changes to the engine and its packages. The format follows
 - The React Native Android module compiles: its view manager was missing the import of
   `QvpDefaults`, and its page view called a `centre()` that does not exist. Both had
   never been through a compiler, which is what #84 is for.
-
-### Changed
-- Page data is rebuilt from `quran-svg-elements` v1.1.2, which moves ink that belongs to a
-  surah name out of the basmalah beside it, on pages 77, 282 and 428. The other 601 pages
-  are byte-identical to the previous data release. The release is `data-v0.3.0`, served as
-  `cdn.quran.ws/qvp/v0.3.0/`; `scripts/sync-test-data.sh`, the wrapper page sync scripts and
-  CI default to it.
-- `@quran.ws/engine/lite` returns `index`, `lineIndex` and `ayahIndex`, the names the
-  main entry point already returned. It kept the abbreviations the naming standard
-  replaced, because the parity check read only `web/qvp.js` and `web/index.mjs`.
-- Page data is rebuilt from `quran-svg-elements` v1.1.1, which redraws the ayah
-  medallions to the ones the printed mushaf uses. All 604 pages change. The
-  decomposition is the same, 6,236 ayahs and 77,432 words, and every `NNN.words.json`,
-  `atlas.qva` and `atlas.json` is byte-identical to the previous data release. Pages 1
-  and 2 no longer carry a duplicate ornament, so the ornament count matches the marker
-  count on every page. The release is `data-v0.2.0`. `scripts/sync-test-data.sh` and CI
-  default to it.
-- Page data is published to `cdn.quran.ws/qvp/<version>/` instead of
-  `qvp.quran.ws/<version>/`. The old hostname redirects, so existing URLs still
-  resolve. One host now carries the releases of the whole stack, each repository
-  in its own folder (`docs/CDN.md`).
-
-### Added
-- Rust releases use crates.io trusted publishing, and Flutter releases include the Android
-  engine and publish `qvp_flutter` to pub.dev.
-- Every example app is built by CI: the Android example, the React Native example's
-  typecheck, the Flutter example's analysis in its own package, and a parse of the web
-  example. An example that stops compiling now fails the build.
-- The parity check reads the published JavaScript entry points and rejects an
-  abbreviation the naming standard replaced.
-- `latest.json` beside each family names its current version, so a consumer can
-  resolve the newest release without knowing the tag.
-- The wasm, Apple and Android builds are published to `cdn.quran.ws/engine/`.
-- `scripts/cdn-put.sh`, the shared upload library, and
-  `scripts/migrate-cdn-prefix.sh` for the one-time move of the published data.
-
-### Fixed
-
 - The React Native example typechecks again. It held the ayah word count as
   `complete` where the API returns `isComplete`, and called a `setLineGap` that no
   longer exists. Its lockfile recorded the linked library at 0.1.0.
@@ -427,7 +432,8 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/quran-ws/quran-engine/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/quran-ws/quran-engine/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/quran-ws/quran-engine/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/quran-ws/quran-engine/compare/v0.1.1...v0.2.0
