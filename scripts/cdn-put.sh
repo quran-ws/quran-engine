@@ -56,6 +56,24 @@ cdn_put() {
 }
 export -f cdn_put
 
+# cdn_get <key> <file> — fetch through authenticated R2 without touching the public cache.
+# Returns 44 when the object does not exist and 1 for every other failure.
+cdn_get() {
+  local key="$1" file="$2" code
+  if ! code=$(curl -sS -o "$file" -w '%{http_code}' \
+       --aws-sigv4 "aws:amz:auto:s3" --user "$R2_ACCESS_KEY_ID:$R2_SECRET_ACCESS_KEY" \
+       "$ENDPOINT/$BUCKET/$key"); then
+    echo "GET $key failed" >&2
+    return 1
+  fi
+  case "$code" in
+    200) return 0 ;;
+    404) rm -f "$file"; return 44 ;;
+    *) echo "GET $key failed: HTTP $code" >&2; return 1 ;;
+  esac
+}
+export -f cdn_get
+
 # cdn_exists <key> — true when the object is already published.
 cdn_exists() {
   [ "$(curl -sS -o /dev/null -w '%{http_code}' -I \

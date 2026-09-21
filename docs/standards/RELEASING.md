@@ -21,7 +21,14 @@
 
 crates.io and pub.dev use GitHub trusted publishing with short-lived OpenID Connect tokens.
 Each crate trusts `.github/workflows/release.yml`. The pub.dev package trusts this repository
-and the `v{{version}}` tag pattern. Neither registry needs a repository secret.
+and the `v{{version}}` tag pattern. Neither registry needs a repository secret. npm requires
+the `NPM_TOKEN` repository secret. A missing publishing credential fails the release rather
+than silently omitting a package. The crates.io, npm and pub.dev steps are safe to rerun for
+the same tag.
+
+A registry failure keeps the workflow red, but does not block verified Wasm, Apple and Android
+artifacts from reaching the CDN. CDN publishing verifies and skips an identical artifact family
+on a retry.
 
 Maven Central requires the `ws.quran` namespace to be verified in the Central Portal and four
 repository secrets: `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `MAVEN_SIGNING_KEY`, and
