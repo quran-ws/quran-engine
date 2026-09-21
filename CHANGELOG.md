@@ -6,6 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+### Changed
+- npm releases use GitHub trusted publishing, as crates.io and pub.dev already did, so the
+  release workflow needs no `NPM_TOKEN`.
+
 ### Fixed
 - Code releases now fail when registry credentials are missing, skip npm and CDN artifacts
   already published during a retry, and publish verified engine artifacts to the CDN even when
