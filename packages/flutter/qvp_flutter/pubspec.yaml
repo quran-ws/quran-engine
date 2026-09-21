@@ -1,6 +1,6 @@
 name: qvp_flutter
 description: "Flutter wrapper for the QVP vector mushaf engine (dart:ffi over libqvp_ffi)."
-version: 0.2.2
+version: 0.3.0
 homepage: https://quran.ws/blocks/quran-engine
 repository: https://github.com/quran-ws/quran-engine/tree/main/packages/flutter/qvp_flutter
 issue_tracker: https://github.com/quran-ws/quran-engine/issues
