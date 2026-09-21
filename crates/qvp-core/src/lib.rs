@@ -25,7 +25,7 @@ pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox}
 pub use hit::{Hit, HitArea, HitOptions, LineBand};
 pub use layout::{Draw, Grid, Layout, LayoutSpec};
 pub use memorize::{MaskMode, MaskState, Reveal};
-pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
+pub use meta::{Division, MarkerInfo, Rosette, SurahHeader, SurahInfo};
 pub use qvp_format;
 pub use qvp_format::atlas::Atlas;
 pub use reflow::{Breaks, Fill, GapMode, Placement, ReflowSpec, Reflowed};

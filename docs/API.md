@@ -140,9 +140,30 @@ and not one of the reflow knobs, because the reader's zoom control fills those i
 banner at all.
 
 **`surahFrames` controls the source-native frame around a surah name.** It defaults to
-`true`, preserving the printed page. Set it to `false` when the host supplies its own frame;
-the native frame is then omitted from drawing and exact hit testing. Reflowed titles and the
-reusable title assets are frameless either way.
+`true`, preserving the printed page. Set it to `false` when the host supplies its own frame.
+The native frame is then omitted from drawing and from exact hit testing. Reflowed titles and
+the reusable title assets are frameless either way.
+
+**Drawing your own frame.** `page.surahHeadersView()` gives each heading two boxes in
+viewport px: `x0, y0, x1, y1` is the box a frame fills, the page's text block wide and the
+heading's row tall, and `titleX0 … titleY1` is the title ink inside it. Both leave out a
+native frame, whether the layout draws one or not, so the numbers do not change when the
+reader turns the frame off. `page.surahHeaders()` is the same in page units.
+
+```js
+page.layout({ ...spec, surahFrames: false, bannerZoom: 1 });
+for (const h of page.surahHeadersView()) {
+  ctx.strokeRect(h.x0, h.y0, h.x1 - h.x0, h.y1 - h.y0);   // your frame
+}
+```
+
+`bannerZoom: 1` belongs with this: it holds the title at its printed size as the reader zooms,
+so a frame with a fixed shape still fits it.
+
+Read the boxes from `surahHeadersView()` rather than mapping `decorationInfo` yourself. That
+box is the one stored in the file, so it covers the native frame you just hid, and it is in
+page units: the layout moves a heading's line by `L.lineDy[line]`, and a mapping that leaves
+that term out draws the frame about eight px above the title on a printed page.
 
 **What this is for.** A printed mushaf page is squatter than a phone screen: fitted to the
 width of a tall viewport it leaves a band of empty paper top and bottom. The layout knobs

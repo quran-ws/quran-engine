@@ -118,6 +118,7 @@ typedef struct { uint32_t ink, diacritics, dots, waqf, sifr, ayah_mark, numeral,
 typedef struct { uint16_t number, ayah_count; uint8_t has_banner, has_basmalah, place /* 0 makkah 1 madinah */, _pad; uint32_t banner_decoration; QvpStr arabic, latin, english; } QvpSurah;
 typedef struct { uint8_t division /* QVP_DIVISION_* */, line; uint16_t number, surah, ayah; uint32_t ayah_index; } QvpDivision;
 typedef struct { uint32_t decoration; uint16_t surah, ayah; uint32_t line; float cx, cy, r; uint32_t ornament_path, numeral_path; } QvpAyahMark;
+typedef struct { uint32_t decoration; uint16_t surah, _pad; uint32_t line; float x0, y0, x1, y1 /* the box a frame fills */, title_x0, title_y0, title_x1, title_y1 /* the title ink in it */; } QvpSurahHeader;
 typedef struct { uint32_t decoration; uint16_t surah, ayah, juz, hizb, nisf, rubu_al_hizb, rubu_al_hizb_in_hizb, _pad; } QvpRosette;
 typedef struct { uint32_t decoration; uint16_t surah, ayah; uint32_t sign_path; } QvpSajdah;
 typedef struct { uint32_t word, index; uint8_t is_loose_match; } QvpMatch;
@@ -148,6 +149,8 @@ void     qvp_page_grid(const QvpPage*, QvpGrid* out);
 uint32_t qvp_surah_count(const QvpPage*);
 int      qvp_surah_at(const QvpPage*, uint32_t i, QvpSurah* out);
 uint32_t qvp_divisions(const QvpPage*, QvpDivision* out, uint32_t cap);   /* divisions that START on this page */
+uint32_t qvp_surah_headers(const QvpPage*, QvpSurahHeader* out, uint32_t cap);      /* page units; boxes leave out a native frame */
+uint32_t qvp_surah_headers_view(const QvpPage*, QvpSurahHeader* out, uint32_t cap); /* the same, in viewport px through the current layout */
 uint32_t qvp_ayah_marks(const QvpPage*, QvpAyahMark* out, uint32_t cap);       /* real ayah medallions */
 uint32_t qvp_ayah_marks_view(const QvpPage*, QvpAyahMark* out, uint32_t cap);  /* the same, in viewport px through the current layout */
 uint32_t qvp_rosettes(const QvpPage*, QvpRosette* out, uint32_t cap);     /* drawn hizb rosettes */

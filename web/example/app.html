@@ -112,6 +112,8 @@
         <b>pad bottom</b><input id="padBottom" type="range" min="0" max="120" step="4" value="24"><span id="padBottomVal">24</span>
       </div>
       <div class="row" style="margin-top:6px"><button id="fillH">Fill screen height</button><button id="fitGap">Leading to fill</button></div>
+      <div class="row" style="margin-top:6px"><button id="surahFrames" class="on">Native surah frame</button></div>
+      <div class="hint">Turn the native frame off and the host draws its own, around the boxes <code>page.surahHeadersView()</code> reports: one for the frame, one for the title ink. This mushaf's artwork carries no frame yet, so only the host frame shows.</div>
       <div class="hint">Leading only grows: the printed lineSpacing is the floor, so the lines can never close up, and the text width is always the viewport's. The knobs spend the empty paper a tall screen leaves above and below the printed page.</div>
     </section>
     <section>

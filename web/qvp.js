@@ -300,6 +300,18 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       for (let i = 0; i < Math.min(n, 64); i++) { const o = s + i * 12; out.push({ division: names('division')[d.getUint8(o)], line: d.getUint8(o + 1), number: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIndex: d.getUint32(o + 8, true) }); }
       return out;
     }
+    /** the surah headings in page units: the box a frame fills, and the title ink in it */
+    surahHeaders() {
+      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surah_headers(this.h, s, 32), d = this.e.dv(), out = [];
+      for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 44; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), line: d.getUint32(o + 8, true), x0: d.getFloat32(o + 12, true), y0: d.getFloat32(o + 16, true), x1: d.getFloat32(o + 20, true), y1: d.getFloat32(o + 24, true), titleX0: d.getFloat32(o + 28, true), titleY0: d.getFloat32(o + 32, true), titleX1: d.getFloat32(o + 36, true), titleY1: d.getFloat32(o + 40, true) }); }
+      return out;
+    }
+    /** the same, in viewport px through the current layout: what a host draws its own frame around */
+    surahHeadersView() {
+      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surah_headers_view(this.h, s, 32), d = this.e.dv(), out = [];
+      for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 44; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), line: d.getUint32(o + 8, true), x0: d.getFloat32(o + 12, true), y0: d.getFloat32(o + 16, true), x1: d.getFloat32(o + 20, true), y1: d.getFloat32(o + 24, true), titleX0: d.getFloat32(o + 28, true), titleY0: d.getFloat32(o + 32, true), titleX1: d.getFloat32(o + 36, true), titleY1: d.getFloat32(o + 40, true) }); }
+      return out;
+    }
     ayahMarks() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_ayah_marks(this.h, s, 128), d = this.e.dv(), out = [];
       for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }

@@ -794,6 +794,42 @@ fn placed_point(page: &Page, layout: &Layout, path: u32, x: f32, y: f32) -> (f32
 }
 
 #[test]
+fn a_surah_header_reports_a_frame_box_and_the_title_ink_without_the_frame() {
+    let (mut framed, Some(frame_path), title_path, _) = page_with_surah_frame(true) else { unreachable!() };
+    let data = framed.data().clone();
+    let title = data.paths[title_path as usize].bbox;
+    let q = framed.quant();
+
+    let headers = framed.surah_headers();
+    assert_eq!(headers.len(), 1);
+    let h = headers[0];
+    assert_eq!(h.surah, 1);
+    // the title box is the title's own ink: the frame is left out even though it is drawn
+    assert!((h.title_x0 - title.x0 as f32 / q).abs() < 1e-4);
+    assert!((h.title_x1 - title.x1 as f32 / q).abs() < 1e-4);
+    // the frame box spans the page's text block and holds the title
+    assert!(h.x0 <= h.title_x0 && h.x1 >= h.title_x1);
+    assert!(h.y0 < h.y1);
+    let frame = data.paths[frame_path as usize].bbox;
+    assert!(h.title_x1 - h.title_x0 < (frame.x1 - frame.x0) as f32 / q);
+
+    // hiding the frame changes neither box
+    let printed = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    framed.layout(&printed);
+    let with_frame = framed.surah_headers();
+    framed.layout(&LayoutSpec { surah_frames: false, ..printed });
+    assert_eq!(framed.surah_headers(), with_frame);
+
+    // the view boxes follow the layout: same order, and inside the laid-out content
+    let l = framed.layout(&printed).clone();
+    let view = framed.surah_headers_view();
+    assert_eq!(view.len(), 1);
+    assert!(view[0].title_y0 >= 0.0 && view[0].title_y1 <= l.content_h);
+    let placed = placed_point(&framed, &l, title_path, title.x0 as f32 / q, title.y0 as f32 / q);
+    assert!((view[0].title_y0 - placed.1).abs() < 1e-3, "{} vs {}", view[0].title_y0, placed.1);
+}
+
+#[test]
 fn reflow_omits_a_native_surah_frame_without_constraining_its_title() {
     let (mut framed, Some(frame_path), title_path, decoration) = page_with_surah_frame(true) else { unreachable!() };
     let (mut bare, None, bare_title, _) = page_with_surah_frame(false) else { unreachable!() };

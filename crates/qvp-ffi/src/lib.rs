@@ -419,6 +419,23 @@ pub struct QvpAyahMark {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
+pub struct QvpSurahHeader {
+    pub decoration: u32,
+    pub surah: u16,
+    pub _pad: u16,
+    pub line: u32,
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+    pub title_x0: f32,
+    pub title_y0: f32,
+    pub title_x1: f32,
+    pub title_y1: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
 pub struct QvpRosette {
     pub decoration: u32,
     pub surah: u16,
@@ -810,6 +827,40 @@ pub unsafe extern "C" fn qvp_divisions(page: *const Page, out: *mut QvpDivision,
                 ayah_index: d.ayah_index,
             })
             .collect();
+        fill(out, cap, &v)
+    })
+}
+/// One surah heading, page units or viewport px depending on the call.
+fn header(h: &qvp_core::SurahHeader) -> QvpSurahHeader {
+    QvpSurahHeader {
+        decoration: h.decoration,
+        surah: h.surah,
+        _pad: 0,
+        line: h.line,
+        x0: h.x0,
+        y0: h.y0,
+        x1: h.x1,
+        y1: h.y1,
+        title_x0: h.title_x0,
+        title_y0: h.title_y0,
+        title_x1: h.title_x1,
+        title_y1: h.title_y1,
+    }
+}
+
+/// The surah headings on the page, in page units: the box a frame fills and the title ink.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_surah_headers(page: *const Page, out: *mut QvpSurahHeader, cap: u32) -> u32 {
+    guard(|| {
+        let v: Vec<QvpSurahHeader> = (*page).surah_headers().iter().map(header).collect();
+        fill(out, cap, &v)
+    })
+}
+/// The surah headings in viewport px through the current layout: where each is drawn.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_surah_headers_view(page: *const Page, out: *mut QvpSurahHeader, cap: u32) -> u32 {
+    guard(|| {
+        let v: Vec<QvpSurahHeader> = (*page).surah_headers_view().iter().map(header).collect();
         fill(out, cap, &v)
     })
 }
