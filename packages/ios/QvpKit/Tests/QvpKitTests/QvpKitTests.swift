@@ -757,6 +757,57 @@ final class QvpKitTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(configured, 2, "configure runs on every (re)attach")
     }
 
+    /// A host showing two pages at once tells the cache so: the spread before,
+    /// the spread, and the spread after are all loaded and kept, so a swipe
+    /// never lands on a blank half. At one page per screen nothing changes.
+    @MainActor func testPageCacheSpanKeepsTheSpreadsEitherSide() async throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCache needs macOS 14 / iOS 17") }
+        let bytes = try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp"))
+        let cache = QvpPageCache(capacity: 6, data: { _ in bytes })
+        func waitUntil(_ cond: @MainActor () -> Bool) async {
+            for _ in 0..<100 { if cond() { return }; try? await Task.sleep(nanoseconds: 10_000_000) }
+        }
+        // Two pages on screen, 291 the first of them: 289…294 come and stay.
+        cache.setCurrentPage(291, span: 2)
+        await waitUntil { (289...294).allSatisfy { cache.page(for: $0) != nil } }
+        XCTAssertTrue((289...294).allSatisfy { cache.page(for: $0) != nil }, "both neighboring spreads are preloaded")
+        XCTAssertNil(cache.page(for: 288)); XCTAssertNil(cache.page(for: 295))
+        // Fill past capacity with pages far away: the six stay, the strangers go.
+        for n in [10, 11, 12, 13] { _ = cache.controller(for: n) }
+        await waitUntil { cache.page(for: 13) != nil }
+        XCTAssertTrue((289...294).allSatisfy { cache.page(for: $0) != nil }, "the spreads either side are never evicted")
+        // One page per screen again: only the page and its two neighbors are kept.
+        cache.setCurrentPage(100)
+        for n in [200, 201, 202, 203] { _ = cache.controller(for: n) }
+        await waitUntil { cache.page(for: 203) != nil }
+        XCTAssertTrue((99...101).allSatisfy { cache.page(for: $0) != nil })
+        XCTAssertTrue((289...294).contains { cache.page(for: $0) == nil }, "the old spreads are ordinary again")
+        // The edge of the mushaf: nothing outside the range is asked for.
+        cache.setCurrentPage(603, span: 2)
+        await waitUntil { cache.page(for: 604) != nil }
+        XCTAssertNil(cache.page(for: 605))
+    }
+
+    /// A cache trimmed before the host has said where the pager is: nothing is
+    /// protected, and asking must not trap. The protected span was briefly a
+    /// stored range with `1...0` standing in for "no current page", which a
+    /// `ClosedRange` cannot hold — it traps where it is built.
+    @MainActor func testPageCacheTrimsBeforeAnyCurrentPage() async throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCache needs macOS 14 / iOS 17") }
+        let bytes = try Data(contentsOf: Self.pages.appendingPathComponent("042.qvp"))
+        let cache = QvpPageCache(capacity: 4, data: { _ in bytes })
+        for n in 10...14 {
+            _ = cache.controller(for: n)
+            for _ in 0..<100 {
+                if cache.page(for: n) != nil { break }
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
+        }
+        XCTAssertNotNil(cache.page(for: 14), "pages still load with no current page set")
+        XCTAssertNil(cache.page(for: 10), "and trimming asks what is protected with nothing on screen")
+        XCTAssertEqual((10...14).filter { cache.page(for: $0) != nil }.count, 4)
+    }
+
     /// Every wrapper replays conformance/scenarios/layout.json and must match the engine's numbers.
     func testLayoutScenariosMatchTheEngine() throws {
         let url = Self.repo.appendingPathComponent("conformance/scenarios/layout.json")
