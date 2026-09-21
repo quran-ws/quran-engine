@@ -44,9 +44,10 @@ Three kinds of generated data travel with the pages. The **atlas** (`atlas.qva`)
 the whole mushaf: the page that holds ayah 2:255, the ayah where each juz starts. The
 **words sidecar**
 (`NNN.words.json`) carries the other spellings of each word, such as the plain modern
-spelling used for search. The **surah-name assets** (`surah-names/NNN.svg`) contain only
-the tightly cropped calligraphic title ink, for reuse in a list without loading its full
-page. The page file still owns the frame. Printed layouts render it by default; a host
+spelling used for search. The **surah-name assets** under `surah-names/` contain only the
+calligraphic title ink, for reuse in a list without loading its full page. A host can choose
+individual or combined QVP and SVG files, or one WOFF2 font. The same engine that draws a
+page loads the QVP forms. The page file still owns the frame. Printed layouts render it by default; a host
 that supplies its own frame sets `surahFrames: false`.
 
 ## Load, draw, tap

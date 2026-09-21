@@ -42,8 +42,10 @@ cdn_put() {
   case "$key" in
     *.json) type=application/json ;;
     *.md)   type=text/markdown ;;
-    *.svg)  type=image/svg+xml ;;
-    *.wasm) type=application/wasm ;;
+    *.svg)   type=image/svg+xml ;;
+    *.css)   type=text/css ;;
+    *.woff2) type=font/woff2 ;;
+    *.wasm)  type=application/wasm ;;
     *)      type=application/octet-stream ;;
   esac
   code=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT \

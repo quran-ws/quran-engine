@@ -1,6 +1,7 @@
 pub mod affine;
 pub mod atlas;
 pub mod qvp2svg;
+mod surah_font;
 pub mod surah_names;
 pub mod svg2qvp;
 pub mod zoom_levels;

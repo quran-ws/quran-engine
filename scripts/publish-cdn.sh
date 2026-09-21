@@ -79,13 +79,23 @@ pages=( "$SRC"/*.qvp )
 sidecars=( "$SRC"/*.words.json )
 [ "${#pages[@]}" = 604 ] || { echo "expected 604 QVP pages in $SRC, found ${#pages[@]}" >&2; exit 1; }
 [ "${#sidecars[@]}" = 604 ] || { echo "expected 604 word sidecars in $SRC, found ${#sidecars[@]}" >&2; exit 1; }
-surah_names=( "$SRC"/surah-names/*.svg )
-[ "${#surah_names[@]}" = 114 ] || {
-  echo "expected 114 surah names in $SRC/surah-names, found ${#surah_names[@]}" >&2
+surah_name_qvps=( "$SRC"/surah-names/qvp/[0-9][0-9][0-9].qvp )
+surah_name_svgs=( "$SRC"/surah-names/svg/[0-9][0-9][0-9].svg )
+[ "${#surah_name_qvps[@]}" = 114 ] || {
+  echo "expected 114 QVP surah names, found ${#surah_name_qvps[@]}" >&2
+  exit 1
+}
+[ "${#surah_name_svgs[@]}" = 114 ] || {
+  echo "expected 114 SVG surah names, found ${#surah_name_svgs[@]}" >&2
   exit 1
 }
 for number in {001..114}; do
-  [ -f "$SRC/surah-names/$number.svg" ] || { echo "missing $SRC/surah-names/$number.svg" >&2; exit 1; }
+  [ -f "$SRC/surah-names/qvp/$number.qvp" ] || { echo "missing surah-names/qvp/$number.qvp" >&2; exit 1; }
+  [ -f "$SRC/surah-names/svg/$number.svg" ] || { echo "missing surah-names/svg/$number.svg" >&2; exit 1; }
+done
+surah_name_assets=( "${surah_name_qvps[@]}" "$SRC"/surah-names/qvp/all.qvp "${surah_name_svgs[@]}" "$SRC"/surah-names/svg/all.svg "$SRC"/surah-names/surah-names.woff2 "$SRC"/surah-names/surah-names.css "$SRC"/surah-names/map.json )
+for asset in "${surah_name_assets[@]}"; do
+  [ -f "$asset" ] || { echo "missing $asset" >&2; exit 1; }
 done
 
 # 2. Stage: the manifest only. Objects upload straight from the source tree — nothing is
@@ -99,7 +109,7 @@ extras=""
 for f in README.md NOTICE.txt; do
   if [ -f "$SRC/$f" ]; then extras="$extras $f"; fi
 done
-for f in "${pages[@]}" "${sidecars[@]}" "$SRC"/atlas.qva "$SRC"/atlas.json "$SRC"/VERSION.json "${surah_names[@]}"; do
+for f in "${pages[@]}" "${sidecars[@]}" "$SRC"/atlas.qva "$SRC"/atlas.json "$SRC"/VERSION.json "${surah_name_assets[@]}"; do
   name="${f#"$SRC/"}"
   printf '%s\t%s\t%s\n' "$name" "$(wc -c < "$f" | tr -d ' ')" "$(sha256 "$f")" >> "$STAGE/.files.tsv"
 done
@@ -118,7 +128,7 @@ echo "== building $BUNDLE (solid brotli, this takes a few minutes)"
 # --format ustar keeps it to the portable header, with no pax extensions to parse.
 (
   cd "$SRC"
-  files=( *.qvp *.words.json atlas.qva atlas.json VERSION.json surah-names/*.svg )
+  files=( *.qvp *.words.json atlas.qva atlas.json VERSION.json surah-names/qvp/*.qvp surah-names/svg/*.svg surah-names/surah-names.woff2 surah-names/surah-names.css surah-names/map.json )
   for f in $extras; do files+=("$f"); done
   COPYFILE_DISABLE=1 tar --format ustar -cf - "${files[@]}"
 ) | brotli -q 11 -c > "$STAGE/$BUNDLE"

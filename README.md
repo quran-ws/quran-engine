@@ -70,7 +70,7 @@ kinds of artifact, each on its own version line:
 
 | folder | holds |
 |---|---|
-| `qvp/<version>/` | page data: `.qvp`, `.words.json`, `atlas.qva`, `surah-names/*.svg`, the brotli bundle |
+| `qvp/<version>/` | page data, atlas, text sidecars, QVP/SVG/font surah-name assets, the brotli bundle |
 | `engine/wasm/<version>/`, `engine/apple/<version>/`, `engine/android/<version>/` | engine builds |
 
 `latest.json` beside each names the current version. Other repositories of the

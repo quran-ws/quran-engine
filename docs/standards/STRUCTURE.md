@@ -46,7 +46,7 @@ Only these: `README.md`, `LICENSE`, `LICENSES/`, `CONTRIBUTING.md`, `SECURITY.md
 pages/*.svg + index/        (source, external, versioned)
       │ qvp-convert batch
       ▼
-dist/pages/*.qvp, atlas.qva, *.words.json, surah-names/*.svg  (generated, never committed)
+dist/pages/*.qvp, atlas.qva, *.words.json, surah-names/  (generated, never committed)
       │ scripts/package-data.sh → GitHub release data-vX.Y.Z → publish-cdn.yml
       ▼
 apps load pages by bytes, path or URL          (the developer surface)

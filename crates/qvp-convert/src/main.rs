@@ -200,7 +200,7 @@ fn main() {
                 atlas.rubu_al_hizbs.len()
             );
             match surah_names.write(&out_dir) {
-                Ok(count) => println!("surah names: {count} → {}/NNN.svg", surah_names::DIR),
+                Ok(count) => println!("surah names: {count} → {}/{{qvp,svg,font}}", surah_names::DIR),
                 Err(e) => {
                     errs += 1;
                     eprintln!("error: {e}");

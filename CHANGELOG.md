@@ -6,12 +6,12 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Added
-- The page-data build emits `surah-names/001.svg` through `114.svg`: tightly cropped,
-  title-only KFGQPC calligraphy for lists and navigation. Frames remain in the page
-  files; `atlas.qva` remains the cross-Mushaf lookup and search index.
+- The page-data build emits frame-free surah titles as individual and combined QVP and SVG
+  assets, plus a lossless OpenType/CFF WOFF2 font, CSS and a metadata map. Frames remain in
+  the page files; `atlas.qva` remains the cross-Mushaf lookup and search index.
 - `surah_frames` on the layout spec controls source-native frames around surah names. It
   defaults on for the printed page; a host that supplies its own frame can turn it off.
-  Reflowed titles and the reusable title SVGs remain frameless.
+  Reflowed titles and the reusable title assets remain frameless.
 - `qvp_layout_printed_height`: the page's height laid out for a spec at the printed pitch, in
   viewport px — `content_h` before fill-height adds any leading. A host deciding whether a page
   fits a box, or how far to shrink it to keep it whole, asks this before it sizes the canvas,

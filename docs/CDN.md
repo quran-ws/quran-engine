@@ -8,13 +8,18 @@ https://cdn.quran.ws/qvp/<version>/manifest.json
 https://cdn.quran.ws/qvp/<version>/001.qvp
 https://cdn.quran.ws/qvp/<version>/001.words.json
 https://cdn.quran.ws/qvp/<version>/atlas.qva
-https://cdn.quran.ws/qvp/<version>/surah-names/001.svg
+https://cdn.quran.ws/qvp/<version>/surah-names/qvp/001.qvp
+https://cdn.quran.ws/qvp/<version>/surah-names/qvp/all.qvp
+https://cdn.quran.ws/qvp/<version>/surah-names/svg/001.svg
+https://cdn.quran.ws/qvp/<version>/surah-names/svg/all.svg
+https://cdn.quran.ws/qvp/<version>/surah-names/surah-names.woff2
+https://cdn.quran.ws/qvp/<version>/surah-names/map.json
 https://cdn.quran.ws/qvp/<version>/hafs-kfgqpc.tar.br
 ```
 
-A reader fetches the pages near its position and caches them. Surah lists can load the 114
-small title SVGs without loading any page file; the atlas supplies aggregate lookup and
-search metadata. A service worker can prefetch a juz from the manifest. Nothing needs the
+A reader fetches the pages near its position and caches them. A surah list can choose
+individual QVP or SVG titles, either combined sheet, or the WOFF2 font without loading a
+full page. The atlas supplies aggregate lookup and search metadata. A service worker can prefetch a juz from the manifest. Nothing needs the
 whole data set up front.
 
 ## The layout
@@ -65,7 +70,7 @@ resolve.
   That is what lets everything be served `Cache-Control: public, max-age=31536000, immutable`,
   and why `cdn-put.sh` refuses a folder that already exists. Rewriting a published object
   needs a manual cache purge to take effect.
-- **Pages and surah-name SVGs are stored raw and compressed at the edge**, negotiating
+- **Pages and surah-name assets are stored raw and compressed at the edge**, negotiating
   zstd, brotli or gzip per client. The bytes a client verifies are the bytes the release
   signed.
 - **`manifest.json`** lists every file with its size and sha256, the bundle, and the data
