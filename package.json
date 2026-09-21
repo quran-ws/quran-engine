@@ -32,6 +32,7 @@
       "require": "./web/index.cjs"
     },
     "./lite": "./web/lite.mjs",
+    "./lite/passage": "./web/lite-passage.mjs",
     "./qvp.js": "./web/qvp.js",
     "./qvp_ffi.wasm": "./web/qvp_ffi.wasm",
     "./package.json": "./package.json"
@@ -42,6 +43,10 @@
     "web/index.mjs",
     "web/index.cjs",
     "web/lite.mjs",
+    "web/lite-path.mjs",
+    "web/lite-passage.mjs",
+    "web/lite-passage-geometry.mjs",
+    "docs/LITE-PASSAGES.md",
     "web/qvp.js",
     "web/qvp_ffi.wasm",
     "docs/API.md",
@@ -58,7 +63,7 @@
   "scripts": {
     "build:wasm": "cargo build -p qvp-ffi --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm",
     "prepack": "npm run build:wasm",
-    "test": "node web/smoke.mjs && node web/lite.test.mjs",
-    "test:lite": "node web/lite.test.mjs"
+    "test": "node web/smoke.mjs && node web/lite.test.mjs && node web/lite-passage.test.mjs",
+    "test:lite": "node web/lite.test.mjs && node web/lite-passage.test.mjs"
   }
 }

@@ -13,6 +13,8 @@ outline at the current moment. Your app renders the outlines with its own graphi
 passes touch events to the engine. The engine computes geometry, layout and colours, and the
 app renders them.
 
+For a browser that must not load Wasm, the lite decoder draws printed pages directly. Its optional passage module lays out complete ayah ranges in JavaScript, preserving word outlines and their signs. This is a scoped exception to the shared Rust core, not another full page reader. See `LITE-PASSAGES.md`.
+
 ## From a drawing to pixels
 
 ```

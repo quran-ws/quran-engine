@@ -19,9 +19,13 @@ assert.deepEqual(page.paths.map(path => [...path.pts]), [
 ])
 assert.deepEqual(page.paths.map(path => path.rule), ['evenodd', 'nonzero'])
 assert.deepEqual(page.words, [
-  { index: 0, surah: 2, ayah: 3, word: 1, lineIndex: 0, ayahIndex: 0, firstPath: 0, nPaths: 1, box: [1, 2, 3.5, 3.5] },
-  { index: 1, surah: 2, ayah: 3, word: 2, lineIndex: 0, ayahIndex: 0, firstPath: 1, nPaths: 1, box: [5, 6, 7, 8] }
+  { text: 'one', index: 0, surah: 2, ayah: 3, word: 1, lineIndex: 0, ayahIndex: 0, firstPath: 0, nPaths: 1, box: [1, 2, 3.5, 3.5] },
+  { text: 'two', index: 1, surah: 2, ayah: 3, word: 2, lineIndex: 0, ayahIndex: 0, firstPath: 1, nPaths: 1, box: [5, 6, 7, 8] }
 ])
+assert.deepEqual(page.lines, [{ index: 0, lineNumber: 1, firstWord: 0, nWords: 2, box: [1, 2, 7, 8] }])
+assert.deepEqual(page.ayahs, [{ index: 0, surah: 2, ayah: 3, fragment: 1, fragments: 1, flags: 0,
+  firstWord: 0, nWords: 2, ayahMarkDecoration: -1, rubuAlHizb: 0, box: [1, 2, 7, 8] }])
+assert.deepEqual(page.decorations, [])
 const interactivePage = Object.assign(Object.create(QvpLitePage.prototype), { words: page.words })
 assert.equal(interactivePage.hitTest(2, 3), page.words[0])
 assert.equal(interactivePage.hitTest(6, 7), page.words[1])

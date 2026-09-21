@@ -6,6 +6,8 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Added
+- Optional `@quran.ws/engine/lite/passage` lays out complete ayah ranges in JavaScript without Wasm, including ranges across pages. It keeps the original word outlines, every ayah medallion, and the relevant division and sajdah signs. Synthetic, Rust-fixture and 604-page checks cover it.
+- The lite geometry decoder exposes line, ayah, decoration and text metadata already present in QVP files. The wire format is unchanged.
 - The page-data build emits frame-free surah titles as individual and combined QVP and SVG
   assets, plus a lossless OpenType/CFF WOFF2 font, CSS and a metadata map. Frames remain in
   the page files; `atlas.qva` remains the cross-Mushaf lookup and search index.

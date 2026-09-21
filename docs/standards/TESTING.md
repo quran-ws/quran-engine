@@ -13,6 +13,7 @@ until it passes.
 | each wrapper | one binding test per C symbol on a known page, plus the shared scenarios | the data release |
 | each example | one UI smoke test: open a page, tap a word, highlight | the example's page set |
 | `web/lite.mjs` | the conformance fixtures | `conformance/` |
+| `web/lite-passage.mjs` | synthetic ranges, unchanged paths, markers, bounds, cross-page ranges and Rust ink metrics | synthetic tests need no data; the 604-page sweep requires `dist/pages/` in `gates` |
 
 Without their data, the data tests skip locally and print a hint. In CI they fail instead
 (`QVP_REQUIRE_DATA=1`), because `scripts/sync-test-data.sh` provides the data there: the

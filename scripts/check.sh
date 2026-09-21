@@ -34,6 +34,7 @@ for check in "$@"; do
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test zoom_control
       QVP_REQUIRE_DATA=1 cargo test -p qvp-ffi --release --test abi
       node web/lite.test.mjs
+      QVP_REQUIRE_DATA=1 node web/lite-passage.test.mjs
       scripts/gen-conformance.sh --check
       cargo run -p qvp-convert --release -- zoom-levels dist/pages crates/qvp-core/src/zoom_table.rs --check
       cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
@@ -66,6 +67,7 @@ for check in "$@"; do
       cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm
       node web/smoke.mjs
       node web/lite.test.mjs
+      node web/lite-passage.test.mjs
       # The example is plain JavaScript that no test loads, so parse it here. This is a
       # syntax check, not a typecheck; it catches the file being left unrunnable.
       node --check web/example/app.js
