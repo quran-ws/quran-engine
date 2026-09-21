@@ -229,8 +229,9 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - uses: rust-lang/crates-io-auth-action@v1
         id: crates-auth
       - name: crates.io
@@ -247,20 +248,12 @@ jobs:
             cargo publish -p "$crate" --no-verify
             sleep 30
           done
-      - name: Build the React Native npm package
-        run: |
-          cd packages/react-native/qvp-react-native
-          npm install --no-audit --no-fund
-          npm run build
       - name: npm
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           VERSION: ${{ needs.verify.outputs.version }}
         run: |
-          [ -n "$NODE_AUTH_TOKEN" ] || {
-            echo "::error::npm publishing requires the NPM_TOKEN repository secret"
-            exit 1
-          }
+          npm install -g npm@11.19.1
+          [ "$(npm --version)" = 11.19.1 ]
           cp artifacts/qvp_ffi.wasm/qvp_ffi.wasm web/qvp_ffi.wasm
           if npm view "@quran.ws/engine@$VERSION" version >/dev/null 2>&1; then
             echo "::notice::@quran.ws/engine $VERSION already exists on npm"

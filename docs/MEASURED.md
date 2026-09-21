@@ -45,6 +45,7 @@ DOM and stay responsive.
 
 - `surahs()` returns a `bannerDecoration` field that `docs/API.md` does not list; it
   indexes into `page.decorations`.
-- The npm and crates.io packages remain at 0.1.0 because their release tokens are not configured.
-  Android 0.2.2 is available from Maven Central, and iOS 0.2.2 is available through Swift Package
+- npm, crates.io, pub.dev and Maven Central publish from the tag workflow; the first three
+  through trusted publishing.
+  Android 0.3.0 is available from Maven Central, and iOS 0.3.0 is available through Swift Package
   Manager.
