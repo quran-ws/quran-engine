@@ -50,8 +50,8 @@ and the URL of its manifest, and it only moves forward, so republishing an older
 does not send consumers back to it:
 
 ```json
-{ "version": "v0.3.0",
-  "manifest": "https://cdn.quran.ws/qvp/v0.3.0/manifest.json",
+{ "version": "v0.4.0",
+  "manifest": "https://cdn.quran.ws/qvp/v0.4.0/manifest.json",
   "updated": "2026-09-15T00:00:00Z" }
 ```
 

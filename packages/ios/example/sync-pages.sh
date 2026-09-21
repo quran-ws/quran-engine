@@ -13,7 +13,7 @@ cd "$(dirname "$0")"
 ROOT=$(cd ../../.. && pwd)
 
 REPO="${QVP_DATA_REPO:-quran-ws/quran-engine}"
-TAG="${QVP_DATA_TAG:-data-v0.3.0}"
+TAG="${QVP_DATA_TAG:-data-v0.4.0}"
 ASSET=quran-engine-pages-hafs-kfgqpc.tar.gz
 BASE="https://github.com/$REPO/releases/download/$TAG"
 SRC="${QVP_PAGES:-$ROOT/dist/pages}"

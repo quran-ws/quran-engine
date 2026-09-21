@@ -23,10 +23,10 @@ jobs:
             dist/pages
             pages
             index
-          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.3.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.2' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.4.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.2' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
       - name: Fetch test data
         env:
-          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.3.0' }}
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.4.0' }}
           QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
         run: scripts/sync-test-data.sh
       - name: All pages
@@ -48,7 +48,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Fetch page data
         env:
-          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.3.0' }}
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.4.0' }}
           QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
         run: scripts/sync-test-data.sh
       - name: Run

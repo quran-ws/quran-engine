@@ -62,7 +62,7 @@ Page files are served from `cdn.quran.ws` under immutable, versioned URLs, so a
 browser can load one page without shipping the data — `docs/CDN.md`:
 
 ```js
-const page = await loadPage('https://cdn.quran.ws/qvp/v0.3.0/042.qvp')
+const page = await loadPage('https://cdn.quran.ws/qvp/v0.4.0/042.qvp')
 ```
 
 `cdn.quran.ws` mirrors the signed releases of the stack. This repo publishes two

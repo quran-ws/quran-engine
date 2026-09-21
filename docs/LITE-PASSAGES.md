@@ -8,7 +8,7 @@ This is an optional entry point. Importing `@quran.ws/engine/lite` alone does no
 import { decodeGeometry } from '@quran.ws/engine/lite'
 import { QvpPassage } from '@quran.ws/engine/lite/passage'
 
-const response = await fetch('https://cdn.quran.ws/qvp/v0.3.0/042.qvp')
+const response = await fetch('https://cdn.quran.ws/qvp/v0.4.0/042.qvp')
 if (!response.ok) throw new Error(`Page: HTTP ${response.status}`)
 const page = decodeGeometry(await response.arrayBuffer())
 const passage = new QvpPassage([page], { surah: 2, from: 255 })

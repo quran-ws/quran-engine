@@ -70,6 +70,11 @@ Nothing yet.
   `scripts/migrate-cdn-prefix.sh` for the one-time move of the published data.
 
 ### Changed
+- Page data release `data-v0.4.0` adds the surah-name assets under `surah-names/`: the 114
+  titles as individual and combined QVP and SVG, and the WOFF2 font with its CSS and metadata
+  map. Every page, word sidecar and atlas is byte-identical to `data-v0.3.0`. It is served as
+  `cdn.quran.ws/qvp/v0.4.0/`; `scripts/sync-test-data.sh`, the wrapper page sync scripts and
+  CI default to it.
 - Page data is rebuilt from `quran-svg-elements` v1.1.2, which moves ink that belongs to a
   surah name out of the basmalah beside it, on pages 77, 282 and 428. The other 601 pages
   are byte-identical to the previous data release. The release is `data-v0.3.0`, served as
