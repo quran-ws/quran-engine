@@ -46,6 +46,8 @@ public final class QvpCanvasController {
     /// until it fills the row. A host that draws its own frame around the printed name caps
     /// it, or the name outgrows the frame. Only a reflowed page grows a banner at all.
     public var bannerZoom: Float = 0 { didSet { guard oldValue != bannerZoom else { return }; relayout() } }
+    /// Draw source-native frames around surah names on the printed page.
+    public var surahFrames = true { didSet { guard oldValue != surahFrames else { return }; relayout() } }
     /// Paper behind the page content, 0xRRGGBBAA (nil = transparent).
     public var paperColor: UInt32?
     /// 0xRRGGBBAA band colour of the drag selection.
@@ -259,7 +261,8 @@ public final class QvpCanvasController {
                              padTop: Float(padTop), padBottom: Float(padBottom),
                              padLeft: Float(padSide), padRight: Float(padSide),
                              lineSpacing: lineSpacing, fillHeight: fillHeight,
-                             cropLeft: cropLeft, cropRight: cropRight, bannerZoom: bannerZoom)
+                             cropLeft: cropLeft, cropRight: cropRight, bannerZoom: bannerZoom,
+                             surahFrames: surahFrames)
     }
     /// The spec in force: the knobs above with the reader's zoom control folded in.
     public var layoutSpec: QvpLayoutSpec {
@@ -294,7 +297,8 @@ public final class QvpCanvasController {
                                  padTop: base.padTop, padBottom: base.padBottom,
                                  padLeft: base.padLeft, padRight: base.padRight,
                                  lineSpacing: base.lineSpacing, fillHeight: base.fillHeight,
-                                 cropLeft: base.cropLeft, cropRight: base.cropRight, bannerZoom: base.bannerZoom)
+                                 cropLeft: base.cropLeft, cropRight: base.cropRight, bannerZoom: base.bannerZoom,
+                                 surahFrames: base.surahFrames)
         return CGFloat(p.layoutPrintedHeight(spec))
     }
     /// Recompute the engine layout for the current size / knobs.

@@ -300,6 +300,18 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       for (let i = 0; i < Math.min(n, 64); i++) { const o = s + i * 12; out.push({ division: names('division')[d.getUint8(o)], line: d.getUint8(o + 1), number: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIndex: d.getUint32(o + 8, true) }); }
       return out;
     }
+    /** the surah headings in page units: the box a frame fills, and the title ink in it */
+    surahHeaders() {
+      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surah_headers(this.h, s, 32), d = this.e.dv(), out = [];
+      for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 44; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), line: d.getUint32(o + 8, true), x0: d.getFloat32(o + 12, true), y0: d.getFloat32(o + 16, true), x1: d.getFloat32(o + 20, true), y1: d.getFloat32(o + 24, true), titleX0: d.getFloat32(o + 28, true), titleY0: d.getFloat32(o + 32, true), titleX1: d.getFloat32(o + 36, true), titleY1: d.getFloat32(o + 40, true) }); }
+      return out;
+    }
+    /** the same, in viewport px through the current layout: what a host draws its own frame around */
+    surahHeadersView() {
+      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surah_headers_view(this.h, s, 32), d = this.e.dv(), out = [];
+      for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 44; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), line: d.getUint32(o + 8, true), x0: d.getFloat32(o + 12, true), y0: d.getFloat32(o + 16, true), x1: d.getFloat32(o + 20, true), y1: d.getFloat32(o + 24, true), titleX0: d.getFloat32(o + 28, true), titleY0: d.getFloat32(o + 32, true), titleX1: d.getFloat32(o + 36, true), titleY1: d.getFloat32(o + 40, true) }); }
+      return out;
+    }
     ayahMarks() {
       const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_ayah_marks(this.h, s, 128), d = this.e.dv(), out = [];
       for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
@@ -362,7 +374,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     hitAreas(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
 
     // ── layout ──
-    /** Write a layout spec (QvpLayoutSpec, 72 bytes) at scratch offset `s`. */
+    /** Write a layout spec (QvpLayoutSpec, 76 bytes) at scratch offset `s`. */
     _writeLayoutSpec(spec, s) {
       const d = this.e.dv();
       d.setFloat32(s, spec.viewportW, true); d.setFloat32(s + 4, spec.viewportH, true); d.setFloat32(s + 8, spec.padTop || 0, true); d.setFloat32(s + 12, spec.padBottom || 0, true);
@@ -381,6 +393,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       // bannerZoom: how big a surah name or basmalah may get against its printed size as the
       // reader zooms; 0 lets it grow with the page until it fills the row.
       d.setFloat32(s + 68, spec.bannerZoom ?? 0, true);
+      // Native frames preserve the printed page by default; a host may supply its own.
+      d.setUint8(s + 72, spec.surahFrames === false ? 0 : 1);
     }
     /** Leading (page units) that makes the page fill the padded viewport of `spec`; max 0 = unlimited. */
     layoutLineSpacingToFill(spec, max = 0) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_line_spacing_to_fill(this.h, s, max); }
@@ -414,7 +428,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const np = ex.qvp_layout_path_groups(this.h, 0, 0);
       if (np) { const pp = this.e.buf(np * 4); ex.qvp_layout_path_groups(this.h, pp, np); L.pathGroup = new Uint32Array(this.e.mem.buffer.slice(pp, pp + np * 4)); }
       else L.pathGroup = null;
-      // paths this layout leaves undrawn: the sheet's furniture on a reflowed page
+      // paths this layout leaves undrawn: sheet furniture and a native surah frame hidden by the spec or reflow
       const no = ex.qvp_layout_omitted_paths(this.h, 0, 0);
       if (no) { const op = this.e.buf(no * 4); ex.qvp_layout_omitted_paths(this.h, op, no); L.omitted = new Set(new Uint32Array(this.e.mem.buffer, op, no)); }
       else L.omitted = null;

@@ -29,6 +29,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     public var padSide: CGFloat = 0 { didSet { relayout() } }
     public var lineSpacing: Float = 1 { didSet { relayout() } }
     public var fillHeight = false { didSet { relayout() } }
+    /// Draw source-native frames around surah names on the printed page.
+    public var surahFrames = true { didSet { guard oldValue != surahFrames else { return }; relayout() } }
     /// Paper behind the page content (nil = transparent).
     public var paperColor: UIColor? { didSet { invalidateContent() } }
     /// 0xRRGGBBAA band colour of the drag selection.
@@ -274,7 +276,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     private var lastSize = CGSize.zero
     /// The layout the current size and knobs ask for, before the zoom control has its say.
     var baseSpec: QvpLayoutSpec {
-        QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, fillHeight: fillHeight)
+        QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, fillHeight: fillHeight, surahFrames: surahFrames)
     }
     /// The spec in force: the knobs above with the reader's zoom control folded in.
     public var layoutSpec: QvpLayoutSpec {

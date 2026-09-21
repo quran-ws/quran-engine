@@ -196,12 +196,14 @@ public struct QvpLayoutSpec: Equatable {
     /// pinches never builds a `QvpReflowSpec` itself — `QvpPage.zoomSpec` does, from the base
     /// spec this is part of — and only a reflowed page can grow a banner anyway.
     public var bannerZoom: Float
+    /// Draw source-native frames around surah names on the printed page. Reflow stays frameless.
+    public var surahFrames: Bool
     public init(viewportW: Float, viewportH: Float, padTop: Float = 0, padBottom: Float = 0, padLeft: Float = 0, padRight: Float = 0, lineSpacing: Float = 1, fillHeight: Bool = false, gridLines: Int = 0,
-                cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0, reflow: QvpReflowSpec? = nil, bannerZoom: Float = 0) {
+                cropLeft: Float = 0, cropRight: Float = 0, maxAspectSlack: Float = 0, reflow: QvpReflowSpec? = nil, bannerZoom: Float = 0, surahFrames: Bool = true) {
         self.viewportW = viewportW; self.viewportH = viewportH; self.padTop = padTop; self.padBottom = padBottom; self.padLeft = padLeft; self.padRight = padRight
         self.lineSpacing = lineSpacing; self.fillHeight = fillHeight; self.gridLines = gridLines
         self.cropLeft = cropLeft; self.cropRight = cropRight; self.maxAspectSlack = maxAspectSlack; self.reflow = reflow
-        self.bannerZoom = bannerZoom
+        self.bannerZoom = bannerZoom; self.surahFrames = surahFrames
     }
     var c: QvpFFI.QvpLayoutSpec {
         // a zoom of 0 is the printed page, and 255 asks the engine for its own default
@@ -215,7 +217,8 @@ public struct QvpLayoutSpec: Equatable {
                              reflow_word_gap: r?.wordGap ?? 1,
                              reflow_max_stretch: r?.maxStretch ?? 0,
                              reflow_relax: r?.relax ?? -1,
-                             banner_zoom: bannerZoom)
+                             banner_zoom: bannerZoom,
+                             surah_frames: surahFrames ? 1 : 0)
     }
 }
 /// The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units).
@@ -270,6 +273,8 @@ public struct QvpTheme: Equatable {
 public struct QvpSurah: Equatable { public let number: Int, ayahCount: Int, hasBanner: Bool, hasBasmalah: Bool, place: String, bannerDecoration: Int, arabic: String, latin: String, english: String }
 public struct QvpDivision: Equatable { public let division: Division, number: Int, surah: Int, ayah: Int, line: Int, ayahIndex: Int }
 public struct QvpAyahMark: Equatable { public let decoration: Int, surah: Int, ayah: Int, line: Int, cx: Float, cy: Float, r: Float, ornamentPath: Int, numeralPath: Int }
+/// `x0 … y1` is the box a surah frame fills, `titleX0 … titleY1` the title ink in it.
+public struct QvpSurahHeader: Equatable { public let decoration: Int, surah: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, titleX0: Float, titleY0: Float, titleX1: Float, titleY1: Float }
 public struct QvpRosette: Equatable { public let decoration: Int, surah: Int, ayah: Int, juz: Int, hizb: Int, nisf: Int, rubuAlHizb: Int, rubuAlHizbInHizb: Int }
 public struct QvpSajdah: Equatable { public let decoration: Int, surah: Int, ayah: Int, signPath: Int }
 public struct QvpMatch: Equatable { public let word: Int, index: Int, isLooseMatch: Bool, wordKey: String, text: String }

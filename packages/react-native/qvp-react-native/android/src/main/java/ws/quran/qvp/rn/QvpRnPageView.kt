@@ -114,6 +114,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         if (zoomStepProp >= 0 && zoomStepProp != inner.zoom.step) inner.zoomToStep(zoomStepProp)
     }
     fun setFillHeightProp(v: Boolean) { inner.fillHeight = v; layoutDirty = true }
+    fun setSurahFramesProp(v: Boolean) { inner.surahFrames = v; layoutDirty = true }
 
     // ── bytes ──
     private fun readUri(uri: String): ByteArray {

@@ -28,8 +28,10 @@ and `qvp_hit_test(...)` in C.
   `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.decoration('ayah-mark')`, `Sel.decorationIndex(d)`.
 - **The engine computes, the host renders.** Hit-testing, layout, styling, highlight bands,
   masks and search are engine calls. A wrapper marshals the calls and renders the results.
-- **Data is separate from code.** Pages (`NNN.qvp`), the atlas (`atlas.qva`) and the
-  optional text sidecars (`NNN.words.json`) are assets your app loads; no package bundles them.
+- **Data is separate from code.** Pages (`NNN.qvp`), the atlas (`atlas.qva`), optional text
+  sidecars (`NNN.words.json`) and reusable title-only assets under `surah-names/` are loaded
+  by the app; no package bundles them. Titles are published as individual and combined QVP
+  and SVG files, plus a WOFF2 font and its map.
 
 ## Loading
 
@@ -109,7 +111,8 @@ print. `hitAreas()` returns the same partition as boxes (no dead zones on a line
 ```js
 const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRight,
                        lineSpacing: 1.0, fillHeight: false, gridLines: 0,
-                       cropLeft: 0, cropRight: 0, maxAspectSlack: 0, bannerZoom: 0});
+                       cropLeft: 0, cropRight: 0, maxAspectSlack: 0, bannerZoom: 0,
+                       surahFrames: true});
 // L = {scale, offsetX, offsetY, contentW, contentH, lineSpacing, lineDy[], slots[], fitScale, fitX, fitY}
 page.layoutLineSpacingToFill(spec)   // the lineSpacing multiplier that fills the padded viewport of spec
 page.layoutWastedFraction(spec)      // the share of the padded viewport left empty at fit-to-width
@@ -135,6 +138,32 @@ frame around the printed name wants, since the frame has a shape to keep. It is 
 and not one of the reflow knobs, because the reader's zoom control fills those in itself
 (`page.zoomSpec`), so a host that pinches never gets to set one; only a reflowed page grows a
 banner at all.
+
+**`surahFrames` controls the source-native frame around a surah name.** It defaults to
+`true`, preserving the printed page. Set it to `false` when the host supplies its own frame.
+The native frame is then omitted from drawing and from exact hit testing. Reflowed titles and
+the reusable title assets are frameless either way.
+
+**Drawing your own frame.** `page.surahHeadersView()` gives each heading two boxes in
+viewport px: `x0, y0, x1, y1` is the box a frame fills, the page's text block wide and the
+heading's row tall, and `titleX0 … titleY1` is the title ink inside it. Both leave out a
+native frame, whether the layout draws one or not, so the numbers do not change when the
+reader turns the frame off. `page.surahHeaders()` is the same in page units.
+
+```js
+page.layout({ ...spec, surahFrames: false, bannerZoom: 1 });
+for (const h of page.surahHeadersView()) {
+  ctx.strokeRect(h.x0, h.y0, h.x1 - h.x0, h.y1 - h.y0);   // your frame
+}
+```
+
+`bannerZoom: 1` belongs with this: it holds the title at its printed size as the reader zooms,
+so a frame with a fixed shape still fits it.
+
+Read the boxes from `surahHeadersView()` rather than mapping `decorationInfo` yourself. That
+box is the one stored in the file, so it covers the native frame you just hid, and it is in
+page units: the layout moves a heading's line by `L.lineDy[line]`, and a mapping that leaves
+that term out draws the frame about eight px above the title on a printed page.
 
 **What this is for.** A printed mushaf page is squatter than a phone screen: fitted to the
 width of a tall viewport it leaves a band of empty paper top and bottom. The layout knobs
@@ -358,7 +387,7 @@ path's group follows the job it does, not only the record it belongs to.
 
 **What a renderer draws.** `page.layoutDrawList(bandTop, bandBottom)` is every drawing this
 layout makes, in drawing order: `{path, placement}` pairs into `page.layoutPlacements()`. A
-path the layout leaves out — the sheet's furniture on a reflowed page — never appears, a sajdah
+path the layout leaves out — sheet furniture, or a native surah frame once the page reflows — never appears, a sajdah
 line stroked over the two rows its words landed on appears twice, and a printed page hands back
 each path under its own line. So one loop draws any page, and no host has to know which case it
 is in:

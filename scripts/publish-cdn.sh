@@ -8,32 +8,31 @@
 # with `Cache-Control: immutable` and nothing ever overwrites them. A new build means a new
 # version, never a rewrite of an old one.
 #
-#   scripts/publish-cdn.sh v0.1.0                 # stage from dist/pages, upload
+#   scripts/publish-cdn.sh v0.1.0                 # publish an extracted package in dist/pages
 #   scripts/publish-cdn.sh v0.1.0 --from-release  # fetch the release tarball instead
-#   scripts/publish-cdn.sh v0.1.0 --stage-only    # build the tree, upload nothing
+#   scripts/publish-cdn.sh v0.1.0 --from-release --stage-only  # stage, upload nothing
 #
-# Two shapes of the same data go up. The per-page objects are what a reader fetches — it
-# wants page 42, not 92 MB. The bundle is for "download the whole mushaf": one request, and
-# solid brotli across all 604 pages exploits the redundancy between them (26 MB against
-# 41.8 MB for the same pages fetched individually). gzip cannot do this — its 32 KB window
-# never sees two pages at once.
+# Two shapes of the same data go up. The individual objects are what a reader fetches — it
+# wants page 42 or one surah title, not the whole data set. The bundle is for "download the
+# whole mushaf": one request, with solid brotli exploiting repetition across archive members.
 #
 # The bundle is an opaque brotli file: no Content-Encoding, so every client receives the same
-# 26 MB and decodes it itself. Serving it as `Content-Encoding: br` was tried and reverted —
+# bytes and decodes them itself. Serving it as `Content-Encoding: br` was tried and reverted —
 # the edge caches one normalised body, so whichever client filled the cache first decided
-# what everyone got: a gzip client filling it first left every browser downloading 89 MB.
+# what everyone got.
 # iOS decodes this with COMPRESSION_BROTLI (iOS 15+). Browsers have no brotli decoder in
 # JavaScript, so a web app should fetch pages individually — 20 of them arrive in 36 ms.
 #
 # Objects are stored RAW. Compression happens at the edge: a Cloudflare Compression Rule on
 # cdn.quran.ws compresses application/octet-stream, negotiating zstd → brotli → gzip per
-# client, which beats one fixed encoding (~37 MB brotli vs ~62 MB gzip for the mushaf). It
-# also fails safely — lose the rule and clients get correct, larger bytes — and what arrives
+# client. It also fails safely — lose the rule and clients get correct, larger bytes — and
+# what arrives
 # is the byte stream the manifest's sha256 covers.
 #
 # Needs: curl (>= 7.75, for --aws-sigv4), brotli, tar, sha256sum/shasum, jq;
 # gh for --from-release. Credentials: see scripts/cdn-put.sh.
 set -euo pipefail
+shopt -s nullglob
 cd "$(dirname "$0")/.."
 
 VERSION="${1:?usage: publish-cdn.sh <version> [--from-release] [--stage-only]}"; shift
@@ -46,6 +45,7 @@ for arg in "$@"; do
   esac
 done
 
+# shellcheck source=scripts/cdn-put.sh
 . scripts/cdn-put.sh
 
 FAMILY=qvp
@@ -55,8 +55,8 @@ PREFIX="$FAMILY/$VERSION"
 SRC=dist/pages
 STAGE="dist/cdn/$VERSION"
 
-# 1. Source the files. The release tarball is the canonical artefact; dist/pages is what a
-#    local `batch` just produced. Either way we verify nothing beyond what the release signs.
+# 1. Source the files. The release tarball is canonical; a local dist/pages must be an
+#    extracted package, including VERSION.json. Either way we publish exactly the signed bytes.
 if [ "$FROM_RELEASE" = 1 ]; then
   TAR=dist/quran-engine-pages-hafs-kfgqpc.tar.gz
   mkdir -p dist && rm -rf "$SRC"
@@ -67,7 +67,36 @@ if [ "$FROM_RELEASE" = 1 ]; then
   [ "$want" = "$got" ] || { echo "sha256 mismatch: want $want got $got" >&2; exit 1; }
   mkdir -p "$SRC" && tar -xzf "$TAR" -C "$SRC" --strip-components=1
 fi
-[ -f "$SRC/atlas.qva" ] || { echo "no page data in $SRC — run batch, or pass --from-release" >&2; exit 1; }
+if [ ! -f "$SRC/atlas.qva" ] || [ ! -f "$SRC/atlas.json" ]; then
+  echo "no atlas data in $SRC — extract a packaged release, or pass --from-release" >&2
+  exit 1
+fi
+[ -f "$SRC/VERSION.json" ] || {
+  echo "no packaged VERSION.json in $SRC — run scripts/package-data.sh and publish the extracted release, or pass --from-release" >&2
+  exit 1
+}
+pages=( "$SRC"/*.qvp )
+sidecars=( "$SRC"/*.words.json )
+[ "${#pages[@]}" = 604 ] || { echo "expected 604 QVP pages in $SRC, found ${#pages[@]}" >&2; exit 1; }
+[ "${#sidecars[@]}" = 604 ] || { echo "expected 604 word sidecars in $SRC, found ${#sidecars[@]}" >&2; exit 1; }
+surah_name_qvps=( "$SRC"/surah-names/qvp/[0-9][0-9][0-9].qvp )
+surah_name_svgs=( "$SRC"/surah-names/svg/[0-9][0-9][0-9].svg )
+[ "${#surah_name_qvps[@]}" = 114 ] || {
+  echo "expected 114 QVP surah names, found ${#surah_name_qvps[@]}" >&2
+  exit 1
+}
+[ "${#surah_name_svgs[@]}" = 114 ] || {
+  echo "expected 114 SVG surah names, found ${#surah_name_svgs[@]}" >&2
+  exit 1
+}
+for number in {001..114}; do
+  [ -f "$SRC/surah-names/qvp/$number.qvp" ] || { echo "missing surah-names/qvp/$number.qvp" >&2; exit 1; }
+  [ -f "$SRC/surah-names/svg/$number.svg" ] || { echo "missing surah-names/svg/$number.svg" >&2; exit 1; }
+done
+surah_name_assets=( "${surah_name_qvps[@]}" "$SRC"/surah-names/qvp/all.qvp "${surah_name_svgs[@]}" "$SRC"/surah-names/svg/all.svg "$SRC"/surah-names/surah-names.woff2 "$SRC"/surah-names/surah-names.css "$SRC"/surah-names/map.json )
+for asset in "${surah_name_assets[@]}"; do
+  [ -f "$asset" ] || { echo "missing $asset" >&2; exit 1; }
+done
 
 # 2. Stage: the manifest only. Objects upload straight from the source tree — nothing is
 #    rewritten, so what we publish is byte-for-byte what the release signed.
@@ -80,23 +109,29 @@ extras=""
 for f in README.md NOTICE.txt; do
   if [ -f "$SRC/$f" ]; then extras="$extras $f"; fi
 done
-for f in "$SRC"/*.qvp "$SRC"/*.words.json "$SRC"/atlas.qva "$SRC"/atlas.json "$SRC"/VERSION.json; do
-  printf '%s\t%s\t%s\n' "$(basename "$f")" "$(wc -c < "$f" | tr -d ' ')" "$(sha256 "$f")" >> "$STAGE/.files.tsv"
+for f in "${pages[@]}" "${sidecars[@]}" "$SRC"/atlas.qva "$SRC"/atlas.json "$SRC"/VERSION.json "${surah_name_assets[@]}"; do
+  name="${f#"$SRC/"}"
+  printf '%s\t%s\t%s\n' "$name" "$(wc -c < "$f" | tr -d ' ')" "$(sha256 "$f")" >> "$STAGE/.files.tsv"
 done
 for f in $extras; do
   printf '%s\t%s\t%s\n' "$f" "$(wc -c < "$SRC/$f" | tr -d ' ')" "$(sha256 "$SRC/$f")" >> "$STAGE/.files.tsv"
 done
 
 # 2b. The solid bundle, named for the edition alone: the host says the format and the prefix
-#     says the version, so anything more just repeats the URL. Built once per release; brotli -q 11 over ~92 MB takes a few minutes.
+#     says the version, so anything more just repeats the URL. Built once per release; quality
+#     11 over the complete data tree takes a few minutes.
 BUNDLE="hafs-kfgqpc.tar.br"
 echo "== building $BUNDLE (solid brotli, this takes a few minutes)"
 # COPYFILE_DISABLE: macOS tar otherwise stores extended attributes as AppleDouble "._name"
 # members. `tar tf` on macOS hides them, but Linux, iOS and every JS untar see them — the
-# archive would extract to 2,424 files, half of them junk, and differ from a CI build.
-  # --format ustar keeps it to the portable header, with no pax extensions to parse.
-( cd "$SRC" && COPYFILE_DISABLE=1 tar --format ustar -cf - $(ls *.qvp *.words.json atlas.qva atlas.json VERSION.json $extras) ) \
-  | brotli -q 11 -c > "$STAGE/$BUNDLE"
+# archive would contain one junk twin for every real file and differ from a CI build.
+# --format ustar keeps it to the portable header, with no pax extensions to parse.
+(
+  cd "$SRC"
+  files=( *.qvp *.words.json atlas.qva atlas.json VERSION.json surah-names/qvp/*.qvp surah-names/svg/*.svg surah-names/surah-names.woff2 surah-names/surah-names.css surah-names/map.json )
+  for f in $extras; do files+=("$f"); done
+  COPYFILE_DISABLE=1 tar --format ustar -cf - "${files[@]}"
+) | brotli -q 11 -c > "$STAGE/$BUNDLE"
 bundle_bytes=$(wc -c < "$STAGE/$BUNDLE" | tr -d ' ')
 bundle_sha=$(sha256 "$STAGE/$BUNDLE")
 # also record the archive inside, so a client can check what it decoded
@@ -133,6 +168,8 @@ cdn_guard "$PREFIX" || exit 1
 
 echo "== uploading to r2://$BUCKET/$PREFIX"
 export PREFIX SRC
+# The child shell expands the exported function and environment.
+# shellcheck disable=SC2016
 cut -f1 "$STAGE/.files.tsv" | xargs -P 16 -I{} bash -c 'cdn_put "$PREFIX/{}" "$SRC/{}"'
 cdn_put "$PREFIX/$BUNDLE" "$STAGE/$BUNDLE"
 cdn_put "$PREFIX/manifest.json" "$STAGE/manifest.json" "public, max-age=300"

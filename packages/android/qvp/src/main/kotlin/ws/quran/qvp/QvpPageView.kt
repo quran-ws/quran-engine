@@ -43,6 +43,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         }
     // layout knobs (viewport size comes from the view)
     var padTop = 0f; var padBottom = 0f; var padSide = 0f; var lineSpacing = 1f; var fillHeight = false
+    /** Draw source-native frames around surah names on the printed page. */
+    var surahFrames = true
     var paperColor: Int = Color.TRANSPARENT           // ARGB
     var selectionBand: Int = QvpDefaults.SELECTION_BAND  // 0xRRGGBBAA
     var onWordTap: ((QvpWord, QvpHit) -> Unit)? = null
@@ -274,9 +276,11 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
 
     /** Recompute the engine layout for the current size/knobs. */
     /** The spec `relayout()` hands the engine for the current size and knobs. */
-    fun layoutSpec() = QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, fillHeight)
+    fun layoutSpec() = QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, fillHeight,
+                                     surahFrames = surahFrames)
     /** The layout the current size and knobs ask for, before the zoom control has its say. */
-    internal fun baseSpec() = QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, fillHeight)
+    internal fun baseSpec() = QvpLayoutSpec(width.toFloat(), height.toFloat(), padTop, padBottom, padSide, padSide, lineSpacing, fillHeight,
+                                            surahFrames = surahFrames)
     /** The spec in force: the knobs with the reader's zoom control folded in. */
     fun layoutSpecInForce(): QvpLayoutSpec {
         val p = page ?: return baseSpec()

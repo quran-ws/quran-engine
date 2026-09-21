@@ -54,6 +54,8 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     // ── metadata ──
     @ReactMethod fun surahs(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.surahs().map { Marshal.surah(it) } }
     @ReactMethod fun divisions(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.divisions().map { Marshal.division(it) } }
+    @ReactMethod fun surahHeaders(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.surahHeaders().map { Marshal.surahHeader(it) } }
+    @ReactMethod fun surahHeadersView(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.surahHeadersView().map { Marshal.surahHeader(it) } }
     @ReactMethod fun ayahMarks(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahMarks().map { Marshal.ayahMark(it) } }
     @ReactMethod fun rosettes(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.rosettes().map { Marshal.rosette(it) } }
     @ReactMethod fun sajdahs(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.sajdahs().map { Marshal.sajdah(it) } }

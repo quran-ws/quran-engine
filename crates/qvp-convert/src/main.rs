@@ -165,6 +165,7 @@ fn main() {
             let (mut svg_total, mut qvp_total, mut n, mut errs, mut warns) = (0usize, 0usize, 0usize, 0usize, 0usize);
             let (mut min, mut max) = (usize::MAX, 0usize);
             let mut atlas = qvp_convert::atlas::Builder::default();
+            let mut surah_names = qvp_convert::surah_names::Builder::default();
             for (stem, r) in results {
                 match r {
                     Ok(d) => {
@@ -178,6 +179,10 @@ fn main() {
                             eprintln!("warn: page {stem}: {x}");
                         }
                         atlas.add_page(&d.page);
+                        if let Err(e) = surah_names.add_page(&d.page) {
+                            errs += 1;
+                            eprintln!("error: page {stem}: {e}");
+                        }
                     }
                     Err(e) => {
                         errs += 1;
@@ -194,6 +199,13 @@ fn main() {
                 atlas.surahs.len(),
                 atlas.rubu_al_hizbs.len()
             );
+            match surah_names.write(&out_dir) {
+                Ok(count) => println!("surah names: {count} → {}/{{qvp,svg,font}}", surah_names::DIR),
+                Err(e) => {
+                    errs += 1;
+                    eprintln!("error: {e}");
+                }
+            }
             println!(
                 "pages={n} errors={errs} warnings={warns}\nsvg total {:.1} MB → qvp total {:.2} MB ({:.1}x)\nper page: min {} B, avg {} B, max {} B",
                 svg_total as f64 / 1e6,
@@ -203,6 +215,9 @@ fn main() {
                 qvp_total / n.max(1),
                 max
             );
+            if errs != 0 {
+                std::process::exit(1);
+            }
         }
         _ => usage(),
     }

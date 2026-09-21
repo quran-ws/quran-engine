@@ -29,6 +29,7 @@ class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {
     @ReactProp(name = "padSide", defaultFloat = 0f) fun setPadSide(v: QvpRnPageView, f: Float) = v.setPadSideDp(f)
     @ReactProp(name = "lineSpacing", defaultFloat = 1f) fun setLineSpacing(v: QvpRnPageView, f: Float) = v.setLineSpacingProp(f)
     @ReactProp(name = "fillHeight", defaultBoolean = false) fun setFillHeight(v: QvpRnPageView, b: Boolean) = v.setFillHeightProp(b)
+    @ReactProp(name = "surahFrames", defaultBoolean = true) fun setSurahFrames(v: QvpRnPageView, b: Boolean) = v.setSurahFramesProp(b)
     @ReactProp(name = "paperColor") fun setPaperColor(v: QvpRnPageView, s: String?) { v.paperColor = if (s.isNullOrBlank()) 0 else QvpColor.argb(QvpColor.parse(s)); v.invalidate() }
     @ReactProp(name = "defaultInk") fun setDefaultColor(v: QvpRnPageView, s: String?) { v.defaultInkProp = s }
     @ReactProp(name = "selectionBand") fun setSelectionBand(v: QvpRnPageView, s: String?) { if (!s.isNullOrBlank()) v.selectionBand = QvpColor.parse(s) }

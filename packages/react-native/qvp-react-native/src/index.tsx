@@ -98,6 +98,7 @@ export interface Match { word: number; index: number; isLooseMatch: boolean; wor
 export interface Surah { number: number; ayahCount: number; hasBanner: boolean; hasBasmalah: boolean; place: string; bannerDecoration: number; arabic: string; latin: string; english: string }
 export interface Division { division: DivisionKind; number: number; surah: number; ayah: number; line: number; ayahIndex: number }
 export interface Marker { decoration: number; surah: number; ayah: number; line: number; cx: number; cy: number; r: number; ornamentPath: number; numeralPath: number }
+export interface SurahHeader { decoration: number; surah: number; line: number; x0: number; y0: number; x1: number; y1: number; titleX0: number; titleY0: number; titleX1: number; titleY1: number }
 export interface Rosette { decoration: number; surah: number; ayah: number; juz: number; hizb: number; nisf: number; rubuAlHizb: number; rubuAlHizbInHizb: number }
 export interface Sajdah { decoration: number; surah: number; ayah: number; signPath: number }
 export interface CropBox { x0: number; y0: number; x1: number; y1: number; nWords: number; ayahMarkDecoration: number }
@@ -132,6 +133,8 @@ export interface QvpPageViewProps extends ViewProps {
   padTop?: number; padBottom?: number; padSide?: number;
   /** spacing only opens up: lineSpacing < 1 is clamped by the engine */
   lineSpacing?: number; fillHeight?: boolean;
+  /** Draw source-native frames around surah names on the printed page. */
+  surahFrames?: boolean;
   paperColor?: Color; defaultInk?: Color; selectionBand?: Color;
   selectionEnabled?: boolean; zoomEnabled?: boolean; hitMaxDistance?: number;
   /** What a pinch does to the page. `stepped` reflows onto the page's own zoom steps and is
@@ -261,6 +264,8 @@ export const Qvp = {
   attachWords: (tag: number, json: string | object): Promise<number> => M.attachWords(tag, typeof json === 'string' ? json : JSON.stringify(json)),
   surahs: (tag: number): Promise<Surah[]> => M.surahs(tag),
   divisions: (tag: number): Promise<Division[]> => M.divisions(tag),
+  surahHeaders: (tag: number): Promise<SurahHeader[]> => M.surahHeaders(tag),
+  surahHeadersView: (tag: number): Promise<SurahHeader[]> => M.surahHeadersView(tag),
   ayahMarks: (tag: number): Promise<Marker[]> => M.ayahMarks(tag),
   rosettes: (tag: number): Promise<Rosette[]> => M.rosettes(tag),
   sajdahs: (tag: number): Promise<Sajdah[]> => M.sajdahs(tag),
@@ -360,7 +365,7 @@ export class QvpAtlas {
 }
 
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg'] as const;
 type PageMethod = (typeof pageMethods)[number];
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {

@@ -57,6 +57,9 @@ pub struct LayoutSpec {
     /// spec itself ([`crate::Page::zoom_spec`]), so a host that pinches never fills one in —
     /// and a banner only grows on a page that reflowed anyway.
     pub banner_zoom: f32,
+    /// Draw source-native frames around surah names on the printed page. Reflowed titles stay
+    /// frameless. Turn this off when the host supplies its own frame.
+    pub surah_frames: bool,
 }
 
 impl Default for LayoutSpec {
@@ -76,6 +79,7 @@ impl Default for LayoutSpec {
             max_aspect_slack: 0.0,
             reflow: None,
             banner_zoom: 0.0,
+            surah_frames: true,
         }
     }
 }
@@ -121,8 +125,8 @@ pub struct Layout {
     pub groups: Vec<Placement>,
     /// Group of every path. Empty without reflow, where a path's group is its printed line.
     pub path_group: Vec<u32>,
-    /// Paths this layout does not draw: the sheet's furniture on a reflowed page (running
-    /// head, page number), which the print puts outside the page box. Sorted.
+    /// Paths this layout does not draw: sheet furniture and a native surah frame hidden by
+    /// the spec or by reflow. Sorted.
     pub omitted_paths: Vec<u32>,
     /// The rows the words were broken onto, when this layout reflowed the page.
     pub reflow: Option<Reflowed>,
@@ -357,7 +361,7 @@ impl Page {
             line_spacing,
             groups: vec![],
             path_group: vec![],
-            omitted_paths: vec![],
+            omitted_paths: if spec.surah_frames { vec![] } else { self.surah_name_ornament_paths() },
             reflow: None,
         };
         layout.groups = layout.line_dy.iter().map(|&d| Placement::shifted(d)).collect();
@@ -426,6 +430,7 @@ impl Page {
                 } else {
                     f32::INFINITY
                 },
+                surah_frames: spec.surah_frames,
             },
         );
         // the content is the ink that was laid out; a page that came out as printed keeps the
@@ -467,7 +472,11 @@ impl Page {
             let deco = &self.data.decorations[di as usize];
             omitted_paths.extend(deco.first_path..deco.first_path + deco.n_paths as u32);
         }
+        if !spec.surah_frames || !flow.as_printed {
+            omitted_paths.extend(self.surah_name_ornament_paths());
+        }
         omitted_paths.sort_unstable();
+        omitted_paths.dedup();
         let mut layout = Layout {
             scale,
             // the block's own left margin, kept at the reader's size

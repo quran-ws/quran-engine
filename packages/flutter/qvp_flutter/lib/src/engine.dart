@@ -497,6 +497,7 @@ final class QvpLayoutSpec {
     this.maxAspectSlack = 0,
     this.reflow,
     this.bannerZoom = 0,
+    this.surahFrames = true,
   });
   final double viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing;
 
@@ -521,6 +522,9 @@ final class QvpLayoutSpec {
   /// pinches never builds a [QvpReflowSpec] itself — [QvpPage.zoomSpec] does, from this spec.
   final double bannerZoom;
 
+  /// Draw source-native frames around surah names on the printed page. Reflow stays frameless.
+  final bool surahFrames;
+
   QvpLayoutSpec copyWith({
     double? viewportW,
     double? viewportH,
@@ -536,6 +540,7 @@ final class QvpLayoutSpec {
     double? maxAspectSlack,
     QvpReflowSpec? reflow,
     double? bannerZoom,
+    bool? surahFrames,
   }) =>
       QvpLayoutSpec(
         viewportW: viewportW ?? this.viewportW,
@@ -552,6 +557,7 @@ final class QvpLayoutSpec {
         maxAspectSlack: maxAspectSlack ?? this.maxAspectSlack,
         reflow: reflow ?? this.reflow,
         bannerZoom: bannerZoom ?? this.bannerZoom,
+        surahFrames: surahFrames ?? this.surahFrames,
       );
 
   @override
@@ -570,11 +576,12 @@ final class QvpLayoutSpec {
       other.cropRight == cropRight &&
       other.maxAspectSlack == maxAspectSlack &&
       other.reflow == reflow &&
-      other.bannerZoom == bannerZoom;
+      other.bannerZoom == bannerZoom &&
+      other.surahFrames == surahFrames;
 
   @override
   int get hashCode => Object.hash(viewportW, viewportH, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft,
-      cropRight, maxAspectSlack, reflow, bannerZoom);
+      cropRight, maxAspectSlack, reflow, bannerZoom, surahFrames);
 }
 
 /// Output of [QvpPage.layout]. Page → viewport: `viewX = offsetX + x*scale`, `viewY = offsetY + (y + lineDy[line])*scale`.
@@ -651,6 +658,18 @@ final class QvpDivision {
   /// 'juz' | 'hizb' | 'nisf' | 'rubuAlHizb'
   final String division;
   final int line, number, surah, ayah, ayahIndex;
+}
+
+@immutable
+final class QvpSurahHeader {
+  const QvpSurahHeader({required this.decoration, required this.surah, required this.line, required this.x0, required this.y0, required this.x1, required this.y1, required this.titleX0, required this.titleY0, required this.titleX1, required this.titleY1});
+  final int decoration, surah, line;
+
+  /// The box a frame fills: the page's text block wide, the heading's row tall.
+  final double x0, y0, x1, y1;
+
+  /// The title ink inside that box, with any native frame left out.
+  final double titleX0, titleY0, titleX1, titleY1;
 }
 
 @immutable
@@ -1187,6 +1206,21 @@ class QvpPage extends ChangeNotifier {
     }, growable: false);
   }
 
+  /// The surah headings, in page units: the box a frame fills, and the title ink in it.
+  List<QvpSurahHeader> surahHeaders() => _surahHeaders(view: false);
+
+  /// The same, in viewport px through the current layout: what a host frames.
+  List<QvpSurahHeader> surahHeadersView() => _surahHeaders(view: true);
+
+  List<QvpSurahHeader> _surahHeaders({required bool view}) {
+    final o = _e._out<QvpSurahHeaderC>(), cap = _e._cap(ffi.sizeOf<QvpSurahHeaderC>());
+    final n = (view ? _b.surahHeadersView(_p, o, cap) : _b.surahHeaders(_p, o, cap)).clamp(0, cap);
+    return List.generate(n, (i) {
+      final h = (o + i).ref;
+      return QvpSurahHeader(decoration: h.decoration, surah: h.surah, line: h.line, x0: h.x0, y0: h.y0, x1: h.x1, y1: h.y1, titleX0: h.titleX0, titleY0: h.titleY0, titleX1: h.titleX1, titleY1: h.titleY1);
+    }, growable: false);
+  }
+
   /// Real ayah medallions.
   List<QvpAyahMark> ayahMarks() {
     final o = _e._out<QvpAyahMarkC>(), cap = _e._cap(ffi.sizeOf<QvpAyahMarkC>());
@@ -1386,6 +1420,7 @@ class QvpPage extends ChangeNotifier {
     // Not a reflow knob in the wrappers: the zoom control builds the reflow spec itself, so a
     // cap that lives on it would never reach a page the reader pinched.
     s.bannerZoom = spec.bannerZoom;
+    s.surahFrames = spec.surahFrames ? 1 : 0;
   }
 
   static const _fill = {'ragged': 0, 'justified': 1, 'centred': 2, 'centered': 2};
@@ -1491,6 +1526,7 @@ class QvpPage extends ChangeNotifier {
         // exactly the layout it is for: only a reflowed page grows a banner, and this is the
         // spec every reflowed page is laid out with.
         bannerZoom: spec.bannerZoom,
+        surahFrames: spec.surahFrames,
         reflow: o.reflowZoom > 1.0001
             ? QvpReflowSpec(
                 zoom: o.reflowZoom,

@@ -103,8 +103,9 @@ typedef struct { uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; 
    name, basmalah) may get as the reader zooms, as a multiple of its printed size (0 or below = uncapped, 1 = held at the print); it is not a reflow
    knob, because the zoom control fills those in itself. reflow_gaps: 0 the printed gap
    between the two words, 1 the page's median gap. reflow_word_gap: multiplier on every gap (0 = 1). reflow_max_stretch: how far a justified row's gaps may stretch,
-   as a multiple of what they started with (0 = the engine's default, negative = no cap). */
-typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint8_t fill_height; uint32_t grid_lines; float crop_left, crop_right, max_aspect_slack, reflow_zoom; uint8_t reflow_fill, reflow_breaks, reflow_gaps; float reflow_word_gap, reflow_max_stretch, reflow_relax, banner_zoom; } QvpLayoutSpec;
+   as a multiple of what they started with (0 = the engine's default, negative = no cap). surah_frames: 1 draws source-native
+   frames around surah names on the printed page, 0 omits them; reflow omits them. */
+typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint8_t fill_height; uint32_t grid_lines; float crop_left, crop_right, max_aspect_slack, reflow_zoom; uint8_t reflow_fill, reflow_breaks, reflow_gaps; float reflow_word_gap, reflow_max_stretch, reflow_relax, banner_zoom; uint8_t surah_frames; } QvpLayoutSpec;
 /* the grid a page is designed on: the mushaf's line count (15 here, or more when a page has more) and the printed spacing */
 typedef struct { uint32_t lines; float line_spacing; } QvpGrid;
 /* fit_*: the view transform that shows the whole content (shrink to the viewport height, never enlarge, centred):
@@ -117,6 +118,7 @@ typedef struct { uint32_t ink, diacritics, dots, waqf, sifr, ayah_mark, numeral,
 typedef struct { uint16_t number, ayah_count; uint8_t has_banner, has_basmalah, place /* 0 makkah 1 madinah */, _pad; uint32_t banner_decoration; QvpStr arabic, latin, english; } QvpSurah;
 typedef struct { uint8_t division /* QVP_DIVISION_* */, line; uint16_t number, surah, ayah; uint32_t ayah_index; } QvpDivision;
 typedef struct { uint32_t decoration; uint16_t surah, ayah; uint32_t line; float cx, cy, r; uint32_t ornament_path, numeral_path; } QvpAyahMark;
+typedef struct { uint32_t decoration; uint16_t surah, _pad; uint32_t line; float x0, y0, x1, y1 /* the box a frame fills */, title_x0, title_y0, title_x1, title_y1 /* the title ink in it */; } QvpSurahHeader;
 typedef struct { uint32_t decoration; uint16_t surah, ayah, juz, hizb, nisf, rubu_al_hizb, rubu_al_hizb_in_hizb, _pad; } QvpRosette;
 typedef struct { uint32_t decoration; uint16_t surah, ayah; uint32_t sign_path; } QvpSajdah;
 typedef struct { uint32_t word, index; uint8_t is_loose_match; } QvpMatch;
@@ -147,6 +149,8 @@ void     qvp_page_grid(const QvpPage*, QvpGrid* out);
 uint32_t qvp_surah_count(const QvpPage*);
 int      qvp_surah_at(const QvpPage*, uint32_t i, QvpSurah* out);
 uint32_t qvp_divisions(const QvpPage*, QvpDivision* out, uint32_t cap);   /* divisions that START on this page */
+uint32_t qvp_surah_headers(const QvpPage*, QvpSurahHeader* out, uint32_t cap);      /* page units; boxes leave out a native frame */
+uint32_t qvp_surah_headers_view(const QvpPage*, QvpSurahHeader* out, uint32_t cap); /* the same, in viewport px through the current layout */
 uint32_t qvp_ayah_marks(const QvpPage*, QvpAyahMark* out, uint32_t cap);       /* real ayah medallions */
 uint32_t qvp_ayah_marks_view(const QvpPage*, QvpAyahMark* out, uint32_t cap);  /* the same, in viewport px through the current layout */
 uint32_t qvp_rosettes(const QvpPage*, QvpRosette* out, uint32_t cap);     /* drawn hizb rosettes */
@@ -206,7 +210,7 @@ int      qvp_layout_current(const QvpPage*, QvpLayout* out);                /* t
 uint32_t qvp_layout_groups(const QvpPage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);   /* where each group of paths is placed */
 uint32_t qvp_layout_repeats(const QvpPage*, float* out /* n × {first_path, n_paths, dx, dy, kx, ky} */, uint32_t cap);   /* paths drawn again elsewhere (a sajdah line over two rows) */
 uint32_t qvp_layout_path_groups(const QvpPage*, uint32_t* out, uint32_t cap);    /* the group of every path; empty unless reflowed */
-uint32_t qvp_layout_omitted_paths(const QvpPage*, uint32_t* out, uint32_t cap);  /* paths this layout does not draw (sheet furniture when reflowed) */
+uint32_t qvp_layout_omitted_paths(const QvpPage*, uint32_t* out, uint32_t cap);  /* paths this layout does not draw (sheet furniture and a native surah frame when reflowed) */
 uint32_t qvp_layout_draw_list(const QvpPage*, float band_top, float band_bottom /* <= top = the whole page */, uint32_t* out /* n × {path, placement} */, uint32_t cap);   /* everything this layout draws inside a band of it, in drawing order: one loop draws any page */
 uint32_t qvp_layout_placements(const QvpPage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);   /* what a draw list's `placement` indexes: the groups, then the repeats */
 uint32_t qvp_layout_row_words(const QvpPage*, uint32_t row, uint32_t* out, uint32_t cap);     /* the words of a reflowed row */

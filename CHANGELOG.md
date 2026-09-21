@@ -6,6 +6,17 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 ### Added
+- The page-data build emits frame-free surah titles as individual and combined QVP and SVG
+  assets, plus a lossless OpenType/CFF WOFF2 font, CSS and a metadata map. Frames remain in
+  the page files; `atlas.qva` remains the cross-Mushaf lookup and search index.
+- `qvp_surah_headers` and `qvp_surah_headers_view`: the two boxes a host needs to draw its
+  own surah frame. The first is the box a frame fills, the page's text block wide and the
+  heading's row tall. The second is the title ink inside it. Both leave out a native frame,
+  and the view call has already applied the layout's move of the heading's line. Every
+  wrapper binds them.
+- `surah_frames` on the layout spec controls source-native frames around surah names. It
+  defaults on for the printed page; a host that supplies its own frame can turn it off.
+  Reflowed titles and the reusable title assets remain frameless.
 - `qvp_layout_printed_height`: the page's height laid out for a spec at the printed pitch, in
   viewport px — `content_h` before fill-height adds any leading. A host deciding whether a page
   fits a box, or how far to shrink it to keep it whole, asks this before it sizes the canvas,
@@ -50,6 +61,11 @@ All notable changes to the engine and its packages. The format follows
   stays the engine's answer for a host that would rather shrink. Both knobs lay the page out again
   when set, and the band a pinch paints follows the view transform, so a magnify peek on a
   host-scrolled page no longer leaves a blank box under the fingers.
+- A native surah frame stored as `PathKind::Ornament` stays with the printed page but no
+  longer freezes the title at the frame's width when the page reflows. The reflow omits the
+  frame from drawing, sizing and hit testing; the title keeps growing with the reader. On the
+  printed page, exact hit testing follows the visible frame ink instead of treating its large
+  transparent centre as part of the title.
 - `qvp_layout_line_spacing_to_fill` answers the spacing the page is really laid out at. It
   measured the full printed width and the page's own height against the viewport, while
   `qvp_layout` fits the CROPPED width and sits a short page on the grid a full page fills —

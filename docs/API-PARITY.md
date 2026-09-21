@@ -261,7 +261,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-147 symbols in the header, 147 Rust exports. web: 146 bound, android: 141 bound, flutter: 146 bound, ios: 138 bound, react-native: 80 bound.
+149 symbols in the header, 149 Rust exports. web: 148 bound, android: 143 bound, flutter: 148 bound, ios: 140 bound, react-native: 82 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -380,6 +380,8 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_styled_paths` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_surah_at` | yes | yes | yes | yes | gap (list form: bound as `surahs()`) |
 | `qvp_surah_count` | yes | yes | yes | yes | gap (list form: bound as `surahs().length`) |
+| `qvp_surah_headers` | yes | yes | yes | yes | yes |
+| `qvp_surah_headers_view` | yes | yes | yes | yes | yes |
 | `qvp_swipe_pages` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_target_words` | yes | yes | yes | yes | yes |
 | `qvp_text` | yes | yes | yes | yes | yes |

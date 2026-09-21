@@ -25,7 +25,7 @@ pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox}
 pub use hit::{Hit, HitArea, HitOptions, LineBand};
 pub use layout::{Draw, Grid, Layout, LayoutSpec};
 pub use memorize::{MaskMode, MaskState, Reveal};
-pub use meta::{Division, MarkerInfo, Rosette, SurahInfo};
+pub use meta::{Division, MarkerInfo, Rosette, SurahHeader, SurahInfo};
 pub use qvp_format;
 pub use qvp_format::atlas::Atlas;
 pub use reflow::{Breaks, Fill, GapMode, Placement, ReflowSpec, Reflowed};
@@ -169,7 +169,23 @@ impl Page {
                     .iter()
                     .filter(|d| d.line as usize == li && matches!(d.kind, DecoKind::SurahName | DecoKind::Basmalah))
                 {
-                    bb.union(&d.bbox);
+                    for pi in d.first_path..d.first_path + d.n_paths as u32 {
+                        let path = &data.paths[pi as usize];
+                        if path.kind == PathKind::HeaderInk {
+                            bb.union(&path.bbox);
+                        }
+                    }
+                }
+                // Old page data can carry an unclassified header path. Keep its established
+                // centre rather than turning the line into an empty one.
+                if bb.is_empty() {
+                    for d in data
+                        .decorations
+                        .iter()
+                        .filter(|d| d.line as usize == li && matches!(d.kind, DecoKind::SurahName | DecoKind::Basmalah))
+                    {
+                        bb.union(&d.bbox);
+                    }
                 }
             }
             if bb.is_empty() {
@@ -702,10 +718,9 @@ impl Page {
         if let Some(wi) = bbox_only {
             return Some(HitExact { word: wi, path: NONE, decoration: NONE });
         }
-        for (di, d) in self.data.decorations.iter().enumerate() {
-            if d.bbox.contains(qx, qy) {
-                let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, y).unwrap_or(NONE);
-                return Some(HitExact { word: NONE, path: pi, decoration: di as u32 });
+        for di in 0..self.data.decorations.len() {
+            if let Some(hit) = self.exact_decoration_hit(di, x, y, &[]) {
+                return Some(hit);
             }
         }
         None
@@ -731,12 +746,10 @@ impl Page {
                     return Some(HitExact { word: wi, path: pi, decoration: NONE });
                 }
             }
-            for (di, d) in self.data.decorations.iter().enumerate() {
+            for di in 0..self.data.decorations.len() {
                 let (px, py) = flow.deco_place[di].invert(x, y);
-                let (qx, qy) = ((px * q).round() as i32, (py * q).round() as i32);
-                if d.bbox.contains(qx, qy) {
-                    let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, px, py).unwrap_or(NONE);
-                    return Some(HitExact { word: NONE, path: pi, decoration: di as u32 });
+                if let Some(hit) = self.exact_decoration_hit(di, px, py, &l.omitted_paths) {
+                    return Some(hit);
                 }
             }
             return None;
@@ -747,23 +760,21 @@ impl Page {
             if py < y0 - 0.5 || py > y1 + 0.5 {
                 continue;
             }
-            if let Some(h) = self.hit_test_in_line(li, x, py) {
+            if let Some(h) = self.hit_test_in_line(li, x, py, &l.omitted_paths) {
                 return Some(h);
             }
         }
         for (di, d) in self.data.decorations.iter().enumerate() {
             let li = self.geom.table[d.first_path as usize].line as usize;
             let py = y - l.line_dy[li];
-            let (qx, qy) = ((x * q).round() as i32, (py * q).round() as i32);
-            if d.bbox.contains(qx, qy) {
-                let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, py).unwrap_or(NONE);
-                return Some(HitExact { word: NONE, path: pi, decoration: di as u32 });
+            if let Some(hit) = self.exact_decoration_hit(di, x, py, &l.omitted_paths) {
+                return Some(hit);
             }
         }
         None
     }
 
-    fn hit_test_in_line(&self, li: usize, x: f32, y: f32) -> Option<HitExact> {
+    fn hit_test_in_line(&self, li: usize, x: f32, y: f32, omitted: &[u32]) -> Option<HitExact> {
         let q = self.quant();
         let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
         let ws = &self.line_words[li];
@@ -787,20 +798,62 @@ impl Page {
             return Some(HitExact { word: wi, path: NONE, decoration: NONE });
         }
         for (di, d) in self.data.decorations.iter().enumerate() {
-            if self.geom.table[d.first_path as usize].line as usize != li || !d.bbox.contains(qx, qy) {
+            if self.geom.table[d.first_path as usize].line as usize != li {
                 continue;
             }
-            let pi = self.exact_path_hit(d.first_path, d.n_paths as u32, x, y).unwrap_or(NONE);
-            return Some(HitExact { word: NONE, path: pi, decoration: di as u32 });
+            if let Some(hit) = self.exact_decoration_hit(di, x, y, omitted) {
+                return Some(hit);
+            }
         }
         None
     }
 
+    fn exact_decoration_hit(&self, di: usize, x: f32, y: f32, omitted: &[u32]) -> Option<HitExact> {
+        let q = self.quant();
+        let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
+        let decoration = &self.data.decorations[di];
+        if !self.decoration_bbox_without(di, omitted).contains(qx, qy) {
+            return None;
+        }
+        if let Some(path) = self.exact_path_hit_without(decoration.first_path, decoration.n_paths as u32, x, y, omitted)
+        {
+            return Some(HitExact { word: NONE, path, decoration: di as u32 });
+        }
+        if decoration.kind != DecoKind::SurahName {
+            return Some(HitExact { word: NONE, path: NONE, decoration: di as u32 });
+        }
+        // A viewport transform can move a point by a few f32 ulps across a frame edge. Retry its
+        // ornament on the exact format grid, but never use the large hollow frame bbox as a hit.
+        let (grid_x, grid_y) = (qx as f32 / q, qy as f32 / q);
+        let mut title_bbox = IBox::EMPTY;
+        for path in decoration.first_path..decoration.first_path + decoration.n_paths as u32 {
+            if omitted.binary_search(&path).is_ok() {
+                continue;
+            }
+            let record = &self.data.paths[path as usize];
+            if record.kind == PathKind::Ornament {
+                if record.bbox.contains(qx, qy) && self.point_in_path(path, grid_x, grid_y) {
+                    return Some(HitExact { word: NONE, path, decoration: di as u32 });
+                }
+            } else {
+                title_bbox.union(&record.bbox);
+            }
+        }
+        title_bbox.contains(qx, qy).then_some(HitExact { word: NONE, path: NONE, decoration: di as u32 })
+    }
+
     fn exact_path_hit(&self, first: u32, n: u32, x: f32, y: f32) -> Option<u32> {
+        self.exact_path_hit_without(first, n, x, y, &[])
+    }
+
+    fn exact_path_hit_without(&self, first: u32, n: u32, x: f32, y: f32, omitted: &[u32]) -> Option<u32> {
         let q = self.quant();
         let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
         for pass in 0..2 {
             for pi in first..first + n {
+                if omitted.binary_search(&pi).is_ok() {
+                    continue;
+                }
                 let p = &self.data.paths[pi as usize];
                 let is_body = matches!(
                     p.kind,

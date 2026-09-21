@@ -28,6 +28,30 @@ pub struct Division {
     pub ayah_index: u32,
 }
 
+/// A surah heading on the page: the box a frame fills, and the title ink inside it.
+///
+/// A host that turns `surah_frames` off supplies its own frame. It needs two boxes: the row
+/// the heading occupies across the page's text block, and the calligraphy alone. Both leave
+/// out a native frame, whether the layout draws one or not, so the same numbers work for a
+/// page that carries a frame and a page that does not.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SurahHeader {
+    pub decoration: u32,
+    pub surah: u16,
+    /// Line the heading sits in.
+    pub line: u32,
+    /// The box a frame fills: the text block's width, the heading row's height.
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+    /// The title ink inside that box, with any native frame left out.
+    pub title_x0: f32,
+    pub title_y0: f32,
+    pub title_x1: f32,
+    pub title_y1: f32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MarkerInfo {
     pub decoration: u32,
@@ -235,6 +259,45 @@ impl Page {
                     r: ((b.x1 - b.x0).max(b.y1 - b.y0)) as f32 / 2.0 / q,
                     ornament_path: orn,
                     numeral_path: num,
+                }
+            })
+            .collect()
+    }
+
+    /// The surah headings drawn on this page, in page units.
+    ///
+    /// The frame box spans the page's text block and the heading's row. The title box holds
+    /// the heading's own ink without its native frame, which is what a host draws around.
+    pub fn surah_headers(&self) -> Vec<SurahHeader> {
+        let d = self.data();
+        let q = self.quant();
+        let (bx0, bx1) = self.text_block();
+        let ornaments = self.surah_name_ornament_paths();
+        let half = self.line_spacing() / 2.0;
+        d.decorations
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| x.kind == DecoKind::SurahName)
+            .map(|(i, x)| {
+                let title = self.decoration_bbox_without(i, &ornaments);
+                let line = x.line as usize;
+                let centre = if line < self.data().lines.len() {
+                    self.line_centre(line)
+                } else {
+                    (title.y0 + title.y1) as f32 / 2.0 / q
+                };
+                SurahHeader {
+                    decoration: i as u32,
+                    surah: x.surah,
+                    line: x.line as u32,
+                    x0: bx0,
+                    y0: centre - half,
+                    x1: bx1,
+                    y1: centre + half,
+                    title_x0: title.x0 as f32 / q,
+                    title_y0: title.y0 as f32 / q,
+                    title_x1: title.x1 as f32 / q,
+                    title_y1: title.y1 as f32 / q,
                 }
             })
             .collect()

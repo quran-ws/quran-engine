@@ -33,7 +33,7 @@
     selWord: -1, selAyah: null, hlSel: 0, hlAyah: 0, hlSearch: 0, hlPlay: 0, pathHandles: new Map(),
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
-    layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16 },
+    layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16, surahFrames: true },
     reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
     hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
     // the reader's zoom control, which the engine owns: mode, step and the size in force
@@ -53,6 +53,17 @@
     paper.style.left = v.offsetX + 'px'; paper.style.top = v.offsetY + 'px';
     paper.style.width = (L ? L.contentW : p.width) * v.scale + 'px'; paper.style.height = (L ? L.contentH : p.height) * v.scale + 'px';
     renderer.draw(p, v, dpr);
+    // the host's own surah frame, drawn where the engine says the heading sits
+    if (!S.layout.surahFrames) {
+      const c = renderer.ctx;
+      c.setTransform(dpr * v.scale, 0, 0, dpr * v.scale, dpr * v.offsetX, dpr * v.offsetY);
+      c.strokeStyle = INK[S.theme]; c.lineWidth = 0.6; c.beginPath();
+      for (const h of p.surahHeadersView()) {
+        c.roundRect(h.x0, h.y0, h.x1 - h.x0, h.y1 - h.y0, 3);
+        c.roundRect(h.x0 + 2, h.y0 + 2, h.x1 - h.x0 - 4, h.y1 - h.y0 - 4, 2);
+      }
+      c.stroke();
+    }
     // hover: a cheap UI overlay, not engine state
     if (S.hover >= 0 && S.hover !== S.selWord) {
       // the engine places the band; the view adds only the reader's pan and zoom
@@ -71,7 +82,7 @@
   // ── view: engine layout + pan/zoom on top ──
   function layoutSpec() {
     const r = stage.getBoundingClientRect(), ls = S.layout;
-    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK,
+    return { viewportW: r.width, viewportH: r.height, padTop: ls.padTop, padBottom: ls.padBottom, padLeft: ls.padSide, padRight: ls.padSide, lineSpacing: ls.lineSpacing, fillHeight: ls.fillHeight, surahFrames: ls.surahFrames, maxAspectSlack: QVP.DEFAULTS.ASPECT_SLACK,
       reflow: S.reflow.on
         ? { zoom: S.reflow.zoom, fill: S.reflow.fill, breaks: S.reflow.breaks, gaps: S.reflow.gaps, wordGap: S.reflow.wordGap, relax: S.reflow.relax, maxStretch: S.reflow.maxStretch }
         : null };
@@ -389,6 +400,7 @@
   const relayoutUI = () => { $('spacingVal').textContent = '×' + S.layout.lineSpacing.toFixed(2); fit(); };
   $('spacing').oninput = e => { S.layout.lineSpacing = +e.target.value; S.layout.fillHeight = false; $('fillH').classList.remove('on'); relayoutUI(); };
   $('fillH').onclick = () => { S.layout.fillHeight = !S.layout.fillHeight; $('fillH').classList.toggle('on', S.layout.fillHeight); relayoutUI(); };
+  $('surahFrames').onclick = () => { S.layout.surahFrames = !S.layout.surahFrames; $('surahFrames').classList.toggle('on', S.layout.surahFrames); relayoutUI(); };
   $('fitGap').onclick = () => { const p = S.page, r = stage.getBoundingClientRect(); S.layout.fillHeight = false; $('fillH').classList.remove('on'); S.layout.lineSpacing = p.layoutLineSpacingToFill(layoutSpec()); $('spacing').value = S.layout.lineSpacing; relayoutUI(); };
   $('padTop').oninput = e => { S.layout.padTop = +e.target.value; $('padTopVal').textContent = e.target.value; relayoutUI(); };
   $('padBottom').oninput = e => { S.layout.padBottom = +e.target.value; $('padBottomVal').textContent = e.target.value; relayoutUI(); };

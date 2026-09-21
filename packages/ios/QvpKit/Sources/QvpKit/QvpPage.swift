@@ -135,6 +135,14 @@ public final class QvpPage {
             return QvpSurah(number: Int(s.number), ayahCount: Int(s.ayah_count), hasBanner: s.has_banner != 0, hasBasmalah: s.has_basmalah != 0, place: place(s.place), bannerDecoration: index(s.banner_decoration), arabic: s.arabic.string, latin: s.latin.string, english: s.english.string)
         }
     }
+    private func header(_ h: QvpFFI.QvpSurahHeader) -> QvpSurahHeader {
+        QvpSurahHeader(decoration: index(h.decoration), surah: Int(h.surah), line: Int(h.line), x0: h.x0, y0: h.y0, x1: h.x1, y1: h.y1, titleX0: h.title_x0, titleY0: h.title_y0, titleX1: h.title_x1, titleY1: h.title_y1)
+    }
+    /// Each heading's two boxes in page units. Both leave a native frame out, so they hold
+    /// whether the layout draws one or not.
+    public func surahHeaders() -> [QvpSurahHeader] { collect(32) { o, c in qvp_surah_headers(p, o, c) }.map(header) }
+    /// The same boxes in viewport px through the current layout — where a reflowed page put them.
+    public func surahHeadersView() -> [QvpSurahHeader] { collect(32) { o, c in qvp_surah_headers_view(p, o, c) }.map(header) }
     public func divisions() -> [QvpDivision] { collect(64) { o, c in qvp_divisions(p, o, c) }.map { (d: QvpFFI.QvpDivision) in QvpDivision(division: Division(rawValue: Int(d.division)) ?? .juz, number: Int(d.number), surah: Int(d.surah), ayah: Int(d.ayah), line: Int(d.line), ayahIndex: Int(d.ayah_index)) } }
     public func ayahMarks() -> [QvpAyahMark] { collect(128) { o, c in qvp_ayah_marks(p, o, c) }.map { (m: QvpFFI.QvpAyahMark) in QvpAyahMark(decoration: index(m.decoration), surah: Int(m.surah), ayah: Int(m.ayah), line: Int(m.line), cx: m.cx, cy: m.cy, r: m.r, ornamentPath: index(m.ornament_path), numeralPath: index(m.numeral_path)) } }
     public func ayahMarkOf(_ surah: Int, _ ayah: Int) -> QvpAyahMark? { ayahMarks().first { $0.surah == surah && $0.ayah == ayah } }
@@ -213,7 +221,7 @@ public final class QvpPage {
     }
     /// The group of every path. Empty without reflow, where a path's group is its printed line.
     public func layoutPathGroups() -> [Int] { collect(4096) { (o: UnsafeMutablePointer<UInt32>, c) in qvp_layout_path_groups(p, o, c) }.map(Int.init) }
-    /// Paths this layout does not draw: the sheet's furniture on a reflowed page.
+    /// Paths this layout does not draw: sheet furniture and a native surah frame in reflow.
     public func layoutOmittedPaths() -> [Int] { collect(64) { (o: UnsafeMutablePointer<UInt32>, c) in qvp_layout_omitted_paths(p, o, c) }.map(Int.init) }
     /// Everything the current layout draws, in drawing order: each path once under the
     /// placement it belongs to, and again for every row a decoration is repeated over. A path

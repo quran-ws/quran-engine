@@ -293,6 +293,8 @@ final class QvpLayoutSpecC extends ffi.Struct {
   external double reflowRelax;
   @ffi.Float()
   external double bannerZoom;
+  @ffi.Uint8()
+  external int surahFrames;
 }
 
 /// `{ uint32_t lines; float line_spacing; }`
@@ -473,6 +475,34 @@ final class QvpDivisionC extends ffi.Struct {
   external int ayahIndex;
 }
 
+/// `{ uint32_t decoration; uint16_t surah, _pad; uint32_t line; float x0, y0, x1, y1, title_x0, title_y0, title_x1, title_y1; }`
+final class QvpSurahHeaderC extends ffi.Struct {
+  @ffi.Uint32()
+  external int decoration;
+  @ffi.Uint16()
+  external int surah;
+  @ffi.Uint16()
+  external int pad;
+  @ffi.Uint32()
+  external int line;
+  @ffi.Float()
+  external double x0;
+  @ffi.Float()
+  external double y0;
+  @ffi.Float()
+  external double x1;
+  @ffi.Float()
+  external double y1;
+  @ffi.Float()
+  external double titleX0;
+  @ffi.Float()
+  external double titleY0;
+  @ffi.Float()
+  external double titleX1;
+  @ffi.Float()
+  external double titleY1;
+}
+
 /// `{ uint32_t decoration; uint16_t surah, ayah; uint32_t line; float cx, cy, r; uint32_t ornament_path, numeral_path; }`
 final class QvpAyahMarkC extends ffi.Struct {
   @ffi.Uint32()
@@ -642,6 +672,10 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpSurahC>), int Function(PtrPage, int, ffi.Pointer<QvpSurahC>)>('qvp_surah_at');
   late final int Function(PtrPage, ffi.Pointer<QvpDivisionC>, int) divisions =
       lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Pointer<QvpDivisionC>, ffi.Uint32), int Function(PtrPage, ffi.Pointer<QvpDivisionC>, int)>('qvp_divisions');
+  late final int Function(PtrPage, ffi.Pointer<QvpSurahHeaderC>, int) surahHeaders =
+      lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Pointer<QvpSurahHeaderC>, ffi.Uint32), int Function(PtrPage, ffi.Pointer<QvpSurahHeaderC>, int)>('qvp_surah_headers');
+  late final int Function(PtrPage, ffi.Pointer<QvpSurahHeaderC>, int) surahHeadersView =
+      lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Pointer<QvpSurahHeaderC>, ffi.Uint32), int Function(PtrPage, ffi.Pointer<QvpSurahHeaderC>, int)>('qvp_surah_headers_view');
   late final int Function(PtrPage, ffi.Pointer<QvpAyahMarkC>, int) ayahMarks =
       lib.lookupFunction<ffi.Uint32 Function(PtrPage, ffi.Pointer<QvpAyahMarkC>, ffi.Uint32), int Function(PtrPage, ffi.Pointer<QvpAyahMarkC>, int)>('qvp_ayah_marks');
   late final int Function(PtrPage, ffi.Pointer<QvpAyahMarkC>, int) ayahMarksView =

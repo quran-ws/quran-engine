@@ -136,7 +136,7 @@ impl Page {
 
 use crate::highlight::{BandHeight, ViewBox};
 use crate::hit::HitArea;
-use crate::meta::MarkerInfo;
+use crate::meta::{MarkerInfo, SurahHeader};
 
 impl Page {
     /// Band boxes for a word list in viewport pixels, through the current layout. The
@@ -265,6 +265,41 @@ impl Page {
     /// The ayah medallions of the page in viewport pixels, through the current layout: where
     /// each one is drawn, for a tap target or a marker a host draws itself. The page-unit twin
     /// is [`Page::ayah_marks`].
+    /// The surah headings in viewport px through the current layout: where each is drawn.
+    ///
+    /// Without a layout this returns the page-unit boxes. The layout moves a heading's line,
+    /// so a host that maps the page-unit boxes itself must apply that move. This call has
+    /// already applied it.
+    pub fn surah_headers_view(&self) -> Vec<SurahHeader> {
+        let Some(l) = self.current_layout() else { return self.surah_headers() };
+        let n_words = self.data().words.len() as u32;
+        self.surah_headers()
+            .into_iter()
+            .map(|h| {
+                let p = match l.reflow.as_ref() {
+                    Some(_) => l.groups.get((n_words + h.decoration) as usize).copied(),
+                    None => l.groups.get(h.line as usize).copied(),
+                }
+                .unwrap_or(crate::Placement::IDENTITY);
+                let (x0, y0) = p.apply(h.x0, h.y0);
+                let (x1, y1) = p.apply(h.x1, h.y1);
+                let (tx0, ty0) = p.apply(h.title_x0, h.title_y0);
+                let (tx1, ty1) = p.apply(h.title_x1, h.title_y1);
+                SurahHeader {
+                    x0: l.offset_x + x0 * l.scale,
+                    y0: l.offset_y + y0 * l.scale,
+                    x1: l.offset_x + x1 * l.scale,
+                    y1: l.offset_y + y1 * l.scale,
+                    title_x0: l.offset_x + tx0 * l.scale,
+                    title_y0: l.offset_y + ty0 * l.scale,
+                    title_x1: l.offset_x + tx1 * l.scale,
+                    title_y1: l.offset_y + ty1 * l.scale,
+                    ..h
+                }
+            })
+            .collect()
+    }
+
     pub fn ayah_marks_view(&self) -> Vec<MarkerInfo> {
         let Some(l) = self.current_layout() else { return self.ayah_marks() };
         let n_words = self.data().words.len() as u32;

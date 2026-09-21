@@ -7,11 +7,11 @@
 //!
 //! What reflow never does: reshape a word (every outline is placed as printed, whole),
 //! split an ayah from its medallion, move a word to another page, or leave a sajdah line
-//! or a surah banner behind. A surah name or basmalah keeps a row of its own, and text
-//! never flows across it.
+//! or header title behind. A surah name or basmalah keeps a row of its own, and text never
+//! flows across it. The printed frame around a surah name belongs to the printed layout only.
 use crate::defaults;
 use crate::Page;
-use qvp_format::{DecoKind, Mark, NONE_U16};
+use qvp_format::{DecoKind, IBox, Mark, PathKind, NONE_U16};
 
 const NONE: u32 = u32::MAX;
 
@@ -196,6 +196,8 @@ pub(crate) struct RowSpec {
     /// own [`crate::LayoutSpec::banner_zoom`] against the zoom it is reflowing at, worked out
     /// once. Infinite leaves the banner growing with the page.
     pub banner_k: f32,
+    /// Whether a row that still reproduces the printed page keeps a native surah frame.
+    pub surah_frames: bool,
 }
 
 /// One unit that a row holds whole: a word, the ink printed with it (the medallion that
@@ -454,6 +456,38 @@ impl Page {
     pub(crate) fn sajdah_line_paths(&self) -> Vec<bool> {
         self.data().paths.iter().map(|p| p.mark == Mark::SajdahLine).collect()
     }
+
+    /// Native frame paths of a surah name. The printed page draws them; a reflowed page omits
+    /// them so the title can grow with the reader instead of being fitted inside the frame.
+    pub(crate) fn surah_name_ornament_paths(&self) -> Vec<u32> {
+        let d = self.data();
+        let mut paths: Vec<u32> = d
+            .decorations
+            .iter()
+            .filter(|deco| deco.kind == DecoKind::SurahName)
+            .flat_map(|deco| deco.first_path..deco.first_path + deco.n_paths as u32)
+            .filter(|&pi| d.paths[pi as usize].kind == PathKind::Ornament)
+            .collect();
+        paths.sort_unstable();
+        paths.dedup();
+        paths
+    }
+
+    /// A decoration's box after paths this layout does not draw are removed.
+    pub(crate) fn decoration_bbox_without(&self, di: usize, omitted: &[u32]) -> IBox {
+        let d = self.data();
+        let deco = &d.decorations[di];
+        if omitted.is_empty() {
+            return deco.bbox;
+        }
+        let mut bbox = IBox::EMPTY;
+        for pi in deco.first_path..deco.first_path + deco.n_paths as u32 {
+            if omitted.binary_search(&pi).is_err() {
+                bbox.union(&d.paths[pi as usize].bbox);
+            }
+        }
+        bbox
+    }
     /// The ink of a decoration apart from its sajdah line: the sign in the margin, and
     /// anything else drawn with it. The decoration's own box holds both and is no use for
     /// placing either.
@@ -506,7 +540,8 @@ impl Page {
     }
 
     pub(crate) fn reflow(&self, spec: &ReflowSpec, rows: &RowSpec) -> Reflowed {
-        let RowSpec { block, margins, row_w, pitch, top, printed_spacing, rows_per_view, banner_k } = *rows;
+        let RowSpec { block, margins, row_w, pitch, top, printed_spacing, rows_per_view, banner_k, surah_frames } =
+            *rows;
         let q = self.quant();
         let d = self.data();
         let median = self.median_word_gap();
@@ -797,6 +832,10 @@ impl Page {
         // than the print has. A reader opening the lines up wants that on a reproduced page
         // too, so the rows then take the even rhythm with the spacing asked for.
         let printed_y = printed_spacing.then_some(()).and(as_printed.clone());
+        // The native surah frame belongs to the printed page. Once the page has truly reflowed,
+        // the title grows with the reader on its own; the frame neither draws nor constrains it.
+        let omitted_header_paths =
+            if printed_y.is_some() && surah_frames { Vec::new() } else { self.surah_name_ornament_paths() };
         // Horizontal placement first: it does not depend on the heights, and the heights need
         // to know which ink of two rows ends up over which.
         let last_row = rows.len().saturating_sub(1);
@@ -937,10 +976,11 @@ impl Page {
             // the banner is drawn at, which is the size `place_header` fits to the row.
             if let Some(&li) = headers.get(&r) {
                 let c = self.line_centre(li as usize);
-                let k = self.header_scale(li as usize, row_w, banner_k);
-                for deco in d.decorations.iter().filter(|x| x.line != NONE_U16 && x.line as u32 == li) {
-                    asc = asc.max(k * (c - deco.bbox.y0 as f32 / q));
-                    desc = desc.max(k * (deco.bbox.y1 as f32 / q - c));
+                let k = self.header_scale(li as usize, row_w, banner_k, &omitted_header_paths);
+                let bbox = self.header_bbox(li as usize, &omitted_header_paths);
+                if !bbox.is_empty() {
+                    asc = asc.max(k * (c - bbox.y0 as f32 / q));
+                    desc = desc.max(k * (bbox.y1 as f32 / q - c));
                 }
             }
             ascents.push(asc.max(0.0));
@@ -973,10 +1013,14 @@ impl Page {
                     if headers.contains_key(&prev) || headers.contains_key(&r) {
                         let air = headers
                             .get(&prev)
-                            .map(|&li| self.header_scale(li as usize, row_w, banner_k) * self.header_air(li as usize).1)
+                            .map(|&li| {
+                                self.header_scale(li as usize, row_w, banner_k, &omitted_header_paths)
+                                    * self.header_air(li as usize, &omitted_header_paths).1
+                            })
                             .or_else(|| {
                                 headers.get(&r).map(|&li| {
-                                    self.header_scale(li as usize, row_w, banner_k) * self.header_air(li as usize).0
+                                    self.header_scale(li as usize, row_w, banner_k, &omitted_header_paths)
+                                        * self.header_air(li as usize, &omitted_header_paths).0
                                 })
                             })
                             .unwrap_or(0.0);
@@ -1037,7 +1081,7 @@ impl Page {
             if let Some(&li) = headers.get(&r) {
                 // on its own ink centre: a band beside a banner stops half a line spacing out,
                 // so it is narrower than the banner and its middle is not where the ink goes
-                self.place_header(&mut out, li, centres[r], row_w, banner_k);
+                self.place_header(&mut out, li, centres[r], row_w, banner_k, &omitted_header_paths);
                 continue;
             }
             for (i, a) in atoms.iter().enumerate() {
@@ -1193,8 +1237,10 @@ impl Page {
         }
         for (di, p) in out.deco_place.iter().enumerate() {
             if *p != Placement::IDENTITY && !out.omitted.contains(&(di as u32)) {
-                let b = &d.decorations[di].bbox;
-                grow(p, b.y0 as f32 / q, b.y1 as f32 / q);
+                let bbox = self.decoration_bbox_without(di, &omitted_header_paths);
+                if !bbox.is_empty() {
+                    grow(p, bbox.y0 as f32 / q, bbox.y1 as f32 / q);
+                }
             }
         }
         if y0.is_finite() {
@@ -1260,23 +1306,32 @@ impl Page {
     /// so its ink is the decorations drawn on it.
     /// The horizontal extent of a banner line's own ink, in page units: a banner line holds
     /// no words, so its ink is the decorations drawn on it.
-    fn header_ink(&self, li: usize) -> (f32, f32) {
-        let d = self.data();
-        let q = self.quant();
-        let (mut x0, mut x1) = (f32::INFINITY, f32::NEG_INFINITY);
-        for deco in d.decorations.iter().filter(|x| x.line != NONE_U16 && x.line as usize == li) {
-            x0 = x0.min(deco.bbox.x0 as f32 / q);
-            x1 = x1.max(deco.bbox.x1 as f32 / q);
+    fn header_bbox(&self, li: usize, omitted: &[u32]) -> IBox {
+        let mut bbox = IBox::EMPTY;
+        for (di, _) in self
+            .data()
+            .decorations
+            .iter()
+            .enumerate()
+            .filter(|(_, deco)| deco.line != NONE_U16 && deco.line as usize == li)
+        {
+            bbox.union(&self.decoration_bbox_without(di, omitted));
         }
-        if x0 <= x1 {
-            (x0, x1)
-        } else {
+        bbox
+    }
+
+    fn header_ink(&self, li: usize, omitted: &[u32]) -> (f32, f32) {
+        let bbox = self.header_bbox(li, omitted);
+        let q = self.quant();
+        if bbox.is_empty() {
             (0.0, 0.0)
+        } else {
+            (bbox.x0 as f32 / q, bbox.x1 as f32 / q)
         }
     }
 
     /// How far a banner is shrunk to sit on a row: its own ink against the row, never enlarged.
-    /// A surah name is one drawing, so it is fitted, not broken.
+    /// A title or basmalah stays whole: it is fitted, not broken.
     ///
     /// The ink is what is measured, not the text block the banner sits in. A surah name is a
     /// fifth of the block wide and a basmalah about half, so both keep their printed size as
@@ -1285,23 +1340,18 @@ impl Page {
     ///
     /// `max_k` is [`ReflowSpec::banner_zoom`] against the zoom, already worked out; it is
     /// infinite when the host left the growth uncapped.
-    fn header_scale(&self, li: usize, row_w: f32, max_k: f32) -> f32 {
-        let ink = self.header_ink(li);
+    fn header_scale(&self, li: usize, row_w: f32, max_k: f32, omitted: &[u32]) -> f32 {
+        let ink = self.header_ink(li, omitted);
         (row_w / (ink.1 - ink.0).max(1.0)).min(1.0).min(max_k)
     }
 
-    fn header_air(&self, li: usize) -> (f32, f32) {
+    fn header_air(&self, li: usize, omitted: &[u32]) -> (f32, f32) {
         let d = self.data();
         let q = self.quant();
         let ink = |line: usize| -> Option<(f32, f32)> {
-            let l = &d.lines[line];
-            let (mut y0, mut y1) =
-                if l.n_words > 0 { (l.bbox.y0 as f32 / q, l.bbox.y1 as f32 / q) } else { (f32::MAX, f32::MIN) };
-            for deco in d.decorations.iter().filter(|x| x.line != NONE_U16 && x.line as usize == line) {
-                y0 = y0.min(deco.bbox.y0 as f32 / q);
-                y1 = y1.max(deco.bbox.y1 as f32 / q);
-            }
-            (y0 <= y1).then_some((y0, y1))
+            let mut bbox = if d.lines[line].n_words > 0 { d.lines[line].bbox } else { IBox::EMPTY };
+            bbox.union(&self.header_bbox(line, omitted));
+            (!bbox.is_empty()).then_some((bbox.y0 as f32 / q, bbox.y1 as f32 / q))
         };
         let Some(mine) = ink(li) else { return (0.0, 0.0) };
         let above = li.checked_sub(1).and_then(ink).map(|(_, y1)| (mine.0 - y1).max(0.0)).unwrap_or(0.0);
@@ -1309,10 +1359,10 @@ impl Page {
         (above, below)
     }
 
-    fn place_header(&self, out: &mut Reflowed, li: u32, centre: f32, row_w: f32, max_k: f32) {
+    fn place_header(&self, out: &mut Reflowed, li: u32, centre: f32, row_w: f32, max_k: f32, omitted: &[u32]) {
         let d = self.data();
-        let k = self.header_scale(li as usize, row_w, max_k);
-        let ink = self.header_ink(li as usize);
+        let k = self.header_scale(li as usize, row_w, max_k, omitted);
+        let ink = self.header_ink(li as usize, omitted);
         let cx = (ink.0 + ink.1) / 2.0;
         for (di, deco) in d.decorations.iter().enumerate() {
             if deco.line != NONE_U16 && deco.line as u32 == li {

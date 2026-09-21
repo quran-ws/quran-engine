@@ -143,6 +143,22 @@ jintArray FN(divisions)(JNIEnv* env, jclass c, jlong h) {
     jint v[64 * 6]; for (uint32_t i = 0; i < n; i++) { v[i*6] = d[i].division; v[i*6+1] = d[i].line; v[i*6+2] = d[i].number; v[i*6+3] = d[i].surah; v[i*6+4] = d[i].ayah; v[i*6+5] = (jint)d[i].ayah_index; }
     return ints(env, v, n * 6);
 }
+/* 11 per: decoration, surah, line, x0, y0, x1, y1, titleX0, titleY0, titleX1, titleY1 */
+static jfloatArray surah_headers(JNIEnv* env, jlong h, int view) {
+    QvpSurahHeader g[32];
+    uint32_t n = view ? qvp_surah_headers_view(PG(h), g, 32) : qvp_surah_headers(PG(h), g, 32);
+    if (n > 32) n = 32;
+    jfloat v[32 * 11];
+    for (uint32_t i = 0; i < n; i++) {
+        jfloat* o = v + i * 11;
+        o[0] = (float)g[i].decoration; o[1] = (float)g[i].surah; o[2] = (float)g[i].line;
+        o[3] = g[i].x0; o[4] = g[i].y0; o[5] = g[i].x1; o[6] = g[i].y1;
+        o[7] = g[i].title_x0; o[8] = g[i].title_y0; o[9] = g[i].title_x1; o[10] = g[i].title_y1;
+    }
+    return floats(env, v, n * 11);
+}
+jfloatArray FN(surahHeaders)(JNIEnv* env, jclass c, jlong h) { return surah_headers(env, h, 0); }
+jfloatArray FN(surahHeadersView)(JNIEnv* env, jclass c, jlong h) { return surah_headers(env, h, 1); }
 /* 9 per: decoration, surah, ayah, line, cx, cy, r, ornamentPath(-1), numeralPath(-1) */
 jfloatArray FN(ayahMarks)(JNIEnv* env, jclass c, jlong h) {
     QvpAyahMark m[128]; uint32_t n = qvp_ayah_marks(PG(h), m, 128); if (n > 128) n = 128;
@@ -222,18 +238,20 @@ jfloatArray FN(hitAreas)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) {
 /* ───────── layout ───────── */
 /* spec {vw, vh, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft,
    cropRight, maxAspectSlack} and, when the array carries them, the reflow seven:
-   {zoom, fill, breaks, gaps, wordGap, maxStretch, relax}. A shorter array is a page as printed. */
+   {zoom, fill, breaks, gaps, wordGap, maxStretch, relax}, bannerZoom and surahFrames. A shorter
+   array is a page as printed and keeps native surah frames. */
 static QvpLayoutSpec layout_spec(JNIEnv* env, jfloatArray spec) {
-    jfloat f[20] = { 0 };
+    jfloat f[21] = { 0 };
     jsize n = (*env)->GetArrayLength(env, spec);
-    if (n > 20) n = 20;
+    if (n > 21) n = 21;
     (*env)->GetFloatArrayRegion(env, spec, 0, n, f);
     QvpLayoutSpec s = { f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7] > 0.5f ? 1u : 0u, (uint32_t)f[8], f[9], f[10], f[11],
                         /* reflow_zoom */ n > 12 ? f[12] : 0.0f,
                         /* fill, breaks, gaps: 255 asks the engine for its own default */
                         n > 13 ? (uint8_t)f[13] : 255u, n > 14 ? (uint8_t)f[14] : 255u, n > 15 ? (uint8_t)f[15] : 1u,
                         n > 16 ? f[16] : 1.0f, n > 17 ? f[17] : 0.0f, n > 18 ? f[18] : -1.0f,
-                        /* banner_zoom: 0 leaves a banner growing with the page */ n > 19 ? f[19] : 0.0f };
+                        /* banner_zoom: 0 leaves a banner growing with the page */ n > 19 ? f[19] : 0.0f,
+                        /* surah_frames: native frames are on unless the host turns them off */ n > 20 ? f[20] > 0.5f : 1u };
     return s;
 }
 
@@ -295,11 +313,12 @@ jfloatArray FN(zoomToStep)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfl
 jfloatArray FN(zoomSpec)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray zoom) {
     QvpLayoutSpec s = layout_spec(env, spec); QvpZoom z = zoom_of(env, zoom); QvpLayoutSpec out;
     qvp_zoom_spec(PG(h), &s, &z, &out);
-    float f[20] = { out.viewport_w, out.viewport_h, out.pad_top, out.pad_bottom, out.pad_left, out.pad_right, out.line_spacing,
+    float f[21] = { out.viewport_w, out.viewport_h, out.pad_top, out.pad_bottom, out.pad_left, out.pad_right, out.line_spacing,
                     out.fill_height ? 1.0f : 0.0f, (float)out.grid_lines, out.crop_left, out.crop_right, out.max_aspect_slack,
                     out.reflow_zoom, (float)out.reflow_fill, (float)out.reflow_breaks, (float)out.reflow_gaps,
-                    out.reflow_word_gap, out.reflow_max_stretch, out.reflow_relax, out.banner_zoom };
-    return floats(env, f, 20);
+                    out.reflow_word_gap, out.reflow_max_stretch, out.reflow_relax, out.banner_zoom,
+                    out.surah_frames ? 1.0f : 0.0f };
+    return floats(env, f, 21);
 }
 jfloatArray FN(zoomCarried)(JNIEnv* env, jclass c, jlong h, jfloatArray spec, jfloatArray zoom) {
     QvpLayoutSpec s = layout_spec(env, spec); QvpZoom z = zoom_of(env, zoom), out;

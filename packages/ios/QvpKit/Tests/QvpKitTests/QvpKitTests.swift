@@ -155,6 +155,8 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(page.layoutPrintedHeight(flat), page.layout(flat).contentH, accuracy: 0.01)
         XCTAssertGreaterThan(page.layoutPrintedHeight(QvpLayoutSpec(viewportW: 900, viewportH: 1000)),
                              page.layoutPrintedHeight(flat))
+        XCTAssertEqual(QvpLayoutSpec(viewportW: 600, viewportH: 1000).c.surah_frames, 1)
+        XCTAssertEqual(QvpLayoutSpec(viewportW: 600, viewportH: 1000, surahFrames: false).c.surah_frames, 0)
     }
 
     func testStyles() {
@@ -627,6 +629,31 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(page.ayahMarksView().count, marks.count)
         XCTAssertFalse(page.wordBandsView(Array(0..<page.nWords)).isEmpty)
         _ = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100))
+    }
+
+    /// The two boxes a host draws its own surah frame from: the box a frame fills and the
+    /// title ink in it. Neither counts a native frame, so hiding one leaves both alone.
+    func testSurahHeaderBoxesHoldTheTitleAndIgnoreTheFrame() throws {
+        let p = try QvpPage(bytes: try Data(contentsOf: Self.pages.appendingPathComponent("001.qvp")))
+        defer { p.close() }
+        let l = p.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100))
+        let headers = p.surahHeaders()
+        XCTAssertFalse(headers.isEmpty, "page 001 opens Fatihah")
+        let h = headers[0]
+        XCTAssertEqual(h.surah, 1)
+        XCTAssertLessThanOrEqual(h.x0, h.titleX0, "the frame box holds the title")
+        XCTAssertGreaterThanOrEqual(h.x1, h.titleX1)
+        XCTAssertLessThan(h.y0, h.y1)
+
+        // the view boxes are the page-unit ones through the layout's scale, offset and line shift
+        let view = p.surahHeadersView()
+        XCTAssertEqual(view.count, headers.count)
+        XCTAssertEqual(view[0].x0, l.offsetX + h.x0 * l.scale, accuracy: 0.01)
+        XCTAssertEqual(view[0].titleY0, l.offsetY + (h.titleY0 + l.lineDy[h.line]) * l.scale, accuracy: 0.01)
+
+        _ = p.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, surahFrames: false))
+        XCTAssertEqual(p.surahHeaders(), headers, "the boxes leave a native frame out")
+        XCTAssertEqual(p.surahHeadersView(), view)
     }
 
     /// A decoration's transform is its line's on the printed page, and its own group's once
