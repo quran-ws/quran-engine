@@ -1,12 +1,11 @@
 # A code release: prepare the iOS artifact, then tag vX.Y.Z. Runs the full check, verifies the
 # prepared XCFramework, builds the Android AAR and wasm engine, completes the GitHub release,
-# and publishes to each configured registry. A registry without a token is reported and skipped.
+# and publishes to every registry. Missing required credentials fail the release.
 name: Release
 
 on:
   push:
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -129,23 +128,57 @@ jobs:
         with:
           name: flutter-android
           path: packages/flutter/qvp_flutter/android/src/main/jniLibs
-      - name: Maven Central
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-prebuilt
+          path: packages/android/qvp/prebuilt
+
+  maven:
+    name: Maven Central
+    needs: [verify, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: android-prebuilt
+          path: packages/android/qvp/prebuilt
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android build tools
+        run: sdkmanager "platforms;android-35" "ndk;$NDK_VERSION" "cmake;3.22.1"
+      - name: Publish
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
         run: |
+          version="${{ needs.verify.outputs.version }}"
+          pom="https://repo.maven.apache.org/maven2/ws/quran/qvp-android/$version/qvp-android-$version.pom"
+          if curl -fsS "$pom" >/dev/null; then
+            echo "::notice::ws.quran:qvp-android:$version already exists on Maven Central"
+            exit 0
+          fi
           if [ -z "$ORG_GRADLE_PROJECT_mavenCentralUsername" ] || \
              [ -z "$ORG_GRADLE_PROJECT_mavenCentralPassword" ] || \
              [ -z "$ORG_GRADLE_PROJECT_signingInMemoryKey" ] || \
              [ -z "$ORG_GRADLE_PROJECT_signingInMemoryKeyPassword" ]; then
-            echo "::notice::Maven Central skipped: publishing or signing credentials are not set"
-            exit 0
+            echo "::error::Maven Central publishing or signing credentials are not set"
+            exit 1
           fi
           cd packages/android
           ./gradlew --no-daemon :qvp:publishAndReleaseToMavenCentral \
-            -PqvpVersion="${{ needs.verify.outputs.version }}" \
+            -PqvpVersion="$version" \
             -PsignAllPublications=true
 
   publish:
@@ -214,14 +247,32 @@ jobs:
             cargo publish -p "$crate" --no-verify
             sleep 30
           done
+      - name: Build the React Native npm package
+        run: |
+          cd packages/react-native/qvp-react-native
+          npm install --no-audit --no-fund
+          npm run build
       - name: npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then echo "::notice::npm skipped: NPM_TOKEN is not set"; exit 0; fi
+          [ -n "$NODE_AUTH_TOKEN" ] || {
+            echo "::error::npm publishing requires the NPM_TOKEN repository secret"
+            exit 1
+          }
           cp artifacts/qvp_ffi.wasm/qvp_ffi.wasm web/qvp_ffi.wasm
-          npm publish --access public --ignore-scripts
-          (cd packages/react-native/qvp-react-native && npm install --no-audit --no-fund && npm run build && npm publish --access public)
+          if npm view "@quran.ws/engine@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::@quran.ws/engine $VERSION already exists on npm"
+          else
+            npm publish --access public --ignore-scripts
+          fi
+          if npm view "@quran.ws/qvp-react-native@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::@quran.ws/qvp-react-native $VERSION already exists on npm"
+          else
+            cd packages/react-native/qvp-react-native
+            npm publish --access public
+          fi
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -244,7 +295,8 @@ jobs:
 
   cdn:
     name: engine builds to cdn.quran.ws
-    needs: [verify, publish]
+    needs: [verify, xcframework, android, publish]
+    if: ${{ always() && needs.verify.result == 'success' && needs.xcframework.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-latest
     # The R2 credentials live in this environment, not in repo secrets, so only a run
     # started from a tag — and approved — can reach them.
@@ -273,7 +325,6 @@ jobs:
           publish() {   # publish <family> <file>...
             local family="$1"; shift
             local prefix="engine/$family/$VERSION" tmp
-            cdn_guard "$prefix" || exit 1
             tmp=$(mktemp -d)
             for f in "$@"; do
               printf '%s\t%s\t%s\n' "$(basename "$f")" "$(wc -c < "$f" | tr -d ' ')" "$(sha256 "$f")"
@@ -283,6 +334,19 @@ jobs:
               '{version: $version, base: $base,
                 files: ($tsv | rtrimstr("\n") | split("\n") | map(split("\t") |
                   {name: .[0], bytes: (.[1]|tonumber), sha256: .[2]}))}' > "$tmp/manifest.json"
+            if cdn_get "$prefix/manifest.json" "$tmp/published.json"; then
+              cmp -s "$tmp/manifest.json" "$tmp/published.json" || {
+                echo "error: $prefix already exists with different artifacts" >&2
+                exit 1
+              }
+              cdn_latest "engine/$family" "$VERSION"
+              echo "== already published https://$CDN_HOST/$prefix/manifest.json"
+              return
+            else
+              status=$?
+              [ "$status" = 44 ] || exit "$status"
+            fi
+            cdn_guard "$prefix" || exit 1
             for f in "$@"; do cdn_put "$prefix/$(basename "$f")" "$f"; done
             cdn_put "$prefix/manifest.json" "$tmp/manifest.json" "public, max-age=300"
             cdn_latest "engine/$family" "$VERSION"

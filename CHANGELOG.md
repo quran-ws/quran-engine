@@ -6,7 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+- Code releases now fail when registry credentials are missing, skip npm and CDN artifacts
+  already published during a retry, and publish verified engine artifacts to the CDN even when
+  a registry fails.
 
 ## [0.3.0] - 2026-09-21
 
