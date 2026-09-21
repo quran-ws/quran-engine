@@ -193,6 +193,13 @@ data class QvpTheme(val ink: Int? = null, val diacritics: Int? = null, val dots:
                     val headers: Int? = null, val marks: Map<String, Int> = emptyMap(), val transitionMs: Int = 0)
 data class QvpSurah(val number: Int, val ayahCount: Int, val hasBanner: Boolean, val hasBasmalah: Boolean, val place: String, val bannerDecoration: Int, val arabic: String, val latin: String, val english: String)
 data class QvpDivision(val division: Division, val number: Int, val surah: Int, val ayah: Int, val line: Int, val ayahIndex: Int)
+/** A surah heading: the box a frame fills, and the title ink inside it. */
+data class QvpSurahHeader(
+    val decoration: Int, val surah: Int, val line: Int,
+    val x0: Float, val y0: Float, val x1: Float, val y1: Float,
+    val titleX0: Float, val titleY0: Float, val titleX1: Float, val titleY1: Float,
+)
+
 data class QvpAyahMark(val decoration: Int, val surah: Int, val ayah: Int, val line: Int, val cx: Float, val cy: Float, val r: Float, val ornamentPath: Int, val numeralPath: Int)
 data class QvpRosette(val decoration: Int, val surah: Int, val ayah: Int, val juz: Int, val hizb: Int, val nisf: Int, val rubuAlHizb: Int, val rubuAlHizbInHizb: Int)
 data class QvpSajdah(val decoration: Int, val surah: Int, val ayah: Int, val signPath: Int)

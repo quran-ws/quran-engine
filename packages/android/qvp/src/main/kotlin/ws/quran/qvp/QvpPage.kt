@@ -140,6 +140,17 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun surahs(): List<QvpSurah> = List(QvpNative.surahCount(h)) { i -> val n = QvpNative.surahNums(h, i)!!; val s = QvpNative.surahNames(h, i)!!
         QvpSurah(n[0].toInt(), n[1].toInt(), n[2] > 0.5f, n[3] > 0.5f, QvpEngine.placeName(n[4].toInt()), n[5].toInt(), s[0], s[1], s[2]) }
     fun divisions(): List<QvpDivision> { val v = QvpNative.divisions(h); return List(v.size / 6) { k -> QvpDivision(Division.entries[v[k * 6]], v[k * 6 + 2], v[k * 6 + 3], v[k * 6 + 4], v[k * 6 + 1], v[k * 6 + 5]) } }
+    /** The surah headings in page units: the box a frame fills, and the title ink in it. */
+    fun surahHeaders(): List<QvpSurahHeader> = readHeaders(QvpNative.surahHeaders(h))
+
+    /** The same, in viewport px through the current layout: what a host frames. */
+    fun surahHeadersView(): List<QvpSurahHeader> = readHeaders(QvpNative.surahHeadersView(h))
+
+    private fun readHeaders(v: FloatArray): List<QvpSurahHeader> = List(v.size / 11) { k ->
+        val o = k * 11
+        QvpSurahHeader(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9], v[o + 10])
+    }
+
     fun ayahMarks(): List<QvpAyahMark> { val v = QvpNative.ayahMarks(h); return List(v.size / 9) { k -> val o = k * 9; QvpAyahMark(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3].toInt(), v[o + 4], v[o + 5], v[o + 6], v[o + 7].toInt(), v[o + 8].toInt()) } }
     fun ayahMarkOf(surah: Int, ayah: Int) = ayahMarks().firstOrNull { it.surah == surah && it.ayah == ayah }
     fun rosettes(): List<QvpRosette> { val v = QvpNative.rosettes(h); return List(v.size / 8) { k -> val o = k * 8; QvpRosette(v[o], v[o + 1], v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7]) } }

@@ -140,6 +140,7 @@ object Marshal {
     fun surah(s: QvpSurah): Map<String, Any?> = mapOf("number" to s.number, "ayahCount" to s.ayahCount, "hasBanner" to s.hasBanner, "hasBasmalah" to s.hasBasmalah, "place" to s.place, "bannerDecoration" to s.bannerDecoration,
         "arabic" to s.arabic, "latin" to s.latin, "english" to s.english)
     fun division(d: QvpDivision): Map<String, Any?> = mapOf("division" to d.division.name.lowercase(), "number" to d.number, "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "ayahIndex" to d.ayahIndex)
+    fun surahHeader(h: QvpSurahHeader): Map<String, Any?> = mapOf("decoration" to h.decoration, "surah" to h.surah, "line" to h.line, "x0" to h.x0, "y0" to h.y0, "x1" to h.x1, "y1" to h.y1, "titleX0" to h.titleX0, "titleY0" to h.titleY0, "titleX1" to h.titleX1, "titleY1" to h.titleY1)
     fun ayahMark(m: QvpAyahMark): Map<String, Any?> = mapOf("decoration" to m.decoration, "surah" to m.surah, "ayah" to m.ayah, "line" to m.line, "cx" to m.cx, "cy" to m.cy, "r" to m.r, "ornamentPath" to m.ornamentPath, "numeralPath" to m.numeralPath)
     fun rosette(r: QvpRosette): Map<String, Any?> = mapOf("decoration" to r.decoration, "surah" to r.surah, "ayah" to r.ayah, "juz" to r.juz, "hizb" to r.hizb, "nisf" to r.nisf, "rubuAlHizb" to r.rubuAlHizb, "rubuAlHizbInHizb" to r.rubuAlHizbInHizb)
     fun sajdah(s: QvpSajdah): Map<String, Any?> = mapOf("decoration" to s.decoration, "surah" to s.surah, "ayah" to s.ayah, "signPath" to s.signPath)

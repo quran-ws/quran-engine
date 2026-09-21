@@ -30,6 +30,8 @@ internal object QvpNative {
     @JvmStatic external fun surahNums(h: Long, i: Int): FloatArray?
     @JvmStatic external fun surahNames(h: Long, i: Int): Array<String>?
     @JvmStatic external fun divisions(h: Long): IntArray
+    @JvmStatic external fun surahHeaders(h: Long): FloatArray
+    @JvmStatic external fun surahHeadersView(h: Long): FloatArray
     @JvmStatic external fun ayahMarks(h: Long): FloatArray
     @JvmStatic external fun rosettes(h: Long): IntArray
     @JvmStatic external fun sajdahs(h: Long): IntArray

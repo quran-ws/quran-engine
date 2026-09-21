@@ -143,6 +143,22 @@ jintArray FN(divisions)(JNIEnv* env, jclass c, jlong h) {
     jint v[64 * 6]; for (uint32_t i = 0; i < n; i++) { v[i*6] = d[i].division; v[i*6+1] = d[i].line; v[i*6+2] = d[i].number; v[i*6+3] = d[i].surah; v[i*6+4] = d[i].ayah; v[i*6+5] = (jint)d[i].ayah_index; }
     return ints(env, v, n * 6);
 }
+/* 11 per: decoration, surah, line, x0, y0, x1, y1, titleX0, titleY0, titleX1, titleY1 */
+static jfloatArray surah_headers(JNIEnv* env, jlong h, int view) {
+    QvpSurahHeader g[32];
+    uint32_t n = view ? qvp_surah_headers_view(PG(h), g, 32) : qvp_surah_headers(PG(h), g, 32);
+    if (n > 32) n = 32;
+    jfloat v[32 * 11];
+    for (uint32_t i = 0; i < n; i++) {
+        jfloat* o = v + i * 11;
+        o[0] = (float)g[i].decoration; o[1] = (float)g[i].surah; o[2] = (float)g[i].line;
+        o[3] = g[i].x0; o[4] = g[i].y0; o[5] = g[i].x1; o[6] = g[i].y1;
+        o[7] = g[i].title_x0; o[8] = g[i].title_y0; o[9] = g[i].title_x1; o[10] = g[i].title_y1;
+    }
+    return floats(env, v, n * 11);
+}
+jfloatArray FN(surahHeaders)(JNIEnv* env, jclass c, jlong h) { return surah_headers(env, h, 0); }
+jfloatArray FN(surahHeadersView)(JNIEnv* env, jclass c, jlong h) { return surah_headers(env, h, 1); }
 /* 9 per: decoration, surah, ayah, line, cx, cy, r, ornamentPath(-1), numeralPath(-1) */
 jfloatArray FN(ayahMarks)(JNIEnv* env, jclass c, jlong h) {
     QvpAyahMark m[128]; uint32_t n = qvp_ayah_marks(PG(h), m, 128); if (n > 128) n = 128;
