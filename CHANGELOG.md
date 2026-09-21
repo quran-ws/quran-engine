@@ -6,6 +6,12 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+### Added
+- `QvpPageCache.setCurrentPage(_:span:)` (iOS): a host showing several pages at once says how
+  many, and the cache keeps the screen before, the screen itself and the screen after loaded
+  and safe from eviction — six pages for a two-page spread — so a swipe never lands on a blank
+  half. The default span of 1 is the page and its two neighbors, as before.
+
 ### Changed
 - npm releases use GitHub trusted publishing, as crates.io and pub.dev already did, so the
   release workflow needs no `NPM_TOKEN`.

@@ -29,6 +29,8 @@ public final class QvpPageCache {
     /// Where the pager is, once the host has said; nil until then, so nothing is
     /// protected from eviction and no distance is ever computed against a sentinel.
     @ObservationIgnored private var currentPage: Int? = nil
+    /// How many pages the host shows at once, from the same call.
+    @ObservationIgnored private var span: Int = 1
 
     @ObservationIgnored private let capacity: Int
     @ObservationIgnored private let pageRange: ClosedRange<Int>
@@ -36,8 +38,9 @@ public final class QvpPageCache {
     @ObservationIgnored private let configure: (QvpPage, QvpCanvasController) -> Void
 
     /// - Parameters:
-    ///   - capacity: live `QvpPage`s kept at most (the current page and its
-    ///     immediate neighbors are never evicted, whatever their age).
+    ///   - capacity: live `QvpPage`s kept at most (the pages on screen and the
+    ///     screens either side are never evicted, whatever their age — three
+    ///     pages at one per screen, six at two).
     ///   - pageRange: valid page numbers (`setCurrentPage` preloads inside it).
     ///   - data: reads one page's `.qvp` bytes; called off the main actor's
     ///     critical path, may do file IO.
@@ -70,15 +73,33 @@ public final class QvpPageCache {
     /// The live page data for a page number, if currently attached.
     public func page(for pageNumber: Int) -> QvpPage? { pages[pageNumber] }
 
-    /// Tell the cache where the pager is: the page and its neighbors are
-    /// (re)loaded — which also restores a previously evicted page onto a
-    /// still-living view — and become ineligible for eviction.
-    public func setCurrentPage(_ pageNumber: Int) {
+    /// Tell the cache where the pager is: the pages on screen and the screens
+    /// either side are (re)loaded — which also restores a previously evicted
+    /// page onto a still-living view — and become ineligible for eviction.
+    ///
+    /// `span` is how many pages the host shows at once and `pageNumber` the
+    /// first of them, so a host laying two pages side by side passes the
+    /// spread's first page and 2: the screen before it, the screen, and the
+    /// screen after it are all kept ready, and a swipe never lands on a blank
+    /// half. At the default 1 this is the page and its two neighbors, as it
+    /// always was.
+    public func setCurrentPage(_ pageNumber: Int, span: Int = 1) {
         currentPage = pageNumber
-        for neighbor in [pageNumber - 1, pageNumber, pageNumber + 1] where pageRange.contains(neighbor) {
+        self.span = max(span, 1)
+        for neighbor in protectedRange(around: pageNumber) where pageRange.contains(neighbor) {
             ensureLoaded(neighbor)
         }
         trim()
+    }
+
+    /// The pages kept ready around `page`: one screen before it, its own
+    /// screen, and one screen after — `page − span` through
+    /// `page + 2·span − 1`. Takes the page rather than reading `currentPage`,
+    /// so there is no "no current page yet" case to stand for: a `ClosedRange`
+    /// has no empty value, and one written to mean empty traps where it is
+    /// built, not where it is used.
+    private func protectedRange(around page: Int) -> ClosedRange<Int> {
+        (page - span)...(page + 2 * span - 1)
     }
 
     /// Re-run the host's `configure` on every live page and redraw — call
@@ -124,14 +145,15 @@ public final class QvpPageCache {
         recency.append(pageNumber)
     }
 
-    /// The current page and its immediate neighbors are never evicted.
+    /// The pages on screen and the screens either side are never evicted.
+    /// Nothing is protected until the host has said where the pager is.
     private func isProtected(_ pageNumber: Int) -> Bool {
         guard let current = currentPage else { return false }
-        return pageNumber >= current - 1 && pageNumber <= current + 1
+        return protectedRange(around: current).contains(pageNumber)
     }
 
-    /// Close least-recently-used pages beyond capacity. Never the current
-    /// page or its immediate neighbors.
+    /// Close least-recently-used pages beyond capacity. Never a page on
+    /// screen or on the screens either side of it.
     private func trim() {
         while pages.count > capacity {
             guard let victim = recency.first(where: { !isProtected($0) && pages[$0] != nil }),
