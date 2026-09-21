@@ -41,6 +41,17 @@ class QvpAndroidTest {
             assertEquals(0f, QvpLayoutSpec(690f, 1100f, surahFrames = false).floats().last())
             assertTrue(layout.scale > 0)
             assertEquals(page.nLines, layout.lineDy.size)
+            // the boxes a host draws its own surah frame around: page 1 carries one heading
+            val headers = page.surahHeaders()
+            assertEquals(1, headers.size)
+            val h = headers[0]
+            assertEquals(1, h.surah)
+            assertTrue(h.x0 < h.titleX0 && h.x1 > h.titleX1)
+            assertTrue(h.titleY1 > h.titleY0)
+            val inView = page.surahHeadersView()
+            assertEquals(headers.size, inView.size)
+            assertTrue(inView[0].titleY0 > 0f && inView[0].titleY1 < layout.contentH)
+
             assertFalse(page.isClosed)
         } finally {
             page.close()
