@@ -661,6 +661,18 @@ final class QvpDivision {
 }
 
 @immutable
+final class QvpSurahHeader {
+  const QvpSurahHeader({required this.decoration, required this.surah, required this.line, required this.x0, required this.y0, required this.x1, required this.y1, required this.titleX0, required this.titleY0, required this.titleX1, required this.titleY1});
+  final int decoration, surah, line;
+
+  /// The box a frame fills: the page's text block wide, the heading's row tall.
+  final double x0, y0, x1, y1;
+
+  /// The title ink inside that box, with any native frame left out.
+  final double titleX0, titleY0, titleX1, titleY1;
+}
+
+@immutable
 final class QvpAyahMark {
   const QvpAyahMark({required this.decoration, required this.surah, required this.ayah, required this.line, required this.cx, required this.cy, required this.r, required this.ornamentPath, required this.numeralPath});
   final int decoration, surah, ayah, line, ornamentPath, numeralPath;
@@ -1191,6 +1203,21 @@ class QvpPage extends ChangeNotifier {
     return List.generate(n, (i) {
       final d = (o + i).ref;
       return QvpDivision(division: _e.divisionName(d.division), line: d.line, number: d.number, surah: d.surah, ayah: d.ayah, ayahIndex: d.ayahIndex);
+    }, growable: false);
+  }
+
+  /// The surah headings, in page units: the box a frame fills, and the title ink in it.
+  List<QvpSurahHeader> surahHeaders() => _surahHeaders(view: false);
+
+  /// The same, in viewport px through the current layout: what a host frames.
+  List<QvpSurahHeader> surahHeadersView() => _surahHeaders(view: true);
+
+  List<QvpSurahHeader> _surahHeaders({required bool view}) {
+    final o = _e._out<QvpSurahHeaderC>(), cap = _e._cap(ffi.sizeOf<QvpSurahHeaderC>());
+    final n = (view ? _b.surahHeadersView(_p, o, cap) : _b.surahHeaders(_p, o, cap)).clamp(0, cap);
+    return List.generate(n, (i) {
+      final h = (o + i).ref;
+      return QvpSurahHeader(decoration: h.decoration, surah: h.surah, line: h.line, x0: h.x0, y0: h.y0, x1: h.x1, y1: h.y1, titleX0: h.titleX0, titleY0: h.titleY0, titleX1: h.titleX1, titleY1: h.titleY1);
     }, growable: false);
   }
 
