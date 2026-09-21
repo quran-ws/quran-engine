@@ -273,6 +273,8 @@ public struct QvpTheme: Equatable {
 public struct QvpSurah: Equatable { public let number: Int, ayahCount: Int, hasBanner: Bool, hasBasmalah: Bool, place: String, bannerDecoration: Int, arabic: String, latin: String, english: String }
 public struct QvpDivision: Equatable { public let division: Division, number: Int, surah: Int, ayah: Int, line: Int, ayahIndex: Int }
 public struct QvpAyahMark: Equatable { public let decoration: Int, surah: Int, ayah: Int, line: Int, cx: Float, cy: Float, r: Float, ornamentPath: Int, numeralPath: Int }
+/// `x0 … y1` is the box a surah frame fills, `titleX0 … titleY1` the title ink in it.
+public struct QvpSurahHeader: Equatable { public let decoration: Int, surah: Int, line: Int, x0: Float, y0: Float, x1: Float, y1: Float, titleX0: Float, titleY0: Float, titleX1: Float, titleY1: Float }
 public struct QvpRosette: Equatable { public let decoration: Int, surah: Int, ayah: Int, juz: Int, hizb: Int, nisf: Int, rubuAlHizb: Int, rubuAlHizbInHizb: Int }
 public struct QvpSajdah: Equatable { public let decoration: Int, surah: Int, ayah: Int, signPath: Int }
 public struct QvpMatch: Equatable { public let word: Int, index: Int, isLooseMatch: Bool, wordKey: String, text: String }

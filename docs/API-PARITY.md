@@ -9,8 +9,6 @@ means the wrapper binds the symbol under the name `docs/standards/NAMING.md` pre
 it. A second table lists platform-level gaps.
 
 ## Declared gaps
-| `qvp_surah_headers` | ios | issue #90: the boxes a host needs to draw its own surah frame |
-| `qvp_surah_headers_view` | ios | issue #90: the boxes a host needs to draw its own surah frame |
 
 A gap is one of four kinds. Each row says which, so the reader can tell whether anything
 is owed.
@@ -263,7 +261,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-149 symbols in the header, 149 Rust exports. web: 148 bound, android: 143 bound, flutter: 148 bound, ios: 138 bound, react-native: 82 bound.
+149 symbols in the header, 149 Rust exports. web: 148 bound, android: 143 bound, flutter: 148 bound, ios: 140 bound, react-native: 82 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -382,8 +380,8 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_styled_paths` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_surah_at` | yes | yes | yes | yes | gap (list form: bound as `surahs()`) |
 | `qvp_surah_count` | yes | yes | yes | yes | gap (list form: bound as `surahs().length`) |
-| `qvp_surah_headers` | yes | yes | yes | gap (issue #90: the boxes a host needs to draw its own surah frame) | yes |
-| `qvp_surah_headers_view` | yes | yes | yes | gap (issue #90: the boxes a host needs to draw its own surah frame) | yes |
+| `qvp_surah_headers` | yes | yes | yes | yes | yes |
+| `qvp_surah_headers_view` | yes | yes | yes | yes | yes |
 | `qvp_swipe_pages` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_target_words` | yes | yes | yes | yes | yes |
 | `qvp_text` | yes | yes | yes | yes | yes |
