@@ -12,8 +12,8 @@ All notable changes to the engine and its packages. The format follows
 - `qvp_surah_headers` and `qvp_surah_headers_view`: the two boxes a host needs to draw its
   own surah frame. The first is the box a frame fills, the page's text block wide and the
   heading's row tall. The second is the title ink inside it. Both leave out a native frame,
-  and the view call has already applied the layout's move of the heading's line. The web
-  and Flutter wrappers bind them. `docs/API-PARITY.md` records the gap for the others.
+  and the view call has already applied the layout's move of the heading's line. Every
+  wrapper binds them.
 - `surah_frames` on the layout spec controls source-native frames around surah names. It
   defaults on for the printed page; a host that supplies its own frame can turn it off.
   Reflowed titles and the reusable title assets remain frameless.

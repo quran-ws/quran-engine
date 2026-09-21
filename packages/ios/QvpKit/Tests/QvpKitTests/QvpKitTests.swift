@@ -638,7 +638,7 @@ final class QvpKitTests: XCTestCase {
         defer { p.close() }
         let l = p.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100))
         let headers = p.surahHeaders()
-        XCTAssertFalse(headers.isEmpty, "page 001 opens al-Fatihah")
+        XCTAssertFalse(headers.isEmpty, "page 001 opens Fatihah")
         let h = headers[0]
         XCTAssertEqual(h.surah, 1)
         XCTAssertLessThanOrEqual(h.x0, h.titleX0, "the frame box holds the title")
