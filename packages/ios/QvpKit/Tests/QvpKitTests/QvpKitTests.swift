@@ -306,8 +306,31 @@ final class QvpKitTests: XCTestCase {
         c.zoomMode = .magnify
         c.pinch(2.0, at: CGPoint(x: 345, y: 550))
         XCTAssertTrue(c.isZoomed)
+        // the glass factor is what the pinch asked for, over the fitted scale
+        XCTAssertEqual(c.peekScale, 2, accuracy: 1e-5)
+        c.pinchEnded()
         c.resetView()
         XCTAssertFalse(c.isZoomed)
+        XCTAssertEqual(c.peekScale, 1, accuracy: 1e-5)
+        // a host ceiling stops the glass short of the policy's twelve. It is a VIEW SCALE,
+        // the units `maxZoom` has always been in — not a multiple of the fitted page — so
+        // the glass factor it leaves is the ceiling over the fit.
+        c.maxZoom = 3
+        c.pinch(10.0, at: CGPoint(x: 345, y: 550))
+        XCTAssertLessThan(c.viewScale, 10 * expScale, "the ceiling must bite")
+        XCTAssertEqual(c.viewScale, 3, accuracy: 1e-5)
+        XCTAssertEqual(c.peekScale, 3 / expScale, accuracy: 1e-5)
+        XCTAssertEqual(QvpViewPolicy.clampZoom(20, fit: 1, ceiling: 6), 6)
+        // A ceiling under the floor is the floor, and the FITTED page is the floor: a
+        // ceiling below it must not shrink the page inside the screen, which is the one
+        // thing the `fit` floor exists to prevent — and having shrunk it, the reader
+        // could neither pinch back out nor reach the ceiling again.
+        XCTAssertEqual(QvpViewPolicy.clampZoom(20, fit: 1, ceiling: 0), 1)
+        XCTAssertEqual(QvpViewPolicy.clampZoom(20, fit: 2, ceiling: 1.5), 2)
+        // …and under BOTH floors it is the larger of them.
+        XCTAssertEqual(QvpViewPolicy.clampZoom(0.1, fit: 0.2, ceiling: 0.1), QvpViewPolicy.minZoom)
+        c.pinchEnded()
+        c.resetView()
         // line spacing only opens up: the engine clamps values below 1 to the printed lineSpacing
         let printed = try XCTUnwrap(p.currentLayout).lineSpacing
         c.lineSpacing = 0.5
