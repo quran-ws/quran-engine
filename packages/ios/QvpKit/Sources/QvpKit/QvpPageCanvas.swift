@@ -26,7 +26,7 @@ import UIKit
 @MainActor @Observable
 public final class QvpCanvasController {
     public var page: QvpPage? {
-        didSet { cache.image = nil; cache.key = ""; selectionHandle = 0; relayout(); resetView(); applyPendingCarry() }
+        didSet { cache.clear(); selectionHandle = 0; relayout(); resetView(); applyPendingCarry() }
     }
     // layout knobs (viewport size comes from the canvas)
     public var padTop: CGFloat = 0 { didSet { relayout() } }
@@ -129,7 +129,7 @@ public final class QvpCanvasController {
         pendingCarry = nil
         let carried = p.zoomCarried(baseSpec, other)
         guard carried != zoom else { return }
-        zoom = carried; placements = nil; cache.key = ""
+        zoom = carried; placements.removeAll(); cache.clear()
         relayout(); resetView()
     }
     /// The host scrolls the page itself: it puts the canvas inside its own scroll view, sized
@@ -240,7 +240,21 @@ public final class QvpCanvasController {
     /// rather than the book.
     public var isZoomed: Bool { viewScale > fitScale * QvpViewPolicy.zoomedThreshold || zoom.zoom > Float(QvpViewPolicy.zoomedThreshold) }
 
-    final class BaseCache { var image: CGImage?; var key = "" }
+    /// The cached ink, one image per canvas the page is drawn as (`QvpPageCanvas.slices`), each
+    /// REPLACED when its own key moves on. Kept by key alone, every frame of a peek, of its
+    /// spring-back and of a pan is a key of its own, and the last few stayed behind the one on
+    /// screen until the next layout — a page-sized bitmap apiece. A pinch paints its band into
+    /// slot 0, and every canvas of the page blits that one image. Cleared whenever the layout
+    /// changes.
+    final class BaseCache {
+        private var slots: [Int: (key: String, image: CGImage)] = [:]
+        func image(for key: String, slot: Int) -> CGImage? {
+            guard let entry = slots[slot], entry.key == key else { return nil }
+            return entry.image
+        }
+        func store(_ image: CGImage, for key: String, slot: Int) { slots[slot] = (key, image) }
+        func clear() { slots.removeAll() }
+    }
 
     public init() {}
 
@@ -317,9 +331,9 @@ public final class QvpCanvasController {
     public func relayout() {
         guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
         _ = p.layout(layoutSpec)
-        placements = nil
+        placements.removeAll()
         layoutRevision &+= 1
-        cache.key = ""; invalidate()
+        cache.clear(); invalidate()
     }
     /// Fit the content height and centre it.
     public func resetView() {
@@ -399,7 +413,7 @@ public final class QvpCanvasController {
             // around the fingers, and the whole page once the pinch ends. Otherwise the bounds
             // are the page and nothing moves under the canvas, so the band is the page itself.
             if isPinching, hostBoxHeight > 0 {
-                // The band is cut in the SCALED page, which is what `visibleBand` divides back
+                // The band is cut in the SCALED page, which is what `layoutBand` divides back
                 // to layout points: the fingers' canvas y less the pan under it. A stepped
                 // reflow keeps the page at its top, so that is the same number; a magnify peek
                 // moves `viewOy` and `viewScale`, and a band cut in canvas points drifted off
@@ -424,20 +438,25 @@ public final class QvpCanvasController {
     /// A printed page and a reflowed one come back in the same shape, so nothing here has to
     /// know which it is looking at.
     struct DrawList { let draws: [QvpDraw], places: [QvpPlacement], band: ClosedRange<Float> }
-    var placements: DrawList?
-    /// The band of the laid-out page worth drawing: the screen, with a screen of slack either
-    /// side so a fast drag has somewhere to go before the next frame asks again.
-    /// The same band in layout points: what the engine is asked to draw.
-    private var visibleBand: (top: Float, bottom: Float) {
+    /// One draw list per band asked for — a page drawn as a stack of canvases asks for each
+    /// slice's in turn, and a single slot rebuilt on every alternation. Cleared with the layout.
+    /// Written from the renderer, so kept out of observation like `cache`.
+    @ObservationIgnored var placements: [ClosedRange<Float>: DrawList] = [:]
+    /// A band of the canvas, in layout points — the pan and zoom divided out: what the engine is
+    /// asked to draw. `draw` hands it the band it is painting — its slice, or `bandTop` and
+    /// `bandHeight` (the screen with a screen of slack either side, the page, or the pinch's two
+    /// boxes) — never a band of its own choosing, which for a slice is the wrong one.
+    func layoutBand(top: CGFloat, height: CGFloat) -> (top: Float, bottom: Float) {
         let s = viewScale == 0 ? 1 : viewScale
-        return (Float(bandTop / s), Float((bandTop + bandHeight) / s))
+        return (Float(top / s), Float((top + height) / s))
     }
-    func drawListNow() -> DrawList? {
-        let b = visibleBand
-        if let q = placements, q.band == b.top...b.bottom { return q }
+    func drawListNow(band b: (top: Float, bottom: Float)) -> DrawList? {
+        let range = b.top...b.bottom
+        if let q = placements[range] { return q }
         guard let p = page, p.isOpen, p.currentLayout != nil else { return nil }
-        let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: b.top...b.bottom)
-        placements = q; return q
+        let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: range)
+        if placements.count >= 4 { placements.removeAll() }
+        placements[range] = q; return q
     }
     /// The transform one entry of the draw list is drawn under.
     func transform(_ q: DrawList, _ placement: Int, offsetY: CGFloat? = nil) -> CGAffineTransform {
@@ -483,7 +502,7 @@ public final class QvpCanvasController {
         // The engine laid the page out inside the call rather than through `relayout()`, so the
         // revision is bumped here too — it is the count of LAYOUTS, and a host overlay keying on
         // it must not be told a pinch left the geometry where it was.
-        if c.relaid { placements = nil; cache.key = ""; layoutRevision &+= 1 }
+        if c.relaid { placements.removeAll(); cache.clear(); layoutRevision &+= 1 }
         invalidate()
     }
     func pinch(_ magnification: CGFloat, at focus: CGPoint) {
@@ -567,7 +586,13 @@ public final class QvpCanvasController {
     }
 
     // ── frame (called from the Canvas renderer) ──
-    func draw(in ctx: GraphicsContext, size: CGSize, displayScale: CGFloat) {
+    /// One frame. `slice` is this canvas's part of the page when the page is drawn as a stack
+    /// of canvases (`QvpPageCanvas.slices`): the ink band is then that slice, cached in the
+    /// slice's own slot, and the context arrives translated so the slice's top is y = 0. A pinch
+    /// keeps painting its two boxes around the fingers whichever canvas asks — that band is what
+    /// keeps a pinch from repainting the whole page at every step the fingers cross.
+    func draw(in ctx: GraphicsContext, size: CGSize, displayScale: CGFloat,
+              slice: (index: Int, top: CGFloat, height: CGFloat)? = nil) {
         guard let p = page, p.isOpen else { return }
         if p.currentLayout == nil { relayout() }
         guard let l = p.currentLayout else { return }
@@ -576,11 +601,18 @@ public final class QvpCanvasController {
         let styled = p.styledPaths()
         let styledSet = Set(styled.map { $0.path })
         let ink = p.defaultInk
-        let W = Int(size.width * displayScale)
+        // Up, like the band's height: truncated, a width a hair under a whole pixel lost that
+        // pixel, and the bitmap came out one column short of the canvas it is drawn across.
+        let W = Int((size.width * displayScale).rounded(.up))
         var hasher = Hasher(); hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
         // The cached ink is a band of the page, not the screen, so a drag inside it is one blit
-        // and nothing is drawn again.
-        let top = bandTop, bandH = bandHeight
+        // and nothing is drawn again. A slice's band is the slice, in page points: the canvas
+        // shows page row `y - viewOy` at canvas row `y`.
+        let sliced = isPinching ? nil : slice
+        let slot = sliced?.index ?? 0
+        let top = sliced.map { $0.top - viewOy } ?? bandTop
+        let bandH = sliced?.height ?? bandHeight
+        let band = layoutBand(top: top, height: bandH)
         let bandPx = Int((bandH * displayScale).rounded(.up))
         let key = "\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(zoom.zoom)|\(l.rows)"
 
@@ -591,7 +623,8 @@ public final class QvpCanvasController {
         let bands = p.highlightBoxesView()
         drawBoxes(ctx, bands)
 
-        if cache.image == nil || key != cache.key || cache.image!.width != W || cache.image!.height != bandPx, W > 0, bandPx > 0 {
+        var img = cache.image(for: key, slot: slot)
+        if img == nil || img!.width != W || img!.height != bandPx, W > 0, bandPx > 0 {
             let t0 = now()
             let cs = CGColorSpaceCreateDeviceRGB()
             if let bc = CGContext(data: nil, width: W, height: bandPx, bitsPerComponent: 8, bytesPerRow: 0, space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
@@ -600,7 +633,7 @@ public final class QvpCanvasController {
                 bc.setFillColor(QvpColor.cgColor(ink))
                 bc.setAllowsAntialiasing(true); bc.setShouldAntialias(true)
                 var cur = -1, n = 0
-                if let q = drawListNow() {
+                if let q = drawListNow(band: band) {
                     for d in q.draws where !styledSet.contains(d.path) {
                         // one state per placement, not per path: the list runs in that order
                         // the band is drawn under its own vertical offset: its top row is `top`
@@ -609,15 +642,20 @@ public final class QvpCanvasController {
                     }
                 }
                 if cur >= 0 { bc.restoreGState() }
-                cache.image = bc.makeImage(); cache.key = key
+                if let made = bc.makeImage() { cache.store(made, for: key, slot: slot); img = made }
                 lastBaseMs = (now() - t0) * 1000; lastBasePaths = n
             }
         }
-        if let img = cache.image {
-            ctx.draw(Image(decorative: img, scale: displayScale), in: CGRect(x: 0, y: viewOy + top, width: size.width, height: bandH))
+        if let img {
+            // At the bitmap's own size, never stretched to the band: the bitmap is whole pixels,
+            // rounded up, and one drawn a fraction of a pixel away from its size is resampled —
+            // every row down the band a blend of two, the softness this canvas exists to avoid.
+            ctx.draw(Image(decorative: img, scale: displayScale),
+                     in: CGRect(x: 0, y: viewOy + top,
+                                width: CGFloat(img.width) / displayScale, height: CGFloat(img.height) / displayScale))
         }
         let t1 = now()
-        if let q = drawListNow() {
+        if let q = drawListNow(band: band) {
             let colors = Dictionary(styled, uniquingKeysWith: { a, _ in a })
             for d in q.draws {
                 guard let col = colors[d.path], col & 0xff != 0 else { continue }
@@ -667,18 +705,62 @@ public struct QvpPageCanvas: View {
 
     public init(controller: QvpCanvasController) { self.controller = controller }
 
+    /// The tallest a canvas may be, in device pixels. Core Animation rasterizes a layer past this
+    /// to fit and stretches it back on screen, so everything on it goes soft — a surah name reads
+    /// as bold. A page reflowed to its top step on a phone is ~8,500 px tall. Measured on an
+    /// iPhone 17 Pro: a page at 8,228 px blurred, one at 8,181 px did not.
+    static let maxLayerPixels: CGFloat = 8192
+    /// The page cut into canvases no taller than `maxLayerPixels` — near equal, so none sits at
+    /// the limit. One slice, the page itself, for any page that fits.
+    ///
+    /// Every cut is on a whole device pixel. SwiftUI lays each canvas on the pixel grid, while a
+    /// canvas draws its slice from the exact `top`: a cut between two pixels drew the canvas
+    /// below up to half a pixel off the one above — a step in every stroke crossing the seam.
+    /// Each cut is rounded UP: a slice stays within a pixel of its share, and a whole number of
+    /// pixels under one more than a share that is itself at most the limit never crosses it.
+    static func slices(height: CGFloat, displayScale: CGFloat) -> [(top: CGFloat, height: CGFloat)] {
+        let scale = max(displayScale, 1)
+        let maxPoints = maxLayerPixels / scale
+        guard height > maxPoints else { return [(top: 0, height: height)] }
+        let n = Int((height / maxPoints).rounded(.up))
+        let cuts = (0...n).map { i -> CGFloat in
+            i == 0 ? 0 : i == n ? height : (height * CGFloat(i) / CGFloat(n) * scale).rounded(.up) / scale
+        }
+        return (0..<n).map { (top: cuts[$0], height: cuts[$0 + 1] - cuts[$0]) }
+    }
+
     public var body: some View {
         // read the observable state the renderer depends on, so the canvas redraws on it
         let _ = controller.revision
         let _ = controller.viewScale; let _ = controller.viewOx; let _ = controller.viewOy
-        GeometryReader { _ in
+        GeometryReader { geo in
+            // A page taller than a layer may be is drawn as a stack of canvases, each drawing
+            // the same frame translated to its own slice; one canvas, the page, otherwise.
+            let slices = Self.slices(height: geo.size.height, displayScale: displayScale)
             TimelineView(.animation(minimumInterval: nil, paused: !controller.animating)) { timeline in
-                Canvas(opaque: false, rendersAsynchronously: false) { ctx, size in
-                    // The renderer reads the frame's date so every timeline tick is a different
-                    // canvas to SwiftUI. A renderer that captured only the controller looked
-                    // unchanged tick to tick, and on device a running transition drew no frames.
-                    _ = timeline.date
-                    controller.draw(in: ctx, size: size, displayScale: displayScale)
+                VStack(spacing: 0) {
+                    ForEach(slices.indices, id: \.self) { i in
+                        let slice = slices[i]
+                        Canvas(opaque: false, rendersAsynchronously: false) { ctx, size in
+                            // The renderer reads the frame's date so every timeline tick is a different
+                            // canvas to SwiftUI. A renderer that captured only the controller looked
+                            // unchanged tick to tick, and on device a running transition drew no frames.
+                            _ = timeline.date
+                            var c = ctx
+                            c.translateBy(x: 0, y: -slice.top)
+                            // Each canvas paints only its own rows. The frame fills paper,
+                            // highlights and masks for the whole page, and a Canvas is clipped to
+                            // its frame on screen but not in an `ImageRenderer` snapshot, where the
+                            // canvas below would paint its paper over the ink of the one above.
+                            if slices.count > 1 {
+                                c.clip(to: Path(CGRect(x: 0, y: slice.top, width: size.width, height: slice.height)))
+                            }
+                            controller.draw(in: c, size: CGSize(width: size.width, height: geo.size.height),
+                                            displayScale: displayScale,
+                                            slice: slices.count > 1 ? (index: i, top: slice.top, height: slice.height) : nil)
+                        }
+                        .frame(height: slice.height)
+                    }
                 }
             }
             // `invalidate()` is this view's setNeedsDisplay(). Engine calls the controller cannot
