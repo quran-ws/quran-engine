@@ -22,6 +22,14 @@ All notable changes to the engine and its packages. The format follows
   drawing it again at every size a pinch passes through.
 
 ### Changed
+- iOS `QvpPageCanvas` adds a reveal to its cached ink instead of drawing the page again. A
+  reveal only takes paths out of the styled set, so the paths it frees are filled onto the band
+  already cached, and a band the revealed word is not on is kept as it is. A memorization review
+  reveals a word at a time: on a page reflowed to its top zoom step a reveal cost ~15 ms and now
+  costs 4–9 ms, measured on macOS.
+- iOS `QvpPageCanvas` reads the engine clock, the styled paths and the highlight and mask boxes
+  once per frame and shares them between the canvases a tall page is drawn as, rather than once
+  per canvas.
 - npm releases use GitHub trusted publishing, as crates.io and pub.dev already did, so the
   release workflow needs no `NPM_TOKEN`.
 

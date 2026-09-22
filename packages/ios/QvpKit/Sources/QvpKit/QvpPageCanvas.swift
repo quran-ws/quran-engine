@@ -246,14 +246,47 @@ public final class QvpCanvasController {
     /// screen until the next layout — a page-sized bitmap apiece. A pinch paints its band into
     /// slot 0, and every canvas of the page blits that one image. Cleared whenever the layout
     /// changes.
+    ///
+    /// Each entry remembers the STYLED paths it was drawn without — they are drawn over it, or not
+    /// at all when their colour is transparent (a hidden word). So a reveal, which only takes paths
+    /// out of that set, adds those paths to the cached image instead of drawing the page again: a
+    /// memorization review reveals a word at a time, and each reveal used to re-rasterize every slice,
+    /// including a slice the word is not even on.
     final class BaseCache {
-        private var slots: [Int: (key: String, image: CGImage)] = [:]
-        func image(for key: String, slot: Int) -> CGImage? {
-            guard let entry = slots[slot], entry.key == key else { return nil }
-            return entry.image
+        struct Entry { let key: String; let styled: Set<Int>; let image: CGImage }
+        private var slots: [Int: Entry] = [:]
+        func entry(slot: Int) -> Entry? { slots[slot] }
+        func store(_ image: CGImage, key: String, styled: Set<Int>, slot: Int) {
+            slots[slot] = Entry(key: key, styled: styled, image: image)
         }
-        func store(_ image: CGImage, for key: String, slot: Int) { slots[slot] = (key, image) }
         func clear() { slots.removeAll() }
+    }
+
+    /// What one frame reads from the engine, whichever canvas asks for it. A page drawn as several
+    /// canvases (`QvpPageCanvas.slices`) renders each in the same frame, and every one of them
+    /// ticked the engine clock and read the styled paths, the highlight boxes and the mask boxes
+    /// again. The token is the frame: the timeline's date, the revision and the layout, so a pan,
+    /// which moves none of these, reads the answers already in hand.
+    struct FrameInputs {
+        let moving: Bool
+        let styled: [(path: Int, color: UInt32)]
+        let styledSet: Set<Int>
+        let colors: [Int: UInt32]
+        let bands: [QvpBox]
+        let masks: [QvpBox]
+    }
+    private struct FrameToken: Equatable { let page: ObjectIdentifier; let revision: Int; let layout: Int; let date: Date }
+    @ObservationIgnored private var frameMemo: (token: FrameToken, inputs: FrameInputs)?
+    private func frameInputs(_ p: QvpPage, frame: Date?) -> FrameInputs {
+        let token = frame.map { FrameToken(page: ObjectIdentifier(p), revision: revision, layout: layoutRevision, date: $0) }
+        if let token, let memo = frameMemo, memo.token == token { return memo.inputs }
+        let moving = p.tick(now() * 1000)
+        let styled = p.styledPaths()
+        let inputs = FrameInputs(moving: moving, styled: styled, styledSet: Set(styled.map { $0.path }),
+                                 colors: Dictionary(styled, uniquingKeysWith: { a, _ in a }),
+                                 bands: p.highlightBoxesView(), masks: p.maskBoxesView())
+        if let token { frameMemo = (token, inputs) }
+        return inputs
     }
 
     public init() {}
@@ -592,19 +625,22 @@ public final class QvpCanvasController {
     /// keeps painting its two boxes around the fingers whichever canvas asks — that band is what
     /// keeps a pinch from repainting the whole page at every step the fingers cross.
     func draw(in ctx: GraphicsContext, size: CGSize, displayScale: CGFloat,
-              slice: (index: Int, top: CGFloat, height: CGFloat)? = nil) {
+              slice: (index: Int, top: CGFloat, height: CGFloat)? = nil, frame: Date? = nil) {
         guard let p = page, p.isOpen else { return }
         if p.currentLayout == nil { relayout() }
         guard let l = p.currentLayout else { return }
-        let moving = p.tick(now() * 1000)
+        let inputs = frameInputs(p, frame: frame)
+        let moving = inputs.moving
         let paths = p.buildPaths()
-        let styled = p.styledPaths()
-        let styledSet = Set(styled.map { $0.path })
+        let styled = inputs.styled
+        let styledSet = inputs.styledSet
         let ink = p.defaultInk
         // Up, like the band's height: truncated, a width a hair under a whole pixel lost that
         // pixel, and the bitmap came out one column short of the canvas it is drawn across.
         let W = Int((size.width * displayScale).rounded(.up))
-        var hasher = Hasher(); hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
+        // The styled set is not in the key: the cache entry keeps it, so a reveal can add to the
+        // image rather than start it again (`BaseCache`).
+        var hasher = Hasher(); hasher.combine(l.lineDy)
         // The cached ink is a band of the page, not the screen, so a drag inside it is one blit
         // and nothing is drawn again. A slice's band is the slice, in page points: the canvas
         // shows page row `y - viewOy` at canvas row `y`.
@@ -620,30 +656,36 @@ public final class QvpCanvasController {
             ctx.fill(Path(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale)),
                      with: .color(color(paper)))
         }
-        let bands = p.highlightBoxesView()
+        let bands = inputs.bands
         drawBoxes(ctx, bands)
 
-        var img = cache.image(for: key, slot: slot)
-        if img == nil || img!.width != W || img!.height != bandPx, W > 0, bandPx > 0 {
+        var img: CGImage?
+        if W > 0, bandPx > 0, let q = drawListNow(band: band) {
             let t0 = now()
-            let cs = CGColorSpaceCreateDeviceRGB()
-            if let bc = CGContext(data: nil, width: W, height: bandPx, bitsPerComponent: 8, bytesPerRow: 0, space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
-                // flip to y-down page space so `makeImage()` comes out upright
-                bc.translateBy(x: 0, y: CGFloat(bandPx)); bc.scaleBy(x: displayScale, y: -displayScale)
-                bc.setFillColor(QvpColor.cgColor(ink))
-                bc.setAllowsAntialiasing(true); bc.setShouldAntialias(true)
-                var cur = -1, n = 0
-                if let q = drawListNow(band: band) {
-                    for d in q.draws where !styledSet.contains(d.path) {
-                        // one state per placement, not per path: the list runs in that order
-                        // the band is drawn under its own vertical offset: its top row is `top`
-                        if d.placement != cur { if cur >= 0 { bc.restoreGState() }; bc.saveGState(); bc.concatenate(transform(q, d.placement, offsetY: -top)); cur = d.placement }
-                        bc.addPath(paths[d.path]); bc.fillPath(using: p.pathEvenOdd(d.path) ? .evenOdd : .winding); n += 1
-                    }
+            if let entry = cache.entry(slot: slot), entry.key == key,
+               entry.image.width == W, entry.image.height == bandPx, styledSet.isSubset(of: entry.styled) {
+                if entry.styled == styledSet {
+                    img = entry.image
+                } else {
+                    // Only a reveal: the paths that left the styled set join the ink in hand. Same
+                    // colour over the same transparent ground, so the order they land in does not
+                    // change the pixels beyond a rounding step.
+                    let revealed = entry.styled.subtracting(styledSet)
+                    let joining = q.draws.filter { revealed.contains($0.path) }
+                    img = joining.isEmpty ? entry.image
+                        : rasterizeBase(W: W, bandPx: bandPx, displayScale: displayScale, over: entry.image,
+                                        draws: joining, q: q, paths: paths, page: p, ink: ink, top: top)
+                    if let img { cache.store(img, key: key, styled: styledSet, slot: slot) }
+                    lastBaseMs = (now() - t0) * 1000; lastBasePaths = joining.count
                 }
-                if cur >= 0 { bc.restoreGState() }
-                if let made = bc.makeImage() { cache.store(made, for: key, slot: slot); img = made }
-                lastBaseMs = (now() - t0) * 1000; lastBasePaths = n
+            }
+            if img == nil {
+                img = rasterizeBase(W: W, bandPx: bandPx, displayScale: displayScale, over: nil,
+                                    draws: q.draws.filter { !styledSet.contains($0.path) },
+                                    q: q, paths: paths, page: p, ink: ink, top: top)
+                if let img { cache.store(img, key: key, styled: styledSet, slot: slot) }
+                lastBaseMs = (now() - t0) * 1000
+                lastBasePaths = q.draws.count - q.draws.filter { styledSet.contains($0.path) }.count
             }
         }
         if let img {
@@ -656,7 +698,7 @@ public final class QvpCanvasController {
         }
         let t1 = now()
         if let q = drawListNow(band: band) {
-            let colors = Dictionary(styled, uniquingKeysWith: { a, _ in a })
+            let colors = inputs.colors
             for d in q.draws {
                 guard let col = colors[d.path], col & 0xff != 0 else { continue }
                 var c = ctx
@@ -664,13 +706,42 @@ public final class QvpCanvasController {
                 c.fill(Path(paths[d.path]), with: .color(color(col)), style: FillStyle(eoFill: p.pathEvenOdd(d.path)))
             }
         }
-        drawBoxes(ctx, p.maskBoxesView())
+        drawBoxes(ctx, inputs.masks)
         lastOverlayMs = (now() - t1) * 1000; lastOverlayPaths = styled.count; lastBands = bands.count
         if moving != animating {
             // Ask the engine again at the hop rather than trusting this frame: a transition begun
             // in between must not be paused by a stale "finished".
             Task { @MainActor [weak self] in if let self, self.syncAnimating() { self.revision &+= 1 } }
         }
+    }
+    /// A band of the page's default ink as a bitmap: `draws` filled in the ink colour, on a clear
+    /// ground or over `base`, a bitmap of the same band this adds to. `base` is copied in pixel
+    /// for pixel — no resampling, no blending — so what was drawn stays exactly as it was.
+    private func rasterizeBase(W: Int, bandPx: Int, displayScale: CGFloat, over base: CGImage?,
+                               draws: [QvpDraw], q: DrawList, paths: [CGPath], page p: QvpPage,
+                               ink: UInt32, top: CGFloat) -> CGImage? {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let bc = CGContext(data: nil, width: W, height: bandPx, bitsPerComponent: 8, bytesPerRow: 0, space: cs,
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return nil }
+        if let base {
+            bc.interpolationQuality = .none; bc.setBlendMode(.copy)
+            bc.draw(base, in: CGRect(x: 0, y: 0, width: W, height: bandPx))
+            bc.setBlendMode(.normal)
+        }
+        // flip to y-down page space so `makeImage()` comes out upright
+        bc.translateBy(x: 0, y: CGFloat(bandPx)); bc.scaleBy(x: displayScale, y: -displayScale)
+        bc.setFillColor(QvpColor.cgColor(ink))
+        bc.setAllowsAntialiasing(true); bc.setShouldAntialias(true)
+        var cur = -1
+        for d in draws {
+            // one state per placement, not per path: the list runs in that order
+            // the band is drawn under its own vertical offset: its top row is `top`
+            if d.placement != cur { if cur >= 0 { bc.restoreGState() }; bc.saveGState(); bc.concatenate(transform(q, d.placement, offsetY: -top)); cur = d.placement }
+            bc.addPath(paths[d.path]); bc.fillPath(using: p.pathEvenOdd(d.path) ? .evenOdd : .winding)
+        }
+        if cur >= 0 { bc.restoreGState() }
+        return bc.makeImage()
     }
     private func drawBoxes(_ ctx: GraphicsContext, _ boxes: [QvpBox]) {
         if boxes.isEmpty { return }
@@ -757,7 +828,8 @@ public struct QvpPageCanvas: View {
                             }
                             controller.draw(in: c, size: CGSize(width: size.width, height: geo.size.height),
                                             displayScale: displayScale,
-                                            slice: slices.count > 1 ? (index: i, top: slice.top, height: slice.height) : nil)
+                                            slice: slices.count > 1 ? (index: i, top: slice.top, height: slice.height) : nil,
+                                            frame: timeline.date)
                         }
                         .frame(height: slice.height)
                     }
