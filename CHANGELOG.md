@@ -11,6 +11,15 @@ All notable changes to the engine and its packages. The format follows
   many, and the cache keeps the screen before, the screen itself and the screen after loaded
   and safe from eviction — six pages for a two-page spread — so a swipe never lands on a blank
   half. The default span of 1 is the page and its two neighbors, as before.
+- `maxZoom` on `QvpCanvasController` and `QvpPageView` (iOS) and on `QvpPageView` (Android):
+  a host lowers the ceiling the magnifying glass is clamped to, from the policy's twelve, for
+  furniture of its own that scales with the glass. A ceiling under the fitted page is the
+  fitted page — a pinch never shrinks the page inside the screen.
+  `QvpViewPolicy.clampZoom(_:fit:ceiling:)` is the iOS clamp.
+- `peekScale` on the same three: how far the glass is over the fitted page — 1 at rest and in
+  every mode but `.magnify`. A host overlay divides it out of the view transform to draw its
+  furniture once at the fitted size and let the glass scale that one raster, instead of
+  drawing it again at every size a pinch passes through.
 
 ### Changed
 - npm releases use GitHub trusted publishing, as crates.io and pub.dev already did, so the

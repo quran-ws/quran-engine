@@ -54,6 +54,15 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// Zoom lasts only while the fingers are down: on release the page eases back to its fitted
     /// size — a peek, not a reading zoom — so a pinch never leaves the page holding the pan.
     public var zoomSpringsBack = false
+    /// How far the magnifying glass may go — the ceiling the pinch is clamped to under
+    /// `.magnify`, `QvpViewPolicy.maxZoom` unless the host lowers it. A host that draws its own
+    /// furniture beside the ink and scales it with the glass says here what that furniture can
+    /// survive; the engine's own ink costs the same at any size.
+    public var maxZoom: CGFloat = QvpViewPolicy.maxZoom
+    /// How far the glass is over the fitted page: `viewScale` over the fitted scale — 1 at
+    /// rest and in every mode but `.magnify`. A host overlay divides this out of the view
+    /// transform to draw its furniture once and let the glass scale that one raster.
+    public var peekScale: CGFloat { fitScale > 0 ? viewScale / fitScale : 1 }
     /// What a pinch does to the page. `.stepped` is what a reader gets: the pinch lands on one
     /// of the page's own zoom steps and the page breaks its rows again at that size. `.magnify`
     /// scales the printed page instead. The engine owns the behaviour; this picks which.
@@ -209,7 +218,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         if zoomSpringsBack, zoomMode == .magnify, [.ended, .cancelled, .failed].contains(g.state) { springBack(); return }
         let f = g.location(in: self)
         guard let p = page, p.isOpen, zoomMode != .magnify else {
-            let ns = QvpViewPolicy.clampZoom(pinchStart * g.scale, fit: fitScale); let k = ns / viewScale
+            let ns = QvpViewPolicy.clampZoom(pinchStart * g.scale, fit: fitScale, ceiling: maxZoom); let k = ns / viewScale
             viewOx = f.x - (f.x - viewOx) * k; viewOy = f.y - (f.y - viewOy) * k; viewScale = ns
             invalidateContent()
             return

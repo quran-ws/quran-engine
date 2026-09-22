@@ -77,6 +77,11 @@ public final class QvpCanvasController {
     /// Zoom lasts only while the fingers are down: on release the page eases back to its fitted
     /// size — a peek, not a reading zoom — so a pinch never leaves the page holding a pager's swipe.
     public var zoomSpringsBack = false
+    /// How far the magnifying glass may go — the ceiling the pinch is clamped to under
+    /// `.magnify`, `QvpViewPolicy.maxZoom` unless the host lowers it. A host that draws its own
+    /// furniture beside the ink and scales it with the glass says here what that furniture can
+    /// survive; the engine's own ink costs the same at any size.
+    public var maxZoom: CGFloat = QvpViewPolicy.maxZoom
     /// What a pinch does to the page. `.stepped` is what a reader gets: the pinch lands on one
     /// of the page's own zoom steps and the page breaks its rows again at that size. `.magnify`
     /// is the old behaviour, scaling the printed page. The engine owns the policy; this only
@@ -177,6 +182,13 @@ public final class QvpCanvasController {
     public private(set) var viewScale: CGFloat = 1
     public private(set) var viewOx: CGFloat = 0
     public private(set) var viewOy: CGFloat = 0
+    /// How far the glass is over the fitted page: `viewScale` over the fitted scale — 1 at
+    /// rest, in every mode but `.magnify`, and again once a peek has sprung back. A host
+    /// overlay that draws its own furniture beside the ink (a frame around a surah name)
+    /// divides this out of the view transform, draws the furniture ONCE at the fitted size,
+    /// and lets the glass scale that one raster — instead of drawing it again at every size
+    /// a pinch passes through.
+    public var peekScale: CGFloat { fitScale > 0 ? viewScale / fitScale : 1 }
     /// Bumped by every relayout. A host's overlay reads this beside the view transform: a page
     /// laid out into a box it fits exactly leaves `viewScale`/`viewOx`/`viewOy` at their
     /// defaults, so the transform alone never tells the overlay that the geometry it draws
@@ -482,7 +494,7 @@ public final class QvpCanvasController {
         }
         guard let p = page, p.isOpen, zoomMode != .magnify else {
             // the printed page under a magnifying glass: the rows never move
-            let ns = QvpViewPolicy.clampZoom(pinchStart * magnification, fit: fitScale); let k = ns / viewScale
+            let ns = QvpViewPolicy.clampZoom(pinchStart * magnification, fit: fitScale, ceiling: maxZoom); let k = ns / viewScale
             viewOx = focus.x - (focus.x - viewOx) * k; viewOy = focus.y - (focus.y - viewOy) * k; viewScale = ns
             return
         }
