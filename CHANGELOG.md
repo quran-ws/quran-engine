@@ -26,6 +26,14 @@ All notable changes to the engine and its packages. The format follows
   release workflow needs no `NPM_TOKEN`.
 
 ### Fixed
+- iOS `QvpPageCanvas` draws a page taller than Core Animation's 8,192-px layer limit as a stack
+  of canvases, each under it and cut on a whole pixel, with the cached ink band and the draw
+  list kept per slice. A reflowed page at its top step on a phone is ~8,500 px; as one layer it
+  was rasterized to fit and stretched back, so every glyph went soft and a surah name read as
+  bold. A page that fits is one canvas, as before.
+- iOS `QvpPageCanvas` draws its cached ink at the bitmap's own size. Stretched to a band a
+  fraction of a pixel shorter, the bitmap was resampled, and rows down the page came out
+  blended with their neighbours.
 - Code releases now fail when registry credentials are missing, skip npm and CDN artifacts
   already published during a retry, and publish verified engine artifacts to the CDN even when
   a registry fails.

@@ -831,6 +831,51 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual((10...14).filter { cache.page(for: $0) != nil }.count, 4)
     }
 
+    /// A page taller than Core Animation's layer limit is drawn as near-equal canvases under it,
+    /// cut on whole pixels; a page that fits is one canvas, itself.
+    func testCanvasSlicesStayUnderTheLayerLimit() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let one = QvpPageCanvas.slices(height: 874, displayScale: 3)
+        XCTAssertEqual(one.count, 1); XCTAssertEqual(one[0].top, 0); XCTAssertEqual(one[0].height, 874)
+        let two = QvpPageCanvas.slices(height: 2848.35, displayScale: 3)   // page 177 at its top step
+        XCTAssertEqual(two.count, 2)
+        XCTAssertEqual(two[0].top, 0)
+        XCTAssertEqual(two[1].top, two[0].height, accuracy: 1e-9)
+        XCTAssertEqual(two.map(\.height).reduce(0, +), 2848.35, accuracy: 1e-9)
+        for s in two { XCTAssertLessThanOrEqual(s.height * 3, QvpPageCanvas.maxLayerPixels) }
+        // Cut on a whole pixel: SwiftUI lays the canvases on the pixel grid.
+        XCTAssertEqual(two[1].top * 3, (two[1].top * 3).rounded(), accuracy: 1e-9)
+        let three = QvpPageCanvas.slices(height: 9000, displayScale: 2)
+        XCTAssertEqual(three.count, 3)
+        for s in three {
+            XCTAssertEqual(s.top * 2, (s.top * 2).rounded(), accuracy: 1e-9)
+            XCTAssertLessThanOrEqual(s.height * 2, QvpPageCanvas.maxLayerPixels)
+        }
+        // Shares a hair under the limit: rounding the cuts up must not carry a slice past it.
+        for s in QvpPageCanvas.slices(height: QvpPageCanvas.maxLayerPixels * 2 / 3 - 0.001, displayScale: 3) {
+            XCTAssertLessThanOrEqual((s.height * 3).rounded(.up), QvpPageCanvas.maxLayerPixels)
+        }
+    }
+
+    /// The cached ink holds ONE image per canvas: a frame whose key moved on (a peek, its
+    /// spring-back, a pan) replaces its canvas's image instead of piling up behind it.
+    @MainActor func testBaseCacheKeepsOneImagePerSlot() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpCanvasController needs macOS 14 / iOS 17") }
+        let bc = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 0,
+                           space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)!
+        let image = try XCTUnwrap(bc.makeImage())
+        let cache = QvpCanvasController.BaseCache()
+        cache.store(image, for: "a", slot: 0)
+        cache.store(image, for: "b", slot: 0)
+        cache.store(image, for: "c", slot: 1)
+        XCTAssertNil(cache.image(for: "a", slot: 0), "a newer key replaced the slot")
+        XCTAssertNotNil(cache.image(for: "b", slot: 0))
+        XCTAssertNil(cache.image(for: "b", slot: 1), "an image answers only in its own slot")
+        XCTAssertNotNil(cache.image(for: "c", slot: 1))
+        cache.clear()
+        XCTAssertNil(cache.image(for: "c", slot: 1))
+    }
+
     /// Every wrapper replays conformance/scenarios/layout.json and must match the engine's numbers.
     func testLayoutScenariosMatchTheEngine() throws {
         let url = Self.repo.appendingPathComponent("conformance/scenarios/layout.json")
