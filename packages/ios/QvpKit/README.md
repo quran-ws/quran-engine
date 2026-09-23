@@ -141,7 +141,10 @@ through `onSwipe` instead of panning, so the host can flip pages; double-tap res
 
 The same frame drawn with SwiftUI `Canvas` — for SwiftUI-first apps that would otherwise bridge
 `QvpPageView` through a representable. Identical draw order and base-ink bitmap cache; frames run
-through `TimelineView(.animation)` only while `page.tick(now)` reports a transition in flight.
+through `TimelineView(.animation)` only while `page.tick(now)` reports a transition in flight. A page
+taller than Core Animation's 8,192-px layer limit is drawn as a stack of canvases, each cut on a
+whole pixel and caching its own band of ink; a reveal, which only takes paths out of the styled
+set, adds them to the cached band instead of drawing it again.
 
 ```swift
 @State private var controller = QvpCanvasController()

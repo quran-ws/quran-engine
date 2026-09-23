@@ -3,6 +3,7 @@
 // (`cargo run -p qvp-convert --release -- batch pages dist/pages`).
 // Run: `swift test` (macOS slice) or `xcodebuild test -scheme QvpKit -destination 'platform=iOS Simulator,name=iPhone 17'`.
 import XCTest
+import SwiftUI
 @testable import QvpKit
 
 final class QvpKitTests: XCTestCase {
@@ -865,15 +866,102 @@ final class QvpKitTests: XCTestCase {
                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)!
         let image = try XCTUnwrap(bc.makeImage())
         let cache = QvpCanvasController.BaseCache()
-        cache.store(image, for: "a", slot: 0)
-        cache.store(image, for: "b", slot: 0)
-        cache.store(image, for: "c", slot: 1)
-        XCTAssertNil(cache.image(for: "a", slot: 0), "a newer key replaced the slot")
-        XCTAssertNotNil(cache.image(for: "b", slot: 0))
-        XCTAssertNil(cache.image(for: "b", slot: 1), "an image answers only in its own slot")
-        XCTAssertNotNil(cache.image(for: "c", slot: 1))
+        cache.store(image, key: "a", styled: [], slot: 0)
+        cache.store(image, key: "b", styled: [7], slot: 0)
+        cache.store(image, key: "c", styled: [], slot: 1)
+        XCTAssertEqual(cache.entry(slot: 0)?.key, "b", "a newer key replaced the slot")
+        XCTAssertEqual(cache.entry(slot: 0)?.styled, [7], "the entry keeps the styled set it was drawn without")
+        XCTAssertEqual(cache.entry(slot: 1)?.key, "c", "each slot is its own")
         cache.clear()
-        XCTAssertNil(cache.image(for: "c", slot: 1))
+        XCTAssertNil(cache.entry(slot: 1))
+    }
+
+    /// Page 177 reflowed to `step` on a phone-width canvas the height of the page. At step 3 it is
+    /// ~8,545 px at 3× — drawn as two canvases; at step 1 it is one.
+    @MainActor private func reflowedCanvas(step: Int, order: Int = 1, page: QvpPage? = nil) throws -> (QvpPage, QvpCanvasController, CGFloat) {
+        let p = try page ?? QvpPage(bytes: Data(contentsOf: Self.pages.appendingPathComponent("177.qvp")))
+        let c = QvpCanvasController()
+        c.fillHeight = true; c.bannerZoom = 1.5; c.hostScrolls = true; c.hostViewportHeight = 874; c.zoomMode = .stepped
+        c.page = p; c.setBounds(CGSize(width: 372, height: 874), fromCanvas: order)
+        c.zoomToStep(step)
+        let h = CGFloat(try XCTUnwrap(p.currentLayout).contentH)
+        c.setBounds(CGSize(width: 372, height: h), fromCanvas: order)
+        return (p, c, h)
+    }
+    /// RGBA bytes of a SwiftUI view rendered at 3×.
+    @MainActor private func pixels(_ view: some View, width: CGFloat, height: CGFloat) throws -> (Int, Int, [UInt8]) {
+        let r = ImageRenderer(content: view.frame(width: width, height: height)); r.scale = 3
+        let img = try XCTUnwrap(r.cgImage)
+        var bytes = [UInt8](repeating: 0, count: img.width * img.height * 4)
+        let ctx = try XCTUnwrap(CGContext(data: &bytes, width: img.width, height: img.height, bitsPerComponent: 8,
+                                          bytesPerRow: img.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        ctx.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
+        return (img.width, img.height, bytes)
+    }
+    /// The page's ink filled straight into one Core Graphics bitmap — no SwiftUI layer, so no
+    /// layer limit — as RGBA bytes: the ground truth a canvas must reproduce.
+    @MainActor private func inkDrawnDirectly(_ c: QvpCanvasController, _ p: QvpPage, height h: CGFloat) throws -> [UInt8] {
+        let W = Int((372 * 3.0).rounded(.up)), H = Int((h * 3).rounded(.up))
+        var bytes = [UInt8](repeating: 0, count: W * H * 4)
+        let ctx = try XCTUnwrap(CGContext(data: &bytes, width: W, height: H, bitsPerComponent: 8, bytesPerRow: W * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        ctx.translateBy(x: 0, y: CGFloat(H)); ctx.scaleBy(x: 3, y: -3)
+        ctx.setFillColor(QvpColor.cgColor(p.defaultInk))
+        let q = try XCTUnwrap(c.drawListNow(band: c.layoutBand(top: 0, height: h)))
+        let paths = p.buildPaths()
+        for d in q.draws {
+            ctx.saveGState(); ctx.concatenate(c.transform(q, d.placement))
+            ctx.addPath(paths[d.path]); ctx.fillPath(using: p.pathEvenOdd(d.path) ? .evenOdd : .winding)
+            ctx.restoreGState()
+        }
+        return bytes
+    }
+    /// Channels further apart than `tolerance`, and the largest difference.
+    private func difference(_ a: [UInt8], _ b: [UInt8], tolerance: Int) -> (count: Int, max: Int) {
+        var count = 0, worst = 0
+        for i in 0..<min(a.count, b.count) {
+            let d = abs(Int(a[i]) - Int(b[i])); worst = max(worst, d); if d > tolerance { count += 1 }
+        }
+        return (count, worst)
+    }
+
+    /// A page too tall for one layer, drawn as a stack of canvases, is the page's ink exactly: not
+    /// softened by a layer rasterized to fit, not resampled by a bitmap stretched into its band,
+    /// and not stepped by a slice cut between two pixels.
+    @MainActor func testSlicedCanvasDrawsThePageInkExactly() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let (p, c, h) = try reflowedCanvas(step: 3); defer { p.close() }
+        XCTAssertEqual(QvpPageCanvas.slices(height: h, displayScale: 3).count, 2, "the page must be sliced for this test to mean anything")
+        let sliced = try pixels(QvpPageCanvas(controller: c), width: 372, height: h)
+        let truth = try inkDrawnDirectly(c, p, height: h)
+        XCTAssertEqual(sliced.2.count, truth.count)
+        // A few channels land a rounding step or two apart where a slice's band is filled under
+        // its own whole-pixel offset. What this test is for is far outside that: a layer
+        // rasterized to fit differed by up to 199 across millions of channels.
+        let d = difference(sliced.2, truth, tolerance: 4)
+        XCTAssertEqual(d.count, 0, "the sliced canvas differs from the ink in \(d.count) channels, by up to \(d.max)")
+    }
+
+    /// A reveal adds the revealed word's paths to the cached ink rather than drawing the page
+    /// again — and lands on the same pixels a full draw of the same state does.
+    @MainActor func testRevealAddsToTheCachedInkAndMatchesAFullDraw() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        // One canvas, so the draw stats are this page's and not the last slice's.
+        let (p, c, h) = try reflowedCanvas(step: 1); defer { p.close() }
+        XCTAssertEqual(QvpPageCanvas.slices(height: h, displayScale: 3).count, 1)
+        _ = try pixels(QvpPageCanvas(controller: c), width: 372, height: h)
+        p.mask(Target.ayahRange(8, 1, 4), .hide); c.invalidate()
+        _ = try pixels(QvpPageCanvas(controller: c), width: 372, height: h)
+        let word = p.targetWords("8:1")[0]
+        p.unmaskWord(word); c.invalidate()
+        let incremental = try pixels(QvpPageCanvas(controller: c), width: 372, height: h)
+        XCTAssertEqual(c.lastBasePaths, p.words[word].nPaths, "only the revealed word's paths were drawn")
+        // The same page state, drawn from nothing by a controller with an empty cache.
+        let (_, fresh, _) = try reflowedCanvas(step: 1, order: 2, page: p)
+        let full = try pixels(QvpPageCanvas(controller: fresh), width: 372, height: h)
+        let d = difference(incremental.2, full.2, tolerance: 2)
+        XCTAssertEqual(d.count, 0, "the reveal differs from a full draw in \(d.count) channels, by up to \(d.max)")
     }
 
     /// Every wrapper replays conformance/scenarios/layout.json and must match the engine's numbers.
