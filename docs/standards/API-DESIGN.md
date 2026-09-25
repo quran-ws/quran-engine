@@ -91,6 +91,8 @@ readers that must not load wasm. The conformance fixtures that the Rust codec ge
 
 The passage entry point is a narrow, JavaScript-only exception to the single-core rule. It lays out complete ayah ranges without Wasm, including ranges across pages. It does not add a second page reader, zoom policy, selection or style engine. Its tests cover unchanged outlines, complete ayahs and decoration ownership; Rust-generated fixtures check shared geometric measurements. The ABI and its wrappers remain unchanged. See `docs/LITE-PASSAGES.md`.
 
+The optional [web data loader](../WEB-DATA.md) owns release fetching and cache policy outside the engine. This web-only convenience has no C ABI or parity changes; its metadata is JSON, not a second layout implementation.
+
 ## Consumability
 
 Every package must build outside this repository from its published form. A default path
