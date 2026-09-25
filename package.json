@@ -37,7 +37,7 @@
     "./qvp_ffi.wasm": "./web/qvp_ffi.wasm",
     "./package.json": "./package.json",
     "./data": "./web/data.mjs",
-    "./metadata": "./web/metadata.mjs"
+    "./metadata": "./web/surahs.json"
   },
   "main": "./web/index.cjs",
   "module": "./web/index.mjs",
@@ -58,7 +58,6 @@
     "web/data.mjs",
     "web/data-hafs.json",
     "web/surahs.json",
-    "web/metadata.mjs",
     "docs/WEB-DATA.md"
   ],
   "publishConfig": {

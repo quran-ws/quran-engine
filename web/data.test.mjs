@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { webcrypto } from 'node:crypto'
 import { QvpData, hafs } from './data.mjs'
-import { surahs } from './metadata.mjs'
+import surahs from './surahs.json' with { type: 'json' }
 
 const crypto_descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
 Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto })

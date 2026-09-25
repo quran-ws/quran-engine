@@ -90,11 +90,9 @@ The converter and the format never simplify a curve or drop a point. Every page 
 pixel-diff gate against the source SVG. A source problem goes in
 `docs/UPSTREAM-DATA-ISSUES.md`. The converter does not patch data.
 
-The optional web data helper (`docs/WEB-DATA.md`) owns release URLs, integrity checks and caches outside the engine. Its small release descriptor and canonical surah metadata are packaged; Quran text and artwork are fetched, never committed. This web-only convenience has no C ABI or parity changes.
-
 ## Data is not code
 
-Packages ship code only. Apps load page data (`NNN.qvp`, `atlas.qva`,
+Packages ship code and small release metadata, not Quran text or artwork. Apps load page data (`NNN.qvp`, `atlas.qva`,
 `NNN.words.json`, and the generated `surah-names/` tree).
 The built data is published as a GitHub release with a CDN mirror and is not committed.
 Examples bundle a sample as gitignored assets.

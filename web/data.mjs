@@ -1,7 +1,7 @@
 // Optional verified fetching for Hafs passages; the core and lite decoder stay fetch-free.
 
 import { decodeGeometry } from './lite.mjs'
-import { surahs } from './metadata.mjs'
+import surahs from './surahs.json' with { type: 'json' }
 import release from './data-hafs.json' with { type: 'json' }
 
 /** Gets the Hafs release URLs, integrity hashes and page-start index. */
@@ -11,23 +11,14 @@ export const hafs = Object.freeze({ ...release, pages: Object.freeze(release.pag
 export class QvpData {
   #pages = new Map()
   #text
-  #fetch
-  #storage
-  #prefix
-  #pageLimit
-  #responseLimit
+  #options
 
   /** Sets cache limits and optional fetch/CacheStorage adapters; zero disables that page cache. */
   constructor({ pageCacheSize = 6, responseCacheSize = 24, cachePrefix = 'qvp', fetch = globalThis.fetch, cacheStorage = globalThis.caches } = {}) {
     for (const size of [pageCacheSize, responseCacheSize]) {
       if (!Number.isSafeInteger(size) || size < 0) throw new RangeError('Invalid cache size')
     }
-    this.#pageLimit = pageCacheSize
-    this.#responseLimit = responseCacheSize
-    this.#prefix = cachePrefix
-    // Call Fetch without rebinding its receiver to the loader instance.
-    this.#fetch = (...args) => fetch(...args)
-    this.#storage = cacheStorage
+    this.#options = { pageCacheSize, responseCacheSize, cachePrefix, fetch, cacheStorage }
   }
 
   /** Gets the printed page containing a valid surah and ayah. */
@@ -52,7 +43,7 @@ export class QvpData {
       return request
     }
     const url = `${hafs.pageUrl}${String(number).padStart(3, '0')}.qvp`
-    const request = this.#load(url, hafs.pages[number - 1][2], `qvp-${hafs.pageVersion}`, this.#responseLimit, bytes => {
+    const request = this.#load(url, hafs.pages[number - 1][2], `qvp-${hafs.pageVersion}`, this.#options.responseCacheSize, bytes => {
       const page = decodeGeometry(bytes)
       if (page.number !== number) throw new Error('Unexpected Quran page')
       return page
@@ -61,7 +52,7 @@ export class QvpData {
       throw error
     })
     this.#pages.set(number, request)
-    while (this.#pages.size > this.#pageLimit) this.#pages.delete(this.#pages.keys().next().value)
+    while (this.#pages.size > this.#options.pageCacheSize) this.#pages.delete(this.#pages.keys().next().value)
     return request
   }
 
@@ -97,7 +88,8 @@ export class QvpData {
   }
 
   async #load(url, digest, bucket, limit, decode) {
-    const cache = limit ? await this.#storage?.open(`${this.#prefix}-${bucket}`).catch(() => null) : null
+    const { fetch, cacheStorage, cachePrefix } = this.#options
+    const cache = limit ? await cacheStorage?.open(`${cachePrefix}-${bucket}`).catch(() => null) : null
     const cached = await cache?.match(url).catch(() => null)
     const read = async response => {
       if (!response.ok) throw new Error(`Quran asset: HTTP ${response.status}`)
@@ -110,7 +102,7 @@ export class QvpData {
       try { return await read(cached) }
       catch { await cache.delete(url).catch(() => {}) }
     }
-    const response = await this.#fetch(url)
+    const response = await fetch(url)
     const result = await read(response.clone())
     if (cache) {
       await cache.put(url, response).catch(() => {})
