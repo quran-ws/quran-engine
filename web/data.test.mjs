@@ -45,7 +45,11 @@ try {
   }
   let calls = 0
   const cache = storage()
-  const options = { cacheStorage: cache, fetch: async () => { calls++; return new Response(text) } }
+  const options = { cacheStorage: cache, fetch: async function () {
+    assert.equal(this, undefined, 'Fetch must not receive the QvpData instance as its receiver')
+    calls++
+    return new Response(text)
+  } }
   const data = new QvpData(options)
   assert.equal(calls, 0)
   for (const [surah, ayah, page] of [[1, 1, 1], [2, 1, 2], [2, 6, 3], [2, 255, 42], [2, 282, 48], [16, 50, 272], [114, 6, 604]])
@@ -71,6 +75,9 @@ try {
   await assert.rejects(new QvpData({ cacheStorage: null, fetch: async () => new Response(text + 'tampered') }).loadText(), /digest/)
   assert.equal((await new QvpData({ cacheStorage: { open: async () => { throw new Error('denied') } }, fetch: options.fetch }).loadText())[0][0], 'test-0')
 
+  hashes.set('broken', hafs.textDigest)
+  await assert.rejects(new QvpData({ cacheStorage: null, fetch: async () => new Response('broken') }).loadText(), /Invalid Quran text/)
+
   let page_calls = 0
   const page_cache = storage()
   const pages = new QvpData({ cacheStorage: page_cache, responseCacheSize: 1, fetch: async () => { page_calls++; return new Response(fixture) } })
@@ -84,6 +91,13 @@ try {
   assert.equal((await new QvpData({ cacheStorage: page_cache, fetch: async () => { throw new Error('offline') } }).loadPage(7)).number, 7)
   await assert.rejects(pages.loadPage(0), /Invalid Quran page/)
   await assert.rejects(pages.loadPassage({ surah: 1, from: 7, to: 1 }), /range/)
+  await response_cache.put(`${hafs.pageUrl}007.qvp`, new Response('corrupt'))
+  const recovered = new QvpData({ cacheStorage: page_cache, fetch: async () => new Response(fixture) })
+  assert.equal((await recovered.loadPage(7)).number, 7)
+  let page_attempts = 0
+  const retry_page = new QvpData({ cacheStorage: null, fetch: async () => ++page_attempts === 1 ? new Response('', { status: 503 }) : new Response(fixture) })
+  await assert.rejects(retry_page.loadPage(7), /503/)
+  assert.equal((await retry_page.loadPage(7)).number, 7)
   const uncached = new QvpData({ pageCacheSize: 0, responseCacheSize: 0, cacheStorage: page_cache, fetch: async () => { page_calls++; return new Response(fixture) } })
   await uncached.loadPage(7)
   await uncached.loadPage(7)
@@ -92,6 +106,17 @@ try {
   hashes.set(fixture.toString('hex'), hafs.pages[7][2])
   await assert.rejects(pages.loadPage(8), /Unexpected Quran page/)
   assert.equal((await response_cache.keys()).length, 1)
+  hashes.set(fixture.toString('hex'), hafs.pages[6][2])
+  const second = Buffer.from(fixture)
+  second.writeUInt16LE(8, 8)
+  hashes.set(second.toString('hex'), hafs.pages[7][2])
+  let lru_calls = 0
+  const lru = new QvpData({ pageCacheSize: 1, responseCacheSize: 0, fetch: async url => {
+    lru_calls++
+    return new Response(url.endsWith('007.qvp') ? fixture : second)
+  } })
+  for (const number of [7, 8, 7]) assert.equal((await lru.loadPage(number)).number, number)
+  assert.equal(lru_calls, 3)
   console.log('ok  optional data: metadata, validation, shared loads, retry, integrity, offline and cache limits')
 } finally {
   webcrypto.subtle.digest = digest

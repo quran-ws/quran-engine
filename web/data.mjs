@@ -24,7 +24,8 @@ export class QvpData {
     this.#pageLimit = pageCacheSize
     this.#responseLimit = responseCacheSize
     this.#prefix = cachePrefix
-    this.#fetch = fetch
+    // Call Fetch without rebinding its receiver to the loader instance.
+    this.#fetch = (...args) => fetch(...args)
     this.#storage = cacheStorage
   }
 

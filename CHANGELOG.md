@@ -7,6 +7,7 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- Optional `@quran.ws/engine/data` loads verified Quran text and artwork with bounded caches; `@quran.ws/engine/metadata` shares canonical surah names and counts. The byte-oriented engine stays fetch-free.
 - `QvpPageCache.setCurrentPage(_:span:)` (iOS): a host showing several pages at once says how
   many, and the cache keeps the screen before, the screen itself and the screen after loaded
   and safe from eviction — six pages for a two-page spread — so a swipe never lands on a blank
@@ -49,7 +50,6 @@ All notable changes to the engine and its packages. The format follows
 ## [0.3.0] - 2026-09-21
 
 ### Added
-- Optional `@quran.ws/engine/data` loads verified Quran text and artwork with bounded caches; `@quran.ws/engine/metadata` shares canonical surah names and counts. The byte-oriented engine stays fetch-free.
 - Optional `@quran.ws/engine/lite/passage` lays out complete ayah ranges in JavaScript without Wasm, including ranges across pages. It keeps the original word outlines, every ayah medallion, and the relevant division and sajdah signs. Synthetic, Rust-fixture and 604-page checks cover it.
 - The lite geometry decoder exposes line, ayah, decoration and text metadata already present in QVP files. The wire format is unchanged.
 - The page-data build emits frame-free surah titles as individual and combined QVP and SVG
