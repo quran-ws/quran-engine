@@ -1,13 +1,10 @@
-// Pinned release descriptor; no Quran text or page artwork is packaged here.
-
-/** Gets the Hafs release URLs, integrity hashes and page-start index. */
-export const hafs = Object.freeze({
-  pageUrl: 'https://cdn.quran.ws/qvp/v0.3.0/',
-  pageVersion: 'v0.3.0',
-  textUrl: 'https://fonts.nuqayah.com/quran.txt',
-  textVersion: 'v1',
-  textDigest: 'b8436b6bba887eab7635a3d524ebdd9ba62e6dec3e329c1400516abbc82159ed',
-  pages: Object.freeze([
+{
+  "pageUrl": "https://cdn.quran.ws/qvp/v0.3.0/",
+  "pageVersion": "v0.3.0",
+  "textUrl": "https://fonts.nuqayah.com/quran.txt",
+  "textVersion": "v1",
+  "textDigest": "b8436b6bba887eab7635a3d524ebdd9ba62e6dec3e329c1400516abbc82159ed",
+  "pages": [
     [1,1,"2792ceab5f3cfaa0d86d09a8ca11c80e49b2692de384705b57225c9e3899940a"],
     [2,1,"2d6b34293a3884739001de8d89b9ae2a89779095992d1ba5cc2031687d142e08"],
     [2,6,"c3a9db527d962203b993097ac307ae123d2af524edf2af7a16b6771139eafca5"],
@@ -611,6 +608,6 @@ export const hafs = Object.freeze({
     [103,1,"ce6e00943887df1ba1bc91d2d2402ec9c201d86b944accecd8f88f339aedbda5"],
     [106,1,"ebc251f288ebe51670d6c2fe508b00c2c3d5775cbcf5f1a8358dc844beee53cd"],
     [109,1,"9b69b04e982d52be10728c4bcd0842ad9273f94d819cacae423fd95cc7ff4f7f"],
-    [112,1,"3c4cab0889bd6a850a403b1e41a58f0e2546f0da41376880f6a35229cd053ec3"],
-  ].map(Object.freeze)),
-})
+    [112,1,"3c4cab0889bd6a850a403b1e41a58f0e2546f0da41376880f6a35229cd053ec3"]
+  ]
+}

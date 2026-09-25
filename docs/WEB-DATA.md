@@ -56,7 +56,11 @@ fetch trusted release URLs. This helper does not replace the host's transport li
 
 ## Release metadata and provenance
 
-The small release descriptor and canonical surah metadata are packaged code inputs;
+The release descriptor (`web/data-hafs.json`) and surah metadata (`web/surahs.json`)
+are plain JSON. Their public JavaScript exports freeze them once on import.
+Node requires 18.20 or later for JSON import attributes.
+
+The small release descriptor and canonical surah metadata are packaged inputs;
 page binaries and Quran text remain external. They are not another copy of the data
 release. Changing the pinned edition requires updating the descriptor, cache versions
 and tests together.

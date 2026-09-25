@@ -2,9 +2,10 @@
 
 import { decodeGeometry } from './lite.mjs'
 import { surahs } from './metadata.mjs'
-import { hafs } from './data-hafs.mjs'
+import release from './data-hafs.json' with { type: 'json' }
 
-export { hafs }
+/** Gets the Hafs release URLs, integrity hashes and page-start index. */
+export const hafs = Object.freeze({ ...release, pages: Object.freeze(release.pages.map(Object.freeze)) })
 
 /** Loads verified Quran text and pages, with bounded page caches and no import-time I/O. */
 export class QvpData {

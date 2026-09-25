@@ -56,7 +56,8 @@
     "LICENSE",
     "LICENSES/",
     "web/data.mjs",
-    "web/data-hafs.mjs",
+    "web/data-hafs.json",
+    "web/surahs.json",
     "web/metadata.mjs",
     "docs/WEB-DATA.md"
   ],
@@ -64,7 +65,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.20"
   },
   "scripts": {
     "build:wasm": "cargo build -p qvp-ffi --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm",
