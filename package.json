@@ -35,7 +35,9 @@
     "./lite/passage": "./web/lite-passage.mjs",
     "./qvp.js": "./web/qvp.js",
     "./qvp_ffi.wasm": "./web/qvp_ffi.wasm",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./data": "./web/data.mjs",
+    "./metadata": "./web/metadata.mjs"
   },
   "main": "./web/index.cjs",
   "module": "./web/index.mjs",
@@ -52,7 +54,11 @@
     "docs/API.md",
     "README.md",
     "LICENSE",
-    "LICENSES/"
+    "LICENSES/",
+    "web/data.mjs",
+    "web/data-hafs.mjs",
+    "web/metadata.mjs",
+    "docs/WEB-DATA.md"
   ],
   "publishConfig": {
     "access": "public"
@@ -63,7 +69,7 @@
   "scripts": {
     "build:wasm": "cargo build -p qvp-ffi --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm",
     "prepack": "npm run build:wasm",
-    "test": "node web/smoke.mjs && node web/lite.test.mjs && node web/lite-passage.test.mjs",
-    "test:lite": "node web/lite.test.mjs && node web/lite-passage.test.mjs"
+    "test": "node web/smoke.mjs && node web/lite.test.mjs && node web/lite-passage.test.mjs && node web/data.test.mjs",
+    "test:lite": "node web/lite.test.mjs && node web/lite-passage.test.mjs && node web/data.test.mjs"
   }
 }

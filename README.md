@@ -126,3 +126,9 @@ Everything about using it lives on the site. This repository is the source.
 | `docs/` | `HOW-IT-WORKS.md` (start here), the API, the standards, and the measured numbers |
 
 Issues and pull requests are welcome here. `CONTRIBUTING.md` says how; `docs/HOW-IT-WORKS.md` describes the engine's components and data flow. Everything that is not about *changing* this repository is on the site.
+
+## Optional web data
+
+`@quran.ws/engine/data` loads verified text and passages with bounded caches.
+`@quran.ws/engine/metadata` provides canonical surah names and counts. Both are
+separate from the fetch-free core and lite decoder. See [WEB-DATA.md](docs/WEB-DATA.md).
