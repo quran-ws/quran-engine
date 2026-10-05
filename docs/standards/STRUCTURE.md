@@ -8,6 +8,7 @@ The layout is part of the public interface. A consumer reads paths. A contributo
 |---|---|---|
 | engine logic | `crates/qvp-core` | shared geometry, layout and colours; the lite passage module below is the scoped JavaScript exception |
 | lite passage layout | `web/lite-passage.mjs`, `web/lite-passage-geometry.mjs` | optional complete-ayah excerpt layout, no Wasm or C ABI; see `docs/LITE-PASSAGES.md` |
+| optional web data | `web/data.mjs`, `web/data-hafs.json`, `web/surahs.json` | verified fetching, release descriptor and canonical metadata; no bundled corpus or artwork; see `docs/WEB-DATA.md` |
 | binary formats and codec | `crates/qvp-format` | no dependencies. `docs/FORMAT.md` specifies the formats |
 | converter and identity gate | `crates/qvp-convert` | the pipeline. Never consumed by an app |
 | the C ABI | `crates/qvp-ffi`, header at `include/qvp.h` | the single contract. The header is canonical and CI checks every copy against it |

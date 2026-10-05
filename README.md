@@ -126,3 +126,5 @@ Everything about using it lives on the site. This repository is the source.
 | `docs/` | `HOW-IT-WORKS.md` (start here), the API, the standards, and the measured numbers |
 
 Issues and pull requests are welcome here. `CONTRIBUTING.md` says how; `docs/HOW-IT-WORKS.md` describes the engine's components and data flow. Everything that is not about *changing* this repository is on the site.
+
+For verified text and passage fetching, use the optional [web data loader](docs/WEB-DATA.md).

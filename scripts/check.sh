@@ -33,6 +33,7 @@ for check in "$@"; do
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test line_shift
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test zoom_control
       QVP_REQUIRE_DATA=1 cargo test -p qvp-ffi --release --test abi
+      node web/data.test.mjs
       node web/lite.test.mjs
       QVP_REQUIRE_DATA=1 node web/lite-passage.test.mjs
       scripts/gen-conformance.sh --check
@@ -66,6 +67,7 @@ for check in "$@"; do
       cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
       cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm
       node web/smoke.mjs
+      node web/data.test.mjs
       node web/lite.test.mjs
       node web/lite-passage.test.mjs
       # The example is plain JavaScript that no test loads, so parse it here. This is a

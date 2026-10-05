@@ -11,6 +11,7 @@ Nothing yet.
 ## [0.3.1] - 2026-10-05
 
 ### Added
+- Optional `@quran.ws/engine/data` loads verified Quran text and artwork with bounded caches; `@quran.ws/engine/metadata` shares canonical surah names and counts. The byte-oriented engine stays fetch-free.
 - `QvpPageCache.setCurrentPage(_:span:)` (iOS): a host showing several pages at once says how
   many, and the cache keeps the screen before, the screen itself and the screen after loaded
   and safe from eviction — six pages for a two-page spread — so a swipe never lands on a blank

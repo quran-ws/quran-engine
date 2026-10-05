@@ -12,6 +12,7 @@ until it passes.
 | `qvp-ffi` | one ABI test per function family on a real page | the data release (`dist/pages/`) |
 | each wrapper | one binding test per C symbol on a known page, plus the shared scenarios | the data release |
 | each example | one UI smoke test: open a page, tap a word, highlight | the example's page set |
+| `web/data.mjs` | reference bounds, integrity, retry, offline cache and limits | synthetic text and the codec fixture; no network |
 | `web/lite.mjs` | the conformance fixtures | `conformance/` |
 | `web/lite-passage.mjs` | synthetic ranges, unchanged paths, markers, bounds, cross-page ranges and Rust ink metrics | synthetic tests need no data; the 604-page sweep requires `dist/pages/` in `gates` |
 

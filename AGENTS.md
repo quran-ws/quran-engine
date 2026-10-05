@@ -31,6 +31,7 @@ scripts/check-parity.py               # header vs Rust vs every wrapper
   identity gate and cutting a new data release.
 - Lossless only. Never simplify a curve.
 - Never commit page data. Regenerating it would add about 92 MB to history each time.
+- The optional `@quran.ws/engine/data` web helper owns verified release fetching and caches; see `docs/WEB-DATA.md`. The core and lite decoder stay fetch-free.
 - The engine is URL-agnostic: every wrapper takes bytes or a path, never a base URL. The
   CDN (`docs/CDN.md`) mirrors the signed releases of this repo, quran-svg and
   quran-svg-elements, each under its own folder on `cdn.quran.ws`.
