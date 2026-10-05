@@ -6,6 +6,25 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 Nothing yet.
 
+## [0.3.1] - 2026-10-05
+
+- `QvpPageCache.setCurrentPage(_:span:)`: a host showing several pages at once says how many,
+  and the cache keeps the screen before, the screen itself and the screen after loaded and
+  safe from eviction — six pages for a two-page spread — so a swipe never lands on a blank
+  half. The default span of 1 is the page and its two neighbors, as before.
+- `maxZoom` on `QvpCanvasController` and `QvpPageView`: a host lowers the ceiling the
+  magnifying glass is clamped to, for furniture of its own that scales with the glass.
+  `QvpViewPolicy.clampZoom(_:fit:ceiling:)` is the clamp. `peekScale` on both: how far the
+  glass is over the fitted page — 1 at rest and in every mode but `.magnify`.
+- `QvpPageCanvas` adds a reveal to its cached ink instead of drawing the page again, and reads
+  the engine clock, the styled paths and the highlight and mask boxes once per frame rather
+  than once per canvas.
+- Fixed: `QvpPageCanvas` draws a page taller than Core Animation's 8,192-px layer limit as a
+  stack of canvases, each under it and cut on a whole pixel, so a reflowed page at its top
+  step no longer goes soft.
+- Fixed: `QvpPageCanvas` draws its cached ink at the bitmap's own size, so rows down the page
+  are no longer blended with their neighbours.
+
 ## [0.3.0] - 2026-09-21
 
 - Engine 0.3.0: the reader's zoom control (`zoomPinch`, `zoomToStep`, and the mode, spec,

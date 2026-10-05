@@ -6,6 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.1] - 2026-10-05
+
 ### Added
 - `QvpPageCache.setCurrentPage(_:span:)` (iOS): a host showing several pages at once says how
   many, and the cache keeps the screen before, the screen itself and the screen after loaded
@@ -470,7 +474,8 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/quran-ws/quran-engine/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/quran-ws/quran-engine/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/quran-ws/quran-engine/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/quran-ws/quran-engine/compare/v0.2.0...v0.2.1
