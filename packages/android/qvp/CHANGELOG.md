@@ -6,6 +6,14 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 Nothing yet.
 
+## [0.3.1] - 2026-10-05
+
+- `maxZoom` on `QvpPageView`: a host lowers the ceiling the magnifying glass is clamped to,
+  for furniture of its own that scales with the glass. A ceiling under the fitted page is the
+  fitted page — a pinch never shrinks the page inside the screen.
+- `peekScale` on `QvpPageView`: how far the glass is over the fitted page — 1 at rest and in
+  every mode but magnify.
+
 ## [0.3.0] - 2026-09-21
 
 - Engine 0.3.0: the reader's zoom control (`zoomPinch`, `zoomToStep`, and the mode, spec,
