@@ -111,50 +111,50 @@ is owed.
 | `qvp_mask_transition` | android | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_mask_transition` | flutter | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_mask_transition` | react-native | issue (to open): a binding is owed; the fade landed on iOS first |
-| `qvp_passage_load` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_load` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_load` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_load` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_free` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_free` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_free` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_free` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_ayah_count` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_ayah_count` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_ayah_count` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_ayah_count` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_ayah_text` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_ayah_text` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_ayah_text` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_ayah_text` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_line_spacing` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_line_spacing` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_line_spacing` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_line_spacing` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_layout` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_layout` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_layout` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_layout` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_rows` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_rows` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_rows` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_rows` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_words` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_words` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_words` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_words` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_ayahs` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_ayahs` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_ayahs` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_ayahs` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_draw_list` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_draw_list` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_draw_list` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_draw_list` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_placements` | web | issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_placements` | android | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_placements` | flutter | issue #PASSAGE_ISSUE: passages reached iOS first |
-| `qvp_passage_placements` | react-native | issue #PASSAGE_ISSUE: passages reached iOS first |
+| `qvp_passage_load` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_load` | android | issue #102: passages reached iOS first |
+| `qvp_passage_load` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_load` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_free` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_free` | android | issue #102: passages reached iOS first |
+| `qvp_passage_free` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_free` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_ayah_count` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_ayah_count` | android | issue #102: passages reached iOS first |
+| `qvp_passage_ayah_count` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_ayah_count` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_ayah_text` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_ayah_text` | android | issue #102: passages reached iOS first |
+| `qvp_passage_ayah_text` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_ayah_text` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_line_spacing` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_line_spacing` | android | issue #102: passages reached iOS first |
+| `qvp_passage_line_spacing` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_line_spacing` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_layout` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_layout` | android | issue #102: passages reached iOS first |
+| `qvp_passage_layout` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_layout` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_rows` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_rows` | android | issue #102: passages reached iOS first |
+| `qvp_passage_rows` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_rows` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_words` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_words` | android | issue #102: passages reached iOS first |
+| `qvp_passage_words` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_words` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_ayahs` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_ayahs` | android | issue #102: passages reached iOS first |
+| `qvp_passage_ayahs` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_ayahs` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_draw_list` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_draw_list` | android | issue #102: passages reached iOS first |
+| `qvp_passage_draw_list` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_draw_list` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_placements` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
+| `qvp_passage_placements` | android | issue #102: passages reached iOS first |
+| `qvp_passage_placements` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_placements` | react-native | issue #102: passages reached iOS first |
 
 ## Platform-level gaps
 
@@ -397,17 +397,17 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_page_info` | yes | yes | yes | yes | yes |
 | `qvp_page_line_spacing` | yes | yes | yes | yes | gap (other shape: `info().lineSpacing`) |
 | `qvp_page_load` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript (`pageUri` prop)) |
-| `qvp_passage_ayah_count` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_ayah_text` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_ayahs` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_draw_list` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_free` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_layout` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_line_spacing` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_load` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_placements` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_rows` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
-| `qvp_passage_words` | gap (issue #PASSAGE_ISSUE: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | gap (issue #PASSAGE_ISSUE: passages reached iOS first) | yes | gap (issue #PASSAGE_ISSUE: passages reached iOS first) |
+| `qvp_passage_ayah_count` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_ayah_text` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_ayahs` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_draw_list` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_free` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_layout` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_line_spacing` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_load` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_placements` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_rows` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_words` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |
 | `qvp_reflow_max_zoom` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_reveal_goto` | yes | yes | yes | yes | yes |
