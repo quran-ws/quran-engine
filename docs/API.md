@@ -611,6 +611,34 @@ ink applied). The medallion is kept only when the whole ayah is inside the crop.
 `juz(n)/hizb(n)/rubuAlHizb(n)` → `{surah, ayah, page}`, `juzOf(s,a)`, `divisionOf(division, s, a)`,
 `pagesOfJuz(n)`, `searchSurahs('cow' | 'البقرة' | '2')`.
 
+## Passages
+
+A passage is a range of complete ayahs shown away from its page: a card, a tooltip, a list
+row. Each word keeps its outline and goes with its signs: a medallion and a sajdah sign with
+the word that closes their ayah, a division mark with the word that it opens, and a sajdah line
+with the words under it. The words move onto rows of the width the app asks for; the rows are
+balanced and the gaps never stretch. Bound in QvpKit; the other wrappers follow
+(`docs/API-PARITY.md`). Without Wasm, `@quran.ws/engine/lite/passage` is the JavaScript port.
+
+```swift
+let passage = try QvpPassage(pages: [page], surah: 2, from: 255)   // the pages can close after this
+let layout = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing,
+                                           maxRows: 2, keepAyahMark: true, ellipsisWidth: 12))
+for draw in layout!.draws {   // draw page draw.page's path draw.path under placements[draw.placement]
+}
+```
+
+- `width` ≤ 0 puts the passage on one row, as wide as it is.
+- `scale` is layout points per page unit. It shrinks only when one word and its signs are wider
+  than the rows. To size a passage by its printed line, divide by `passage.lineSpacing`: pages 1
+  and 2 print smaller lines than the rest.
+- `maxRows` cuts the passage: the rows fill in turn, and the last one ends after a whole word
+  with room for the host's ellipsis (`ellipsisWidth`, returned as `layout.ellipsis`). With
+  `keepAyahMark`, the medallion of the last ayah follows the ellipsis.
+- A point of a path draws at `scale · (kx · x + dx), scale · (ky · y + dy)`. Only a sajdah line
+  is stretched (`kx ≠ 1`). Pick each path's ink from its page's `pathKind`.
+- A missing or incomplete ayah, a repeated page or more than 4,096 words fail the load.
+
 ## Names
 
 ```js
@@ -736,6 +764,17 @@ says which wrapper binds which.
 | atlas | `qvp_atlas_pages_of_juz` | `atlas.pagesOfJuz(n)` | Return the first and last page of a juz. |
 | atlas | `qvp_atlas_search_surahs` | `atlas.searchSurahs(text)` | Search the surah names in Arabic, Latin or English, or by number. |
 | atlas | `qvp_atlas_json` | `atlas.json()` | Return the atlas as JSON. |
+| passage | `qvp_passage_load` | iOS `QvpPassage(pages:surah:from:to:)` | Load a range of complete ayahs from the pages that print them; null when an ayah is missing or incomplete. |
+| passage | `qvp_passage_free` | iOS `passage.close()` | Free the passage. |
+| passage | `qvp_passage_ayah_count` | iOS `passage.ayahs.count` | Return how many ayahs the passage has. |
+| passage | `qvp_passage_ayah_text` | iOS `passage.ayahs[i].text` | Return an ayah's text, from the page's own word records. |
+| passage | `qvp_passage_line_spacing` | iOS `passage.lineSpacing` | Return the printed line spacing of the passage's pages, in page units. |
+| passage | `qvp_passage_layout` | iOS `passage.layout(spec)` | Lay the passage out at a width and keep the layout; 0 when the spec is out of range. |
+| passage | `qvp_passage_rows` | iOS `layout.rows` | Return the rows of the last layout. |
+| passage | `qvp_passage_words` | iOS `layout.words` | Return the words that the last layout shows, with the box of each and its signs. |
+| passage | `qvp_passage_ayahs` | iOS `layout.ayahs` | Return the bounds of each ayah that the last layout shows. |
+| passage | `qvp_passage_draw_list` | iOS `layout.draws` | Return every path that the last layout draws, as page, path and placement. |
+| passage | `qvp_passage_placements` | iOS `layout.placements` | Return what a passage draw list's placement indexes. |
 | names | `qvp_name_count` | `engine.nameCount(table)` | Return how many ids a name table has. |
 | names | `qvp_name` | `engine.name(table, id)` | Return the name of an id in a table; empty outside the table. |
 | names | `qvp_name_id` | `engine.nameId(table, name)` | Return the id of a name in a table; 255 when the table has no such name. |

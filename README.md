@@ -87,7 +87,7 @@ elements such as ayah markers, surah banners, basmalahs, division and sajdah
 marks, running heads and page numbers. Both accept the same `scale`, `x`, `y`
 and `ink` options as `draw()` and leave clearing and sizing to the caller.
 
-For a standalone verse excerpt that wraps to its container without Wasm, import the optional `QvpPassage` from `@quran.ws/engine/lite/passage`. It takes `decodeGeometry()` pages and a complete ayah range, including ranges across pages, and preserves verse medallions and sajdah signs. See [Lite passages](docs/LITE-PASSAGES.md). The base lite import does not load this layout code.
+A passage is a verse excerpt that wraps to its container: the core lays it out (`qvp_passage_*`, bound in QvpKit as `QvpPassage`). For a passage without Wasm, import the optional `QvpPassage` from `@quran.ws/engine/lite/passage`, a JavaScript port of the same layout. It takes `decodeGeometry()` pages and a complete ayah range, including ranges across pages, and preserves verse medallions and sajdah signs. See [Lite passages](docs/LITE-PASSAGES.md). The base lite import does not load this layout code.
 
 Use the main package for full-page layout, exact hit-testing, search, styling, selection,
 masks and animation.

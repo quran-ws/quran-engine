@@ -11,6 +11,7 @@ pub mod hit;
 pub mod layout;
 pub mod memorize;
 pub mod meta;
+pub mod passage;
 pub mod reflow;
 pub mod selection;
 pub mod style;
@@ -26,6 +27,9 @@ pub use hit::{Hit, HitArea, HitOptions, LineBand};
 pub use layout::{Draw, Grid, Layout, LayoutSpec};
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahHeader, SurahInfo};
+pub use passage::{
+    Align, Passage, PassageAyah, PassageDraw, PassageError, PassageLayout, PassageRow, PassageSpec, PassageWord,
+};
 pub use qvp_format;
 pub use qvp_format::atlas::Atlas;
 pub use reflow::{Breaks, Fill, GapMode, Placement, ReflowSpec, Reflowed};
@@ -110,6 +114,9 @@ pub struct Page {
     /// Tracing every outline costs more than the rest of loading a page, and only a reflow
     /// needs it, so it waits until something asks.
     silhouettes: std::cell::OnceCell<Silhouettes>,
+    /// The page measured for passages: each word with the signs that go with it, in the bands
+    /// that every page shares. Measured the first time a passage asks.
+    passage: std::cell::OnceCell<Result<passage::Prepared, PassageError>>,
     /// The searched zoom steps of a page the shipped table does not cover, kept so the search
     /// runs at most once a page. See [`Page::zoom_steps`].
     pub(crate) searched_steps: Option<Vec<f32>>,
@@ -412,6 +419,7 @@ impl Page {
             word_body,
             line_baseline,
             silhouettes: std::cell::OnceCell::new(),
+            passage: std::cell::OnceCell::new(),
             searched_steps: None,
             path_deco,
             path_ctx,
@@ -456,6 +464,14 @@ impl Page {
     }
     pub fn page_number(&self) -> u16 {
         self.data.header.page
+    }
+    /// The height most of a printed line's words sit on, in page units.
+    pub(crate) fn line_baseline(&self, li: usize) -> f32 {
+        self.line_baseline[li]
+    }
+    /// The page measured for passages, measured once.
+    pub(crate) fn passage_prepared(&self) -> Result<&passage::Prepared, PassageError> {
+        self.passage.get_or_init(|| passage::prepare(self)).as_ref().map_err(|e| *e)
     }
     /// The horizontal extent of a word's letters in page units, without the marks drawn over
     /// and under them: what the eye reads as the distance between two words.

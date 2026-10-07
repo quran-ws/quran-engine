@@ -98,6 +98,10 @@ page.revealStart(lit: 2); page.revealGoto(3); page.revealPosition(); page.reveal
 page.cropBounds("2:255"); page.cropSvg("2:255:1", background: 0xfffdf7ff)
 page.close()                                             // frees the native page (also on deinit)
 
+let passage = try QvpPassage(pages: [page], surah: 2, from: 255)   // complete ayahs; the pages can close after this
+let l = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing, maxRows: 2, keepAyahMark: true, ellipsisWidth: 12))
+l?.draws; l?.placements; l?.words; l?.ellipsis           // draw page `page`'s path `path` at scale·(kx·x+dx), scale·(ky·y+dy)
+
 let atlas = try QvpAtlas(bytes: atlasData)
 atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36)
 atlas.juz(30); atlas.hizb(1); atlas.rubuAlHizb(1); atlas.juzOf(2, 255); atlas.pagesOfJuz(30); atlas.searchSurahs("cow")

@@ -139,4 +139,31 @@ if (!has_data) {
   assert.equal(cross_layout.words.length, 19)
   bounded(cross_layout)
   console.log(`ok  604 pages at three widths; prepare + layouts median ${durations[302].toFixed(1)}ms, p95 ${durations[573].toFixed(1)}ms`)
+
+  // The engine's passage layout is the reference. Replay its scenarios that this module
+  // supports: a width, and no row limit.
+  const scenarios = JSON.parse(await readFile(new URL('../conformance/scenarios/passage.json', import.meta.url), 'utf8'))
+  let replayed = 0
+  for (const { pages: numbers, surah, from, to, spec, layout: golden } of scenarios.cases) {
+    if (spec.maxRows > 0 || spec.width <= 0) continue
+    const scenario_pages = await Promise.all(numbers.map(n =>
+      readFile(new URL(`${String(n).padStart(3, '0')}.qvp`, data_root)).then(decodeGeometry)))
+    const got = new QvpPassage(scenario_pages, { surah, from, to })
+      .layout({ width: spec.width, scale: spec.scale, lineSpacing: spec.lineSpacing, padding: spec.padding, align: spec.align })
+    const label = `${surah}:${from}-${to} at ${spec.width} ${spec.align}`
+    assert.equal(got.rows.length, golden.rows.length, `Rows of ${label}`)
+    assert.equal(got.words.length, golden.words.length, `Words of ${label}`)
+    const near = (a, b, what) => assert.ok(Math.abs(a - b) <= scenarios.tolerance, `${what} of ${label}: ${a} vs ${b}`)
+    near(got.height, golden.height, 'Height')
+    near(got.scale, golden.scale, 'Scale')
+    got.rows.forEach((row, i) => [...row.box, row.baseline].forEach((v, k) => near(v, golden.rows[i][k], `Row ${i}`)))
+    got.words.forEach((word, i) => {
+      const [, ayah, number, row, ...box] = golden.words[i]
+      assert.deepEqual([word.ayah, word.word, word.row], [ayah, number, row], `Word ${i} of ${label}`)
+      word.box.forEach((v, k) => near(v, box[k], `Word ${i}`))
+    })
+    replayed++
+  }
+  assert.ok(replayed > 0)
+  console.log(`ok  ${replayed} engine passage scenarios match`)
 }

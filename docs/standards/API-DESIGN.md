@@ -89,7 +89,7 @@ A feature is done when it meets its tier's rule.
 `web/lite.mjs` is the only sanctioned reimplementation of the page format, for Canvas-only
 readers that must not load wasm. The conformance fixtures that the Rust codec generates gate it. It keeps printed-page drawing and word-bound hit testing separate from the optional `web/lite-passage.mjs` entry point.
 
-The passage entry point is a narrow, JavaScript-only exception to the single-core rule. It lays out complete ayah ranges without Wasm, including ranges across pages. It does not add a second page reader, zoom policy, selection or style engine. Its tests cover unchanged outlines, complete ayahs and decoration ownership; Rust-generated fixtures check shared geometric measurements. The ABI and its wrappers remain unchanged. See `docs/LITE-PASSAGES.md`.
+The passage entry point is a narrow exception to the single-core rule: a JavaScript port of the core's passage layout (`qvp_passage_*`, `crates/qvp-core/src/passage.rs`) for readers that must not load Wasm. It lays out complete ayah ranges, including ranges across pages. It does not add a second page reader, zoom policy, selection or style engine. Its tests cover unchanged outlines, complete ayahs and decoration ownership; it replays the core's passage scenarios, and Rust-generated fixtures check shared geometric measurements. A change to the layout starts in the core. See `docs/LITE-PASSAGES.md`.
 
 ## Consumability
 
