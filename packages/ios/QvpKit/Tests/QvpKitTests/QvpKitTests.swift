@@ -667,6 +667,24 @@ final class QvpKitTests: XCTestCase {
         XCTAssertNotEqual(p.hitAreasView(), justified, "and moves the words the first step placed")
     }
 
+    /// The canvas's cap on a justified row's gaps reaches the first step too, and a wider cap
+    /// lets more rows reach both margins.
+    @MainActor func testCanvasCapsTheJustifiedGaps() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.page = p
+        c.setBounds(Self.readingBox, fromCanvas: 1)
+        c.reflowFill = .justified
+        c.reflowMaxStretch = 4
+        c.zoomToStep(2)
+        XCTAssertEqual(c.layoutSpec.reflow?.maxStretch, 4)
+        let wide = p.hitAreasView()
+        c.reflowMaxStretch = QvpDefaults.REFLOW_MAX_STRETCH
+        XCTAssertNotEqual(p.hitAreasView(), wide, "a narrower cap leaves more rows short")
+    }
+
     /// The view-space geometry a host draws its overlays from. On the printed page every
     /// answer is the page-unit one through the layout's scale and offset; on a reflowed page
     /// it is wherever the rows put the words, and every word still has one.

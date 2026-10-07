@@ -921,7 +921,7 @@ fn reflow_justified_fills_every_row_but_the_last() {
 }
 
 #[test]
-fn reflow_justified_leaves_a_row_ragged_rather_than_gap_it_out() {
+fn reflow_justified_leaves_a_row_short_rather_than_gap_it_out() {
     let mut p = packed_page();
     let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
     let spec = |max_stretch| LayoutSpec {
@@ -949,6 +949,32 @@ fn reflow_justified_leaves_a_row_ragged_rather_than_gap_it_out() {
         capped.iter().zip(&uncapped).any(|(c, u)| c > u),
         "with gaps capped, at least one row should stay short instead of reaching the margin"
     );
+}
+
+#[test]
+fn reflow_justified_centres_every_row_it_cannot_fill() {
+    let mut p = packed_page();
+    let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    // a cap of 1.0 forbids any stretch, so no row reaches both margins, the last one included
+    let spec = LayoutSpec {
+        reflow: Some(ReflowSpec { zoom: 1.5, fill: Fill::Justified, max_stretch: 1.0, ..Default::default() }),
+        ..base
+    };
+    let l = p.layout(&spec).clone();
+    let flow = l.reflow.clone().unwrap();
+    let q = p.quant();
+    let mut short = 0;
+    for (r, words) in flow.row_words.iter().enumerate() {
+        let (Some(&first), Some(&last)) = (words.first(), words.last()) else { continue };
+        let (fw, lw) = (&p.data().words[first as usize], &p.data().words[last as usize]);
+        let right = flow.row_w - flow.word_place[first as usize].apply(fw.bbox.x1 as f32 / q, 0.0).0;
+        let left = flow.word_place[last as usize].apply(lw.bbox.x0 as f32 / q, 0.0).0;
+        assert!((right - left).abs() < 0.01, "row {r} is not centred: {right} on the right, {left} on the left");
+        if left > 0.01 {
+            short += 1;
+        }
+    }
+    assert!(short > 0, "the cap leaves at least one row short");
 }
 
 #[test]
