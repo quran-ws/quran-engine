@@ -606,10 +606,6 @@ impl Page {
         Self::slice_clearance(&s.words[a as usize], &s.words[b as usize], dx)
     }
 
-    /// The bands of a word's own letters and marks.
-    pub(crate) fn word_slices(&self, word: u32) -> &[(i16, f32, f32)] {
-        &self.silhouettes().words[word as usize]
-    }
     /// The bands of a decoration's ink.
     pub(crate) fn deco_slices(&self, deco: u32) -> &[(i16, f32, f32)] {
         &self.silhouettes().decorations[deco as usize]

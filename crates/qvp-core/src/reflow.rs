@@ -52,7 +52,8 @@ pub enum Breaks {
 pub enum Fill {
     /// Words keep their gap and the row starts at the right margin, so it ends where it ends.
     Ragged = 0,
-    /// Gaps stretch so the row spans the full width. The last row of a block stays ragged.
+    /// Gaps stretch so the row spans the full width. A row that cannot, the last of a block or
+    /// one its gaps would have to stretch past [`ReflowSpec::max_stretch`], is centred.
     Justified = 1,
     /// Words keep their gap and the row is centred: what is left over is split between the
     /// two margins. This is what a reflowed page does unless a host asks otherwise.
@@ -76,8 +77,8 @@ pub struct ReflowSpec {
     /// justified by this, and [`ReflowSpec::max_stretch`] still caps how far its gaps may go.
     pub relax: f32,
     /// How far a gap may stretch under [`Fill::Justified`], as a multiple of the gap the row
-    /// started with. A row that would need more than this stays as it is, right-aligned, so a
-    /// short row is never gapped out to the margins. 0 or below means no cap.
+    /// started with. A row that would need more than this opens as far as the cap allows and is
+    /// centred, so a short row is never gapped out to the margins. 0 or below means no cap.
     pub max_stretch: f32,
 }
 
@@ -928,9 +929,12 @@ impl Page {
                 row_dx.push(dxs);
                 continue;
             }
-            // a centred row starts half its leftover space in from the right margin
+            // A centred row starts half its leftover space in from the right margin, and so does
+            // a justified row that could not reach both: the last of a block, a single word, or
+            // one its gaps could not fill. Hung off the right margin, it reads as a ragged column
+            // under a justified block.
             let mut cursor = row_w;
-            if spec.fill == Fill::Centred {
+            if matches!(spec.fill, Fill::Centred | Fill::Justified) {
                 let slack = row_w - ink - gaps.iter().sum::<f32>();
                 if slack > 0.0 {
                     cursor -= slack / 2.0;
@@ -1116,6 +1120,10 @@ impl Page {
         // words share a row it is set midway between them, rather than at the distance the
         // print happened to give it on a line it is no longer on. Moving it changes nothing
         // else: the words either side stay where the row put them.
+        //
+        // Each side is the whole unit the row placed, the word and the signs that travel with
+        // it, such as the quarter star (۞) that opens the next ayah. Measured on the letters
+        // alone, the medallion was centred on a space the star half filled, and sat against it.
         for atoms in rows.iter() {
             for pair in atoms.windows(2) {
                 let (left_word, right_word) = (&pair[1], &pair[0]);
@@ -1129,10 +1137,10 @@ impl Page {
                     let (dx_a, dx_b) =
                         (out.word_place[right_word.word as usize].dx, out.word_place[left_word.word as usize].dx);
                     let dx_m = out.deco_place[di as usize].dx;
-                    let before =
-                        Page::slice_clearance(self.word_slices(right_word.word), self.deco_slices(di), dx_m - dx_a);
-                    let after =
-                        Page::slice_clearance(self.deco_slices(di), self.word_slices(left_word.word), dx_b - dx_m);
+                    let others: Vec<u32> = right_word.inline_decos.iter().copied().filter(|&o| o != di).collect();
+                    let right_ink = self.slices_with(right_word.word, &others);
+                    let before = Page::slice_clearance(&right_ink, self.deco_slices(di), dx_m - dx_a);
+                    let after = Page::slice_clearance(self.deco_slices(di), &left_word.slices, dx_b - dx_m);
                     if let (Some(before), Some(after)) = (before, after) {
                         out.deco_place[di as usize].dx += (before - after) / 2.0;
                     }

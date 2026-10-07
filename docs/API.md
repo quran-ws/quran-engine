@@ -134,10 +134,8 @@ answers for forty viewport cases are in `conformance/scenarios/layout.json`.
 multiple of its PRINTED size. 0 (the default) leaves it uncapped: the drawing grows with the
 words around it until it fills the row, which for a surah name is about five times the print.
 1 holds it at the printed size however far the reader zooms — what a host that draws its own
-frame around the printed name wants, since the frame has a shape to keep. It is a LAYOUT knob
-and not one of the reflow knobs, because the reader's zoom control fills those in itself
-(`page.zoomSpec`), so a host that pinches never gets to set one; only a reflowed page grows a
-banner at all.
+frame around the printed name wants, since the frame has a shape to keep. Only a reflowed page
+grows a banner at all.
 
 **`surahFrames` controls the source-native frame around a surah name.** It defaults to
 `true`, preserving the printed page. Set it to `false` when the host supplies its own frame.
@@ -310,8 +308,12 @@ was built from, so a change to the artwork or to the spacing defaults is caught 
 left to drift.
 
 `fill` is `centred` (the default), `ragged` (the row starts at the right margin) or `justified`
-(gaps stretch to both margins, the row that ends a block excepted). `gaps` is `uniform` (the
-default) or `printed`, and `wordGap` scales whichever it picked.
+(gaps stretch to both margins; a row that cannot reach them, the row that ends a block or one
+whose gaps would stretch past `maxStretch`, is centred). `gaps` is `uniform` (the
+default) or `printed`, and `wordGap` scales whichever it picked. The knobs are read on the
+printed page too, with `zoom` 0: they are what the zoom control reflows the page with, so a
+host's fill holds from the first pinch. QvpKit's `zoomSpec` keeps them at the printed size,
+and its canvas takes the fill and the cap as `reflowFill` and `reflowMaxStretch`.
 
 `relax` opens a row that still comes out short. Each row is opened a share of the way towards
 the widest row within three rows of it, because those are the rows a reader sees beside it and

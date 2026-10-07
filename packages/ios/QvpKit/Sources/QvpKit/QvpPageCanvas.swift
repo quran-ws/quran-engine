@@ -48,6 +48,17 @@ public final class QvpCanvasController {
     public var bannerZoom: Float = 0 { didSet { guard oldValue != bannerZoom else { return }; relayout() } }
     /// Draw source-native frames around surah names on the printed page.
     public var surahFrames = true { didSet { guard oldValue != surahFrames else { return }; relayout() } }
+    /// How the rows of a reflowed page fill the width: centred (the default), justified or
+    /// ragged. The printed page keeps the print's own lines, so it only matters once the
+    /// reader zooms in.
+    public var reflowFill: QvpFill = .centred { didSet { guard oldValue != reflowFill else { return }; relayout() } }
+    /// How far a justified row's gaps may open, as a multiple of the page's usual air between
+    /// two words. A row that would need more opens that far and is centred; a negative value
+    /// lifts the cap. A row of few words has few gaps, so a reader who zooms far in needs more
+    /// room.
+    public var reflowMaxStretch: Float = QvpDefaults.REFLOW_MAX_STRETCH {
+        didSet { guard oldValue != reflowMaxStretch else { return }; relayout() }
+    }
     /// Paper behind the page content, 0xRRGGBBAA (nil = transparent).
     public var paperColor: UInt32?
     /// 0xRRGGBBAA band colour of the drag selection.
@@ -320,8 +331,11 @@ public final class QvpCanvasController {
                              padTop: Float(padTop), padBottom: Float(padBottom),
                              padLeft: Float(padSide), padRight: Float(padSide),
                              lineSpacing: lineSpacing, fillHeight: fillHeight,
-                             cropLeft: cropLeft, cropRight: cropRight, bannerZoom: bannerZoom,
-                             surahFrames: surahFrames)
+                             cropLeft: cropLeft, cropRight: cropRight,
+                             // zoom 0 is the printed page; the fill waits there for the pinch
+                             // that reflows it, which the engine lays out inside the call
+                             reflow: QvpReflowSpec(zoom: 0, fill: reflowFill, maxStretch: reflowMaxStretch),
+                             bannerZoom: bannerZoom, surahFrames: surahFrames)
     }
     /// The spec in force: the knobs above with the reader's zoom control folded in.
     public var layoutSpec: QvpLayoutSpec {

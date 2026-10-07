@@ -630,6 +630,61 @@ final class QvpKitTests: XCTestCase {
         return c.zoom
     }
 
+    /// A zoom control owns the zoom of a reflow and nothing else: the host's fill, breaks, gaps
+    /// and spacing come back from `zoomSpec` as the host set them, on the printed page too.
+    @MainActor func testZoomSpecKeepsTheHostsReflowKnobs() throws {
+        let reading = try readingZoom()
+        let p = try Self.loadPage(); defer { p.close() }
+        let knobs = QvpReflowSpec(zoom: 0, fill: .justified, breaks: .even, gaps: .printed, wordGap: 1.2, relax: 0.25, maxStretch: 1.5)
+        let base = QvpLayoutSpec(viewportW: Float(Self.readingBox.width), viewportH: Float(Self.readingBox.height), reflow: knobs)
+        let reflow = try XCTUnwrap(p.zoomSpec(base, reading).reflow, "a zoomed control reflows the page")
+        XCTAssertGreaterThan(reflow.zoom, 1)
+        var expected = knobs
+        expected.zoom = reflow.zoom
+        XCTAssertEqual(reflow, expected)
+        XCTAssertEqual(p.zoomSpec(base, QvpZoom()).reflow, knobs, "the printed page keeps them for the next pinch")
+        XCTAssertNil(p.zoomSpec(QvpLayoutSpec(viewportW: base.viewportW, viewportH: base.viewportH), QvpZoom()).reflow,
+                     "and a host that set none is given none")
+    }
+
+    /// The canvas's fill reaches the first step a reader zooms into, which the engine lays out
+    /// inside the call, and a new fill moves the words.
+    @MainActor func testCanvasFillsTheReflowedRows() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.page = p
+        c.setBounds(Self.readingBox, fromCanvas: 1)
+        c.reflowFill = .justified
+        XCTAssertFalse(try XCTUnwrap(p.currentLayout).reflowed, "the printed page has no rows of its own")
+        c.zoomToStep(2)
+        XCTAssertTrue(try XCTUnwrap(p.currentLayout).reflowed)
+        let justified = p.hitAreasView()
+        let revision = c.layoutRevision
+        c.reflowFill = .centred
+        XCTAssertGreaterThan(c.layoutRevision, revision, "a new fill lays the page out again")
+        XCTAssertNotEqual(p.hitAreasView(), justified, "and moves the words the first step placed")
+    }
+
+    /// The canvas's cap on a justified row's gaps reaches the first step too, and a wider cap
+    /// lets more rows reach both margins.
+    @MainActor func testCanvasCapsTheJustifiedGaps() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let p = try Self.loadPage(); defer { p.close() }
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.page = p
+        c.setBounds(Self.readingBox, fromCanvas: 1)
+        c.reflowFill = .justified
+        c.reflowMaxStretch = 4
+        c.zoomToStep(2)
+        XCTAssertEqual(c.layoutSpec.reflow?.maxStretch, 4)
+        let wide = p.hitAreasView()
+        c.reflowMaxStretch = QvpDefaults.REFLOW_MAX_STRETCH
+        XCTAssertNotEqual(p.hitAreasView(), wide, "a narrower cap leaves more rows short")
+    }
+
     /// The view-space geometry a host draws its overlays from. On the printed page every
     /// answer is the page-unit one through the layout's scale and offset; on a reflowed page
     /// it is wherever the rows put the words, and every word still has one.
