@@ -6,7 +6,23 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- `QvpCanvasController.reflowFill` (iOS): how the rows of a page the reader zoomed into fill
+  the width, `centred` (the default), `justified` or `ragged`.
+
+### Changed
+- The reflow knobs of `QvpLayoutSpec` are read on a printed page too (`reflow_zoom` 0): they
+  are what the zoom control reflows the page with. A C host that zeroes the spec and pinches
+  now reflows ragged (fill 0), greedy (breaks 0) and with printed gaps (gaps 0); 255, 255 and 1
+  ask for the engine's defaults, which every wrapper already writes.
+
+### Fixed
+- A pinch keeps the host's fill, breaks and gaps from the first step. The C layer dropped the
+  reflow knobs while `reflow_zoom` was 0, so the layout the zoom control made inside a pinch
+  always took the engine's defaults.
+- `QvpPage.zoomSpec` (iOS) keeps the host's reflow knobs and sets only the zoom, on the printed
+  page too. It rebuilt the reflow from the zoom and three spacing knobs, and dropped it at the
+  printed size.
 
 ## [0.4.0] - 2026-10-07
 

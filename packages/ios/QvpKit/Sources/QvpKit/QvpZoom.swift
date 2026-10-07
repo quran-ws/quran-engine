@@ -107,13 +107,19 @@ extension QvpPage {
         return qvp_sideways_drag(p, &z, &v, fitScale) == 1 ? .turnPage : .pan
     }
     /// `spec` with this control's zoom in it: what the host lays out, draws and hit-tests with.
+    /// The host's other reflow knobs come back as it set them, on the printed page too, where
+    /// the zoom is 0 and they wait for the next pinch.
     public func zoomSpec(_ spec: QvpLayoutSpec, _ zoom: QvpZoom) -> QvpLayoutSpec {
         var s = spec.c, z = zoom.c, out = QvpFFI.QvpLayoutSpec()
         qvp_zoom_spec(p, &s, &z, &out)
+        // The control owns the zoom alone. Dropping the host's knobs at the printed size would
+        // leave the pinch that leaves it to lay the page out with the engine's defaults.
         var spec = spec
-        spec.reflow = out.reflow_zoom > 0 ? QvpReflowSpec(zoom: out.reflow_zoom, wordGap: spec.reflow?.wordGap ?? 1,
-                                                          relax: spec.reflow?.relax ?? QvpDefaults.REFLOW_RELAX,
-                                                          maxStretch: spec.reflow?.maxStretch ?? QvpDefaults.REFLOW_MAX_STRETCH) : nil
+        if out.reflow_zoom > 0 || spec.reflow != nil {
+            var reflow = spec.reflow ?? QvpReflowSpec(zoom: 0)
+            reflow.zoom = out.reflow_zoom
+            spec.reflow = reflow
+        }
         return spec
     }
     /// Hold the content against the viewport: centre an axis it does not fill, cover the

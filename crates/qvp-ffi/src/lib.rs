@@ -1534,8 +1534,11 @@ unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
         max_aspect_slack: s.max_aspect_slack,
         banner_zoom: s.banner_zoom,
         surah_frames: s.surah_frames != 0,
-        reflow: (s.reflow_zoom > 0.0).then(|| qvp_core::ReflowSpec {
-            zoom: s.reflow_zoom,
+        // The reflow knobs reach the core on a printed page too. A zoom of 1 or less lays the page
+        // out as printed, and the knobs are what the zoom control reflows it with when a pinch
+        // leaves the print, so a host's fill holds from the first step.
+        reflow: Some(qvp_core::ReflowSpec {
+            zoom: s.reflow_zoom.max(0.0),
             fill: match s.reflow_fill {
                 0 => qvp_core::Fill::Ragged,
                 1 => qvp_core::Fill::Justified,

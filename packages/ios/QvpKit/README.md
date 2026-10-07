@@ -157,6 +157,7 @@ QvpPageCanvas(controller: controller)
 
 controller.page = page                    // relayouts, fits and centres
 controller.padTop = 12; controller.fillHeight = true; controller.paperColor = 0xfffdf7ff
+controller.reflowFill = .justified        // a zoomed-in page's rows: .centred (default), .justified or .ragged
 controller.onWordTap = { word, hit in }; controller.onDecorationTap = { decoration, hit in }; controller.onEmptyTap = { }
 controller.onDoubleTap = { hit in }        // nil (default) resets the view
 controller.onLongPress = { hit in }        // only while selectionEnabled is false — a UIKit recognizer on iOS, never takes a pager's swipe

@@ -184,17 +184,15 @@ public struct QvpLayoutSpec: Equatable {
     public var cropLeft: Float, cropRight: Float
     /// The content is never wider than `viewportH · pageW / pageH · maxAspectSlack` (0 = no bound).
     public var maxAspectSlack: Float
-    /// Break the words onto rows of the page's own width. `nil` lays the page out as printed.
+    /// Break the words onto rows of the page's own width. `nil`, or a zoom of 1 or less, lays
+    /// the page out as printed; the other knobs are then what the zoom control reflows it with.
     public var reflow: QvpReflowSpec?
     /// How big a banner — a surah name, a basmalah — may get as the reader zooms in, as a
     /// multiple of its PRINTED size. 0 leaves it uncapped: the drawing grows with the words
     /// around it until it fills the row, which for a surah name is about five times the print.
     /// 1 holds it at the printed size however far the reader zooms — what a host drawing its
-    /// own frame around the name wants, since the frame has a shape to keep.
-    ///
-    /// It sits here and not on `reflow` because it must survive the zoom control: a host that
-    /// pinches never builds a `QvpReflowSpec` itself — `QvpPage.zoomSpec` does, from the base
-    /// spec this is part of — and only a reflowed page can grow a banner anyway.
+    /// own frame around the name wants, since the frame has a shape to keep. Only a reflowed
+    /// page grows a banner at all.
     public var bannerZoom: Float
     /// Draw source-native frames around surah names on the printed page. Reflow stays frameless.
     public var surahFrames: Bool

@@ -98,6 +98,22 @@ fn abi_end_to_end() {
         let n_pg = qvp_layout_path_groups(page, std::ptr::null_mut(), 0);
         assert!(n_pg > 0);
         assert!(qvp_reflow_max_zoom(page, &reflowed) >= 1.0);
+        // the reflow knobs ride on the printed page: the pinch that leaves it, which the engine
+        // lays out inside the call, reflows with the host's fill and not the default
+        let first_step = |fill: u8| -> Vec<f32> {
+            let printed = QvpLayoutSpec { reflow_fill: fill, ..spec };
+            let view = QvpView { scale: 1.0, offset_x: 0.0, offset_y: 0.0 };
+            let mut change = std::mem::zeroed::<QvpZoomChange>();
+            qvp_zoom_to_step(page, &printed, &std::mem::zeroed::<QvpZoom>(), 1, &view, &mut change);
+            assert_eq!(change.relaid, 1);
+            let mut bounds = Vec::new();
+            let mut b = [0f32; 4];
+            while qvp_word_bounds_view(page, (bounds.len() / 4) as u32, b.as_mut_ptr()) == 1 {
+                bounds.extend_from_slice(&b);
+            }
+            bounds
+        };
+        assert_ne!(first_step(1), first_step(2), "a justified first step is not the centred one");
         qvp_layout(page, &spec, &mut lay);
         let mut h = std::mem::zeroed::<QvpHit>();
         assert_eq!(qvp_hit_test_exact_view(page, (wb[0] + wb[2]) / 2.0, (wb[1] + wb[3]) / 2.0, &mut h), 1);
