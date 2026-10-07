@@ -4,7 +4,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+- `QvpPassage`: a range of complete ayahs laid out on rows away from its page, from the
+  outlines of its pages, with `QvpPassageSpec` and `QvpPassageLayout`. A row limit cuts it
+  after a whole word, with room for the host's ellipsis and, when asked, the last ayah's
+  medallion after it. The pages can close after the passage is made.
 
 ## [0.3.1] - 2026-10-05
 

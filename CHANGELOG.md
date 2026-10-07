@@ -6,7 +6,22 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- Passages in the core: `qvp_passage_*` lays out a range of complete ayahs on rows of a given
+  width, from the outlines of their pages. Each word goes with its signs: a medallion and a
+  sajdah sign with the word that closes their ayah, a division mark with the word that it opens,
+  and a sajdah line with the words under it. A range can span two pages. `max_rows` cuts the
+  passage after a whole word, keeps room for the host's ellipsis and, with `keep_ayah_mark`,
+  places the last ayah's medallion after it. A width of zero or less puts the passage on one
+  row. The passage copies what it needs, so the pages can be freed after it is loaded.
+- `QvpPassage` (iOS): the passage over the C ABI, with `QvpPassageSpec` and `QvpPassageLayout`.
+  The other wrappers bind it next (`docs/API-PARITY.md`).
+- `conformance/scenarios/passage.json`: the core's layouts of six ranges at six specs. QvpKit
+  replays all of them, and `web/lite-passage.mjs` replays the ones it supports.
+
+### Changed
+- `web/lite-passage.mjs` is now a port of the core's passage layout, not a JavaScript-only
+  layout. A change to the layout starts in `crates/qvp-core/src/passage.rs`.
 
 ## [0.3.1] - 2026-10-05
 

@@ -991,4 +991,74 @@ final class QvpKitTests: XCTestCase {
         }
         XCTAssertEqual(cases.count, 40)
     }
+
+    // ── passage ──
+
+    func testPassageLaysOutAyah2255AndCutsIt() throws {
+        let passage = try QvpPassage(pages: [page], surah: 2, from: 255)
+        XCTAssertEqual(passage.ayahs.count, 1)
+        XCTAssertEqual(passage.ayahs[0].text.split(separator: " ").count, 50)
+        XCTAssertGreaterThan(passage.lineSpacing, 30)
+        let l = try XCTUnwrap(passage.layout(QvpPassageSpec(width: 366, scale: 0.9)))
+        XCTAssertGreaterThan(l.rows.count, 1)
+        XCTAssertEqual(l.words.count, 50)
+        XCTAssertFalse(l.isTruncated)
+        XCTAssertNil(l.ellipsis)
+        XCTAssertTrue(l.draws.allSatisfy { $0.page == 42 && $0.placement < l.placements.count && $0.path < page.nPaths })
+        let cut = try XCTUnwrap(passage.layout(QvpPassageSpec(width: 366, scale: 0.9, maxRows: 2, keepAyahMark: true, ellipsisWidth: 12)))
+        XCTAssertEqual(cut.rows.count, 2)
+        XCTAssertTrue(cut.isTruncated)
+        XCTAssertEqual(try XCTUnwrap(cut.ellipsis).width, 12, accuracy: 0.01)
+        // A spec out of range lays nothing out and keeps the last layout.
+        XCTAssertNil(passage.layout(QvpPassageSpec(width: 366, lineSpacing: 0.5)))
+        XCTAssertEqual(passage.currentLayout, cut)
+        XCTAssertThrowsError(try QvpPassage(pages: [page], surah: 2, from: 1))
+        XCTAssertThrowsError(try QvpPassage(pages: [page, page], surah: 2, from: 255))
+    }
+
+    func testPassageScenariosMatchTheEngine() throws {
+        let url = Self.repo.appendingPathComponent("conformance/scenarios/passage.json")
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let tolerance = json["tolerance"] as! Double
+        let cases = json["cases"] as! [[String: Any]]
+        func close(_ a: Float, _ b: Any, _ what: String) {
+            let b = (b as! NSNumber).doubleValue
+            XCTAssertLessThanOrEqual(abs(Double(a) - b), tolerance, "\(what): got \(a), engine says \(b)")
+        }
+        for c in cases {
+            let numbers = (c["pages"] as! [NSNumber]).map(\.intValue)
+            let (surah, from, to) = ((c["surah"] as! NSNumber).intValue, (c["from"] as! NSNumber).intValue, (c["to"] as! NSNumber).intValue)
+            let pages = try numbers.map { try QvpPage(bytes: Data(contentsOf: Self.pages.appendingPathComponent(String(format: "%03d.qvp", $0)))) }
+            let passage = try QvpPassage(pages: pages, surah: surah, from: from, to: to)
+            // The passage keeps what it needs.
+            pages.forEach { $0.close() }
+            let s = c["spec"] as! [String: Any], want = c["layout"] as! [String: Any]
+            let f: (String) -> Float = { Float((s[$0] as! NSNumber).doubleValue) }
+            let spec = QvpPassageSpec(width: f("width"), scale: f("scale"), lineSpacing: f("lineSpacing"), padding: f("padding"),
+                                      align: s["align"] as! String == "center" ? .center : .right, maxRows: (s["maxRows"] as! NSNumber).intValue,
+                                      keepAyahMark: s["keepAyahMark"] as! Bool, ellipsisWidth: f("ellipsisWidth"))
+            let tag = "\(surah):\(from)-\(to) at \(spec.width) rows \(spec.maxRows)"
+            let l = try XCTUnwrap(passage.layout(spec), tag)
+            close(l.width, want["width"]!, "\(tag) width"); close(l.height, want["height"]!, "\(tag) height")
+            close(l.scale, want["scale"]!, "\(tag) scale"); close(l.lineSpacing, want["lineSpacing"]!, "\(tag) lineSpacing")
+            XCTAssertEqual(l.isTruncated, want["isTruncated"] as! Bool, tag)
+            XCTAssertEqual(l.draws.count, (want["draws"] as! NSNumber).intValue, tag)
+            let rows = want["rows"] as! [[NSNumber]], words = want["words"] as! [[NSNumber]]
+            XCTAssertEqual(l.rows.count, rows.count, tag)
+            XCTAssertEqual(l.words.count, words.count, tag)
+            for (r, g) in zip(l.rows, rows) {
+                for (v, k) in zip([r.x0, r.y0, r.x1, r.y1, r.baseline], g) { close(v, k, "\(tag) row") }
+            }
+            for (w, g) in zip(l.words, words) {
+                XCTAssertEqual([w.page, w.ayah, w.word, w.row], g.prefix(4).map(\.intValue), tag)
+                for (v, k) in zip([w.x0, w.y0, w.x1, w.y1], g.dropFirst(4)) { close(v, k, "\(tag) word") }
+            }
+            if let e = want["ellipsis"] as? [NSNumber], let got = l.ellipsis {
+                for (v, k) in zip([got.minX, got.minY, got.maxX, got.maxY].map { Float($0) }, e) { close(v, k, "\(tag) ellipsis") }
+            } else {
+                XCTAssertNil(l.ellipsis, tag)
+            }
+        }
+        XCTAssertEqual(cases.count, 36)
+    }
 }

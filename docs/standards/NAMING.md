@@ -62,9 +62,9 @@ Never `lineHeight`: printed lines are not equally tall, and the name would promi
 ## The C header
 
 - Functions: `qvp_<noun>_<verb>`. The noun is the object-model section the function belongs
-  to (page, atlas, style, highlight, mask, reveal, layout, …). `qvp_highlight_add`,
+  to (page, atlas, passage, style, highlight, mask, reveal, layout, …). `qvp_highlight_add`,
   `qvp_atlas_page_of`, `qvp_style_remove`.
-- Structs: `Qvp<Noun>`. Opaque handles are bare nouns (`QvpPage`, `QvpAtlas`). Snapshots of
+- Structs: `Qvp<Noun>`. Opaque handles are bare nouns (`QvpPage`, `QvpAtlas`, `QvpPassage`). Snapshots of
   the five indexable elements are `Qvp<Element>Info` (`QvpWordInfo`, `QvpLineInfo`, …).
   Metadata records are plain nouns (`QvpSurah`, `QvpDivision`, `QvpRosette`).
 - Constants: `QVP_<ENUM>_<VALUE>`, and a struct's discriminator field takes its enum's

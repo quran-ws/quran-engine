@@ -189,6 +189,79 @@ fn abi_end_to_end() {
     }
 }
 
+/// A passage through the C ABI: 2:255 from page 42, laid out, cut to two rows, and the
+/// error returns.
+#[test]
+fn passage_end_to_end() {
+    let Some(bytes) = page_bytes("042.qvp") else {
+        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
+            panic!("dist/pages/042.qvp is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
+        }
+        eprintln!("skip: dist/pages/042.qvp is missing; run scripts/sync-test-data.sh to enable this test");
+        return;
+    };
+    unsafe {
+        let page = qvp_page_load(bytes.as_ptr(), bytes.len());
+        assert!(!page.is_null());
+        let pages = [page as *const _];
+        // An ayah that is not on the page, and a page given twice, load nothing.
+        assert!(qvp_passage_load(pages.as_ptr(), 1, 2, 280, 280).is_null());
+        assert!(qvp_passage_load(pages.as_ptr(), 1, 2, 1, 1).is_null());
+        let twice = [page as *const _, page as *const _];
+        assert!(qvp_passage_load(twice.as_ptr(), 2, 2, 255, 255).is_null());
+
+        let passage = qvp_passage_load(pages.as_ptr(), 1, 2, 255, 255);
+        assert!(!passage.is_null());
+        // The passage keeps what it needs: the page can go.
+        qvp_page_free(page);
+        assert_eq!(qvp_passage_ayah_count(passage), 1);
+        let mut text = QvpStr { ptr: std::ptr::null(), len: 0 };
+        qvp_passage_ayah_text(passage, 0, &mut text);
+        assert_eq!(s(&text).split(' ').count(), 50, "{}", s(&text));
+        assert!(qvp_passage_line_spacing(passage) > 30.0);
+
+        let mut spec = QvpPassageSpec {
+            width: 366.0,
+            scale: 0.9,
+            line_spacing: 1.0,
+            padding: 2.0,
+            align: 0, // QVP_ALIGN_RIGHT
+            keep_ayah_mark: 0,
+            _pad: [0; 2],
+            max_rows: 0,
+            ellipsis_width: 0.0,
+        };
+        let mut layout = QvpPassageLayout::default();
+        assert_eq!(qvp_passage_layout(passage, &spec, &mut layout), 1);
+        assert!(layout.n_rows > 1 && layout.n_words > 40 && layout.is_truncated == 0);
+        assert_eq!(qvp_passage_rows(passage, std::ptr::null_mut(), 0), layout.n_rows);
+        let mut words = vec![std::mem::zeroed::<QvpPassageWord>(); layout.n_words as usize];
+        assert_eq!(qvp_passage_words(passage, words.as_mut_ptr(), layout.n_words), layout.n_words);
+        assert!(words.iter().all(|w| w.page == 42 && w.surah == 2 && w.ayah == 255));
+        assert_eq!((words[0].word, words[0].row), (1, 0));
+        let mut ayahs = vec![std::mem::zeroed::<QvpPassageAyah>(); 2];
+        assert_eq!(qvp_passage_ayahs(passage, ayahs.as_mut_ptr(), 2), 1);
+        let mut draws = vec![0u32; layout.n_draws as usize * 3];
+        assert_eq!(qvp_passage_draw_list(passage, draws.as_mut_ptr(), layout.n_draws), layout.n_draws);
+        let n_placements = qvp_passage_placements(passage, std::ptr::null_mut(), 0);
+        assert!(draws.chunks(3).all(|d| d[0] == 42 && d[2] < n_placements));
+
+        // Two rows, then an ellipsis and the medallion.
+        spec.max_rows = 2;
+        spec.keep_ayah_mark = 1;
+        spec.ellipsis_width = 12.0;
+        assert_eq!(qvp_passage_layout(passage, &spec, &mut layout), 1);
+        assert_eq!((layout.n_rows, layout.is_truncated), (2, 1));
+        assert!(layout.ellipsis_x1 - layout.ellipsis_x0 > 11.9);
+
+        // A spec out of range keeps the last layout.
+        spec.align = 7;
+        assert_eq!(qvp_passage_layout(passage, &spec, &mut layout), 0);
+        assert_eq!(qvp_passage_rows(passage, std::ptr::null_mut(), 0), 2);
+        qvp_passage_free(passage);
+    }
+}
+
 /// The taxonomy is the contract: these names are the quran-svg `mark-taxonomy` v2
 /// vocabulary, and every wrapper mirrors this table by index. Changing one here
 /// means changing `qvp.h`, `web/qvp.js`, Kotlin, Dart, React Native and `docs/API.md`.

@@ -6,7 +6,7 @@ import Foundation
 import CoreGraphics
 import QvpFFI
 
-public enum QvpError: Error { case badPage, badAtlas }
+public enum QvpError: Error { case badPage, badAtlas, badPassage }
 
 public final class QvpPage {
     private var h: OpaquePointer?
