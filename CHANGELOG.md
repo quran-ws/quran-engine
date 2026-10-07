@@ -6,6 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.0] - 2026-10-07
+
 ### Added
 - Passages in the core: `qvp_passage_*` lays out a range of complete ayahs on rows of a given
   width, from the outlines of their pages. Each word goes with its signs: a medallion and a
@@ -489,7 +493,8 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/quran-ws/quran-engine/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/quran-ws/quran-engine/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/quran-ws/quran-engine/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/quran-ws/quran-engine/compare/v0.2.1...v0.2.2

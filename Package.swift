@@ -10,8 +10,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "QvpEngine",
-            url: "https://github.com/quran-ws/quran-engine/releases/download/v0.3.1/QvpEngine.xcframework.zip",
-            checksum: "898172f2f3bd1c169bcdb022b2380f9e741b1317ce82d80f0538705ecede5ae7"
+            url: "https://github.com/quran-ws/quran-engine/releases/download/v0.4.0/QvpEngine.xcframework.zip",
+            checksum: "69b0c36b11ab69190eb775bfb92aa57d5f2096f420cef66f3ea9ce01a999c23d"
         ),
         .target(
             name: "QvpKit",

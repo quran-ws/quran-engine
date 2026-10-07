@@ -4,6 +4,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.0] - 2026-10-07
+
 - `QvpPassage`: a range of complete ayahs laid out on rows away from its page, from the
   outlines of its pages, with `QvpPassageSpec` and `QvpPassageLayout`. A row limit cuts it
   after a whole word, with room for the host's ellipsis and, when asked, the last ayah's
