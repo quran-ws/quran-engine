@@ -6,6 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.5.0] - 2026-10-08
+
 ### Added
 - `QvpCanvasController.reflowFill` (iOS): how the rows of a page the reader zoomed into fill
   the width, `centred` (the default), `justified` or `ragged`.
