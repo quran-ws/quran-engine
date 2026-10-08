@@ -115,6 +115,10 @@ is owed.
 | `qvp_passage_load` | android | issue #102: passages reached iOS first |
 | `qvp_passage_load` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_load` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_load_basmalah` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays out ayahs only |
+| `qvp_passage_load_basmalah` | android | issue #102: passages reached iOS first |
+| `qvp_passage_load_basmalah` | flutter | issue #102: passages reached iOS first |
+| `qvp_passage_load_basmalah` | react-native | issue #102: passages reached iOS first |
 | `qvp_passage_free` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
 | `qvp_passage_free` | android | issue #102: passages reached iOS first |
 | `qvp_passage_free` | flutter | issue #102: passages reached iOS first |
@@ -305,7 +309,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-160 symbols in the header, 160 Rust exports. web: 148 bound, android: 143 bound, flutter: 148 bound, ios: 151 bound, react-native: 82 bound.
+161 symbols in the header, 161 Rust exports. web: 148 bound, android: 143 bound, flutter: 148 bound, ios: 152 bound, react-native: 82 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -405,6 +409,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_passage_layout` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
 | `qvp_passage_line_spacing` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
 | `qvp_passage_load` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_load_basmalah` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays out ayahs only) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
 | `qvp_passage_placements` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
 | `qvp_passage_rows` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
 | `qvp_passage_words` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |

@@ -26,14 +26,14 @@ passage.draw(canvas.getContext('2d'), layout, { pixelRatio: ratio, ink: '#231f20
 
 `new QvpPassage(pages, {surah, from, to = from})` accepts the geometry returned by `decodeGeometry()`, not `QvpLitePage`. Supply every page containing the requested range. Pages may arrive in any order. Missing ayahs, incomplete fragments, duplicate pages and passages over 4,096 words throw rather than show partial Quran text. The app decides which pages to fetch and how many ayahs to show; the module does not fetch anything. `passage.ayahs` contains `{surah, ayah, text}` in reading order, with the text from the page's own word records.
 
-`passage.layout({width, scale = 1, lineSpacing = 1, padding = 2, align = 'right'})` returns:
+`passage.layout({width, scale = 1, lineSpacing = 1, padding = 2, align = 'right', maxStretch = 2})` returns:
 
 - `width`, `height`, `scale`: CSS-pixel canvas dimensions and the actual scale from page units. Scale shrinks only if a whole word and its attached signs would exceed the width.
 - `rows`: each row's `box` and `baseline` in CSS pixels.
 - `words`: `{surah, ayah, word, row, box}`. A box includes signs that travel with that word.
 - `ayahs`: `{surah, ayah, text, box}`, suitable for an accessible text layer or scrolling to a cited ayah.
 
-`align` accepts `right` or `center`. `lineSpacing` is a multiplier, at least 1. The rows may need more room for tall ink. The layout balances row lengths without stretching the gaps; it is intentionally not the full page reader's fitted breaking or zoom policy. Layout is independent of canvas resolution and can run without the DOM.
+`align` accepts `right`, `center` or `justified`. A justified row but the last opens its word gaps, in equal shares, until it reaches both edges, by at most `maxStretch` times the passage's usual air between two words (0 or less lifts the cap); two words drawn as one piece of calligraphy keep their distance, and what a row has left over is split between its two sides. `lineSpacing` is a multiplier, at least 1. The rows may need more room for tall ink. The layout balances row lengths, and stretches gaps only to justify; it is intentionally not the full page reader's fitted breaking or zoom policy. A surah's basmalah is not part of this module: the engine loads it (`qvp_passage_load_basmalah`). Layout is independent of canvas resolution and can run without the DOM.
 
 `passage.draw(context, layout, {pixelRatio = 1, ink = '#231f20'})` draws the layout made by that passage. It saves and restores the context but does not clear or resize its canvas. The caller supplies the backing ratio and caps the canvas dimensions or pixel budget as needed. Drawing requires Canvas2D and `Path2D`; decoding and layout do not.
 

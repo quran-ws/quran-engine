@@ -141,15 +141,16 @@ if (!has_data) {
   console.log(`ok  604 pages at three widths; prepare + layouts median ${durations[302].toFixed(1)}ms, p95 ${durations[573].toFixed(1)}ms`)
 
   // The engine's passage layout is the reference. Replay its scenarios that this module
-  // supports: a width, and no row limit.
+  // supports: ayahs (not a basmalah), a width, and no row limit.
   const scenarios = JSON.parse(await readFile(new URL('../conformance/scenarios/passage.json', import.meta.url), 'utf8'))
   let replayed = 0
-  for (const { pages: numbers, surah, from, to, spec, layout: golden } of scenarios.cases) {
-    if (spec.maxRows > 0 || spec.width <= 0) continue
+  for (const { pages: numbers, surah, from, to, basmalah, spec, layout: golden } of scenarios.cases) {
+    if (basmalah || spec.maxRows > 0 || spec.width <= 0) continue
     const scenario_pages = await Promise.all(numbers.map(n =>
       readFile(new URL(`${String(n).padStart(3, '0')}.qvp`, data_root)).then(decodeGeometry)))
     const got = new QvpPassage(scenario_pages, { surah, from, to })
-      .layout({ width: spec.width, scale: spec.scale, lineSpacing: spec.lineSpacing, padding: spec.padding, align: spec.align })
+      .layout({ width: spec.width, scale: spec.scale, lineSpacing: spec.lineSpacing, padding: spec.padding, align: spec.align,
+        maxStretch: spec.maxStretch })
     const label = `${surah}:${from}-${to} at ${spec.width} ${spec.align}`
     assert.equal(got.rows.length, golden.rows.length, `Rows of ${label}`)
     assert.equal(got.words.length, golden.words.length, `Words of ${label}`)

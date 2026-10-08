@@ -9,6 +9,7 @@ export class QvpPassage {
   #atoms
   #pages
   #gaps
+  #open
   #layouts = new WeakMap()
 
   /** Select complete ayahs; pages come from decodeGeometry(), in any order. */
@@ -36,27 +37,37 @@ export class QvpPassage {
       for (const { page, word } of words) this.#atoms.push(preparePage(page).atoms[word.index])
       this.ayahs.push({ surah, ayah, text: words.map(({ word }) => word.text).join(' ') })
     }
-    this.#gaps = this.#atoms.map((atom, index) => {
-      if (!index) return 0
+    // Two words drawn as one piece of calligraphy keep their printed distance, and a justified
+    // row never opens it.
+    const spacing = this.#atoms.map((atom, index) => {
+      if (!index) return [0, false]
       const previous = this.#atoms[index - 1]
       const natural = previous.box[0] - atom.box[2]
       const word_air = clearance(previous.wordSlices, atom.wordSlices)
       const joined = previous.page === atom.page && previous.word.lineIndex === atom.word.lineIndex &&
         previous.word.index + 1 === atom.word.index && word_air !== null && -word_air >= atom.pitch * 0.15
-      if (joined) return natural
+      if (joined) return [natural, false]
       const air = clearance(previous.slices, atom.slices)
       const wanted = (previous.gap + atom.gap) / 2
-      return air === null ? wanted : natural + wanted - air
+      return [air === null ? wanted : natural + wanted - air, true]
     })
+    this.#gaps = spacing.map(([gap]) => gap)
+    this.#open = spacing.map(([, open]) => open)
   }
 
-  /** Return rows and word/ayah bounds in CSS pixels, at the requested width and scale. */
-  layout({ width, scale = 1, lineSpacing = 1, padding = 2, align = 'right' }) {
+  /**
+   * Return rows and word/ayah bounds in CSS pixels, at the requested width and scale. A
+   * justified row opens its gaps until it reaches both edges, never past maxStretch times the
+   * usual air between words (0 or less lifts the cap); what is left over is split between its
+   * sides, as for a centred row.
+   */
+  layout({ width, scale = 1, lineSpacing = 1, padding = 2, align = 'right', maxStretch = 2 }) {
     if (!Number.isFinite(width) || width <= 0 || width > 32768 ||
         !Number.isFinite(scale) || scale <= 0 || scale > 32 ||
         !Number.isFinite(padding) || padding < 0 || 2 * padding >= width ||
         !Number.isFinite(lineSpacing) || lineSpacing < 1 || lineSpacing > 4 ||
-        !['right', 'center'].includes(align)) throw new RangeError('Invalid passage layout')
+        !['right', 'center', 'justified'].includes(align) ||
+        !Number.isFinite(maxStretch)) throw new RangeError('Invalid passage layout')
     const atoms = this.#atoms
     const widest = Math.max(...atoms.map(atom => atom.box[2] - atom.box[0]))
     // An indivisible word and its signs must fit even at an unusually narrow width.
@@ -67,21 +78,35 @@ export class QvpPassage {
     const placements = new Map()
     const result = { width, height: 0, scale, rows: [], words: [], ayahs: [] }
     const pitch = median(atoms.map(atom => atom.pitch)) * lineSpacing
+    // A justified gap opens by the air between words, never by the distance between boxes.
+    const air = median(atoms.map(atom => atom.gap))
     let last_bottom = 0
     let last_baseline = 0
     for (const indices of rows) {
-      const used = indices.reduce((sum, index, i) => sum + atoms[index].box[2] - atoms[index].box[0] + (i ? this.#gaps[index] : 0), 0)
+      let used = indices.reduce((sum, index, i) => sum + atoms[index].box[2] - atoms[index].box[0] + (i ? this.#gaps[index] : 0), 0)
       const ascent = Math.max(...indices.map(index => atoms[index].baseline - atoms[index].box[1]))
       const descent = Math.max(...indices.map(index => atoms[index].box[3] - atoms[index].baseline))
       // Signs and tall marks have the same right to vertical space as the letters.
       const baseline = result.rows.length ? Math.max(last_baseline + pitch, last_bottom + ascent + 1) : ascent
-      let cursor = align === 'center' ? (row_width + used) / 2 : row_width
+      // The last row is short because the text ran out, and keeps its gaps.
+      let share = 0
+      if (align === 'justified' && indices !== rows[rows.length - 1]) {
+        const opening = indices.filter((index, i) => i && this.#open[index]).length
+        const slack = row_width - used
+        if (opening > 0 && slack > 0) {
+          const cap = maxStretch > 0 ? opening * air * (maxStretch - 1) : Infinity
+          const widen = Math.min(slack, Math.max(cap, 0))
+          share = widen / opening
+          used += widen
+        }
+      }
+      let cursor = align === 'right' ? row_width : (row_width + used) / 2
       const row = result.rows.length
       const row_bounds = []
       for (let i = 0; i < indices.length; i++) {
         const index = indices[i]
         const atom = atoms[index]
-        if (i) cursor -= this.#gaps[index]
+        if (i) cursor -= this.#gaps[index] + (this.#open[index] ? share : 0)
         const dx = cursor - atom.box[2]
         const dy = baseline - atom.baseline
         const placement = { dx, dy, row }

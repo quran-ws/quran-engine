@@ -246,7 +246,10 @@ fn passage_end_to_end() {
             _pad: [0; 2],
             max_rows: 0,
             ellipsis_width: 0.0,
+            max_stretch: 0.0, // the default
         };
+        // The spec grew by its last field, the justified gaps' cap.
+        assert_eq!(std::mem::size_of::<QvpPassageSpec>(), 32);
         let mut layout = QvpPassageLayout::default();
         assert_eq!(qvp_passage_layout(passage, &spec, &mut layout), 1);
         assert!(layout.n_rows > 1 && layout.n_words > 40 && layout.is_truncated == 0);
@@ -270,11 +273,75 @@ fn passage_end_to_end() {
         assert_eq!((layout.n_rows, layout.is_truncated), (2, 1));
         assert!(layout.ellipsis_x1 - layout.ellipsis_x0 > 11.9);
 
+        // Justified with no cap: every row but the last reaches both edges, and the last is centred.
+        spec.max_rows = 0;
+        spec.keep_ayah_mark = 0;
+        spec.ellipsis_width = 0.0;
+        spec.align = 2; // QVP_ALIGN_JUSTIFIED
+        spec.max_stretch = -1.0;
+        assert_eq!(qvp_passage_layout(passage, &spec, &mut layout), 1);
+        let mut rows = vec![std::mem::zeroed::<QvpPassageRow>(); layout.n_rows as usize];
+        assert_eq!(qvp_passage_rows(passage, rows.as_mut_ptr(), layout.n_rows), layout.n_rows);
+        let (inner_left, inner_right) = (spec.padding, spec.width - spec.padding);
+        for r in &rows[..rows.len() - 1] {
+            assert!((r.x0 - inner_left).abs() < 0.01 && (r.x1 - inner_right).abs() < 0.01, "{} {}", r.x0, r.x1);
+        }
+        let last = rows[rows.len() - 1];
+        assert!(((last.x0 - inner_left) - (inner_right - last.x1)).abs() < 0.01);
+
         // A spec out of range keeps the last layout.
         spec.align = 7;
         assert_eq!(qvp_passage_layout(passage, &spec, &mut layout), 0);
-        assert_eq!(qvp_passage_rows(passage, std::ptr::null_mut(), 0), 2);
+        assert_eq!(qvp_passage_rows(passage, std::ptr::null_mut(), 0), layout.n_rows);
         qvp_passage_free(passage);
+    }
+}
+
+#[test]
+fn basmalah_end_to_end() {
+    let (Some(two), Some(page42)) = (page_bytes("002.qvp"), page_bytes("042.qvp")) else {
+        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
+            panic!("dist/pages is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
+        }
+        eprintln!("skip: dist/pages is missing; run scripts/sync-test-data.sh to enable this test");
+        return;
+    };
+    unsafe {
+        let page = qvp_page_load(two.as_ptr(), two.len());
+        let other = qvp_page_load(page42.as_ptr(), page42.len());
+        assert!(!page.is_null() && !other.is_null());
+        // Surah 1's basmalah is its first ayah, surah 9 has none, and page 42 prints no basmalah.
+        let pages = [page as *const _];
+        assert!(qvp_passage_load_basmalah(pages.as_ptr(), 1, 1).is_null());
+        assert!(qvp_passage_load_basmalah(pages.as_ptr(), 1, 9).is_null());
+        assert!(qvp_passage_load_basmalah([other as *const _].as_ptr(), 1, 2).is_null());
+
+        let basmalah = qvp_passage_load_basmalah(pages.as_ptr(), 1, 2);
+        assert!(!basmalah.is_null());
+        qvp_page_free(page);
+        qvp_page_free(other);
+        assert_eq!(qvp_passage_ayah_count(basmalah), 0);
+        assert!(qvp_passage_line_spacing(basmalah) > 0.0);
+        let spec = QvpPassageSpec {
+            width: 366.0,
+            scale: 0.9,
+            line_spacing: 1.0,
+            padding: 2.0,
+            align: 1, // QVP_ALIGN_CENTER
+            keep_ayah_mark: 0,
+            _pad: [0; 2],
+            max_rows: 0,
+            ellipsis_width: 0.0,
+            max_stretch: 0.0,
+        };
+        let mut layout = QvpPassageLayout::default();
+        assert_eq!(qvp_passage_layout(basmalah, &spec, &mut layout), 1);
+        assert_eq!((layout.n_rows, layout.n_words, layout.n_ayahs), (1, 0, 0));
+        assert!(layout.n_draws > 0);
+        let mut draws = vec![0u32; layout.n_draws as usize * 3];
+        assert_eq!(qvp_passage_draw_list(basmalah, draws.as_mut_ptr(), layout.n_draws), layout.n_draws);
+        assert!(draws.chunks(3).all(|d| d[0] == 2));
+        qvp_passage_free(basmalah);
     }
 }
 

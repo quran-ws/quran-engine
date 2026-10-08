@@ -100,6 +100,8 @@ page.close()                                             // frees the native pag
 
 let passage = try QvpPassage(pages: [page], surah: 2, from: 255)   // complete ayahs; the pages can close after this
 let l = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing, maxRows: 2, keepAyahMark: true, ellipsisWidth: 12))
+passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing, align: .justified))  // rows reach both edges; maxStretch caps the gaps
+let basmalah = try QvpPassage(basmalahOf: 2, pages: [page])   // a surah's basmalah, one row, no words; throws for surahs 1 and 9
 l?.draws; l?.placements; l?.words; l?.ellipsis           // draw page `page`'s path `path` at scale·(kx·x+dx), scale·(ky·y+dy)
 
 let atlas = try QvpAtlas(bytes: atlasData)

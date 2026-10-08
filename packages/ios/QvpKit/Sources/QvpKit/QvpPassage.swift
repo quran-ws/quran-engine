@@ -1,4 +1,5 @@
-// A range of complete ayahs laid out on rows away from its page, over the C ABI in qvp.h.
+// A range of complete ayahs, or a surah's basmalah, laid out on rows away from its page, over the
+// C ABI in qvp.h.
 // The engine measures and places every word; this file marshals the calls. See docs/API.md.
 import Foundation
 import CoreGraphics
@@ -10,6 +11,10 @@ public enum QvpPassageAlign: UInt8, Sendable {
     case right = 0
     /// In the middle of the width.
     case center = 1
+    /// Across the width: every row but the last opens its word gaps until it reaches both edges,
+    /// never past `QvpPassageSpec.maxStretch`. What is left over is split between the two sides,
+    /// so the last row, a one-word row and a capped row are centred.
+    case justified = 2
 }
 
 /// What a layout of a passage asks for. Lengths are layout points.
@@ -31,12 +36,17 @@ public struct QvpPassageSpec: Equatable, Sendable {
     public var keepAyahMark: Bool
     /// The width that the host needs for its ellipsis after a cut.
     public var ellipsisWidth: Float
+    /// How far a justified row's gaps may open, as a multiple of the passage's usual air between
+    /// two words. A negative value lifts the cap.
+    public var maxStretch: Float
 
     /// Make a spec; the defaults put the passage on one row at the printed size.
     public init(width: Float = 0, scale: Float = 1, lineSpacing: Float = 1, padding: Float = 2, align: QvpPassageAlign = .right,
-                maxRows: Int = 0, keepAyahMark: Bool = false, ellipsisWidth: Float = 0) {
+                maxRows: Int = 0, keepAyahMark: Bool = false, ellipsisWidth: Float = 0,
+                maxStretch: Float = QvpDefaults.REFLOW_MAX_STRETCH) {
         self.width = width; self.scale = scale; self.lineSpacing = lineSpacing; self.padding = padding; self.align = align
         self.maxRows = maxRows; self.keepAyahMark = keepAyahMark; self.ellipsisWidth = ellipsisWidth
+        self.maxStretch = maxStretch
     }
 }
 
@@ -117,16 +127,35 @@ public final class QvpPassage {
     /// Load the ayahs `from` to `to` of `surah` from the pages that print them, in any order.
     /// Throws when an ayah is missing or incomplete, a page is given twice, or the range has more
     /// than 4,096 words.
-    public init(pages: [QvpPage], surah: Int, from: Int, to: Int? = nil) throws {
+    public convenience init(pages: [QvpPage], surah: Int, from: Int, to: Int? = nil) throws {
         let to = to ?? from
         // Every engine call on a closed page traps; the engine checks the range itself.
         guard pages.allSatisfy(\.isOpen), (1...Int(UInt16.max)).contains(surah), (1...Int(UInt16.max)).contains(from),
               (1...Int(UInt16.max)).contains(to) else { throw QvpError.badPassage }
         let handles: [OpaquePointer?] = pages.map { $0.p }
-        h = handles.withUnsafeBufferPointer {
+        let h = handles.withUnsafeBufferPointer {
             qvp_passage_load($0.baseAddress, UInt32($0.count), UInt16(surah), UInt16(from), UInt16(to))
         }
         guard let h else { throw QvpError.badPassage }
+        self.init(h, surah: surah, from: from)
+    }
+
+    /// Load the basmalah printed above `surah` from whichever of the pages prints it. It lays out
+    /// as one piece on one row and has no ayahs and no words; its line spacing is its page's, so
+    /// it is sized by the printed line as an ayah is. Throws for surah 1, whose basmalah is its
+    /// first ayah, for surah 9, which has none, and when no page given prints it.
+    public convenience init(basmalahOf surah: Int, pages: [QvpPage]) throws {
+        guard pages.allSatisfy(\.isOpen), (1...Int(UInt16.max)).contains(surah) else { throw QvpError.badPassage }
+        let handles: [OpaquePointer?] = pages.map { $0.p }
+        let h = handles.withUnsafeBufferPointer {
+            qvp_passage_load_basmalah($0.baseAddress, UInt32($0.count), UInt16(surah))
+        }
+        guard let h else { throw QvpError.badPassage }
+        self.init(h, surah: surah, from: 1)
+    }
+
+    private init(_ h: OpaquePointer, surah: Int, from: Int) {
+        self.h = h
         ayahs = (0..<Int(qvp_passage_ayah_count(h))).map { i in
             var s = QvpStr(); qvp_passage_ayah_text(h, UInt32(i), &s)
             return QvpPassageText(surah: surah, ayah: from + i, text: s.string)
@@ -145,7 +174,7 @@ public final class QvpPassage {
         guard let p = h, spec.maxRows >= 0 else { return nil }
         var s = QvpFFI.QvpPassageSpec(width: spec.width, scale: spec.scale, line_spacing: spec.lineSpacing, padding: spec.padding,
                                        align: spec.align.rawValue, keep_ayah_mark: spec.keepAyahMark ? 1 : 0, _pad: (0, 0),
-                                       max_rows: UInt32(spec.maxRows), ellipsis_width: spec.ellipsisWidth)
+                                       max_rows: UInt32(spec.maxRows), ellipsis_width: spec.ellipsisWidth, max_stretch: spec.maxStretch)
         var out = QvpFFI.QvpPassageLayout()
         guard qvp_passage_layout(p, &s, &out) != 0 else { return nil }
         let rows: [QvpFFI.QvpPassageRow] = collect(max(1, Int(out.n_rows))) { o, c in qvp_passage_rows(p, o, c) }

@@ -619,7 +619,7 @@ A passage is a range of complete ayahs shown away from its page: a card, a toolt
 row. Each word keeps its outline and goes with its signs: a medallion and a sajdah sign with
 the word that closes their ayah, a division mark with the word that it opens, and a sajdah line
 with the words under it. The words move onto rows of the width the app asks for; the rows are
-balanced and the gaps never stretch. Bound in QvpKit; the other wrappers follow
+balanced, and the gaps stretch only when a row is justified. Bound in QvpKit; the other wrappers follow
 (`docs/API-PARITY.md`). Without Wasm, `@quran.ws/engine/lite/passage` is the JavaScript port.
 
 ```swift
@@ -628,9 +628,16 @@ let layout = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineS
                                            maxRows: 2, keepAyahMark: true, ellipsisWidth: 12))
 for draw in layout!.draws {   // draw page draw.page's path draw.path under placements[draw.placement]
 }
+let basmalah = try QvpPassage(basmalahOf: 2, pages: [page])          // a surah's basmalah, sized like an ayah
 ```
 
 - `width` ≤ 0 puts the passage on one row, as wide as it is.
+- `align` places each row: `right` (the default), `center`, or `justified`. A justified row
+  but the last opens its word gaps, in equal shares, until it reaches both edges, by at most
+  `maxStretch` times the passage's usual air between two words (2 by default; negative lifts
+  the cap). Two words the print draws as one piece of calligraphy keep their distance. What a
+  row has left over is split between its two sides, so the last row, the cut row with its
+  ellipsis, a one-word row and a capped row are centred.
 - `scale` is layout points per page unit. It shrinks only when one word and its signs are wider
   than the rows. To size a passage by its printed line, divide by `passage.lineSpacing`: pages 1
   and 2 print smaller lines than the rest.
@@ -640,6 +647,10 @@ for draw in layout!.draws {   // draw page draw.page's path draw.path under plac
 - A point of a path draws at `scale · (kx · x + dx), scale · (ky · y + dy)`. Only a sajdah line
   is stretched (`kx ≠ 1`). Pick each path's ink from its page's `pathKind`.
 - A missing or incomplete ayah, a repeated page or more than 4,096 words fail the load.
+- A surah's basmalah loads from the page that prints it (`qvp_passage_load_basmalah`) and lays
+  out like any passage, on one row; it has no ayahs and no words. Its `lineSpacing` is its
+  page's, so it is sized by the printed line as an ayah is. Surah 1, whose basmalah is its first
+  ayah, and surah 9, which has none, fail the load, as does a page list that does not print it.
 
 ## Names
 
