@@ -2440,6 +2440,7 @@ pub struct QvpPassageSpec {
     pub _pad: [u8; 2],
     pub max_rows: u32,
     pub ellipsis_width: f32,
+    pub max_stretch: f32,
 }
 
 #[repr(C)]
@@ -2505,22 +2506,41 @@ pub unsafe extern "C" fn qvp_passage_load(
     to: u16,
 ) -> *mut Passage {
     guard(|| {
-        if pages.is_null() || n_pages == 0 {
-            return std::ptr::null_mut();
-        }
-        let mut refs = Vec::with_capacity(n_pages as usize);
-        for i in 0..n_pages as usize {
-            let page = *pages.add(i);
-            if page.is_null() {
-                return std::ptr::null_mut();
-            }
-            refs.push(&*page);
-        }
+        let Some(refs) = passage_pages(pages, n_pages) else { return std::ptr::null_mut() };
         match Passage::load(&refs, surah, from, to) {
             Ok(passage) => Box::into_raw(Box::new(passage)),
             Err(_) => std::ptr::null_mut(),
         }
     })
+}
+#[no_mangle]
+pub unsafe extern "C" fn qvp_passage_load_basmalah(
+    pages: *const *const Page,
+    n_pages: u32,
+    surah: u16,
+) -> *mut Passage {
+    guard(|| {
+        let Some(refs) = passage_pages(pages, n_pages) else { return std::ptr::null_mut() };
+        match Passage::load_basmalah(&refs, surah) {
+            Ok(passage) => Box::into_raw(Box::new(passage)),
+            Err(_) => std::ptr::null_mut(),
+        }
+    })
+}
+/// The pages a passage loads from; `None` when the list is empty or holds a null page.
+unsafe fn passage_pages<'a>(pages: *const *const Page, n_pages: u32) -> Option<Vec<&'a Page>> {
+    if pages.is_null() || n_pages == 0 {
+        return None;
+    }
+    let mut refs = Vec::with_capacity(n_pages as usize);
+    for i in 0..n_pages as usize {
+        let page = *pages.add(i);
+        if page.is_null() {
+            return None;
+        }
+        refs.push(&*page);
+    }
+    Some(refs)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_passage_free(passage: *mut Passage) {
@@ -2556,6 +2576,7 @@ pub unsafe extern "C" fn qvp_passage_layout(
         let align = match s.align {
             0 => Align::Right,
             1 => Align::Center,
+            2 => Align::Justified,
             _ => return 0,
         };
         let spec = PassageSpec {
@@ -2567,6 +2588,9 @@ pub unsafe extern "C" fn qvp_passage_layout(
             max_rows: s.max_rows,
             keep_ayah_mark: s.keep_ayah_mark != 0,
             ellipsis_width: s.ellipsis_width,
+            // 0 is the default, as for the page's reflow; a negative value reaches the core as it
+            // is, which reads any value at or below 0 as no cap.
+            max_stretch: if s.max_stretch == 0.0 { qvp_core::defaults::REFLOW_MAX_STRETCH } else { s.max_stretch },
         };
         let Some(l) = (*passage).layout(&spec) else { return 0 };
         if !out.is_null() {

@@ -4,7 +4,24 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- Justified passages: `Align::Justified` (`QVP_ALIGN_JUSTIFIED`, QvpKit `.justified`, `'justified'`
+  in `web/lite-passage.mjs`). Every row but the last opens its word gaps, in equal shares, until
+  it reaches both edges, by at most `max_stretch` times the passage's usual air between two words
+  (2 by default). Two words the print draws as one piece of calligraphy keep their distance.
+  What a row has left over is split between its two sides, so the last row, the cut row with its
+  ellipsis, a one-word row and a capped row are centred.
+- A surah's basmalah as a passage: `Passage::load_basmalah`, `qvp_passage_load_basmalah`, QvpKit
+  `QvpPassage(basmalahOf:pages:)`. It loads from the page that prints it and lays out like any
+  passage, on one row, with no ayahs and no words; its line spacing is its page's, so a host sizes
+  it by the printed line as it does an ayah. Surahs 1 and 9 fail the load. The other wrappers
+  bind it with passages (issue #102).
+- `conformance/scenarios/passage.json`: two justified specs on every range, and the basmalahs of
+  surahs 2 and 114. QvpKit replays all 52 cases, `web/lite-passage.mjs` the 36 it supports.
+
+### Changed
+- C ABI: `QvpPassageSpec` gains a last field, `float max_stretch` (0 = the default, negative = no
+  cap), and grows from 28 to 32 bytes. A C host that declares the struct itself must add it.
 
 ## [0.5.0] - 2026-10-08
 

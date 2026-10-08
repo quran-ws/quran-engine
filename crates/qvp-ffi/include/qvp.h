@@ -310,16 +310,18 @@ void      qvp_atlas_json(const QvpAtlas*, QvpStr* out);
    Load copies what it needs, so the pages can be freed after it. Lengths are layout px. A draw entry
    names a page number and a path index: draw that path with that page's geometry, a point (x, y) at
    scale·(kx·x + dx), scale·(ky·y + dy), with the layout's scale. The getters read the last layout. */
-enum { QVP_ALIGN_RIGHT = 0, QVP_ALIGN_CENTER };
+enum { QVP_ALIGN_RIGHT = 0, QVP_ALIGN_CENTER, QVP_ALIGN_JUSTIFIED };   /* justified: every row but the last reaches both edges; what is left over is split between the sides */
 typedef struct { float width /* <= 0: one row, as wide as the passage */, scale /* layout px per page unit */, line_spacing /* >= 1 */, padding;
                  uint8_t align /* QVP_ALIGN_* */, keep_ayah_mark /* after a cut, the last ayah's medallion follows the ellipsis */, _pad[2];
-                 uint32_t max_rows /* 0 = every row */; float ellipsis_width /* room the host needs for its ellipsis */; } QvpPassageSpec;
+                 uint32_t max_rows /* 0 = every row */; float ellipsis_width /* room the host needs for its ellipsis */;
+                 float max_stretch /* how far a justified row's gaps may open, times the usual air between words: 0 = the default, negative = no cap */; } QvpPassageSpec;
 typedef struct { float width, height, scale, line_spacing /* page units */; uint32_t n_rows, n_words, n_ayahs, n_draws;
                  uint8_t is_truncated, _pad[3]; float ellipsis_x0, ellipsis_y0, ellipsis_x1, ellipsis_y1; /* after a cut: from the last row's top to its baseline */ } QvpPassageLayout;
 typedef struct { float x0, y0, x1, y1, baseline; } QvpPassageRow;
 typedef struct { uint16_t surah, ayah, word, page; uint32_t row; float x0, y0, x1, y1; } QvpPassageWord;   /* a box includes the word's signs */
 typedef struct { uint16_t surah, ayah; float x0, y0, x1, y1; } QvpPassageAyah;                            /* the ayahs with a word shown */
 QvpPassage* qvp_passage_load(const QvpPage* const* pages, uint32_t n_pages, uint16_t surah, uint16_t from, uint16_t to);   /* NULL: an ayah missing or incomplete, a page repeated, over 4096 words, over the measuring budget */
+QvpPassage* qvp_passage_load_basmalah(const QvpPage* const* pages, uint32_t n_pages, uint16_t surah);   /* the basmalah printed above a surah, on one row; no ayahs, no words. NULL: surah 1 or 9, not on the pages, a page repeated */
 void     qvp_passage_free(QvpPassage*);
 uint32_t qvp_passage_ayah_count(const QvpPassage*);
 void     qvp_passage_ayah_text(const QvpPassage*, uint32_t index, QvpStr* out);         /* the page's own word texts; empty outside the range */

@@ -71,6 +71,12 @@ pub enum PassageError {
     MeasureLimit,
     /// A page has a sign or a sajdah line that no word goes with.
     UnattachedSign,
+    /// The surah has no basmalah of its own (1, whose basmalah is its first ayah, and 9), or
+    /// none of the pages prints it.
+    NoBasmalah {
+        /// The surah asked for.
+        surah: u16,
+    },
 }
 
 impl std::fmt::Display for PassageError {
@@ -82,6 +88,7 @@ impl std::fmt::Display for PassageError {
             Self::TooManyWords => write!(f, "a passage may contain at most {MAX_WORDS} words"),
             Self::MeasureLimit => write!(f, "QVP passage measurement limit exceeded"),
             Self::UnattachedSign => write!(f, "a passage sign has no word"),
+            Self::NoBasmalah { surah } => write!(f, "no basmalah of surah {surah} on the pages"),
         }
     }
 }
@@ -97,6 +104,11 @@ pub enum Align {
     Right = 0,
     /// In the middle of the width.
     Center = 1,
+    /// Across the width: every row but the last opens its word gaps, in equal shares, until it
+    /// reaches both edges, never past [`PassageSpec::max_stretch`]. What is still left over is
+    /// split between the two sides, so the last row, a one-word row and a capped row are
+    /// centred.
+    Justified = 2,
 }
 
 /// What a layout of a passage asks for. Lengths are layout pixels.
@@ -121,6 +133,9 @@ pub struct PassageSpec {
     pub keep_ayah_mark: bool,
     /// The width that the host needs for its ellipsis after a cut.
     pub ellipsis_width: f32,
+    /// How far a justified row's gaps may open, as a multiple of the passage's usual air
+    /// between two words. Zero or less lifts the cap.
+    pub max_stretch: f32,
 }
 
 impl Default for PassageSpec {
@@ -134,6 +149,7 @@ impl Default for PassageSpec {
             max_rows: 0,
             keep_ayah_mark: false,
             ellipsis_width: 0.0,
+            max_stretch: defaults::REFLOW_MAX_STRETCH,
         }
     }
 }
@@ -235,12 +251,16 @@ pub struct PassageLayout {
     pub ellipsis: Option<[f32; 4]>,
 }
 
-/// A contiguous range of complete ayahs, ready to lay out at any width. It copies what it needs
-/// from its pages, so the pages can be freed after it is loaded.
+/// A contiguous range of complete ayahs, ready to lay out at any width, or a surah's basmalah. It
+/// copies what it needs from its pages, so the pages can be freed after it is loaded.
 pub struct Passage {
     atoms: Vec<PassageAtom>,
     /// The gap before each word, page units. The first is zero.
     gaps: Vec<f64>,
+    /// Whether the gap before each word may open when a row is justified. Two words the print
+    /// draws as one piece of calligraphy keep their printed distance, and the first word has no
+    /// gap.
+    open: Vec<bool>,
     /// The sajdah lines of every page given, with the page number.
     strokes: Vec<(u16, Stroke)>,
     ayahs: Vec<(u16, u16, String)>,
@@ -248,7 +268,11 @@ pub struct Passage {
     layout: Option<PassageLayout>,
 }
 
-/// A word of one page, measured for passages, with the signs that go with it.
+/// The word an atom names when it is a decoration standing alone, such as a basmalah.
+const NO_WORD: u32 = u32::MAX;
+
+/// A word of one page, measured for passages, with the signs that go with it; or a decoration
+/// that stands alone, which is no word at all ([`NO_WORD`]).
 #[derive(Clone, Debug)]
 struct Atom {
     word: u32,
@@ -371,12 +395,13 @@ impl Passage {
             ayahs.push((surah, ayah, text.join(" ")));
         }
 
-        // Two words the print draws as one piece of calligraphy keep their printed distance;
-        // any other two are set the usual gap apart, measured on their ink.
-        let gaps = (0..atoms.len())
+        // Two words the print draws as one piece of calligraphy keep their printed distance, and
+        // a justified row never opens it; any other two are set the usual gap apart, measured on
+        // their ink.
+        let (gaps, open) = (0..atoms.len())
             .map(|i| {
                 if i == 0 {
-                    return 0.0;
+                    return (0.0, false);
                 }
                 let (previous, atom) = (&atoms[i - 1], &atoms[i]);
                 let (a, b) = (&previous.atom, &atom.atom);
@@ -387,22 +412,102 @@ impl Passage {
                     && clearance(&a.word_bands, &b.word_bands)
                         .is_some_and(|air| -air >= b.pitch * defaults::INTERLOCK_DEPTH as f64);
                 if joined {
-                    return natural;
+                    return (natural, false);
                 }
                 let wanted = (a.gap + b.gap) / 2.0;
                 match clearance(&a.bands, &b.bands) {
-                    Some(air) => natural + wanted - air,
-                    None => wanted,
+                    Some(air) => (natural + wanted - air, true),
+                    None => (wanted, true),
                 }
             })
-            .collect();
+            .unzip();
         let strokes = pages
             .iter()
             .zip(&prepared)
             .flat_map(|(p, prep)| prep.strokes.iter().map(|s| (p.page_number(), s.clone())))
             .collect();
         let line_spacing = median(atoms.iter().map(|a| a.atom.pitch).collect(), 0.0);
-        Ok(Passage { atoms, gaps, strokes, ayahs, line_spacing, layout: None })
+        Ok(Passage { atoms, gaps, open, strokes, ayahs, line_spacing, layout: None })
+    }
+
+    /// Load the basmalah printed above `surah`, from whichever of the pages prints it.
+    ///
+    /// It lays out like any passage, as one piece on one row, and has no ayahs and no words. Its
+    /// line spacing is its page's, so a host sizes it by the printed line as it does an ayah.
+    /// Surah 1 has no basmalah of its own, since its basmalah is its first ayah, and surah 9 has
+    /// none.
+    pub fn load_basmalah(pages: &[&Page], surah: u16) -> Result<Passage, PassageError> {
+        if !(1..=MAX_SURAH).contains(&surah) {
+            return Err(PassageError::Range);
+        }
+        let mut numbers: Vec<u16> = pages.iter().map(|p| p.page_number()).collect();
+        numbers.sort_unstable();
+        if numbers.windows(2).any(|w| w[0] == w[1]) {
+            return Err(PassageError::RepeatedPage);
+        }
+        let missing = PassageError::NoBasmalah { surah };
+        if surah == 1 || surah == 9 {
+            return Err(missing);
+        }
+        let (page, deco) = pages
+            .iter()
+            .find_map(|p| {
+                p.data().decorations.iter().find(|d| d.kind == DecoKind::Basmalah && d.surah == surah).map(|d| (*p, *d))
+            })
+            .ok_or(missing)?;
+        let data = page.data();
+        let q = page.quant();
+        let paths: Vec<u32> = (deco.first_path..deco.first_path + deco.n_paths as u32).collect();
+        let rect = bounds(paths.iter().map(|&pi| {
+            let b = &data.paths[pi as usize].bbox;
+            [b.x0 as f32 / q, b.y0 as f32 / q, b.x1 as f32 / q, b.y1 as f32 / q].map(f64::from)
+        }))
+        .ok_or(missing)?;
+        // A basmalah line holds no words, so it sits where the page's text lines put theirs:
+        // the same distance below the line's centre.
+        let lines = data.lines.len();
+        let drop = median(
+            (0..lines)
+                .filter(|&li| data.lines[li].n_words > 0)
+                .map(|li| (page.line_baseline(li) - page.line_centre(li)) as f64)
+                .collect(),
+            0.0,
+        );
+        let centre = if (deco.line as usize) < lines {
+            page.line_centre(deco.line as usize) as f64
+        } else {
+            (rect[1] + rect[3]) / 2.0
+        };
+        let baseline = centre + drop;
+        let mut budget = Budget { points: MAX_POINTS, bands: MAX_BANDS };
+        let bands = trace(page.geometry(), paths.iter().copied(), baseline, &mut budget)?;
+        let pitch = page.line_spacing() as f64;
+        let atom = Atom {
+            word: NO_WORD,
+            line: deco.line,
+            surah,
+            ayah: 0,
+            number: 0,
+            paths,
+            signs: Vec::new(),
+            rect,
+            word_rect: rect,
+            bands: bands.clone(),
+            word_bands: bands,
+            baseline,
+            pitch,
+            // It stands alone, so no gap is ever measured against it.
+            gap: pitch / 4.0,
+        };
+        Ok(Passage {
+            atoms: vec![PassageAtom { page: page.page_number(), atom }],
+            gaps: vec![0.0],
+            open: vec![false],
+            strokes: Vec::new(),
+            ayahs: Vec::new(),
+            line_spacing: pitch,
+            layout: None,
+        })
     }
 
     /// Get the ayahs of the passage in reading order, with the page's own word texts.
@@ -410,9 +515,9 @@ impl Passage {
         self.ayahs.iter().map(|(s, a, t)| (*s, *a, t.as_str()))
     }
 
-    /// Get how many words the passage has.
+    /// Get how many words the passage has. A basmalah has none.
     pub fn word_count(&self) -> usize {
-        self.atoms.len()
+        self.atoms.iter().filter(|a| a.atom.word != NO_WORD).count()
     }
 
     /// Get the printed line spacing of the passage's pages, in page units: the median over its
@@ -445,7 +550,8 @@ impl Passage {
             && spec.line_spacing.is_finite()
             && (1.0..=MAX_LINE_SPACING).contains(&spec.line_spacing)
             && spec.ellipsis_width.is_finite()
-            && spec.ellipsis_width >= 0.0;
+            && spec.ellipsis_width >= 0.0
+            && spec.max_stretch.is_finite();
         if !valid || self.atoms.is_empty() {
             return None;
         }
@@ -499,6 +605,9 @@ impl Passage {
         }
 
         let pitch = median(atoms.iter().map(|a| a.pitch).collect(), 0.0) * spec.line_spacing as f64;
+        // What a justified gap may open by is measured on the air between words, as the page
+        // reader's justified rows are, and never on the distance between their boxes.
+        let air = median(atoms.iter().map(|a| a.gap).collect(), 0.0);
         let mut out_rows: Vec<(Rect, f64)> = Vec::with_capacity(rows.len());
         let mut words: Vec<(usize, u32, Rect)> = Vec::new();
         let mut draws: Vec<(u16, u32, u32)> = Vec::new();
@@ -521,25 +630,47 @@ impl Passage {
             // Signs and tall marks have the same right to vertical space as the letters.
             let baseline =
                 if r == 0 { ascent } else { f64::max(last_baseline + pitch, last_bottom + ascent + ROW_AIR) };
+            // A justified row opens its gaps in equal shares until it reaches the width, never
+            // past the cap, so a row of a few long words stays short rather than gapped out. The
+            // last row is short because the text ran out, or holds the cut, and keeps its gaps.
+            let mut share = 0.0;
+            if spec.align == Align::Justified && r + 1 < rows.len() {
+                let opening = row.iter().skip(1).filter(|&&i| self.open[i]).count();
+                let slack = row_width - row_used;
+                if opening > 0 && slack > 0.0 {
+                    let cap = if spec.max_stretch > 0.0 {
+                        opening as f64 * air * (spec.max_stretch as f64 - 1.0)
+                    } else {
+                        f64::INFINITY
+                    };
+                    let widen = slack.min(cap.max(0.0));
+                    share = widen / opening as f64;
+                    row_used += widen;
+                }
+            }
+            // What a centred or justified row has left over is split between its two sides.
             let mut cursor = match spec.align {
-                Align::Center => (row_width + row_used) / 2.0,
                 Align::Right => row_width,
+                Align::Center | Align::Justified => (row_width + row_used) / 2.0,
             };
             let mut boxes = Vec::with_capacity(row.len() + 1);
             for (k, &i) in row.iter().enumerate() {
                 let atom = atoms[i];
                 if k > 0 {
-                    cursor -= self.gaps[i];
+                    cursor -= self.gaps[i] + if self.open[i] { share } else { 0.0 };
                 }
                 let (dx, dy) = (cursor - atom.rect[2], baseline - atom.baseline);
                 let placement = placements.len() as u32;
                 placements.push((dx, dy, 1.0, r as u32));
                 let page = self.atoms[i].page;
                 draws.extend(atom.paths.iter().map(|&p| (page, p, placement)));
-                placed.insert((page, atom.word), (r as u32, dx, dy, atom.word_rect));
                 let rect = moved(atom.rect, dx, dy);
                 boxes.push(rect);
-                words.push((i, r as u32, rect));
+                // A decoration standing alone, such as a basmalah, is drawn but is no word.
+                if atom.word != NO_WORD {
+                    placed.insert((page, atom.word), (r as u32, dx, dy, atom.word_rect));
+                    words.push((i, r as u32, rect));
+                }
                 cursor -= width_of(i);
             }
             if is_last_cut {
