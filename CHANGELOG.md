@@ -6,6 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.6.0] - 2026-10-08
+
 ### Added
 - Justified passages: `Align::Justified` (`QVP_ALIGN_JUSTIFIED`, QvpKit `.justified`, `'justified'`
   in `web/lite-passage.mjs`). Every row but the last opens its word gaps, in equal shares, until
