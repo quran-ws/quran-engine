@@ -1,3 +1,8 @@
+## 0.6.0
+
+- Engine 0.6.0: justified passages and a surah's basmalah as a passage reach QvpKit first;
+  this package binds passages next (issue #102). Nothing changes here.
+
 ## 0.5.0
 
 - Under `justified`, a row that cannot reach both margins is centred instead of starting at
