@@ -187,7 +187,10 @@ impl StyleEngine {
 /// Per-path facts the matcher needs, precomputed at load.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PathCtx {
+    /// First logical word of the printed unit owning this path, or NONE.
     pub word: u32,
+    /// Number of logical words sharing this printed unit.
+    pub word_count: u16,
     pub decoration: u32,
     pub line_number: u8,
     pub surah: u16,
@@ -205,15 +208,16 @@ pub(crate) struct PathCtx {
 
 impl Rule {
     fn matches(&self, c: &PathCtx, pi: u32) -> bool {
+        let word = |candidate: u32| c.word != NONE && candidate >= c.word && candidate < c.word + c.word_count as u32;
         match &self.sel {
             Selector::Page => true,
             Selector::Path(p) => *p == pi,
-            Selector::WordPath(w, n) => c.word == *w && c.nth_in_word == *n,
-            Selector::WordMark(w, n) => c.word == *w && c.kind == PathKind::Mark && c.nth_mark == *n,
-            Selector::WordMarkNamed(w, m, n) => c.word == *w && c.mark == *m && c.nth_mark_named == *n,
-            Selector::WordBody(w) => c.word == *w && c.kind == PathKind::Body,
-            Selector::WordMarks(w) => c.word == *w && c.kind == PathKind::Mark,
-            Selector::Word(w) => c.word == *w,
+            Selector::WordPath(w, n) => word(*w) && c.nth_in_word == *n,
+            Selector::WordMark(w, n) => word(*w) && c.kind == PathKind::Mark && c.nth_mark == *n,
+            Selector::WordMarkNamed(w, m, n) => word(*w) && c.mark == *m && c.nth_mark_named == *n,
+            Selector::WordBody(w) => word(*w) && c.kind == PathKind::Body,
+            Selector::WordMarks(w) => word(*w) && c.kind == PathKind::Mark,
+            Selector::Word(w) => word(*w),
             Selector::Ayah(s, a) => c.surah == *s && c.ayah == *a && c.ayah != 0,
             Selector::Line(l) => c.line_number == *l,
             Selector::Mark(m) => c.mark == *m,
@@ -414,7 +418,7 @@ impl Page {
     }
     /// Recolour the ink of everything a target resolves to.
     pub fn style_target(&mut self, layer: i32, target: &crate::Target, paint: Paint) -> Handle {
-        let words = self.target_words(target);
+        let words = self.printed_words(&self.target_words(target));
         self.styles.add_many(layer, words.into_iter().map(Selector::Word), paint)
     }
     pub fn remove_style(&mut self, handle: Handle) -> usize {

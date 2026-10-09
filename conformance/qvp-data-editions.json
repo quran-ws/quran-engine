@@ -1,0 +1,18 @@
+{
+  "schema": "quran-engine/qvp-data-editions",
+  "schema_version": 1,
+  "repository": "quran-ws/quran-engine",
+  "default": "hafs-kfgqpc",
+  "editions": {
+    "hafs-kfgqpc": {
+      "tag": "data-v0.4.0",
+      "archive_sha256": "cec1280068eaf391f5f89cd0207d560c3f732d7a9bbf6117ef04975642b26844",
+      "published": true
+    },
+    "hafs-qcf-v1-1405h": {
+      "tag": "data-hafs-qcf-v1-1405h-v0.1.0",
+      "archive_sha256": "7ec6052d35175c1be893484e88004ce754b2fdffc2c752c3c64632c63036d9f1",
+      "published": false
+    }
+  }
+}

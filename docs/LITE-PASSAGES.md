@@ -41,6 +41,10 @@ passage.draw(canvas.getContext('2d'), layout, { pixelRatio: ratio, ink: '#231f20
 
 The decoder now exposes `lines`, `ayahs`, `decorations`, word `text`, and path `kind`, `mark` and `family` alongside the existing geometry. Indices are zero-based. Optional decoration and line indices are -1 when absent. Empty line/ayah/decoration bounds are `null`. The QVP wire format is unchanged.
 
+When adjacent logical words share one printed glyph, both words remain in text and result
+metadata, while measurement and drawing use one physical atom. `wordGroup(i)` returns all
+logical indices in that atom. Supplying both indices to `drawWords` still draws the paths once.
+
 The passage module measures outlines in thin bands rather than separating word bounding boxes. It keeps deeply interlocked adjacent words at their printed relative position. All pages share the same band height, so a range spanning a page boundary can form one row. Curves are sampled only to measure spacing: drawing uses their unchanged original operations. The reference Rust engine supplies fixtures for line spacing and ink clearance; the clearance test allows 0.75 page units because the Rust reader's band height varies with each page while the passage bands must be shared across pages.
 
 Ayah medallions and sajdah signs travel with the word that closes their ayah. A division mark travels with the word it opens. A sajdah stroke belongs to the words geometrically underneath it, which can be in an earlier ayah than the closing sign. If those words wrap, the stroke is drawn on each affected row; only that stroke is stretched horizontally.

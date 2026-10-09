@@ -315,6 +315,11 @@ impl Page {
                 }
             }
         }
+        for word in &mut out {
+            if *word != NONE {
+                *word = self.printed_word(*word).unwrap_or(*word);
+            }
+        }
         out
     }
 
@@ -398,11 +403,13 @@ impl Page {
             .min_by_key(|w| w.bbox.y0 - b.y1)
             .map(|w| w.line_index);
         let Some(li) = under else { return vec![] };
-        d.words
+        self.line_words[li as usize]
             .iter()
-            .enumerate()
-            .filter(|(_, w)| w.line_index == li && w.bbox.x0 < b.x1 && w.bbox.x1 > b.x0)
-            .map(|(i, _)| i as u32)
+            .map(|&(_, wi)| wi)
+            .filter(|&wi| {
+                let w = &d.words[wi as usize];
+                w.bbox.x0 < b.x1 && w.bbox.x1 > b.x0
+            })
             .collect()
     }
 
@@ -429,6 +436,7 @@ impl Page {
         }
         let block = self.text_block();
         let widest = (0..d.words.len() as u32)
+            .filter(|&wi| self.printed_word(wi) == Some(wi))
             .map(|wi| self.atom(wi, &word_decos[wi as usize], median, block).width)
             .fold(0.0f32, f32::max);
         if widest > 0.0 {
@@ -1114,6 +1122,13 @@ impl Page {
                     };
                     out.deco_place[di as usize] = Placement::moved(x1 - bx1, dy);
                 }
+            }
+        }
+        // Logical words that share one printed unit always follow its single placement.
+        for (word, &owner) in self.word_owner.iter().enumerate() {
+            if owner != word as u32 {
+                out.word_place[word] = out.word_place[owner as usize];
+                out.word_row[word] = out.word_row[owner as usize];
             }
         }
         // A medallion stands between the ayah it closes and the one that follows. Where both

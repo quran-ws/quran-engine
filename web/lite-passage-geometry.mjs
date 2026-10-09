@@ -1,4 +1,5 @@
 // Measure passage ink; Canvas still draws the untouched curves, not these samples.
+import { printedWordGroups } from './lite.mjs'
 const prepared_pages = new WeakMap()
 const band_height = 0.375
 const curve_steps = 8
@@ -109,7 +110,9 @@ export function preparePage(page) {
   // into unbounded maps or work. Current pages use <447k samples and <13k bands.
   const budget = { points: 2000000, bands: 32768 }
   const paths_of = record => page.paths.slice(record.firstPath, record.firstPath + record.nPaths)
-  const line_words = page.lines.map(line => page.words.slice(line.firstWord, line.firstWord + line.nWords))
+  const groups = printedWordGroups(page.words, page.paths.length)
+  const physical = word => groups.owners[word.index] === word.index
+  const line_words = page.lines.map(line => page.words.slice(line.firstWord, line.firstWord + line.nWords).filter(physical))
   const centres = page.lines.map((line, i) => {
     let box = bounds(line_words[i].flatMap(word => paths_of(word).filter(path => path.kind === 0).map(path => path.box)))
     if (!box) box = bounds(page.decorations.filter(d => d.lineIndex === i && [1, 2].includes(d.decoration)).map(d => d.box))
@@ -117,7 +120,9 @@ export function preparePage(page) {
   })
   const pitch = median(centres.slice(1).map((y, i) => Math.abs(y - centres[i])).filter(gap => gap > 1), page.height / 15)
   const baselines = line_words.map((words, i) => median(words.map(word => word.box[3]), centres[i]))
-  const word_slices = page.words.map(word => trace(paths_of(word), baselines[word.lineIndex], budget))
+  const word_slices = Array(page.words.length)
+  for (const word of page.words.filter(physical)) word_slices[word.index] = trace(paths_of(word), baselines[word.lineIndex], budget)
+  for (const word of page.words) word_slices[word.index] = word_slices[groups.owners[word.index]]
   const gaps = []
   for (const words of line_words) for (let i = 1; i < words.length; i++) {
     const a = words[i - 1]
@@ -155,19 +160,23 @@ export function preparePage(page) {
         Math.min(Math.abs(b.box[0] - box[0]), Math.abs(b.box[2] - box[2])))[0]
     }
     if (!word) throw new Error('QVP passage decoration has no word')
+    word = page.words[groups.owners[word.index]]
     attached[word.index].push({ indices, box, decoration: decoration.index,
       slices: trace(indices.map(index => page.paths[index]), baselines[word.lineIndex], budget) })
   }
-  const atoms = page.words.map(word => {
+  const atoms = Array(page.words.length)
+  for (const word of page.words.filter(physical)) {
     const decorations = attached[word.index]
     const indices = Array.from({ length: word.nPaths }, (_, i) => word.firstPath + i)
     for (const decoration of decorations) indices.push(...decoration.indices)
-    return { page, word, indices, decorations, pitch, gap,
+    const logicalWords = page.words.slice(word.index, word.index + groups.counts[word.index])
+    const atom = { page, word, words: logicalWords, indices, decorations, pitch, gap,
       baseline: baselines[word.lineIndex],
       box: bounds([word.box, ...decorations.map(d => d.box)]),
       slices: merged_slices([word_slices[word.index], ...decorations.map(d => d.slices)]),
       wordSlices: word_slices[word.index] }
-  })
+    for (const logical of logicalWords) atoms[logical.index] = atom
+  }
   const result = { atoms, strokes, pitch, gap, baselines }
   prepared_pages.set(page, result)
   return result

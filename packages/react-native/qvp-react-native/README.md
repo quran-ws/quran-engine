@@ -98,7 +98,7 @@ const qvp = useQvp();
 await qvp.info(); qvp.words(); qvp.word(i); qvp.ayahs(); qvp.lines(); qvp.decorations();
 await qvp.search('الرحمان', { mode: 'includes' });     // [{word, wordKey, text, index, loose}]
 await qvp.text('2:255', { form: 'search', wordSep: ' ' });
-await qvp.targetWords('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
+await qvp.targetWords('line:7'); qvp.findWord(2, 255, 3); qvp.wordGroup(i); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
 await qvp.attachWords(jsonString);                      // when you do not use the wordsUri prop
 await qvp.surahs(); qvp.divisions(); qvp.ayahMarks(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
 await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ayahIndex);

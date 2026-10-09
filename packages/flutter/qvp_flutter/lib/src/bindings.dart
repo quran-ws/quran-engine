@@ -653,6 +653,8 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpWordInfoC>), int Function(PtrPage, int, ffi.Pointer<QvpWordInfoC>)>('qvp_word_info');
   late final int Function(PtrPage, int, int, PtrStr) wordForm =
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Uint8, PtrStr), int Function(PtrPage, int, int, PtrStr)>('qvp_word_form');
+  late final int Function(PtrPage, int, PtrU32, PtrU32) wordGroup =
+      lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, PtrU32, PtrU32), int Function(PtrPage, int, PtrU32, PtrU32)>('qvp_word_group');
   late final int Function(PtrPage, int, ffi.Pointer<QvpAyahInfoC>) ayahInfo =
       lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Uint32, ffi.Pointer<QvpAyahInfoC>), int Function(PtrPage, int, ffi.Pointer<QvpAyahInfoC>)>('qvp_ayah_info');
   late final int Function(PtrPage, int, ffi.Pointer<QvpLineInfoC>) lineInfo =

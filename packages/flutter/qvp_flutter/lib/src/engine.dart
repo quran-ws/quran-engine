@@ -1133,6 +1133,13 @@ class QvpPage extends ChangeNotifier {
     return _e._s();
   }
 
+  /// Logical word indices sharing one indivisible printed unit.
+  List<int> wordGroup(int i) {
+    final out = _e._out<ffi.Uint32>();
+    if (_b.wordGroup(_p, i, out, out + 1) == 0) return const [];
+    return List.generate(out[1], (offset) => out[0] + offset, growable: false);
+  }
+
   /// Word index for (surah, ayah, word) or -1.
   int findWord(int surah, int ayah, int word) {
     final i = _b.findWord(_p, surah, ayah, word);

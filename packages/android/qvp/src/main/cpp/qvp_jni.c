@@ -93,6 +93,11 @@ jfloatArray FN(wordInfo)(JNIEnv* env, jclass c, jlong h, jint i) {
 }
 jstring FN(wordText)(JNIEnv* env, jclass c, jlong h, jint i) { QvpWordInfo w; if (!qvp_word_info(PG(h), i, &w)) return NULL; return qstr(env, w.text); }
 jstring FN(wordForm)(JNIEnv* env, jclass c, jlong h, jint i, jint form) { QvpStr s; if (!qvp_word_form(PG(h), i, (uint8_t)form, &s)) return NULL; return qstr(env, s); }
+/* {firstWord, count}; null for an invalid word. */
+jintArray FN(wordGroup)(JNIEnv* env, jclass c, jlong h, jint i) {
+    uint32_t first, count; if (!qvp_word_group(PG(h), (uint32_t)i, &first, &count)) return NULL;
+    jint v[2] = { (jint)first, (jint)count }; return ints(env, v, 2);
+}
 /* {surah, ayah, fragment, fragments, flags, rubuAlHizb, firstWord, nWords, ayahMarkDecoration(-1), x0, y0, x1, y1} */
 jfloatArray FN(ayahInfo)(JNIEnv* env, jclass c, jlong h, jint i) {
     QvpAyahInfo a; if (!qvp_ayah_info(PG(h), i, &a)) return NULL;

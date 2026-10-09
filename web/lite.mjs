@@ -22,6 +22,43 @@ const limits = {
   records: 4096
 }
 
+/** Derive and validate the indivisible printed unit owning every logical word. */
+export function printedWordGroups(words, pathCount = null) {
+  const owners = new Uint32Array(words.length)
+  const counts = new Uint16Array(words.length)
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index]
+    const end = word.firstPath + word.nPaths
+    if (!Number.isInteger(word.firstPath) || !Number.isInteger(word.nPaths) ||
+        word.firstPath < 0 || word.nPaths < 0 ||
+        (pathCount != null && end > pathCount)) throw new Error('Invalid QVP word path range')
+    let overlaps = false
+    for (let previous = 0; previous < index; previous++) {
+      const left = words[previous]
+      const leftEnd = left.firstPath + left.nPaths
+      if (word.firstPath >= leftEnd || left.firstPath >= end) continue
+      overlaps = true
+      const exact = word.nPaths > 0 && word.firstPath === left.firstPath && word.nPaths === left.nPaths &&
+        word.surah === left.surah && word.ayah === left.ayah && word.lineIndex === left.lineIndex &&
+        word.ayahIndex === left.ayahIndex
+      if (!exact) throw new Error('Overlapping QVP word paths')
+    }
+    if (overlaps) {
+      const left = words[index - 1]
+      const contiguous = word.firstPath === left.firstPath && word.nPaths === left.nPaths &&
+        word.surah === left.surah && word.ayah === left.ayah && word.lineIndex === left.lineIndex &&
+        word.ayahIndex === left.ayahIndex && word.word === left.word + 1
+      if (!contiguous) throw new Error('Overlapping QVP word paths')
+      owners[index] = owners[index - 1]
+    } else {
+      owners[index] = index
+    }
+  }
+  for (const owner of owners) counts[owner]++
+  for (let index = 0; index < words.length; index++) counts[index] = counts[owners[index]]
+  return { owners, counts }
+}
+
 export async function loadPage(url, options) {
   const response = await fetch(url, options)
   if (!response.ok) throw new Error(`Could not load QVP page: HTTP ${response.status}`)
@@ -362,6 +399,7 @@ export function decodeGeometry(buffer) {
     const box = bounds(paths.slice(firstPath, firstPath + count))
     return { ...record, text: texts[textIndex] ?? '', box }
   })
+  printedWordGroups(words, nPaths)
   for (const line of lines) line.box = bounds(words.slice(line.firstWord, line.firstWord + line.nWords))
   for (const ayah of ayahs) {
     if (ayah.fragment < 1 || ayah.fragment > ayah.fragments ||
@@ -388,6 +426,8 @@ function bounds(records) {
 export class QvpLitePage {
   #paths
   #decorationPaths
+  #wordOwner
+  #wordCount
 
   constructor({ width, height, number, paths, words }) {
     this.width = width
@@ -395,15 +435,24 @@ export class QvpLitePage {
     this.number = number
     this.words = words
     this.#paths = paths.map(shape => ({ path: buildPath(shape), rule: shape.rule }))
+    const groups = printedWordGroups(words, this.#paths.length)
+    this.#wordOwner = groups.owners
+    this.#wordCount = groups.counts
     const wordPaths = new Uint8Array(this.#paths.length)
-    for (const { firstPath, nPaths } of words) {
-      for (let path = firstPath; path < firstPath + nPaths; path++) {
-        if (wordPaths[path]) throw new Error('Overlapping QVP word paths')
-        wordPaths[path] = 1
-      }
+    for (let index = 0; index < words.length; index++) {
+      if (this.#wordOwner[index] !== index) continue
+      const { firstPath, nPaths } = words[index]
+      for (let path = firstPath; path < firstPath + nPaths; path++) wordPaths[path] = 1
     }
     this.#decorationPaths = Array.from(wordPaths, (owned, path) => owned ? -1 : path)
       .filter(path => path >= 0)
+  }
+
+  /** Logical word indices sharing one indivisible printed unit. */
+  wordGroup(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.words.length) return []
+    const first = this.#wordOwner[index]
+    return Array.from({ length: this.#wordCount[index] }, (_, offset) => first + offset)
   }
 
   fit(canvas, padding = 0) {
@@ -435,10 +484,14 @@ export class QvpLitePage {
       if (!Number.isInteger(index) || index < 0 || index >= this.words.length) {
         throw new RangeError(`Invalid QVP word index: ${index}`)
       }
-      if (seen.has(index)) continue
-      seen.add(index)
-      const { firstPath, nPaths } = this.words[index]
-      for (let path = firstPath; path < firstPath + nPaths; path++) pathIndices.push(path)
+      const owner = this.#wordOwner[index]
+      const { firstPath, nPaths } = this.words[owner]
+      for (let path = firstPath; path < firstPath + nPaths; path++) {
+        if (!seen.has(path)) {
+          seen.add(path)
+          pathIndices.push(path)
+        }
+      }
     }
     this.#drawPaths(ctx, pathIndices, options)
   }

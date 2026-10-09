@@ -279,6 +279,13 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
         text: this.e.qstr(s + 28), firstPath: d.getUint32(s + 36, true), nPaths: d.getUint32(s + 40, true) };
     }
     wordForm(i, form = 'rasm_uthmani') { const s = this.e.scratch; if (!this.e.ex.qvp_word_form(this.h, i, FORM[form] ?? 0, s)) return ''; return this.e.qstr(s); }
+    /** Logical word indices sharing one indivisible printed unit; ordinary words return `[i]`. */
+    wordGroup(i) {
+      const s = this.e.scratch, d = this.e.dv();
+      if (!this.e.ex.qvp_word_group(this.h, i, s, s + 4)) return [];
+      const first = d.getUint32(s, true), count = d.getUint32(s + 4, true);
+      return Array.from({ length: count }, (_, offset) => first + offset);
+    }
     findWord(surah, ayah, word) { const i = this.e.ex.qvp_find_word(this.h, surah, ayah, word); return i < 0 ? -1 : i; }
     _target(t) {
       if (typeof t === 'string') t = parseTarget(t);

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Run the checks CI runs, with the same commands. No argument runs all of them.
 #
-# Usage: scripts/check.sh [fmt|lint|test|gates|parity|versions|terminology|docs|structure|web]...
+# Usage: scripts/check.sh [fmt|lint|test|gates|parity|versions|contracts|terminology|docs|structure|web]...
 #
 # Inputs: the repository; `gates` needs the data from scripts/sync-test-data.sh.
 # Output: exit 0 when every selected check passes; the first failing check's output otherwise.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ALL=(fmt lint test gates parity versions terminology docs structure web)
+ALL=(fmt lint test gates parity versions contracts terminology docs structure web)
 [ $# -eq 0 ] && set -- "${ALL[@]}"
 
 step() { printf '\n== %s\n' "$1"; }
@@ -49,6 +49,13 @@ for check in "$@"; do
     versions)
       step "one version everywhere"
       scripts/check-versions.sh
+      ;;
+    contracts)
+      step "data package, release and installer contracts"
+      python conformance/test_package_edition_data.py
+      python conformance/test_qvp_data_release.py
+      python conformance/test_install_qvp_data.py
+      node conformance/test_qcf_v1_semantics_audit.mjs
       ;;
     terminology)
       step "Quran.ws terminology audit"
