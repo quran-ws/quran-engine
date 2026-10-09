@@ -1,0 +1,101 @@
+{
+  "schema": "quran-engine/edition-data-package-contract",
+  "schema_version": 7,
+  "package_name": "quran-engine-pages-hafs-qcf-v1-1405h",
+  "edition": "hafs-qcf-v1",
+  "print_year_hijri": 1405,
+  "format_version": 1,
+  "source": {
+    "summary_sha256": "b30ecbb475ea80027812822fc5c5e93f8fc51d6c5dbd116d6fb85a0f64e19858",
+    "summary_schema": "quran-svg-elements/qcf-v1-hq-word-corpus",
+    "summary_schema_version": 10,
+    "pages_sha256": "a394d850efb83eab405f540c885033348ea2fde460a94f5ea0bbf671cb0ce55c",
+    "qualified_geometry_pages_sha256": "18f32701b14e588610a7c2bd73495644eb9e36ea9b0fb87a46ed8c316dd09d8e",
+    "base_header_qualified_geometry_pages_sha256": "411d244d4e47bb4853951663777bd2f95c2ec92737c5a44dfd33628cc174fe6e",
+    "base_path_geometry": {
+      "base_pages_sha256": "55968bfa7d4478972328f8b2addc772188f8e857acf99c793764e1832655648b",
+      "base_paths": 88472,
+      "emitted_pages_sha256": "5715e1503979e531f7e4acae0bbc407b88d84f3f927e991dd8d6e64496834aee",
+      "emitted_paths": 88473,
+      "qualification": "base-order-preserved",
+      "restored_paths": 1
+    },
+    "index_sha256": "27f787fa512a3bac09630b8fca2dc687b8377af5c2b99a5d06d0df24b27007f6",
+    "pages": 604,
+    "words": 77432,
+    "qualification": "source-qualified",
+    "hq_words": 60739,
+    "fallback_words": 16693,
+    "pages_with_hq": 602,
+    "base_summary_sha256": "3adb2d203627a49fd90b3f4093251ab70f3549f539bbfe3f3e9e618407a439e8",
+    "base_waqf_source_glyphs_sha256": "fec9e579e22ca355010d650bf84264744225afc9db737ba2bab78f7eead9eb8e",
+    "base_division_sajdah_source_sha256": "a70fd546abce8fb4608683cc2497148f3bca9a3411d2970a4cc6e5b692c23e2b",
+    "division_sajdah": {
+      "division_starts": 240,
+      "mapped_sajdah_source_glyphs": 14,
+      "printed_rubu_al_hizb": 199,
+      "qualification": "source-owned",
+      "restored_sajdah_source_glyphs": 1,
+      "sajdah_marks": 15,
+      "unprinted_rubu_al_hizb": 41
+    },
+    "source_candidate_tree_sha256": "bba389e5fe0a533acd8c0a00698a4d8671b697ff362754fb19d884bd51a46636",
+    "source_manifest_sha256": "d94b55bad366afe1fd263fb01113458ff2aa9b8206444591e134af58cc1c13c7",
+    "source_records_sha256": "0904180d75f02f9229330bb0407f2b047a172df9dcd44c7aa3d6b815c4e3180d",
+    "source_exclusions": {
+      "aspect-ratio": 456,
+      "candidate-missing": 52,
+      "excluded-page": 62,
+      "excluded-word": 1,
+      "fit-audit": 39,
+      "reported-centre": 1198,
+      "reported-size": 1490,
+      "review-marked": 759,
+      "reviewed-fallback": 62,
+      "scale-drift": 1070,
+      "scan-iou": 69,
+      "semantic-owner": 214,
+      "text-differs": 1957,
+      "typed-owner": 4221,
+      "unsupported-source": 5043
+    },
+    "waqf": {
+      "fused_source_glyphs": 51,
+      "fused_source_glyphs_by_mark": {
+        "waqf_jaiz_mustawi_al_tarafayn": 17,
+        "waqf_jaiz_wasl_awla": 34
+      },
+      "qualification": "source-glyph-qualified",
+      "separate_source_glyphs": 4221,
+      "separate_source_glyphs_by_mark": {
+        "waqf_al_muanaqah": 6,
+        "waqf_jaiz_mustawi_al_tarafayn": 2066,
+        "waqf_jaiz_waqf_awla": 511,
+        "waqf_jaiz_wasl_awla": 1617,
+        "waqf_lazim": 21
+      },
+      "text_signs": 4272,
+      "text_signs_by_mark": {
+        "waqf_al_muanaqah": 6,
+        "waqf_jaiz_mustawi_al_tarafayn": 2083,
+        "waqf_jaiz_waqf_awla": 511,
+        "waqf_jaiz_wasl_awla": 1651,
+        "waqf_lazim": 21
+      }
+    },
+    "optical_calibration_sha256": "6323f6f8f77b42150e3b666b74f4789d01b41096ffd09718c4e552abdfaf3059"
+  },
+  "qvp": {
+    "tree_sha256": "853b5af4bae95864affa8585be79b386ca6a0b6ffb8fafaa2220f9836f4c1c0a",
+    "files": 1443,
+    "pages": 604,
+    "word_sidecars": 604,
+    "logical_words": 77432,
+    "atlas_qva_sha256": "6f0b1f4f68180397d66ae0b5879e2bd4f7b1ef12fc11b34f5bad733707db6bc4",
+    "atlas_json_sha256": "4de027351e3bfffa91623a27bcdd02ef9394a07cdd61708dd17bbd5d61593522",
+    "surah_names": 114
+  },
+  "converter": {
+    "sha256": "e1cbff55ee69bff1e66729c8aae371dd47a6611944f63833c798a065f4e60797"
+  }
+}

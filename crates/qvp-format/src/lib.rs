@@ -915,6 +915,11 @@ mod tests {
             strings: vec!["ذَٰلِكَ".to_owned()],
         };
         let mut p = p;
+        let mut alias = p.words[0];
+        alias.word = 2;
+        p.words.push(alias);
+        p.lines[0].n_words = 2;
+        p.ayahs[0].n_words = 2;
         p.paths.push(PathRec {
             kind: PathKind::AyahMarkOrnament,
             mark: Mark::None,
@@ -931,6 +936,24 @@ mod tests {
         let bytes = encode(&p);
         let q = decode(&bytes).unwrap();
         assert_eq!(p, q);
+        assert_eq!(q.words[0].first_path, q.words[1].first_path);
+        assert_eq!(q.words[0].n_paths, q.words[1].n_paths);
+        let mut partial = p.words.clone();
+        partial[1].n_paths += 1;
+        assert_eq!(codec::validate_word_paths(&partial, p.paths.len()), Err(Error::Corrupt("word path overlap")));
+        let mut reversed = vec![p.words[0], p.words[1]];
+        reversed[0].first_path = 2;
+        reversed[0].n_paths = 1;
+        reversed[1].first_path = 0;
+        reversed[1].n_paths = 1;
+        codec::validate_word_paths(&reversed, p.paths.len()).unwrap();
+        let mut middle = p.words[0];
+        middle.word = 2;
+        middle.first_path = 2;
+        let mut noncontiguous_alias = p.words[0];
+        noncontiguous_alias.word = 3;
+        let noncontiguous = vec![p.words[0], middle, noncontiguous_alias];
+        assert_eq!(codec::validate_word_paths(&noncontiguous, p.paths.len()), Err(Error::Corrupt("word path overlap")));
         assert_eq!(decode(b"QVP1\x09\x00xx").unwrap_err(), Error::BadVersion(9));
         // instance: shared ops decode at glyph origin (0,0) → page (10,20) → quantised 1000,2000
         assert_eq!(q.path_cmds(2).unwrap()[0], Cmd::MoveTo(1000, 2000));

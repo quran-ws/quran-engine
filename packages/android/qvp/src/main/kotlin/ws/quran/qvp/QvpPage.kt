@@ -120,6 +120,11 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     // ── words / text ──
     fun wordKey(i: Int) = words[i].wordKey
     fun wordForm(i: Int, form: Form = Form.RASM_UTHMANI): String = QvpNative.wordForm(h, i, form.id) ?: ""
+    /** Logical word indices sharing one indivisible printed unit. */
+    fun wordGroup(i: Int): IntArray {
+        val group = QvpNative.wordGroup(h, i) ?: return IntArray(0)
+        return IntArray(group[1]) { group[0] + it }
+    }
     fun findWord(surah: Int, ayah: Int, word: Int): Int = QvpNative.findWord(h, surah, ayah, word)
     fun target(s: String) = Target.parse(s, this)
     fun targetWords(t: Target): IntArray = QvpNative.targetWords(h, t.arr)

@@ -34,7 +34,14 @@ export class QvpPassage {
         throw new Error(`Incomplete passage ayah ${surah}:${ayah}`)
       }
       if (this.#atoms.length + words.length > 4096) throw new RangeError('A passage may contain at most 4096 words')
-      for (const { page, word } of words) this.#atoms.push(preparePage(page).atoms[word.index])
+      const seen = new Set()
+      for (const { page, word } of words) {
+        const atom = preparePage(page).atoms[word.index]
+        if (!seen.has(atom)) {
+          seen.add(atom)
+          this.#atoms.push(atom)
+        }
+      }
       this.ayahs.push({ surah, ayah, text: words.map(({ word }) => word.text).join(' ') })
     }
     // Two words drawn as one piece of calligraphy keep their printed distance, and a justified
@@ -45,7 +52,7 @@ export class QvpPassage {
       const natural = previous.box[0] - atom.box[2]
       const word_air = clearance(previous.wordSlices, atom.wordSlices)
       const joined = previous.page === atom.page && previous.word.lineIndex === atom.word.lineIndex &&
-        previous.word.index + 1 === atom.word.index && word_air !== null && -word_air >= atom.pitch * 0.15
+        previous.word.index + previous.words.length === atom.word.index && word_air !== null && -word_air >= atom.pitch * 0.15
       if (joined) return [natural, false]
       const air = clearance(previous.slices, atom.slices)
       const wanted = (previous.gap + atom.gap) / 2
@@ -114,7 +121,7 @@ export class QvpPassage {
         for (const path of atom.indices) drawings.push({ page: atom.page, path, dx, dy, kx: 1, row })
         const box = [atom.box[0] + dx, atom.box[1] + dy, atom.box[2] + dx, atom.box[3] + dy]
         row_bounds.push(box)
-        result.words.push({ surah: atom.word.surah, ayah: atom.word.ayah, word: atom.word.word, row, box })
+        for (const word of atom.words) result.words.push({ surah: word.surah, ayah: word.ayah, word: word.word, row, box: [...box] })
         cursor -= atom.box[2] - atom.box[0]
       }
       result.rows.push({ box: bounds(row_bounds), baseline })

@@ -1,5 +1,5 @@
-# Publish a data release to cdn.quran.ws/qvp/. Versions are immutable: this runs once per
-# release and refuses to overwrite a folder that already exists.
+# Publish a QVP data release to its edition family on cdn.quran.ws. Versions are immutable:
+# this runs once per release and refuses to overwrite a folder that already exists.
 name: publish-cdn
 
 on:
@@ -8,14 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release tag to publish (e.g. v0.1.0)'
+        description: 'Data release tag (data-vX.Y.Z or data-hafs-qcf-v1-1405h-vX.Y.Z)'
         required: true
 
 jobs:
   publish:
-    # Only data releases (data-vX.Y.Z, and the first one, v0.1.0) go to the CDN; code
-    # releases (vX.Y.Z) carry the engine, not pages.
-    if: ${{ inputs.version != '' || startsWith(github.event.release.tag_name, 'data-v') || github.event.release.tag_name == 'v0.1.0' }}
+    # Data tags choose an edition family. Code releases (vX.Y.Z) carry the engine, not pages;
+    # v0.1.0 is the one historical data-tag exception.
+    if: ${{ inputs.version != '' || startsWith(github.event.release.tag_name, 'data-v') || startsWith(github.event.release.tag_name, 'data-hafs-qcf-v1-1405h-v') || github.event.release.tag_name == 'v0.1.0' }}
     runs-on: ubuntu-latest
     # The R2 credentials live in this environment, not in repo secrets, so only a run
     # started from a tag — and approved — can reach them.
@@ -43,35 +43,37 @@ jobs:
         env:
           VERSION: ${{ inputs.version || github.event.release.tag_name }}
         run: |
-          # the tag may carry a data- prefix; the URL never does
-          v="${VERSION#data-}"
-          base="https://cdn.quran.ws/qvp/$v"
+          profile=$(python scripts/qvp-data-release.py profile "$VERSION")
+          v=$(jq -r .version <<< "$profile")
+          family=$(jq -r .family <<< "$profile")
+          legacy=$(jq -r .legacy_redirect <<< "$profile")
+          base="https://cdn.quran.ws/$family/$v"
           curl -fsS "$base/manifest.json" -o /tmp/m.json
 
-          # a page: CORS must be present, and the bytes must match the manifest digest.
-          # The Origin header is required — R2 only emits the CORS headers in response to one.
+          # A page: CORS must be present, and the bytes must match the manifest digest.
+          # The Origin header is required — R2 only emits CORS in response to one.
           curl -fsS --compressed -H 'Origin: https://example.com' -o /tmp/001.qvp -D /tmp/h "$base/001.qvp"
           grep -qi '^access-control-allow-origin' /tmp/h || { echo "no CORS header"; exit 1; }
           want=$(jq -r '.files[]|select(.name=="001.qvp")|.sha256' /tmp/m.json)
           got=$(sha256sum /tmp/001.qvp | cut -d' ' -f1)
           [ "$want" = "$got" ] || { echo "001.qvp digest mismatch"; exit 1; }
 
-          # the bundle: brotli is the file format here, not a transfer encoding, so the edge
-          # must hand back the stored bytes. Any Content-Encoding means it re-encoded them.
+          # The bundle is already brotli. The edge must return its stored bytes unchanged.
           name=$(jq -r .bundle.name /tmp/m.json)
           curl -fsS -o /tmp/bundle -D /tmp/bh -H 'Accept-Encoding: gzip, deflate, br, zstd' "$base/$name"
           enc=$(tr -d '\r' < /tmp/bh | awk 'tolower($1)=="content-encoding:"{print tolower($2)}')
-          [ -z "$enc" ] || { echo "bundle served with Content-Encoding '$enc'; the stored bytes are already brotli"; exit 1; }
+          [ -z "$enc" ] || { echo "bundle served with Content-Encoding '$enc'"; exit 1; }
           want=$(jq -r .bundle.sha256 /tmp/m.json)
           got=$(sha256sum /tmp/bundle | cut -d' ' -f1)
           [ "$want" = "$got" ] || { echo "bundle digest mismatch: want $want got $got"; exit 1; }
 
-          # latest.json must name this version, or consumers that follow it never see it
-          got=$(curl -fsS "https://cdn.quran.ws/qvp/latest.json" | jq -r .version)
+          got=$(curl -fsS "https://cdn.quran.ws/$family/latest.json" | jq -r .version)
           [ "$got" = "$v" ] || { echo "latest.json names '$got', expected '$v'"; exit 1; }
 
-          # the old hostname must still resolve, or links published before the move break
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -I "https://qvp.quran.ws/$v/manifest.json")
-          [ "$code" = 301 ] || echo "::warning::qvp.quran.ws returned $code, expected 301 — check the redirect rule"
+          # Only the original V4 family has the historical qvp.quran.ws redirect.
+          if [ "$legacy" = true ]; then
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -I "https://qvp.quran.ws/$v/manifest.json")
+            [ "$code" = 301 ] || echo "::warning::qvp.quran.ws returned $code, expected 301"
+          fi
 
-          echo "pages, digests, bundle encoding and latest all ok"
+          echo "$family pages, digests, bundle encoding and latest all ok"

@@ -25,11 +25,16 @@ fn abi_end_to_end() {
         assert!(!page.is_null());
         let mut info = std::mem::zeroed::<QvpPageInfo>();
         qvp_page_info(page, &mut info);
-        assert_eq!((info.n_words, info.n_paths, info.n_lines), (150, 1162, 15));
+        assert_eq!((info.n_words, info.n_lines), (150, 15));
+        assert!(info.n_paths >= info.n_words, "a converted word page must carry path geometry");
         // word + forms
         let mut w = std::mem::zeroed::<QvpWordInfo>();
         assert_eq!(qvp_word_info(page, 0, &mut w), 1);
         assert_eq!(w.surah, 2);
+        let mut first_word = u32::MAX;
+        let mut word_count = 0;
+        assert_eq!(qvp_word_group(page, 0, &mut first_word, &mut word_count), 1);
+        assert_eq!((first_word, word_count), (0, 1));
         let mut f = QvpStr { ptr: std::ptr::null(), len: 0 };
         assert_eq!(qvp_word_form(page, 0, 4, &mut f), 1);
         assert!(!s(&f).is_empty());

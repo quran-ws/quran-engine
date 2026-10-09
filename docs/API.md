@@ -55,6 +55,7 @@ page.free(); atlas.free();
 | `page.lines[i]` | `{lineNumber, isHeader, firstWord, nWords, bbox, bandY0, bandY1, centre}` |
 | `page.decorations[i]` | `{decoration, surah, ayah, line, bbox, text, firstPath, nPaths}` — ayah marks, surah banners, basmalah, division rosettes, sajdah signs, page furniture |
 | `page.findWord(s,a,w)` | index or −1 |
+| `page.wordGroup(i)` | contiguous logical word indices sharing one indivisible printed unit; normally just `[i]` |
 | `page.targetWords(target)` | word indices in reading order |
 | `page.wordForm(i, form)` | `'rasm_uthmani' \| 'rasm_imlai' \| 'qpc' \| 'rasm' \| 'search'` (derived forms need the sidecar; `hasForm(form)`) |
 | `page.attachWords(json)` | attach `NNN.words.json` (`{"s:a:w": {rasm_uthmani, rasm_imlai, qpc, rasm, search}}`); returns words updated |
@@ -69,7 +70,9 @@ quran-ws shared word identity (the same keys quran-svg, quran-svg-elements and t
 spans use). A host app with its own word table may tokenize an edge case differently (a
 compound written as one word split into two, or the reverse); map at the boundary with
 `findWord(s,a,w)` / `words[i].wordKey`, and treat a per-ayah word-count mismatch as
-"skip, don't guess" — the engine's numbering follows the standard, never a host table.
+"skip, don't guess" — the engine's numbering follows the standard, never a host table. Two
+adjacent logical words may share one printed glyph. Hits return the first word of that
+indivisible unit; `wordGroup(i)` returns every logical word it contains.
 
 ## Metadata (no database needed)
 
@@ -681,6 +684,7 @@ says which wrapper binds which.
 | page | `qvp_page_info` | `page.width`, `.height`, `.page`, `.nLines`, `.nAyahs`, `.nWords`, `.nPaths`, `.nDecorations` | Return the page's dimensions and element counts. |
 | page | `qvp_geometry` | `page.paths`, `page.buildPaths()` | Return the outline streams and the per-path table a renderer draws from; they live as long as the page. Ink outside the page's box gets no outline, so a host draws the page and not what the artwork left beyond it. |
 | page | `qvp_word_info` | `page.words[i]` | Return one word: key, line, ayah fragment, bounds, text and its path range. |
+| page | `qvp_word_group` | `page.wordGroup(i)` | Return the first logical word and count of the indivisible printed unit containing a word. Exact and gap hits identify that first word. |
 | page | `qvp_word_form` | `page.wordForm(i, form)` | Return one of a word's text forms; the derived forms need the words sidecar. |
 | page | `qvp_ayah_info` | `page.ayahs[i]` | Return one ayah fragment: key, fragment index and count, flags, word range, ayah-mark decoration, bounds. |
 | page | `qvp_line_info` | `page.lines[i]` | Return one printed line: number, header flag, word range, bounds, band and centre. |

@@ -23,12 +23,15 @@ takes the new number: its version means "binds header version X.Y.Z".
 | behaviour change with no header change | minor |
 | a fix | patch |
 
-## Two things, two tag families
+## Code and data tag families
 
 - `vX.Y.Z` releases the code: every package at once.
-- `data-vX.Y.Z` releases the page data. The data has its own cadence and its own
-  provenance (`VERSION.json` in the tarball). The first data release used the tag `v0.1.0`
-  before the two families existed. It is the only exception.
+- `data-vX.Y.Z` releases the default KFGQPC V4 page data.
+- `data-hafs-qcf-v1-1405h-vX.Y.Z` releases the QCF V1 1405H page data.
+
+Each data edition has its own cadence, version sequence, `VERSION.json`, CDN family,
+and `latest.json`. The first default data release used the tag `v0.1.0` before the data prefix
+existed. It is the only exception.
 
 A wrapper declares the page format version it reads (`qvp_format_version()`), so an app
 with old data keeps working after an engine update.

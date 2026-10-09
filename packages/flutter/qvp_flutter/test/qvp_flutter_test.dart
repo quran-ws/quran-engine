@@ -84,6 +84,8 @@ void main() {
     expect(w0.nPaths, greaterThan(0));
     expect(page.findWord(w0.surah, w0.ayah, w0.word), 0);
     expect(page.wordKey(0), w0.wordKey);
+    expect(page.wordGroup(0), [0]);
+    expect(page.wordGroup(-1), isEmpty);
     expect(page.lineSpacing, greaterThan(0));
     expect(page.surahs().map((s) => s.number), contains(2));
     expect(page.ayahKeys(), contains((2, 255)));

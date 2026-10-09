@@ -586,7 +586,7 @@ mod tests {
                 <g class="surah-name" data-sid="{surah}" data-surah-name-ar="اسم" data-surah-name-latin="Name" data-surah-name-en="Light &amp; Opening" data-revelation-place="makkah" data-ayah-count="7">
                   <path data-kind="ornament" fill-rule="evenodd" d="M10 5H110V35H10ZM20 10V30H100V10Z"/>
                   <path data-kind="header_ink" d="M45 15H75V25H45Z"/>
-                  <path data-kind="header_ink" fill-rule="evenodd" d="M80 16H84V24H80Z"/>
+                  <path data-kind="header_ink" fill-rule="evenodd" d="M80 20Q82 16 84 20Q82 24 80 20Z"/>
                 </g>
               </g>
             </svg>"#

@@ -93,6 +93,36 @@ struct Silhouettes {
     decorations: Vec<Vec<(i16, f32, f32)>>,
 }
 
+fn same_printed_unit(left: &WordRec, right: &WordRec) -> bool {
+    left.n_paths > 0
+        && left.first_path == right.first_path
+        && left.n_paths == right.n_paths
+        && left.surah == right.surah
+        && left.ayah == right.ayah
+        && left.line_index == right.line_index
+        && left.ayah_index == right.ayah_index
+        && right.word == left.word.saturating_add(1)
+}
+
+fn word_groups(words: &[WordRec]) -> (Vec<u32>, Vec<u16>) {
+    let mut owner: Vec<u32> = (0..words.len() as u32).collect();
+    let mut count = vec![1u16; words.len()];
+    let mut first = 0usize;
+    while first < words.len() {
+        let mut end = first + 1;
+        while end < words.len() && same_printed_unit(&words[end - 1], &words[end]) {
+            end += 1;
+        }
+        let size = (end - first) as u16;
+        for index in first..end {
+            owner[index] = first as u32;
+            count[index] = size;
+        }
+        first = end;
+    }
+    (owner, count)
+}
+
 pub struct Page {
     data: PageData,
     geom: Geometry,
@@ -122,6 +152,9 @@ pub struct Page {
     pub(crate) searched_steps: Option<Vec<f32>>,
     path_deco: Vec<u32>,
     pub(crate) path_ctx: Vec<PathCtx>,
+    /// First logical word and logical word count of each word's indivisible printed unit.
+    word_owner: Vec<u32>,
+    word_group_count: Vec<u16>,
     word_index: HashMap<(u16, u16, u16), u32>,
     pub styles: StyleEngine,
     pub(crate) mask: MaskState,
@@ -141,9 +174,13 @@ impl Page {
 
     pub fn from_data(data: PageData) -> Page {
         let q = data.header.quant as f32;
+        let (word_owner, word_group_count) = word_groups(&data.words);
         let mut geom = Geometry::default();
         let mut path_word = vec![NONE; data.paths.len()];
         for (wi, w) in data.words.iter().enumerate() {
+            if word_owner[wi] != wi as u32 {
+                continue;
+            }
             for p in w.first_path..w.first_path + w.n_paths as u32 {
                 path_word[p as usize] = wi as u32;
             }
@@ -162,6 +199,9 @@ impl Page {
         for (li, l) in data.lines.iter().enumerate() {
             let mut bb = IBox::EMPTY;
             for wi in l.first_word..l.first_word + l.n_words {
+                if word_owner[wi as usize] != wi as u32 {
+                    continue;
+                }
                 let w = &data.words[wi as usize];
                 for p in w.first_path..w.first_path + w.n_paths as u32 {
                     let pr = &data.paths[p as usize];
@@ -289,6 +329,7 @@ impl Page {
             let nm = *named.entry(p.mark).and_modify(|v| *v += 1).or_insert(0);
             path_ctx.push(PathCtx {
                 word: wi,
+                word_count: if wi == NONE { 0 } else { word_group_count[wi as usize] },
                 decoration: di,
                 line_number,
                 surah,
@@ -365,6 +406,7 @@ impl Page {
         let mut line_words = Vec::with_capacity(data.lines.len());
         for l in &data.lines {
             let mut v: Vec<(i32, u32)> = (l.first_word..l.first_word + l.n_words)
+                .filter(|&wi| word_owner[wi as usize] == wi as u32)
                 .map(|wi| (data.words[wi as usize].bbox.x0, wi as u32))
                 .collect();
             v.sort_unstable();
@@ -423,6 +465,8 @@ impl Page {
             searched_steps: None,
             path_deco,
             path_ctx,
+            word_owner,
+            word_group_count,
             word_index,
             styles: StyleEngine::new(),
             mask: MaskState::default(),
@@ -450,6 +494,25 @@ impl Page {
         self.data.strings.push(s.to_owned());
         (self.data.strings.len() - 1) as u16
     }
+
+    /// The indivisible printed unit containing a logical word: `(first_word, count)`.
+    /// Ordinary words return themselves with count 1.
+    pub fn word_group(&self, word: u32) -> Option<(u32, u16)> {
+        self.word_owner
+            .get(word as usize)
+            .zip(self.word_group_count.get(word as usize))
+            .map(|(&first, &count)| (first, count))
+    }
+
+    pub(crate) fn printed_word(&self, word: u32) -> Option<u32> {
+        self.word_owner.get(word as usize).copied()
+    }
+
+    pub(crate) fn printed_words(&self, words: &[u32]) -> Vec<u32> {
+        let mut seen = std::collections::HashSet::new();
+        words.iter().filter_map(|&word| self.printed_word(word)).filter(|word| seen.insert(*word)).collect()
+    }
+
     pub fn geometry(&self) -> &Geometry {
         &self.geom
     }
@@ -476,6 +539,7 @@ impl Page {
     /// The horizontal extent of a word's letters in page units, without the marks drawn over
     /// and under them: what the eye reads as the distance between two words.
     pub fn word_body(&self, wi: u32) -> (f32, f32) {
+        let wi = self.printed_word(wi).unwrap_or(wi);
         self.word_body[wi as usize]
     }
 
@@ -602,6 +666,10 @@ impl Page {
     /// preceding `ر` so the two boxes overlap by 12 page units while the strokes stay 5 apart.
     /// `None` when the two share no band, which is the case for a mark set above the line.
     pub fn words_clearance(&self, a: u32, b: u32, dx: f32) -> Option<f32> {
+        let (a, b) = (self.printed_word(a)?, self.printed_word(b)?);
+        if a == b {
+            return Some(0.0);
+        }
         let s = self.silhouettes();
         Self::slice_clearance(&s.words[a as usize], &s.words[b as usize], dx)
     }
@@ -614,6 +682,7 @@ impl Page {
     /// The bands of a word together with the marks set inline with it, so a medallion standing
     /// between two words is measured with the word it closes.
     pub(crate) fn slices_with(&self, word: u32, decos: &[u32]) -> Vec<(i16, f32, f32)> {
+        let word = self.printed_word(word).unwrap_or(word);
         let s = self.silhouettes();
         let mut out = s.words[word as usize].clone();
         for &di in decos {
@@ -666,9 +735,14 @@ impl Page {
     /// this mushaf's 68,612 neighbouring pairs, and those three overlap by 19 to 26 page units
     /// where the next deepest reaches 3.8, so the two are far apart in the data.
     pub fn words_interlock(&self, a: u32, b: u32) -> Option<f32> {
+        let (a, b) = (self.printed_word(a)?, self.printed_word(b)?);
+        if a == b {
+            return None;
+        }
         let d = self.data();
         let (wa, wb) = (&d.words[a as usize], &d.words[b as usize]);
-        if wa.line_index != wb.line_index || b != a + 1 {
+        let next = a + self.word_group_count[a as usize] as u32;
+        if wa.line_index != wb.line_index || b != next {
             return None;
         }
         let overlap = -self.words_clearance(a, b, 0.0)?;

@@ -80,6 +80,33 @@ assert.deepEqual(calls, [
 assert.throws(() => renderedPage.drawWords(ctx, [2]), RangeError)
 assert.equal('paths' in renderedPage, false)
 
+const sharedWords = [
+  { index: 0, surah: 13, ayah: 37, word: 8, lineIndex: 0, ayahIndex: 0, firstPath: 0, nPaths: 1, box: [1, 1, 3, 3] },
+  { index: 1, surah: 13, ayah: 37, word: 9, lineIndex: 0, ayahIndex: 0, firstPath: 0, nPaths: 1, box: [1, 1, 3, 3] },
+  { index: 2, surah: 13, ayah: 37, word: 10, lineIndex: 0, ayahIndex: 0, firstPath: 1, nPaths: 1, box: [4, 1, 6, 3] }
+]
+const sharedPage = new QvpLitePage({
+  width: 10, height: 10, number: 254,
+  paths: [{ ops: [0], pts: [1, 1], rule: 'nonzero' }, { ops: [0], pts: [4, 1], rule: 'nonzero' }],
+  words: sharedWords
+})
+assert.deepEqual(sharedPage.wordGroup(0), [0, 1])
+assert.deepEqual(sharedPage.wordGroup(1), [0, 1])
+assert.deepEqual(sharedPage.wordGroup(2), [2])
+assert.deepEqual(sharedPage.wordGroup(99), [])
+const sharedCalls = []
+sharedPage.drawWords({
+  save() {}, restore() {}, setTransform() {}, set fillStyle(_) {},
+  fill(path) { sharedCalls.push(path.id) }
+}, [0, 1])
+assert.equal(sharedCalls.length, 1, 'shared ink is drawn once')
+assert.equal(sharedPage.hitTest(2, 2), sharedWords[0], 'hit resolves to the printed-unit owner')
+assert.throws(() => new QvpLitePage({
+  width: 10, height: 10, number: 1,
+  paths: [{ ops: [0], pts: [1, 1], rule: 'nonzero' }, { ops: [0], pts: [2, 2], rule: 'nonzero' }],
+  words: [sharedWords[0], { ...sharedWords[1], firstPath: 0, nPaths: 2 }]
+}), /Overlapping/)
+
 assert.throws(() => decodeGeometry(bytes.subarray(0, -1)), /section length/)
 const wrongMagic = bytes.slice()
 wrongMagic[0] = 0

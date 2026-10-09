@@ -17,6 +17,8 @@ internal object QvpNative {
     @JvmStatic external fun wordInfo(h: Long, i: Int): FloatArray?
     @JvmStatic external fun wordText(h: Long, i: Int): String?
     @JvmStatic external fun wordForm(h: Long, i: Int, form: Int): String?
+    /** {firstWord, count}; null for an invalid word. */
+    @JvmStatic external fun wordGroup(h: Long, i: Int): IntArray?
     @JvmStatic external fun ayahInfo(h: Long, i: Int): FloatArray?
     @JvmStatic external fun lineInfo(h: Long, i: Int): FloatArray?
     @JvmStatic external fun decorationInfo(h: Long, i: Int): FloatArray?

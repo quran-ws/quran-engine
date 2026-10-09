@@ -2,7 +2,7 @@
 //!
 //! Needs dist/pages from scripts/sync-test-data.sh. Skipped when the data is missing unless
 //! QVP_REQUIRE_DATA is set.
-use qvp_core::{LayoutSpec, Page, Sideways, View, Zoom, ZoomMode};
+use qvp_core::{HitOptions, LayoutSpec, Page, Sideways, View, Zoom, ZoomMode};
 use std::path::{Path, PathBuf};
 
 fn page_path(n: u32) -> PathBuf {
@@ -189,7 +189,9 @@ fn a_commit_holds_the_word_under_the_fingers() {
     for step in 1..=p.zoom_steps(&s).len() as u32 {
         p.layout(&s);
         // the word the fingers are on, and where inside it they are: what the engine holds
-        let before = p.hit_test_view(focal.0, focal.1, &Default::default()).expect("a word in the middle");
+        let before = p
+            .hit_test_view(focal.0, focal.1, &HitOptions { prefer_exact: false, ..Default::default() })
+            .expect("a word in the middle");
         let (_, y0, _, y1) = p.word_bounds_view(before.word);
         let ny = ((focal.1 - y0) / (y1 - y0)).clamp(0.0, 1.0);
         let c = p.zoom_to_step(&s, Zoom::default(), step, View::default());

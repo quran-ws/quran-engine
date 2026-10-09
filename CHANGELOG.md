@@ -79,6 +79,29 @@ Nothing yet.
 ## [0.3.1] - 2026-10-05
 
 ### Added
+- Optional `@quran.ws/engine/data` describes immutable QVP asset sets for the default V4 and
+  QCF V1 1405H editions. It builds page, sidecar, atlas, Surah-name, bundle, manifest and latest
+  URLs without performing I/O, and rejects mixed, incomplete or polluted release manifests.
+- The QVP CDN publisher resolves data tags through an edition profile, safely extracts and
+  verifies the checksummed release, and publishes QCF V1 under its own immutable
+  `qvp/hafs-qcf-v1-1405h/` family without changing the default V4 line.
+- `scripts/install-qvp-data.py` verifies and atomically installs a pinned local edition archive,
+  reverifies an installed tree, or fetches a published edition. The registry keeps QCF V1 local
+  until its GitHub release exists and pins the real default V4 archive digest.
+- A deterministic `hafs-qcf-v1` 1405H data package, separate from the default V4 corpus. It
+  pins the qualified 604-page source, 60,739 source-qualified HQ word outlines, 16,693 verified
+  fallbacks—including 62 exact reviewed source candidates across 48 affected pairs—canonical
+  sidecars, page-calibrated HQ optical weight, atlas, Surah-name assets, converter, and every
+  archive payload.
+- QCF V1 preserves the exact `mark`/`waqf` identity of 4,221 independently positioned source
+  glyphs across all 604 QVP pages; 51 signs fused into whole-word glyphs remain explicitly
+  deferred. It also carries all 240 division boundaries, 199 printed rosettes, 41 deliberately
+  unprinted boundaries, and 15 sajdah marks. The schema-7 package pins source admission, both
+  ownership ledgers, and proof that all 88,472 baseline paths remain in order with only one
+  source-pinned restoration.
+- `qvp_word_group` / `page.wordGroup(i)`: recover all logical words represented by one
+  indivisible printed unit. Hits, layout, masking, highlighting and crop geometry use the
+  physical owner while text, search, citation and recitation retain every logical word.
 - `QvpPageCache.setCurrentPage(_:span:)` (iOS): a host showing several pages at once says how
   many, and the cache keeps the screen before, the screen itself and the screen after loaded
   and safe from eviction — six pages for a two-page spread — so a swipe never lands on a blank
