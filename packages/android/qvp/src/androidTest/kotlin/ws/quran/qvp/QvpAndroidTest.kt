@@ -2,6 +2,7 @@ package ws.quran.qvp
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -31,6 +32,8 @@ class QvpAndroidTest {
             assertEquals(page.nPaths * 8, page.table.size)
             assertEquals(page.nWords, page.targetWords(Target.page()).size)
             assertEquals(page.nWords, page.hitAreas().size)
+            assertArrayEquals(intArrayOf(0), page.wordGroup(0))
+            assertEquals(0, page.wordGroup(-1).size)
 
             val paths = page.buildPaths()
             assertEquals(page.nPaths, paths.size)

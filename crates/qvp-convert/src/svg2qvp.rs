@@ -314,7 +314,34 @@ impl<'a> Ctx<'a> {
                 t => self.warn(format!("word {word_key}: unexpected <{t}> inside word")),
             }
         }
-        let (first_path, n_paths, bbox) = self.push_paths(raws);
+        let (first_path, n_paths, bbox) = if let Some(owner_key) = n.attribute("data-shared-paths-with") {
+            if !raws.is_empty() {
+                return Err(format!("word {word_key}: shared-path alias contains paths"));
+            }
+            let owner = self
+                .page
+                .words
+                .last()
+                .ok_or_else(|| format!("word {word_key}: shared-path owner {owner_key} is not before the alias"))?;
+            let expected_owner = format!("{}:{}:{}", owner.surah, owner.ayah, owner.word);
+            if owner_key != expected_owner {
+                return Err(format!(
+                    "word {word_key}: shared-path owner {owner_key} is not the immediately preceding word {expected_owner}"
+                ));
+            }
+            if owner.line_index != line_index
+                || owner.ayah_index != ayah_index
+                || owner.surah != surah
+                || owner.ayah != ayah
+                || word != owner.word + 1
+                || owner.n_paths == 0
+            {
+                return Err(format!("word {word_key}: invalid shared-path owner {owner_key}"));
+            }
+            (owner.first_path, owner.n_paths, owner.bbox)
+        } else {
+            self.push_paths(raws)
+        };
         self.page.words.push(WordRec {
             surah,
             ayah,
@@ -573,7 +600,83 @@ impl<'a> Ctx<'a> {
 #[cfg(test)]
 mod tests {
     use super::convert;
-    use qvp_format::{decode, encode, DecoKind, PathKind, PF_EVENODD};
+    use qvp_format::{decode, encode, DecoKind, Family, Mark, PathKind, PF_EVENODD};
+
+    #[test]
+    fn waqf_semantics_survive_qvp_round_trip() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" data-page="2">
+          <g class="line" data-line="1">
+            <g class="ayah-fragment" data-ayah-key="2:5" data-fragment="1" data-ayah-fragments="1">
+              <g class="word" data-word-key="2:5:5" data-rasm-uthmani="رَّبِّهِمۡۖ">
+                <path data-kind="other" d="M10 20H60V60H10Z"/>
+                <path data-kind="mark" data-mark="waqf_lazim" data-mark-family="waqf" d="M70 10H80V20H70Z"/>
+              </g>
+            </g>
+          </g>
+        </svg>"#;
+        let converted = convert(svg).unwrap();
+        assert!(converted.report.warnings.is_empty(), "{:?}", converted.report.warnings);
+        let path = converted.page.paths.last().unwrap();
+        assert_eq!(path.kind, PathKind::Mark);
+        assert_eq!(path.mark, Mark::WaqfLazim);
+        assert_eq!(path.family, Family::Waqf);
+
+        let mut page = converted.page;
+        page.canonicalize_ops();
+        let decoded = decode(&encode(&page)).unwrap();
+        let path = decoded.paths.last().unwrap();
+        assert_eq!((path.kind, path.mark, path.family), (PathKind::Mark, Mark::WaqfLazim, Family::Waqf));
+    }
+
+    #[test]
+    fn shared_word_alias_reuses_one_path_range() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" data-page="254">
+          <g class="line" data-line="6">
+            <g class="ayah-fragment" data-ayah-key="13:37" data-fragment="1" data-ayah-fragments="1">
+              <g class="word" data-word-key="13:37:8" data-rasm-uthmani="بَعْدَ">
+                <path data-kind="other" d="M10 10H30V30H10Z"/>
+              </g>
+              <g class="word" data-word-key="13:37:9" data-rasm-uthmani="مَا" data-shared-paths-with="13:37:8"/>
+            </g>
+          </g>
+        </svg>"#;
+        let converted = convert(svg).unwrap();
+        assert!(converted.report.warnings.is_empty(), "{:?}", converted.report.warnings);
+        assert_eq!(converted.page.words.len(), 2);
+        assert_eq!(converted.page.paths.len(), 1);
+        assert_eq!(converted.words_text[0].word_key, "13:37:8");
+        assert_eq!(converted.words_text[1].word_key, "13:37:9");
+        assert_eq!(converted.page.words[0].first_path, converted.page.words[1].first_path);
+        assert_eq!(converted.page.words[0].n_paths, converted.page.words[1].n_paths);
+        assert_eq!(converted.page.words[0].bbox, converted.page.words[1].bbox);
+
+        let encoded = encode(&converted.page);
+        let decoded = decode(&encoded).unwrap();
+        assert_eq!(decoded.words.len(), 2);
+        assert_eq!(decoded.paths.len(), 1);
+        assert_eq!(decoded.words[0].first_path, decoded.words[1].first_path);
+
+        let roundtrip = crate::qvp2svg::to_svg(&decoded).unwrap();
+        assert_eq!(roundtrip.matches("<path").count(), 1);
+        assert!(roundtrip.contains("data-shared-paths-with=\"13:37:8\""));
+        let reconverted = convert(&roundtrip).unwrap();
+        assert_eq!(reconverted.page.words.len(), 2);
+        assert_eq!(reconverted.page.paths.len(), 1);
+        assert_eq!(reconverted.page.words[0].first_path, reconverted.page.words[1].first_path);
+    }
+
+    #[test]
+    fn shared_word_alias_rejects_paths_or_nonadjacent_owner() {
+        for svg in [
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g class="line" data-line="1"><g class="ayah-fragment" data-ayah-key="1:1"><g class="word" data-word-key="1:1:1"><path data-kind="other" d="M0 0H1V1Z"/></g><g class="word" data-word-key="1:1:2" data-shared-paths-with="1:1:1"><path data-kind="other" d="M0 0H1V1Z"/></g></g></g></svg>"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g class="line" data-line="1"><g class="ayah-fragment" data-ayah-key="1:1"><g class="word" data-word-key="1:1:1"><path data-kind="other" d="M0 0H1V1Z"/></g><g class="word" data-word-key="1:1:3" data-shared-paths-with="1:1:1"/></g></g></svg>"#,
+        ] {
+            match convert(svg) {
+                Err(error) => assert!(error.contains("shared-path"), "{error}"),
+                Ok(_) => panic!("accepted invalid shared-path alias"),
+            }
+        }
+    }
 
     #[test]
     fn surah_name_keeps_ornament_before_title() {

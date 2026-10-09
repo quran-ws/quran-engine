@@ -86,7 +86,7 @@ impl Reveal {
 impl Page {
     /// Mask a target. Everything in it is hidden; reveal progressively.
     pub fn mask(&mut self, target: &Target, mode: MaskMode) {
-        let words = self.target_words(target);
+        let words = self.printed_words(&self.target_words(target));
         self.mask.words = words.clone();
         self.mask.hidden = words.into_iter().collect();
         self.mask.mode = mode;
@@ -144,11 +144,13 @@ impl Page {
         done
     }
     pub fn unmask_word(&mut self, wi: u32) -> bool {
+        let wi = self.printed_word(wi).unwrap_or(wi);
         let r = self.mask.hidden.remove(&wi);
         self.state_dirty |= r;
         r
     }
     pub fn mask_word(&mut self, wi: u32) -> bool {
+        let wi = self.printed_word(wi).unwrap_or(wi);
         if !self.mask.words.contains(&wi) {
             self.mask.words.push(wi);
             self.mask.words.sort_unstable();
@@ -253,10 +255,18 @@ impl Page {
                 }
                 step_of_word.push(steps);
             } else {
-                step_of_word.push(i as u32);
+                let owner = self.word_owner[i] as usize;
+                if owner == i {
+                    step_of_word.push(steps);
+                    steps += 1;
+                } else {
+                    step_of_word.push(step_of_word[owner]);
+                }
             }
         }
-        steps = if by_ayah { steps + 1 } else { d.words.len() as u32 };
+        if by_ayah {
+            steps += 1;
+        }
         self.reveal = Some(Reveal {
             at: -1,
             lit: lit.max(1),

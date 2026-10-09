@@ -60,14 +60,29 @@ pub fn to_svg(p: &PageData) -> Result<String, Error> {
             let text = if w.text == NONE_U16 { "" } else { &p.strings[w.text as usize] };
             write!(
                 s,
-                "<g class=\"word\" data-word-key=\"{}:{}:{}\" data-rasm-uthmani=\"{}\">",
+                "<g class=\"word\" data-word-key=\"{}:{}:{}\" data-rasm-uthmani=\"{}\"",
                 w.surah, w.ayah, w.word, text
             )
             .unwrap();
-            for i in w.first_path..w.first_path + w.n_paths as u32 {
-                write_path(p, i as usize, &mut s)?;
+            let owner = wi.checked_sub(1).filter(|owner| {
+                let candidate = &p.words[*owner as usize];
+                *owner >= l.first_word
+                    && candidate.line_index == w.line_index
+                    && candidate.ayah_index == w.ayah_index
+                    && candidate.first_path == w.first_path
+                    && candidate.n_paths == w.n_paths
+                    && w.n_paths != 0
+            });
+            if let Some(owner) = owner {
+                let owner = &p.words[owner as usize];
+                write!(s, " data-shared-paths-with=\"{}:{}:{}\"/>", owner.surah, owner.ayah, owner.word).unwrap();
+            } else {
+                s.push('>');
+                for i in w.first_path..w.first_path + w.n_paths as u32 {
+                    write_path(p, i as usize, &mut s)?;
+                }
+                s.push_str("</g>");
             }
-            s.push_str("</g>");
         }
         if cur_ayah != u16::MAX {
             s.push_str("</g>");

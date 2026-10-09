@@ -35,7 +35,8 @@
     "./lite/passage": "./web/lite-passage.mjs",
     "./qvp.js": "./web/qvp.js",
     "./qvp_ffi.wasm": "./web/qvp_ffi.wasm",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./data": "./web/data.mjs"
   },
   "main": "./web/index.cjs",
   "module": "./web/index.mjs",
@@ -47,6 +48,8 @@
     "web/lite-passage.mjs",
     "web/lite-passage-geometry.mjs",
     "docs/LITE-PASSAGES.md",
+    "web/data.mjs",
+    "docs/QVP-DATA-SOURCES.md",
     "web/qvp.js",
     "web/qvp_ffi.wasm",
     "docs/API.md",
@@ -63,7 +66,7 @@
   "scripts": {
     "build:wasm": "cargo build -p qvp-ffi --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm",
     "prepack": "npm run build:wasm",
-    "test": "node web/smoke.mjs && node web/lite.test.mjs && node web/lite-passage.test.mjs",
-    "test:lite": "node web/lite.test.mjs && node web/lite-passage.test.mjs"
+    "test": "node web/smoke.mjs && node web/lite.test.mjs && node web/lite-passage.test.mjs && node web/data.test.mjs && node conformance/test_qcf_v1_semantics_audit.mjs",
+    "test:lite": "node web/lite.test.mjs && node web/lite-passage.test.mjs && node web/data.test.mjs && node conformance/test_qcf_v1_semantics_audit.mjs"
   }
 }
