@@ -325,7 +325,7 @@ QvpPassage* qvp_passage_load_basmalah(const QvpPage* const* pages, uint32_t n_pa
 void     qvp_passage_free(QvpPassage*);
 uint32_t qvp_passage_ayah_count(const QvpPassage*);
 void     qvp_passage_ayah_text(const QvpPassage*, uint32_t index, QvpStr* out);         /* the page's own word texts; empty outside the range */
-float    qvp_passage_line_spacing(const QvpPassage*);                                    /* the pages' printed line spacing, page units: scale = px per line / this */
+float    qvp_passage_line_spacing(const QvpPassage*);                                    /* the printed line spacing of the first word, page units: scale = px per line / this */
 int      qvp_passage_layout(QvpPassage*, const QvpPassageSpec*, QvpPassageLayout* out);   /* 0: the spec is out of range */
 uint32_t qvp_passage_rows(const QvpPassage*, QvpPassageRow* out, uint32_t cap);
 uint32_t qvp_passage_words(const QvpPassage*, QvpPassageWord* out, uint32_t cap);      /* the words shown, in reading order */

@@ -1,6 +1,6 @@
 // Lay out complete ayahs as a standalone passage without loading Wasm.
 import { buildPath } from './lite-path.mjs'
-import { bounds, clearance, median, preparePage } from './lite-passage-geometry.mjs'
+import { bounds, clearance, median, preparePage, resizedSlices } from './lite-passage-geometry.mjs'
 
 const canvas_paths = new WeakMap()
 
@@ -10,6 +10,7 @@ export class QvpPassage {
   #pages
   #gaps
   #open
+  #lineSpacing
   #layouts = new WeakMap()
 
   /** Select complete ayahs; pages come from decodeGeometry(), in any order. */
@@ -37,6 +38,10 @@ export class QvpPassage {
       for (const { page, word } of words) this.#atoms.push(preparePage(page).atoms[word.index])
       this.ayahs.push({ surah, ayah, text: words.map(({ word }) => word.text).join(' ') })
     }
+    // Pages 1 and 2 print their words smaller than the other pages. A word of a page that prints
+    // at another size than the passage's first word is resized to that word's size, so that
+    // every word of the passage is drawn at one size.
+    this.#lineSpacing = print_sizes(this.#atoms)
     // Two words drawn as one piece of calligraphy keep their printed distance, and a justified
     // row never opens it.
     const spacing = this.#atoms.map((atom, index) => {
@@ -77,7 +82,7 @@ export class QvpPassage {
     const drawings = []
     const placements = new Map()
     const result = { width, height: 0, scale, rows: [], words: [], ayahs: [] }
-    const pitch = median(atoms.map(atom => atom.pitch)) * lineSpacing
+    const pitch = this.#lineSpacing * lineSpacing
     // A justified gap opens by the air between words, never by the distance between boxes.
     const air = median(atoms.map(atom => atom.gap))
     let last_bottom = 0
@@ -109,9 +114,9 @@ export class QvpPassage {
         if (i) cursor -= this.#gaps[index] + (this.#open[index] ? share : 0)
         const dx = cursor - atom.box[2]
         const dy = baseline - atom.baseline
-        const placement = { dx, dy, row }
-        placements.set(atom, placement)
-        for (const path of atom.indices) drawings.push({ page: atom.page, path, dx, dy, kx: 1, row })
+        const size = atom.size
+        placements.set(atom.source, { dx, dy, row, size })
+        for (const path of atom.indices) drawings.push({ page: atom.page, path, dx, dy, kx: size, ky: size, row })
         const box = [atom.box[0] + dx, atom.box[1] + dy, atom.box[2] + dx, atom.box[3] + dy]
         row_bounds.push(box)
         result.words.push({ surah: atom.word.surah, ayah: atom.word.ayah, word: atom.word.word, row, box })
@@ -122,23 +127,26 @@ export class QvpPassage {
       last_bottom = baseline + descent
     }
     // A sajdah line belongs to the words underneath it, not necessarily to the ayah
-    // carrying the sign. Its stroke is repeated only when those words span rows.
+    // carrying the sign. Its stroke is repeated only when those words span rows. It has the size
+    // of its words.
     for (const page of this.#pages) for (const stroke of preparePage(page).strokes) {
       const spans = new Map()
       for (const index of stroke.words) {
         const atom = preparePage(page).atoms[index]
         const placement = placements.get(atom)
         if (!placement) continue
-        const box = [atom.word.box[0] + placement.dx, atom.word.box[1] + placement.dy,
-          atom.word.box[2] + placement.dx, atom.word.box[3] + placement.dy]
+        const { dx, dy, size } = placement
+        const box = [atom.word.box[0] * size + dx, atom.word.box[1] * size + dy,
+          atom.word.box[2] * size + dx, atom.word.box[3] * size + dy]
         const old = spans.get(placement.row)
-        spans.set(placement.row, { box: bounds([old?.box, box]), dy: placement.dy })
+        spans.set(placement.row, { box: bounds([old?.box, box]), dy, size })
       }
-      for (const [row, { box, dy }] of spans) {
+      for (const [row, { box, dy, size }] of spans) {
         const kx = (box[2] - box[0]) / (stroke.box[2] - stroke.box[0])
         const dx = box[0] - kx * stroke.box[0]
-        drawings.push({ page, path: stroke.path, dx, dy, kx, row })
-        result.rows[row].box = bounds([result.rows[row].box, [box[0], stroke.box[1] + dy, box[2], stroke.box[3] + dy]])
+        drawings.push({ page, path: stroke.path, dx, dy, kx, ky: size, row })
+        result.rows[row].box = bounds([result.rows[row].box,
+          [box[0], stroke.box[1] * size + dy, box[2], stroke.box[3] * size + dy]])
       }
     }
     // Include the strokes in row spacing too. Moving whole rows cannot reshape ink.
@@ -184,15 +192,45 @@ export class QvpPassage {
     const scale = layout.scale * pixelRatio
     ctx.save()
     ctx.fillStyle = ink
-    for (const { page, path, dx, dy, kx } of drawings) {
+    for (const { page, path, dx, dy, kx, ky } of drawings) {
       let paths = canvas_paths.get(page)
       if (!paths) canvas_paths.set(page, paths = new Map())
       if (!paths.has(path)) paths.set(path, buildPath(page.paths[path]))
-      ctx.setTransform(scale * kx, 0, 0, scale, dx * scale, dy * scale)
+      ctx.setTransform(scale * kx, 0, 0, scale * ky, dx * scale, dy * scale)
       ctx.fill(paths.get(path), page.paths[path].rule)
     }
     ctx.restore()
   }
+}
+
+// Resize every word printed at another size than the passage's first word to that word's size,
+// and return the passage's line spacing: the median over the words printed at the first word's
+// size. Two pages print at one size when their line spacings are less than 1.15 times apart.
+// The first page that prints at a size stands for that size. Each word records its prepared atom
+// as its source, and how much it is resized.
+function print_sizes(atoms) {
+  const sizes = []
+  const size_of = atoms.map(atom => {
+    let i = sizes.findIndex(({ first }) => Math.max(first, atom.pitch) < 1.15 * Math.min(first, atom.pitch))
+    if (i < 0) i = sizes.push({ first: atom.pitch, pitches: [] }) - 1
+    sizes[i].pitches.push(atom.pitch)
+    return i
+  })
+  const spacings = sizes.map(({ pitches }) => median(pitches))
+  atoms.forEach((atom, i) => {
+    atoms[i] = size_of[i] ? resized(atom, spacings[0] / spacings[size_of[i]]) : { ...atom, source: atom, size: 1 }
+  })
+  return spacings.length ? spacings[0] : 0
+}
+
+// A prepared atom resized by k from the page's origin. Its paths stay as printed; their
+// placement resizes them.
+function resized(atom, k) {
+  const scaled = box => box.map(v => v * k)
+  return { ...atom, source: atom, size: k, box: scaled(atom.box), baseline: atom.baseline * k,
+    pitch: atom.pitch * k, gap: atom.gap * k,
+    slices: resizedSlices(atom.slices, k), wordSlices: resizedSlices(atom.wordSlices, k),
+    decorations: atom.decorations.map(d => ({ ...d, box: scaled(d.box), slices: resizedSlices(d.slices, k) })) }
 }
 
 // Balance a bounded passage without stretching its gaps. The last row may be short.

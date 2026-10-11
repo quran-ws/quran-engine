@@ -5,7 +5,9 @@
 //! their original outlines, dots and reading signs; the layout only moves them onto rows. Each
 //! word carries the signs that go with it: an ayah medallion and a sajdah sign go with the word
 //! that closes their ayah, and a division mark goes with the word that it opens. A sajdah line
-//! goes with the words under it, and it is stretched over each row that holds them.
+//! goes with the words under it, and it is stretched over each row that holds them. Pages 1 and 2
+//! print their words smaller than the other pages; a passage draws every word at the size of its
+//! first word.
 //!
 //! This is the reference for `web/lite-passage.mjs`. The two measure ink the same way: in bands
 //! of one fixed height, so that one row can hold words from two pages, and in `f64`, so that the
@@ -39,6 +41,10 @@ const SAJDAH_LINE_REACH: f64 = 2.0;
 const ROW_AIR: f64 = 1.0;
 /// How far a row may overrun its width before it counts as too wide, in page units.
 const OVERRUN: f64 = 0.001;
+/// How far apart, as a ratio, the printed line spacings of two pages may be when the pages print
+/// their words at one size. The spacing measured on the pages of one size differs by up to 8%,
+/// and pages 1 and 2 print their words about 20% smaller than the other pages.
+const SAME_PRINT_SIZE: f64 = 1.15;
 /// The widest layout, the largest scale and the largest line spacing a passage accepts.
 const MAX_WIDTH: f32 = 32_768.0;
 const MAX_SCALE: f32 = 32.0;
@@ -314,11 +320,13 @@ struct Stroke {
     rect: Rect,
 }
 
-/// A word of a passage: the page it is from, and its measurements.
+/// A word of a passage: the page it is from, its measurements, and how much they are resized
+/// from the page's units, so that the word has the size of the passage's first word.
 #[derive(Clone, Debug)]
 struct PassageAtom {
     page: u16,
     atom: Atom,
+    size: f64,
 }
 
 /// What a page knows about passages, measured once.
@@ -388,12 +396,21 @@ impl Passage {
             }
             let mut text = Vec::with_capacity(words.len());
             for &(pi, wi) in &words {
-                atoms
-                    .push(PassageAtom { page: pages[pi].page_number(), atom: prepared[pi].atoms[wi as usize].clone() });
+                atoms.push(PassageAtom {
+                    page: pages[pi].page_number(),
+                    atom: prepared[pi].atoms[wi as usize].clone(),
+                    size: 1.0,
+                });
                 text.push(pages[pi].word_text(wi));
             }
             ayahs.push((surah, ayah, text.join(" ")));
         }
+
+        // Pages 1 and 2 print their words smaller than the other pages. A word of a page that
+        // prints at another size than the passage's first word is resized to that word's size,
+        // so that every word of the passage is drawn at one size, and the passage's line spacing
+        // is the line spacing of that size.
+        let line_spacing = print_sizes(&mut atoms);
 
         // Two words the print draws as one piece of calligraphy keep their printed distance, and
         // a justified row never opens it; any other two are set the usual gap apart, measured on
@@ -426,7 +443,6 @@ impl Passage {
             .zip(&prepared)
             .flat_map(|(p, prep)| prep.strokes.iter().map(|s| (p.page_number(), s.clone())))
             .collect();
-        let line_spacing = median(atoms.iter().map(|a| a.atom.pitch).collect(), 0.0);
         Ok(Passage { atoms, gaps, open, strokes, ayahs, line_spacing, layout: None })
     }
 
@@ -500,7 +516,7 @@ impl Passage {
             gap: pitch / 4.0,
         };
         Ok(Passage {
-            atoms: vec![PassageAtom { page: page.page_number(), atom }],
+            atoms: vec![PassageAtom { page: page.page_number(), atom, size: 1.0 }],
             gaps: vec![0.0],
             open: vec![false],
             strokes: Vec::new(),
@@ -520,8 +536,9 @@ impl Passage {
         self.atoms.iter().filter(|a| a.atom.word != NO_WORD).count()
     }
 
-    /// Get the printed line spacing of the passage's pages, in page units: the median over its
-    /// words. A host that sizes a passage by its printed line divides by it to get a scale.
+    /// Get the printed line spacing of the passage, in page units: the median over the words
+    /// printed at the size of its first word. The passage draws all its words at that size. A
+    /// host that sizes a passage by its printed line divides by it to get a scale.
     pub fn line_spacing(&self) -> f32 {
         self.line_spacing as f32
     }
@@ -604,14 +621,15 @@ impl Passage {
             }
         }
 
-        let pitch = median(atoms.iter().map(|a| a.pitch).collect(), 0.0) * spec.line_spacing as f64;
+        let pitch = self.line_spacing * spec.line_spacing as f64;
         // What a justified gap may open by is measured on the air between words, as the page
         // reader's justified rows are, and never on the distance between their boxes.
         let air = median(atoms.iter().map(|a| a.gap).collect(), 0.0);
         let mut out_rows: Vec<(Rect, f64)> = Vec::with_capacity(rows.len());
         let mut words: Vec<(usize, u32, Rect)> = Vec::new();
         let mut draws: Vec<(u16, u32, u32)> = Vec::new();
-        let mut placements: Vec<(f64, f64, f64, u32)> = Vec::new();
+        // Each placement: dx, dy, kx, ky, and its row.
+        let mut placements: Vec<(f64, f64, f64, f64, u32)> = Vec::new();
         let mut placed: HashMap<(u16, u32), (u32, f64, f64, Rect)> = HashMap::new();
         let mut ellipsis: Option<Rect> = None;
         let (mut last_baseline, mut last_bottom) = (0.0, 0.0);
@@ -661,7 +679,8 @@ impl Passage {
                 }
                 let (dx, dy) = (cursor - atom.rect[2], baseline - atom.baseline);
                 let placement = placements.len() as u32;
-                placements.push((dx, dy, 1.0, r as u32));
+                let size = self.atoms[i].size;
+                placements.push((dx, dy, size, size, r as u32));
                 let page = self.atoms[i].page;
                 draws.extend(atom.paths.iter().map(|&p| (page, p, placement)));
                 let rect = moved(atom.rect, dx, dy);
@@ -682,7 +701,8 @@ impl Passage {
                     cursor -= atoms[owner].gap;
                     let (dx, dy) = (cursor - sign.rect[2], baseline - atoms[owner].baseline);
                     let placement = placements.len() as u32;
-                    placements.push((dx, dy, 1.0, r as u32));
+                    let size = self.atoms[owner].size;
+                    placements.push((dx, dy, size, size, r as u32));
                     let page = self.atoms[owner].page;
                     draws.extend(sign.paths.iter().map(|&p| (page, p, placement)));
                     boxes.push(moved(sign.rect, dx, dy));
@@ -695,8 +715,9 @@ impl Passage {
 
         // A sajdah line belongs to the words under it, which can be in an earlier ayah than the
         // sign. When those words wrap, the stroke is drawn on each row that holds them, and only
-        // the stroke is stretched.
+        // the stroke is stretched. It has the size of its words.
         for (page, stroke) in &self.strokes {
+            let Some(size) = self.atoms.iter().find(|a| a.page == *page).map(|a| a.size) else { continue };
             let mut spans: Vec<(u32, Rect, f64)> = Vec::new();
             for &w in &stroke.words {
                 let Some(&(row, dx, dy, word_rect)) = placed.get(&(*page, w)) else { continue };
@@ -713,10 +734,10 @@ impl Passage {
                 let kx = (rect[2] - rect[0]) / (stroke.rect[2] - stroke.rect[0]);
                 let dx = rect[0] - kx * stroke.rect[0];
                 let placement = placements.len() as u32;
-                placements.push((dx, dy, kx, row));
+                placements.push((dx, dy, kx, size, row));
                 draws.push((*page, stroke.path, placement));
                 let r = &mut out_rows[row as usize].0;
-                *r = union(*r, [rect[0], stroke.rect[1] + dy, rect[2], stroke.rect[3] + dy]);
+                *r = union(*r, [rect[0], size * stroke.rect[1] + dy, rect[2], size * stroke.rect[3] + dy]);
             }
         }
 
@@ -736,7 +757,7 @@ impl Passage {
                 word.2[1] += needed;
                 word.2[3] += needed;
             }
-            for placement in placements.iter_mut().filter(|p| p.3 as usize >= r) {
+            for placement in placements.iter_mut().filter(|p| p.4 as usize >= r) {
                 placement.1 += needed;
             }
         }
@@ -803,11 +824,11 @@ impl Passage {
             draws: draws.into_iter().map(|(page, path, placement)| PassageDraw { page, path, placement }).collect(),
             placements: placements
                 .into_iter()
-                .map(|(dx, dy, kx, _)| Placement {
+                .map(|(dx, dy, kx, ky, _)| Placement {
                     dx: (dx + padding / scale) as f32,
                     dy: (dy + offset) as f32,
                     kx: kx as f32,
-                    ky: 1.0,
+                    ky: ky as f32,
                 })
                 .collect(),
             is_truncated,
@@ -1079,6 +1100,88 @@ impl Silhouette<'_> {
 }
 
 // ───────────────────────────── helpers ─────────────────────────────
+
+/// Resize every word that is printed at another size than the passage's first word to that
+/// word's size, and get the passage's line spacing: the median over the words printed at the
+/// first word's size. Two pages print at one size when their line spacings are less than
+/// [`SAME_PRINT_SIZE`] apart. The first page that prints at a size stands for that size.
+fn print_sizes(atoms: &mut [PassageAtom]) -> f64 {
+    // Each size: the line spacing of the first page that prints at it, and of each of its words.
+    let mut sizes: Vec<(f64, Vec<f64>)> = Vec::new();
+    let mut size_of = Vec::with_capacity(atoms.len());
+    for a in atoms.iter() {
+        let pitch = a.atom.pitch;
+        let i = match sizes.iter().position(|s| same_print_size(s.0, pitch)) {
+            Some(i) => i,
+            None => {
+                sizes.push((pitch, Vec::new()));
+                sizes.len() - 1
+            }
+        };
+        sizes[i].1.push(pitch);
+        size_of.push(i);
+    }
+    let spacings: Vec<f64> = sizes.into_iter().map(|(_, pitches)| median(pitches, 0.0)).collect();
+    let Some(&line_spacing) = spacings.first() else { return 0.0 };
+    for (a, i) in atoms.iter_mut().zip(size_of) {
+        if i > 0 {
+            a.size = line_spacing / spacings[i];
+            a.atom = a.atom.resized(a.size);
+        }
+    }
+    line_spacing
+}
+
+/// Whether two pages with these line spacings print their words at one size.
+fn same_print_size(a: f64, b: f64) -> bool {
+    a.max(b) < SAME_PRINT_SIZE * a.min(b)
+}
+
+impl Atom {
+    /// The atom resized by `k` from the page's origin: its boxes, its bands, its baseline, its
+    /// page's line spacing and its gap. Its paths stay as printed; their placement resizes them.
+    fn resized(&self, k: f64) -> Atom {
+        let rect = |r: Rect| r.map(|v| v * k);
+        Atom {
+            word: self.word,
+            line: self.line,
+            surah: self.surah,
+            ayah: self.ayah,
+            number: self.number,
+            paths: self.paths.clone(),
+            signs: self
+                .signs
+                .iter()
+                .map(|s| Sign {
+                    kind: s.kind,
+                    paths: s.paths.clone(),
+                    rect: rect(s.rect),
+                    bands: resized_bands(&s.bands, k),
+                })
+                .collect(),
+            rect: rect(self.rect),
+            word_rect: rect(self.word_rect),
+            bands: resized_bands(&self.bands, k),
+            word_bands: resized_bands(&self.word_bands, k),
+            baseline: self.baseline * k,
+            pitch: self.pitch * k,
+            gap: self.gap * k,
+        }
+    }
+}
+
+/// Resize bands by `k` from the baseline and the page's left edge. A resized band goes into every
+/// band of the shared height that it reaches, so ink is never measured narrower than it is.
+fn resized_bands(bands: &[Band], k: f64) -> Vec<Band> {
+    let mut resized: Vec<Band> = Vec::new();
+    for &(band, x0, x1) in bands {
+        let first = (band as f64 * k).floor() as i32;
+        let last = (((band as f64 + 1.0) * k).ceil() as i32 - 1).max(first);
+        let spans: Vec<Band> = (first..=last).map(|b| (b, x0 * k, x1 * k)).collect();
+        merge(&mut resized, &spans);
+    }
+    resized
+}
 
 /// Break a passage into rows of `width` without stretching its gaps: each row costs the square
 /// of its slack, plus one, and the last row's slack is free, so the rows come out balanced.

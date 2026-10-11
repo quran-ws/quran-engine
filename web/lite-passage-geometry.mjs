@@ -94,6 +94,18 @@ export function clearance(a, b) {
   return Number.isFinite(air) ? air : null
 }
 
+// Resize slices by k from the baseline and the page's left edge. A resized slice goes into every
+// slice of the shared height that it reaches, so ink is never measured narrower than it is.
+export function resizedSlices(slices, k) {
+  const spans = []
+  for (const [row, left, right] of slices) {
+    const first = Math.floor(row * k)
+    const last = Math.max(first, Math.ceil((row + 1) * k) - 1)
+    for (let r = first; r <= last; r++) spans.push([r, left * k, right * k])
+  }
+  return merged_slices([spans])
+}
+
 function merged_slices(groups) {
   const rows = new Map()
   for (const slices of groups) for (const [row, left, right] of slices) {

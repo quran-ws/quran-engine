@@ -138,6 +138,16 @@ if (!has_data) {
   const cross_layout = across.layout({ width: 366, scale: 0.9 })
   assert.equal(cross_layout.words.length, 19)
   bounded(cross_layout)
+  // Page 2 prints its words smaller than page 3. Every word of a passage has the size of its
+  // first word: a word of page 3 after a word of page 2 is resized by their pages' line spacings.
+  const [page_two, page_three] = cross_pages.map(page => preparePage(page)).sort((a, b) => a.pitch - b.pitch)
+  const heights = (from, to) => new QvpPassage(cross_pages, { surah: 2, from, to }).layout({ width: 366, scale: 0.9 })
+    .words.filter(word => word.ayah >= 6).map(word => word.box[3] - word.box[1])
+  for (let to = 6; to <= 12; to++) {
+    const alone = heights(6, to)
+    heights(1, to).forEach((height, i) => assert.ok(
+      Math.abs(height - alone[i] * page_two.pitch / page_three.pitch) < 0.001, `2:1-${to}: word ${i}`))
+  }
   console.log(`ok  604 pages at three widths; prepare + layouts median ${durations[302].toFixed(1)}ms, p95 ${durations[573].toFixed(1)}ms`)
 
   // The engine's passage layout is the reference. Replay its scenarios that this module

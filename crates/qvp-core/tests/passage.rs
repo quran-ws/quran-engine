@@ -1,7 +1,8 @@
 //! Passages on the real page data: every ayah of every page, at three widths and cut to one row.
 //!
 //! Every word is shown, every medallion moves with the word that closes its ayah, and every box
-//! lies inside its layout. A range across two pages forms one passage. A justified passage
+//! lies inside its layout. A range across two pages forms one passage, with every word at one
+//! size when the two pages print at two sizes. A justified passage
 //! reaches both edges and centres what it cannot fill, and a surah's basmalah is a passage of
 //! its own.
 //!
@@ -110,6 +111,41 @@ fn a_range_across_two_pages_is_one_passage() {
     assert_eq!(l.ayahs.len(), 2);
     assert!(l.words.iter().any(|w| w.page == 2) && l.words.iter().any(|w| w.page == 3));
     bounded(&l, "2:5-6");
+}
+
+#[test]
+fn a_passage_draws_every_word_at_one_size() {
+    // Page 2 prints its words about 20% smaller than page 3. A passage that runs from one into
+    // the other draws all its words at the size of its first word, and keeps the line spacing of
+    // that size however many ayahs it holds.
+    let (Some(two), Some(three)) = (load(2), load(3)) else { return };
+    let spacing = |page: u16| if page == 2 { two.line_spacing() } else { three.line_spacing() };
+    // Each word's height, in pixels, when a host sizes the passage by its printed line.
+    let heights = |from: u16, to: u16| -> Vec<((u16, u16), f32)> {
+        let mut passage = Passage::load(&[&three, &two], 2, from, to).unwrap();
+        let scale = 20.0 / passage.line_spacing();
+        let l = passage.layout(&PassageSpec { width: 0.0, scale, padding: 0.0, ..Default::default() }).unwrap();
+        l.words.iter().map(|w| ((w.ayah, w.word), w.y1 - w.y0)).collect()
+    };
+    let alone: Vec<((u16, u16), f32)> = heights(1, 5).into_iter().chain(heights(6, 12)).collect();
+    for to in 5..=12 {
+        let mut passage = Passage::load(&[&three, &two], 2, 1, to).unwrap();
+        assert_eq!(passage.line_spacing(), two.line_spacing(), "2:1-{to}");
+        let line_spacing = passage.line_spacing();
+        let l = passage.layout(&PassageSpec { width: 366.0, scale: 0.9, ..Default::default() }).unwrap().clone();
+        bounded(&l, &format!("2:1-{to}"));
+        for d in &l.draws {
+            let p = l.placements[d.placement as usize];
+            assert_eq!(p.kx, p.ky, "2:1-{to}: only a sajdah line is stretched");
+            let size = p.ky * spacing(d.page);
+            assert!((size - line_spacing).abs() < 0.001, "2:1-{to}: a word of page {} at {size}", d.page);
+        }
+        // Sized by the printed line, every word is as big as it is in a passage of its page alone.
+        for (word, height) in heights(1, to) {
+            let (_, expected) = alone.iter().find(|(w, _)| *w == word).unwrap();
+            assert!((height - expected).abs() < 0.01, "2:1-{to}: {word:?} is {height}, alone {expected}");
+        }
+    }
 }
 
 #[test]

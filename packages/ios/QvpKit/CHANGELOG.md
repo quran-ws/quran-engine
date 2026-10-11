@@ -4,7 +4,15 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+- A passage that runs from page 2 into page 3 draws every word at one size. Page 2 prints its
+  words about 20% smaller than page 3, and the passage drew each word at its own page's size, so
+  its words came out at two sizes. Its line spacing, the median over its words, also jumped by
+  about 20% when the words of page 3 became the majority. Now every word has the size of the
+  passage's first word: a word of a page printed at another size is resized (its placement has
+  `kx = ky ≠ 1`), and the line spacing is that of the first word's size, however many ayahs
+  follow. A passage of pages that print at one size lays out as before. `web/lite-passage.mjs`
+  follows the engine, and its `draw` now applies `ky`.
 
 ## [0.6.0] - 2026-10-08
 

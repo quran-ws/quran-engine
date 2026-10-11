@@ -119,7 +119,8 @@ public final class QvpPassage {
 
     /// The ayahs in reading order.
     public let ayahs: [QvpPassageText]
-    /// The printed line spacing of the passage's pages, in page units.
+    /// The printed line spacing of the passage's first word, in page units. Every word of the
+    /// passage has that size.
     public let lineSpacing: Float
     /// The last layout.
     public private(set) var currentLayout: QvpPassageLayout?

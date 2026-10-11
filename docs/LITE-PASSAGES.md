@@ -26,6 +26,8 @@ passage.draw(canvas.getContext('2d'), layout, { pixelRatio: ratio, ink: '#231f20
 
 `new QvpPassage(pages, {surah, from, to = from})` accepts the geometry returned by `decodeGeometry()`, not `QvpLitePage`. Supply every page containing the requested range. Pages may arrive in any order. Missing ayahs, incomplete fragments, duplicate pages and passages over 4,096 words throw rather than show partial Quran text. The app decides which pages to fetch and how many ayahs to show; the module does not fetch anything. `passage.ayahs` contains `{surah, ayah, text}` in reading order, with the text from the page's own word records.
 
+Pages 1 and 2 print their words smaller than the other pages. A passage draws every word at the size of its first word: when a range runs from page 2 into page 3, the words of page 3 are resized to the size of page 2.
+
 `passage.layout({width, scale = 1, lineSpacing = 1, padding = 2, align = 'right', maxStretch = 2})` returns:
 
 - `width`, `height`, `scale`: CSS-pixel canvas dimensions and the actual scale from page units. Scale shrinks only if a whole word and its attached signs would exceed the width.

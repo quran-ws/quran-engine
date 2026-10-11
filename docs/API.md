@@ -641,11 +641,15 @@ let basmalah = try QvpPassage(basmalahOf: 2, pages: [page])          // a surah'
 - `scale` is layout points per page unit. It shrinks only when one word and its signs are wider
   than the rows. To size a passage by its printed line, divide by `passage.lineSpacing`: pages 1
   and 2 print smaller lines than the rest.
+- A passage draws every word at the size of its first word. When a passage runs from page 2
+  into page 3, the words of page 3 are resized to the size of page 2, and `lineSpacing` is the
+  line spacing of page 2 however many ayahs follow.
 - `maxRows` cuts the passage: the rows fill in turn, and the last one ends after a whole word
   with room for the host's ellipsis (`ellipsisWidth`, returned as `layout.ellipsis`). With
   `keepAyahMark`, the medallion of the last ayah follows the ellipsis.
 - A point of a path draws at `scale · (kx · x + dx), scale · (ky · y + dy)`. Only a sajdah line
-  is stretched (`kx ≠ 1`). Pick each path's ink from its page's `pathKind`.
+  is stretched (`kx ≠ ky`). A resized word has `kx = ky ≠ 1`. Pick each path's ink from its
+  page's `pathKind`.
 - A missing or incomplete ayah, a repeated page or more than 4,096 words fail the load.
 - A surah's basmalah loads from the page that prints it (`qvp_passage_load_basmalah`) and lays
   out like any passage, on one row; it has no ayahs and no words. Its `lineSpacing` is its
@@ -781,7 +785,7 @@ says which wrapper binds which.
 | passage | `qvp_passage_free` | iOS `passage.close()` | Free the passage. |
 | passage | `qvp_passage_ayah_count` | iOS `passage.ayahs.count` | Return how many ayahs the passage has. |
 | passage | `qvp_passage_ayah_text` | iOS `passage.ayahs[i].text` | Return an ayah's text, from the page's own word records. |
-| passage | `qvp_passage_line_spacing` | iOS `passage.lineSpacing` | Return the printed line spacing of the passage's pages, in page units. |
+| passage | `qvp_passage_line_spacing` | iOS `passage.lineSpacing` | Return the printed line spacing of the passage's first word, in page units. Every word of the passage has that size. |
 | passage | `qvp_passage_layout` | iOS `passage.layout(spec)` | Lay the passage out at a width and keep the layout; 0 when the spec is out of range. |
 | passage | `qvp_passage_rows` | iOS `layout.rows` | Return the rows of the last layout. |
 | passage | `qvp_passage_words` | iOS `layout.words` | Return the words that the last layout shows, with the box of each and its signs. |
