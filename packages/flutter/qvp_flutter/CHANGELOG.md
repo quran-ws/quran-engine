@@ -1,3 +1,9 @@
+## 0.6.1
+
+- Engine 0.6.1: a passage that runs from page 2 into page 3 draws every word at one size
+  in QvpKit and `web/lite-passage.mjs`; this package binds passages next (issue #102). Nothing
+  changes here.
+
 ## 0.6.0
 
 - Engine 0.6.0: justified passages and a surah's basmalah as a passage reach QvpKit first;

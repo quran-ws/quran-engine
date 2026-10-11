@@ -6,6 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.6.1] - 2026-10-12
+
 ### Fixed
 - A passage that runs from page 2 into page 3 draws every word at one size. Page 2 prints its
   words about 20% smaller than page 3, and the passage drew each word at its own page's size, so
@@ -550,7 +554,10 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/quran-ws/quran-engine/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/quran-ws/quran-engine/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/quran-ws/quran-engine/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/quran-ws/quran-engine/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/quran-ws/quran-engine/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/quran-ws/quran-engine/compare/v0.2.2...v0.3.0

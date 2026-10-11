@@ -4,6 +4,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.6.1] - 2026-10-12
+
 ### Fixed
 - A passage that runs from page 2 into page 3 draws every word at one size. Page 2 prints its
   words about 20% smaller than page 3, and the passage drew each word at its own page's size, so
