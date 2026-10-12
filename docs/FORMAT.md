@@ -91,6 +91,12 @@ The juz, hizb and nisf numbers derive from the `rubu_al_hizb` number:
 | text, `rasm_imlai`, qpc, rasm, search | five `opt` string indices; only the first is set in production data, the rest come from the words sidecar |
 | path count | varint |
 
+Ordinarily, word path ranges are disjoint. Consecutive logical words in the same ayah fragment
+may name one indivisible printed unit by repeating the exact same nonempty path range. Their
+word numbers must remain consecutive. Partial overlap, nonconsecutive aliases, and aliases
+across ayahs or lines are corrupt. This needs no format-version change because `first path` is
+already a signed delta; readers derive the printed unit from the repeated range.
+
 **Paths**, stored column by column so that like bytes sit together:
 
 | column | coding |

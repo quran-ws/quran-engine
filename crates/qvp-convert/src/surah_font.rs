@@ -1,7 +1,8 @@
 //! A compact OpenType/CFF webfont for the reusable surah-name artwork.
 //!
-//! CFF keeps the source cubic Béziers. A TrueType `glyf` table would require converting
-//! them to quadratics, which would make the generated font an approximation.
+//! CFF keeps source cubics directly and converts source quadratics to their mathematically
+//! equivalent cubics. Type 2's signed 16.16 operands retain fractional control points to
+//! substantially less than one font unit.
 use crate::surah_names::{TitleAsset, TitlePath};
 use kurbo::{flatten, BezPath, PathEl, Point, Shape};
 use qvp_format::{Cmd, PF_EVENODD};
@@ -9,6 +10,7 @@ use qvp_format::{Cmd, PF_EVENODD};
 const FAMILY: &str = "Quran Surah Names";
 const POSTSCRIPT_NAME: &str = "QuranSurahNames-Regular";
 const UNITS_PER_EM: u16 = 5000;
+const FIXED_ONE: i64 = 1 << 16;
 
 pub(crate) fn build(titles: &[&TitleAsset]) -> Result<Vec<u8>, String> {
     if titles.len() != 114 {
@@ -76,23 +78,74 @@ fn validate(otf: &[u8], titles: &[&TitleAsset]) -> Result<(), String> {
         if face.outline_glyph(glyph, &mut outline).is_none() {
             return Err(format!("font has no outline for surah {}", title.surah));
         }
-        let expected: Vec<_> = title
-            .paths
-            .iter()
-            .flat_map(|path| font_commands(title, path))
-            .filter_map(|command| match command {
-                Cmd::MoveTo(x, y) => Some(OutlineCommand::Move(x, y)),
-                Cmd::LineTo(x, y) => Some(OutlineCommand::Line(x, y)),
-                Cmd::QuadTo(x1, y1, x, y) => Some(OutlineCommand::Quad(x1, y1, x, y)),
-                Cmd::CubicTo(x1, y1, x2, y2, x, y) => Some(OutlineCommand::Cubic(x1, y1, x2, y2, x, y)),
-                Cmd::Close => None,
-            })
-            .collect();
+        let expected = expected_outline(title);
         if outline.0 != expected {
             return Err(format!("font changed the outline geometry for surah {}", title.surah));
         }
     }
     Ok(())
+}
+
+fn fixed(value: i32) -> i64 {
+    i64::from(value) * FIXED_ONE
+}
+
+fn divide_round(value: i64, divisor: i64) -> i64 {
+    if value >= 0 {
+        (value + divisor / 2) / divisor
+    } else {
+        -((-value + divisor / 2) / divisor)
+    }
+}
+
+fn quadratic_controls(start: i64, control: i32, end: i32) -> (i64, i64) {
+    let control = fixed(control);
+    let end = fixed(end);
+    (divide_round(start + 2 * control, 3), divide_round(end + 2 * control, 3))
+}
+
+fn fixed_round(value: i64) -> i32 {
+    divide_round(value, FIXED_ONE) as i32
+}
+
+fn expected_outline(title: &TitleAsset) -> Vec<OutlineCommand> {
+    let mut out = Vec::new();
+    let (mut current_x, mut current_y) = (0i64, 0i64);
+    for command in title.paths.iter().flat_map(|path| font_commands(title, path)) {
+        match command {
+            Cmd::MoveTo(x, y) => {
+                current_x = fixed(x);
+                current_y = fixed(y);
+                out.push(OutlineCommand::Move(x, y));
+            }
+            Cmd::LineTo(x, y) => {
+                current_x = fixed(x);
+                current_y = fixed(y);
+                out.push(OutlineCommand::Line(x, y));
+            }
+            Cmd::QuadTo(x1, y1, x, y) => {
+                let (c1x, c2x) = quadratic_controls(current_x, x1, x);
+                let (c1y, c2y) = quadratic_controls(current_y, y1, y);
+                out.push(OutlineCommand::Cubic(
+                    fixed_round(c1x),
+                    fixed_round(c1y),
+                    fixed_round(c2x),
+                    fixed_round(c2y),
+                    x,
+                    y,
+                ));
+                current_x = fixed(x);
+                current_y = fixed(y);
+            }
+            Cmd::CubicTo(x1, y1, x2, y2, x, y) => {
+                out.push(OutlineCommand::Cubic(x1, y1, x2, y2, x, y));
+                current_x = fixed(x);
+                current_y = fixed(y);
+            }
+            Cmd::Close => {}
+        }
+    }
+    out
 }
 
 fn otf(titles: &[&TitleAsset]) -> Result<Vec<u8>, String> {
@@ -150,6 +203,7 @@ fn cff(titles: &[&TitleAsset], max_width: i32, max_height: i32) -> Result<Vec<u8
         let top_index = index(&[top.clone()])?;
         let charset_offset = header.len() + names.len() + top_index.len() + strings.len() + global_subrs.len();
         let charstrings_offset = charset_offset + charset.len();
+        let private_offset = charstrings_offset + charstrings.len();
         let mut next = Vec::new();
         dict_int(full_sid, &mut next);
         next.push(2); // FullName
@@ -172,6 +226,11 @@ fn cff(titles: &[&TitleAsset], max_width: i32, max_height: i32) -> Result<Vec<u8
         next.push(15); // charset
         dict_int(charstrings_offset as i32, &mut next);
         next.push(17); // CharStrings
+                       // An explicitly empty Private DICT keeps the compact font standards-compliant and
+                       // readable by both ttf-parser and FontTools. Its offset is the end of CharStrings.
+        dict_int(0, &mut next);
+        dict_int(private_offset as i32, &mut next);
+        next.push(18); // Private: size, offset
         if next == top {
             break;
         }
@@ -202,7 +261,7 @@ fn notdef() -> Vec<u8> {
 fn charstring(title: &TitleAsset) -> Result<Vec<u8>, String> {
     let width = title.bounds.x1 - title.bounds.x0;
     let mut out = Vec::new();
-    let (mut current_x, mut current_y) = (0, 0);
+    let (mut current_x, mut current_y) = (0i64, 0i64);
     let mut first_move = true;
     for path in &title.paths {
         for command in font_commands(title, path) {
@@ -212,35 +271,48 @@ fn charstring(title: &TitleAsset) -> Result<Vec<u8>, String> {
                         type2_int(width, &mut out);
                         first_move = false;
                     }
-                    type2_int(x - current_x, &mut out);
-                    type2_int(y - current_y, &mut out);
+                    let (x, y) = (fixed(x), fixed(y));
+                    type2_number(x - current_x, &mut out)?;
+                    type2_number(y - current_y, &mut out)?;
                     out.push(21); // rmoveto
                     current_x = x;
                     current_y = y;
                 }
                 Cmd::LineTo(x, y) => {
-                    type2_int(x - current_x, &mut out);
-                    type2_int(y - current_y, &mut out);
+                    let (x, y) = (fixed(x), fixed(y));
+                    type2_number(x - current_x, &mut out)?;
+                    type2_number(y - current_y, &mut out)?;
                     out.push(5); // rlineto
                     current_x = x;
                     current_y = y;
                 }
+                Cmd::QuadTo(x1, y1, x, y) => {
+                    let (end_x, end_y) = (fixed(x), fixed(y));
+                    let (c1x, c2x) = quadratic_controls(current_x, x1, x);
+                    let (c1y, c2y) = quadratic_controls(current_y, y1, y);
+                    type2_number(c1x - current_x, &mut out)?;
+                    type2_number(c1y - current_y, &mut out)?;
+                    type2_number(c2x - c1x, &mut out)?;
+                    type2_number(c2y - c1y, &mut out)?;
+                    type2_number(end_x - c2x, &mut out)?;
+                    type2_number(end_y - c2y, &mut out)?;
+                    out.push(8); // rrcurveto
+                    current_x = end_x;
+                    current_y = end_y;
+                }
                 Cmd::CubicTo(x1, y1, x2, y2, x, y) => {
-                    type2_int(x1 - current_x, &mut out);
-                    type2_int(y1 - current_y, &mut out);
-                    type2_int(x2 - x1, &mut out);
-                    type2_int(y2 - y1, &mut out);
-                    type2_int(x - x2, &mut out);
-                    type2_int(y - y2, &mut out);
+                    let (x1, y1) = (fixed(x1), fixed(y1));
+                    let (x2, y2) = (fixed(x2), fixed(y2));
+                    let (x, y) = (fixed(x), fixed(y));
+                    type2_number(x1 - current_x, &mut out)?;
+                    type2_number(y1 - current_y, &mut out)?;
+                    type2_number(x2 - x1, &mut out)?;
+                    type2_number(y2 - y1, &mut out)?;
+                    type2_number(x - x2, &mut out)?;
+                    type2_number(y - y2, &mut out)?;
                     out.push(8); // rrcurveto
                     current_x = x;
                     current_y = y;
-                }
-                Cmd::QuadTo(..) => {
-                    return Err(format!(
-                        "surah {} uses a quadratic curve; CFF generation would not be lossless",
-                        title.surah
-                    ));
                 }
                 // Type 2 closes every contour implicitly at the next move or at endchar.
                 Cmd::Close => {}
@@ -370,6 +442,19 @@ fn interior_point(path: &BezPath) -> Option<Point> {
     }
     let centre = path.bounding_box().center();
     (path.winding(centre) != 0).then_some(centre)
+}
+
+fn type2_number(value: i64, out: &mut Vec<u8>) -> Result<(), String> {
+    if value % FIXED_ONE == 0 {
+        let integer =
+            i32::try_from(value / FIXED_ONE).map_err(|_| format!("Type 2 integer is out of range: {value}"))?;
+        type2_int(integer, out);
+    } else {
+        let fixed = i32::try_from(value).map_err(|_| format!("Type 2 16.16 number is out of range: {value}"))?;
+        out.push(255);
+        out.extend_from_slice(&fixed.to_be_bytes());
+    }
+    Ok(())
 }
 
 fn type2_int(value: i32, out: &mut Vec<u8>) {

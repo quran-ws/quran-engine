@@ -58,19 +58,26 @@ page.draw(canvas.getContext('2d'), page.fit(canvas, 24 * pixelRatio))
 An app may cap the backing dimensions or total pixel count to control memory use. The web
 example uses this rule and caps its ratio at three.
 
-Page files are served from `cdn.quran.ws` under immutable, versioned URLs, so a
-browser can load one page without shipping the data — `docs/CDN.md`:
+Page files are served from `cdn.quran.ws` under immutable, versioned URLs. The optional data
+entry point keeps an edition's pages, sidecars, atlas and Surah-name assets on one version:
 
 ```js
-const page = await loadPage('https://cdn.quran.ws/qvp/v0.4.0/042.qvp')
+import { qvpSource } from '@quran.ws/engine/data'
+
+const data = qvpSource('hafs-kfgqpc', '0.4.0')
+const page = await loadPage(data.pageUrl(42))
 ```
+
+QCF V1 is a separate source: `qvpSource('hafs-qcf-v1-1405h', '<version>')`. See
+[`docs/QVP-DATA-SOURCES.md`](docs/QVP-DATA-SOURCES.md) and [`docs/CDN.md`](docs/CDN.md).
 
 `cdn.quran.ws` mirrors the signed releases of the stack. This repo publishes two
 kinds of artifact, each on its own version line:
 
 | folder | holds |
 |---|---|
-| `qvp/<version>/` | page data, atlas, text sidecars, QVP/SVG/font surah-name assets, the brotli bundle |
+| `qvp/<version>/` | default V4 page data, atlas, sidecars, Surah-name assets, bundle |
+| `qvp/hafs-qcf-v1-1405h/<version>/` | QCF V1 1405H data on its own version line |
 | `engine/wasm/<version>/`, `engine/apple/<version>/`, `engine/android/<version>/` | engine builds |
 
 `latest.json` beside each names the current version. Other repositories of the

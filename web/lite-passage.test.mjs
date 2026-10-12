@@ -52,6 +52,21 @@ for (const change of [{ fragment: 2 }, { nWords: 4 }, { fragments: 2 }]) {
 for (const options of [{ width: 0 }, { width: NaN }, { width: 20, padding: 10 }, { width: 70, scale: -1 },
   { width: 70, lineSpacing: 0.5 }, { width: 70, align: 'guess' }]) assert.throws(() => passage.layout(options), RangeError)
 
+const shared = synthetic(254, 37)
+const sharedAlias = { ...shared.words[1], index: 2, word: 3, text: '3' }
+const sharedLast = { ...shared.words[2], index: 3, word: 4, text: '4' }
+shared.words = [shared.words[0], shared.words[1], sharedAlias, sharedLast]
+shared.lines[0].nWords = 4
+shared.ayahs[0].nWords = 4
+const preparedShared = preparePage(shared)
+assert.equal(preparedShared.atoms[1], preparedShared.atoms[2])
+const sharedPassage = new QvpPassage([shared], { surah: 1, from: 37 })
+const sharedLayout = sharedPassage.layout({ width: 120 })
+assert.equal(sharedLayout.words.length, 4)
+assert.deepEqual(sharedLayout.words[1].box, sharedLayout.words[2].box)
+assert.equal(sharedPassage.ayahs[0].text, '1 2 3 4')
+bounded(sharedLayout)
+
 // Canvas receives the original outline operations, including every selected mark.
 const fills = []
 globalThis.Path2D = class {

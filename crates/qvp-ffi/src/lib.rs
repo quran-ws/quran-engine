@@ -663,6 +663,29 @@ pub unsafe extern "C" fn qvp_word_info(page: *const Page, index: u32, out: *mut 
     })
 }
 /// form: 0 rasm_uthmani, 1 rasm_imlai, 2 qpc, 3 rasm, 4 search
+/// The indivisible printed unit containing `index`. Hits return `first_word`; callers may
+/// use this function to recover every logical word that shares its geometry.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_word_group(
+    page: *const Page,
+    index: u32,
+    first_word: *mut u32,
+    word_count: *mut u32,
+) -> i32 {
+    guard(|| match (*page).word_group(index) {
+        Some((first, count)) => {
+            if !first_word.is_null() {
+                *first_word = first;
+            }
+            if !word_count.is_null() {
+                *word_count = count as u32;
+            }
+            1
+        }
+        None => 0,
+    })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn qvp_word_form(page: *const Page, index: u32, form: u8, out: *mut QvpStr) -> i32 {
     guard(|| {
@@ -2846,6 +2869,74 @@ mod tests {
         assert_eq!(name(QVP_NAMES_DECORATION, 0), "ayah-mark");
         assert_eq!(name(QVP_NAMES_DIVISION, 3), "rubu_al_hizb");
         assert_eq!(name(QVP_NAMES_PLACE, 1), "madinah");
+    }
+
+    fn shared_word_page() -> Page {
+        use qvp_core::qvp_format::{AyahRec, Header, IBox, LineRec, PageData, PathRec, WordRec, NONE_U16, VERSION};
+        let bbox = IBox { x0: 100, y0: 100, x1: 200, y1: 200 };
+        let owner = WordRec {
+            surah: 13,
+            ayah: 37,
+            word: 8,
+            line_index: 0,
+            ayah_index: 0,
+            text: NONE_U16,
+            rasm_imlai: NONE_U16,
+            qpc: NONE_U16,
+            rasm: NONE_U16,
+            search: NONE_U16,
+            first_path: 0,
+            n_paths: 1,
+            bbox,
+        };
+        let mut alias = owner;
+        alias.word = 9;
+        Page::from_data(PageData {
+            header: Header { version: VERSION, quant: 100, page: 254, flags: 0, width: 10.0, height: 10.0 },
+            lines: vec![LineRec { line_number: 6, first_word: 0, n_words: 2, bbox }],
+            ayahs: vec![AyahRec {
+                surah: 13,
+                ayah: 37,
+                fragment: 1,
+                fragments: 1,
+                flags: 0,
+                first_word: 0,
+                n_words: 2,
+                ayah_mark_decoration: NONE_U16,
+                rubu_al_hizb: 0,
+                bbox,
+            }],
+            words: vec![owner, alias],
+            paths: vec![PathRec {
+                kind: PathKind::Body,
+                mark: Mark::None,
+                family: Family::None,
+                flags: 0,
+                ox: bbox.x0,
+                oy: bbox.y0,
+                op_off: 0,
+                op_len: 0,
+                bbox,
+            }],
+            decorations: vec![],
+            glyphs: vec![],
+            insts: vec![],
+            ops: vec![],
+            strings: vec![],
+        })
+    }
+
+    #[test]
+    fn word_group_exposes_logical_aliases_of_one_printed_unit() {
+        let page = shared_word_page();
+        let mut first = u32::MAX;
+        let mut count = 0;
+        assert_eq!(unsafe { qvp_word_group(&page, 0, &mut first, &mut count) }, 1);
+        assert_eq!((first, count), (0, 2));
+        assert_eq!(unsafe { qvp_word_group(&page, 1, &mut first, &mut count) }, 1);
+        assert_eq!((first, count), (0, 2));
+        assert_eq!(unsafe { qvp_word_group(&page, 2, &mut first, &mut count) }, 0);
+        assert_eq!(unsafe { qvp_word_group(&page, 0, std::ptr::null_mut(), std::ptr::null_mut()) }, 1);
     }
 
     #[test]

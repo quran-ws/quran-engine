@@ -1,8 +1,9 @@
 # The page data
 
 The engine ships code only. Page data is published as a release of this repository and
-mirrored to a CDN. This page says which mushaf it is, where it comes from, how it is built,
-and under what terms an app may use it.
+mirrored to a CDN. This page describes the default KFGQPC V4 corpus: which mushaf it is,
+where it comes from, how it is built, and under what terms an app may use it. The separately
+qualified, not-yet-published QCF V1 1405H edition is documented in `docs/QCF-V1-DATA.md`.
 
 ## What is published
 
@@ -17,7 +18,7 @@ and under what terms an app may use it.
 | `surah-names/qvp/all.qvp`, `surah-names/svg/all.svg` | all 114 titles on one frame-free sprite sheet |
 | `surah-names/surah-names.woff2` | all titles as OpenType/CFF glyphs at private-use code points |
 | `surah-names/surah-names.css`, `surah-names/map.json` | browser classes and the code-point and metadata map |
-| `VERSION.json` | provenance: data version, source release, engine commit, format version, page and surah-name counts, and digests of every generated data file |
+| `VERSION.json` | release metadata: data version, source release, engine commit, format version, page and surah-name counts, and digests of every generated data file |
 
 The data covers 604 pages, 77,432 words, 6,236 ayahs and 114 surahs. The individual QVPs
 add about 0.35 MB, the WOFF2 font about 0.13 MB, and the optional SVG and combined forms

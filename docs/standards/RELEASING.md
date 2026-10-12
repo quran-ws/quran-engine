@@ -52,6 +52,26 @@ on 2029-09-13 and must be replaced in GitHub before then.
 
 A published data version is never rewritten. Cut a new one.
 
+## A QCF V1 data release (`data-hafs-qcf-v1-1405h-vX.Y.Z`)
+
+1. Complete source qualification, the 604-page SVG→QVP conversion, semantic audit, and
+   deterministic package qualification in `docs/QCF-V1-DATA.md`.
+2. Convert the corpus, then run `node scripts/audit-qcf-v1-semantics.mjs <qvp-directory>` to
+   verify every encoded waqf path, division boundary, printed rosette, and sajdah mark.
+3. Build `quran-engine-pages-hafs-qcf-v1-1405h-vX.Y.Z.tar.gz` and its checksum with
+   `scripts/package-edition-data.py`. The package contract admits no edition, quality, inventory,
+   semantic-evidence, or converter overrides.
+4. Run `scripts/publish-cdn.sh data-hafs-qcf-v1-1405h-vX.Y.Z --source-dir <extracted> --stage-only`
+   and verify the staged manifest with `@quran.ws/engine/data`.
+5. Create the GitHub release with the exact qualified archive and checksum. `publish-cdn.yml`
+   mirrors it to `qvp/hafs-qcf-v1-1405h/vX.Y.Z/` and advances only that family's `latest.json`.
+6. After publication, change the matching `conformance/qvp-data-editions.json` entry to
+   `"published": true`, verify the downloaded archive with `scripts/install-qvp-data.py fetch`,
+   and commit the registry change. Do not enable fetching before the release exists.
+
+The default V4 and QCF V1 version sequences are independent. Neither release may overwrite or
+supply assets to the other's family.
+
 ## Before either
 
 `scripts/check.sh` green locally, `CHANGELOG.md` has the section, no open issue carries the

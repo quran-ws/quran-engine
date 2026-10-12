@@ -131,6 +131,102 @@ fn page_data() -> PageData {
     }
 }
 
+fn shared_page_data() -> PageData {
+    let mut data = page_data();
+    let owner = data.words[1];
+    let text = data.strings.len() as u16;
+    data.strings.push("مَا".into());
+    let rasm = data.strings.len() as u16;
+    data.strings.push("ما".into());
+    let mut alias = owner;
+    alias.word = 3;
+    alias.text = text;
+    alias.rasm_imlai = text;
+    alias.qpc = text;
+    alias.rasm = rasm;
+    alias.search = rasm;
+    data.words.insert(2, alias);
+    data.lines[0].n_words = 3;
+    data.lines[1].first_word = 3;
+    data.ayahs[0].n_words = 3;
+    data.ayahs[1].first_word = 3;
+    data
+}
+
+fn shared_page() -> Page {
+    Page::load(&encode(&shared_page_data())).unwrap()
+}
+
+#[test]
+fn shared_printed_unit_keeps_two_logical_words_and_one_geometry_owner() {
+    let mut page = shared_page();
+    assert_eq!(page.find_word(1, 1, 2), Some(1));
+    assert_eq!(page.find_word(1, 1, 3), Some(2));
+    assert_eq!(page.word_text(1), "ٱلْكِتَٰبُ");
+    assert_eq!(page.word_text(2), "مَا");
+    assert_eq!(page.word_group(0), Some((0, 1)));
+    assert_eq!(page.word_group(1), Some((1, 2)));
+    assert_eq!(page.word_group(2), Some((1, 2)));
+    assert_eq!(page.word_group(3), Some((3, 1)));
+
+    assert_eq!(page.text_of(&[0, 1, 2], Form::RasmUthmani, " ", "\n"), "ذَٰلِكَ ٱلْكِتَٰبُ مَا");
+    assert_eq!(page.recite_map(1, 1, 3), Some(vec![0, 1, 2]));
+    assert_eq!(page.hit_test_exact(35.0, 15.0), Some(HitExact { word: 1, path: 1, decoration: NONE }));
+    assert_eq!(
+        page.hit_areas(0.6).iter().map(|area| area.word).collect::<Vec<_>>(),
+        vec![0, 1, 3],
+        "one hit area per printed unit"
+    );
+    assert_eq!(page.word_bounds_view(1), page.word_bounds_view(2));
+
+    let handle = page.style(Selector::Word(2), Paint::new(0x123456ff));
+    assert_eq!(page.color_of(1), 0x123456ff, "either logical key styles the shared ink");
+    page.remove_style(handle);
+
+    page.mask(&Target::Word(2), MaskMode::Hide);
+    assert_eq!(page.mask_words(), &[1]);
+    assert_eq!(page.mask_hidden(), vec![1]);
+    assert_eq!(page.color_of(1) & 0xff, 0);
+    assert!(page.unmask_word(2));
+    assert_ne!(page.color_of(1) & 0xff, 0);
+    page.unmask();
+
+    assert_eq!(page.reveal_start(1, false, 0x777777ff, DEFAULT_INK, true, 0), 3);
+    assert_eq!(page.reveal_step_of(1), Some(1));
+    assert_eq!(page.reveal_step_of(2), Some(1));
+    assert_eq!(page.reveal_step_of(3), Some(2));
+    page.reveal_stop();
+
+    let bounds = page.crop_bounds(&Target::Range(1, 2), 0.0, false).unwrap();
+    assert_eq!(bounds.n_words, 2, "both logical words remain in crop metadata");
+    let crop = page.crop_svg(&Target::Range(1, 2), 0.0, false, None).unwrap();
+    assert_eq!(crop.matches("<path").count(), 3, "shared paths are emitted once");
+    assert_eq!(page.word_bands(&[1, 2], BandHeight::Ink, 0.0, 0.0), page.word_bands(&[1], BandHeight::Ink, 0.0, 0.0));
+    let highlight = page.highlight(&Target::Range(1, 2), HighlightStyle::default());
+    assert_eq!(page.highlight_words(highlight), vec![1]);
+}
+
+#[test]
+fn shared_printed_unit_reflows_as_one_atom() {
+    let mut page = shared_page();
+    let spec = LayoutSpec {
+        viewport_w: 100.0,
+        viewport_h: 300.0,
+        reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+        ..Default::default()
+    };
+    let layout = page.layout(&spec).clone();
+    let flow = layout.reflow.unwrap();
+    assert_eq!(flow.word_place[1], flow.word_place[2]);
+    assert_eq!(flow.word_row[1], flow.word_row[2]);
+    assert!(!flow.row_words.iter().flatten().any(|&word| word == 2));
+    assert_eq!(page.word_bounds_view(1), page.word_bounds_view(2));
+    let (x0, y0, x1, y1) = page.word_bounds_view(2);
+    let hit = page.hit_test_view((x0 + x1) / 2.0, (y0 + y1) / 2.0, &HitOptions::default());
+    assert_eq!(hit.map(|value| value.word), Some(1));
+    assert_eq!(page.hit_test_exact_view((x0 + x1) / 2.0, (y0 + y1) / 2.0).map(|value| value.word), Some(1));
+}
+
 /// A tall sajdah sign on line 1 must not pull the line's centre. An ayah mark stored
 /// without a line takes the line of the ayah it closes, not the nearest centre. The
 /// sajdah line takes the line of the word under it, not the sign's line.

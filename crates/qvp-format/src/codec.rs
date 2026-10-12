@@ -314,6 +314,49 @@ pub fn encode(p: &PageData) -> Vec<u8> {
     o
 }
 
+// Two adjacent logical words may name one printed unit by owning the exact same
+// non-empty path range. Any partial or cross-record overlap remains corrupt.
+pub(crate) fn validate_word_paths(words: &[WordRec], path_count: usize) -> Result<(), Error> {
+    for (index, word) in words.iter().enumerate() {
+        let end = word.first_path.checked_add(word.n_paths as u32).ok_or(Error::Bounds("word paths"))?;
+        if end as usize > path_count {
+            return Err(Error::Bounds("word paths"));
+        }
+        let mut overlaps = false;
+        for left in &words[..index] {
+            let left_end = left.first_path + left.n_paths as u32;
+            if word.first_path >= left_end || left.first_path >= end {
+                continue;
+            }
+            overlaps = true;
+            let exact = word.n_paths > 0
+                && word.first_path == left.first_path
+                && word.n_paths == left.n_paths
+                && word.surah == left.surah
+                && word.ayah == left.ayah
+                && word.line_index == left.line_index
+                && word.ayah_index == left.ayah_index;
+            if !exact {
+                return Err(Error::Corrupt("word path overlap"));
+            }
+        }
+        if overlaps {
+            let left = &words[index - 1];
+            let contiguous = word.first_path == left.first_path
+                && word.n_paths == left.n_paths
+                && word.surah == left.surah
+                && word.ayah == left.ayah
+                && word.line_index == left.line_index
+                && word.ayah_index == left.ayah_index
+                && word.word == left.word.saturating_add(1);
+            if !contiguous {
+                return Err(Error::Corrupt("word path overlap"));
+            }
+        }
+    }
+    Ok(())
+}
+
 // ───────────────────────────── decode ─────────────────────────────
 
 pub fn decode(b: &[u8]) -> Result<PageData, Error> {
@@ -415,6 +458,7 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
             bbox: IBox::EMPTY,
         });
     }
+    validate_word_paths(&words, n_paths)?;
     if t.pos + n_paths * 4 > b.len() {
         return Err(Error::Truncated("paths"));
     }

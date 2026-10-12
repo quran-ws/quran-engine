@@ -137,6 +137,7 @@ void     qvp_page_free(QvpPage*);
 void     qvp_page_info(const QvpPage*, QvpPageInfo* out);
 void     qvp_geometry(const QvpPage*, QvpGeometry* out);               /* pointers live as long as the page */
 int      qvp_word_info(const QvpPage*, uint32_t index, QvpWordInfo* out);
+int      qvp_word_group(const QvpPage*, uint32_t index, uint32_t* first_word, uint32_t* word_count); /* one indivisible printed unit; hits return first_word */
 int      qvp_word_form(const QvpPage*, uint32_t index, uint8_t form, QvpStr* out);
 int      qvp_ayah_info(const QvpPage*, uint32_t index, QvpAyahInfo* out);
 int      qvp_line_info(const QvpPage*, uint32_t index, QvpLineInfo* out);

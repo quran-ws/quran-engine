@@ -15,6 +15,10 @@ https://cdn.quran.ws/qvp/<version>/surah-names/svg/all.svg
 https://cdn.quran.ws/qvp/<version>/surah-names/surah-names.woff2
 https://cdn.quran.ws/qvp/<version>/surah-names/map.json
 https://cdn.quran.ws/qvp/<version>/hafs-kfgqpc.tar.br
+
+https://cdn.quran.ws/qvp/hafs-qcf-v1-1405h/<version>/manifest.json
+https://cdn.quran.ws/qvp/hafs-qcf-v1-1405h/<version>/001.qvp
+https://cdn.quran.ws/qvp/hafs-qcf-v1-1405h/<version>/hafs-qcf-v1-1405h.tar.br
 ```
 
 A reader fetches the pages near its position and caches them. A surah list can choose
@@ -30,8 +34,11 @@ its own version line, so a page-data release and an SVG release never collide:
 ```
 cdn.quran.ws/
 ├── qvp/                    page data, from quran-engine
-│   ├── v0.3.0/
-│   └── latest.json
+│   ├── v0.4.0/             default KFGQPC V4 line
+│   ├── latest.json
+│   └── hafs-qcf-v1-1405h/  separate QCF V1 1405H line
+│       ├── v0.1.0/
+│       └── latest.json
 ├── svg/
 │   ├── pages/              full-page mushaf SVG, from quran-svg
 │   │   ├── v1.2.0/
@@ -55,10 +62,11 @@ does not send consumers back to it:
   "updated": "2026-09-15T00:00:00Z" }
 ```
 
-A data release is tagged `data-vX.Y.Z` and publishes to `qvp/vX.Y.Z/`: the tag says which of
-this repository's two release lines produced it, and the URL says the version alone. The engine
-line is tagged `vX.Y.Z` and publishes to `engine/<family>/vX.Y.Z/`. The first data release,
-`v0.1.0`, predates the prefix.
+The default data line is tagged `data-vX.Y.Z` and publishes to `qvp/vX.Y.Z/`. QCF V1 1405H
+is tagged `data-hafs-qcf-v1-1405h-vX.Y.Z` and publishes to
+`qvp/hafs-qcf-v1-1405h/vX.Y.Z/`. Their version sequences and `latest.json` pointers are
+independent. The engine line is tagged `vX.Y.Z` and publishes to
+`engine/<family>/vX.Y.Z/`. The first default data release, `v0.1.0`, predates the prefix.
 
 Before this layout the page data was served from `qvp.quran.ws/<version>/`. That hostname
 now returns a 301 to `cdn.quran.ws/qvp/<version>/`, so URLs published before the move still
@@ -82,25 +90,30 @@ resolve.
   114 surah-title assets in one request. One brotli stream finds repetition across files;
   gzip's 32 KB window cannot exploit repetition across distant archive members.
 - **The bundle is an opaque brotli file.** No `Content-Encoding`: every client receives the
-  same bytes and decodes them. iOS uses `COMPRESSION_BROTLI` (iOS 15+), which takes 0.31 s for
-  the whole mushaf. Browsers have no brotli decoder in JavaScript — `DecompressionStream`
-  supports only gzip, deflate and deflate-raw — so a web app should fetch pages individually
-  instead; 20 pages arrive in 36 ms.
+  same bytes and decodes them. Its inner ustar follows the verified inventory order and uses
+  zero timestamps, numeric owner/group zero, and mode `0644`, so extraction time and host file
+  metadata cannot change an immutable bundle's identity. iOS uses `COMPRESSION_BROTLI` (iOS 15+),
+  which takes 0.31 s for the whole mushaf. Browsers have no brotli decoder in JavaScript —
+  `DecompressionStream` supports only gzip, deflate and deflate-raw — so a web app should fetch
+  pages individually instead; 20 pages arrive in 36 ms.
 - **Digests cover both ends of the decode.** `bundle.sha256` is the bytes as downloaded;
   `bundle.decoded` is the size and digest of the `ustar` archive inside.
 
 ## Publishing
 
 The GitHub release is the canonical artefact. The CDN is a mirror of it, built from the
-signed tarball, never from a working tree:
+checksummed tarball, never from a working tree:
 
 ```
-scripts/publish-cdn.sh v0.2.0 --from-release    # verify sha256, extract, stage, upload
-scripts/publish-cdn.sh v0.2.0 --from-release --stage-only  # stage, upload nothing
+scripts/publish-cdn.sh data-v0.4.0 --from-release
+scripts/publish-cdn.sh data-hafs-qcf-v1-1405h-v0.1.0 --from-release
+scripts/publish-cdn.sh data-hafs-qcf-v1-1405h-v0.1.0 --from-release --stage-only
 ```
 
-`.github/workflows/publish-cdn.yml` runs the first form when a release is published, then
-checks a page against its manifest digest before the run is allowed to pass.
+`scripts/qvp-data-release.py` resolves the tag to its package and CDN family, safely extracts
+the checksummed archive, and verifies edition identity, complete inventory, and every declared digest.
+`.github/workflows/publish-cdn.yml` runs the matching publish command when a data release is
+published, then checks a page, bundle, family-specific `latest.json`, and manifest over HTTPS.
 
 `scripts/cdn-put.sh` holds what every publisher needs: the signed upload, the content types,
 the cache headers, the already-published guard and the `latest.json` update. It is sourced,

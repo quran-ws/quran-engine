@@ -109,6 +109,13 @@ public final class QvpPage {
     // ── words / text ──
     public func wordKey(_ i: Int) -> String { words[i].wordKey }
     public func wordForm(_ i: Int, _ form: Form = .rasmUthmani) -> String { var s = QvpStr(); return qvp_word_form(p, UInt32(i), UInt8(form.rawValue), &s) != 0 ? s.string : "" }
+    /// Logical word indices sharing one indivisible printed unit.
+    public func wordGroup(_ i: Int) -> [Int] {
+        guard let index = UInt32(exactly: i) else { return [] }
+        var first: UInt32 = 0, count: UInt32 = 0
+        guard qvp_word_group(p, index, &first, &count) != 0 else { return [] }
+        return (0..<Int(count)).map { Int(first) + $0 }
+    }
     public func findWord(_ surah: Int, _ ayah: Int, _ word: Int) -> Int { Int(qvp_find_word(p, UInt16(surah), UInt16(ayah), UInt16(word))) }
     public func target(_ s: String) -> Target { Target.parse(s, page: self) }
     public func targetWords(_ t: Target) -> [Int] { t.withC { tp in collect(512) { o, c in qvp_target_words(p, tp, o, c) } }.map { Int($0) } }
