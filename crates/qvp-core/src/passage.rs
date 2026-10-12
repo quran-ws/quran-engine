@@ -41,6 +41,8 @@ const SAJDAH_LINE_REACH: f64 = 2.0;
 const ROW_AIR: f64 = 1.0;
 /// How far a row may overrun its width before it counts as too wide, in page units.
 const OVERRUN: f64 = 0.001;
+/// How many times a cut row too narrow for its word and the reserve may shrink the passage.
+const MAX_CUT_PASSES: usize = 8;
 /// How far apart, as a ratio, the printed line spacings of two pages may be when the pages print
 /// their words at one size. The spacing measured on the pages of one size differs by up to 8%,
 /// and pages 1 and 2 print their words about 20% smaller than the other pages.
@@ -560,6 +562,7 @@ impl Passage {
             && (1.0..=MAX_LINE_SPACING).contains(&spec.line_spacing)
             && spec.ellipsis_width.is_finite()
             && spec.ellipsis_width >= 0.0
+            && (spec.width <= 0.0 || spec.max_rows == 0 || spec.ellipsis_width < spec.width - 2.0 * spec.padding)
             && spec.max_stretch.is_finite();
         if !valid || self.atoms.is_empty() {
             return None;
@@ -591,18 +594,18 @@ impl Passage {
         };
         // What a cut needs after a row's last word, in page units: a gap and the ellipsis, and
         // when the medallion is kept, another gap and the medallion.
-        let reserve_after = |i: usize, ellipsis_width: f64, with_tail: bool| -> f64 {
+        let reserve_after = |i: usize, ellipsis_width: f64| -> f64 {
             let gap = atoms[i].gap;
-            let tail = if with_tail { tail_sign } else { None };
-            gap + ellipsis_width + tail.map_or(0.0, |(_, s)| gap + s.rect[2] - s.rect[0])
+            gap + ellipsis_width + tail_sign.map_or(0.0, |(_, s)| gap + s.rect[2] - s.rect[0])
         };
 
         // Past the row limit the rows are filled in turn, as text is: balanced rows can need one
         // more row than full ones. When even full rows do not fit, the last one is cut early
         // enough for the ellipsis and, when asked, the medallion of the last ayah. A row too
-        // narrow for one word and what follows the cut shrinks everything, once, so that every
-        // word has room for its reserve, and the rows are broken again.
-        let mut shrunk = false;
+        // narrow for its one word and what follows the cut shrinks everything so that the word
+        // has room for its reserve, and the rows are broken again; the next cut can end on a
+        // wider word, so this goes round until the cut row fits.
+        let mut passes = 0;
         let (row_width, rows, is_truncated, ellipsis_width) = loop {
             let row_width = if one_row { used(&all) } else { (spec.width as f64 - 2.0 * padding) / scale };
             let mut rows = if one_row { vec![all.clone()] } else { break_rows(&atoms, &self.gaps, row_width) };
@@ -615,25 +618,25 @@ impl Passage {
                 rows.truncate(max_rows);
                 let last = rows.last_mut().expect("a cut keeps at least one row");
                 let overflows = |row: &[usize]| {
-                    let reserve = row.last().map_or(0.0, |&i| reserve_after(i, ellipsis_width, true));
+                    let reserve = row.last().map_or(0.0, |&i| reserve_after(i, ellipsis_width));
                     used(row) + reserve > row_width + OVERRUN
                 };
                 while last.len() > 1 && overflows(last) {
                     last.pop();
                 }
-                let room = spec.width as f64 - 2.0 * padding - spec.ellipsis_width as f64;
-                if overflows(last) && !shrunk && room > 0.0 {
-                    let need = (0..atoms.len()).map(|i| width_of(i) + reserve_after(i, 0.0, true)).fold(0.0, f64::max);
+                passes += 1;
+                if overflows(last) && passes <= MAX_CUT_PASSES {
+                    let word = last[0];
+                    let need = width_of(word) + reserve_after(word, 0.0);
+                    let room = spec.width as f64 - 2.0 * padding - spec.ellipsis_width as f64;
                     scale = scale.min(room / need);
-                    shrunk = true;
                     continue;
                 }
             }
             break (row_width, rows, is_truncated, ellipsis_width);
         };
         let tail = if is_truncated { tail_sign } else { None };
-        let reserve =
-            |row: &[usize]| -> f64 { row.last().map_or(0.0, |&i| reserve_after(i, ellipsis_width, tail.is_some())) };
+        let reserve = |row: &[usize]| -> f64 { row.last().map_or(0.0, |&i| reserve_after(i, ellipsis_width)) };
 
         let pitch = self.line_spacing * spec.line_spacing as f64;
         // What a justified gap may open by is measured on the air between words, as the page

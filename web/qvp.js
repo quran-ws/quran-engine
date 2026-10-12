@@ -769,6 +769,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * of range, and the last layout then stays. Spec: {width, scale, lineSpacing, padding, align:
      * 'right'|'center'|'justified', maxRows, keepAyahMark, ellipsisWidth, maxStretch}. */
     layout(spec = {}) {
+      if (spec.maxRows < 0) return null;
       const ex = this.e.ex, s = this.e.scratch;
       const sp = this._writeSpec(spec, this.e.scratch2 + 43008);
       if (!ex.qvp_passage_layout(this.h, sp, s)) return null;

@@ -387,7 +387,8 @@ final class QvpReflowSpec {
     this.relax = 0.5,
   });
 
-  /// 1 is the printed page. The largest this page can reach is [QvpPage.reflowMaxZoom].
+  /// 1 or less is the printed page; [QvpPage.zoomSpec] hands back 0 there, as the C header
+  /// does. The largest this page can reach is [QvpPage.reflowMaxZoom].
   final double zoom;
   /// `ragged` | `justified` | `centred`; `greedy` | `even` | `fitted`; `printed` | `uniform`.
   final String fill, breaks, gaps;

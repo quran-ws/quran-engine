@@ -9,8 +9,17 @@ tag="${QVP_DATA_TAG:-data-v0.4.0}"
 destination="packages/android/qvp/src/androidTest/assets"
 mkdir -p "$destination"
 
-# 001 and 042 carry the page tests. The rest are what conformance/scenarios/passage.json loads.
-pages=(001 002 003 042 048 272 598 604)
+# 001 and 042 carry the page tests. The rest are what conformance/scenarios/passage.json loads,
+# read from the file so a new scenario on a new page is picked up here.
+mapfile -t pages < <(python3 - <<'PY'
+import json
+pages = {1, 42}
+for case in json.load(open("conformance/scenarios/passage.json"))["cases"]:
+    pages.update(case["pages"])
+for p in sorted(pages):
+    print(f"{p:03d}")
+PY
+)
 
 have_all() {
   for p in "${pages[@]}"; do [ -f "$1/$p.qvp" ] || return 1; done
@@ -50,12 +59,15 @@ expected = {
 }
 # The digests are those of data-v0.4.0. 001 and 042 are byte-identical in the two releases
 # before it. Nobody checked the other pages there.
+# A page the table does not list is copied unchecked.
 checked = {
     "data-v0.4.0": set(expected),
     "data-v0.3.0": {"001.qvp", "042.qvp"},
     "data-v0.2.0": {"001.qvp", "042.qvp"},
 }.get(sys.argv[2], set())
 for name in sorted(checked):
+    if not (root / name).exists():
+        continue
     actual = hashlib.sha256((root / name).read_bytes()).hexdigest()
     if actual != expected[name]:
         raise SystemExit(f"{name} checksum mismatch: {actual}")

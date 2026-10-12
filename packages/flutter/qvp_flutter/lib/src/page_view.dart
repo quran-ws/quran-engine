@@ -165,7 +165,7 @@ class QvpPageView extends StatefulWidget {
   /// [QvpZoomMode.magnify], [kMaxZoom] unless the host lowers it. A host that draws its own
   /// furniture beside the ink and scales it with the glass says here what that furniture can
   /// survive. A ceiling under the fitted page is the fitted page, since a pinch never shrinks
-  /// the page inside the screen.
+  /// the page inside the screen. 0 or below is the engine's own ceiling.
   final double maxZoom;
 
   @override
