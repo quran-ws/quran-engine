@@ -103,11 +103,15 @@ band follows the title, including the title's banner scaling.
 |---|---|---|
 | medallion | `ayah_marks()`: `cx, cy, r, ornament_path` | scale so the asset's height equals `2r`, keep the aspect, put the asset's slot centre on `(cx, cy)` |
 | band | `surah_headers()`: title box, decoration, line | width is the text column, centred on the title's centre, the slot's vertical centre on the title's vertical centre |
-| border | the laid-out page box | the frame's text-area slot maps onto the page box grown by `gap` on every side; one uniform scale |
+| border | the laid-out page box | the frame's text-area slot maps onto the page box grown by `gap` on every side. A frame with slices is tiled at one uniform scale. A frame without slices is stretched so that its slot lands exactly on the grown page box, with one scale per axis |
 
 The text column is the page width, plus `2·gap` when a border is drawn. It is never this
 page's ink: pages 1 and 2 hold one short surah centred in the column, and a band measured
 from their lines comes out a third of the width it has elsewhere.
+
+Under reflow the band's width is the text column in printed units, the laid-out width
+before any placement. The title's placement then scales the band with the title, as it
+scales the title's own ink.
 
 The laid-out page box is new on `Layout`: `laid_top` and `laid_height`, in page units.
 The printed layout sets them from its padding and block height. The reflow layout sets them
