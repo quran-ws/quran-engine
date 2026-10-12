@@ -47,6 +47,8 @@ else:
     emb = {'wasm': wasm, 'pages': {}, 'words': {}}
     ap = os.path.join(pages_dir, 'atlas.qva')
     if os.path.exists(ap): emb['atlas'] = base64.b64encode(open(ap, 'rb').read()).decode()
+    op = os.path.join(pages_dir, 'ornaments.qvo')
+    if os.path.exists(op): emb['ornaments'] = base64.b64encode(open(op, 'rb').read()).decode()
     for n in pages:
         k = f'{n:03d}'
         emb['pages'][k] = base64.b64encode(open(os.path.join(pages_dir, k + '.qvp'), 'rb').read()).decode()

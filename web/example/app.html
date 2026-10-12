@@ -117,6 +117,21 @@
       <div class="hint">Leading only grows: the printed lineSpacing is the floor, so the lines can never close up, and the text width is always the viewport's. The knobs spend the empty paper a tall screen leaves above and below the printed page.</div>
     </section>
     <section>
+      <h2>Dress (another mushaf's ornaments)</h2>
+      <div class="row">
+        <label>medallion <select id="dressMark"><option value="">as printed</option></select></label>
+        <label>band <select id="dressHeader"><option value="">as printed</option></select></label>
+        <label>border <select id="dressFrame"><option value="">none</option></select></label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label><input id="dressLine" type="checkbox"> line art</label>
+        <b>breathing space</b><input id="dressGap" type="range" min="0" max="24" step="1" value="5" style="flex:1"><span id="dressGapVal" class="hint">5</span>
+        <button id="undress">As printed</button>
+      </div>
+      <div class="row" style="margin-top:6px" id="dressParts"></div>
+      <div id="dressInfo" class="hint" style="white-space:pre-line"></div>
+    </section>
+    <section>
       <h2>Reflow (engine)</h2>
       <div class="row"><button id="reflow">Reflow the page</button><span class="hint" id="reflowRows"></span></div>
       <div class="row" style="margin-top:6px">

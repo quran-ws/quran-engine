@@ -9,6 +9,7 @@
   const pad = n => String(n).padStart(3, '0');
   const src = {
     wasm: async () => EMB ? b64(EMB.wasm) : new Uint8Array(await (await fetch('qvp_ffi.wasm')).arrayBuffer()),
+    ornaments: async () => { if (EMB) return EMB.ornaments ? b64(EMB.ornaments) : null; try { const r = await fetch('pages/ornaments.qvo'); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } },
     atlas: async () => { if (EMB) return EMB.atlas ? b64(EMB.atlas) : null; try { const r = await fetch('pages/atlas.qva'); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } },
     pages: EMB ? Object.keys(EMB.pages).map(Number).sort((a, b) => a - b) : Array.from({ length: 604 }, (_, i) => i + 1),
     page: async n => EMB ? b64(EMB.pages[pad(n)]) : new Uint8Array(await (await fetch(`pages/${pad(n)}.qvp`)).arrayBuffer()),
@@ -20,6 +21,8 @@
   const wasmMs = performance.now() - t0;
   let atlas = null;
   try { const ab = await src.atlas(); if (ab) atlas = engine.loadAtlas(ab); } catch (e) { console.warn('no atlas', e); }
+  let ornaments = null;
+  try { const ob = await src.ornaments(); if (ob) ornaments = engine.loadOrnaments(ob); } catch (e) { console.warn('no ornaments', e); }
 
   const canvas = $('cv'), stage = $('stage'), paper = $('paper');
   const renderer = new CanvasRenderer(canvas);
@@ -33,6 +36,7 @@
     selWord: -1, selAyah: null, hlSel: 0, hlAyah: 0, hlSearch: 0, hlPlay: 0, pathHandles: new Map(),
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
+    dress: { ayahMark: null, surahHeader: null, pageFrame: null, gap: 5, lineArt: false, colors: [] },
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16, surahFrames: true },
     reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
     hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
@@ -93,8 +97,14 @@
   }
   function fit(redraw = true) {
     const L = relayout(); if (!L) return;
-    // a reflowed page is taller than the screen on purpose: show its top and let the reader scroll
-    S.view = L.reflowed ? { scale: 1, offsetX: L.fitX, offsetY: 0 } : { scale: L.fitScale, offsetX: L.fitX, offsetY: L.fitY };
+    const r = stage.getBoundingClientRect();
+    // A dressed page is bigger than its text: the border is drawn around it, and the
+    // engine says by how much on each side, so the view fits content plus overflow.
+    const [l, t, rt, bt] = S.page.dressInfo()?.overflow || [0, 0, 0, 0];
+    const w = L.contentW + l + rt, h = L.contentH + t + bt;
+    const s = L.reflowed ? 1 : Math.min(1, r.height / h, r.width / w);
+    S.view = L.reflowed ? { scale: 1, offsetX: (r.width - w) / 2 + l, offsetY: t }
+                        : { scale: s, offsetX: (r.width - w * s) / 2 + l * s, offsetY: (r.height - h * s) / 2 + t * s };
     renderer.baseKey = '';
     if (redraw) draw();
   }
@@ -131,6 +141,7 @@
     applyTheme(); applyToggles();
     carryZoom();
     renderer.baseKey = '';
+    applyDress(false);
     fit(false);
     showSelection(); showMeta(); runSearch();
     draw();
@@ -482,6 +493,60 @@
       `zoom          ${(S.view.scale * (L ? L.scale : 1) * dpr).toFixed(2)}× device px per unit`;
   }
 
+  // ── dress: another mushaf's ornaments. The engine places everything; this panel only
+  // says which ornaments, and the readout is the engine's. ──
+  function applyDress(redraw = true) {
+    const p = S.page; if (!p) return;
+    const d = S.dress;
+    const none = d.ayahMark === null && d.surahHeader === null && d.pageFrame === null;
+    if (!ornaments || none) {
+      p.undress();
+      $('dressInfo').textContent = ornaments ? 'as printed' : 'no ornament set (put ornaments.qvo beside the pages)';
+    } else {
+      const info = p.dress(ornaments, d);
+      const chosen = [d.ayahMark, d.surahHeader, d.pageFrame].filter(i => i !== null).map(i => ornaments.list[i]);
+      $('dressInfo').textContent = info
+        ? `${info.ayahMarks} medallions · ${info.surahHeaders} band(s) · ` +
+          (info.pageFrame === null ? 'no border' : info.frameStretched ? 'the whole frame is stretched (no slices)' : `${info.frameRepeats} border repeats tiled to this page`) +
+          `\nviewBox ${info.viewBox.map(v => v.toFixed(1)).join(' ')}` +
+          chosen.map(o => `\n${o.style} ${o.kind}: ${o.licence.id || 'licence unstated'}, ${o.licence.status}, redistributable: ${o.licence.redistributable}`).join('')
+        : 'the engine refused that dress';
+    }
+    renderer.baseKey = '';   // the dress hid or restored printed ink
+    fit(redraw);
+  }
+  function dressSwatches() {
+    const host = $('dressParts');
+    host.innerHTML = '';
+    if (!ornaments) return;
+    for (const i of [S.dress.ayahMark, S.dress.surahHeader, S.dress.pageFrame]) {
+      if (i === null) continue;
+      const o = ornaments.list[i];
+      // line art draws one ink, so it gets one swatch
+      const parts = S.dress.lineArt ? o.parts.filter(x => x && x.name === 'line') : o.parts.filter(x => x && (x.color & 255) !== 0);
+      for (const part of parts) {
+        const wrap = document.createElement('label');
+        wrap.className = 'hint';
+        const set = S.dress.colors.find(c => c[0] === i && c[1] === part.index);
+        const own = '#' + (part.color >>> 8).toString(16).padStart(6, '0');
+        wrap.innerHTML = `<input type="color" value="${set ? set[2] : own}"> ${o.kind.replace('_', ' ')} ${part.name}`;
+        wrap.firstChild.onchange = e => { S.dress.colors = S.dress.colors.filter(c => !(c[0] === i && c[1] === part.index)); S.dress.colors.push([i, part.index, e.target.value]); applyDress(); };
+        host.append(wrap);
+      }
+    }
+  }
+  function fillDressPickers() {
+    for (const [id, kind, key] of [['dressMark', 'ayah_mark', 'ayahMark'], ['dressHeader', 'surah_header', 'surahHeader'], ['dressFrame', 'page_frame', 'pageFrame']]) {
+      const sel = $(id);
+      if (!ornaments) { sel.disabled = true; continue; }
+      for (const o of ornaments.ofKind(kind)) sel.insertAdjacentHTML('beforeend', `<option value="${o.index}">${o.style}${o.riwayah ? ', ' + o.riwayah : ''}</option>`);
+      sel.onchange = e => { S.dress[key] = e.target.value === '' ? null : +e.target.value; S.dress.colors = []; dressSwatches(); applyDress(); };
+    }
+  }
+  fillDressPickers();
+  $('undress').onclick = () => { S.dress = { ...S.dress, ayahMark: null, surahHeader: null, pageFrame: null, colors: [] }; for (const id of ['dressMark', 'dressHeader', 'dressFrame']) $(id).value = ''; dressSwatches(); applyDress(); };
+  $('dressGap').oninput = e => { S.dress.gap = +e.target.value; $('dressGapVal').textContent = e.target.value; applyDress(); };
+  $('dressLine').onchange = e => { S.dress.lineArt = e.target.checked; S.dress.colors = []; dressSwatches(); applyDress(); };
   window.__qvp = { S, engine, atlas, renderer, loadPage, fit, selectWord, selectAyah, draw };
   const prefersDark = document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
   if (prefersDark) { S.theme = 'dark'; $('theme').value = 'dark'; $('ink').value = INK.dark; }

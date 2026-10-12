@@ -15,12 +15,14 @@ copy() { # destination directory
   mkdir -p "$1"
   for p in $pages; do cp "dist/pages/$p.qvp" "dist/pages/$p.words.json" "$1/"; done
   cp dist/pages/atlas.qva "$1/"
+  [ -f dist/pages/ornaments.qvo ] && cp dist/pages/ornaments.qvo "$1/"
   echo "synced   $1 (29 pages + atlas)"
 }
 
 copy_all() { # destination directory
   mkdir -p "$1"
   cp dist/pages/*.qvp dist/pages/*.words.json dist/pages/atlas.qva "$1/"
+  [ -f dist/pages/ornaments.qvo ] && cp dist/pages/ornaments.qvo "$1/"
   cat dist/pages/.tag 2>/dev/null > "$1/.tag" || echo local > "$1/.tag"
   echo "synced   $1 (604 pages + atlas)"
 }

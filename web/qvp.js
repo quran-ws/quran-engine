@@ -6,6 +6,8 @@
   'use strict';
 
   const NONE = 0xffffffff;
+  const ORNAMENT_KIND = ['ayah_mark', 'surah_header', 'page_frame'];
+  const LINEAGE = ['scan', 'font'];
 // the reader's zoom control: what a pinch does to the page
 const ZOOM_MODE = { stepped: 0, continuous: 1, magnify: 2 };
 const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
@@ -154,6 +156,15 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       if (!h) throw new Error('qvp_atlas_load failed');
       return new QvpAtlas(this, h);
     }
+    /** an ornament set (ornaments.qvo): the medallions, bands and borders of other mushafs and fonts */
+    loadOrnaments(bytes) {
+      const p = this.ex.qvp_alloc(bytes.length);
+      new Uint8Array(this.mem.buffer, p, bytes.length).set(bytes);
+      const h = this.ex.qvp_ornaments_load(p, bytes.length);
+      this.ex.qvp_dealloc(p, bytes.length);
+      if (!h) throw new Error('qvp_ornaments_load failed');
+      return new QvpOrnaments(this, h);
+    }
   }
 
   // struct writers (wasm32 layouts, see qvp.h)
@@ -212,6 +223,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.pts = new Float32Array(engine.mem.buffer.slice(ptsPtr, ptsPtr + ptsLen * 4));
       this.table = new Uint32Array(engine.mem.buffer.slice(tabPtr, tabPtr + nPaths * 32));
       this.paths = null;
+      this.ornaments = null; this.ornamentsRevision = -1;
       this.words = Array.from({ length: this.nWords }, (_, i) => this._word(i));
       this.ayahs = Array.from({ length: this.nAyahs }, (_, i) => this._ayah(i));
       this.lines = Array.from({ length: this.nLines }, (_, i) => this._line(i));
@@ -221,6 +233,90 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this._defaultInk = DEFAULTS.INK;
     }
     free() { this.e.ex.qvp_page_free(this.h); this.h = 0; }
+    // ── dress: another mushaf's ornaments ──
+    /**
+     * Put other ornaments on the page: up to one per kind. Each of `ayahMark`,
+     * `surahHeader` and `pageFrame` is an ornament of the set, its index, or a style name
+     * (the ornament of that kind in that style); leave one out for none. `colors` is a
+     * list of `[ornament, part, colour]`; every part left out keeps the design's own.
+     * Returns the readout, or null when the engine refused the spec (an index out of
+     * range, an ornament of another kind, or nothing to dress). Replaces any previous
+     * dress.
+     */
+    dress(set, { ayahMark = null, surahHeader = null, pageFrame = null, gap = 5, lineArt = false, colors = [] } = {}) {
+      const index = (v, kind) => {
+        if (v === null || v === undefined) return NONE;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string') { const o = set.find(kind, v); return o ? o.index : NONE; }
+        return v.index;
+      };
+      const triples = [];
+      for (const [o, part, colour] of colors) triples.push(typeof o === 'object' ? o.index : o, part, rgba(colour));
+      const cp = triples.length ? this.e.putU32(Uint32Array.from(triples), 2048) : 0;
+      const s = this.e.scratch2, d = this.e.dv();
+      d.setUint32(s, index(ayahMark, 'ayah_mark'), true); d.setUint32(s + 4, index(surahHeader, 'surah_header'), true); d.setUint32(s + 8, index(pageFrame, 'page_frame'), true);
+      d.setFloat32(s + 12, gap, true); d.setUint32(s + 16, lineArt ? 1 : 0, true);
+      d.setUint32(s + 20, cp, true); d.setUint32(s + 24, triples.length / 3, true);
+      this.ornaments = null;
+      if (!this.e.ex.qvp_dress(this.h, set.h, s)) return null;
+      return this.dressInfo();
+    }
+    /** Take the ornaments off: the printed rings and bands come back. */
+    undress() { this.e.ex.qvp_undress(this.h); this.ornaments = null; }
+    /** The readout, or null when the page is not dressed: {ayahMark, surahHeader, pageFrame,
+     * ayahMarks, surahHeaders, frameRepeats, frameStretched, draws, revision, viewBox,
+     * overflow}. `viewBox` is [x, y, w, h] in page units; a border grows it. `overflow` is
+     * [left, top, right, bottom] in viewport px: fit content plus overflow or the border is
+     * cropped off. */
+    dressInfo() {
+      const s = this.e.scratch;
+      if (!this.e.ex.qvp_dress_info(this.h, s)) return null;
+      const d = this.e.dv(), u = i => d.getUint32(s + i * 4, true), f = i => d.getFloat32(s + i, true);
+      const id = v => v === NONE ? null : v;
+      return { ayahMark: id(u(0)), surahHeader: id(u(1)), pageFrame: id(u(2)), ayahMarks: u(3), surahHeaders: u(4), frameRepeats: u(5), frameStretched: !!u(6), draws: u(7), revision: u(8),
+        viewBox: [f(36), f(40), f(44), f(48)], overflow: [f(52), f(56), f(60), f(64)] };
+    }
+    /** Counts up whenever the ornament layer is rebuilt: a new dress, or a layout that
+     * moved the page under the border. 0 when undressed. */
+    dressRevision() { const i = this.dressInfo(); return i ? i.revision : 0; }
+    /**
+     * The ornament display list as Path2D plus paint, in page units: [{path, color, kind,
+     * evenOdd, stroke, strokeWidth, part, placement}]. Draw it behind the page ink. A
+     * draw's `placement` is the layout placement index a page draw carries, or null for
+     * the border, which is drawn with no group transform.
+     */
+    dressGeometry() {
+      const P = typeof Path2D === 'function' ? Path2D : class { moveTo() {} lineTo() {} quadraticCurveTo() {} bezierCurveTo() {} closePath() {} };
+      const rev = this.dressRevision();
+      if (this.ornaments && this.ornamentsRevision === rev) return this.ornaments;
+      this.ornamentsRevision = rev;
+      const s = this.e.scratch;
+      this.e.ex.qvp_dress_geometry(this.h, s);
+      const d = this.e.dv(), n = d.getUint32(s + 20, true);
+      if (!n) return (this.ornaments = []);
+      const opsPtr = d.getUint32(s, true), opsLen = d.getUint32(s + 4, true), ptsPtr = d.getUint32(s + 8, true), ptsLen = d.getUint32(s + 12, true), tabPtr = d.getUint32(s + 16, true);
+      const ops = new Uint8Array(this.e.mem.buffer, opsPtr, opsLen);
+      const pts = new Float32Array(this.e.mem.buffer, ptsPtr, ptsLen);
+      const t = new Uint32Array(this.e.mem.buffer.slice(tabPtr, tabPtr + n * 36));
+      const tf = new Float32Array(t.buffer);
+      const out = new Array(n);
+      for (let i = 0; i < n; i++) {
+        const p = new P();
+        let o = t[i * 9], oe = o + t[i * 9 + 1], k = t[i * 9 + 2];
+        for (; o < oe; o++) {
+          switch (ops[o]) {
+            case 0: p.moveTo(pts[k], pts[k + 1]); k += 2; break;
+            case 1: p.lineTo(pts[k], pts[k + 1]); k += 2; break;
+            case 2: p.quadraticCurveTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3]); k += 4; break;
+            case 3: p.bezierCurveTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3], pts[k + 4], pts[k + 5]); k += 6; break;
+            case 4: p.closePath(); break;
+          }
+        }
+        const flags = t[i * 9 + 5], placement = t[i * 9 + 8];
+        out[i] = { path: p, color: t[i * 9 + 4], kind: ORNAMENT_KIND[flags & 0xff], evenOdd: !!(flags & 0x100), stroke: !!(flags & 0x200), strokeWidth: tf[i * 9 + 6], part: t[i * 9 + 7], placement: placement === NONE ? null : placement };
+      }
+      return (this.ornaments = out);
+    }
 
     // ── geometry ──
     pathFlags(i) { return this.table[i * 8 + 4]; }
@@ -696,6 +792,42 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   }
 
   /**
+   * The ornaments of other mushafs and fonts, from `ornaments.qvo`. None of these
+   * outlines is part of a QVP page. Each ornament says what it may be redistributed under.
+   * Read `licence` before you publish a page wearing it.
+   */
+  class QvpOrnaments {
+    constructor(engine, handle) {
+      this.e = engine; this.h = handle;
+      this.count = engine.ex.qvp_ornament_count(handle);
+      /** every ornament: {index, kind, lineage, style, riwayah, hasSlices, licence, parts} */
+      this.list = Array.from({ length: this.count }, (_, i) => this._ornament(i));
+    }
+    free() { this.e.ex.qvp_ornaments_free(this.h); this.h = 0; }
+    _ornament(i) {
+      const s = this.e.scratch;
+      if (!this.e.ex.qvp_ornament_info(this.h, i, s)) return null;
+      const d = this.e.dv(), u = k => d.getUint32(s + k * 4, true);
+      return {
+        index: i, kind: ORNAMENT_KIND[u(0)], lineage: LINEAGE[u(1)], style: this.e.qstr(s + 24), riwayah: this.e.qstr(s + 32), hasSlices: !!u(3),
+        licence: { id: this.e.qstr(s + 40), status: this.e.qstr(s + 48), redistributable: !!u(4), attribution: this.e.qstr(s + 56) },
+        // one entry per printed colour; `slot` is the window the design leaves open
+        parts: Array.from({ length: u(2) }, (_, k) => this._part(i, k)),
+      };
+    }
+    _part(i, k) {
+      const s = this.e.scratch2 + 4096;   // not `scratch`: an ornament is being read out of it
+      if (!this.e.ex.qvp_ornament_part(this.h, i, k, s)) return null;
+      const d = this.e.dv();
+      return { index: k, color: d.getUint32(s, true), stroke: !!d.getUint32(s + 4, true), name: this.e.qstr(s + 8) };
+    }
+    /** the ornament of `kind` ('ayah_mark' | 'surah_header' | 'page_frame') in `style`, or null */
+    find(kind, style) { const i = this.e.ex.qvp_ornament_find(this.h, ORNAMENT_KIND.indexOf(kind), ...this.e.putStr(style)); return i < 0 ? null : this.list[i]; }
+    /** the ornaments of one kind */
+    ofKind(kind) { return this.list.filter(o => o && o.kind === kind); }
+  }
+
+  /**
    * Canvas2D host renderer. Order: highlight bands → base ink (cached) → styled ink → mask boxes.
    * Call `page.tick(performance.now())` before `draw` each frame; keep drawing while it returns true.
    */
@@ -708,9 +840,41 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       /// How much ink to keep ready at once: a page that fits is drawn once and scrolling never
       /// draws again. About 17 MB for a page of this mushaf at the first zoom step.
       this.inkBudget = 64 << 20;
+      this.orn = null; this.ornKey = '';
       this.stats = { baseMs: 0, overlayMs: 0, basePaths: 0, overlayPaths: 0, bands: 0 };
     }
     /** transform of one group of paths: a point p is drawn at (kx·p.x + dx, ky·p.y + dy), page units */
+    /**
+     * The ornament layer, behind everything else. Each draw carries the placement its
+     * ink is drawn under, so it moves with its word or title under any layout; the
+     * border carries none and sits in layout space. Rasterised once per revision and
+     * view, like the base ink: a tiled border is hundreds of outlines and nothing about
+     * it changes while a highlight animates.
+     */
+    drawOrnaments(c, page, view, dpr) {
+      const rev = page.dressRevision();
+      if (!rev) { this.orn = null; this.ornKey = ''; return; }
+      const W = this.canvas.width, H = this.canvas.height;
+      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${view.offsetY.toFixed(1)}|${dpr}|${rev}|${W}x${H}`;
+      if (!this.orn || key !== this.ornKey || this.orn.width !== W || this.orn.height !== H) {
+        if (!this.orn) this.orn = document.createElement('canvas');
+        this.orn.width = W; this.orn.height = H;
+        const b = this.orn.getContext('2d');
+        let cur = -2;
+        for (const o of page.dressGeometry()) {
+          if (o.placement !== cur) {
+            const [a, d, tx, ty] = o.placement === null ? this.placementTransform(page, view, { dx: 0, dy: 0, kx: 1, ky: 1 }, dpr) : this.groupTransform(page, view, o.placement, dpr);
+            b.setTransform(a, 0, 0, d, tx, ty);
+            cur = o.placement;
+          }
+          if (o.stroke) { b.strokeStyle = css(o.color); b.lineWidth = o.strokeWidth; b.lineCap = 'round'; b.lineJoin = 'round'; b.stroke(o.path); }
+          else { b.fillStyle = css(o.color); b.fill(o.path, o.evenOdd ? 'evenodd' : 'nonzero'); }
+        }
+        this.ornKey = key;
+      }
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.drawImage(this.orn, 0, 0);
+    }
     groupTransform(page, view, group, dpr) {
       const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null, groups: null };
       let dx = 0, dy = 0, kx = 1, ky = 1;
@@ -797,6 +961,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const t1 = performance.now();
       const c = this.ctx;
       c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+      this.drawOrnaments(c, page, view, dpr);
       const bands = page.highlightBoxesView();
       this.drawBoxes(c, bands, view, dpr);
       c.setTransform(1, 0, 0, 1, 0, 0);
@@ -815,5 +980,5 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     }
   }
 
-  global.QVP = { QvpEngine, QvpPage, QvpAtlas, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECORATION, FORM, LAYER, NAMES_TABLE, DEFAULTS, NONE, css, rgba, parseTarget };
+  global.QVP = { QvpEngine, QvpPage, QvpAtlas, QvpOrnaments, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECORATION, FORM, LAYER, NAMES_TABLE, DEFAULTS, NONE, css, rgba, parseTarget };
 })(typeof window !== 'undefined' ? window : globalThis);
