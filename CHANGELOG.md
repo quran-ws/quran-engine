@@ -27,7 +27,7 @@ All notable changes to the engine and its packages. The format follows
 - The magnify pinch's ceiling (`maxZoom`) is clamped by the engine, in `qvp_view_zoom_about`,
   on iOS, Android and Flutter, rather than by each platform's own arithmetic. A ceiling of 0 or
   less is now the engine's own ceiling; a ceiling under the fitted page is still the fitted
-  page.
+  page, which `qvp_view_zoom_about` now holds to itself: a `max` under `min` is `min`.
 
 ## [0.6.1] - 2026-10-12
 

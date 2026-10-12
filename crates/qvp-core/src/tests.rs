@@ -1035,6 +1035,16 @@ fn view_zoom_pans_about_the_fingers_and_clamps() {
 }
 
 #[test]
+fn a_zoom_ceiling_under_the_floor_is_the_floor() {
+    let v = View { scale: 0.1, offset_x: 0.0, offset_y: 0.0 };
+    // the floor holds against a ceiling under it, and against a factor that would pass it
+    assert_eq!(v.zoom_about(0.0, 0.0, 1.0, 0.5, 0.1).scale, 0.5);
+    assert_eq!(v.zoom_about(0.0, 0.0, 100.0, 1.0, 0.5).scale, 1.0);
+    // a ceiling of 0 is the engine's own, not the floor
+    assert_eq!(v.zoom_about(0.0, 0.0, 1000.0, 1.0, 0.0).scale, defaults::MAX_ZOOM);
+}
+
+#[test]
 fn view_anchor_holds_a_word_across_a_relayout() {
     let mut p = packed_page();
     let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
