@@ -24,4 +24,13 @@ class TypesTest {
         assertArrayEquals(Target.surah(36).arr, Target.parse("surah:36").arr)
         assertThrows(IllegalArgumentException::class.java) { Target.parse("not-a-target") }
     }
+
+    /** The record the JNI bridge reads a passage spec from, in the order qvp_jni.c states. */
+    @Test
+    fun passageSpecRecordMatchesTheBridge() {
+        assertArrayEquals(floatArrayOf(0f, 1f, 1f, 2f, 0f, 0f, 0f, 0f, QvpDefaults.REFLOW_MAX_STRETCH), QvpPassageSpec().floats(), 0f)
+        val spec = QvpPassageSpec(width = 366f, scale = 0.8f, lineSpacing = 1.2f, padding = 4f, align = QvpPassageAlign.JUSTIFIED,
+                                  maxRows = 2, keepAyahMark = true, ellipsisWidth = 12f, maxStretch = -1f)
+        assertArrayEquals(floatArrayOf(366f, 0.8f, 1.2f, 4f, 2f, 1f, 2f, 12f, -1f), spec.floats(), 0f)
+    }
 }

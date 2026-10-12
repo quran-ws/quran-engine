@@ -312,7 +312,7 @@ left to drift.
 whose gaps would stretch past `maxStretch`, is centred). `gaps` is `uniform` (the
 default) or `printed`, and `wordGap` scales whichever it picked. The knobs are read on the
 printed page too, with `zoom` 0: they are what the zoom control reflows the page with, so a
-host's fill holds from the first pinch. QvpKit's `zoomSpec` keeps them at the printed size,
+host's fill holds from the first pinch. Every wrapper's `zoomSpec` keeps them at the printed size,
 and its canvas takes the fill and the cap as `reflowFill` and `reflowMaxStretch`.
 
 `relax` opens a row that still comes out short. Each row is opened a share of the way towards
@@ -619,8 +619,9 @@ A passage is a range of complete ayahs shown away from its page: a card, a toolt
 row. Each word keeps its outline and goes with its signs: a medallion and a sajdah sign with
 the word that closes their ayah, a division mark with the word that it opens, and a sajdah line
 with the words under it. The words move onto rows of the width the app asks for; the rows are
-balanced, and the gaps stretch only when a row is justified. Bound in QvpKit; the other wrappers follow
-(`docs/API-PARITY.md`). Without Wasm, `@quran.ws/engine/lite/passage` is the JavaScript port.
+balanced, and the gaps stretch only when a row is justified. Bound in QvpKit, in `qvp.js`, in the
+Android SDK and in the Flutter plugin; React Native follows (`docs/API-PARITY.md`). Without Wasm,
+`@quran.ws/engine/lite/passage` is the JavaScript port.
 
 ```swift
 let passage = try QvpPassage(pages: [page], surah: 2, from: 255)   // the pages can close after this
@@ -631,6 +632,13 @@ for draw in layout!.draws {   // draw page draw.page's path draw.path under plac
 let basmalah = try QvpPassage(basmalahOf: 2, pages: [page])          // a surah's basmalah, sized like an ayah
 ```
 
+```js
+const passage = engine.loadPassage([page], 2, 255)       // the pages can be freed after this
+const layout = passage.layout({ width: 366, scale: 22 / passage.lineSpacing, maxRows: 2, keepAyahMark: true, ellipsisWidth: 12 })
+CanvasRenderer.drawPassage(ctx, layout, { 42: page }, { dpr })   // every draw under its placement
+const basmalah = engine.loadBasmalah([page], 2)
+```
+
 - `width` ≤ 0 puts the passage on one row, as wide as it is.
 - `align` places each row: `right` (the default), `center`, or `justified`. A justified row
   but the last opens its word gaps, in equal shares, until it reaches both edges, by at most
@@ -639,8 +647,9 @@ let basmalah = try QvpPassage(basmalahOf: 2, pages: [page])          // a surah'
   row has left over is split between its two sides, so the last row, the cut row with its
   ellipsis, a one-word row and a capped row are centred.
 - `scale` is layout points per page unit. It shrinks only when one word and its signs are wider
-  than the rows. To size a passage by its printed line, divide by `passage.lineSpacing`: pages 1
-  and 2 print smaller lines than the rest.
+  than the rows, or when a cut row has no room for one word, the ellipsis and the medallion. To
+  size a passage by its printed line, divide by `passage.lineSpacing`: pages 1 and 2 print
+  smaller lines than the rest.
 - A passage draws every word at the size of its first word. When a passage runs from page 2
   into page 3, the words of page 3 are resized to the size of page 2, and `lineSpacing` is the
   line spacing of page 2 however many ayahs follow.
@@ -781,17 +790,18 @@ says which wrapper binds which.
 | atlas | `qvp_atlas_pages_of_juz` | `atlas.pagesOfJuz(n)` | Return the first and last page of a juz. |
 | atlas | `qvp_atlas_search_surahs` | `atlas.searchSurahs(text)` | Search the surah names in Arabic, Latin or English, or by number. |
 | atlas | `qvp_atlas_json` | `atlas.json()` | Return the atlas as JSON. |
-| passage | `qvp_passage_load` | iOS `QvpPassage(pages:surah:from:to:)` | Load a range of complete ayahs from the pages that print them; null when an ayah is missing or incomplete. |
-| passage | `qvp_passage_free` | iOS `passage.close()` | Free the passage. |
-| passage | `qvp_passage_ayah_count` | iOS `passage.ayahs.count` | Return how many ayahs the passage has. |
-| passage | `qvp_passage_ayah_text` | iOS `passage.ayahs[i].text` | Return an ayah's text, from the page's own word records. |
-| passage | `qvp_passage_line_spacing` | iOS `passage.lineSpacing` | Return the printed line spacing of the passage's first word, in page units. Every word of the passage has that size. |
-| passage | `qvp_passage_layout` | iOS `passage.layout(spec)` | Lay the passage out at a width and keep the layout; 0 when the spec is out of range. |
-| passage | `qvp_passage_rows` | iOS `layout.rows` | Return the rows of the last layout. |
-| passage | `qvp_passage_words` | iOS `layout.words` | Return the words that the last layout shows, with the box of each and its signs. |
-| passage | `qvp_passage_ayahs` | iOS `layout.ayahs` | Return the bounds of each ayah that the last layout shows. |
-| passage | `qvp_passage_draw_list` | iOS `layout.draws` | Return every path that the last layout draws, as page, path and placement. |
-| passage | `qvp_passage_placements` | iOS `layout.placements` | Return what a passage draw list's placement indexes. |
+| passage | `qvp_passage_load` | `engine.loadPassage(pages, surah, from, to)` | Load a range of complete ayahs from the pages that print them; null when an ayah is missing or incomplete. |
+| passage | `qvp_passage_free` | `passage.free()` | Free the passage. |
+| passage | `qvp_passage_load_basmalah` | `engine.loadBasmalah(pages, surah)` | Load the basmalah printed above a surah, from whichever of the pages prints it; null for surahs 1 and 9, and when no page prints it. |
+| passage | `qvp_passage_ayah_count` | `passage.ayahs.length` | Return how many ayahs the passage has. |
+| passage | `qvp_passage_ayah_text` | `passage.ayahs[i].text` | Return an ayah's text, from the page's own word records. |
+| passage | `qvp_passage_line_spacing` | `passage.lineSpacing` | Return the printed line spacing of the passage's first word, in page units. Every word of the passage has that size. |
+| passage | `qvp_passage_layout` | `passage.layout(spec)` | Lay the passage out at a width and keep the layout; 0 when the spec is out of range. |
+| passage | `qvp_passage_rows` | `layout.rows` | Return the rows of the last layout. |
+| passage | `qvp_passage_words` | `layout.words` | Return the words that the last layout shows, with the box of each and its signs. |
+| passage | `qvp_passage_ayahs` | `layout.ayahs` | Return the bounds of each ayah that the last layout shows. |
+| passage | `qvp_passage_draw_list` | `layout.draws` | Return every path that the last layout draws, as page, path and placement. |
+| passage | `qvp_passage_placements` | `layout.placements` | Return what a passage draw list's placement indexes. |
 | names | `qvp_name_count` | `engine.nameCount(table)` | Return how many ids a name table has. |
 | names | `qvp_name` | `engine.name(table, id)` | Return the name of an id in a table; empty outside the table. |
 | names | `qvp_name_id` | `engine.nameId(table, name)` | Return the id of a name in a table; 255 when the table has no such name. |

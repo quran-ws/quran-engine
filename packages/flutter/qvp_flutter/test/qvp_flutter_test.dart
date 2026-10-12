@@ -311,11 +311,23 @@ void main() {
   test('the reader\'s zoom control reflows the page and one loop draws it', () {
     const spec = QvpLayoutSpec(viewportW: 390, viewportH: 844, padTop: 12, padBottom: 12, padLeft: 8, padRight: 8, surahFrames: false);
 
-    // a zeroed control is stepped, on the printed page, and asks for no reflow
+    // a zeroed control is stepped, on the printed page, and asks for no reflow when the host
+    // gave it no knobs
     const printed = QvpZoom();
     expect(printed.mode, QvpZoomMode.stepped);
     expect(page.zoomSpec(spec, printed).reflow, isNull);
     expect(page.zoomSpec(spec, printed).surahFrames, isFalse);
+
+    // the host's reflow knobs survive the printed page, with zoom 0, so the first pinch that
+    // leaves it reflows with them and not with the engine's defaults
+    final knobbed = spec.copyWith(reflow: const QvpReflowSpec(fill: 'justified', maxStretch: 3, wordGap: 1.5));
+    final kept = page.zoomSpec(knobbed, printed).reflow;
+    expect(kept, isNotNull);
+    expect(kept!.zoom, 0);
+    expect(kept.fill, 'justified');
+    expect(kept.maxStretch, 3);
+    expect(kept.wordGap, 1.5);
+    expect(page.layout(page.zoomSpec(knobbed, printed)).reflowed, isFalse);
 
     // the page ships its own steps, each larger than the last
     final steps = page.zoomSteps(spec);
@@ -368,5 +380,102 @@ void main() {
 
     // and the page laid out again is the printed one when the control goes back to it
     page.layout(spec);
+  });
+
+  test('passage scenarios match the engine (conformance/scenarios/passage.json)', () {
+    final json = jsonDecode(File('$repo/conformance/scenarios/passage.json').readAsStringSync()) as Map<String, dynamic>;
+    final tolerance = (json['tolerance'] as num).toDouble();
+    final cases = json['cases'] as List<dynamic>;
+    void close(double a, num b, String what) => expect((a - b).abs() <= tolerance, isTrue, reason: '$what: got $a, engine says $b');
+    QvpPage load(int n) => engine.loadPage(File('$repo/dist/pages/${n.toString().padLeft(3, '0')}.qvp').readAsBytesSync());
+    for (final c in cases) {
+      final numbers = (c['pages'] as List<dynamic>).cast<int>();
+      final surah = c['surah'] as int, from = c['from'] as int, to = c['to'] as int;
+      final basmalah = c['basmalah'] as bool? ?? false;
+      final pages = [for (final n in numbers) load(n)];
+      final passage = basmalah ? QvpPassage.basmalah(pages, surah) : QvpPassage.load(pages, surah, from, to: to);
+      // The passage keeps what it needs.
+      for (final p in pages) {
+        p.dispose();
+      }
+      final s = c['spec'] as Map<String, dynamic>, want = c['layout'] as Map<String, dynamic>;
+      double f(String k) => (s[k] as num).toDouble();
+      final spec = QvpPassageSpec(
+        width: f('width'), scale: f('scale'), lineSpacing: f('lineSpacing'), padding: f('padding'),
+        align: QvpPassageAlign.values.byName(s['align'] as String), maxRows: s['maxRows'] as int,
+        keepAyahMark: s['keepAyahMark'] as bool, ellipsisWidth: f('ellipsisWidth'), maxStretch: f('maxStretch'));
+      final tag = '${basmalah ? 'basmalah of ' : ''}$surah:$from-$to at ${spec.width} ${s['align']} rows ${spec.maxRows}';
+      final l = passage.layout(spec);
+      expect(l, isNotNull, reason: tag);
+      expect(passage.currentLayout, same(l));
+      close(l!.width, want['width'] as num, '$tag width'); close(l.height, want['height'] as num, '$tag height');
+      close(l.scale, want['scale'] as num, '$tag scale'); close(l.lineSpacing, want['lineSpacing'] as num, '$tag lineSpacing');
+      expect(l.isTruncated, want['isTruncated'] as bool, reason: tag);
+      expect(l.draws.length, want['draws'] as int, reason: tag);
+      final rows = want['rows'] as List<dynamic>, words = want['words'] as List<dynamic>;
+      expect(l.rows.length, rows.length, reason: tag);
+      expect(l.words.length, words.length, reason: tag);
+      for (var i = 0; i < l.rows.length && i < rows.length; i++) {
+        final r = l.rows[i], g = (rows[i] as List<dynamic>).cast<num>();
+        close(r.x0, g[0], '$tag row $i x0'); close(r.y0, g[1], '$tag row $i y0');
+        close(r.x1, g[2], '$tag row $i x1'); close(r.y1, g[3], '$tag row $i y1');
+        close(r.baseline, g[4], '$tag row $i baseline');
+      }
+      for (var i = 0; i < l.words.length && i < words.length; i++) {
+        final w = l.words[i], g = (words[i] as List<dynamic>).cast<num>();
+        expect([w.page, w.ayah, w.word, w.row], g.sublist(0, 4).map((v) => v.toInt()).toList(), reason: '$tag word $i');
+        close(w.x0, g[4], '$tag word $i x0'); close(w.y0, g[5], '$tag word $i y0');
+        close(w.x1, g[6], '$tag word $i x1'); close(w.y1, g[7], '$tag word $i y1');
+      }
+      final e = (want['ellipsis'] as List<dynamic>?)?.cast<num>();
+      if (e != null) {
+        expect(l.ellipsis, isNotNull, reason: tag);
+        close(l.ellipsis!.left, e[0], '$tag ellipsis x0'); close(l.ellipsis!.top, e[1], '$tag ellipsis y0');
+        close(l.ellipsis!.right, e[2], '$tag ellipsis x1'); close(l.ellipsis!.bottom, e[3], '$tag ellipsis y1');
+      } else {
+        expect(l.ellipsis, isNull, reason: tag);
+      }
+      // every draw names a page of the passage, a path on it and a placement that exists
+      for (final d in l.draws) {
+        expect(numbers, contains(d.page), reason: tag);
+        expect(d.placement, lessThan(l.placements.length), reason: tag);
+      }
+      if (basmalah) {
+        expect(passage.ayahs, isEmpty, reason: tag);
+      } else {
+        expect(passage.ayahs.length, to - from + 1, reason: tag);
+        expect(passage.ayahs.first.text, isNotEmpty, reason: tag);
+      }
+      expect(passage.lineSpacing, greaterThan(0), reason: tag);
+      passage.close();
+      expect(passage.isDisposed, isTrue);
+    }
+    expect(cases.length, 58);
+  });
+
+  test('a basmalah passage has no ayahs; surah 1, surah 9 and a page without it fail to load', () {
+    QvpPage load(int n) => engine.loadPage(File('$repo/dist/pages/${n.toString().padLeft(3, '0')}.qvp').readAsBytesSync());
+    final two = load(2), one = load(1), tawbah = load(187);
+    final basmalah = QvpPassage.basmalah([two], 2);
+    expect(basmalah.ayahs, isEmpty);
+    final first = QvpPassage.load([two], 2, 1);
+    expect(basmalah.lineSpacing, first.lineSpacing);
+    expect(first.ayahs.single.ayahKey, '2:1');
+    first.close();
+    final l = basmalah.layout(QvpPassageSpec(width: 366, scale: 22 / basmalah.lineSpacing, align: QvpPassageAlign.center));
+    expect(l, isNotNull);
+    expect(l!.rows.length, 1);
+    expect(l.words, isEmpty);
+    expect(l.draws, isNotEmpty);
+    expect(() => QvpPassage.basmalah([one], 1), throwsFormatException);
+    expect(() => QvpPassage.basmalah([tawbah], 9), throwsFormatException);
+    expect(() => QvpPassage.basmalah([two], 3), throwsFormatException);
+    expect(() => QvpPassage.load([two], 2, 1, to: 300), throwsFormatException);
+    basmalah.close();
+    basmalah.close();
+    for (final p in [two, one, tawbah]) {
+      p.dispose();
+    }
+    expect(() => QvpPassage.load([two], 2, 1), throwsStateError);
   });
 }

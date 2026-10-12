@@ -41,6 +41,7 @@ for check in "$@"; do
       cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
       cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm
       node web/scenarios.test.mjs
+      node web/passage.test.mjs
       ;;
     parity)
       step "header vs Rust vs every wrapper"

@@ -61,7 +61,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     /** How far the magnifying glass may go — the ceiling the pinch is clamped to under MAGNIFY,
      * [MAX_ZOOM] unless the host lowers it. A host that draws its own furniture beside the ink
      * and scales it with the glass says here what that furniture can survive; a ceiling under
-     * the fitted page is the fitted page, since a pinch never shrinks the page inside the screen. */
+     * the fitted page is the fitted page, since a pinch never shrinks the page inside the screen;
+     * 0 or below is the engine's own ceiling. */
     var maxZoom: Float = MAX_ZOOM
     /** How far the glass is over the fitted page: [viewScale] over the fitted scale — 1 at rest
      * and in every mode but MAGNIFY. A host overlay divides this out of the view transform to
@@ -174,11 +175,11 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             pinchFactor *= d.scaleFactor
             if (p == null || !p.isOpen || zoomMode == QvpZoomMode.MAGNIFY) {
                 // never below the settled page: a pinch magnifies the print, it does not shrink
-                // the page inside the screen — not even for a host ceiling set under it
+                // the page inside the screen, not even for a host ceiling set under it. The
+                // engine clamps and moves the view; this only hands it the floor and the ceiling.
                 val floor = fitScale.coerceAtLeast(MIN_ZOOM)
-                val ns = (viewScale * d.scaleFactor).coerceIn(floor, maxZoom.coerceAtLeast(floor))
-                val kk = ns / viewScale
-                viewOx = d.focusX - (d.focusX - viewOx) * kk; viewOy = d.focusY - (d.focusY - viewOy) * kk; viewScale = ns
+                val v = QvpView.of(QvpNative.viewZoomAbout(currentView.floats(), d.focusX, d.focusY, d.scaleFactor, floor, maxZoom))
+                viewScale = v.scale; viewOx = v.offsetX; viewOy = v.offsetY
                 invalidate(); return true
             }
             apply(p.zoomPinch(layoutSpecInForce(), pinchZoom, pinchView, pinchFactor, d.focusX, d.focusY))

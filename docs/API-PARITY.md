@@ -51,7 +51,6 @@ is owed.
 | `qvp_view_swipe` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_view_to_layout` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
 | `qvp_view_to_layout` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
-| `qvp_view_zoom_about` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
 | `qvp_view_zoom_about` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_word_bands_view` | android | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
 | `qvp_word_bands_view` | ios | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
@@ -111,53 +110,17 @@ is owed.
 | `qvp_mask_transition` | android | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_mask_transition` | flutter | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_mask_transition` | react-native | issue (to open): a binding is owed; the fade landed on iOS first |
-| `qvp_passage_load` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_load` | android | issue #102: passages reached iOS first |
-| `qvp_passage_load` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_load` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_load_basmalah` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays out ayahs only |
-| `qvp_passage_load_basmalah` | android | issue #102: passages reached iOS first |
-| `qvp_passage_load_basmalah` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_load_basmalah` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_free` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_free` | android | issue #102: passages reached iOS first |
-| `qvp_passage_free` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_free` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_ayah_count` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_ayah_count` | android | issue #102: passages reached iOS first |
-| `qvp_passage_ayah_count` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_ayah_count` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_ayah_text` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_ayah_text` | android | issue #102: passages reached iOS first |
-| `qvp_passage_ayah_text` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_ayah_text` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_line_spacing` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_line_spacing` | android | issue #102: passages reached iOS first |
-| `qvp_passage_line_spacing` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_line_spacing` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_layout` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_layout` | android | issue #102: passages reached iOS first |
-| `qvp_passage_layout` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_layout` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_rows` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_rows` | android | issue #102: passages reached iOS first |
-| `qvp_passage_rows` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_rows` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_words` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_words` | android | issue #102: passages reached iOS first |
-| `qvp_passage_words` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_words` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_ayahs` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_ayahs` | android | issue #102: passages reached iOS first |
-| `qvp_passage_ayahs` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_ayahs` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_draw_list` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_draw_list` | android | issue #102: passages reached iOS first |
-| `qvp_passage_draw_list` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_draw_list` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_placements` | web | issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile |
-| `qvp_passage_placements` | android | issue #102: passages reached iOS first |
-| `qvp_passage_placements` | flutter | issue #102: passages reached iOS first |
 | `qvp_passage_placements` | react-native | issue #102: passages reached iOS first |
 
 ## Platform-level gaps
@@ -300,7 +263,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 
 | convenience | where | note |
 |---|---|---|
-| pan and pinch transform | every page view | zoom limits 0.5 to 12 times the fitted scale on every platform: `QvpViewPolicy` (iOS), `QvpPageView.MIN_ZOOM` (Android), `kMinZoom` (Flutter), `clampZoom` in the web example; a page view or controller may lower the ceiling (`maxZoom`) and reports the glass factor (`peekScale`), on iOS and Android, for host overlays that scale with it |
+| pan and pinch transform | every page view | zoom limits 0.5 to 12 times the fitted scale on every platform: `QvpViewPolicy` (iOS), `QvpPageView.MIN_ZOOM` (Android), `kMinZoom` (Flutter), `clampZoom` in the web example; a page view or controller may lower the ceiling (`maxZoom`) and reports the glass factor (`peekScale`), on iOS, Android and Flutter, for host overlays that scale with it |
 | zoomed threshold and swipe classifier | iOS, `QvpViewPolicy` | a pinch settled within 2% of the fitted scale is not a zoom; a mostly horizontal drag longer than 40 pt or faster than 500 pt/s is a page swipe |
 | zoom spring | iOS, `QvpZoomSpring` | eases a released pinch back to the fitted transform on a display link of its own |
 | page cache | iOS, `QvpPageCache` | the policy in `docs/EXAMPLE-APP.md`; the other platforms follow it in their examples |
@@ -309,7 +272,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-161 symbols in the header, 161 Rust exports. web: 148 bound, android: 143 bound, flutter: 148 bound, ios: 152 bound, react-native: 82 bound.
+161 symbols in the header, 161 Rust exports. web: 160 bound, android: 155 bound, flutter: 160 bound, ios: 153 bound, react-native: 82 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -401,18 +364,18 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_page_info` | yes | yes | yes | yes | yes |
 | `qvp_page_line_spacing` | yes | yes | yes | yes | gap (other shape: `info().lineSpacing`) |
 | `qvp_page_load` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript (`pageUri` prop)) |
-| `qvp_passage_ayah_count` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_ayah_text` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_ayahs` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_draw_list` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_free` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_layout` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_line_spacing` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_load` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_load_basmalah` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays out ayahs only) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_placements` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_rows` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_words` | gap (issue #102: passages reached iOS first; `web/lite-passage.mjs` lays them out without Wasm meanwhile) | gap (issue #102: passages reached iOS first) | gap (issue #102: passages reached iOS first) | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_ayah_count` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_ayah_text` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_ayahs` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_draw_list` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_free` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_layout` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_line_spacing` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_load` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_load_basmalah` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_placements` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_rows` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_words` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |
 | `qvp_reflow_max_zoom` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_reveal_goto` | yes | yes | yes | yes | yes |
@@ -457,7 +420,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_view_pan` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_swipe` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_to_layout` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_view_zoom_about` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_zoom_about` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bands_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_word_bounds_view` | yes | yes | yes | yes | yes |

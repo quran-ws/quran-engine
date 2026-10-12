@@ -4,7 +4,14 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+- `QvpViewPolicy.clampZoom(_:fit:ceiling:)`, the magnify pinch's ceiling, is applied by the
+  engine (`qvp_view_zoom_about`) rather than by the policy's own arithmetic. A ceiling of 0 or
+  less is now the engine's own ceiling; a ceiling under the fitted page is still the fitted
+  page.
+- The engine's passage layout: a cut row with no room for one word, the ellipsis and the
+  medallion shrinks the scale rather than placing them outside the layout. The conformance
+  replay has 58 cases, from 52.
 
 ## [0.6.1] - 2026-10-12
 

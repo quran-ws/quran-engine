@@ -551,6 +551,94 @@ jint FN(atlasDivisionOf)(JNIEnv* env, jclass c, jlong h, jint division, jint s, 
 jintArray FN(atlasPagesOfJuz)(JNIEnv* env, jclass c, jlong h, jint n) { uint16_t o[2]; if (!qvp_atlas_pages_of_juz(AT(h), (uint16_t)n, o)) return NULL; jint v[2] = { o[0], o[1] }; return ints(env, v, 2); }
 jintArray FN(atlasSearchSurahs)(JNIEnv* env, jclass c, jlong h, jstring text) { uint32_t n; uint8_t* b = jbytes(env, text, &n); uint16_t o[128]; uint32_t k = qvp_atlas_search_surahs(AT(h), b, n, o, 128); free(b); if (k > 128) k = 128; jint v[128]; for (uint32_t i = 0; i < k; i++) v[i] = o[i]; return ints(env, v, k); }
 
+/* ───────── passage ───────── */
+#define PS(h) ((QvpPassage*)(intptr_t)(h))
+/* the page handles a LongArray carries, as the engine wants them (caller frees) */
+static const QvpPage** page_handles(JNIEnv* env, jlongArray pages, uint32_t* n) {
+    jsize k = (*env)->GetArrayLength(env, pages);
+    const QvpPage** out = (const QvpPage**)malloc((k ? k : 1) * sizeof(QvpPage*));
+    jlong* v = (*env)->GetLongArrayElements(env, pages, NULL);
+    for (jsize i = 0; i < k; i++) out[i] = PG(v[i]);
+    (*env)->ReleaseLongArrayElements(env, pages, v, JNI_ABORT);
+    *n = (uint32_t)k; return out;
+}
+jlong FN(passageLoad)(JNIEnv* env, jclass c, jlongArray pages, jint surah, jint from, jint to) {
+    uint32_t n; const QvpPage** p = page_handles(env, pages, &n);
+    QvpPassage* ps = qvp_passage_load(p, n, (uint16_t)surah, (uint16_t)from, (uint16_t)to);
+    free(p); return (jlong)(intptr_t)ps;
+}
+jlong FN(passageLoadBasmalah)(JNIEnv* env, jclass c, jlongArray pages, jint surah) {
+    uint32_t n; const QvpPage** p = page_handles(env, pages, &n);
+    QvpPassage* ps = qvp_passage_load_basmalah(p, n, (uint16_t)surah);
+    free(p); return (jlong)(intptr_t)ps;
+}
+void FN(passageFree)(JNIEnv* env, jclass c, jlong h) { qvp_passage_free(PS(h)); }
+jint FN(passageAyahCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_passage_ayah_count(PS(h)); }
+jstring FN(passageAyahText)(JNIEnv* env, jclass c, jlong h, jint i) { QvpStr s; qvp_passage_ayah_text(PS(h), (uint32_t)i, &s); return qstr(env, s); }
+jfloat FN(passageLineSpacing)(JNIEnv* env, jclass c, jlong h) { return qvp_passage_line_spacing(PS(h)); }
+/* spec {width, scale, lineSpacing, padding, align, keepAyahMark, maxRows, ellipsisWidth, maxStretch} →
+   {width, height, scale, lineSpacing, nRows, nWords, nAyahs, nDraws, isTruncated, ellipsisX0, ellipsisY0,
+   ellipsisX1, ellipsisY1}; null when the spec is out of range */
+jfloatArray FN(passageLayout)(JNIEnv* env, jclass c, jlong h, jfloatArray spec) {
+    jfloat f[9]; (*env)->GetFloatArrayRegion(env, spec, 0, 9, f);
+    QvpPassageSpec s = { f[0], f[1], f[2], f[3], (uint8_t)f[4], f[5] > 0.5f ? 1u : 0u, { 0, 0 }, (uint32_t)f[6], f[7], f[8] };
+    QvpPassageLayout l;
+    if (!qvp_passage_layout(PS(h), &s, &l)) return NULL;
+    float v[13] = { l.width, l.height, l.scale, l.line_spacing, (float)l.n_rows, (float)l.n_words, (float)l.n_ayahs, (float)l.n_draws,
+                    (float)l.is_truncated, l.ellipsis_x0, l.ellipsis_y0, l.ellipsis_x1, l.ellipsis_y1 };
+    return floats(env, v, 13);
+}
+/* 5 per row: x0, y0, x1, y1, baseline */
+jfloatArray FN(passageRows)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_passage_rows(PS(h), NULL, 0);
+    if (!n) return floats(env, NULL, 0);
+    QvpPassageRow* r = (QvpPassageRow*)malloc(n * sizeof(QvpPassageRow));
+    qvp_passage_rows(PS(h), r, n);
+    float* v = (float*)malloc(n * 5 * sizeof(float));
+    for (uint32_t i = 0; i < n; i++) { float* o = v + i * 5; o[0] = r[i].x0; o[1] = r[i].y0; o[2] = r[i].x1; o[3] = r[i].y1; o[4] = r[i].baseline; }
+    jfloatArray a = floats(env, v, (jsize)(n * 5)); free(v); free(r); return a;
+}
+/* 9 per word: surah, ayah, word, page, row, x0, y0, x1, y1 */
+jfloatArray FN(passageWords)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_passage_words(PS(h), NULL, 0);
+    if (!n) return floats(env, NULL, 0);
+    QvpPassageWord* w = (QvpPassageWord*)malloc(n * sizeof(QvpPassageWord));
+    qvp_passage_words(PS(h), w, n);
+    float* v = (float*)malloc(n * 9 * sizeof(float));
+    for (uint32_t i = 0; i < n; i++) {
+        float* o = v + i * 9;
+        o[0] = w[i].surah; o[1] = w[i].ayah; o[2] = w[i].word; o[3] = w[i].page; o[4] = (float)w[i].row;
+        o[5] = w[i].x0; o[6] = w[i].y0; o[7] = w[i].x1; o[8] = w[i].y1;
+    }
+    jfloatArray a = floats(env, v, (jsize)(n * 9)); free(v); free(w); return a;
+}
+/* 6 per ayah: surah, ayah, x0, y0, x1, y1 */
+jfloatArray FN(passageAyahs)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_passage_ayahs(PS(h), NULL, 0);
+    if (!n) return floats(env, NULL, 0);
+    QvpPassageAyah* y = (QvpPassageAyah*)malloc(n * sizeof(QvpPassageAyah));
+    qvp_passage_ayahs(PS(h), y, n);
+    float* v = (float*)malloc(n * 6 * sizeof(float));
+    for (uint32_t i = 0; i < n; i++) { float* o = v + i * 6; o[0] = y[i].surah; o[1] = y[i].ayah; o[2] = y[i].x0; o[3] = y[i].y0; o[4] = y[i].x1; o[5] = y[i].y1; }
+    jfloatArray a = floats(env, v, (jsize)(n * 6)); free(v); free(y); return a;
+}
+/* {page, path, placement} triples, in drawing order */
+jintArray FN(passageDrawList)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_passage_draw_list(PS(h), NULL, 0);
+    if (!n) return ints(env, NULL, 0);
+    uint32_t* v = (uint32_t*)malloc(n * 3 * sizeof(uint32_t));
+    qvp_passage_draw_list(PS(h), v, n);
+    jintArray a = ints(env, (const jint*)v, (jsize)(n * 3)); free(v); return a;
+}
+/* what a passage draw list's placement indexes: {dx, dy, kx, ky} each */
+jfloatArray FN(passagePlacements)(JNIEnv* env, jclass c, jlong h) {
+    uint32_t n = qvp_passage_placements(PS(h), NULL, 0);
+    if (!n) return floats(env, NULL, 0);
+    float* v = (float*)malloc(n * 4 * sizeof(float));
+    qvp_passage_placements(PS(h), v, n);
+    jfloatArray a = floats(env, v, (jsize)(n * 4)); free(v); return a;
+}
+
 /* ───────── names ───────── */
 jstring FN(markName)(JNIEnv* env, jclass c, jint m) { QvpStr s; qvp_mark_name((uint8_t)m, &s); return qstr(env, s); }
 jstring FN(familyName)(JNIEnv* env, jclass c, jint f) { QvpStr s; qvp_family_name((uint8_t)f, &s); return qstr(env, s); }

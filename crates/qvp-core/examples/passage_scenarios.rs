@@ -50,6 +50,16 @@ fn main() {
         PassageSpec { width: 0.0, scale: 0.5, padding: 0.0, ..Default::default() },
         PassageSpec { width: 366.0, scale: 0.9, align: Align::Justified, ..Default::default() },
         PassageSpec { width: 200.0, scale: 0.9, align: Align::Justified, max_stretch: 5.0, ..Default::default() },
+        // A cut row too narrow for one word, the ellipsis and the medallion: the scale shrinks
+        // so that they fit, rather than the medallion landing outside the layout.
+        PassageSpec {
+            width: 40.0,
+            scale: 0.9,
+            max_rows: 1,
+            keep_ayah_mark: true,
+            ellipsis_width: 9.0,
+            ..Default::default()
+        },
     ];
     let basmalah_specs = [
         PassageSpec { width: 366.0, scale: 0.9, align: Align::Center, ..Default::default() },

@@ -2,6 +2,7 @@
 // the swipe classifier. They are platform conveniences (docs/API-PARITY.md) and decide nothing
 // the engine could decide.
 import CoreGraphics
+import QvpFFI
 
 public enum QvpViewPolicy {
     /// Pinch limits as multiples of the fitted scale; the same pair on every platform.
@@ -23,14 +24,16 @@ public enum QvpViewPolicy {
         min(max(scale, max(fit, minZoom)), maxZoom)
     }
     /// The same clamp under a ceiling of the host's own (`QvpCanvasController.maxZoom`): a
-    /// host whose overlays scale with the glass says how far it may go. A ceiling under the
-    /// floor is the floor — the settled page, which a pinch never shrinks inside the screen.
-    /// A host that lowers the ceiling below the size its own page is fitted at is saying it
-    /// wants no glass at all, and gets the fitted page rather than a page shrunk to a
-    /// ceiling it can then neither leave nor pinch back out of.
+    /// host whose overlays scale with the glass says how far it may go. The engine applies it,
+    /// in `qvp_view_zoom_about`, so no platform clamps a pinch its own way. A ceiling under the
+    /// floor is the floor: the settled page, which a pinch never shrinks inside the screen. A
+    /// host that lowers the ceiling below the size its own page is fitted at is saying it wants
+    /// no glass at all, and gets the fitted page rather than a page shrunk to a ceiling it can
+    /// then neither leave nor pinch back out of. A ceiling of 0 or less is the engine's own.
     public static func clampZoom(_ scale: CGFloat, fit: CGFloat, ceiling: CGFloat) -> CGFloat {
-        let floor = max(fit, minZoom)
-        return min(max(scale, floor), max(ceiling, floor))
+        var v = QvpFFI.QvpView(scale: Float(scale), offset_x: 0, offset_y: 0), out = QvpFFI.QvpView()
+        qvp_view_zoom_about(&v, 0, 0, 1, Float(max(fit, minZoom)), Float(ceiling), &out)
+        return CGFloat(out.scale)
     }
     /// How many pages a released drag turns, in the muṣḥaf's own order: +1 the page after this
     /// one, -1 the page before it, nil when it is not a swipe. The engine decides, so no platform

@@ -262,9 +262,6 @@ impl Page {
         out
     }
 
-    /// The ayah medallions of the page in viewport pixels, through the current layout: where
-    /// each one is drawn, for a tap target or a marker a host draws itself. The page-unit twin
-    /// is [`Page::ayah_marks`].
     /// The surah headings in viewport px through the current layout: where each is drawn.
     ///
     /// Without a layout this returns the page-unit boxes. The layout moves a heading's line,
@@ -300,6 +297,9 @@ impl Page {
             .collect()
     }
 
+    /// The ayah medallions of the page in viewport pixels, through the current layout: where
+    /// each one is drawn, for a tap target or a marker a host draws itself. The page-unit twin
+    /// is [`Page::ayah_marks`].
     pub fn ayah_marks_view(&self) -> Vec<MarkerInfo> {
         let Some(l) = self.current_layout() else { return self.ayah_marks() };
         let n_words = self.data().words.len() as u32;

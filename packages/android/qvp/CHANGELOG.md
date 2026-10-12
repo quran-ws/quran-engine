@@ -4,7 +4,18 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- Passages: `QvpPassage.load` and `QvpPassage.basmalah`, `layout`, and `QvpPassageLayout.draw`
+  to draw a layout on a `Canvas`. The instrumented tests replay
+  `conformance/scenarios/passage.json` (issue #102), and `scripts/sync-android-test-data.sh`
+  copies the pages and the scenario file they read.
+
+### Fixed
+- `QvpPage.zoomSpec` keeps the host's reflow knobs on the printed page, with zoom 0, so the first
+  pinch off it reflows with the host's fill rather than the engine's defaults, as QvpKit does.
+- The magnify pinch's ceiling (`QvpPageView.maxZoom`) is clamped by the engine
+  (`qvp_view_zoom_about`) rather than by the view's own arithmetic. A ceiling of 0 or less is the
+  engine's own ceiling.
 
 ## [0.5.0] - 2026-10-08
 

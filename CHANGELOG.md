@@ -6,7 +6,28 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- Passages reach every wrapper but React Native: `qvp.js` (`engine.loadPassage`,
+  `engine.loadBasmalah`, `QvpPassage`, `CanvasRenderer.drawPassage`), the Android SDK
+  (`QvpPassage`) and the Flutter plugin (`QvpPassage`, `paintPassage`). Each replays
+  `conformance/scenarios/passage.json`, and the web replay runs in the gates. React Native stays a
+  declared gap under issue #102.
+- A conformance scenario for a cut row too narrow for one word, the ellipsis and the medallion:
+  58 passage cases, from 52.
+- The Flutter page view takes `maxZoom` and reports `peekScale`, as the iOS and Android page
+  views do, and `setZoomMode` switches the pinch to magnify.
+
+### Fixed
+- A passage cut to a row with no room for one word, the ellipsis and the medallion of its last
+  ayah placed them outside the layout, left of the padding. The scale now shrinks, once, so that
+  every word has room for what follows the cut, and the rows are broken again.
+- `zoomSpec` on web, Android and Flutter dropped the host's reflow knobs on the printed page, so
+  the first pinch off it reflowed with the engine's defaults. They now keep the knobs with zoom
+  0, as QvpKit has since 0.5.0.
+- The magnify pinch's ceiling (`maxZoom`) is clamped by the engine, in `qvp_view_zoom_about`,
+  on iOS, Android and Flutter, rather than by each platform's own arithmetic. A ceiling of 0 or
+  less is now the engine's own ceiling; a ceiling under the fitted page is still the fitted
+  page.
 
 ## [0.6.1] - 2026-10-12
 

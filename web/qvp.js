@@ -154,6 +154,30 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       if (!h) throw new Error('qvp_atlas_load failed');
       return new QvpAtlas(this, h);
     }
+    /** Load the ayahs `from` to `to` of `surah` from the pages that print them, in any order.
+     * The passage copies what it needs, so the pages can be freed after this. Throws when an
+     * ayah is missing or incomplete, a page is given twice, or the range has over 4,096 words. */
+    loadPassage(pages, surah, from, to = from) {
+      const [p, n] = this._pageHandles(pages);
+      const h = this.ex.qvp_passage_load(p, n, surah, from, to);
+      if (!h) throw new Error('qvp_passage_load failed');
+      return new QvpPassage(this, h, surah, from);
+    }
+    /** Load the basmalah printed above `surah` from whichever of the pages prints it. It lays
+     * out on one row and has no ayahs and no words. Throws for surah 1, whose basmalah is its
+     * first ayah, for surah 9, which has none, and when no page given prints it. */
+    loadBasmalah(pages, surah) {
+      const [p, n] = this._pageHandles(pages);
+      const h = this.ex.qvp_passage_load_basmalah(p, n, surah);
+      if (!h) throw new Error('qvp_passage_load_basmalah failed');
+      return new QvpPassage(this, h, surah, 1);
+    }
+    /** the pages' handles as an array in wasm memory: [ptr, count]. A freed page traps in the
+     * engine, so this refuses one. */
+    _pageHandles(pages) {
+      if (!pages.length || pages.some(p => !p.h)) throw new Error('a passage needs open pages');
+      return [this.putU32(Uint32Array.from(pages, p => p.h)), pages.length];
+    }
   }
 
   // struct writers (wasm32 layouts, see qvp.h)
@@ -485,7 +509,11 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.e.ex.qvp_zoom_spec(this.h, s, z, this.e.scratch);
       const at = this.e.scratch + 48;
       const v = this.e.dv().getFloat32(at, true);
-      return { ...spec, reflow: v > 0 ? { ...(spec.reflow || {}), zoom: v } : null };
+      // The control owns the zoom alone. The host's other reflow knobs come back as it set
+      // them, on the printed page too, where the zoom is 0: dropping them there would leave the
+      // pinch that leaves the printed page to lay it out with the engine's defaults.
+      if (v > 0 || spec.reflow) return { ...spec, reflow: { ...(spec.reflow || {}), zoom: v } };
+      return { ...spec, reflow: null };
     }
     /** The same control on this page: what the reader was reading at, carried onto the page they
      * turned to. A step carries as a step, because every page's steps are its own; a free zoom
@@ -695,6 +723,73 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     searchSurahs(text) { const [p, n] = this.e.putStr(text); const c = this.e.ex.qvp_atlas_search_surahs(this.h, p, n, this.e.scratch, 128); return Array.from(new Uint16Array(this.e.mem.buffer, this.e.scratch, Math.min(c, 128))).map(k => this.surah(k)); }
   }
 
+  // where the rows of a passage start (QVP_ALIGN_*)
+  const PASSAGE_ALIGN = { right: 0, center: 1, centre: 1, justified: 2 };
+
+  /**
+   * A contiguous range of complete ayahs, or a surah's basmalah, laid out on rows away from
+   * its page. It copies what it needs, so its pages can be freed once it is loaded. Lengths
+   * of a layout are layout px: a point (x, y) of a path draws at
+   * `scale · (kx · x + dx), scale · (ky · y + dy)` under the draw's placement.
+   */
+  class QvpPassage {
+    constructor(engine, handle, surah, from) {
+      this.e = engine; this.h = handle;
+      const ex = engine.ex, s = engine.scratch;
+      /** the ayahs in reading order, each with its text from the page's own word records */
+      this.ayahs = Array.from({ length: ex.qvp_passage_ayah_count(handle) }, (_, i) => { ex.qvp_passage_ayah_text(handle, i, s); return { surah, ayah: from + i, text: engine.qstr(s) }; });
+      /** the printed line spacing of the first word, page units. Every word has that size. */
+      this.lineSpacing = ex.qvp_passage_line_spacing(handle);
+      /** the last layout */
+      this.currentLayout = null;
+    }
+    /** Free the engine's passage. Safe to call more than once. */
+    free() { if (this.h) { this.e.ex.qvp_passage_free(this.h); this.h = 0; } }
+    /** Write a passage spec (QvpPassageSpec, 32 bytes) at `at`. A knob left out takes the
+     * engine's default, and so does `maxStretch` 0. */
+    _writeSpec(spec, at) {
+      const align = spec.align == null ? 0 : PASSAGE_ALIGN[spec.align];
+      if (align === undefined) throw new Error('bad align ' + spec.align);
+      const d = this.e.dv();
+      d.setFloat32(at, spec.width ?? 0, true); d.setFloat32(at + 4, spec.scale ?? 1, true);
+      d.setFloat32(at + 8, spec.lineSpacing ?? 1, true); d.setFloat32(at + 12, spec.padding ?? 2, true);
+      d.setUint8(at + 16, align); d.setUint8(at + 17, spec.keepAyahMark ? 1 : 0); d.setUint16(at + 18, 0, true);
+      d.setUint32(at + 20, spec.maxRows || 0, true); d.setFloat32(at + 24, spec.ellipsisWidth || 0, true);
+      d.setFloat32(at + 28, spec.maxStretch ?? 0, true);
+      return at;
+    }
+    /** `n` records of `size` bytes from an array getter, each read by `record(view, offset)` */
+    _collect(getter, n, size, record) {
+      // The engine takes a buffer even for an empty answer, so the smallest ask is one record.
+      const p = this.e.buf(Math.max(1, n) * size), got = Math.min(getter(this.h, p, n), n), d = this.e.dv();
+      return Array.from({ length: got }, (_, i) => record(d, p + i * size));
+    }
+    /** Lay the passage out at `spec` and keep the layout: {width, height, scale, lineSpacing,
+     * isTruncated, ellipsis, rows, words, ayahs, draws, placements}. Null when the spec is out
+     * of range, and the last layout then stays. Spec: {width, scale, lineSpacing, padding, align:
+     * 'right'|'center'|'justified', maxRows, keepAyahMark, ellipsisWidth, maxStretch}. */
+    layout(spec = {}) {
+      const ex = this.e.ex, s = this.e.scratch;
+      const sp = this._writeSpec(spec, this.e.scratch2 + 43008);
+      if (!ex.qvp_passage_layout(this.h, sp, s)) return null;
+      const d = this.e.dv();
+      const nRows = d.getUint32(s + 16, true), nWords = d.getUint32(s + 20, true), nAyahs = d.getUint32(s + 24, true), nDraws = d.getUint32(s + 28, true);
+      const isTruncated = !!d.getUint8(s + 32);
+      const L = { width: d.getFloat32(s, true), height: d.getFloat32(s + 4, true), scale: d.getFloat32(s + 8, true), lineSpacing: d.getFloat32(s + 12, true), isTruncated,
+        // after a cut, where the host draws its ellipsis: from the last row's top to its baseline
+        ellipsis: isTruncated ? { x0: d.getFloat32(s + 36, true), y0: d.getFloat32(s + 40, true), x1: d.getFloat32(s + 44, true), y1: d.getFloat32(s + 48, true) } : null };
+      L.rows = this._collect(ex.qvp_passage_rows, nRows, 20, (v, o) => ({ x0: v.getFloat32(o, true), y0: v.getFloat32(o + 4, true), x1: v.getFloat32(o + 8, true), y1: v.getFloat32(o + 12, true), baseline: v.getFloat32(o + 16, true) }));
+      L.words = this._collect(ex.qvp_passage_words, nWords, 28, (v, o) => ({ surah: v.getUint16(o, true), ayah: v.getUint16(o + 2, true), word: v.getUint16(o + 4, true), page: v.getUint16(o + 6, true), row: v.getUint32(o + 8, true),
+        x0: v.getFloat32(o + 12, true), y0: v.getFloat32(o + 16, true), x1: v.getFloat32(o + 20, true), y1: v.getFloat32(o + 24, true) }));
+      L.ayahs = this._collect(ex.qvp_passage_ayahs, nAyahs, 20, (v, o) => ({ surah: v.getUint16(o, true), ayah: v.getUint16(o + 2, true), x0: v.getFloat32(o + 4, true), y0: v.getFloat32(o + 8, true), x1: v.getFloat32(o + 12, true), y1: v.getFloat32(o + 16, true) }));
+      // every path to draw, in drawing order: page number, path index on that page, placement index
+      L.draws = this._collect(ex.qvp_passage_draw_list, nDraws, 12, (v, o) => ({ page: v.getUint32(o, true), path: v.getUint32(o + 4, true), placement: v.getUint32(o + 8, true) }));
+      const nPlacements = ex.qvp_passage_placements(this.h, 0, 0);
+      L.placements = this._collect(ex.qvp_passage_placements, nPlacements, 16, (v, o) => ({ dx: v.getFloat32(o, true), dy: v.getFloat32(o + 4, true), kx: v.getFloat32(o + 8, true), ky: v.getFloat32(o + 12, true) }));
+      return (this.currentLayout = L);
+    }
+  }
+
   /**
    * Canvas2D host renderer. Order: highlight bands → base ink (cached) → styled ink → mask boxes.
    * Call `page.tick(performance.now())` before `draw` each frame; keep drawing while it returns true.
@@ -725,6 +820,26 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       return [s * p.kx, s * p.ky, dpr * (view.offsetX + view.scale * (L.offsetX + p.dx * L.scale)), dpr * (view.offsetY + view.scale * (L.offsetY + p.dy * L.scale))];
     }
     lineTransform(page, view, line, dpr) { const [a, , tx, ty] = this.groupTransform(page, view, line, dpr); return [a, tx, ty]; }
+    /** Draw a passage layout into a context, its top left at (x, y) in CSS px: every draw under
+     * its placement, with the path from the page the draw names. `pages` maps a page number to
+     * its QvpPage (a Map or an object). `ink` is one colour, or `(page, path) => colour` to pick
+     * an ink per path, from its page's `pathKind` for instance. */
+    static drawPassage(c, layout, pages, { x = 0, y = 0, dpr = 1, ink = DEFAULTS.INK } = {}) {
+      const pageOf = n => { const p = pages instanceof Map ? pages.get(n) : pages[n]; if (!p) throw new Error('the passage draws page ' + n + ', which was not given'); return p; };
+      const k = dpr * layout.scale, perPath = typeof ink === 'function';
+      if (!perPath) c.fillStyle = css(rgba(ink));
+      let page = null, paths = null, cur = -1;
+      for (const dr of layout.draws) {
+        if (!page || page.page !== dr.page) { page = pageOf(dr.page); paths = page.buildPaths(); }
+        if (dr.placement !== cur) {
+          const p = layout.placements[dr.placement];
+          c.setTransform(k * p.kx, 0, 0, k * p.ky, dpr * (x + layout.scale * p.dx), dpr * (y + layout.scale * p.dy));
+          cur = dr.placement;
+        }
+        if (perPath) c.fillStyle = css(rgba(ink(page, dr.path)));
+        c.fill(paths[dr.path], page.pathEvenOdd(dr.path) ? 'evenodd' : 'nonzero');
+      }
+    }
     /** put a context into one group's space, so a host overlay lands where the group is drawn */
     setGroupTransform(c, page, view, group, dpr) { const [a, d, tx, ty] = this.groupTransform(page, view, group, dpr); c.setTransform(a, 0, 0, d, tx, ty); }
     /** the group a path is drawn with: its reflow group, or its printed line */
@@ -815,5 +930,5 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     }
   }
 
-  global.QVP = { QvpEngine, QvpPage, QvpAtlas, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECORATION, FORM, LAYER, NAMES_TABLE, DEFAULTS, NONE, css, rgba, parseTarget };
+  global.QVP = { QvpEngine, QvpPage, QvpAtlas, QvpPassage, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECORATION, FORM, LAYER, NAMES_TABLE, DEFAULTS, NONE, css, rgba, parseTarget };
 })(typeof window !== 'undefined' ? window : globalThis);
