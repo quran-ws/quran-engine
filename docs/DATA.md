@@ -39,7 +39,8 @@ and fixed there; the converter never patches data.
 `ornaments.qvo` is built by `qvp-convert ornaments <quran-assets checkout> ornaments.qvo
 --redistributable` from a pinned commit of `quran-ws/quran-assets`, recorded in
 `VERSION.json` under `ornaments.source_commit`. Only assets whose catalogue licence status
-is `confirmed` go in. The scanned ornaments of other printed mushafs are traced from
+is `confirmed` go in. `scripts/package-data.sh` refuses a set that holds any ornament
+whose licence is not confirmed. The scanned ornaments of other printed mushafs are traced from
 designs that belong to their publishers and stay at CC BY-NC-SA 4.0, provisional, until
 each publisher settles permission. They are not in any release. Build a local set without
 `--redistributable` to use them, and read each ornament's licence, which the engine

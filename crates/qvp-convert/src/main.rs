@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 fn usage() -> ! {
     eprintln!(
-        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg> [ornaments.qvo ayah_mark,surah_header,page_frame]\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert zoom-levels <pages_dir> <out.rs> [--check]\n  qvp-convert ornaments <assets_dir> <out.qvo> [--redistributable] [--style NAME]...\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out.\n\n<assets_dir> is a quran-assets checkout: catalog.json with the assets/ tree beside it.\n--redistributable keeps only assets whose licence is confirmed."
+        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg> [ornaments.qvo ayah_mark,surah_header,page_frame]\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert zoom-levels <pages_dir> <out.rs> [--check]\n  qvp-convert ornaments <assets_dir> <out.qvo> [--redistributable] [--style NAME]...\n  qvp-convert ornaments-info <set.qvo>\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out.\n\n<assets_dir> is a quran-assets checkout: catalog.json with the assets/ tree beside it.\n--redistributable keeps only assets whose licence is confirmed.\nornaments-info lists a set and ends with `redistributable: <n> of <total>`."
     );
     std::process::exit(2)
 }
@@ -284,6 +284,22 @@ fn main() {
                     std::process::exit(1);
                 }
             }
+        }
+        "ornaments-info" => {
+            if args.len() != 3 {
+                usage();
+            }
+            let bytes = fs::read(&args[2]).unwrap_or_else(|e| {
+                eprintln!("error: {}: {e}", args[2]);
+                std::process::exit(1)
+            });
+            let set = qvp_format::ornaments::OrnamentSet::decode(&bytes).unwrap_or_else(|e| {
+                eprintln!("error: {}: {e:?}", args[2]);
+                std::process::exit(1)
+            });
+            print!("{}", qvp_convert::ornaments::describe(&set));
+            let n = set.ornaments.iter().filter(|o| o.license.redistributable).count();
+            println!("redistributable: {n} of {}", set.ornaments.len());
         }
         _ => usage(),
     }

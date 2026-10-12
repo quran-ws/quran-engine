@@ -5,6 +5,9 @@
 # Usage: scripts/package-data.sh X.Y.Z
 # Inputs: dist/pages/ (604 pages and sidecars, atlas.qva, generated surah-name assets),
 #         pages/.tag (the quran-svg-elements tag).
+#         Optional: dist/pages/ornaments.qvo, built with --redistributable, and
+#         QVP_ASSETS_COMMIT. The script refuses a set with any ornament whose licence
+#         is not confirmed.
 # Output: dist/quran-engine-pages-hafs-kfgqpc.tar.gz and .sha256, ready for
 #         `gh release create data-vX.Y.Z`.
 set -euo pipefail
@@ -37,6 +40,20 @@ done
 ornaments_commit="${QVP_ASSETS_COMMIT:-}"
 if [ -f dist/pages/ornaments.qvo ]; then
   [ -n "$ornaments_commit" ] || { echo "error: dist/pages/ornaments.qvo is present; set QVP_ASSETS_COMMIT to the quran-assets commit it was built from" >&2; exit 1; }
+  [ -x target/release/qvp-convert ] || cargo build -q -p qvp-convert --release
+  info="$(target/release/qvp-convert ornaments-info dist/pages/ornaments.qvo)" || {
+    echo "error: dist/pages/ornaments.qvo does not decode" >&2
+    exit 1
+  }
+  last="$(printf '%s\n' "$info" | tail -n 1)"
+  if [[ ! "$last" =~ ^redistributable:\ ([0-9]+)\ of\ ([0-9]+)$ ]]; then
+    echo "error: unexpected ornaments-info output: $last" >&2
+    exit 1
+  fi
+  if [ "${BASH_REMATCH[1]}" != "${BASH_REMATCH[2]}" ]; then
+    echo "error: dist/pages/ornaments.qvo has ${BASH_REMATCH[1]} redistributable ornaments of ${BASH_REMATCH[2]}; build it with --redistributable" >&2
+    exit 1
+  fi
 fi
 
 stage="$(mktemp -d)/$name"; trap 'rm -rf "$(dirname "$stage")"' EXIT
