@@ -813,7 +813,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       return {
         index: i, kind: ORNAMENT_KIND[u(0)], lineage: LINEAGE[u(1)], style: this.e.qstr(s + 24), riwayah: this.e.qstr(s + 32), hasSlices: !!u(3),
         licence: { id: this.e.qstr(s + 40), status: this.e.qstr(s + 48), redistributable: !!u(4), attribution: this.e.qstr(s + 56) },
-        // one entry per printed colour; `slot` is the window the design leaves open
+        // one entry per printed colour; `slot` in a design's palette is the window it leaves open; it has alpha 0
         parts: Array.from({ length: u(2) }, (_, k) => this._part(i, k)),
       };
     }
@@ -842,41 +842,49 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       /// How much ink to keep ready at once: a page that fits is drawn once and scrolling never
       /// draws again. About 17 MB for a page of this mushaf at the first zoom step.
       this.inkBudget = 64 << 20;
-      this.orn = null; this.ornKey = '';
+      // the ornament layer's raster, its key, and the layout it was drawn under
+      this.ornamentLayer = null; this.ornamentKey = ''; this.ornamentFor = null;
       this.stats = { baseMs: 0, overlayMs: 0, basePaths: 0, overlayPaths: 0, bands: 0 };
     }
-    /** transform of one group of paths: a point p is drawn at (kx·p.x + dx, ky·p.y + dy), page units */
     /**
      * The ornament layer, behind everything else. Each draw carries the placement its
      * ink is drawn under, so it moves with its word or title under any layout; the
-     * border carries none and sits in layout space. Rasterised once per revision and
-     * view, like the base ink: a tiled border is hundreds of outlines and nothing about
-     * it changes while a highlight animates.
+     * border carries none and sits in layout space. Rasterised once per band, like the
+     * base ink, so a scroll inside the band is one blit: a tiled border is hundreds of
+     * outlines and nothing about it changes while a highlight animates or the reader
+     * scrolls. A border stands past the content's top and bottom, so the band grows by
+     * the dress overflow. A new layout redraws it, as it moves the placements.
      */
-    drawOrnaments(c, page, view, dpr) {
-      const rev = page.dressRevision();
-      if (!rev) { this.orn = null; this.ornKey = ''; return; }
-      const W = this.canvas.width, H = this.canvas.height;
-      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${view.offsetY.toFixed(1)}|${dpr}|${rev}|${W}x${H}`;
-      if (!this.orn || key !== this.ornKey || this.orn.width !== W || this.orn.height !== H) {
-        if (!this.orn) this.orn = document.createElement('canvas');
-        this.orn.width = W; this.orn.height = H;
-        const b = this.orn.getContext('2d');
+    drawOrnaments(c, page, view, dpr, bandTop, bandH, bandView) {
+      const info = page.dressInfo();
+      if (!info) { this.ornamentLayer = null; this.ornamentKey = ''; this.ornamentFor = null; return; }
+      const scale = view.scale || 1;
+      const padTop = Math.ceil(info.overflow[1] * scale), padBottom = Math.ceil(info.overflow[3] * scale);
+      const top = bandTop - padTop;   // view px
+      const W = this.canvas.width, H = Math.ceil((bandH + padTop + padBottom) * dpr);
+      const L = page.currentLayout;
+      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${top.toFixed(1)}|${dpr}|${info.revision}|${W}x${H}`;
+      if (!this.ornamentLayer || key !== this.ornamentKey || this.ornamentFor !== L) {
+        if (!this.ornamentLayer) this.ornamentLayer = document.createElement('canvas');
+        this.ornamentLayer.width = W; this.ornamentLayer.height = H;
+        const b = this.ornamentLayer.getContext('2d');
+        const v = { ...bandView, offsetY: bandView.offsetY + padTop };
         let cur = -2;
         for (const o of page.dressGeometry()) {
           if (o.placement !== cur) {
-            const [a, d, tx, ty] = o.placement === null ? this.placementTransform(page, view, { dx: 0, dy: 0, kx: 1, ky: 1 }, dpr) : this.groupTransform(page, view, o.placement, dpr);
+            const [a, d, tx, ty] = o.placement === null ? this.placementTransform(page, v, { dx: 0, dy: 0, kx: 1, ky: 1 }, dpr) : this.groupTransform(page, v, o.placement, dpr);
             b.setTransform(a, 0, 0, d, tx, ty);
             cur = o.placement;
           }
           if (o.stroke) { b.strokeStyle = css(o.color); b.lineWidth = o.strokeWidth; b.lineCap = 'round'; b.lineJoin = 'round'; b.stroke(o.path); }
           else { b.fillStyle = css(o.color); b.fill(o.path, o.evenOdd ? 'evenodd' : 'nonzero'); }
         }
-        this.ornKey = key;
+        this.ornamentKey = key; this.ornamentFor = L;
       }
       c.setTransform(1, 0, 0, 1, 0, 0);
-      c.drawImage(this.orn, 0, 0);
+      c.drawImage(this.ornamentLayer, 0, Math.round(dpr * (view.offsetY + top)));
     }
+    /** transform of one group of paths: a point p is drawn at (kx·p.x + dx, ky·p.y + dy), page units */
     groupTransform(page, view, group, dpr) {
       const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null, groups: null };
       let dx = 0, dy = 0, kx = 1, ky = 1;
@@ -963,7 +971,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const t1 = performance.now();
       const c = this.ctx;
       c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
-      this.drawOrnaments(c, page, view, dpr);
+      this.drawOrnaments(c, page, view, dpr, bandTop, bandH, bandView);
       const bands = page.highlightBoxesView();
       this.drawBoxes(c, bands, view, dpr);
       c.setTransform(1, 0, 0, 1, 0, 0);
