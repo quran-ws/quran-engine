@@ -1,8 +1,9 @@
-# The page and atlas formats
+# The page, atlas and ornament formats
 
-This page specifies the two binary formats the engine reads, byte by byte, so that a
+This page specifies the three binary formats the engine reads, byte by byte, so that a
 decoder can be written from it without the Rust source. The reference implementation is
-`crates/qvp-format/src/codec.rs` (pages) and `crates/qvp-format/src/atlas.rs` (atlas);
+`crates/qvp-format/src/codec.rs` (pages), `crates/qvp-format/src/atlas.rs` (atlas) and
+`crates/qvp-format/src/ornaments.rs` (ornaments);
 `conformance/qvp1-lite.hex` is a small page written by the encoder, and
 `web/lite.mjs` is a second decoder written against this specification.
 
@@ -174,3 +175,36 @@ length-prefixed string.
 The page format version is the u16 at offset 4. A reader rejects a version it does not
 know. Changing the encoding means a new version, a full rerun of the identity gate over
 all 604 pages, and a new data release (`docs/standards/RELEASING.md`).
+
+## QVO1: an ornament set
+
+An ornament set holds the ayah medallions, surah bands and page frames of other mushafs
+and fonts, converted from the `quran-ws/quran-assets` catalogue. The reference
+implementation is `crates/qvp-format/src/ornaments.rs`. Coordinates are asset units, the
+asset's own viewBox space, quantised by `quant` (1000 by default). A `str` is a varint
+length followed by that many UTF-8 bytes. A `f32` is four bytes, little-endian.
+
+| field | type |
+|---|---|
+| magic | `QVO1` |
+| quant | u16 |
+| ornament count | varint |
+| ornaments | one record each, below |
+| path count | varint |
+| paths | one record each, below |
+| opcode length | varint |
+| opcodes | the QVP1 opcode encoding with origin 0,0 |
+
+**Ornament**: `kind` u8 (0 ayah mark, 1 surah header, 2 page frame), `lineage` u8 (0 scan,
+1 font), `style` str, `riwayah` str, `license_id` str, `license_status` str,
+`redistributable` varint (0 or 1), `attribution` str, `part count` varint, then per part
+`name` str, `color` u32 (`0xRRGGBBAA`), `stroke` varint; then one **asset**; then
+`has_slices` varint, and when 1: `corner_w`, `corner_h`, `repeat_h`, `repeat_v` as f32,
+`rotate` varint, and three assets (corner, horizontal edge, vertical edge).
+
+**Asset**: `view_box` 4 × f32 (`x, y, w, h`), `has_slot` varint, when 1 `slot` 4 × f32,
+`first_path` varint, `path count` varint.
+
+**Path**: `part` varint, `flags` u8 (1 even-odd, 2 stroke), `stroke_width` zigzag in
+quantised asset units (0 when filled), `op_off` varint, `op_len` varint. A path's
+bounding box is derived at load.
