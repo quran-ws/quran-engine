@@ -211,7 +211,7 @@ impl OrnamentSet {
     }
     pub fn path_cmds(&self, i: usize) -> Result<Vec<Cmd>, Error> {
         let p = self.paths.get(i).ok_or(Error::Corrupt("ornament path index"))?;
-        let end = (p.op_off + p.op_len) as usize;
+        let end = p.op_off.checked_add(p.op_len).ok_or(Error::Corrupt("ornament op range"))? as usize;
         let ops = self.ops.get(p.op_off as usize..end).ok_or(Error::Truncated("ornament ops"))?;
         decode_cmds(ops, 0, 0)
     }
@@ -326,7 +326,7 @@ impl OrnamentSet {
         let n_paths = read_varint(b, &mut pos)? as usize;
         let mut paths = Vec::with_capacity(n_paths.min(1 << 20));
         for _ in 0..n_paths {
-            let part = read_varint(b, &mut pos)? as u16;
+            let part = u16::try_from(read_varint(b, &mut pos)?).map_err(|_| Error::Corrupt("ornament path part"))?;
             let flags = get_u8(b, &mut pos)?;
             let stroke_width = unzigzag(read_varint(b, &mut pos)?);
             let op_off = read_varint(b, &mut pos)?;
@@ -334,7 +334,27 @@ impl OrnamentSet {
             paths.push(OrnamentPath { part, flags, stroke_width, op_off, op_len, bbox: IBox::EMPTY });
         }
         let n_ops = read_varint(b, &mut pos)? as usize;
-        let ops = b.get(pos..pos + n_ops).ok_or(Error::Truncated("ornament ops"))?.to_vec();
+        let end = pos.checked_add(n_ops).ok_or(Error::Corrupt("ornament ops length"))?;
+        let ops = b.get(pos..end).ok_or(Error::Truncated("ornament ops"))?.to_vec();
+        for p in &paths {
+            match p.op_off.checked_add(p.op_len) {
+                Some(end) if end as usize <= ops.len() => {}
+                _ => return Err(Error::Corrupt("ornament path ops out of range")),
+            }
+        }
+        // Every asset's outlines are in the pool, and each names a part of the ornament
+        // that owns it. A slice draws with its frame's parts.
+        for o in &ornaments {
+            let slices = o.slices.iter().flat_map(|s| [&s.corner, &s.edge_h, &s.edge_v]);
+            for a in std::iter::once(&o.asset).chain(slices) {
+                let end = a.first_path.checked_add(a.n_paths).ok_or(Error::Corrupt("ornament asset range"))?;
+                let owned =
+                    paths.get(a.first_path as usize..end as usize).ok_or(Error::Corrupt("ornament asset range"))?;
+                if owned.iter().any(|p| p.part as usize >= o.parts.len()) {
+                    return Err(Error::Corrupt("ornament path part"));
+                }
+            }
+        }
         let mut set = OrnamentSet { quant, ornaments, paths, ops };
         for i in 0..set.paths.len() {
             let bb = cmds_bbox(&set.path_cmds(i)?);
@@ -374,13 +394,15 @@ fn get_u8(b: &[u8], pos: &mut usize) -> Result<u8, Error> {
 
 fn get_str(b: &[u8], pos: &mut usize) -> Result<String, Error> {
     let len = read_varint(b, pos)? as usize;
-    let s = b.get(*pos..*pos + len).ok_or(Error::Truncated("ornament string"))?;
+    let end = pos.checked_add(len).ok_or(Error::Corrupt("ornament string length"))?;
+    let s = b.get(*pos..end).ok_or(Error::Truncated("ornament string"))?;
     *pos += len;
     Ok(std::str::from_utf8(s).map_err(|_| Error::Corrupt("utf8"))?.to_owned())
 }
 
 fn get_u32(b: &[u8], pos: &mut usize) -> Result<u32, Error> {
-    let s = b.get(*pos..*pos + 4).ok_or(Error::Truncated("ornament u32"))?;
+    let end = pos.checked_add(4).ok_or(Error::Truncated("ornament u32"))?;
+    let s = b.get(*pos..end).ok_or(Error::Truncated("ornament u32"))?;
     *pos += 4;
     Ok(u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
 }
@@ -464,7 +486,7 @@ mod tests {
             lineage: Lineage::Scan,
             riwayah: String::new(),
             license: License::default(),
-            parts: vec![],
+            parts: a.ornaments[0].parts.clone(),
             asset: Asset {
                 view_box: [0.0, 0.0, 65.59, 100.0],
                 slot: Some([4.92, 5.14, 55.74, 89.77]),
@@ -496,5 +518,52 @@ mod tests {
     #[test]
     fn rejects_foreign_bytes() {
         assert!(matches!(OrnamentSet::decode(b"QVP1\x64\x00").unwrap_err(), Error::BadMagic));
+    }
+
+    #[test]
+    fn a_truncated_set_is_an_error_not_a_panic() {
+        let bytes = sample().encode();
+        for n in 0..bytes.len() {
+            match OrnamentSet::decode(&bytes[..n]) {
+                Err(Error::Truncated(_) | Error::Corrupt(_) | Error::BadMagic) => {}
+                other => panic!("{n} of {} bytes: {other:?}", bytes.len()),
+            }
+        }
+    }
+
+    #[test]
+    fn an_asset_past_the_pool_is_corrupt() {
+        let mut a = sample();
+        a.ornaments[0].asset.n_paths = 3;
+        assert!(matches!(OrnamentSet::decode(&a.encode()), Err(Error::Corrupt(_))));
+        let mut a = sample();
+        a.ornaments[0].asset.first_path = u32::MAX;
+        assert!(matches!(OrnamentSet::decode(&a.encode()), Err(Error::Corrupt(_))));
+    }
+
+    #[test]
+    fn a_path_naming_a_missing_part_is_corrupt() {
+        let mut a = sample();
+        a.ornaments[0].parts.truncate(2);
+        assert!(matches!(OrnamentSet::decode(&a.encode()), Err(Error::Corrupt(_))));
+    }
+
+    #[test]
+    fn ops_past_the_pool_are_corrupt() {
+        let mut a = sample();
+        a.paths[1].op_len += 1;
+        assert!(matches!(OrnamentSet::decode(&a.encode()), Err(Error::Corrupt(_))));
+    }
+
+    #[test]
+    fn a_zero_quant_and_a_bad_kind_are_corrupt() {
+        let mut bytes = sample().encode();
+        bytes[4] = 0;
+        bytes[5] = 0;
+        assert!(matches!(OrnamentSet::decode(&bytes), Err(Error::Corrupt(_))));
+        let mut bytes = sample().encode();
+        // after the magic, the quant and the one-byte ornament count
+        bytes[7] = 200;
+        assert!(matches!(OrnamentSet::decode(&bytes), Err(Error::Corrupt("ornament kind"))));
     }
 }
