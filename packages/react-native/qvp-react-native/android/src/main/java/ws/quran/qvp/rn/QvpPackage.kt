@@ -7,5 +7,5 @@ import com.facebook.react.uimanager.ViewManager
 
 class QvpPackage : ReactPackage {
     override fun createNativeModules(ctx: ReactApplicationContext): List<NativeModule> = listOf(QvpModule(ctx))
-    override fun createViewManagers(ctx: ReactApplicationContext): List<ViewManager<*, *>> = listOf(QvpPageViewManager())
+    override fun createViewManagers(ctx: ReactApplicationContext): List<ViewManager<*, *>> = listOf(QvpPageViewManager(), QvpPassageViewManager())
 }

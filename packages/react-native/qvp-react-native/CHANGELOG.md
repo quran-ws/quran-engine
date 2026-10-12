@@ -4,7 +4,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- `<QvpPassageView />`: a range of complete ayahs, or a surah's basmalah, laid out by the engine on
+  rows of the view's width and drawn natively. The layout comes back through `onPassageLayout`,
+  and the view takes its height from it. Closes the React Native rows of issue #102.
 
 ## [0.5.0] - 2026-10-08
 

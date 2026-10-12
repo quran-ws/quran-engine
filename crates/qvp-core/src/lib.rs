@@ -114,6 +114,8 @@ pub struct Page {
     /// Tracing every outline costs more than the rest of loading a page, and only a reflow
     /// needs it, so it waits until something asks.
     silhouettes: std::cell::OnceCell<Silhouettes>,
+    /// The surah headings, measured the first time a host asks. See [`Page::surah_headers`].
+    surah_headers: std::cell::OnceCell<Vec<SurahHeader>>,
     /// The page measured for passages: each word with the signs that go with it, in the bands
     /// that every page shares. Measured the first time a passage asks.
     passage: std::cell::OnceCell<Result<passage::Prepared, PassageError>>,
@@ -419,6 +421,7 @@ impl Page {
             word_body,
             line_baseline,
             silhouettes: std::cell::OnceCell::new(),
+            surah_headers: std::cell::OnceCell::new(),
             passage: std::cell::OnceCell::new(),
             searched_steps: None,
             path_deco,

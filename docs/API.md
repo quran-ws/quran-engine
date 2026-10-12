@@ -620,8 +620,9 @@ row. Each word keeps its outline and goes with its signs: a medallion and a sajd
 the word that closes their ayah, a division mark with the word that it opens, and a sajdah line
 with the words under it. The words move onto rows of the width the app asks for; the rows are
 balanced, and the gaps stretch only when a row is justified. Bound in QvpKit, in `qvp.js`, in the
-Android SDK and in the Flutter plugin; React Native follows (`docs/API-PARITY.md`). Without Wasm,
-`@quran.ws/engine/lite/passage` is the JavaScript port.
+Android SDK and in the Flutter plugin; React Native shows one as `<QvpPassageView />`, laid out and
+drawn natively (`docs/API-PARITY.md`). Without Wasm, `@quran.ws/engine/lite/passage` is the
+JavaScript port.
 
 ```swift
 let passage = try QvpPassage(pages: [page], surah: 2, from: 255)   // the pages can close after this

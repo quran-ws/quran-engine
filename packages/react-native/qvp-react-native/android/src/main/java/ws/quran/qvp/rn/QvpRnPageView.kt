@@ -1,6 +1,5 @@
 package ws.quran.qvp.rn
 
-import android.util.Base64
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableMap
@@ -10,7 +9,6 @@ import com.facebook.react.uimanager.events.Event
 import android.widget.FrameLayout
 import ws.quran.qvp.*
 import ws.quran.qvp.Target
-import java.io.File
 
 /**
  * The React Native host of [QvpPageView]. It owns the loaded [QvpPage], loads bytes from the prop-given
@@ -116,18 +114,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     fun setFillHeightProp(v: Boolean) { inner.fillHeight = v; layoutDirty = true }
     fun setSurahFramesProp(v: Boolean) { inner.surahFrames = v; layoutDirty = true }
 
-    // ── bytes ──
-    private fun readUri(uri: String): ByteArray {
-        val u = uri.trim()
-        return when {
-            u.startsWith("asset://") -> ctx.assets.open(u.removePrefix("asset://")).use { it.readBytes() }
-            u.startsWith("asset:") -> ctx.assets.open(u.removePrefix("asset:")).use { it.readBytes() }
-            u.startsWith("file://") -> File(u.removePrefix("file://")).readBytes()
-            u.startsWith("/") -> File(u).readBytes()
-            u.startsWith("base64:") -> Base64.decode(u.removePrefix("base64:"), Base64.DEFAULT)
-            else -> ctx.assets.open(u).use { it.readBytes() }
-        }
-    }
+    private fun readUri(uri: String): ByteArray = QvpRnBytes.read(ctx, uri)
 
     /** Called by the manager after every prop batch. */
     fun commit() {

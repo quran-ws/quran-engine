@@ -280,8 +280,16 @@ impl Page {
                     None => l.groups.get(h.line as usize).copied(),
                 }
                 .unwrap_or(crate::Placement::IDENTITY);
-                let (x0, y0) = p.apply(h.x0, h.y0);
-                let (x1, y1) = p.apply(h.x1, h.y1);
+                // The frame spans the row the heading is on. On a reflowed page that is the
+                // row's own width, not the printed text block scaled by the banner's growth,
+                // which was wider than the row as soon as the reader zoomed in. The banner's
+                // growth still sets the frame's height.
+                let (_, y0) = p.apply(h.x0, h.y0);
+                let (_, y1) = p.apply(h.x1, h.y1);
+                let (x0, x1) = match l.reflow.as_ref() {
+                    Some(flow) => (0.0, flow.row_w),
+                    None => (p.apply(h.x0, h.y0).0, p.apply(h.x1, h.y1).0),
+                };
                 let (tx0, ty0) = p.apply(h.title_x0, h.title_y0);
                 let (tx1, ty1) = p.apply(h.title_x1, h.title_y1);
                 SurahHeader {

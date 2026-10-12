@@ -6,7 +6,7 @@
  * Declarative props (`highlights`, `styles`, `theme`, `mask`, `reveal`) are reconciled against engine
  * handles on the native side, so JS never sees a handle.
  */
-import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import React, { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   findNodeHandle,
   NativeModules,
@@ -227,6 +227,69 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
     />
   );
 });
+
+// ── the passage view ─────────────────────────────────────────────────────────────────────────
+/** Where the rows of a passage start: at the right edge, in the middle, or across the width. */
+export type PassageAlign = 'right' | 'center' | 'justified';
+export interface PassageRow { x0: number; y0: number; x1: number; y1: number; baseline: number }
+/** One word of a laid-out passage with its signs, in dp: its key, the page it is printed on and its row. */
+export interface PassageWord { surah: number; ayah: number; word: number; wordKey: string; page: number; row: number; x0: number; y0: number; x1: number; y1: number }
+export interface PassageAyah { surah: number; ayah: number; x0: number; y0: number; x1: number; y1: number }
+export interface PassageText { surah: number; ayah: number; text: string }
+/** A laid-out passage, in dp. `printedLineSpacing` is the passage's printed line, in page units: what
+ * `lineHeight` divides by. `ellipsis` is where the view drew the ellipsis after a cut. */
+export interface PassageLayout {
+  width: number; height: number; scale: number; lineSpacing: number; printedLineSpacing: number;
+  isTruncated: boolean; ellipsis: number[] | null;
+  rows: PassageRow[]; words: PassageWord[]; ayahs: PassageAyah[]; texts: PassageText[];
+}
+export interface QvpPassageViewProps extends ViewProps {
+  /** The pages that print the range, in any order; the same URI schemes as `pageUri`. */
+  pageUris: string[];
+  surah: number;
+  /** The first and last ayah; `to` defaults to `from`. Left out for a basmalah. */
+  from?: number; to?: number;
+  /** The basmalah printed above `surah`, one row and no words. Surahs 1 and 9 have none. */
+  basmalah?: boolean;
+  /** dp per page unit (1), or `lineHeight`: dp per printed line, which wins when both are given. */
+  scale?: number; lineHeight?: number;
+  /** Leading as a multiple of the printed line (1), and the padding around the rows in dp (2). */
+  lineSpacing?: number; padding?: number;
+  align?: PassageAlign;
+  /** Cut the passage after this many rows (0 = no cut), with room for an ellipsis this wide in dp.
+   * `keepAyahMark` puts the medallion of the last ayah after the ellipsis. */
+  maxRows?: number; ellipsisWidth?: number; keepAyahMark?: boolean;
+  /** How far a justified row's gaps may open, as a multiple of the usual air (0 = the engine's default). */
+  maxStretch?: number;
+  ink?: Color; paperColor?: Color;
+  /** The layout the engine made for this width. The view takes its height from it unless the style gives one. */
+  onPassageLayout?: (e: PassageLayout) => void;
+  onError?: (e: { message: string }) => void;
+}
+type NativePassageProps = ViewProps & Omit<QvpPassageViewProps, 'onPassageLayout' | 'onError' | 'ink' | 'paperColor'> & {
+  ink?: string; paperColor?: string;
+  onPassageLayout?: (e: NativeSyntheticEvent<PassageLayout>) => void;
+  onError?: (e: NativeSyntheticEvent<{ message: string }>) => void;
+};
+const NativeQvpPassageView = requireNativeComponent<NativePassageProps>('QvpPassageView') as HostComponent<NativePassageProps>;
+
+/** A range of complete ayahs, or a surah's basmalah, laid out on rows of this view's width and drawn
+ * natively. The engine lays it out; JS sees the layout through `onPassageLayout`. */
+export function QvpPassageView(props: QvpPassageViewProps) {
+  const { ink, paperColor, onPassageLayout, onError, style, ...rest } = props;
+  // The height is the engine's answer for the width, so it arrives with the first layout.
+  const [height, setHeight] = useState<number | undefined>(undefined);
+  return (
+    <NativeQvpPassageView
+      {...rest}
+      style={[{ height }, style]}
+      ink={css(ink)}
+      paperColor={css(paperColor)}
+      onPassageLayout={(e: NativeSyntheticEvent<PassageLayout>) => { setHeight(e.nativeEvent.height); onPassageLayout?.(e.nativeEvent); }}
+      onError={onError ? (e: NativeSyntheticEvent<{ message: string }>) => onError(e.nativeEvent) : undefined}
+    />
+  );
+}
 
 // ── the module ───────────────────────────────────────────────────────────────────────────────
 const M = NativeModules.QvpModule as any;

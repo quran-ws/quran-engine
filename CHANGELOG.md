@@ -7,17 +7,24 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
-- Passages reach every wrapper but React Native: `qvp.js` (`engine.loadPassage`,
+- Passages reach every wrapper: `qvp.js` (`engine.loadPassage`,
   `engine.loadBasmalah`, `QvpPassage`, `CanvasRenderer.drawPassage`), the Android SDK
   (`QvpPassage`) and the Flutter plugin (`QvpPassage`, `paintPassage`). Each replays
-  `conformance/scenarios/passage.json`, and the web replay runs in the gates. React Native stays a
-  declared gap under issue #102.
+  `conformance/scenarios/passage.json`, and the web replay runs in the gates. React Native shows
+  one as `<QvpPassageView />`, laid out and drawn natively, which closes issue #102.
 - A conformance scenario for a cut row too narrow for one word, the ellipsis and the medallion:
   58 passage cases, from 52.
 - The Flutter page view takes `maxZoom` and reports `peekScale`, as the iOS and Android page
   views do, and `setZoomMode` switches the pinch to magnify.
 
 ### Fixed
+- `surah_headers_view` on a reflowed page returned the printed text block scaled by the banner's
+  growth as the frame box, which was wider than the row, and the screen, as soon as the reader
+  zoomed in. The frame box is now the row the heading is on; the banner's growth still sets its
+  height.
+- A surah name whose every path is an ornament has a title box: the decoration's, rather than
+  the empty box's sentinel corners. The headings are also measured once per page, where a host
+  overlay asked on every pan and zoom frame.
 - A passage cut to a row with no room for one word, the ellipsis and the medallion of its last
   ayah placed them outside the layout, left of the padding. The scale now shrinks, once, so that
   every word has room for what follows the cut, and the rows are broken again.

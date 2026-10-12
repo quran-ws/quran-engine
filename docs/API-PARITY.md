@@ -110,18 +110,18 @@ is owed.
 | `qvp_mask_transition` | android | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_mask_transition` | flutter | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_mask_transition` | react-native | issue (to open): a binding is owed; the fade landed on iOS first |
-| `qvp_passage_load` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_load_basmalah` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_free` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_ayah_count` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_ayah_text` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_line_spacing` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_layout` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_rows` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_words` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_ayahs` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_draw_list` | react-native | issue #102: passages reached iOS first |
-| `qvp_passage_placements` | react-native | issue #102: passages reached iOS first |
+| `qvp_passage_load` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_load_basmalah` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_free` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_ayah_count` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_ayah_text` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_line_spacing` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_layout` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_rows` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_words` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_ayahs` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_draw_list` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_placements` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 
 ## Platform-level gaps
 
@@ -272,7 +272,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-161 symbols in the header, 161 Rust exports. web: 160 bound, android: 155 bound, flutter: 160 bound, ios: 153 bound, react-native: 82 bound.
+161 symbols in the header, 161 Rust exports. web: 160 bound, android: 155 bound, flutter: 160 bound, ios: 153 bound, react-native: 83 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -364,18 +364,18 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_page_info` | yes | yes | yes | yes | yes |
 | `qvp_page_line_spacing` | yes | yes | yes | yes | gap (other shape: `info().lineSpacing`) |
 | `qvp_page_load` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript (`pageUri` prop)) |
-| `qvp_passage_ayah_count` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_ayah_text` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_ayahs` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_draw_list` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_free` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_layout` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_line_spacing` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_load` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_load_basmalah` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_placements` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_rows` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
-| `qvp_passage_words` | yes | yes | yes | yes | gap (issue #102: passages reached iOS first) |
+| `qvp_passage_ayah_count` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_ayah_text` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_ayahs` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_draw_list` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_free` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_layout` | yes | yes | yes | yes | yes |
+| `qvp_passage_line_spacing` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_load` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_load_basmalah` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_placements` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_rows` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_words` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |
 | `qvp_reflow_max_zoom` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_reveal_goto` | yes | yes | yes | yes | yes |
