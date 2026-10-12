@@ -1,6 +1,6 @@
 use super::*;
 
-fn square(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<Cmd> {
+pub(crate) fn square(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<Cmd> {
     vec![Cmd::MoveTo(x0, y0), Cmd::LineTo(x1, y0), Cmd::LineTo(x1, y1), Cmd::LineTo(x0, y1), Cmd::Close]
 }
 
@@ -10,7 +10,7 @@ fn page() -> Page {
     Page::load(&encode(&page_data())).unwrap()
 }
 
-fn page_data() -> PageData {
+pub(crate) fn page_data() -> PageData {
     let mut ops = Vec::new();
     let mut paths = Vec::new();
     let mut strings = vec![];
@@ -729,7 +729,7 @@ fn packed_page() -> Page {
     Page::load(&encode(&data)).unwrap()
 }
 
-fn page_with_surah_frame(frame: bool) -> (Page, Option<u32>, u32, u32) {
+pub(crate) fn page_with_surah_frame(frame: bool) -> (Page, Option<u32>, u32, u32) {
     let mut data = page_data();
     for line in &mut data.lines {
         line.line_number += 1;

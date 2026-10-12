@@ -109,6 +109,11 @@ pub struct Layout {
     pub content_h: f32,
     /// Content width in viewport px (the padded page width).
     pub content_w: f32,
+    /// The laid-out page box in page units, in the space of a draw with no placement:
+    /// the top of the page below the top padding, and the page's height with the leading
+    /// added. A border drawn around the page goes around this box.
+    pub laid_top: f32,
+    pub laid_height: f32,
     /// The line spacing the layout produced, in page units (printed spacing + the added delta).
     pub line_spacing: f32,
     /// The view transform that shows the whole laid-out content inside the viewport:
@@ -287,6 +292,7 @@ impl Page {
         if let Some(r) = spec.reflow.filter(|r| r.zoom > 1.0 + 1e-4) {
             let l = self.layout_reflow(spec, &r);
             self.layout = Some(l);
+            self.redress();
             return self.layout.as_ref().unwrap();
         }
         let ph = self.height();
@@ -355,6 +361,8 @@ impl Page {
             line_slots,
             content_h,
             content_w,
+            laid_top: spec.pad_top / scale,
+            laid_height: block_h,
             fit_scale: 0.0,
             fit_x: 0.0,
             fit_y: 0.0,
@@ -376,6 +384,8 @@ impl Page {
         layout.fit_x = ((spec.viewport_w - layout.content_w * fit_scale) / 2.0).max(0.0);
         layout.fit_y = ((spec.viewport_h - layout.content_h * fit_scale) / 2.0).max(0.0);
         self.layout = Some(layout);
+        // a border goes around the laid-out page, so it moves with it
+        self.redress();
         self.layout.as_ref().unwrap()
     }
 
@@ -486,6 +496,8 @@ impl Page {
             line_slots,
             content_h,
             content_w,
+            laid_top: spec.pad_top / scale,
+            laid_height: (content_h - spec.pad_top - spec.pad_bottom) / scale,
             line_spacing: pitch,
             fit_scale: 1.0,
             fit_x: 0.0,
