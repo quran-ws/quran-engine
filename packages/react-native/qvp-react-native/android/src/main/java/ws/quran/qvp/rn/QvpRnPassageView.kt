@@ -4,10 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.util.Log
 import android.view.View
-import com.facebook.react.bridge.WritableMap
 import com.facebook.react.uimanager.ThemedReactContext
-import com.facebook.react.uimanager.UIManagerHelper
-import com.facebook.react.uimanager.events.Event
 import ws.quran.qvp.*
 
 /**
@@ -78,9 +75,11 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
         loadedKey = key
         if (pageUris.isEmpty() || surahProp <= 0) return
         // The passage copies what it needs, but a draw names a path by its page, so the pages stay
-        // open for as long as the passage is drawn.
-        val loaded = pageUris.map { QvpPage(QvpRnBytes.read(ctx, it)).also { p -> p.buildPaths() } }
+        // open for as long as the passage is drawn. Each page goes into `pages` as it opens, so a
+        // URI that fails after it leaves nothing for `destroy` to miss.
+        val loaded = ArrayList<QvpPage>(pageUris.size)
         pages = loaded
+        for (uri in pageUris) loaded.add(QvpPage(QvpRnBytes.read(ctx, uri)).also { p -> p.buildPaths() })
         pagesByNumber = loaded.associateBy { it.pageNo }
         passage = if (basmalahProp) QvpPassage.basmalah(loaded, surahProp)
                   else QvpPassage.load(loaded, surahProp, fromProp, if (toProp > 0) toProp else fromProp)
@@ -97,19 +96,26 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
             "justified" -> QvpPassageAlign.JUSTIFIED
             else -> QvpPassageAlign.RIGHT
         }
+        val maxRows = maxRowsProp.coerceAtLeast(0)
+        // The view draws the ellipsis after a cut, so it knows how wide one is: three dots as
+        // tall as a row, unless the host reserved a width of its own.
+        val ellipsisWidth = if (ellipsisWidthProp > 0f || maxRows == 0) ellipsisWidthProp else {
+            paint.textSize = scale * p.lineSpacing
+            paint.measureText(ELLIPSIS)
+        }
         val spec = QvpPassageSpec(width = widthDp, scale = scale, lineSpacing = lineSpacingProp, padding = paddingProp,
-                                  align = align, maxRows = maxRowsProp.coerceAtLeast(0), keepAyahMark = keepAyahMarkProp,
-                                  ellipsisWidth = ellipsisWidthProp, maxStretch = maxStretchProp)
+                                  align = align, maxRows = maxRows, keepAyahMark = keepAyahMarkProp,
+                                  ellipsisWidth = ellipsisWidth, maxStretch = maxStretchProp)
         val key = spec.toString()
         if (key == layoutKey) return
-        layoutKey = key
         val l = p.layout(spec)
+        layoutKey = key
         layout = l
         if (l == null) {
             emit("onError", mapOf("message" to "the passage spec is out of range: $spec"))
             return
         }
-        emit("onPassageLayout", Marshal.passageLayout(l, p))
+        emit("onPassageLayout", Marshal.passageLayoutMap(l, p))
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -125,19 +131,14 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
         l.ellipsis?.let { e ->
             paint.textSize = e.height()
             paint.textAlign = Paint.Align.CENTER
-            canvas.drawText("…", e.centerX(), e.bottom, paint)
+            canvas.drawText(ELLIPSIS, e.centerX(), e.bottom, paint)
         }
         canvas.restore()
     }
 
-    // ── events ──
-    private class QvpEvent(surfaceId: Int, viewTag: Int, private val name: String, private val payload: WritableMap) : Event<QvpEvent>(surfaceId, viewTag) {
-        override fun getEventName() = name
-        override fun getEventData(): WritableMap = payload
-    }
-    private fun emit(name: String, payload: Map<String, Any?>) {
-        if (id <= 0) return
-        val dispatcher = UIManagerHelper.getEventDispatcherForReactTag(ctx, id) ?: return
-        dispatcher.dispatchEvent(QvpEvent(UIManagerHelper.getSurfaceId(this), id, name, Marshal.toMap(payload)))
+    private fun emit(name: String, payload: Map<String, Any?>) = QvpRnEvents.emit(ctx, this, name, payload)
+
+    private companion object {
+        const val ELLIPSIS = "\u2026"
     }
 }

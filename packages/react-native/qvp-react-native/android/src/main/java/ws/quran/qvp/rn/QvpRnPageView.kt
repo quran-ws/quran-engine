@@ -2,10 +2,7 @@ package ws.quran.qvp.rn
 
 import android.util.Log
 import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.WritableMap
 import com.facebook.react.uimanager.ThemedReactContext
-import com.facebook.react.uimanager.UIManagerHelper
-import com.facebook.react.uimanager.events.Event
 import android.widget.FrameLayout
 import ws.quran.qvp.*
 import ws.quran.qvp.Target
@@ -223,16 +220,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         if (at != appliedRevealAt) { appliedRevealAt = at; p.revealGoto(at) }
     }
 
-    // ── events ──
-    private class QvpEvent(surfaceId: Int, viewTag: Int, private val name: String, private val payload: WritableMap) : Event<QvpEvent>(surfaceId, viewTag) {
-        override fun getEventName() = name
-        override fun getEventData(): WritableMap = payload
-    }
-    fun emit(name: String, payload: Map<String, Any?>) {
-        if (id <= 0) return
-        val dispatcher = UIManagerHelper.getEventDispatcherForReactTag(ctx, id) ?: return
-        dispatcher.dispatchEvent(QvpEvent(UIManagerHelper.getSurfaceId(this), id, name, Marshal.toMap(payload)))
-    }
+    fun emit(name: String, payload: Map<String, Any?>) = QvpRnEvents.emit(ctx, this, name, payload)
 
     fun stats(): Map<String, Any?> = mapOf("loadMs" to loadMs, "bytes" to pageBytes, "baseMs" to inner.lastBaseMs, "overlayMs" to inner.lastOverlayMs, "basePaths" to inner.lastBasePaths, "overlayPaths" to inner.lastOverlayPaths,
         "bands" to inner.lastBands, "hitUs" to inner.lastHitUs, "animating" to inner.animating, "styleHandles" to (page?.styleHandles()?.size ?: 0), "highlightHandles" to (page?.highlightHandles()?.size ?: 0),

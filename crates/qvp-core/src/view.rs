@@ -272,9 +272,9 @@ impl Page {
     pub fn surah_headers_view(&self) -> Vec<SurahHeader> {
         let Some(l) = self.current_layout() else { return self.surah_headers() };
         let n_words = self.data().words.len() as u32;
-        self.surah_headers()
-            .into_iter()
-            .map(|h| {
+        self.surah_headers_cached()
+            .iter()
+            .map(|&h| {
                 let p = match l.reflow.as_ref() {
                     Some(_) => l.groups.get((n_words + h.decoration) as usize).copied(),
                     None => l.groups.get(h.line as usize).copied(),
@@ -284,11 +284,11 @@ impl Page {
                 // row's own width, not the printed text block scaled by the banner's growth,
                 // which was wider than the row as soon as the reader zoomed in. The banner's
                 // growth still sets the frame's height.
-                let (_, y0) = p.apply(h.x0, h.y0);
-                let (_, y1) = p.apply(h.x1, h.y1);
+                let (px0, y0) = p.apply(h.x0, h.y0);
+                let (px1, y1) = p.apply(h.x1, h.y1);
                 let (x0, x1) = match l.reflow.as_ref() {
                     Some(flow) => (0.0, flow.row_w),
-                    None => (p.apply(h.x0, h.y0).0, p.apply(h.x1, h.y1).0),
+                    None => (px0, px1),
                 };
                 let (tx0, ty0) = p.apply(h.title_x0, h.title_y0);
                 let (tx1, ty1) = p.apply(h.title_x1, h.title_y1);

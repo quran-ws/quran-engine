@@ -13,11 +13,7 @@ class QvpPassageViewManager : SimpleViewManager<QvpRnPassageView>() {
     override fun onDropViewInstance(view: QvpRnPassageView) { view.destroy(); super.onDropViewInstance(view) }
     override fun onAfterUpdateTransaction(view: QvpRnPassageView) { super.onAfterUpdateTransaction(view); view.commit() }
 
-    override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> {
-        val m = HashMap<String, Any>()
-        for (e in EVENTS) m[e] = mapOf("registrationName" to e)
-        return m
-    }
+    override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> = QvpRnEvents.constants(EVENTS)
 
     @ReactProp(name = "pageUris") fun setPageUris(v: QvpRnPassageView, a: ReadableArray?) { v.pageUris = Marshal.plain(a)?.map { it.toString() } ?: emptyList() }
     @ReactProp(name = "surah", defaultInt = 0) fun setSurah(v: QvpRnPassageView, i: Int) { v.surahProp = i }
@@ -34,7 +30,7 @@ class QvpPassageViewManager : SimpleViewManager<QvpRnPassageView>() {
     @ReactProp(name = "ellipsisWidth", defaultFloat = 0f) fun setEllipsisWidth(v: QvpRnPassageView, f: Float) { v.ellipsisWidthProp = f }
     @ReactProp(name = "maxStretch", defaultFloat = 0f) fun setMaxStretch(v: QvpRnPassageView, f: Float) { v.maxStretchProp = f }
     @ReactProp(name = "ink") fun setInk(v: QvpRnPassageView, s: String?) { v.inkProp = s }
-    @ReactProp(name = "paperColor") fun setPaperColor(v: QvpRnPassageView, s: String?) { v.paperColor = if (s.isNullOrBlank()) 0 else QvpColor.argb(QvpColor.parse(s)) }
+    @ReactProp(name = "paperColor") fun setPaperColor(v: QvpRnPassageView, s: String?) { v.paperColor = Marshal.color(s, 0).let { if (it == 0) 0 else QvpColor.argb(it) } }
 
     companion object {
         const val NAME = "QvpPassageView"

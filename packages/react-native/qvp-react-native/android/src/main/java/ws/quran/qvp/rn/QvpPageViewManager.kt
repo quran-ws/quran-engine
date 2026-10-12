@@ -15,11 +15,7 @@ class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {
     override fun onDropViewInstance(view: QvpRnPageView) { view.destroy(); super.onDropViewInstance(view) }
     override fun onAfterUpdateTransaction(view: QvpRnPageView) { super.onAfterUpdateTransaction(view); view.commit() }
 
-    override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> {
-        val m = HashMap<String, Any>()
-        for (e in EVENTS) m[e] = mapOf("registrationName" to e)
-        return m
-    }
+    override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> = QvpRnEvents.constants(EVENTS)
 
     @ReactProp(name = "pageUri") fun setPageUri(v: QvpRnPageView, s: String?) { v.pageUri = s }
     @ReactProp(name = "pageBase64") fun setPageBase64(v: QvpRnPageView, s: String?) { v.pageBase64 = s }

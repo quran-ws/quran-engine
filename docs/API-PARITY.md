@@ -272,7 +272,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-161 symbols in the header, 161 Rust exports. web: 160 bound, android: 155 bound, flutter: 160 bound, ios: 153 bound, react-native: 83 bound.
+161 symbols in the header, 161 Rust exports. web: 160 bound, android: 155 bound, flutter: 160 bound, ios: 153 bound, react-native: 82 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -369,7 +369,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_passage_ayahs` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_draw_list` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_free` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
-| `qvp_passage_layout` | yes | yes | yes | yes | yes |
+| `qvp_passage_layout` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_line_spacing` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_load` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_load_basmalah` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |

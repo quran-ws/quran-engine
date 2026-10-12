@@ -269,9 +269,13 @@ impl Page {
     /// The frame box spans the page's text block and the heading's row. The title box holds
     /// the heading's own ink without its native frame, which is what a host draws around.
     pub fn surah_headers(&self) -> Vec<SurahHeader> {
-        // Measured once: a host overlay asks on every pan and zoom frame, and nothing here
-        // changes after the page is loaded.
-        self.surah_headers.get_or_init(|| self.measure_surah_headers()).clone()
+        self.surah_headers_cached().to_vec()
+    }
+
+    /// The headings as measured once: a host overlay asks on every pan and zoom frame, and
+    /// nothing here changes after the page is loaded.
+    pub(crate) fn surah_headers_cached(&self) -> &[SurahHeader] {
+        self.surah_headers.get_or_init(|| self.measure_surah_headers())
     }
 
     fn measure_surah_headers(&self) -> Vec<SurahHeader> {
