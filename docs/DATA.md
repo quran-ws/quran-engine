@@ -18,6 +18,7 @@ and under what terms an app may use it.
 | `surah-names/surah-names.woff2` | all titles as OpenType/CFF glyphs at private-use code points |
 | `surah-names/surah-names.css`, `surah-names/map.json` | browser classes and the code-point and metadata map |
 | `VERSION.json` | provenance: data version, source release, engine commit, format version, page and surah-name counts, and digests of every generated data file |
+| `ornaments.qvo` | the ornament set in the QVO1 format: every asset of `quran-ws/quran-assets` whose licence is confirmed, today the 40 font-derived ayah markers |
 
 The data covers 604 pages, 77,432 words, 6,236 ayahs and 114 surahs. The individual QVPs
 add about 0.35 MB, the WOFF2 font about 0.13 MB, and the optional SVG and combined forms
@@ -32,6 +33,17 @@ version 4, 1441 AH**, in the Hafs reading, as vector artwork. The immediate sour
 `hafs-kfgqpc` bundle): one SVG per page with every word tagged by its key, plus an index of
 the text forms. `docs/UPSTREAM-DATA-ISSUES.md` lists what was found wrong in that source
 and fixed there; the converter never patches data.
+
+## The ornament set
+
+`ornaments.qvo` is built by `qvp-convert ornaments <quran-assets checkout> ornaments.qvo
+--redistributable` from a pinned commit of `quran-ws/quran-assets`, recorded in
+`VERSION.json` under `ornaments.source_commit`. Only assets whose catalogue licence status
+is `confirmed` go in. The scanned ornaments of other printed mushafs are traced from
+designs that belong to their publishers and stay at CC BY-NC-SA 4.0, provisional, until
+each publisher settles permission. They are not in any release. Build a local set without
+`--redistributable` to use them, and read each ornament's licence, which the engine
+reports, before you publish a page wearing it.
 
 ## How it is built
 

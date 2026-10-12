@@ -113,6 +113,9 @@ for f in "${pages[@]}" "${sidecars[@]}" "$SRC"/atlas.qva "$SRC"/atlas.json "$SRC
   name="${f#"$SRC/"}"
   printf '%s\t%s\t%s\n' "$name" "$(wc -c < "$f" | tr -d ' ')" "$(sha256 "$f")" >> "$STAGE/.files.tsv"
 done
+if [ -f "$SRC/ornaments.qvo" ]; then
+  printf '%s\t%s\t%s\n' "ornaments.qvo" "$(wc -c < "$SRC/ornaments.qvo" | tr -d ' ')" "$(sha256 "$SRC/ornaments.qvo")" >> "$STAGE/.files.tsv"
+fi
 for f in $extras; do
   printf '%s\t%s\t%s\n' "$f" "$(wc -c < "$SRC/$f" | tr -d ' ')" "$(sha256 "$SRC/$f")" >> "$STAGE/.files.tsv"
 done
@@ -129,6 +132,7 @@ echo "== building $BUNDLE (solid brotli, this takes a few minutes)"
 (
   cd "$SRC"
   files=( *.qvp *.words.json atlas.qva atlas.json VERSION.json surah-names/qvp/*.qvp surah-names/svg/*.svg surah-names/surah-names.woff2 surah-names/surah-names.css surah-names/map.json )
+  [ -f ornaments.qvo ] && files+=( ornaments.qvo )
   for f in $extras; do files+=("$f"); done
   COPYFILE_DISABLE=1 tar --format ustar -cf - "${files[@]}"
 ) | brotli -q 11 -c > "$STAGE/$BUNDLE"

@@ -36,6 +36,16 @@ else
   echo "fetched  dist/pages ($tag, checksum verified)"
 fi
 
+# the ornament set, when the data release has one; a release without it is not an error
+if [ -f dist/pages/ornaments.qvo ] && [ "$(cat dist/pages/.tag 2>/dev/null)" = "$tag" ]; then
+  echo "kept     dist/pages/ornaments.qvo ($tag)"
+elif curl --fail --location --retry 3 --silent --show-error "$base/ornaments.qvo" --output dist/pages/ornaments.qvo 2>/dev/null; then
+  echo "fetched  dist/pages/ornaments.qvo ($tag)"
+else
+  rm -f dist/pages/ornaments.qvo
+  echo "skipped  dist/pages/ornaments.qvo ($tag has none)"
+fi
+
 svg_tag="${QVP_SVG_TAG:-v1.1.2}"
 svg_asset="quran-svg-elements-hafs-kfgqpc.tar.gz"
 svg_base="https://github.com/quran-ws/quran-svg-elements/releases/download/$svg_tag"
