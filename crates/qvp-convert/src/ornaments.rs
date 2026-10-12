@@ -403,6 +403,82 @@ pub fn asset_bbox(set: &OrnamentSet, a: &Asset) -> IBox {
     }
     bb
 }
+/// A dressed page as one standalone SVG, the way `qvp2svg` is for the page itself. The
+/// ornament layer comes first so it paints behind the print, as a host must draw it.
+/// Draws are written in page units with no placement, so this shows the printed layout.
+pub fn dress_svg(page: &mut qvp_core::Page, dress: &qvp_core::Dress) -> String {
+    use std::fmt::Write;
+    let vb = dress.view_box;
+    let mut s = String::with_capacity(256 * 1024);
+    write!(
+        s,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"{:.3} {:.3} {:.3} {:.3}\">",
+        vb[0], vb[1], vb[2], vb[3]
+    )
+    .unwrap();
+    s.push_str("<g class=\"ornaments\">");
+    for d in &dress.table {
+        let mut path = String::new();
+        let pts = &dress.pts[d.pt_start as usize..(d.pt_start + d.pt_count) as usize];
+        let mut i = 0usize;
+        let mut take = |n: usize, out: &mut String| {
+            for k in 0..n {
+                write!(out, "{}{:.3} {:.3}", if k > 0 { " " } else { "" }, pts[i + k * 2], pts[i + k * 2 + 1]).unwrap();
+            }
+            i += n * 2;
+        };
+        for op in &dress.ops[d.op_start as usize..(d.op_start + d.op_count) as usize] {
+            match *op {
+                qvp_format::OP_MOVE => {
+                    path.push('M');
+                    take(1, &mut path);
+                }
+                qvp_format::OP_LINE => {
+                    path.push('L');
+                    take(1, &mut path);
+                }
+                qvp_format::OP_QUAD => {
+                    path.push('Q');
+                    take(2, &mut path);
+                }
+                qvp_format::OP_CUBIC => {
+                    path.push('C');
+                    take(3, &mut path);
+                }
+                _ => path.push('Z'),
+            }
+        }
+        let hex = format!("#{:06x}", d.color >> 8);
+        write!(s, "<path d=\"{path}\"").unwrap();
+        if d.flags & qvp_core::ODF_STROKE != 0 {
+            write!(s, " fill=\"none\" stroke=\"{hex}\" stroke-width=\"{:.4}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"", d.stroke_width).unwrap();
+        } else {
+            write!(s, " fill=\"{hex}\"").unwrap();
+            if d.flags & qvp_core::ODF_EVENODD != 0 {
+                s.push_str(" fill-rule=\"evenodd\"");
+            }
+        }
+        s.push_str("/>");
+    }
+    s.push_str("</g>");
+    // the print on top, with the rings the dress hid left out
+    let colors = page.colors().to_vec();
+    let p = page.data();
+    for (i, r) in p.paths.iter().enumerate() {
+        if colors[i] & 0xff == 0 {
+            continue;
+        }
+        let Ok(cmds) = p.path_cmds(i) else { continue };
+        write!(s, "<path d=\"{}\" fill=\"#231f20\"", qvp_format::svg_path_d(&cmds, p.header.quant)).unwrap();
+        if r.flags & qvp_format::PF_EVENODD != 0 {
+            s.push_str(" fill-rule=\"evenodd\"");
+        }
+        s.push_str("/>");
+    }
+    s.push_str("</svg>");
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

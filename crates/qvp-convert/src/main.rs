@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 fn usage() -> ! {
     eprintln!(
-        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg>\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert zoom-levels <pages_dir> <out.rs> [--check]\n  qvp-convert ornaments <assets_dir> <out.qvo> [--redistributable] [--style NAME]...\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out.\n\n<assets_dir> is a quran-assets checkout: catalog.json with the assets/ tree beside it.\n--redistributable keeps only assets whose licence is confirmed."
+        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg> [ornaments.qvo ayah_mark,surah_header,page_frame]\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert zoom-levels <pages_dir> <out.rs> [--check]\n  qvp-convert ornaments <assets_dir> <out.qvo> [--redistributable] [--style NAME]...\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out.\n\n<assets_dir> is a quran-assets checkout: catalog.json with the assets/ tree beside it.\n--redistributable keeps only assets whose licence is confirmed."
     );
     std::process::exit(2)
 }
@@ -74,10 +74,33 @@ fn main() {
             }
         }
         "qvp2svg" => {
-            expect_args(&args, 2, 2);
+            expect_args(&args, 2, 4);
             let bytes = fs::read(&args[2]).expect("read qvp");
-            let page = qvp_format::decode(&bytes).expect("decode");
-            fs::write(&args[3], to_svg(&page).expect("to_svg")).expect("write svg");
+            if args.len() == 6 {
+                // three ornament indices (ayah mark, surah header, page frame), `-` for none
+                let set = qvp_format::ornaments::OrnamentSet::decode(&fs::read(&args[4]).expect("read ornaments"))
+                    .expect("decode ornaments");
+                let idx: Vec<u32> = args[5]
+                    .split(',')
+                    .map(|v| if v == "-" { u32::MAX } else { v.parse().expect("an ornament index or -") })
+                    .collect();
+                if idx.len() != 3 {
+                    usage();
+                }
+                let mut page = qvp_core::Page::load(&bytes).expect("decode");
+                let spec = qvp_core::DressSpec {
+                    ayah_mark: idx[0],
+                    surah_header: idx[1],
+                    page_frame: idx[2],
+                    ..Default::default()
+                };
+                let dress = page.dress(&std::sync::Arc::new(set), &spec).expect("the engine refused the spec").clone();
+                fs::write(&args[3], ornaments::dress_svg(&mut page, &dress)).expect("write svg");
+            } else {
+                expect_args(&args, 2, 2);
+                let page = qvp_format::decode(&bytes).expect("decode");
+                fs::write(&args[3], to_svg(&page).expect("to_svg")).expect("write svg");
+            }
         }
         // the engine's shipped zoom steps: search every page, chain the pages together, write
         // the table the engine carries. `--check` rebuilds it and reports whether the committed
