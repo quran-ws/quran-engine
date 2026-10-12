@@ -115,10 +115,14 @@ from its padding and content height. Without a layout the box is the printed pag
 
 ### 5. Hiding the native ornament uses the style engine
 
-A dress with a medallion hides the printed rings with one style rule at `LAYER_TOP`
+A dress with a medallion hides the printed rings with one style rule
 (`Selector::Kind(PathKind::AyahMarkOrnament)`, `Paint::HIDDEN`). A dress with a band hides
 the native surah frame the same way, through the paths `surah_name_ornament_paths()` lists.
-`undress` removes both rules. The layout's `surah_frames` knob is untouched and independent.
+These rules live on `LAYER_ENGINE`, a reserved layer above every host layer. A host cannot
+add a rule there. `qvp_style_clear` and `qvp_style_clear_layer` do not touch it. A higher
+layer always wins, so no host rule shows the printed ring again, whatever its selector.
+`undress` removes both rules by handle. The layout's `surah_frames` knob is untouched and
+independent.
 
 ### 6. The layout re-places the dress
 

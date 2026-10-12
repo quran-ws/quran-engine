@@ -85,6 +85,13 @@ pub const LAYER_THEME: i32 = 10;
 pub const LAYER_HIGHLIGHT: i32 = 50;
 pub const LAYER_SELECTION: i32 = 60;
 pub const LAYER_TOP: i32 = 100;
+/// The engine's own layer, above every host layer. A dressed page hides its printed
+/// rings and bands here. A host cannot add a rule on it: [`StyleEngine::add`] and
+/// [`StyleEngine::add_many`] put a rule asked for at this layer one layer below. A
+/// higher layer always wins, so no host rule beats an engine rule, whatever its
+/// selector. [`StyleEngine::clear`] and [`StyleEngine::clear_layer`] leave it alone.
+/// It is not part of the C header or the wrappers.
+pub(crate) const LAYER_ENGINE: i32 = i32::MAX;
 
 #[derive(Debug, Default)]
 pub struct StyleEngine {
@@ -104,15 +111,24 @@ impl StyleEngine {
         self.next_handle += 1;
         h
     }
-    /// Add one rule. Returns its handle.
+    /// Add one rule. Returns its handle. The engine's own layer, `i32::MAX`, is reserved:
+    /// a rule asked for there goes one layer below.
     pub fn add(&mut self, layer: i32, sel: Selector, paint: Paint) -> Handle {
         let h = self.alloc();
-        self.push(h, layer, sel, paint);
+        self.push(h, layer.min(LAYER_ENGINE - 1), sel, paint);
         h
     }
-    /// Add several rules under one handle.
+    /// Add one rule on the engine's own layer. Returns its handle.
+    pub(crate) fn add_engine(&mut self, sel: Selector, paint: Paint) -> Handle {
+        let h = self.alloc();
+        self.push(h, LAYER_ENGINE, sel, paint);
+        h
+    }
+    /// Add several rules under one handle. The engine's own layer, `i32::MAX`, is
+    /// reserved: rules asked for there go one layer below.
     pub fn add_many(&mut self, layer: i32, sels: impl IntoIterator<Item = Selector>, paint: Paint) -> Handle {
         let h = self.alloc();
+        let layer = layer.min(LAYER_ENGINE - 1);
         for s in sels {
             self.push(h, layer, s, paint);
         }
@@ -123,8 +139,10 @@ impl StyleEngine {
         self.rules.push(Rule { handle, layer, sel, paint, seq: self.seq });
         self.dirty = true;
     }
+    /// Add a rule under an existing handle, on a host layer: `LAYER_ENGINE` becomes
+    /// the layer below it.
     pub(crate) fn push_under(&mut self, handle: Handle, layer: i32, sel: Selector, paint: Paint) {
-        self.push(handle, layer, sel, paint);
+        self.push(handle, layer.min(LAYER_ENGINE - 1), sel, paint);
     }
     pub(crate) fn new_handle(&mut self) -> Handle {
         self.alloc()
@@ -151,13 +169,21 @@ impl StyleEngine {
         }
         n
     }
+    /// Remove every host rule. Rules on the engine's own layer, `i32::MAX`, stay: they
+    /// belong to the engine, and the engine removes them by handle.
     pub fn clear(&mut self) {
-        if !self.rules.is_empty() {
-            self.rules.clear();
+        let n = self.rules.len();
+        self.rules.retain(|r| r.layer == LAYER_ENGINE);
+        if n != self.rules.len() {
             self.dirty = true;
         }
     }
+    /// Remove every rule on one layer. On the engine's own layer, `i32::MAX`, this does
+    /// nothing.
     pub fn clear_layer(&mut self, layer: i32) {
+        if layer == LAYER_ENGINE {
+            return;
+        }
         let n = self.rules.len();
         self.rules.retain(|r| r.layer != layer);
         if n != self.rules.len() {
@@ -484,4 +510,32 @@ pub struct Theme {
     pub headers: Option<Rgba>,
     pub marks: Vec<(Mark, Rgba)>,
     pub transition_ms: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clear_keeps_the_engine_layer_and_drops_the_host_ones() {
+        let mut s = StyleEngine::new();
+        let engine = s.add_engine(Selector::Kind(PathKind::AyahMarkOrnament), Paint::HIDDEN);
+        let host = s.add(LAYER_TOP, Selector::Page, Paint::new(0xff0000ff));
+        s.clear();
+        assert_eq!(s.handles(), vec![engine]);
+        s.add(LAYER_TOP, Selector::Page, Paint::new(0xff0000ff));
+        s.clear_layer(LAYER_ENGINE);
+        assert_eq!(s.len(), 2, "clearing the engine layer does nothing");
+        assert_ne!(host, engine);
+    }
+
+    #[test]
+    fn a_host_cannot_add_on_the_engine_layer() {
+        let mut s = StyleEngine::new();
+        s.add(LAYER_ENGINE, Selector::Page, Paint::HIDDEN);
+        s.add_many(i32::MAX, [Selector::Page], Paint::HIDDEN);
+        assert!(s.rules.iter().all(|r| r.layer == LAYER_ENGINE - 1));
+        s.clear();
+        assert!(s.is_empty());
+    }
 }

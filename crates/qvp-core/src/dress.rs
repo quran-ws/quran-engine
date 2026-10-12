@@ -13,7 +13,7 @@
 //! the page's own draws carry, so a host applies the transform it already applies to
 //! the ink. A host paints the list behind the page ink. Only the printed ring is
 //! hidden; the numeral inside it is the print's own ink and stays on top.
-use crate::style::Selector;
+use crate::style::{Paint, Selector};
 use crate::{Handle, Page, Rgba, NONE};
 use qvp_format::ornaments::*;
 use qvp_format::{Cmd, PathKind, OP_CLOSE, OP_CUBIC, OP_LINE, OP_MOVE, OP_QUAD};
@@ -386,11 +386,11 @@ impl Page {
         self.dress_revision = self.dress_revision.wrapping_add(1);
         dress.revision = self.dress_revision;
         if spec.ayah_mark != NONE {
-            dress.hidden.push(self.hide(Selector::Kind(PathKind::AyahMarkOrnament)));
+            dress.hidden.push(self.styles.add_engine(Selector::Kind(PathKind::AyahMarkOrnament), Paint::HIDDEN));
         }
         if spec.surah_header != NONE {
             for p in self.surah_name_ornament_paths() {
-                dress.hidden.push(self.hide(Selector::Path(p)));
+                dress.hidden.push(self.styles.add_engine(Selector::Path(p), Paint::HIDDEN));
             }
         }
         self.state_dirty = true;
@@ -533,6 +533,7 @@ impl Page {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::style::LAYER_TOP;
     use crate::tests::{page_with_surah_frame, square};
     use crate::{LayoutSpec, ReflowSpec};
     use qvp_format::{
@@ -700,6 +701,22 @@ mod tests {
         assert_ne!(p.color_of(band) & 0xff, 0);
         assert_eq!(p.view_box(), [0.0, 0.0, p.width(), p.height()]);
         assert_eq!(p.dress_overflow(), (0.0, 0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn the_hiding_survives_a_style_clear_and_a_host_rule() {
+        let (mut p, ring, numeral) = page();
+        let band = p.surah_name_ornament_paths()[0];
+        p.dress(&set(), &all()).unwrap();
+        p.styles.clear();
+        p.styles.clear_layer(LAYER_TOP);
+        assert_eq!(p.color_of(ring) & 0xff, 0, "the ring stays hidden");
+        assert_eq!(p.color_of(band) & 0xff, 0, "the native band stays hidden");
+        p.style_in(LAYER_TOP, Selector::Ayah(1, 1), Paint::new(0xff0000ff));
+        assert_eq!(p.color_of(numeral), 0xff0000ff, "the host rule covers the ayah");
+        assert_eq!(p.color_of(ring) & 0xff, 0, "an ayah rule does not bring the ring back");
+        p.undress();
+        assert_eq!(p.color_of(ring), 0xff0000ff, "undressed, the host rule shows on the ring");
     }
 
     #[test]
