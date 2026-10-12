@@ -11,6 +11,10 @@
 //! asset units, and each outline keeps the part its `data-part` names. The palette is
 //! the catalogue's, in its order; a part the SVG draws and the palette lacks is added
 //! after it with the SVG's own colour.
+//!
+//! An `<ellipse>`, `<circle>`, `<rect>`, `<polygon>` or `<polyline>` becomes path data
+//! and goes through the same parser as a `<path>`. An element the engine cannot draw, a
+//! `<use>` that points to nothing, and a clip or a mask are warnings in the report.
 use crate::affine::Affine;
 use crate::json::Json;
 use qvp_format::ornaments::*;
@@ -89,7 +93,7 @@ pub fn build(dir: &Path, opts: &BuildOptions) -> Result<(OrnamentSet, Report), S
         } else {
             None
         };
-        let asset = match read_asset(&dir.join(rel), &mut set, &mut parts, slices.is_none(), slot) {
+        let asset = match read_asset(dir, rel, &mut set, &mut parts, slices.is_none(), slot, &mut report.warnings) {
             Ok(a) => a,
             Err(e) => {
                 report.warnings.push(format!("{style}/{}: {e}", kind.as_str()));
@@ -132,7 +136,7 @@ fn read_slices(
     let files = rec.path("slices.files").and_then(|v| v.obj())?;
     let mut slice = |key: &str| -> Result<Asset, String> {
         let p = files.get(key).and_then(|v| v.str()).ok_or_else(|| format!("slices.files has no {key:?}"))?;
-        read_asset(&dir.join(p), set, parts, true, None)
+        read_asset(dir, p, set, parts, true, None, &mut report.warnings)
     };
     let (a, b, c) = (slice("corner"), slice("edge-h"), slice("edge-v"));
     match (a, b, c) {
@@ -156,16 +160,19 @@ fn read_slices(
     }
 }
 
-/// Parse one asset SVG and append its outlines to `set`. With `geometry` off only the
-/// viewBox and the slot are kept. `slot` is the catalogue's; the SVG's `data-slot` is
-/// the fallback.
+/// Parse one asset SVG (`rel` under `dir`) and append its outlines to `set`. With
+/// `geometry` off only the viewBox and the slot are kept. `slot` is the catalogue's;
+/// the SVG's `data-slot` is the fallback. What the walk cannot draw goes to `warnings`.
 fn read_asset(
-    path: &Path,
+    dir: &Path,
+    rel: &str,
     set: &mut OrnamentSet,
     parts: &mut Vec<Part>,
     geometry: bool,
     slot: Option<[f32; 4]>,
+    warnings: &mut Vec<String>,
 ) -> Result<Asset, String> {
+    let path = &dir.join(rel);
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let doc = roxmltree::Document::parse(&text).map_err(|e| format!("{}: xml: {e}", path.display()))?;
     let root = doc.root_element();
@@ -180,7 +187,9 @@ fn read_asset(
     }
     let first_path = set.paths.len() as u32;
     if geometry {
-        let mut cx = AssetCtx { quant: set.quant as f64, set, parts, by_id, depth: 0 };
+        let mut cx =
+            AssetCtx { quant: set.quant as f64, set, parts, by_id, depth: 0, file: rel, warnings, warned_clip: false };
+        cx.warn_clip(root);
         cx.walk(root, Affine::IDENTITY, &Paint::default()).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     Ok(Asset { view_box, slot, first_path, n_paths: set.paths.len() as u32 - first_path })
@@ -193,12 +202,19 @@ fn numbers(s: &str) -> Option<[f32; 4]> {
 }
 
 /// Inherited paint state while walking an asset.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct Paint {
     part: Option<u16>,
     stroke: bool,
+    /// In user units. SVG's initial value is 1.
     stroke_width: f64,
     evenodd: bool,
+}
+
+impl Default for Paint {
+    fn default() -> Self {
+        Paint { part: None, stroke: false, stroke_width: 1.0, evenodd: false }
+    }
 }
 
 struct AssetCtx<'a, 'd, 'i> {
@@ -207,6 +223,11 @@ struct AssetCtx<'a, 'd, 'i> {
     by_id: HashMap<&'d str, Node<'d, 'i>>,
     quant: f64,
     depth: u32,
+    /// The asset's path in the catalogue, for warnings.
+    file: &'a str,
+    warnings: &'a mut Vec<String>,
+    /// A clip or a mask is reported once per file.
+    warned_clip: bool,
 }
 
 impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
@@ -218,9 +239,22 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
         (self.parts.len() - 1) as u16
     }
 
+    fn warn(&mut self, msg: String) {
+        self.warnings.push(format!("{}: {msg}", self.file));
+    }
+
+    /// A clip or a mask is not applied: the outlines are drawn whole.
+    fn warn_clip(&mut self, n: Node<'d, 'i>) {
+        if !self.warned_clip && (n.attribute("clip-path").is_some() || n.attribute("mask").is_some()) {
+            self.warned_clip = true;
+            self.warn(format!("<{}> has a clip-path or a mask, which is ignored", n.tag_name().name()));
+        }
+    }
+
     /// Fold the paint attributes of `n` into `p`: its part, stroke or fill colour,
     /// stroke width and fill rule. A child and a `<use>` target read them the same way.
     fn apply_attrs(&mut self, n: Node<'d, 'i>, p: &mut Paint) {
+        self.warn_clip(n);
         if let Some(name) = n.attribute("data-part") {
             let stroke_attr = n.attribute("stroke").filter(|v| *v != "none");
             let (color, is_stroke) = match stroke_attr {
@@ -230,8 +264,12 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
             p.stroke = is_stroke;
             p.part = Some(self.part_of(name, color, is_stroke));
         }
-        if let Some(w) = n.attribute("stroke-width").and_then(|v| v.parse::<f64>().ok()) {
-            p.stroke_width = w;
+        if let Some(v) = n.attribute("stroke-width") {
+            let t = v.trim();
+            match t.strip_suffix("px").unwrap_or(t).trim().parse::<f64>() {
+                Ok(w) => p.stroke_width = w,
+                Err(_) => self.warn(format!("stroke-width {v:?} is not in user units, the inherited width is kept")),
+            }
         }
         match n.attribute("fill-rule") {
             Some("evenodd") => p.evenodd = true,
@@ -264,6 +302,7 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
                         .or_else(|| child.attribute(("http://www.w3.org/1999/xlink", "href")))
                         .unwrap_or("");
                     let Some(target) = href.strip_prefix('#').and_then(|id| self.by_id.get(id).copied()) else {
+                        self.warn(format!("<use href={href:?}> points to nothing, it is not drawn"));
                         continue;
                     };
                     // An instance is the referenced element drawn again, so the element
@@ -276,25 +315,49 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
                     self.walk_element(target, inner, &p)?;
                     self.depth -= 1;
                 }
-                "path" => self.emit_path(child, &local, &p)?,
-                _ => self.walk(child, local, &p)?,
+                _ => {
+                    if !self.leaf(child, &local, &p)? {
+                        self.walk(child, local, &p)?;
+                    }
+                }
             }
         }
         Ok(())
     }
 
-    /// Walk `n` itself as if it were a child: its own `data-part`, paint and `d` count.
+    /// Walk `n` itself as if it were a child: its own `data-part`, paint and shape count.
     fn walk_element(&mut self, n: Node<'d, 'i>, tf: Affine, paint: &Paint) -> Result<(), String> {
         let mut p = paint.clone();
         self.apply_attrs(n, &mut p);
-        if n.tag_name().name() == "path" {
-            return self.emit_path(n, &tf, &p);
+        if self.leaf(n, &tf, &p)? {
+            return Ok(());
         }
         self.walk(n, tf, &p)
     }
 
-    fn emit_path(&mut self, n: Node<'d, 'i>, tf: &Affine, p: &Paint) -> Result<(), String> {
-        let Some(d) = n.attribute("d") else { return Ok(()) };
+    /// Draw `n` when it is an element that draws. A basic shape becomes path data and
+    /// goes through the same parser as a `<path>`. An element the engine cannot draw is
+    /// a warning. Returns false for a container, which the caller walks.
+    fn leaf(&mut self, n: Node<'d, 'i>, tf: &Affine, p: &Paint) -> Result<bool, String> {
+        let tag = n.tag_name().name();
+        match tag {
+            "path" => {
+                if let Some(d) = n.attribute("d") {
+                    self.emit_d(d, tf, p)?;
+                }
+            }
+            "ellipse" | "circle" | "rect" | "polygon" | "polyline" => {
+                if let Some(d) = shape_d(n) {
+                    self.emit_d(&d, tf, p)?;
+                }
+            }
+            "text" | "image" | "line" | "foreignObject" => self.warn(format!("<{tag}> is not drawn")),
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    fn emit_d(&mut self, d: &str, tf: &Affine, p: &Paint) -> Result<(), String> {
         let Some(part) = p.part else { return Ok(()) };
         let cmds = parse_d(d, tf, self.quant)?;
         if cmds.is_empty() {
@@ -314,6 +377,66 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
         };
         self.set.push_path(part, flags, width, &cmds);
         Ok(())
+    }
+}
+
+/// The path data of a basic shape, or `None` when it draws nothing (a zero or missing
+/// size, no points). Arcs stay arcs here; `parse_d` turns them into cubics, as it does
+/// for a `<path>`.
+fn shape_d(n: Node) -> Option<String> {
+    let num =
+        |a: &str| n.attribute(a).and_then(|v| v.trim().strip_suffix("px").unwrap_or(v.trim()).parse::<f64>().ok());
+    match n.tag_name().name() {
+        "ellipse" | "circle" => {
+            let (cx, cy) = (num("cx").unwrap_or(0.0), num("cy").unwrap_or(0.0));
+            let (rx, ry) = match n.tag_name().name() {
+                "circle" => (num("r")?, num("r")?),
+                _ => (num("rx")?, num("ry")?),
+            };
+            if rx <= 0.0 || ry <= 0.0 {
+                return None;
+            }
+            Some(format!("M{},{} a{rx},{ry} 0 1 0 {},0 a{rx},{ry} 0 1 0 {},0 Z", cx - rx, cy, 2.0 * rx, -2.0 * rx))
+        }
+        "rect" => {
+            let (x, y) = (num("x").unwrap_or(0.0), num("y").unwrap_or(0.0));
+            let (w, h) = (num("width")?, num("height")?);
+            if w <= 0.0 || h <= 0.0 {
+                return None;
+            }
+            // one corner radius given stands for both; each is at most half the side
+            let (rx, ry) = match (num("rx"), num("ry")) {
+                (None, None) => (0.0, 0.0),
+                (Some(r), None) | (None, Some(r)) => (r, r),
+                (Some(rx), Some(ry)) => (rx, ry),
+            };
+            let (rx, ry) = (rx.clamp(0.0, w / 2.0), ry.clamp(0.0, h / 2.0));
+            if rx == 0.0 || ry == 0.0 {
+                return Some(format!("M{x},{y} H{} V{} H{x} Z", x + w, y + h));
+            }
+            let arc = |ex: f64, ey: f64| format!("A{rx},{ry} 0 0 1 {ex},{ey}");
+            Some(format!(
+                "M{},{y} H{} {} V{} {} H{} {} V{} {} Z",
+                x + rx,
+                x + w - rx,
+                arc(x + w, y + ry),
+                y + h - ry,
+                arc(x + w - rx, y + h),
+                x + rx,
+                arc(x, y + h - ry),
+                y + ry,
+                arc(x + rx, y),
+            ))
+        }
+        // After a moveto, more coordinate pairs are linetos: the points are path data.
+        tag @ ("polygon" | "polyline") => {
+            let pts = n.attribute("points")?.trim();
+            if pts.is_empty() {
+                return None;
+            }
+            Some(format!("M{pts}{}", if tag == "polygon" { " Z" } else { "" }))
+        }
+        _ => None,
     }
 }
 
@@ -704,6 +827,82 @@ mod tests {
         let (l, r) = (&set.paths[a.first_path as usize], &set.paths[(a.first_path + 1) as usize]);
         assert_eq!((l.bbox.x0, l.bbox.x1), (0, 100_000));
         assert_eq!((r.bbox.x0, r.bbox.x1), (100_000, 200_000));
+    }
+
+    /// A one-asset catalogue whose asset is `body` inside a 200 × 100 SVG.
+    fn shapes(body: &str) -> (OrnamentSet, Report) {
+        let svg = format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">{body}</svg>"##);
+        let dir = single("surah-headers", "", &[("assets/whole.svg", &svg)]);
+        build(&dir, &BuildOptions::default()).unwrap()
+    }
+
+    #[test]
+    fn an_ellipse_becomes_one_outline_with_its_box() {
+        let (set, report) =
+            shapes(r##"<g data-part="c1" fill="#ffffff"><ellipse cx="100" cy="50" rx="40" ry="20"/></g>"##);
+        assert_eq!(report.warnings, Vec::<String>::new());
+        let a = &set.ornaments[0].asset;
+        assert_eq!(a.n_paths, 1);
+        let b = set.paths[a.first_path as usize].bbox;
+        for (got, want) in [(b.x0, 60_000), (b.y0, 30_000), (b.x1, 140_000), (b.y1, 70_000)] {
+            assert!((got - want).abs() <= 1, "{b:?}");
+        }
+        let (set, _) = shapes(r##"<g data-part="c1" fill="#ffffff"><circle cx="50" cy="50" r="10"/></g>"##);
+        let b = set.paths[0].bbox;
+        assert!((b.x0 - 40_000).abs() <= 1 && (b.x1 - 60_000).abs() <= 1, "{b:?}");
+    }
+
+    #[test]
+    fn a_rect_and_a_polygon_become_outlines() {
+        let (set, report) = shapes(
+            r##"<g data-part="c1" fill="#ffffff"><rect x="10" y="20" width="30" height="40"/>
+<rect x="0" y="0" width="100" height="50" rx="5"/><polygon points="0,0 10,0 10,10"/><polyline points="0 0 5 5"/></g>"##,
+        );
+        assert_eq!(report.warnings, Vec::<String>::new());
+        assert_eq!(set.ornaments[0].asset.n_paths, 4);
+        let cmds = set.path_cmds(0).unwrap();
+        let corners: Vec<_> = cmds
+            .iter()
+            .filter_map(|c| match *c {
+                Cmd::MoveTo(x, y) | Cmd::LineTo(x, y) => Some((x, y)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(corners, [(10_000, 20_000), (40_000, 20_000), (40_000, 60_000), (10_000, 60_000)]);
+        let b = set.paths[0].bbox;
+        assert_eq!((b.x0, b.y0, b.x1, b.y1), (10_000, 20_000, 40_000, 60_000));
+        let rounded = set.paths[1].bbox;
+        assert_eq!((rounded.x0, rounded.y0, rounded.x1, rounded.y1), (0, 0, 100_000, 50_000));
+        assert_eq!(set.paths[2].bbox.x1, 10_000);
+    }
+
+    #[test]
+    fn what_cannot_be_drawn_is_a_warning() {
+        let (set, report) = shapes(
+            r##"<g data-part="c1" fill="#ffffff" clip-path="url(#c)"><path d="M0 0h10v10H0z"/>
+<text>x</text><use href="#gone"/><path d="M0 0h5v5H0z" mask="url(#m)"/></g>"##,
+        );
+        assert_eq!(set.ornaments[0].asset.n_paths, 2);
+        let w = &report.warnings;
+        assert!(w.iter().all(|w| w.starts_with("assets/whole.svg: ")), "{w:?}");
+        assert!(w.iter().any(|w| w.contains("<text>")), "{w:?}");
+        assert!(w.iter().any(|w| w.contains("\"#gone\"")), "{w:?}");
+        assert_eq!(w.iter().filter(|w| w.contains("clip-path")).count(), 1, "once per file: {w:?}");
+        assert_eq!(w.len(), 3, "{w:?}");
+    }
+
+    #[test]
+    fn a_stroke_without_a_width_is_one_unit_wide() {
+        let (set, report) = shapes(
+            r##"<g data-part="c1" stroke="#000000" fill="none"><path d="M0 0h10"/></g>
+<g data-part="c1" stroke="#000000" stroke-width="2px"><path d="M0 0h10"/></g>
+<g data-part="c1" stroke="#000000" stroke-width="2em"><path d="M0 0h10"/></g>"##,
+        );
+        assert_eq!(set.paths[0].stroke_width, 1000);
+        assert_eq!(set.paths[1].stroke_width, 2000);
+        assert_eq!(set.paths[2].stroke_width, 1000, "a width in other units keeps the inherited one");
+        assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+        assert!(report.warnings[0].contains("2em"));
     }
 
     #[test]
