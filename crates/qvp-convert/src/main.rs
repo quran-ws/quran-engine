@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 fn usage() -> ! {
     eprintln!(
-        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg>\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert zoom-levels <pages_dir> <out.rs> [--check]\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out."
+        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg>\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert zoom-levels <pages_dir> <out.rs> [--check]\n  qvp-convert ornaments <assets_dir> <out.qvo> [--redistributable] [--style NAME]...\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out.\n\n<assets_dir> is a quran-assets checkout: catalog.json with the assets/ tree beside it.\n--redistributable keeps only assets whose licence is confirmed."
     );
     std::process::exit(2)
 }
@@ -217,6 +217,49 @@ fn main() {
             );
             if errs != 0 {
                 std::process::exit(1);
+            }
+        }
+        "ornaments" => {
+            if args.len() < 4 {
+                usage();
+            }
+            let dir = PathBuf::from(&args[2]);
+            let out = PathBuf::from(&args[3]);
+            let mut opts = qvp_convert::ornaments::BuildOptions::default();
+            let mut rest = args[4..].iter();
+            while let Some(a) = rest.next() {
+                match a.as_str() {
+                    "--redistributable" => opts.redistributable_only = true,
+                    "--style" => match rest.next() {
+                        Some(s) => opts.styles.push(s.clone()),
+                        None => usage(),
+                    },
+                    _ => usage(),
+                }
+            }
+            match qvp_convert::ornaments::build(&dir, &opts) {
+                Ok((set, report)) => {
+                    for w in &report.warnings {
+                        eprintln!("warning: {w}");
+                    }
+                    let bytes = set.encode();
+                    fs::write(&out, &bytes).unwrap_or_else(|e| {
+                        eprintln!("error: {}: {e}", out.display());
+                        std::process::exit(1)
+                    });
+                    print!("{}", qvp_convert::ornaments::describe(&set));
+                    println!(
+                        "{} ornaments, {} outlines, {} bytes -> {}",
+                        set.ornaments.len(),
+                        set.paths.len(),
+                        bytes.len(),
+                        out.display()
+                    );
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
             }
         }
         _ => usage(),
