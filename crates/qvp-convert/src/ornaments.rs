@@ -218,13 +218,37 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
         (self.parts.len() - 1) as u16
     }
 
+    /// Fold the paint attributes of `n` into `p`: its part, stroke or fill colour,
+    /// stroke width and fill rule. A child and a `<use>` target read them the same way.
+    fn apply_attrs(&mut self, n: Node<'d, 'i>, p: &mut Paint) {
+        if let Some(name) = n.attribute("data-part") {
+            let stroke_attr = n.attribute("stroke").filter(|v| *v != "none");
+            let (color, is_stroke) = match stroke_attr {
+                Some(s) => (css_rgba(s), true),
+                None => (css_rgba(n.attribute("fill").unwrap_or("#000000")), false),
+            };
+            p.stroke = is_stroke;
+            p.part = Some(self.part_of(name, color, is_stroke));
+        }
+        if let Some(w) = n.attribute("stroke-width").and_then(|v| v.parse::<f64>().ok()) {
+            p.stroke_width = w;
+        }
+        match n.attribute("fill-rule") {
+            Some("evenodd") => p.evenodd = true,
+            Some(_) => p.evenodd = false,
+            None => {}
+        }
+    }
+
     fn walk(&mut self, n: Node<'d, 'i>, tf: Affine, paint: &Paint) -> Result<(), String> {
         if self.depth > 32 {
             return Err("nested <use> too deep".into());
         }
         for child in n.children().filter(|c| c.is_element()) {
             let tag = child.tag_name().name();
-            if tag == "metadata" || tag == "title" || tag == "desc" {
+            // `<defs>`, `<symbol>` and `<clipPath>` draw nothing where they stand. A
+            // `<use>` reaches their children through `by_id`.
+            if matches!(tag, "metadata" | "title" | "desc" | "defs" | "symbol" | "clipPath") {
                 continue;
             }
             let local = match child.attribute("transform") {
@@ -232,24 +256,7 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
                 None => tf,
             };
             let mut p = paint.clone();
-            if let Some(name) = child.attribute("data-part") {
-                let stroke_attr = child.attribute("stroke").filter(|v| *v != "none");
-                let fill_attr = child.attribute("fill");
-                let (color, is_stroke) = match stroke_attr {
-                    Some(s) => (css_rgba(s), true),
-                    None => (css_rgba(fill_attr.unwrap_or("#000000")), false),
-                };
-                p.stroke = is_stroke;
-                p.part = Some(self.part_of(name, color, is_stroke));
-            }
-            if let Some(w) = child.attribute("stroke-width").and_then(|v| v.parse::<f64>().ok()) {
-                p.stroke_width = w;
-            }
-            match child.attribute("fill-rule") {
-                Some("evenodd") => p.evenodd = true,
-                Some(_) => p.evenodd = false,
-                None => {}
-            }
+            self.apply_attrs(child, &mut p);
             match tag {
                 "use" => {
                     let href = child
@@ -279,18 +286,7 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
     /// Walk `n` itself as if it were a child: its own `data-part`, paint and `d` count.
     fn walk_element(&mut self, n: Node<'d, 'i>, tf: Affine, paint: &Paint) -> Result<(), String> {
         let mut p = paint.clone();
-        if let Some(name) = n.attribute("data-part") {
-            let stroke_attr = n.attribute("stroke").filter(|v| *v != "none");
-            let (color, is_stroke) = match stroke_attr {
-                Some(s) => (css_rgba(s), true),
-                None => (css_rgba(n.attribute("fill").unwrap_or("#000000")), false),
-            };
-            p.stroke = is_stroke;
-            p.part = Some(self.part_of(name, color, is_stroke));
-        }
-        if let Some(w) = n.attribute("stroke-width").and_then(|v| v.parse::<f64>().ok()) {
-            p.stroke_width = w;
-        }
+        self.apply_attrs(n, &mut p);
         if n.tag_name().name() == "path" {
             return self.emit_path(n, &tf, &p);
         }
@@ -410,11 +406,35 @@ pub fn asset_bbox(set: &OrnamentSet, a: &Asset) -> IBox {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use qvp_format::ornaments::{Lineage, OrnamentKind, OPF_STROKE};
+    use qvp_format::ornaments::{Lineage, OrnamentKind, OPF_EVENODD, OPF_STROKE};
 
-    fn fixture() -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("qvp-ornaments-{}", std::process::id()));
+    /// A fixture directory that is unique to one test and removed when it drops.
+    struct Fixture(std::path::PathBuf);
+
+    impl std::ops::Deref for Fixture {
+        type Target = std::path::Path;
+        fn deref(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn fresh_dir() -> Fixture {
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("qvp-ornaments-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        Fixture(dir)
+    }
+
+    fn fixture() -> Fixture {
+        let dir = fresh_dir();
         std::fs::create_dir_all(dir.join("assets/surah-headers/mushaf-test")).unwrap();
         std::fs::create_dir_all(dir.join("assets/ayah-markers/font-001-regular")).unwrap();
         std::fs::write(
@@ -504,6 +524,110 @@ mod tests {
             build(&dir, &BuildOptions { styles: vec!["mushaf-test".into()], redistributable_only: false }).unwrap();
         assert_eq!(set.ornaments.len(), 1);
         assert!(build(&dir, &BuildOptions { styles: vec!["nope".into()], redistributable_only: false }).is_err());
+    }
+
+    /// One catalogue with a single asset of `kind`, plus the files it names.
+    fn single(kind: &str, extra: &str, files: &[(&str, &str)]) -> Fixture {
+        let dir = fresh_dir();
+        for (name, svg) in files {
+            let path = dir.join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, svg).unwrap();
+        }
+        std::fs::write(
+            dir.join("catalog.json"),
+            format!(
+                r##"{{"schema":"quran-assets/catalog@1","assets":[
+{{"id":"{kind}/t","type":"{kind}","style":"t","lineage":"scan","riwayah":null,"viewBox":"0 0 200 100",
+ "variants":{{"color":"assets/whole.svg"}},
+ "palette":[{{"name":"c1","hex":"#ffffff"}}],
+ "slots":[{{"role":"text-area","x":20,"y":10,"w":160,"h":80}}],
+ "license":{{"id":"CC0-1.0","status":"confirmed","attribution":"x"}}{extra}}}
+]}}"##
+            ),
+        )
+        .unwrap();
+        dir
+    }
+
+    const WHOLE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+<g data-part="c1" fill="#ffffff"><path d="M0 0h200v100H0z"/><path d="M5 5h10v10H5z"/></g></svg>"##;
+    const TINY: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+<g data-part="c1" fill="#ffffff"><path d="M0 0h10v10H0z"/></g></svg>"##;
+    const SLICES: &str = r#","slices":{"files":{"corner":"assets/corner.svg","edge-h":"assets/edge-h.svg","edge-v":"assets/edge-v.svg"},
+ "corner":{"w":12,"h":14},"repeat":{"h":30,"v":40},"corner_mode":"rotate"}"#;
+
+    #[test]
+    fn use_target_keeps_its_fill_rule() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+<g id="half" data-part="c1" fill="#ffffff" fill-rule="evenodd"><path d="M0 0h100v100H0z"/></g>
+<use href="#half" transform="matrix(-1 0 0 1 200 0)"/></svg>"##;
+        let dir = single("surah-headers", "", &[("assets/whole.svg", svg)]);
+        let (set, _) = build(&dir, &BuildOptions::default()).unwrap();
+        let a = &set.ornaments[0].asset;
+        assert_eq!(a.n_paths, 2);
+        for i in 0..2 {
+            let p = &set.paths[(a.first_path + i) as usize];
+            assert_ne!(p.flags & OPF_EVENODD, 0, "path {i}");
+        }
+        let mirrored = &set.paths[(a.first_path + 1) as usize];
+        assert_eq!((mirrored.bbox.x0, mirrored.bbox.x1), (100_000, 200_000));
+    }
+
+    #[test]
+    fn page_frame_slices_replace_the_whole_drawing() {
+        let dir = single(
+            "page-frames",
+            SLICES,
+            &[
+                ("assets/whole.svg", WHOLE),
+                ("assets/corner.svg", TINY),
+                ("assets/edge-h.svg", TINY),
+                ("assets/edge-v.svg", TINY),
+            ],
+        );
+        let (set, report) = build(&dir, &BuildOptions::default()).unwrap();
+        assert_eq!(report.warnings, Vec::<String>::new());
+        let o = &set.ornaments[0];
+        assert_eq!(o.asset.n_paths, 0);
+        assert_eq!(o.asset.view_box, [0.0, 0.0, 200.0, 100.0]);
+        assert_eq!(o.asset.slot, Some([20.0, 10.0, 160.0, 80.0]));
+        let s = o.slices.as_ref().expect("slices");
+        assert_eq!((s.corner_w, s.corner_h, s.repeat_h, s.repeat_v), (12.0, 14.0, 30.0, 40.0));
+        assert!(s.rotate);
+        for a in [&s.corner, &s.edge_h, &s.edge_v] {
+            assert_eq!(a.n_paths, 1);
+        }
+        assert_eq!(set.paths.len(), 3);
+    }
+
+    #[test]
+    fn page_frame_with_a_missing_slice_falls_back_to_the_whole_drawing() {
+        let dir = single(
+            "page-frames",
+            SLICES,
+            &[("assets/whole.svg", WHOLE), ("assets/corner.svg", TINY), ("assets/edge-h.svg", TINY)],
+        );
+        let (set, report) = build(&dir, &BuildOptions::default()).unwrap();
+        let o = &set.ornaments[0];
+        assert!(o.slices.is_none());
+        assert_eq!(o.asset.n_paths, 2);
+        assert!(report.warnings.iter().any(|w| w.contains("edge-v")), "{:?}", report.warnings);
+        assert!(report.warnings.iter().any(|w| w.contains("no usable slices")), "{:?}", report.warnings);
+    }
+
+    #[test]
+    fn content_in_defs_is_drawn_only_through_use() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+<defs><g id="half" data-part="c1" fill="#ffffff"><path d="M0 0h100v100H0z"/></g></defs>
+<use href="#half"/><use href="#half" transform="matrix(-1 0 0 1 200 0)"/></svg>"##;
+        let dir = single("surah-headers", "", &[("assets/whole.svg", svg)]);
+        let (set, _) = build(&dir, &BuildOptions::default()).unwrap();
+        let a = &set.ornaments[0].asset;
+        assert_eq!(a.n_paths, 2);
+        let (l, r) = (&set.paths[a.first_path as usize], &set.paths[(a.first_path + 1) as usize]);
+        assert_eq!((l.bbox.x0, l.bbox.x1), (0, 100_000));
+        assert_eq!((r.bbox.x0, r.bbox.x1), (100_000, 200_000));
     }
 
     #[test]
