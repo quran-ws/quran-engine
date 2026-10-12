@@ -284,9 +284,12 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
         }
         for child in n.children().filter(|c| c.is_element()) {
             let tag = child.tag_name().name();
-            // `<defs>`, `<symbol>` and `<clipPath>` draw nothing where they stand. A
-            // `<use>` reaches their children through `by_id`.
-            if matches!(tag, "metadata" | "title" | "desc" | "defs" | "symbol" | "clipPath") {
+            // `<defs>`, `<symbol>`, `<clipPath>`, `<mask>`, `<pattern>` and `<marker>` draw
+            // nothing where they stand. A `<use>` reaches their children through `by_id`.
+            if matches!(
+                tag,
+                "metadata" | "title" | "desc" | "defs" | "symbol" | "clipPath" | "mask" | "pattern" | "marker"
+            ) {
                 continue;
             }
             let local = match child.attribute("transform") {
@@ -827,6 +830,15 @@ mod tests {
         let (l, r) = (&set.paths[a.first_path as usize], &set.paths[(a.first_path + 1) as usize]);
         assert_eq!((l.bbox.x0, l.bbox.x1), (0, 100_000));
         assert_eq!((r.bbox.x0, r.bbox.x1), (100_000, 200_000));
+    }
+
+    #[test]
+    fn content_inside_a_mask_is_not_drawn() {
+        let (set, _) = shapes(
+            r##"<mask id="m"><rect data-part="c1" x="0" y="0" width="10" height="10" fill="#ffffff"/></mask>
+<g data-part="c1" fill="#ffffff"><path d="M0 0h10v10H0z"/></g>"##,
+        );
+        assert_eq!(set.ornaments[0].asset.n_paths, 1, "only the path outside the mask");
     }
 
     /// A one-asset catalogue whose asset is `body` inside a 200 × 100 SVG.

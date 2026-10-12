@@ -645,7 +645,7 @@ drawn in layout space. `CanvasRenderer` does all of this.
 **A dressed page is bigger than its text.** `viewBox` is the page box the border grew, in
 page units, and `overflow` is how far the border reaches past the laid-out content on each
 side, in viewport px. Fit content plus overflow, or the border is cropped off. A new layout
-re-places the dress and bumps `revision`; a host that rasterises the layer keys its cache on
+re-places the dress and bumps `revision` (on every rebuild: a new dress, and every layout); a host that rasterises the layer keys its cache on
 that number.
 
 **The ornaments are not part of the pages.** The data release carries an `ornaments.qvo`

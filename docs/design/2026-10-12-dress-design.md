@@ -131,7 +131,7 @@ independent.
 ### 6. The layout re-places the dress
 
 Both layout constructors end by calling `redress()`. It rebuilds the display list against
-the new layout and bumps `revision`. A host caches the ornament raster against `revision`.
+the new layout and bumps `revision` on every rebuild: a new dress, and every layout. A host caches the ornament raster against `revision`.
 
 ### 7. Overflow and view box
 

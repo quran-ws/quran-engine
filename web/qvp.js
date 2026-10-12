@@ -8,6 +8,8 @@
   const NONE = 0xffffffff;
   const ORNAMENT_KIND = ['ayah_mark', 'surah_header', 'page_frame'];
   const LINEAGE = ['scan', 'font'];
+  /** the tallest canvas a browser reliably makes, in device px */
+  const MAX_CANVAS_PX = 16384;
 // the reader's zoom control: what a pinch does to the page
 const ZOOM_MODE = { stepped: 0, continuous: 1, magnify: 2 };
 const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
@@ -860,8 +862,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       if (!info) { this.ornamentLayer = null; this.ornamentKey = ''; this.ornamentFor = null; return; }
       const scale = view.scale || 1;
       const padTop = Math.ceil(info.overflow[1] * scale), padBottom = Math.ceil(info.overflow[3] * scale);
-      const top = bandTop - padTop;   // view px
-      const W = this.canvas.width, H = Math.ceil((bandH + padTop + padBottom) * dpr);
+      const top = bandTop - padTop;   // view px; a clamped canvas (H) keeps this top and loses its bottom edge
+      const W = this.canvas.width, H = Math.min(MAX_CANVAS_PX, Math.ceil((bandH + padTop + padBottom) * dpr));
       const L = page.currentLayout;
       const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${top.toFixed(1)}|${dpr}|${info.revision}|${W}x${H}`;
       if (!this.ornamentLayer || key !== this.ornamentKey || this.ornamentFor !== L) {
@@ -931,7 +933,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       // included, and then scrolling draws nothing at all. A taller one keeps a band of itself,
       // two screens tall, redrawn when the reader scrolls out of it.
       const contentH = (L.contentH || 0) * scale;
-      const whole = contentH > 0 && W * contentH * dpr * 4 <= this.inkBudget && contentH * dpr <= 16384;
+      const whole = contentH > 0 && W * contentH * dpr * 4 <= this.inkBudget && contentH * dpr <= MAX_CANVAS_PX;
       const bandTop = whole ? 0 : Math.floor((-view.offsetY - slack) / step) * step;   // view px
       const bandH = whole ? contentH : viewH + 2 * slack;
       // the ink drawn into the band, in layout px: what the engine is asked for

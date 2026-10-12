@@ -83,8 +83,7 @@ pub struct Dress {
     pub n_frame_repeats: u32,
     /// True when the frame had no slices and was stretched whole.
     pub frame_stretched: bool,
-    /// Counts up every time the display list is rebuilt: a new dress, and a layout that
-    /// moved the page under the border. A host caches the raster of this layer and this
+    /// Bumped on every rebuild: a new dress, and every layout. A host caches the raster of this layer and this
     /// is what tells it the raster is stale.
     pub revision: u32,
     /// The style rules hiding the printed rings and bands, so undressing puts them back.
@@ -362,15 +361,12 @@ impl Page {
 
     /// Re-place the ornaments against the current layout. A layout that respaces the
     /// lines makes the page taller than it is printed, and the border goes around what
-    /// is on the page, so it has to follow. A layout that leaves the display list as it
-    /// was keeps the revision, so a host keeps its raster.
+    /// is on the page, so it has to follow. Every rebuild bumps the revision, because a
+    /// layout can move placements without changing the geometry.
     pub(crate) fn redress(&mut self) {
         let Some(d) = self.dress.as_ref() else { return };
         let (Some(set), spec) = (d.set.clone(), d.spec.clone()) else { return };
         if let Some(mut next) = self.build_dress(&set, &spec) {
-            if next.ops == d.ops && next.pts == d.pts && next.table == d.table && next.view_box == d.view_box {
-                return;
-            }
             let old = self.dress.take().unwrap();
             self.dress_revision = self.dress_revision.wrapping_add(1);
             next.hidden = old.hidden;
@@ -739,18 +735,6 @@ mod tests {
         let filled = p.dress_of().unwrap().clone();
         assert!(filled.view_box[3] > printed.view_box[3], "{:?} -> {:?}", printed.view_box, filled.view_box);
         assert_eq!(filled.view_box[2], printed.view_box[2], "only the height changed");
-    }
-
-    #[test]
-    fn a_layout_that_changes_nothing_keeps_the_revision() {
-        let (mut p, _, _) = page();
-        p.dress(&set(), &DressSpec { surah_header: NONE, page_frame: NONE, ..all() }).unwrap();
-        let spec =
-            LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, pad_top: 10.0, pad_bottom: 10.0, ..Default::default() };
-        p.layout(&spec);
-        let first = p.dress_of().unwrap().revision;
-        p.layout(&spec);
-        assert_eq!(p.dress_of().unwrap().revision, first, "the same layout keeps the raster");
     }
 
     #[test]
