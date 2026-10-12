@@ -607,6 +607,53 @@ Drive the highlight with `moveHighlight(h, T.word(i))`.
 returns a standalone SVG string with the current colours (masks, themes and highlights'
 ink applied). The medallion is kept only when the whole ayah is inside the crop.
 
+## Dress (another mushaf's ornaments)
+
+A page carries the King Fahd Complex's own medallions, surah bands and page furniture.
+`dress` puts other ornaments on it: an ayah medallion, a surah band and a page border from
+another printed mushaf or from a font, and hands back a display list to paint behind the
+ink.
+
+```js
+const set = engine.loadOrnaments(await fetchBytes('ornaments.qvo'));
+const marker = set.find('ayah_mark', 'font-003-regular');
+const info = page.dress(set, { ayahMark: marker, surahHeader: 'mushaf-qalon', pageFrame: 'mushaf-qalon', gap: 5 });
+// → {ayahMark, surahHeader, pageFrame, ayahMarks, surahHeaders, frameRepeats, frameStretched, draws, revision, viewBox, overflow}
+for (const o of page.dressGeometry()) { /* {path, color, kind, evenOdd, stroke, strokeWidth, part, placement} */ }
+page.undress();
+```
+
+`set.list` is every ornament the set holds: `{index, kind, lineage, style, riwayah,
+hasSlices, licence, parts}`. A dress names up to one ornament per kind, as an ornament, its
+index or a style name. `parts` is the design's printed palette, and `colors:
+[[ornament, part, colour]]` repaints any of them; `slot` is the transparent window the
+design leaves for the number, the name or the text area. `lineArt: true` keeps only the
+constant-width strokes, so there is one ink.
+
+**Every ornament is placed from a measurement**, never a fixed offset: the medallion from
+the printed ring's centre and radius, with the design's slot centre on the ring centre; the
+band from the surah title's box across the text column; the border from the laid-out page
+box. That is why the same rules land on all 604 pages.
+
+**Paint the display list behind the page ink.** Only the printed ring and the native band
+are hidden; the numeral inside the ring is the print's own ink and stays on top. Each draw
+carries a `placement`, the same index a page draw carries into the layout's placements, so
+a host applies the transform it already applies to the ink: a medallion follows its word
+onto its row under reflow, and a band follows its title. The border carries `null` and is
+drawn in layout space. `CanvasRenderer` does all of this.
+
+**A dressed page is bigger than its text.** `viewBox` is the page box the border grew, in
+page units, and `overflow` is how far the border reaches past the laid-out content on each
+side, in viewport px. Fit content plus overflow, or the border is cropped off. A new layout
+re-places the dress and bumps `revision`; a host that rasterises the layer keys its cache on
+that number.
+
+**The ornaments are not part of the pages.** The data release carries an `ornaments.qvo`
+of the assets whose licence is confirmed (`docs/DATA.md`). A fuller set is built from a
+`quran-ws/quran-assets` checkout by `qvp-convert ornaments`. Each ornament carries its own
+`licence` (`{id, status, redistributable, attribution}`) and the engine reports it so a host
+can say so on screen. Read it before you publish a dressed page.
+
 ## Atlas (cross-page)
 
 `atlas.pageOf(s,a)`, `pageRange(page)`, `surah(n)`, `surahs()`, `pageOfSurah(n)`,
@@ -801,6 +848,16 @@ says which wrapper binds which.
 | names | `qvp_category_name` | `engine.categoryName(id)` | Return a mark category's name. |
 | names | `qvp_mark_from_name` | `engine.markFromName(name)` | Return a mark's id by name; 255 when unknown. |
 | names | `qvp_mark_category` | `engine.markCategory(id)` | Return the category a mark belongs to. |
+| dress | `qvp_ornaments_load` | `engine.loadOrnaments(bytes)` | Decode an ornament set; null on a malformed file; the bytes are copied. |
+| dress | `qvp_ornaments_free` | `set.free()` | Free the ornament set. |
+| dress | `qvp_ornament_count` | `set.count` | Return how many ornaments the set holds. |
+| dress | `qvp_ornament_info` | `set.list[i]` | Return one ornament: kind, lineage, style, riwayah, licence and part count. |
+| dress | `qvp_ornament_find` | `set.find(kind, style)` | Return the index of the ornament of one kind in one style, or −1. |
+| dress | `qvp_ornament_part` | `set.list[i].parts[k]` | Return one printed colour of an ornament: colour, stroke flag and name. |
+| dress | `qvp_dress` | `page.dress(set, spec)` | Place the chosen ornaments on the page from its measurements. |
+| dress | `qvp_undress` | `page.undress()` | Take the ornaments off; the printed rings and bands come back. |
+| dress | `qvp_dress_info` | `page.dressInfo()` | Return the readout: chosen ornaments, counts, revision, grown page box and overflow. |
+| dress | `qvp_dress_geometry` | `page.dressGeometry()` | Return the ornament display list, with a layout placement on each draw. |
 | names | `qvp_version` | `engine.version()` | Return the engine version as a string, `0.2.0`. |
 | names | `qvp_format_version` | `engine.formatVersion()` | Return the page format version the engine reads. |
 | names | `qvp_engine_name` | `engine.engineName()` | Return the engine's name, `qvp`. |

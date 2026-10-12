@@ -74,4 +74,5 @@ awk '/^## Third-party/,0' LICENSE > "$stage/NOTICE.txt" 2>/dev/null || cp LICENS
 mkdir -p dist
 tar -czf "dist/$name.tar.gz" -C "$(dirname "$stage")" "$name"
 (cd dist && shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256")
-echo "packaged dist/$name.tar.gz ($count pages, $sidecars word sidecars, $surah_names surah names, data version $v); next: gh release create data-v$v dist/$name.tar.gz dist/$name.tar.gz.sha256"
+extra=""; [ -f dist/pages/ornaments.qvo ] && extra=" dist/pages/ornaments.qvo"
+echo "packaged dist/$name.tar.gz ($count pages, $sidecars word sidecars, $surah_names surah names, data version $v); next: gh release create data-v$v dist/$name.tar.gz dist/$name.tar.gz.sha256$extra"

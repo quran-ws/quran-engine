@@ -6,7 +6,14 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- `dress`: put another mushaf's or a font's ornaments on a page. A new QVO1 ornament set
+  (`docs/FORMAT.md`), built by `qvp-convert ornaments` from `quran-ws/quran-assets`, holds
+  ayah medallions, surah bands and page frames. The engine places each one from the page's
+  own measurements and hands the host a display list to paint behind the ink; each draw
+  carries a layout placement, so a dressed page reflows. Ten C symbols, bound in the web
+  wrapper; the native wrappers carry declared gaps. The data release ships the
+  redistributable subset as `ornaments.qvo`.
 
 ## [0.6.1] - 2026-10-12
 
