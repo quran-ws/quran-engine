@@ -326,7 +326,9 @@ final class QvpKitTests: XCTestCase {
         // ceiling below it must not shrink the page inside the screen, which is the one
         // thing the `fit` floor exists to prevent — and having shrunk it, the reader
         // could neither pinch back out nor reach the ceiling again.
-        XCTAssertEqual(QvpViewPolicy.clampZoom(20, fit: 1, ceiling: 0), 1)
+        XCTAssertEqual(QvpViewPolicy.clampZoom(20, fit: 1, ceiling: 0.5), 1)
+        // …and a ceiling of 0 or less is the engine's own.
+        XCTAssertEqual(QvpViewPolicy.clampZoom(20, fit: 1, ceiling: 0), QvpViewPolicy.maxZoom)
         XCTAssertEqual(QvpViewPolicy.clampZoom(20, fit: 2, ceiling: 1.5), 2)
         // …and under BOTH floors it is the larger of them.
         XCTAssertEqual(QvpViewPolicy.clampZoom(0.1, fit: 0.2, ceiling: 0.1), QvpViewPolicy.minZoom)
@@ -1116,7 +1118,7 @@ final class QvpKitTests: XCTestCase {
                 XCTAssertNil(l.ellipsis, tag)
             }
         }
-        XCTAssertEqual(cases.count, 52)
+        XCTAssertEqual(cases.count, 58)
     }
 
     /// A surah's basmalah is a passage with no ayahs; surah 1 has none of its own and surah 9

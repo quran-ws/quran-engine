@@ -614,16 +614,129 @@ final class QvpAtlasRubuAlHizbC extends ffi.Struct {
   external int page;
 }
 
+/// `{ float width, scale, line_spacing, padding; uint8_t align, keep_ayah_mark, _pad[2]; uint32_t max_rows; float ellipsis_width, max_stretch; }`
+final class QvpPassageSpecC extends ffi.Struct {
+  @ffi.Float()
+  external double width;
+  @ffi.Float()
+  external double scale;
+  @ffi.Float()
+  external double lineSpacing;
+  @ffi.Float()
+  external double padding;
+  @ffi.Uint8()
+  external int align;
+  @ffi.Uint8()
+  external int keepAyahMark;
+  @ffi.Array(2)
+  external ffi.Array<ffi.Uint8> pad;
+  @ffi.Uint32()
+  external int maxRows;
+  @ffi.Float()
+  external double ellipsisWidth;
+  @ffi.Float()
+  external double maxStretch;
+}
+
+/// `{ float width, height, scale, line_spacing; uint32_t n_rows, n_words, n_ayahs, n_draws; uint8_t is_truncated, _pad[3]; float ellipsis_x0, ellipsis_y0, ellipsis_x1, ellipsis_y1; }`
+final class QvpPassageLayoutC extends ffi.Struct {
+  @ffi.Float()
+  external double width;
+  @ffi.Float()
+  external double height;
+  @ffi.Float()
+  external double scale;
+  @ffi.Float()
+  external double lineSpacing;
+  @ffi.Uint32()
+  external int nRows;
+  @ffi.Uint32()
+  external int nWords;
+  @ffi.Uint32()
+  external int nAyahs;
+  @ffi.Uint32()
+  external int nDraws;
+  @ffi.Uint8()
+  external int isTruncated;
+  @ffi.Array(3)
+  external ffi.Array<ffi.Uint8> pad;
+  @ffi.Float()
+  external double ellipsisX0;
+  @ffi.Float()
+  external double ellipsisY0;
+  @ffi.Float()
+  external double ellipsisX1;
+  @ffi.Float()
+  external double ellipsisY1;
+}
+
+/// `{ float x0, y0, x1, y1, baseline; }`
+final class QvpPassageRowC extends ffi.Struct {
+  @ffi.Float()
+  external double x0;
+  @ffi.Float()
+  external double y0;
+  @ffi.Float()
+  external double x1;
+  @ffi.Float()
+  external double y1;
+  @ffi.Float()
+  external double baseline;
+}
+
+/// `{ uint16_t surah, ayah, word, page; uint32_t row; float x0, y0, x1, y1; }`
+final class QvpPassageWordC extends ffi.Struct {
+  @ffi.Uint16()
+  external int surah;
+  @ffi.Uint16()
+  external int ayah;
+  @ffi.Uint16()
+  external int word;
+  @ffi.Uint16()
+  external int page;
+  @ffi.Uint32()
+  external int row;
+  @ffi.Float()
+  external double x0;
+  @ffi.Float()
+  external double y0;
+  @ffi.Float()
+  external double x1;
+  @ffi.Float()
+  external double y1;
+}
+
+/// `{ uint16_t surah, ayah; float x0, y0, x1, y1; }`
+final class QvpPassageAyahC extends ffi.Struct {
+  @ffi.Uint16()
+  external int surah;
+  @ffi.Uint16()
+  external int ayah;
+  @ffi.Float()
+  external double x0;
+  @ffi.Float()
+  external double y0;
+  @ffi.Float()
+  external double x1;
+  @ffi.Float()
+  external double y1;
+}
+
 /// Opaque `QvpPage`.
 final class QvpPageC extends ffi.Opaque {}
 
 /// Opaque `QvpAtlas`.
 final class QvpAtlasC extends ffi.Opaque {}
 
+/// Opaque `QvpPassage`.
+final class QvpPassageC extends ffi.Opaque {}
+
 // ───────────── C function typedefs (native ↔ dart) ─────────────
 
 typedef PtrPage = ffi.Pointer<QvpPageC>;
 typedef PtrAtlas = ffi.Pointer<QvpAtlasC>;
+typedef PtrPassage = ffi.Pointer<QvpPassageC>;
+typedef PtrPages = ffi.Pointer<PtrPage>;
 typedef PtrU8 = ffi.Pointer<ffi.Uint8>;
 typedef PtrU16 = ffi.Pointer<ffi.Uint16>;
 typedef PtrU32 = ffi.Pointer<ffi.Uint32>;
@@ -845,6 +958,30 @@ final class QvpBindings {
   late final int Function(PtrAtlas, PtrU8, int, PtrU16, int) atlasSearchSurahs = lib.lookupFunction<
       ffi.Uint32 Function(PtrAtlas, PtrU8, ffi.Uint32, PtrU16, ffi.Uint32), int Function(PtrAtlas, PtrU8, int, PtrU16, int)>('qvp_atlas_search_surahs');
   late final void Function(PtrAtlas, PtrStr) atlasJson = lib.lookupFunction<ffi.Void Function(PtrAtlas, PtrStr), void Function(PtrAtlas, PtrStr)>('qvp_atlas_json');
+
+  // passage
+  late final PtrPassage Function(PtrPages, int, int, int, int) passageLoad = lib.lookupFunction<
+      PtrPassage Function(PtrPages, ffi.Uint32, ffi.Uint16, ffi.Uint16, ffi.Uint16), PtrPassage Function(PtrPages, int, int, int, int)>('qvp_passage_load');
+  late final PtrPassage Function(PtrPages, int, int) passageLoadBasmalah =
+      lib.lookupFunction<PtrPassage Function(PtrPages, ffi.Uint32, ffi.Uint16), PtrPassage Function(PtrPages, int, int)>('qvp_passage_load_basmalah');
+  late final void Function(PtrPassage) passageFree = lib.lookupFunction<ffi.Void Function(PtrPassage), void Function(PtrPassage)>('qvp_passage_free');
+  late final int Function(PtrPassage) passageAyahCount = lib.lookupFunction<ffi.Uint32 Function(PtrPassage), int Function(PtrPassage)>('qvp_passage_ayah_count');
+  late final void Function(PtrPassage, int, PtrStr) passageAyahText =
+      lib.lookupFunction<ffi.Void Function(PtrPassage, ffi.Uint32, PtrStr), void Function(PtrPassage, int, PtrStr)>('qvp_passage_ayah_text');
+  late final double Function(PtrPassage) passageLineSpacing = lib.lookupFunction<ffi.Float Function(PtrPassage), double Function(PtrPassage)>('qvp_passage_line_spacing');
+  late final int Function(PtrPassage, ffi.Pointer<QvpPassageSpecC>, ffi.Pointer<QvpPassageLayoutC>) passageLayout = lib.lookupFunction<
+      ffi.Int32 Function(PtrPassage, ffi.Pointer<QvpPassageSpecC>, ffi.Pointer<QvpPassageLayoutC>),
+      int Function(PtrPassage, ffi.Pointer<QvpPassageSpecC>, ffi.Pointer<QvpPassageLayoutC>)>('qvp_passage_layout');
+  late final int Function(PtrPassage, ffi.Pointer<QvpPassageRowC>, int) passageRows = lib.lookupFunction<
+      ffi.Uint32 Function(PtrPassage, ffi.Pointer<QvpPassageRowC>, ffi.Uint32), int Function(PtrPassage, ffi.Pointer<QvpPassageRowC>, int)>('qvp_passage_rows');
+  late final int Function(PtrPassage, ffi.Pointer<QvpPassageWordC>, int) passageWords = lib.lookupFunction<
+      ffi.Uint32 Function(PtrPassage, ffi.Pointer<QvpPassageWordC>, ffi.Uint32), int Function(PtrPassage, ffi.Pointer<QvpPassageWordC>, int)>('qvp_passage_words');
+  late final int Function(PtrPassage, ffi.Pointer<QvpPassageAyahC>, int) passageAyahs = lib.lookupFunction<
+      ffi.Uint32 Function(PtrPassage, ffi.Pointer<QvpPassageAyahC>, ffi.Uint32), int Function(PtrPassage, ffi.Pointer<QvpPassageAyahC>, int)>('qvp_passage_ayahs');
+  late final int Function(PtrPassage, PtrU32, int) passageDrawList =
+      lib.lookupFunction<ffi.Uint32 Function(PtrPassage, PtrU32, ffi.Uint32), int Function(PtrPassage, PtrU32, int)>('qvp_passage_draw_list');
+  late final int Function(PtrPassage, PtrF32, int) passagePlacements =
+      lib.lookupFunction<ffi.Uint32 Function(PtrPassage, PtrF32, ffi.Uint32), int Function(PtrPassage, PtrF32, int)>('qvp_passage_placements');
 
   // names
   late final void Function(int, PtrStr) markName = lib.lookupFunction<ffi.Void Function(ffi.Uint8, PtrStr), void Function(int, PtrStr)>('qvp_mark_name');

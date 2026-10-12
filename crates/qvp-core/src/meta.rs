@@ -269,6 +269,16 @@ impl Page {
     /// The frame box spans the page's text block and the heading's row. The title box holds
     /// the heading's own ink without its native frame, which is what a host draws around.
     pub fn surah_headers(&self) -> Vec<SurahHeader> {
+        self.surah_headers_cached().to_vec()
+    }
+
+    /// The headings as measured once: a host overlay asks on every pan and zoom frame, and
+    /// nothing here changes after the page is loaded.
+    pub(crate) fn surah_headers_cached(&self) -> &[SurahHeader] {
+        self.surah_headers.get_or_init(|| self.measure_surah_headers())
+    }
+
+    fn measure_surah_headers(&self) -> Vec<SurahHeader> {
         let d = self.data();
         let q = self.quant();
         let (bx0, bx1) = self.text_block();
@@ -279,7 +289,10 @@ impl Page {
             .enumerate()
             .filter(|(_, x)| x.kind == DecoKind::SurahName)
             .map(|(i, x)| {
+                // A name whose every path is an ornament has no title ink of its own: its box
+                // is the decoration's, rather than an empty box's sentinel corners.
                 let title = self.decoration_bbox_without(i, &ornaments);
+                let title = if title.is_empty() { x.bbox } else { title };
                 let line = x.line as usize;
                 let centre = if line < self.data().lines.len() {
                     self.line_centre(line)

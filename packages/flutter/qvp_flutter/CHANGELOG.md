@@ -1,3 +1,14 @@
+## Unreleased
+
+- Passages: `QvpPassage.load` and `QvpPassage.basmalah`, `layout`, and `paintPassage` to draw a
+  layout; the plugin replays `conformance/scenarios/passage.json` (issue #102).
+- `QvpPageView.maxZoom`, `peekScale` and `setZoomMode`, as on iOS and Android. The magnify pinch
+  is clamped by the engine (`QvpEngine.viewZoomAbout`).
+- `zoomSpec` keeps the host's reflow knobs on the printed page, with zoom 0, so the first pinch
+  off it reflows with the host's fill rather than the engine's defaults.
+- Engine: a passage cut to a row with no room for one word, the ellipsis and the medallion
+  shrinks the scale rather than placing them outside the layout.
+
 ## 0.6.1
 
 - Engine 0.6.1: a passage that runs from page 2 into page 3 draws every word at one size

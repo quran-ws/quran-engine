@@ -827,6 +827,39 @@ fn a_surah_header_reports_a_frame_box_and_the_title_ink_without_the_frame() {
     assert!(view[0].title_y0 >= 0.0 && view[0].title_y1 <= l.content_h);
     let placed = placed_point(&framed, &l, title_path, title.x0 as f32 / q, title.y0 as f32 / q);
     assert!((view[0].title_y0 - placed.1).abs() < 1e-3, "{} vs {}", view[0].title_y0, placed.1);
+
+    // On a reflowed page the frame box is the row: the printed block scaled by the banner's
+    // growth was wider than the row, and so wider than the screen, as soon as the reader
+    // zoomed in.
+    let zoomed =
+        framed.layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }), ..printed }).clone();
+    let flow = zoomed.reflow.as_ref().unwrap();
+    let view = framed.surah_headers_view();
+    assert_eq!(view.len(), 1);
+    assert!((view[0].x0 - zoomed.offset_x).abs() < 1e-3, "{} vs {}", view[0].x0, zoomed.offset_x);
+    assert!((view[0].x1 - (zoomed.offset_x + flow.row_w * zoomed.scale)).abs() < 1e-3);
+    assert!(view[0].x1 <= zoomed.offset_x + zoomed.content_w + 1e-3);
+    assert!(view[0].x0 <= view[0].title_x0 && view[0].title_x1 <= view[0].x1, "the frame holds the title");
+}
+
+#[test]
+fn a_surah_name_of_ornaments_alone_keeps_the_decorations_box() {
+    let (framed, Some(frame_path), _, decoration) = page_with_surah_frame(true) else { unreachable!() };
+    let mut data = framed.data().clone();
+    let deco = &mut data.decorations[decoration as usize];
+    deco.first_path = frame_path;
+    deco.n_paths = 1;
+    deco.bbox = data.paths[frame_path as usize].bbox;
+    let page = Page::from_data(data);
+    let q = page.quant();
+    let frame = page.data().paths[frame_path as usize].bbox;
+    let headers = page.surah_headers();
+    assert_eq!(headers.len(), 1);
+    let h = headers[0];
+    assert!(h.title_x0 <= h.title_x1 && h.title_y0 <= h.title_y1, "a box, not the empty sentinel: {h:?}");
+    assert!((h.title_x0 - frame.x0 as f32 / q).abs() < 1e-4);
+    assert!((h.title_x1 - frame.x1 as f32 / q).abs() < 1e-4);
+    assert!(h.y0 < h.y1 && h.y0.is_finite() && h.y1.is_finite());
 }
 
 #[test]
@@ -1032,6 +1065,16 @@ fn view_zoom_pans_about_the_fingers_and_clamps() {
     assert_eq!(swipe_direction(-60.0, 5.0, 0.0, 0.0), -1);
     assert_eq!(swipe_direction(10.0, 5.0, 0.0, 0.0), 0);
     assert_eq!(swipe_direction(60.0, 300.0, 0.0, 0.0), 0);
+}
+
+#[test]
+fn a_zoom_ceiling_under_the_floor_is_the_floor() {
+    let v = View { scale: 0.1, offset_x: 0.0, offset_y: 0.0 };
+    // the floor holds against a ceiling under it, and against a factor that would pass it
+    assert_eq!(v.zoom_about(0.0, 0.0, 1.0, 0.5, 0.1).scale, 0.5);
+    assert_eq!(v.zoom_about(0.0, 0.0, 100.0, 1.0, 0.5).scale, 1.0);
+    // a ceiling of 0 is the engine's own, not the floor
+    assert_eq!(v.zoom_about(0.0, 0.0, 1000.0, 1.0, 0.0).scale, defaults::MAX_ZOOM);
 }
 
 #[test]

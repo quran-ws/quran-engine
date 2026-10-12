@@ -10,7 +10,7 @@ import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' show Color;
+import 'dart:ui' show Color, Rect;
 
 import 'package:ffi/ffi.dart' as pffi;
 import 'package:flutter/foundation.dart';
@@ -69,6 +69,9 @@ abstract final class QvpDefaults {
   static const double minZoom = 0.5, maxZoom = 12, zoomedThreshold = 1.02;
   static const double swipeAxisRatio = 1.5, swipeDistance = 40, swipeVelocity = 500;
   static const double zoomSnapHysteresis = 0.03, zoomQuantum = 0.01;
+  /// How far a justified row's gaps may open, as a multiple of the usual air between two
+  /// words: what a reflowed page and a passage stretch to unless the host says otherwise.
+  static const double reflowMaxStretch = 2;
 }
 
 /// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
@@ -380,11 +383,12 @@ final class QvpReflowSpec {
     this.breaks = 'fitted',
     this.gaps = 'uniform',
     this.wordGap = 1,
-    this.maxStretch = 2,
+    this.maxStretch = QvpDefaults.reflowMaxStretch,
     this.relax = 0.5,
   });
 
-  /// 1 is the printed page. The largest this page can reach is [QvpPage.reflowMaxZoom].
+  /// 1 or less is the printed page; [QvpPage.zoomSpec] hands back 0 there, as the C header
+  /// does. The largest this page can reach is [QvpPage.reflowMaxZoom].
   final double zoom;
   /// `ragged` | `justified` | `centred`; `greedy` | `even` | `fitted`; `printed` | `uniform`.
   final String fill, breaks, gaps;
@@ -866,6 +870,22 @@ class QvpEngine {
     final h = withBytes(bytes, (p, n) => b.atlasLoad(p, n));
     if (h == ffi.nullptr) throw const FormatException('qvp_atlas_load failed');
     return QvpAtlas._(this, h);
+  }
+
+  /// Scales [view] by [factor] about a point in viewport px and holds the scale between [min]
+  /// and [max]. 0 is the engine's own limit, and a ceiling under the floor is the floor.
+  QvpView viewZoomAbout(QvpView view, double focalX, double focalY, double factor, {double min = 0, double max = 0}) {
+    final v = pffi.calloc<QvpViewC>(), out = pffi.calloc<QvpViewC>();
+    try {
+      v.ref.scale = view.scale;
+      v.ref.offsetX = view.offsetX;
+      v.ref.offsetY = view.offsetY;
+      b.viewZoomAbout(v, focalX, focalY, factor, min, max, out);
+      return QvpView(scale: out.ref.scale, offsetX: out.ref.offsetX, offsetY: out.ref.offsetY);
+    } finally {
+      pffi.calloc.free(v);
+      pffi.calloc.free(out);
+    }
   }
 
 
@@ -1498,7 +1518,9 @@ class QvpPage extends ChangeNotifier {
     }
   }
 
-  /// The spec this control asks for: what to lay out, draw and hit-test with.
+  /// The spec this control asks for: what to lay out, draw and hit-test with. The host's other
+  /// reflow knobs come back as it set them, on the printed page too, where the zoom is 0 and
+  /// they wait for the next pinch.
   QvpLayoutSpec zoomSpec(QvpLayoutSpec spec, QvpZoom zoom) {
     _writeSpec(spec);
     final z = pffi.calloc<QvpZoomC>(), out = pffi.calloc<QvpLayoutSpecC>();
@@ -1509,6 +1531,10 @@ class QvpPage extends ChangeNotifier {
       // Built rather than copied: a control on the printed page asks for no reflow at all, and
       // `copyWith` cannot say "none" — its `??` would keep the reflow the spec came in with.
       final knobs = spec.reflow ?? const QvpReflowSpec();
+      // The control owns the zoom alone. Dropping the host's knobs at the printed size would
+      // leave the pinch that leaves it to lay the page out with the engine's defaults, so a
+      // spec that came with knobs keeps them, at zoom 0, until the next pinch.
+      final zoomed = o.reflowZoom > 1.0001;
       return QvpLayoutSpec(
         viewportW: spec.viewportW,
         viewportH: spec.viewportH,
@@ -1527,9 +1553,9 @@ class QvpPage extends ChangeNotifier {
         // spec every reflowed page is laid out with.
         bannerZoom: spec.bannerZoom,
         surahFrames: spec.surahFrames,
-        reflow: o.reflowZoom > 1.0001
+        reflow: zoomed || spec.reflow != null
             ? QvpReflowSpec(
-                zoom: o.reflowZoom,
+                zoom: zoomed ? o.reflowZoom : 0,
                 fill: knobs.fill,
                 breaks: knobs.breaks,
                 gaps: knobs.gaps,
@@ -2089,5 +2115,384 @@ class QvpAtlas {
   String json() {
     _b.atlasJson(_a, engine._str);
     return engine._s();
+  }
+}
+
+// ───────────── passage ─────────────
+
+/// Where the rows of a passage start. The order is `QVP_ALIGN_*`.
+enum QvpPassageAlign {
+  /// At the right edge, as Arabic text starts.
+  right,
+
+  /// In the middle of the width.
+  center,
+
+  /// Across the width: every row but the last opens its word gaps until it reaches both edges,
+  /// never past [QvpPassageSpec.maxStretch]. What is left over is split between the two sides,
+  /// so the last row, a one-word row and a capped row are centred.
+  justified,
+}
+
+/// What a layout of a passage asks for. Lengths are layout px.
+@immutable
+final class QvpPassageSpec {
+  /// The defaults put the passage on one row at the printed size.
+  const QvpPassageSpec({
+    this.width = 0,
+    this.scale = 1,
+    this.lineSpacing = 1,
+    this.padding = 2,
+    this.align = QvpPassageAlign.right,
+    this.maxRows = 0,
+    this.keepAyahMark = false,
+    this.ellipsisWidth = 0,
+    this.maxStretch = QvpDefaults.reflowMaxStretch,
+  });
+
+  /// The width of the rows. Zero or less puts the whole passage on one row, as wide as it is.
+  final double width;
+
+  /// Layout px per page unit. It shrinks only when one word and its signs are wider than the
+  /// rows. To size a passage by its printed line, divide by [QvpPassage.lineSpacing].
+  final double scale;
+
+  /// The distance between two rows' baselines, as a multiple of the printed one. At least 1.
+  final double lineSpacing;
+
+  /// The empty margin on every side.
+  final double padding;
+
+  /// Where each row starts.
+  final QvpPassageAlign align;
+
+  /// The most rows to show. Zero shows every row.
+  final int maxRows;
+
+  /// After a cut, place the medallion of the passage's last ayah after the ellipsis.
+  final bool keepAyahMark;
+
+  /// The width that the host needs for its ellipsis after a cut.
+  final double ellipsisWidth;
+
+  /// How far a justified row's gaps may open, as a multiple of the passage's usual air between
+  /// two words. A negative value lifts the cap.
+  final double maxStretch;
+
+  @override
+  bool operator ==(Object other) =>
+      other is QvpPassageSpec &&
+      other.width == width &&
+      other.scale == scale &&
+      other.lineSpacing == lineSpacing &&
+      other.padding == padding &&
+      other.align == align &&
+      other.maxRows == maxRows &&
+      other.keepAyahMark == keepAyahMark &&
+      other.ellipsisWidth == ellipsisWidth &&
+      other.maxStretch == maxStretch;
+
+  @override
+  int get hashCode => Object.hash(width, scale, lineSpacing, padding, align, maxRows, keepAyahMark, ellipsisWidth, maxStretch);
+}
+
+/// One ayah of a passage, with its text from the page's own word records.
+@immutable
+final class QvpPassageText {
+  const QvpPassageText({required this.surah, required this.ayah, required this.text});
+  final int surah, ayah;
+  final String text;
+
+  /// `surah:ayah`
+  String get ayahKey => '$surah:$ayah';
+}
+
+/// One row of a laid-out passage, in layout px: the box of the row's ink, and the height its
+/// words sit on.
+@immutable
+final class QvpPassageRow {
+  const QvpPassageRow({required this.x0, required this.y0, required this.x1, required this.y1, required this.baseline});
+  final double x0, y0, x1, y1, baseline;
+}
+
+/// One word of a laid-out passage with the signs that go with it, in layout px.
+@immutable
+final class QvpPassageWord {
+  const QvpPassageWord({required this.surah, required this.ayah, required this.word, required this.page, required this.row, required this.x0, required this.y0, required this.x1, required this.y1});
+
+  /// The word's key and the page it is printed on.
+  final int surah, ayah, word, page;
+
+  /// The row the word is on, from 0.
+  final int row;
+
+  /// The box of the word and its signs.
+  final double x0, y0, x1, y1;
+
+  /// `surah:ayah:word`
+  String get wordKey => '$surah:$ayah:$word';
+}
+
+/// The bounds of one ayah that a layout shows, in layout px.
+@immutable
+final class QvpPassageAyah {
+  const QvpPassageAyah({required this.surah, required this.ayah, required this.x0, required this.y0, required this.x1, required this.y1});
+  final int surah, ayah;
+  final double x0, y0, x1, y1;
+}
+
+/// One path that a passage layout draws: its page, its index on that page, and which of
+/// [QvpPassageLayout.placements] it goes under.
+@immutable
+final class QvpPassageDraw {
+  const QvpPassageDraw(this.page, this.path, this.placement);
+
+  /// The page number. Draw the path with that page's geometry.
+  final int page;
+
+  /// The path's index on its page, and the index of its placement.
+  final int path, placement;
+}
+
+/// A laid-out passage. A point `(x, y)` of a path draws at
+/// `scale · (kx · x + dx), scale · (ky · y + dy)`, with the path's placement.
+@immutable
+final class QvpPassageLayout {
+  const QvpPassageLayout({
+    required this.width,
+    required this.height,
+    required this.scale,
+    required this.lineSpacing,
+    required this.rows,
+    required this.words,
+    required this.ayahs,
+    required this.draws,
+    required this.placements,
+    required this.isTruncated,
+    required this.ellipsis,
+  });
+
+  /// The size of the layout, padding included, and the scale it was laid out at.
+  final double width, height, scale;
+
+  /// The distance between two rows' baselines, page units, before a row moves down for its ink.
+  final double lineSpacing;
+
+  /// The rows, top to bottom.
+  final List<QvpPassageRow> rows;
+
+  /// The words shown, in reading order.
+  final List<QvpPassageWord> words;
+
+  /// The ayahs with at least one word shown.
+  final List<QvpPassageAyah> ayahs;
+
+  /// Every path to draw, in drawing order.
+  final List<QvpPassageDraw> draws;
+
+  /// What [QvpPassageDraw.placement] indexes.
+  final List<QvpPlacement> placements;
+
+  /// The layout shows fewer words than the passage has.
+  final bool isTruncated;
+
+  /// Where the host draws its ellipsis after a cut: from the last row's top to its baseline.
+  final Rect? ellipsis;
+}
+
+/// A contiguous range of complete ayahs, or a surah's basmalah, ready to lay out at any width.
+/// It copies what it needs from its pages, so the pages can be disposed after it is made.
+class QvpPassage {
+  QvpPassage._(this.engine, this._h, int surah, int from) {
+    final b = engine.b;
+    ayahs = List.generate(b.passageAyahCount(_h), (i) {
+      b.passageAyahText(_h, i, engine._str);
+      return QvpPassageText(surah: surah, ayah: from + i, text: engine._s());
+    }, growable: false);
+    lineSpacing = b.passageLineSpacing(_h);
+  }
+
+  /// Loads the ayahs [from] to [to] of [surah] from the pages that print them, in any order.
+  /// Throws when an ayah is missing or incomplete, a page is given twice, or the range has more
+  /// than 4,096 words.
+  factory QvpPassage.load(List<QvpPage> pages, int surah, int from, {int? to}) {
+    final last = to ?? from;
+    _checkU16(surah, 'surah');
+    _checkU16(from, 'from');
+    _checkU16(last, 'to');
+    final engine = _engineOf(pages);
+    final h = _withPages(pages, (p, n) => engine.b.passageLoad(p, n, surah, from, last));
+    if (h == ffi.nullptr) throw const FormatException('qvp_passage_load failed');
+    return QvpPassage._(engine, h, surah, from);
+  }
+
+  /// Loads the basmalah printed above [surah] from whichever of the pages prints it. It lays out
+  /// as one piece on one row and has no ayahs and no words. Its line spacing is its page's, so
+  /// it is sized by the printed line as an ayah is. Throws for surah 1, whose basmalah is its
+  /// first ayah, for surah 9, which has none, and when no page given prints it.
+  factory QvpPassage.basmalah(List<QvpPage> pages, int surah) {
+    _checkU16(surah, 'surah');
+    final engine = _engineOf(pages);
+    final h = _withPages(pages, (p, n) => engine.b.passageLoadBasmalah(p, n, surah));
+    if (h == ffi.nullptr) throw const FormatException('qvp_passage_load_basmalah failed');
+    return QvpPassage._(engine, h, surah, 1);
+  }
+
+  static void _checkU16(int v, String name) {
+    if (v < 1 || v > 0xffff) throw RangeError.range(v, 1, 0xffff, name);
+  }
+
+  static QvpEngine _engineOf(List<QvpPage> pages) {
+    if (pages.isEmpty) throw ArgumentError.value(pages, 'pages', 'a passage needs at least one page');
+    // Every engine call on a disposed page is undefined. The engine checks the range itself.
+    for (final p in pages) {
+      if (p.isDisposed) throw StateError('QvpPassage: a page was disposed');
+    }
+    return pages.first.engine;
+  }
+
+  /// Runs [f] with the pages' handles in one native array.
+  static R _withPages<R>(List<QvpPage> pages, R Function(PtrPages p, int n) f) {
+    final arr = pffi.malloc<PtrPage>(pages.length);
+    try {
+      for (var i = 0; i < pages.length; i++) {
+        arr[i] = pages[i]._p;
+      }
+      return f(arr, pages.length);
+    } finally {
+      pffi.malloc.free(arr);
+    }
+  }
+
+  final QvpEngine engine;
+  ffi.Pointer<QvpPassageC> _h;
+
+  /// The ayahs in reading order. Empty for a basmalah.
+  late final List<QvpPassageText> ayahs;
+
+  /// The printed line spacing of the passage's first word, in page units. Every word of the
+  /// passage has that size.
+  late final double lineSpacing;
+
+  /// The last layout, if any.
+  QvpPassageLayout? currentLayout;
+
+  bool get isDisposed => _h == ffi.nullptr;
+
+  ffi.Pointer<QvpPassageC> get _p {
+    assert(_h != ffi.nullptr, 'QvpPassage used after close()');
+    return _h;
+  }
+
+  QvpBindings get _b => engine.b;
+  QvpEngine get _e => engine;
+
+  /// Frees the native passage. Safe to call more than once. [ayahs], [lineSpacing] and
+  /// [currentLayout] stay usable.
+  void close() {
+    if (_h != ffi.nullptr) {
+      _b.passageFree(_h);
+      _h = ffi.nullptr;
+    }
+  }
+
+  /// The same as [close], under the name every other object of this package frees with.
+  void dispose() => close();
+
+  /// Lays the passage out. Null when the spec is out of range. The last layout then stays.
+  QvpPassageLayout? layout(QvpPassageSpec spec) {
+    if (spec.maxRows < 0) return null;
+    final s = pffi.calloc<QvpPassageSpecC>(), o = pffi.calloc<QvpPassageLayoutC>();
+    try {
+      final r = s.ref;
+      r.width = spec.width;
+      r.scale = spec.scale;
+      r.lineSpacing = spec.lineSpacing;
+      r.padding = spec.padding;
+      r.align = spec.align.index;
+      r.keepAyahMark = spec.keepAyahMark ? 1 : 0;
+      r.maxRows = spec.maxRows;
+      r.ellipsisWidth = spec.ellipsisWidth;
+      r.maxStretch = spec.maxStretch;
+      if (_b.passageLayout(_p, s, o) == 0) return null;
+      final l = o.ref;
+      final layout = QvpPassageLayout(
+        width: l.width,
+        height: l.height,
+        scale: l.scale,
+        lineSpacing: l.lineSpacing,
+        rows: _rows(),
+        words: _words(),
+        ayahs: _ayahs(),
+        draws: _draws(l.nDraws),
+        placements: _placements(),
+        isTruncated: l.isTruncated != 0,
+        ellipsis: l.isTruncated != 0 ? Rect.fromLTRB(l.ellipsisX0, l.ellipsisY0, l.ellipsisX1, l.ellipsisY1) : null,
+      );
+      currentLayout = layout;
+      return layout;
+    } finally {
+      pffi.calloc.free(s);
+      pffi.calloc.free(o);
+    }
+  }
+
+  // The rows, words and ayahs fit the engine's scratch: a passage holds at most 4,096 words.
+  List<QvpPassageRow> _rows() {
+    final o = _e._out<QvpPassageRowC>(), cap = _e._cap(ffi.sizeOf<QvpPassageRowC>());
+    final n = _b.passageRows(_p, o, cap).clamp(0, cap);
+    return List.generate(n, (i) {
+      final r = (o + i).ref;
+      return QvpPassageRow(x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, baseline: r.baseline);
+    }, growable: false);
+  }
+
+  List<QvpPassageWord> _words() {
+    final o = _e._out<QvpPassageWordC>(), cap = _e._cap(ffi.sizeOf<QvpPassageWordC>());
+    final n = _b.passageWords(_p, o, cap).clamp(0, cap);
+    return List.generate(n, (i) {
+      final w = (o + i).ref;
+      return QvpPassageWord(surah: w.surah, ayah: w.ayah, word: w.word, page: w.page, row: w.row, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1);
+    }, growable: false);
+  }
+
+  List<QvpPassageAyah> _ayahs() {
+    final o = _e._out<QvpPassageAyahC>(), cap = _e._cap(ffi.sizeOf<QvpPassageAyahC>());
+    final n = _b.passageAyahs(_p, o, cap).clamp(0, cap);
+    return List.generate(n, (i) {
+      final a = (o + i).ref;
+      return QvpPassageAyah(surah: a.surah, ayah: a.ayah, x0: a.x0, y0: a.y0, x1: a.x1, y1: a.y1);
+    }, growable: false);
+  }
+
+  // A long passage draws more paths than the scratch holds, so the draw list gets its own
+  // buffer, sized by the count the layout reported.
+  List<QvpPassageDraw> _draws(int count) {
+    final buf = pffi.malloc<ffi.Uint32>(count < 1 ? 3 : count * 3);
+    try {
+      final n = _b.passageDrawList(_p, buf, count).clamp(0, count);
+      final f = buf.asTypedList(n * 3);
+      return List.generate(n, (i) => QvpPassageDraw(f[i * 3], f[i * 3 + 1], f[i * 3 + 2]), growable: false);
+    } finally {
+      pffi.malloc.free(buf);
+    }
+  }
+
+  List<QvpPlacement> _placements() {
+    final o = _e._out<ffi.Float>(), cap = _e._cap(16);
+    final total = _b.passagePlacements(_p, o, cap);
+    if (total <= cap) return _readPlacements(o, total);
+    // More placements than the scratch holds: ask again into a buffer of the right size.
+    final buf = pffi.malloc<ffi.Float>(total * 4);
+    try {
+      return _readPlacements(buf, _b.passagePlacements(_p, buf, total).clamp(0, total));
+    } finally {
+      pffi.malloc.free(buf);
+    }
+  }
+
+  static List<QvpPlacement> _readPlacements(ffi.Pointer<ffi.Float> p, int n) {
+    final f = p.asTypedList(n * 4);
+    return List.generate(n, (i) => QvpPlacement(f[i * 4], f[i * 4 + 1], f[i * 4 + 2], f[i * 4 + 3]), growable: false);
   }
 }

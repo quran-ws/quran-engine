@@ -6,6 +6,7 @@
 // widget only converts geometry into ui.Path objects once, caches the
 // unstyled ink as an image at the current transform, and forwards gestures
 // to the engine's hit test / selection.
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -124,6 +125,7 @@ class QvpPageView extends StatefulWidget {
     this.paperShadow = true,
     this.minScale = kMinZoom,
     this.maxScale = kMaxZoom,
+    this.maxZoom = kMaxZoom,
     this.onZoomChanged,
   });
 
@@ -159,6 +161,13 @@ class QvpPageView extends StatefulWidget {
   final int selectionBand;
   final double minScale, maxScale;
 
+  /// How far the magnifying glass may go: the ceiling the pinch is clamped to under
+  /// [QvpZoomMode.magnify], [kMaxZoom] unless the host lowers it. A host that draws its own
+  /// furniture beside the ink and scales it with the glass says here what that furniture can
+  /// survive. A ceiling under the fitted page is the fitted page, since a pinch never shrinks
+  /// the page inside the screen. 0 or below is the engine's own ceiling.
+  final double maxZoom;
+
   @override
   State<QvpPageView> createState() => QvpPageViewState();
 }
@@ -179,9 +188,16 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   /// Where the reader's zoom control stands, and where it stood when a pinch began.
   QvpZoom _zoom = const QvpZoom();
   QvpZoom _gZoom = const QvpZoom();
+  /// The scale the page was last fitted at: the floor of a magnifying pinch.
+  double _fitScale = 1;
 
   QvpViewController get controller => _ctl;
   QvpPage get page => widget.page;
+
+  /// How far the glass is over the fitted page: the view scale over the fitted scale, 1 at rest
+  /// and in every mode but [QvpZoomMode.magnify]. A host overlay divides this out of the view
+  /// transform to draw its furniture once and let the glass scale that one raster.
+  double get peekScale => _fitScale > 0 ? _ctl.scale / _fitScale : 1;
 
   /// True while the engine is animating.
   bool get animating => _ticker.isActive;
@@ -278,6 +294,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     // A reflowed page is taller than the screen because the reader asked for it: show the top
     // and let them scroll, rather than shrinking it back to fit.
     _ctl.scale = l.reflowed ? 1 : l.fitScale;
+    _fitScale = _ctl.scale;
     _ctl.offsetX = l.fitX;
     _ctl.offsetY = l.reflowed ? 0 : l.fitY;
     _ctl._fitRequested = false;
@@ -320,6 +337,15 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   void _onScaleUpdate(ScaleUpdateDetails d) {
     if (!widget.panZoomEnabled || _size == Size.zero) return;
     final f = d.localFocalPoint;
+    if (_gZoom.mode == QvpZoomMode.magnify) {
+      // The printed page under a magnifying glass: the rows never move. The floor is the
+      // settled page, and a host ceiling set under it does not lower it: a pinch magnifies the
+      // print, it does not shrink the page inside the screen. The engine applies the clamp.
+      final floor = math.max(_fitScale, kMinZoom);
+      final v = page.engine.viewZoomAbout(QvpView(scale: _gScale, offsetX: _gOx, offsetY: _gOy), f.dx, f.dy, d.scale, min: floor, max: widget.maxZoom);
+      _ctl.set(scale: v.scale, offsetX: v.offsetX, offsetY: v.offsetY);
+      return;
+    }
     // The engine owns the whole pinch: which step it lands on, when it commits, and what holds
     // the reader's place when the page reflows under the fingers.
     final c = page.zoomPinch(
@@ -355,6 +381,17 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
 
   /// Where the reader's zoom control stands.
   QvpZoom get zoom => _zoom;
+
+  /// What a pinch does to the page. Stepped is what a reader gets: the pinch lands on one of
+  /// the page's own zoom steps and the page breaks its rows again at that size. Magnify scales
+  /// the printed page as it is, up to [QvpPageView.maxZoom]. The page is laid out and fitted
+  /// again under the new policy, at the size the reader is already at.
+  void setZoomMode(QvpZoomMode mode) {
+    if (_zoom.mode == mode || _size == Size.zero) return;
+    setState(() => _zoom = page.zoomMode(widget.layout.toSpec(_size.width, _size.height), _zoom, mode));
+    fit();
+    widget.onZoomChanged?.call(_zoom);
+  }
 
   void _onLongPressStart(LongPressStartDetails d) {
     if (!widget.selectionEnabled) return;
@@ -472,13 +509,18 @@ class _InkCache {
     page = null;
   }
 
-  List<ui.Path> buildPaths(QvpPage p) {
-    final cached = paths;
-    if (cached != null) return cached;
-    final t = p.table, ops = p.ops, pts = p.pts;
-    final out = List<ui.Path>.generate(p.nPaths, (i) {
+  List<ui.Path> buildPaths(QvpPage p) => paths ??= p.buildPaths();
+}
+
+/// The page's outlines as Flutter paths.
+extension QvpPagePaths on QvpPage {
+  /// One [ui.Path] per engine path, in page units, with the fill rule the page records. Built
+  /// from the copied geometry, so it works on a disposed page too. Keep the list across frames.
+  List<ui.Path> buildPaths() {
+    final t = table;
+    return List<ui.Path>.generate(nPaths, (i) {
       final path = ui.Path();
-      path.fillType = p.pathEvenOdd(i) ? PathFillType.evenOdd : PathFillType.nonZero;
+      path.fillType = pathEvenOdd(i) ? PathFillType.evenOdd : PathFillType.nonZero;
       var o = t[i * 8];
       final oe = o + t[i * 8 + 1];
       var k = t[i * 8 + 2];
@@ -502,8 +544,39 @@ class _InkCache {
       }
       return path;
     }, growable: false);
-    return paths = out;
   }
+}
+
+/// Draws a laid-out passage on [canvas], in the layout's own px from the canvas origin: every
+/// path of [layout], from its page in [pages] (by page number), in [ink]. Translate the canvas
+/// to where the passage goes first. [paths] keeps each page's [QvpPagePaths.buildPaths] across
+/// calls. Without it, every call builds the paths again. A page the map lacks is skipped.
+void paintPassage(ui.Canvas canvas, QvpPassageLayout layout, Map<int, QvpPage> pages, Color ink, {Map<int, List<ui.Path>>? paths}) {
+  final built = paths ?? <int, List<ui.Path>>{};
+  final places = layout.placements;
+  final s = layout.scale;
+  final paint = ui.Paint()
+    ..color = ink
+    ..isAntiAlias = true;
+  // The same placement loop as the page painter: a point (x, y) draws at
+  // scale · (kx · x + dx), scale · (ky · y + dy), and runs under one placement share a save.
+  var cur = -1, open = false;
+  for (final d in layout.draws) {
+    final page = pages[d.page];
+    if (page == null) continue;
+    final list = built.putIfAbsent(d.page, page.buildPaths);
+    if (d.placement != cur) {
+      if (open) canvas.restore();
+      canvas.save();
+      final q = d.placement < places.length ? places[d.placement] : QvpPlacement.identity;
+      canvas.translate(s * q.dx, s * q.dy);
+      canvas.scale(s * q.kx, s * q.ky);
+      open = true;
+      cur = d.placement;
+    }
+    canvas.drawPath(list[d.path], paint);
+  }
+  if (open) canvas.restore();
 }
 
 class _QvpPainter extends CustomPainter {

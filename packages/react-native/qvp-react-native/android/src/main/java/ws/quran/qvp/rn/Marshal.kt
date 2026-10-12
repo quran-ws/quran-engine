@@ -145,6 +145,12 @@ object Marshal {
     fun rosette(r: QvpRosette): Map<String, Any?> = mapOf("decoration" to r.decoration, "surah" to r.surah, "ayah" to r.ayah, "juz" to r.juz, "hizb" to r.hizb, "nisf" to r.nisf, "rubuAlHizb" to r.rubuAlHizb, "rubuAlHizbInHizb" to r.rubuAlHizbInHizb)
     fun sajdah(s: QvpSajdah): Map<String, Any?> = mapOf("decoration" to s.decoration, "surah" to s.surah, "ayah" to s.ayah, "signPath" to s.signPath)
     fun match(m: QvpMatch): Map<String, Any?> = mapOf("word" to m.word, "index" to m.index, "isLooseMatch" to m.isLooseMatch, "wordKey" to m.wordKey, "text" to m.text)
+    fun passageLayoutMap(l: QvpPassageLayout, p: QvpPassage): Map<String, Any?> = mapOf("width" to l.width, "height" to l.height, "scale" to l.scale, "lineSpacing" to l.lineSpacing,
+        "printedLineSpacing" to p.lineSpacing, "isTruncated" to l.isTruncated, "ellipsis" to l.ellipsis?.let { listOf(it.left, it.top, it.right, it.bottom) },
+        "rows" to l.rows.map { mapOf("x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1, "baseline" to it.baseline) },
+        "words" to l.words.map { mapOf("surah" to it.surah, "ayah" to it.ayah, "word" to it.word, "wordKey" to it.wordKey, "page" to it.page, "row" to it.row, "x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1) },
+        "ayahs" to l.ayahs.map { mapOf("surah" to it.surah, "ayah" to it.ayah, "x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1) },
+        "texts" to p.ayahs.map { mapOf("surah" to it.surah, "ayah" to it.ayah, "text" to it.text) })
     fun cropBounds(c: QvpCropBounds): Map<String, Any?> = mapOf("x0" to c.x0, "y0" to c.y0, "x1" to c.x1, "y1" to c.y1, "nWords" to c.nWords, "ayahMarkDecoration" to c.ayahMarkDecoration)
     fun atlasSurah(s: QvpAtlasSurah): Map<String, Any?> = mapOf("number" to s.number, "page" to s.page, "ayahCount" to s.ayahCount, "place" to s.place, "arabic" to s.arabic, "latin" to s.latin, "english" to s.english)
     fun atlasRubuAlHizb(r: QvpAtlasRubuAlHizb): Map<String, Any?> = mapOf("rubuAlHizb" to r.rubuAlHizb, "surah" to r.surah, "ayah" to r.ayah, "page" to r.page, "ayahKey" to r.ayahKey)

@@ -88,6 +88,25 @@ Colours: `'#rgb' | '#rrggbb' | '#rrggbbaa' | 0xRRGGBBAA` (`css()` / `rgba(c, alp
 Targets: `'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | wordIdx | [index…] | T.*`.
 Selectors: `Sel.page/path/wordPath/wordMark/wordMarkNamed/wordBody/wordMarks/word/ayah/line/mark/category/family/kind/decoration/decorationIndex`.
 
+## The passage view
+
+A passage is a range of complete ayahs shown away from its page, or a surah's basmalah. The
+engine lays it out on rows of the view's width and the view draws it; the layout comes back
+through `onPassageLayout`, and the view takes its height from it.
+
+```tsx
+<QvpPassageView
+  style={{ width: '100%' }}
+  pageUris={['asset://pages/042.qvp']}                 // the pages that print the range, in any order
+  surah={2} from={255}                                 // to={…} for a range; basmalah for the surah's basmalah
+  lineHeight={22}                                      // dp per printed line (or scale: dp per page unit)
+  align="justified" maxStretch={2}                     // right (the default), center or justified
+  maxRows={2} ellipsisWidth={12} keepAyahMark          // cut after two rows, ellipsis, then the medallion
+  ink="#231f20" paperColor="#fffdf7"
+  onPassageLayout={l => console.log(l.rows.length, l.words.length, l.isTruncated)}
+/>
+```
+
 ## The module
 
 Everything takes the view's react tag (`findNodeHandle`) — or use the bound forms:
@@ -134,10 +153,13 @@ android/build.gradle                       library module; depends on project(':
 android/src/main/java/ws/quran/qvp/rn/
   QvpRnPageView.kt      QvpPageView subclass: page loading, prop → handle reconciliation, events
   QvpPageViewManager.kt SimpleViewManager<QvpRnPageView> (props, events, commit after each prop batch)
+  QvpRnPassageView.kt   View: loads the pages, lays the passage out at the view's width, draws it, reports the layout
+  QvpPassageViewManager.kt SimpleViewManager<QvpRnPassageView>
+  QvpRnBytes.kt         the bytes a URI names (asset, file, path, base64)
   QvpModule.kt          ReactContextBaseJavaModule: page queries by react tag, engine helpers, atlas
   Marshal.kt            JS shapes ↔ Kotlin types (targets, selectors, styles, records)
   QvpPackage.kt
-src/index.tsx                              typed API: <QvpPageView/>, useQvp(), Qvp, QvpAtlas, Sel, T, constants
+src/index.tsx                              typed API: <QvpPageView/>, <QvpPassageView/>, useQvp(), Qvp, QvpAtlas, Sel, T, constants
 ```
 
 ## iOS — TODO

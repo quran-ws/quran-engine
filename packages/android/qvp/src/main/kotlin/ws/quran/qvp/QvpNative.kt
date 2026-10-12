@@ -158,6 +158,23 @@ internal object QvpNative {
     @JvmStatic external fun atlasDivisionOf(h: Long, division: Int, s: Int, a: Int): Int
     @JvmStatic external fun atlasPagesOfJuz(h: Long, n: Int): IntArray?
     @JvmStatic external fun atlasSearchSurahs(h: Long, text: String): IntArray
+    // passage: pages are page handles; spec FloatArray {width, scale, lineSpacing, padding, align, keepAyahMark,
+    // maxRows, ellipsisWidth, maxStretch}; a layout answers {width, height, scale, lineSpacing, nRows, nWords,
+    // nAyahs, nDraws, isTruncated, ellipsisX0, ellipsisY0, ellipsisX1, ellipsisY1}, or null when the spec is out of range
+    @JvmStatic external fun passageLoad(pages: LongArray, surah: Int, from: Int, to: Int): Long
+    @JvmStatic external fun passageLoadBasmalah(pages: LongArray, surah: Int): Long
+    @JvmStatic external fun passageFree(h: Long)
+    @JvmStatic external fun passageAyahCount(h: Long): Int
+    @JvmStatic external fun passageAyahText(h: Long, i: Int): String
+    @JvmStatic external fun passageLineSpacing(h: Long): Float
+    @JvmStatic external fun passageLayout(h: Long, spec: FloatArray): FloatArray?
+    // the last layout: 5 per row {x0, y0, x1, y1, baseline}; 9 per word {surah, ayah, word, page, row, x0, y0, x1, y1};
+    // 6 per ayah {surah, ayah, x0, y0, x1, y1}; 3 per draw {page, path, placement}; 4 per placement {dx, dy, kx, ky}
+    @JvmStatic external fun passageRows(h: Long): FloatArray
+    @JvmStatic external fun passageWords(h: Long): FloatArray
+    @JvmStatic external fun passageAyahs(h: Long): FloatArray
+    @JvmStatic external fun passageDrawList(h: Long): IntArray
+    @JvmStatic external fun passagePlacements(h: Long): FloatArray
     // names
     @JvmStatic external fun markName(m: Int): String
     @JvmStatic external fun familyName(f: Int): String

@@ -40,6 +40,8 @@ object QvpEngine {
 class QvpPage(bytes: ByteArray) : AutoCloseable {
     private var nativeHandle: Long = QvpNative.pageLoad(bytes)
     private val h: Long get() = nativeHandle.takeIf { it != 0L } ?: error("QvpPage is closed")
+    /** The engine's handle, for a passage that loads from this page. Throws once the page is closed. */
+    internal val handle: Long get() = h
     /** False once [close] has been called. Every call into the engine needs an open page. */
     val isOpen: Boolean get() = nativeHandle != 0L
     init { require(nativeHandle != 0L) { "qvp_page_load failed (not a QVP1 file?)" } }
@@ -212,9 +214,14 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** `spec` with this control's zoom in it: what the host lays out and draws with. */
     fun zoomSpec(spec: QvpLayoutSpec, zoom: QvpZoom): QvpLayoutSpec {
         val v = QvpNative.zoomSpec(h, spec.floats(), zoom.floats())
-        val r = if (v[12] > 0f) QvpReflowSpec(v[12], spec.reflow?.fill ?: QvpFill.CENTRED, spec.reflow?.breaks ?: QvpBreaks.FITTED,
-                                              spec.reflow?.gaps ?: QvpGapMode.UNIFORM, spec.reflow?.wordGap ?: 1f,
-                                              spec.reflow?.relax ?: QvpDefaults.REFLOW_RELAX, spec.reflow?.maxStretch ?: QvpDefaults.REFLOW_MAX_STRETCH) else null
+        // The control owns the zoom alone. Dropping the host's knobs at the printed size would
+        // leave the pinch that leaves it to lay the page out with the engine's defaults.
+        val given = spec.reflow
+        val r = when {
+            given != null -> given.copy(zoom = v[12])
+            v[12] > 0f -> QvpReflowSpec(v[12])
+            else -> null
+        }
         return spec.copy(reflow = r)
     }
     /** The reflow zoom one step of this page's control means; step 0 is the printed page. */

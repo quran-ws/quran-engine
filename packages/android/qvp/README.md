@@ -70,6 +70,20 @@ after close throw `IllegalStateException`. Keep application-specific Compose sur
 accessibility nodes, navigation, and state outside the SDK and use `QvpPage.buildPaths()`,
 `targetWords()`, `cropBounds()`, `hitAreas()`, and the style/mask APIs as their data layer.
 
+## Lay out a passage
+
+A passage is a range of complete ayahs shown away from its page: a card, a tooltip, a list
+row. The engine lays it out; the pages can close once it is loaded.
+
+```kotlin
+val passage = QvpPassage.load(listOf(page), surah = 2, from = 255)
+val layout = passage.layout(QvpPassageSpec(width = 366f, scale = 22f / passage.lineSpacing,
+                                           maxRows = 2, keepAyahMark = true, ellipsisWidth = 12f))
+layout?.draw(canvas, mapOf(42 to page), paint)       // every path under its placement
+val basmalah = QvpPassage.basmalah(listOf(page), surah = 2)   // one row, no words; throws for surahs 1 and 9
+passage.close()
+```
+
 ## Verify and benchmark
 
 Unit tests do not need page data:

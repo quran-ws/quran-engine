@@ -87,6 +87,17 @@ layout or transform changes) → styled paths → mask boxes. Each frame calls
 `page.select` with a band highlight in `QvpLayer.selection`; pinch / pan on
 top of the engine layout; double-tap fits.
 
+## Passages
+
+```dart
+final passage = QvpPassage.load([page], 2, 255);          // the pages can be disposed after this
+final layout = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing,
+                                             maxRows: 2, keepAyahMark: true, ellipsisWidth: 12));
+paintPassage(canvas, layout!, {42: page}, ink);           // every path under its placement
+final basmalah = QvpPassage.basmalah([page], 2);          // one row, no words; throws for surahs 1 and 9
+passage.close();
+```
+
 ## Tests
 
 ```sh

@@ -337,3 +337,20 @@ fn a_surah_without_a_basmalah_of_its_own_fails() {
     assert_eq!(Passage::load_basmalah(&[&two], 115).err(), Some(PassageError::Range));
     assert_eq!(Passage::load_basmalah(&[&two, &two], 2).err(), Some(PassageError::RepeatedPage));
 }
+
+#[test]
+fn a_cut_row_too_narrow_for_its_word_and_the_ellipsis_shrinks_rather_than_overflows() {
+    let Some(page) = load(48) else { return };
+    let mut passage = Passage::load(&[&page], 2, 282, 282).unwrap();
+    // A width the widest word only just fits, so the scale has already shrunk for it; the cut
+    // then has to find room for the ellipsis and the medallion beside one word.
+    for (width, keep_ayah_mark) in [(28.0, false), (28.0, true), (40.0, true)] {
+        let spec =
+            PassageSpec { width, scale: 1.0, max_rows: 1, ellipsis_width: 9.0, keep_ayah_mark, ..Default::default() };
+        let l = passage.layout(&spec).unwrap().clone();
+        assert!(l.is_truncated);
+        bounded(&l, &format!("2:282 cut to one row at {width}, keep_ayah_mark {keep_ayah_mark}"));
+        let e = l.ellipsis.unwrap();
+        assert!(e[0] >= spec.padding - 0.001, "the ellipsis is inside the padding: {e:?}");
+    }
+}

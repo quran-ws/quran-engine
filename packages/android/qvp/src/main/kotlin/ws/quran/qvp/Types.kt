@@ -1,5 +1,7 @@
 package ws.quran.qvp
 
+import android.graphics.RectF
+
 /** Constants mirroring qvp.h. Colours everywhere are 0xRRGGBBAA (see [QvpColor]). */
 object QvpKind { const val BODY = 0; const val MARK = 1; const val AYAH_NUMBER = 2; const val AYAH_MARK_ORNAMENT = 3; const val HEADER_INK = 4; const val ORNAMENT = 5; const val PAGE_NUMBER = 6; const val RUNNING_HEAD = 7; const val OTHER = 255 }
 object QvpFamily { const val NONE = 0; const val DIACRITIC = 1; const val TANWIN = 2; const val DOTS = 3; const val WAQF = 4; const val SIFR = 5; const val SAJDAH = 6; const val READING_SIGN = 7 }
@@ -207,3 +209,79 @@ data class QvpMatch(val word: Int, val index: Int, val isLooseMatch: Boolean, va
 data class QvpCropBounds(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val nWords: Int, val ayahMarkDecoration: Int)
 data class QvpAtlasSurah(val number: Int, val page: Int, val ayahCount: Int, val place: String, val arabic: String, val latin: String, val english: String)
 data class QvpAtlasRubuAlHizb(val rubuAlHizb: Int, val surah: Int, val ayah: Int, val page: Int) { val ayahKey get() = "$surah:$ayah" }
+
+// ── passage ──
+/** Where the rows of a passage start. */
+enum class QvpPassageAlign(val id: Int) {
+    /** At the right edge, as Arabic text starts. */
+    RIGHT(0),
+    /** In the middle of the width. */
+    CENTER(1),
+    /** Across the width: every row but the last opens its word gaps until it reaches both edges,
+     * never past [QvpPassageSpec.maxStretch]. What is left over is split between the two sides,
+     * so the last row, a one-word row and a capped row are centred. */
+    JUSTIFIED(2),
+}
+/** What a layout of a passage asks for. Lengths are layout px. The defaults put the passage on
+ * one row at the printed size. */
+data class QvpPassageSpec(
+    /** The width of the rows. Zero or less puts the whole passage on one row, as wide as it is. */
+    val width: Float = 0f,
+    /** Layout px per page unit. It shrinks only when one word and its signs are wider than the
+     * rows. To size a passage by its printed line, divide by [QvpPassage.lineSpacing]. */
+    val scale: Float = 1f,
+    /** The distance between two rows' baselines, as a multiple of the printed one. At least 1. */
+    val lineSpacing: Float = 1f,
+    /** The empty margin on every side. */
+    val padding: Float = 2f,
+    /** Where each row starts. */
+    val align: QvpPassageAlign = QvpPassageAlign.RIGHT,
+    /** The most rows to show. Zero shows every row. */
+    val maxRows: Int = 0,
+    /** After a cut, place the medallion of the passage's last ayah after the ellipsis. */
+    val keepAyahMark: Boolean = false,
+    /** The width that the host needs for its ellipsis after a cut. */
+    val ellipsisWidth: Float = 0f,
+    /** How far a justified row's gaps may open, as a multiple of the passage's usual air between
+     * two words. A negative value lifts the cap. */
+    val maxStretch: Float = QvpDefaults.REFLOW_MAX_STRETCH,
+) {
+    internal fun floats() = floatArrayOf(width, scale, lineSpacing, padding, align.id.toFloat(), if (keepAyahMark) 1f else 0f,
+                                         maxRows.toFloat(), ellipsisWidth, maxStretch)
+}
+/** One row of a laid-out passage, in layout px: the box of its ink, and the height its words sit on. */
+data class QvpPassageRow(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val baseline: Float)
+/** One word of a laid-out passage with the signs that go with it, in layout px: its key, the page it
+ * is printed on, the row it is on (from 0), and the box of the word and its signs. */
+data class QvpPassageWord(val surah: Int, val ayah: Int, val word: Int, val page: Int, val row: Int,
+                          val x0: Float, val y0: Float, val x1: Float, val y1: Float) {
+    val wordKey get() = "$surah:$ayah:$word"
+}
+/** The bounds of one ayah that a layout shows, in layout px: the ayah, and the box of its shown words. */
+data class QvpPassageAyah(val surah: Int, val ayah: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
+/** One ayah of a passage, with its text from the page's own word records. */
+data class QvpPassageText(val surah: Int, val ayah: Int, val text: String)
+/** One path that a passage layout draws: its page, its index on that page (draw it with that page's
+ * [QvpPage.path]), and which of [QvpPassageLayout.placements] it goes under. */
+data class QvpPassageDraw(val page: Int, val path: Int, val placement: Int)
+/** A laid-out passage. A point (x, y) of a path draws at `scale · (kx · x + dx), scale · (ky · y + dy)`
+ * under the path's placement. [width] and [height] include the padding. [lineSpacing] is the distance
+ * between two rows' baselines, in page units, before a row moves down for its ink. */
+class QvpPassageLayout(
+    val width: Float, val height: Float, val scale: Float, val lineSpacing: Float,
+    /** The rows, top to bottom. */
+    val rows: List<QvpPassageRow>,
+    /** The words shown, in reading order. */
+    val words: List<QvpPassageWord>,
+    /** The ayahs with at least one word shown. */
+    val ayahs: List<QvpPassageAyah>,
+    /** Every path to draw, in drawing order. */
+    val draws: List<QvpPassageDraw>,
+    /** What [QvpPassageDraw.placement] indexes. */
+    val placements: List<QvpPlacement>,
+    /** The layout shows fewer words than the passage has. */
+    val isTruncated: Boolean,
+    /** Where the host draws its ellipsis after a cut, from the last row's top to its baseline. Null
+     * when nothing was cut. */
+    val ellipsis: RectF?,
+)

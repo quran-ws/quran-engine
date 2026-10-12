@@ -41,6 +41,8 @@ const SAJDAH_LINE_REACH: f64 = 2.0;
 const ROW_AIR: f64 = 1.0;
 /// How far a row may overrun its width before it counts as too wide, in page units.
 const OVERRUN: f64 = 0.001;
+/// How many times a cut row too narrow for its word and the reserve may shrink the passage.
+const MAX_CUT_PASSES: usize = 8;
 /// How far apart, as a ratio, the printed line spacings of two pages may be when the pages print
 /// their words at one size. The spacing measured on the pages of one size differs by up to 8%,
 /// and pages 1 and 2 print their words about 20% smaller than the other pages.
@@ -352,11 +354,7 @@ impl Passage {
         if !(1..=MAX_SURAH).contains(&surah) || from < 1 || to < from || to > MAX_AYAH {
             return Err(PassageError::Range);
         }
-        let mut numbers: Vec<u16> = pages.iter().map(|p| p.page_number()).collect();
-        numbers.sort_unstable();
-        if numbers.windows(2).any(|w| w[0] == w[1]) {
-            return Err(PassageError::RepeatedPage);
-        }
+        distinct_pages(pages)?;
         let prepared: Vec<&Prepared> = pages.iter().map(|p| p.passage_prepared()).collect::<Result<_, _>>()?;
 
         let mut atoms: Vec<PassageAtom> = Vec::new();
@@ -456,11 +454,7 @@ impl Passage {
         if !(1..=MAX_SURAH).contains(&surah) {
             return Err(PassageError::Range);
         }
-        let mut numbers: Vec<u16> = pages.iter().map(|p| p.page_number()).collect();
-        numbers.sort_unstable();
-        if numbers.windows(2).any(|w| w[0] == w[1]) {
-            return Err(PassageError::RepeatedPage);
-        }
+        distinct_pages(pages)?;
         let missing = PassageError::NoBasmalah { surah };
         if surah == 1 || surah == 9 {
             return Err(missing);
@@ -568,6 +562,7 @@ impl Passage {
             && (1.0..=MAX_LINE_SPACING).contains(&spec.line_spacing)
             && spec.ellipsis_width.is_finite()
             && spec.ellipsis_width >= 0.0
+            && (spec.width <= 0.0 || spec.max_rows == 0 || spec.ellipsis_width < spec.width - 2.0 * spec.padding)
             && spec.max_stretch.is_finite();
         if !valid || self.atoms.is_empty() {
             return None;
@@ -579,47 +574,69 @@ impl Passage {
         };
         let padding = spec.padding as f64;
         let one_row = spec.width <= 0.0;
+        let max_rows = spec.max_rows as usize;
         let mut scale = spec.scale as f64;
         let all: Vec<usize> = (0..atoms.len()).collect();
-        let row_width = if one_row {
-            used(&all)
-        } else {
+        if !one_row {
             // A word and its signs cannot be divided: at an unusually narrow width, everything
             // shrinks so that the widest one fits.
             let widest = (0..atoms.len()).map(width_of).fold(0.0, f64::max);
             if widest > 0.0 {
                 scale = scale.min((spec.width as f64 - 2.0 * padding) / widest);
             }
-            (spec.width as f64 - 2.0 * padding) / scale
-        };
-        let mut rows = if one_row { vec![all] } else { break_rows(&atoms, &self.gaps, row_width) };
-
-        // Past the row limit the rows are filled in turn, as text is: balanced rows can need one
-        // more row than full ones. When even full rows do not fit, the last one is cut early
-        // enough for the ellipsis and, when asked, the medallion of the last ayah.
-        let max_rows = spec.max_rows as usize;
-        if max_rows > 0 && rows.len() > max_rows {
-            rows = fill_rows(&atoms, &self.gaps, row_width);
         }
-        let is_truncated = max_rows > 0 && rows.len() > max_rows;
-        let ellipsis_width = spec.ellipsis_width as f64 / scale;
-        let tail = if is_truncated && spec.keep_ayah_mark {
+        // The medallion of the last ayah, when a cut keeps it.
+        let tail_sign = if spec.keep_ayah_mark {
             let last = atoms.len() - 1;
             atoms[last].signs.iter().find(|s| s.kind == DecoKind::AyahMark).map(|s| (last, s))
         } else {
             None
         };
-        let reserve = |row: &[usize]| -> f64 {
-            let gap = row.last().map_or(0.0, |&i| atoms[i].gap);
-            gap + ellipsis_width + tail.map_or(0.0, |(_, s)| gap + s.rect[2] - s.rect[0])
+        // What a cut needs after a row's last word, in page units: a gap and the ellipsis, and
+        // when the medallion is kept, another gap and the medallion.
+        let reserve_after = |i: usize, ellipsis_width: f64| -> f64 {
+            let gap = atoms[i].gap;
+            gap + ellipsis_width + tail_sign.map_or(0.0, |(_, s)| gap + s.rect[2] - s.rect[0])
         };
-        if is_truncated {
-            rows.truncate(max_rows);
-            let last = rows.last_mut().expect("a cut keeps at least one row");
-            while last.len() > 1 && used(last) + reserve(last) > row_width + OVERRUN {
-                last.pop();
+
+        // Past the row limit the rows are filled in turn, as text is: balanced rows can need one
+        // more row than full ones. When even full rows do not fit, the last one is cut early
+        // enough for the ellipsis and, when asked, the medallion of the last ayah. A row too
+        // narrow for its one word and what follows the cut shrinks everything so that the word
+        // has room for its reserve, and the rows are broken again; the next cut can end on a
+        // wider word, so this goes round until the cut row fits.
+        let mut passes = 0;
+        let (row_width, rows, is_truncated, ellipsis_width) = loop {
+            let row_width = if one_row { used(&all) } else { (spec.width as f64 - 2.0 * padding) / scale };
+            let mut rows = if one_row { vec![all.clone()] } else { break_rows(&atoms, &self.gaps, row_width) };
+            if max_rows > 0 && rows.len() > max_rows {
+                rows = fill_rows(&atoms, &self.gaps, row_width);
             }
-        }
+            let is_truncated = max_rows > 0 && rows.len() > max_rows;
+            let ellipsis_width = spec.ellipsis_width as f64 / scale;
+            if is_truncated {
+                rows.truncate(max_rows);
+                let last = rows.last_mut().expect("a cut keeps at least one row");
+                let overflows = |row: &[usize]| {
+                    let reserve = row.last().map_or(0.0, |&i| reserve_after(i, ellipsis_width));
+                    used(row) + reserve > row_width + OVERRUN
+                };
+                while last.len() > 1 && overflows(last) {
+                    last.pop();
+                }
+                passes += 1;
+                if overflows(last) && passes <= MAX_CUT_PASSES {
+                    let word = last[0];
+                    let need = width_of(word) + reserve_after(word, 0.0);
+                    let room = spec.width as f64 - 2.0 * padding - spec.ellipsis_width as f64;
+                    scale = scale.min(room / need);
+                    continue;
+                }
+            }
+            break (row_width, rows, is_truncated, ellipsis_width);
+        };
+        let tail = if is_truncated { tail_sign } else { None };
+        let reserve = |row: &[usize]| -> f64 { row.last().map_or(0.0, |&i| reserve_after(i, ellipsis_width)) };
 
         let pitch = self.line_spacing * spec.line_spacing as f64;
         // What a justified gap may open by is measured on the air between words, as the page
@@ -1100,6 +1117,16 @@ impl Silhouette<'_> {
 }
 
 // ───────────────────────────── helpers ─────────────────────────────
+
+/// Fail when a page is given twice.
+fn distinct_pages(pages: &[&Page]) -> Result<(), PassageError> {
+    let mut numbers: Vec<u16> = pages.iter().map(|p| p.page_number()).collect();
+    numbers.sort_unstable();
+    if numbers.windows(2).any(|w| w[0] == w[1]) {
+        return Err(PassageError::RepeatedPage);
+    }
+    Ok(())
+}
 
 /// Resize every word that is printed at another size than the passage's first word to that
 /// word's size, and get the passage's line spacing: the median over the words printed at the
