@@ -310,12 +310,12 @@ impl Page {
         }
     }
 
-    /// The laid-out page box in page units: `(top, height)`. Without a layout that is
-    /// the printed page itself.
-    fn laid_page_box(&self) -> (f32, f32) {
+    /// The laid-out page box in page units: `(left, top, width, height)`. Without a
+    /// layout that is the printed page itself.
+    fn laid_page_box(&self) -> (f32, f32, f32, f32) {
         match &self.layout {
-            Some(l) => (l.laid_top, l.laid_height),
-            None => (0.0, self.height()),
+            Some(l) => (l.laid_left, l.laid_top, l.laid_width, l.laid_height),
+            None => (0.0, 0.0, self.width(), self.height()),
         }
     }
 
@@ -418,7 +418,7 @@ impl Page {
         }
         let pw = self.width();
         let ph = self.height();
-        let (laid_top, laid_h) = self.laid_page_box();
+        let (laid_left, laid_top, laid_w, laid_h) = self.laid_page_box();
         let mut b = Builder {
             set,
             line_art: spec.line_art,
@@ -434,39 +434,52 @@ impl Page {
         // drawn, and the page's own width otherwise. Never this page's ink: pages 1 and 2
         // hold one short surah centred in the column, and a band measured from their
         // lines would come out a third of the width it has on the other 602 pages.
-        let mut column = pw;
+        let mut column = laid_w;
 
         // The border. A frame publishes its text area as its slot. Mapping the page box
         // onto that slot makes the band thickness follow at the mushaf's own proportions:
         // one uniform scale, never a stretch to the page box. The page the border goes
-        // around is the laid-out one.
+        // around is the laid-out one, in both dimensions: under reflow a row is narrower
+        // than the printed page. A frame without slices is stretched instead, so that its
+        // slot lands on the grown box exactly.
         if let Some((oi, o)) = frame {
             if let Some(slot) = o.asset.slot {
                 let pal = palette(o, oi, spec);
                 let gap = spec.gap;
-                let unit = (pw + 2.0 * gap) / slot[2].max(f32::EPSILON); // page units per frame unit
-                let box_x = -gap - slot[0] * unit;
-                let box_y = laid_top - gap - slot[1] * unit;
-                let unit_w = o.asset.width();
-                let unit_h = (laid_h + 2.0 * gap) / unit + 2.0 * slot[1];
-                let (box_w, box_h) = (unit_w * unit, unit_h * unit);
-                let frame_tf = Tf::fit([0.0, 0.0, unit_w, unit_h], box_x, box_y, box_w, box_h, false);
+                let unit = (laid_w + 2.0 * gap) / slot[2].max(f32::EPSILON); // page units per frame unit
+                let (asset_w, asset_h) = (o.asset.width(), o.asset.height());
                 match &o.slices {
-                    Some(sl) => b.tile_frame(sl, &pal, &frame_tf, unit_w, unit_h),
+                    Some(sl) => {
+                        let box_x = laid_left - gap - slot[0] * unit;
+                        let box_y = laid_top - gap - slot[1] * unit;
+                        let unit_w = asset_w;
+                        // the bottom margin is the frame's own, not a copy of its top
+                        let unit_h = (laid_h + 2.0 * gap) / unit + slot[1] + (asset_h - slot[1] - slot[3]);
+                        let (box_w, box_h) = (unit_w * unit, unit_h * unit);
+                        let frame_tf = Tf::fit([0.0, 0.0, unit_w, unit_h], box_x, box_y, box_w, box_h, false);
+                        b.tile_frame(sl, &pal, &frame_tf, unit_w, unit_h);
+                        b.out.view_box = [box_x, box_y, box_w, box_h];
+                    }
                     None => {
+                        // two scales: the slot maps onto the grown box in both dimensions
+                        let sx = (laid_w + 2.0 * gap) / slot[2].max(f32::EPSILON);
+                        let sy = (laid_h + 2.0 * gap) / slot[3].max(f32::EPSILON);
+                        let e = laid_left - gap - slot[0] * sx;
+                        let f = laid_top - gap - slot[1] * sy;
+                        let vb = o.asset.view_box;
                         b.place(
                             &o.asset,
                             &pal,
                             OrnamentKind::PageFrame,
-                            &Tf::fit(o.asset.view_box, box_x, box_y, box_w, box_h, false),
+                            &Tf { a: sx, b: 0.0, c: 0.0, d: sy, e, f },
                             false,
                             NONE,
                         );
                         b.out.frame_stretched = true;
+                        b.out.view_box = [e + vb[0] * sx, f + vb[1] * sy, asset_w * sx, asset_h * sy];
                     }
                 }
-                b.out.view_box = [box_x, box_y, box_w, box_h];
-                column = pw + 2.0 * gap;
+                column = laid_w + 2.0 * gap;
             }
         }
 
@@ -765,5 +778,148 @@ mod tests {
     fn stroke_scale_is_the_geometric_mean() {
         assert_eq!(Tf::scale(4.0, 9.0).stroke_scale(), 6.0);
         assert_eq!(Tf::scale(-1.0, 1.0).stroke_scale(), 1.0);
+    }
+
+    /// The slot's box mapped through the frame draw's viewBox, as `x, y, w, h`.
+    fn mapped_slot(d: &Dress) -> [f32; 4] {
+        let (vb, slot, v) = ([0.0f32, 0.0, 70.0, 100.0], [5.0f32, 5.0, 60.0, 90.0], d.view_box);
+        [
+            v[0] + (slot[0] - vb[0]) / vb[2] * v[2],
+            v[1] + (slot[1] - vb[1]) / vb[3] * v[3],
+            slot[2] / vb[2] * v[2],
+            slot[3] / vb[3] * v[3],
+        ]
+    }
+
+    fn assert_slot_on_box(p: &Page, d: &Dress, gap: f32) {
+        let (left, top, w, h) = p.laid_page_box();
+        let want = [left - gap, top - gap, w + 2.0 * gap, h + 2.0 * gap];
+        let got = mapped_slot(d);
+        assert!(got.iter().zip(want).all(|(a, b)| near(*a, b)), "{got:?} vs {want:?}");
+    }
+
+    #[test]
+    fn the_stretched_slot_lands_on_the_grown_box() {
+        let (mut p, _, _) = page();
+        let spec = DressSpec { ayah_mark: NONE, surah_header: NONE, ..all() };
+        let d = p.dress(&set(), &spec).unwrap().clone();
+        assert!(d.frame_stretched);
+        assert_slot_on_box(&p, &d, spec.gap);
+        let lay =
+            LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, pad_top: 10.0, pad_bottom: 10.0, ..Default::default() };
+        p.layout(&lay);
+        assert_slot_on_box(&p, p.dress_of().unwrap(), spec.gap);
+        let before = p.dress_of().unwrap().view_box[3];
+        p.layout(&LayoutSpec { viewport_h: 1500.0, fill_height: true, ..lay });
+        let d = p.dress_of().unwrap();
+        assert!(d.view_box[3] > before, "the page got taller");
+        assert_slot_on_box(&p, d, spec.gap);
+    }
+
+    #[test]
+    fn under_reflow_the_border_and_band_go_around_the_laid_out_page() {
+        let (mut p, _, _) = page();
+        p.dress(&set(), &all()).unwrap();
+        let spec = LayoutSpec {
+            viewport_w: 200.0,
+            viewport_h: 400.0,
+            reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+            ..Default::default()
+        };
+        let l = p.layout(&spec).clone();
+        let d = p.dress_of().unwrap().clone();
+        let gap = 5.0;
+        assert!(l.laid_width < p.width(), "a reflowed row is narrower than the printed page");
+        let band = d.table.iter().position(|t| t.flags & 0xff == OrnamentKind::SurahHeader as u32).unwrap();
+        let (x0, _, x1, _) = draw_box(&d, band);
+        assert!(near(x1 - x0, l.laid_width + 2.0 * gap), "{} vs {}", x1 - x0, l.laid_width + 2.0 * gap);
+        let over = p.dress_overflow();
+        let limit = (gap + 20.0) * l.scale;
+        assert!(over.0 < limit && over.2 < limit, "{over:?} limit {limit}");
+    }
+
+    /// A set whose page frame tiles: a 10 x 8 corner and two 6 unit edge strips, each one
+    /// filled rectangle on part 0. The corner also holds an outline on the `slot` part.
+    fn tiled_set(rotate: bool) -> Arc<OrnamentSet> {
+        let base = set();
+        let mut set = (*base).clone();
+        let q = set.quant as i32;
+        let rect = |w: i32, h: i32| {
+            vec![Cmd::MoveTo(0, 0), Cmd::LineTo(w * q, 0), Cmd::LineTo(w * q, h * q), Cmd::LineTo(0, h * q), Cmd::Close]
+        };
+        let slice = |w: i32, h: i32, with_slot: bool, set: &mut OrnamentSet| {
+            let first = set.paths.len() as u32;
+            set.push_path(0, 0, 0, &rect(w, h));
+            if with_slot {
+                set.push_path(2, 0, 0, &rect(w, h));
+            }
+            Asset {
+                view_box: [0.0, 0.0, w as f32, h as f32],
+                slot: None,
+                first_path: first,
+                n_paths: 1 + with_slot as u32,
+            }
+        };
+        let corner = slice(10, 8, true, &mut set);
+        let edge_h = slice(6, 8, false, &mut set);
+        let edge_v = slice(10, 6, false, &mut set);
+        let o = &mut set.ornaments[2];
+        o.parts.push(Part { name: "slot".into(), color: 0x00ff00ff, stroke: false });
+        o.slices = Some(Slices {
+            corner_w: 10.0,
+            corner_h: 8.0,
+            repeat_h: 6.0,
+            repeat_v: 6.0,
+            rotate,
+            corner,
+            edge_h,
+            edge_v,
+        });
+        Arc::new(set)
+    }
+
+    fn frame_only() -> DressSpec {
+        DressSpec { ayah_mark: NONE, surah_header: NONE, ..all() }
+    }
+
+    #[test]
+    fn a_frame_with_slices_tiles_its_edges() {
+        let (mut p, _, _) = page();
+        let d = p.dress(&tiled_set(false), &frame_only()).unwrap().clone();
+        assert!(!d.frame_stretched);
+        // the same arithmetic the code does
+        let unit = (p.width() + 10.0) / 60.0;
+        let (unit_w, unit_h) = (70.0f32, d.view_box[3] / unit);
+        let nh = (((unit_w - 20.0) / 6.0).round() as i32).max(1) as u32;
+        let nv = (((unit_h - 16.0) / 6.0).round() as i32).max(1) as u32;
+        assert_eq!(d.n_frame_repeats, (nh + nv) * 2);
+        assert_eq!(d.table.len() as u32, 4 + d.n_frame_repeats);
+        assert!(d.table.iter().all(|t| t.flags & 0xff == OrnamentKind::PageFrame as u32));
+        assert!(d.table.iter().all(|t| t.placement == NONE));
+        assert!(d.table.iter().all(|t| t.part != 2), "the slot outline is dropped");
+        let boxes: Vec<_> = (0..d.table.len()).map(|i| draw_box(&d, i)).collect();
+        let x0 = boxes.iter().map(|b| b.0).fold(f32::INFINITY, f32::min);
+        let y0 = boxes.iter().map(|b| b.1).fold(f32::INFINITY, f32::min);
+        let x1 = boxes.iter().map(|b| b.2).fold(f32::NEG_INFINITY, f32::max);
+        let y1 = boxes.iter().map(|b| b.3).fold(f32::NEG_INFINITY, f32::max);
+        let v = d.view_box;
+        assert!(
+            near(x0, v[0]) && near(y0, v[1]) && near(x1, v[0] + v[2]) && near(y1, v[1] + v[3]),
+            "{:?} vs {v:?}",
+            (x0, y0, x1, y1)
+        );
+    }
+
+    #[test]
+    fn rotated_corners_sit_at_the_four_corners() {
+        let (mut p, _, _) = page();
+        let d = p.dress(&tiled_set(true), &frame_only()).unwrap().clone();
+        let v = d.view_box;
+        let (r, b) = (v[0] + v[2], v[1] + v[3]);
+        let (tl, tr, bl, br) = (draw_box(&d, 0), draw_box(&d, 1), draw_box(&d, 2), draw_box(&d, 3));
+        assert!(near(tl.0, v[0]) && near(tl.1, v[1]), "{tl:?}");
+        assert!(near(tr.2, r) && near(tr.1, v[1]), "{tr:?}");
+        assert!(near(bl.0, v[0]) && near(bl.3, b), "{bl:?}");
+        assert!(near(br.2, r) && near(br.3, b), "{br:?}");
     }
 }

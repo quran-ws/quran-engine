@@ -110,9 +110,12 @@ pub struct Layout {
     /// Content width in viewport px (the padded page width).
     pub content_w: f32,
     /// The laid-out page box in page units, in the space of a draw with no placement:
-    /// the top of the page below the top padding, and the page's height with the leading
-    /// added. A border drawn around the page goes around this box.
+    /// the left edge and top of the page inside the padding, and its width and height as
+    /// laid out. Under reflow a row is the printed width divided by the zoom, so the width
+    /// is not the printed one. A border drawn around the page goes around this box.
+    pub laid_left: f32,
     pub laid_top: f32,
+    pub laid_width: f32,
     pub laid_height: f32,
     /// The line spacing the layout produced, in page units (printed spacing + the added delta).
     pub line_spacing: f32,
@@ -361,7 +364,9 @@ impl Page {
             line_slots,
             content_h,
             content_w,
+            laid_left: crop.0,
             laid_top: spec.pad_top / scale,
+            laid_width: (content_w - spec.pad_left - spec.pad_right) / scale,
             laid_height: block_h,
             fit_scale: 0.0,
             fit_x: 0.0,
@@ -496,7 +501,9 @@ impl Page {
             line_slots,
             content_h,
             content_w,
+            laid_left: -(margin_l / zoom),
             laid_top: spec.pad_top / scale,
+            laid_width: (content_w - spec.pad_left - spec.pad_right) / scale,
             laid_height: (content_h - spec.pad_top - spec.pad_bottom) / scale,
             line_spacing: pitch,
             fit_scale: 1.0,
