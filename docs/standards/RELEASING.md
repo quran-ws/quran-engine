@@ -46,8 +46,13 @@ on 2029-09-13 and must be replaced in GitHub before then.
 4. `scripts/package-data.sh X.Y.Z`: writes `VERSION.json` (data version, source bundle
    version, engine commit, format version, page and surah-name counts, and SHA-256 digests
    of every generated page, sidecar, atlas and surah-name asset), the upstream rights notice,
-   and `dist/quran-engine-pages-hafs-kfgqpc.tar.gz` with its `.sha256`. When a set was built, upload `ornaments.qvo` as a separate release asset beside the tarball, with `QVP_ASSETS_COMMIT` set when packaging. The tarball also carries it.
-5. `gh release create data-vX.Y.Z` with the tarball, the checksum and a sample page.
+   and `dist/quran-engine-pages-hafs-kfgqpc.tar.gz` with its `.sha256`. With an ornament
+   set at `dist/pages/ornaments.qvo`, set `QVP_ASSETS_COMMIT` to the quran-assets commit
+   it was built from. The tarball then carries the set. In step 5, upload the same file as
+   a separate asset beside the tarball, so that `scripts/sync-test-data.sh` can fetch it
+   on its own.
+5. `gh release create data-vX.Y.Z` with the tarball, the checksum, a sample page and, when
+   there is one, `dist/pages/ornaments.qvo`.
    `publish-cdn.yml` mirrors it to `cdn.quran.ws/qvp/` under an immutable folder.
 
 A published data version is never rewritten. Cut a new one.

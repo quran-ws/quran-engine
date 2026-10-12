@@ -6,8 +6,8 @@
 //!
 //! Every ornament is placed from a measurement, never a fixed offset: the medallion
 //! from the printed ring's centre and radius, the band from the surah title's box and
-//! the text column, the border from the laid-out page box. That is why the same rules
-//! land on all 604 pages.
+//! the text column, the border from the laid-out page box. The same rules apply on
+//! every page.
 //!
 //! The result is a display list in page units. Each draw carries the placement index
 //! the page's own draws carry, so a host applies the transform it already applies to

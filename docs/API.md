@@ -626,14 +626,14 @@ page.undress();
 `set.list` is every ornament the set holds: `{index, kind, lineage, style, riwayah,
 hasSlices, licence, parts}`. A dress names up to one ornament per kind, as an ornament, its
 index or a style name. `parts` is the design's printed palette, and `colors:
-[[ornament, part, colour]]` repaints any of them; `slot` is the transparent window the
-design leaves for the number, the name or the text area. `lineArt: true` keeps only the
+[[ornament, part, colour]]` repaints any of them. The design's slot is the transparent
+window it leaves for the number, the name or the text area. `lineArt: true` keeps only the
 constant-width strokes, so there is one ink.
 
 **Every ornament is placed from a measurement**, never a fixed offset: the medallion from
 the printed ring's centre and radius, with the design's slot centre on the ring centre; the
 band from the surah title's box across the text column; the border from the laid-out page
-box. That is why the same rules land on all 604 pages.
+box. The same rules apply on every page.
 
 **Paint the display list behind the page ink.** Only the printed ring and the native band
 are hidden; the numeral inside the ring is the print's own ink and stays on top. Each draw
@@ -852,7 +852,7 @@ says which wrapper binds which.
 | dress | `qvp_ornaments_free` | `set.free()` | Free the ornament set. |
 | dress | `qvp_ornament_count` | `set.count` | Return how many ornaments the set holds. |
 | dress | `qvp_ornament_info` | `set.list[i]` | Return one ornament: kind, lineage, style, riwayah, licence and part count. |
-| dress | `qvp_ornament_find` | `set.find(kind, style)` | Return the index of the ornament of one kind in one style, or −1. |
+| dress | `qvp_ornament_find` | `set.find(kind, style)` | Return the ornament of one kind in one style, or null. The C call returns its index, or −1. |
 | dress | `qvp_ornament_part` | `set.list[i].parts[k]` | Return one printed colour of an ornament: colour, stroke flag and name. |
 | dress | `qvp_dress` | `page.dress(set, spec)` | Place the chosen ornaments on the page from its measurements. |
 | dress | `qvp_undress` | `page.undress()` | Take the ornaments off; the printed rings and bands come back. |
