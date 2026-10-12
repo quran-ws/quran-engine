@@ -40,6 +40,18 @@ if (existsSync(setPath) && existsSync(pagePath)) {
   if (page.dress(set, { ayahMark: set.find('surah_header', marker.style) }) !== null) throw new Error('an ornament of the wrong kind was accepted');
   page.undress();
   if (page.dressInfo() !== null) throw new Error('undress left a dress behind');
+  // The style-name form: three string lookups in one call must not corrupt the spec.
+  const style = set.list.find(o => o.kind === 'ayah_mark' && set.find('surah_header', o.style) && set.find('page_frame', o.style))?.style;
+  if (!style) throw new Error('no style has all three kinds');
+  const named = page.dress(set, { ayahMark: style, surahHeader: style, pageFrame: style });
+  if (!named) throw new Error('dress by style name failed');
+  for (const [field, kind] of [['ayahMark', 'ayah_mark'], ['surahHeader', 'surah_header'], ['pageFrame', 'page_frame']]) {
+    const want = set.find(kind, style);
+    if (!want || named[field] !== want.index) throw new Error(`dress by name: ${field} is ${named[field]}, expected ${want && want.index}`);
+  }
+  if (!(named.draws > 0)) throw new Error('dress by name drew nothing');
+  if (page.dress(set, { ayahMark: 'no-such-style', surahHeader: 'no-such-style', pageFrame: 'no-such-style' }) !== null) throw new Error('unknown style names were accepted');
+  page.undress();
   set.free(); page.free();
   console.log(`ok  dress: ${info.ayahMarks} medallions, ${info.surahHeaders} bands, ${info.draws} draws, revision ${info.revision}`);
 } else {

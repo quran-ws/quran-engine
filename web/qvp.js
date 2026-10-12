@@ -250,11 +250,13 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
         if (typeof v === 'string') { const o = set.find(kind, v); return o ? o.index : NONE; }
         return v.index;
       };
+      // Resolve every name first: a string lookup writes into scratch2, where the spec goes.
+      const ayah = index(ayahMark, 'ayah_mark'), header = index(surahHeader, 'surah_header'), frame = index(pageFrame, 'page_frame');
       const triples = [];
       for (const [o, part, colour] of colors) triples.push(typeof o === 'object' ? o.index : o, part, rgba(colour));
       const cp = triples.length ? this.e.putU32(Uint32Array.from(triples), 2048) : 0;
       const s = this.e.scratch2, d = this.e.dv();
-      d.setUint32(s, index(ayahMark, 'ayah_mark'), true); d.setUint32(s + 4, index(surahHeader, 'surah_header'), true); d.setUint32(s + 8, index(pageFrame, 'page_frame'), true);
+      d.setUint32(s, ayah, true); d.setUint32(s + 4, header, true); d.setUint32(s + 8, frame, true);
       d.setFloat32(s + 12, gap, true); d.setUint32(s + 16, lineArt ? 1 : 0, true);
       d.setUint32(s + 20, cp, true); d.setUint32(s + 24, triples.length / 3, true);
       this.ornaments = null;
