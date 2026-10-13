@@ -317,6 +317,22 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
                         self.warn(format!("<use href={href:?}> points to nothing, it is not drawn"));
                         continue;
                     };
+                    // `x` and `y` move the instance: SVG appends `translate(x, y)` to the
+                    // `<use>`'s own transform. `width` and `height` only size a `<symbol>`
+                    // or an `<svg>`, which an asset does not reference.
+                    let mut at = [0.0f64; 2];
+                    for (k, name) in ["x", "y"].iter().enumerate() {
+                        let Some(v) = child.attribute(*name) else { continue };
+                        let t = v.trim();
+                        match t.strip_suffix("px").unwrap_or(t).trim().parse::<f64>() {
+                            Ok(n) => at[k] = n,
+                            Err(_) => self.warn(format!("<use {name}={v:?}> is not in user units, it is taken as 0")),
+                        }
+                    }
+                    if child.attribute("width").is_some() || child.attribute("height").is_some() {
+                        self.warn(format!("<use href={href:?}> has a width or a height, which is ignored"));
+                    }
+                    let local = local.then(&Affine::translate(at[0], at[1]));
                     // An instance is the referenced element drawn again, so the element
                     // itself is walked, not only its children.
                     let inner = match target.attribute("transform") {
@@ -768,6 +784,25 @@ mod tests {
 <g data-part="c1" fill="#ffffff"><path d="M0 0h10v10H0z"/></g></svg>"##;
     const SLICES: &str = r#","slices":{"files":{"corner":"assets/corner.svg","edge-h":"assets/edge-h.svg","edge-v":"assets/edge-v.svg"},
  "corner":{"w":12,"h":14},"repeat":{"h":30,"v":40},"corner_mode":"rotate"}"#;
+
+    #[test]
+    fn use_x_and_y_move_the_instance() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+<g id="half" data-part="c1" fill="#ffffff"><path d="M0 0h100v50H0z"/></g>
+<use href="#half" x="100"/>
+<use href="#half" transform="translate(0 10)" x="100" y="40" width="5"/></svg>"##;
+        let dir = single("surah-headers", "", &[("assets/whole.svg", svg)]);
+        let (set, report) = build(&dir, &BuildOptions::default()).unwrap();
+        let a = &set.ornaments[0].asset;
+        assert_eq!(a.n_paths, 3);
+        let b = |i: u32| set.paths[(a.first_path + i) as usize].bbox;
+        assert_eq!((b(0).x0, b(0).x1), (0, 100_000), "the original stays where it is");
+        assert_eq!((b(1).x0, b(1).y0, b(1).x1, b(1).y1), (100_000, 0, 200_000, 50_000), "x moves the copy");
+        // translate(x, y) goes after the `<use>`'s own transform
+        assert_eq!((b(2).x0, b(2).y0, b(2).x1, b(2).y1), (100_000, 50_000, 200_000, 100_000));
+        assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+        assert!(report.warnings[0].contains("width or a height"), "{:?}", report.warnings);
+    }
 
     #[test]
     fn use_target_keeps_its_fill_rule() {
