@@ -137,6 +137,9 @@ pub struct Layout {
     /// The viewport this layout was made for, in px: what the fit is measured against.
     pub viewport_w: f32,
     pub viewport_h: f32,
+    /// The spec this layout was made from. A dress laid on a reflowed page lays it out
+    /// again from this, because the band caps how far a title may grow.
+    pub spec: LayoutSpec,
     /// Where each group of paths is placed. Without reflow there is one group per printed
     /// line, holding that line's `line_dy`. With reflow the groups are the page's words and
     /// decorations: `path_group` says which group a path belongs to.
@@ -383,6 +386,7 @@ impl Page {
             fit_y: 0.0,
             viewport_w: spec.viewport_w,
             viewport_h: spec.viewport_h,
+            spec: *spec,
             line_spacing,
             groups: vec![],
             path_group: vec![],
@@ -517,6 +521,7 @@ impl Page {
             fit_y: 0.0,
             viewport_w: spec.viewport_w,
             viewport_h: spec.viewport_h,
+            spec: *spec,
             groups,
             path_group,
             omitted_paths,

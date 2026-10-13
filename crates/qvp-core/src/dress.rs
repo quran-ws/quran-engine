@@ -425,12 +425,31 @@ impl Page {
     /// Take the ornaments off: the printed rings and bands come back, the viewBox
     /// returns to the page's own and the current layout's fit is the undressed one again.
     pub fn undress(&mut self) {
-        if let Some(d) = self.dress.take() {
-            for h in d.hidden {
-                self.styles.remove(h);
+        if self.take_dress() {
+            self.relayout_dressed();
+        }
+    }
+
+    /// Remove the dress and its hiding rules, and leave the layout alone. True when the page
+    /// was dressed.
+    fn take_dress(&mut self) -> bool {
+        let Some(d) = self.dress.take() else { return false };
+        for h in d.hidden {
+            self.styles.remove(h);
+        }
+        self.state_dirty = true;
+        true
+    }
+
+    /// Bring the current layout up to date with a new dress, or with none. A reflowed layout
+    /// is made again from its own spec, because a band caps how far a title may grow and the
+    /// rows were broken before the band was there. A printed one only needs a new fit.
+    fn relayout_dressed(&mut self) {
+        match self.layout.as_ref().filter(|l| l.reflow.is_some()).map(|l| l.spec) {
+            Some(spec) => {
+                self.layout(&spec);
             }
-            self.state_dirty = true;
-            self.refit();
+            None => self.refit(),
         }
     }
 
@@ -495,10 +514,16 @@ impl Page {
 
     /// Put other ornaments on this page. Returns `None`, and leaves the page undressed,
     /// when an index is out of range, names an ornament of another kind, or every index
-    /// is [`NONE`]. Replaces any previous dress.
+    /// is [`NONE`]. Replaces any previous dress. A reflowed page is laid out again from its
+    /// own spec, so a band holds its title at once; a printed page is refitted.
     pub fn dress(&mut self, set: &Arc<OrnamentSet>, spec: &DressSpec) -> Option<&Dress> {
-        self.undress();
-        let mut dress = self.build_dress(set, spec)?;
+        let was_dressed = self.take_dress();
+        let Some(mut dress) = self.build_dress(set, spec) else {
+            if was_dressed {
+                self.relayout_dressed();
+            }
+            return None;
+        };
         self.dress_revision = self.dress_revision.wrapping_add(1);
         dress.revision = self.dress_revision;
         if spec.ayah_mark != NONE {
@@ -513,7 +538,7 @@ impl Page {
         dress.set = Some(set.clone());
         dress.spec = spec.clone();
         self.dress = Some(dress);
-        self.refit();
+        self.relayout_dressed();
         self.dress.as_ref()
     }
 
@@ -1246,6 +1271,39 @@ mod tests {
         let free = p.layout(&spec).clone();
         let title = p.data().decorations[0].first_path;
         assert!(free.groups[free.path_group[title as usize] as usize].ky > pl.ky);
+    }
+
+    #[test]
+    fn a_dress_after_a_reflow_caps_the_title_at_once() {
+        let (mut p, _, _) = page();
+        let spec = LayoutSpec {
+            viewport_w: 200.0,
+            viewport_h: 400.0,
+            reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+            ..Default::default()
+        };
+        let title = p.data().decorations[0].first_path;
+        let title_ky = |p: &Page| {
+            let l = p.current_layout().unwrap();
+            l.groups[l.path_group[title as usize] as usize].ky
+        };
+        p.layout(&spec);
+        let free = title_ky(&p);
+        // laid out first, dressed after: no relayout from the host
+        p.dress(&set(), &DressSpec { ayah_mark: NONE, page_frame: NONE, ..all() }).unwrap();
+        let l = p.current_layout().unwrap().clone();
+        assert_eq!(l.spec, spec, "the layout keeps the spec it was made from");
+        let capped = title_ky(&p);
+        let slot_h = 80.0 * l.laid_width / 800.0;
+        assert!(4.0 * capped <= 0.9 * slot_h + 1e-3, "title {} in a slot of {slot_h}", 4.0 * capped);
+        assert!(capped < free, "the cap binds: {capped} vs {free}");
+        // the band is placed under the capped title
+        let d = p.dress_of().unwrap();
+        let band = d.table.iter().find(|t| t.flags & 0xff == OrnamentKind::SurahHeader as u32).unwrap();
+        assert_eq!(l.groups[band.placement as usize].ky, capped);
+        // undressed, the title grows again with no relayout from the host
+        p.undress();
+        assert_eq!(title_ky(&p), free);
     }
 
     #[test]
