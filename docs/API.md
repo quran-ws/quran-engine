@@ -627,7 +627,9 @@ page.undress();
 hasSlices, licence, parts}`. A dress names up to one ornament per kind, as an ornament, its
 index or a style name. `parts` is the design's printed palette, and `colors:
 [[ornament, part, colour]]` repaints any of them. The design's slot is the transparent
-window it leaves for the number, the name or the text area. `lineArt: true` keeps only the
+window it leaves for the number, the name or the text area. The paper of a scanned design,
+its pure white `c1`, is left open too, so the host's page shows through; repaint `c1` to put a
+paper colour back. `lineArt: true` keeps only the
 constant-width strokes, so there is one ink.
 
 **Every ornament is placed from a measurement**, never a fixed offset: the medallion from

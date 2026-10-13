@@ -11,6 +11,7 @@
 //! asset units, and each outline keeps the part its `data-part` names. The palette is
 //! the catalogue's, in its order; a part the SVG draws and the palette lacks is added
 //! after it with the SVG's own colour.
+//! The pure white fill of a scanned design is its paper and is left open, like the slot.
 //!
 //! An `<ellipse>`, `<circle>`, `<rect>`, `<polygon>` or `<polyline>` becomes path data
 //! and goes through the same parser as a `<path>`. An element the engine cannot draw, a
@@ -70,15 +71,23 @@ pub fn build(dir: &Path, opts: &BuildOptions) -> Result<(OrnamentSet, Report), S
             report.warnings.push(format!("{style}/{}: no colour variant in the catalogue", kind.as_str()));
             continue;
         }
+        let scan = rec.s("lineage") != "font";
+        // The lightest fill of a scanned design is the traced paper, quantised to pure
+        // white. It is not ink: on a dark page it would paint white slabs behind the
+        // numbers and names. It is left open, like the slot, so the host's page shows
+        // through; a host repaints `c1` to put a paper colour back.
         let mut parts: Vec<Part> = rec
             .get("palette")
             .map(|p| p.arr())
             .unwrap_or(&[])
             .iter()
-            .map(|p| Part {
-                name: p.s("name").to_owned(),
-                color: css_rgba(p.s("hex")),
-                stroke: p.path("stroke").and_then(|v| v.bool()).unwrap_or(false),
+            .map(|p| {
+                let color = css_rgba(p.s("hex"));
+                Part {
+                    name: p.s("name").to_owned(),
+                    color: if scan && color == 0xffffffff { 0 } else { color },
+                    stroke: p.path("stroke").and_then(|v| v.bool()).unwrap_or(false),
+                }
             })
             .collect();
         let slot = rec
@@ -104,7 +113,7 @@ pub fn build(dir: &Path, opts: &BuildOptions) -> Result<(OrnamentSet, Report), S
         set.ornaments.push(Ornament {
             kind,
             style: style.to_owned(),
-            lineage: if rec.s("lineage") == "font" { Lineage::Font } else { Lineage::Scan },
+            lineage: if scan { Lineage::Scan } else { Lineage::Font },
             riwayah: rec.s("riwayah").to_owned(),
             license: License {
                 id: rec.s("license.id").to_owned(),
@@ -689,6 +698,7 @@ mod tests {
         assert_eq!(header.asset.slot, Some([50.0, 10.0, 100.0, 80.0]));
         // the palette comes from the catalogue, in its order
         assert_eq!(header.parts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["slot", "c1", "line"]);
+        assert_eq!(header.parts[1].color, 0, "the paper of a scanned design is left open");
         assert_eq!(header.parts[2].color, 0x343f49ff);
         assert!(header.parts[2].stroke);
         // slot + (c1 + line) drawn twice: the `<use>` mirror is expanded
