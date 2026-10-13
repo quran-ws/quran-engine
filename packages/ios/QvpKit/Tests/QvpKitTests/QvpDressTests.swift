@@ -203,11 +203,16 @@ final class QvpDressTests: XCTestCase {
         c.page = page
         c.setBounds(Self.box, fromCanvas: 1)
         c.zoomToStep(c.zoomSteps.count)
-        let l = try XCTUnwrap(page.currentLayout)
-        XCTAssertTrue(l.reflowed)
+        XCTAssertTrue(try XCTUnwrap(page.currentLayout).reflowed)
         XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
         c.resetView()
+        // the dress lays the reflowed page out again, with rows narrow enough for the border
+        let l = try XCTUnwrap(page.currentLayout)
+        XCTAssertTrue(l.reflowed)
         let o = try XCTUnwrap(page.dressOverflow)
+        XCTAssertGreaterThanOrEqual(c.viewOx - o.left * c.viewScale, -0.5, "the border's left is on the screen")
+        XCTAssertLessThanOrEqual(c.viewOx + (CGFloat(l.contentW) + o.right) * c.viewScale, Self.box.width + 0.5,
+                                 "and so is its right")
         XCTAssertGreaterThan(o.top, 0)
         XCTAssertGreaterThan(CGFloat(l.contentH) + o.top + o.bottom, Self.box.height, "the page scrolls")
         XCTAssertEqual(c.viewOy, o.top * c.viewScale, accuracy: 0.5, "it opens at the border's top")
@@ -240,19 +245,27 @@ final class QvpDressTests: XCTestCase {
         let o = try XCTUnwrap(page.dressOverflow)
         XCTAssertGreaterThan(o.top, 0)
         XCTAssertGreaterThan(o.left, 0)
-        XCTAssertEqual(c.viewScale, 1, accuracy: 0.0001)
-        // the border's top is the canvas's top, and its left is on the canvas
-        XCTAssertEqual(c.viewOy - o.top, 0, accuracy: 0.5)
-        XCTAssertGreaterThanOrEqual(c.viewOx - o.left, -0.5)
+        // the dressed box is wider than the canvas, so the engine shrinks it to the width
+        let s = c.viewScale
+        let full = CGFloat(l.contentW) + o.left + o.right
+        XCTAssertEqual(s, min(1, Self.box.width / full), accuracy: 0.0001)
+        XCTAssertLessThan(s, 1)
+        // the border's top is the canvas's top, and its left and right are on the canvas
+        XCTAssertEqual(c.viewOy - o.top * s, 0, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(c.viewOx - o.left * s, -0.5)
+        XCTAssertLessThanOrEqual(c.viewOx + (CGFloat(l.contentW) + o.right) * s, Self.box.width + 0.5)
         // the size the host gives the canvas holds the whole border
         let size = try XCTUnwrap(c.hostPageSize)
-        XCTAssertEqual(size.height, CGFloat(l.contentH) + o.top + o.bottom, accuracy: 0.5)
-        XCTAssertEqual(size.width, CGFloat(l.contentW) + o.left + o.right, accuracy: 0.5)
+        XCTAssertEqual(size.height, (CGFloat(l.contentH) + o.top + o.bottom) * s, accuracy: 0.5)
+        XCTAssertEqual(size.width, full * s, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(size.width, Self.box.width + 0.5)
         // sized so, the border's bottom is on the canvas too
         c.setBounds(CGSize(width: Self.box.width, height: size.height), fromCanvas: 1)
         let after = try XCTUnwrap(page.currentLayout), o2 = try XCTUnwrap(page.dressOverflow)
-        XCTAssertEqual(c.viewOy - o2.top, 0, accuracy: 0.5)
-        XCTAssertLessThanOrEqual(c.viewOy + CGFloat(after.contentH) + o2.bottom, size.height + 0.5)
+        let s2 = c.viewScale
+        XCTAssertEqual(c.viewOy - o2.top * s2, 0, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(c.viewOy + (CGFloat(after.contentH) + o2.bottom) * s2, size.height + 0.5)
+        XCTAssertLessThanOrEqual(c.viewOx + (CGFloat(after.contentW) + o2.right) * s2, Self.box.width + 0.5)
         XCTAssertEqual(try XCTUnwrap(c.hostPageSize).height, size.height, accuracy: 0.5, "the box, not the canvas, sizes the page")
     }
 
@@ -264,10 +277,12 @@ final class QvpDressTests: XCTestCase {
         let v = QvpPageView(frame: CGRect(origin: .zero, size: Self.box))
         v.page = page
         v.zoomToStep(v.zoomSteps.count)
-        let l = try XCTUnwrap(page.currentLayout)
-        XCTAssertTrue(l.reflowed)
+        XCTAssertTrue(try XCTUnwrap(page.currentLayout).reflowed)
         XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
         v.resetView()
+        // the dress lays the reflowed page out again, with rows narrow enough for the border
+        let l = try XCTUnwrap(page.currentLayout)
+        XCTAssertTrue(l.reflowed)
         let o = try XCTUnwrap(page.dressOverflow)
         XCTAssertGreaterThan(CGFloat(l.contentH) + o.top + o.bottom, Self.box.height, "the page scrolls")
         XCTAssertEqual(v.viewOy, o.top * v.viewScale, accuracy: 0.5, "it opens at the border's top")
@@ -290,6 +305,12 @@ final class QvpDressTests: XCTestCase {
         XCTAssertEqual(d.width, l.contentW + o[0] + o[2], accuracy: 0.001)
         XCTAssertEqual(d.height, l.contentH + o[1] + o[3], accuracy: 0.001)
         XCTAssertEqual(d.view.offsetY - d.view.scale * o[1], 0, accuracy: 0.001)
+        // scale 0 fits the dressed box to the width, and the whole border is inside it
+        let f = page.dressView(0, viewportW: Float(Self.box.width))
+        XCTAssertEqual(f.view.scale, min(1, Float(Self.box.width) / d.width), accuracy: 0.0001)
+        XCTAssertLessThanOrEqual(f.width, Float(Self.box.width) + 0.5)
+        XCTAssertGreaterThanOrEqual(f.view.offsetX - f.view.scale * o[0], -0.5)
+        XCTAssertLessThanOrEqual(f.view.offsetX + f.view.scale * (l.contentW + o[2]), Float(Self.box.width) + 0.5)
     }
 
     /// An undressed page gets the plain clamp from `dressClamp`.

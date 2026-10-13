@@ -17,7 +17,8 @@
 //
 // After `page.dress(...)` or `page.undress()`, call `resetView()`: a dressed page is fitted
 // with its border. A host that scrolls the page itself (`hostScrolls`) gives the canvas the
-// height of `hostPageSize`, the engine's dressed box at scale 1, so the whole border is on it.
+// height of `hostPageSize`, the engine's dressed box fitted to the canvas width, so the whole
+// border is on it.
 #if canImport(SwiftUI)
 import SwiftUI
 import CoreGraphics
@@ -152,8 +153,9 @@ public final class QvpCanvasController {
     /// to the laid-out page (`hostPageSize`): a reflowed page, or a printed one too
     /// tall for the box. The canvas then attaches no drag of its own — the scroll view takes
     /// every vertical drag, with the momentum, bounce and indicator a reader expects — never
-    /// shrinks the page to the box (`fitScale` is the host's to ignore) nor centres it as if
+    /// shrinks the page to the box's height (`fitScale` is the host's to ignore) nor centres it as if
     /// it had (`fitX` goes with `fitScale`), keeps it at its top,
+    /// shrinks a dressed printed page only as far as its border needs to fit across the width,
     /// and caches the ink for its whole bounds, which ARE the page, rather than a band around a
     /// screen that no longer moves. A pinch still reaches the engine's zoom control.
     ///
@@ -206,15 +208,15 @@ public final class QvpCanvasController {
     /// a pinch passes through.
     public var peekScale: CGFloat { fitScale > 0 ? viewScale / fitScale : 1 }
     /// The size a host that scrolls the page (`hostScrolls`) gives the canvas, in view points: the
-    /// laid-out page at scale 1 grown by a dress's border, from the engine (`dressView`). Give the
-    /// canvas this height and the border's bottom is on it. The width is the dressed box's: the
-    /// canvas keeps the width of the box it is laid out for, and a border wider than that box
-    /// starts at the canvas's left edge. nil before the canvas has a page and a width.
+    /// laid-out page grown by a dress's border, from the engine (`dressView` at scale 0). The
+    /// engine shrinks a dressed box wider than the canvas to the canvas width and never
+    /// enlarges one, so the whole border fits across. Give the canvas this height and the
+    /// border's bottom is on it. nil before the canvas has a page and a width.
     public var hostPageSize: CGSize? {
         // read so an observer asks again after a relayout or a redraw (`resetView` after a dress)
         _ = layoutRevision; _ = revision
         guard let p = page, p.isOpen, bounds.width > 0, p.currentLayout != nil else { return nil }
-        let d = p.dressView(1, viewportW: Float(bounds.width))
+        let d = p.dressView(0, viewportW: Float(bounds.width))
         return CGSize(width: CGFloat(d.width), height: CGFloat(d.height))
     }
     /// Bumped by every relayout. A host's overlay reads this beside the view transform: a page
@@ -422,9 +424,10 @@ public final class QvpCanvasController {
         // the shrink would have freed. Centred at scale 1 instead — the reflow's own rule.
         if let l, l.reflowed { return (1, CGFloat(l.fitX), CGFloat(l.fitY)) }
         if hostScrolls, let p = page, p.isOpen {
-            // the engine's scale-1 view: the dressed box centred, its top at the canvas's top
-            let v = p.dressView(1, viewportW: Float(bounds.width)).view
-            return (1, CGFloat(v.offsetX), CGFloat(v.offsetY))
+            // the engine's view: the dressed box fitted to the width (never enlarged), centred,
+            // its top at the canvas's top
+            let v = p.dressView(0, viewportW: Float(bounds.width)).view
+            return (CGFloat(v.scale), CGFloat(v.offsetX), CGFloat(v.offsetY))
         }
         return (CGFloat(l?.fitScale ?? 1), CGFloat(l?.fitX ?? 0), CGFloat(l?.fitY ?? 0))
     }
