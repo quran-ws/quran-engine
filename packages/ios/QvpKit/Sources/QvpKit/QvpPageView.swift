@@ -3,17 +3,19 @@ import UIKit
 import QuartzCore
 
 /// Host-canvas renderer for a `QvpPage` (CoreGraphics). Draw order per frame:
-/// highlight bands (one path per highlight id, nonzero, behind the ink) → cached base ink
+/// a dress's ornament layer (cached per dress revision and view transform) → highlight bands (one path per highlight id, nonzero, behind the ink) → cached base ink
 /// (a bitmap of every non-styled path at the current transform, rebuilt only when the styled
 /// set / layout / transform changes) → styled ink from `styledPaths()` → mask boxes.
 /// Each frame calls `page.tick(now)`; a CADisplayLink keeps running while the engine says so.
 /// Gestures: tap → gap-aware hit-test → `onWordTap` / `onDecorationTap` / `onEmptyTap`; long-press +
 /// drag → whole-word selection (engine `select`, band in the selection layer); pinch / pan on
 /// top of the engine layout; double-tap resets the view (or runs `onDoubleTap` when set).
+/// After `page.dress(...)` or `page.undress()`, call `resetView()`: a dressed page is fitted
+/// with its border.
 public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollViewDelegate {
     public var page: QvpPage? {
         didSet {
-            base = nil; baseKey = ""; selectionHandle = 0; drawList = nil
+            base = nil; baseKey = ""; selectionHandle = 0; drawList = nil; ornamentLayer = nil
             // A step means the same size to the reader on any page: the engine chose every
             // page's steps so the ink barely changes across a turn. So the step carries over,
             // and the new page says what it means. Carrying the size instead and rounding it to
@@ -310,10 +312,24 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// The transform `resetView()` applies: content height fitted, centred.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
+        // A dressed page is bigger than its text: the border stands past the content, and the
+        // engine says how far on each side. The view fits content plus that overflow.
+        if let l, let o = page.flatMap(dressOverflow) {
+            let w = CGFloat(l.contentW) + o.left + o.right, h = CGFloat(l.contentH) + o.top + o.bottom
+            if l.reflowed { return (1, (bounds.width - w) / 2 + o.left, o.top) }
+            let s = min(1, bounds.height / max(h, 1), bounds.width / max(w, 1))
+            return (s, (bounds.width - w * s) / 2 + o.left * s, (bounds.height - h * s) / 2 + o.top * s)
+        }
         // A reflowed page is taller than the screen on purpose: fitting its height would undo
         // the size the reader asked for. It opens at its top and the reader scrolls.
         if let l, l.reflowed { return (1, CGFloat(l.fitX), 0) }
         return (CGFloat(l?.fitScale ?? 1), CGFloat(l?.fitX ?? 0), CGFloat(l?.fitY ?? 0))
+    }
+    /// How far a dress's border reaches past the laid-out content, in layout px: nil when the
+    /// page in hand is not dressed. Only the page in hand: a page drawn ahead is drawn bare.
+    private func dressOverflow(_ p: QvpPage) -> (left: CGFloat, top: CGFloat, right: CGFloat, bottom: CGFloat)? {
+        guard p === page, p.isOpen, let o = p.dressInfo()?.overflow, o.count == 4 else { return nil }
+        return (CGFloat(o[0]), CGFloat(o[1]), CGFloat(o[2]), CGFloat(o[3]))
     }
     /// Ease from the released transform to the fitted one on a display link of its own.
     private func springBack() {
@@ -401,8 +417,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     }
     /// Where the cached ink starts and how tall it is, for the page and place in hand.
     private var currentBand: (top: CGFloat, height: CGFloat) {
-        guard let l = page?.currentLayout else { return (0, max(bounds.height, 1)) }
-        return band(for: l, offsetY: viewOy, scale: window?.screen.scale ?? contentScaleFactor)
+        guard let p = page, let l = p.currentLayout else { return (0, max(bounds.height, 1)) }
+        return band(for: p, l, offsetY: viewOy, scale: window?.screen.scale ?? contentScaleFactor)
     }
     private var bandTop: CGFloat { currentBand.top }
     private var bandHeight: CGFloat { currentBand.height }
@@ -497,6 +513,10 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         scroller.showsVerticalScrollIndicator = reflowed
         let size = CGSize(width: bounds.width, height: reflowed ? max(contentH, bounds.height) : bounds.height)
         if scroller.contentSize != size { scroller.contentSize = size }
+        // a dressed page's border stands above and below the reflowed rows
+        let o = page.flatMap(dressOverflow)
+        let inset = reflowed && o != nil ? UIEdgeInsets(top: o!.top * viewScale, left: 0, bottom: o!.bottom * viewScale, right: 0) : .zero
+        if scroller.contentInset != inset { scroller.contentInset = inset }
         contentHost.frame = CGRect(origin: .zero, size: size)
         // the reader's place is one number, kept on both sides of it
         if reflowed, !scroller.isDragging, !scroller.isDecelerating, abs(scroller.contentOffset.y + viewOy) > 0.5 {
@@ -554,7 +574,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         let styledSet = Set(styled.map { $0.path })
         let ink = p.defaultInk
         let scale = window?.screen.scale ?? contentScaleFactor
-        let (top, bandH) = band(for: l, offsetY: offsetY, scale: scale)
+        let (top, bandH) = band(for: p, l, offsetY: offsetY, scale: scale)
         let W = Int(bounds.width * scale), bandPx = Int((bandH * scale).rounded(.up))
         guard W > 0, bandPx > 0 else { return nil }
         let bands = p.highlightBoxesView()
@@ -564,7 +584,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         hasher.combine(bands.map { $0.id }); hasher.combine(masks.map { $0.id })
         // The key holds where the band starts, never where the reader has scrolled to, so a
         // drag inside the band changes nothing.
-        let key = "\(p.pageNo)|\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(z.zoom)|\(l.rows)"
+        // the ornament layer is drawn into the band, so its revision is part of the key
+        let dress = p === page ? p.dressInfo() : nil
+        let key = "\(p.pageNo)|\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(z.zoom)|\(l.rows)|\(dress?.revision ?? -1)"
         if reuse, let kept = cachedInk(key) { return (key, kept) }
 
         let t0 = CACurrentMediaTime()
@@ -579,6 +601,13 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         if let paper = paperColor {
             bc.setFillColor(paper.cgColor)
             bc.fill(CGRect(x: viewOx, y: off, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale))
+        }
+        // the ornament layer, behind everything but the paper
+        if let dress, let ornaments = ornamentImage(p, dress, top: top, W: W, bandPx: bandPx, scale: scale) {
+            bc.saveGState()
+            bc.translateBy(x: 0, y: CGFloat(bandPx) / scale); bc.scaleBy(x: 1, y: -1)
+            bc.draw(ornaments, in: CGRect(x: 0, y: 0, width: CGFloat(W) / scale, height: CGFloat(bandPx) / scale))
+            bc.restoreGState()
         }
         drawBoxes(bc, bands, offsetY: off)
         bc.setFillColor(QvpColor.cgColor(ink))
@@ -611,17 +640,59 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
 
     /// The band of one page worth drawing: the whole of it when it fits the ink budget, and two
     /// screens around the reader when it does not.
-    private func band(for l: QvpLayout, offsetY: CGFloat, scale: CGFloat) -> (top: CGFloat, height: CGFloat) {
-        let contentH = CGFloat(l.contentH) * viewScale
+    /// A dressed page's band reaches past the content by the dress overflow, so the border
+    /// above and below it is drawn too.
+    private func band(for p: QvpPage, _ l: QvpLayout, offsetY: CGFloat, scale: CGFloat) -> (top: CGFloat, height: CGFloat) {
+        let o = dressOverflow(p)
+        let above = ((o?.top ?? 0) * viewScale).rounded(.up), below = ((o?.bottom ?? 0) * viewScale).rounded(.up)
+        let contentH = CGFloat(l.contentH) * viewScale + above + below
         let whole = (contentH * scale).rounded(.up) <= 16384
             && Int((bounds.width * scale).rounded(.up) * (contentH * scale).rounded(.up)) * 4 <= inkBudget
-        if l.reflowed, whole { return (0, max(contentH, 1)) }
-        if !l.reflowed { return (0, max(bounds.height, 1)) }
+        if l.reflowed, whole { return (-above, max(contentH, 1)) }
+        if !l.reflowed { return (-above, max(bounds.height + above + below, 1)) }
         let step = max(bounds.height / 2, 1)
         return (((-offsetY - step) / step).rounded(.down) * step, max(bounds.height * 2, 1))
     }
 
     private func paths(_ p: QvpPage) -> [CGPath] { p.buildPaths() }
+
+    /// The dress's ornament layer for one band, and the key it was drawn for.
+    private var ornamentLayer: (key: String, image: CGImage)?
+    /// Draw the ornament display list once per dress revision, view transform and band. A
+    /// tiled border is hundreds of outlines and nothing in it moves while a highlight
+    /// animates, so a frame that draws the ink again takes this image as it is. Each draw goes
+    /// under the placement its page ink goes under; the border goes under none.
+    private func ornamentImage(_ p: QvpPage, _ dress: DressInfo, top: CGFloat, W: Int, bandPx: Int, scale: CGFloat) -> CGImage? {
+        let key = "\(ObjectIdentifier(p))|\(dress.revision)|\(viewScale)|\(viewOx)|\(top)|\(W)x\(bandPx)|\(scale)"
+        if let o = ornamentLayer, o.key == key { return o.image }
+        guard let oc = CGContext(data: nil, width: W, height: bandPx, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return nil }
+        oc.translateBy(x: 0, y: CGFloat(bandPx)); oc.scaleBy(x: scale, y: -scale)
+        oc.setAllowsAntialiasing(true); oc.setShouldAntialias(true)
+        oc.setLineCap(.round); oc.setLineJoin(.round)
+        let places = p.layoutPlacements()
+        var cur: Int?? = .none
+        for d in p.dressGeometry() {
+            if cur != .some(d.placement) {
+                if cur != nil { oc.restoreGState() }
+                oc.saveGState()
+                let q = d.placement.map { $0 < places.count ? places[$0] : .identity } ?? .identity
+                oc.concatenate(transform(q, offsetY: -top))
+                cur = .some(d.placement)
+            }
+            oc.addPath(d.path)
+            if d.stroke {
+                oc.setStrokeColor(QvpColor.cgColor(d.color)); oc.setLineWidth(CGFloat(d.strokeWidth)); oc.strokePath()
+            } else {
+                oc.setFillColor(QvpColor.cgColor(d.color)); oc.fillPath(using: d.evenOdd ? .evenOdd : .winding)
+            }
+        }
+        if cur != nil { oc.restoreGState() }
+        guard let image = oc.makeImage() else { return nil }
+        ornamentLayer = (key, image)
+        return image
+    }
 
     private func setAnimating(_ on: Bool) {
         animating = on

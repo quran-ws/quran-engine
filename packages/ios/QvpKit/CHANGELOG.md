@@ -4,6 +4,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+### Added
+- Dress: `QvpOrnaments` loads an ornament set, and `QvpPage.dress`, `undress`, `dressInfo`,
+  `dressGeometry` and `dressRevision` bind the engine's dress. `QvpPageView` paints the
+  ornament layer behind the ink and fits the border. The demo has a dress sheet.
+
 ### Fixed
 - `QvpViewPolicy.clampZoom(_:fit:ceiling:)`, the magnify pinch's ceiling, is applied by the
   engine (`qvp_view_zoom_about`) rather than by the policy's own arithmetic. A ceiling of 0 or

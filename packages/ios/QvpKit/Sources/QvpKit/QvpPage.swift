@@ -6,7 +6,7 @@ import Foundation
 import CoreGraphics
 import QvpFFI
 
-public enum QvpError: Error { case badPage, badAtlas, badPassage }
+public enum QvpError: Error { case badPage, badAtlas, badPassage, badOrnaments }
 
 public final class QvpPage {
     private var h: OpaquePointer?
@@ -24,6 +24,8 @@ public final class QvpPage {
     public private(set) var currentLayout: QvpLayout?
     public private(set) var defaultInk: UInt32 = QvpDefaults.INK
     private var paths: [CGPath]?
+    /// The ornament display list and the dress revision it was read at.
+    var dressDraws: (revision: Int, draws: [OrnamentDraw])?
 
     /// Load a `NNN.qvp` page; bytes are copied by the engine.
     public init(bytes: Data) throws {

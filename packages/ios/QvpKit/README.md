@@ -15,13 +15,14 @@ packages/ios/
 │   │   ├── Types.swift             constants, Selector, Target, QvpColor, records, QvpHighlightStyle, QvpTheme, QvpLayoutSpec
 │   │   ├── QvpEngine.swift         names, Arabic tools
 │   │   ├── QvpPage.swift           QvpPage (geometry copied once, CGPath per path built once) and QvpAtlas
-│   │   ├── QvpPageView.swift       UIView renderer: bands → cached base ink → styled ink → mask boxes; gestures; CADisplayLink
+│   │   ├── QvpDress.swift          QvpOrnaments (ornaments.qvo) and the page's dress, undress and display list
+│   │   ├── QvpPageView.swift       UIView renderer: ornament layer → bands → cached base ink → styled ink → mask boxes; gestures; CADisplayLink
 │   │   └── QvpPageCanvas.swift     the same frame as SwiftUI Canvas (iOS 17+): QvpCanvasController + QvpPageCanvas
 │   └── Tests/QvpKitTests/          XCTest: the same assertions as the Flutter/Dart test (page 042, atlas)
 └── example/                        SwiftUI app (`xcodegen generate` → Demo.xcodeproj, not committed)
     ├── Sources/                    DemoModel (engine state, a port of the Android MainActivity) + ContentView (the reader UI)
     ├── UITests/                    XCUITest: tap, swipe page flip, pinch, search sheet on the real view
-    ├── sync-pages.sh               fills pages/ with all 604 pages + atlas.qva, from the data release or dist/pages (pre-build step)
+    ├── sync-pages.sh               fills pages/ with all 604 pages + atlas.qva (+ ornaments.qvo when present), from the data release or dist/pages (pre-build step)
     └── pages/                      the demo's assets (gitignored)
 ```
 
@@ -142,6 +143,25 @@ whole-word selection through `page.select` with a band highlight in `QvpLayer.SE
 (`selectionEnabled = false` turns it off); a horizontal pan while the page is at its fitted size is reported
 through `onSwipe` instead of panning, so the host can flip pages; double-tap resets the view (or runs
 `onDoubleTap` when set). Wrap it for SwiftUI with a `UIViewRepresentable` (see `example/Sources/ContentView.swift`).
+
+### Dress
+
+A page can wear another mushaf's ornaments: an ayah medallion, a surah band and a page
+border from an ornament set (`ornaments.qvo`). The engine places them. `QvpPageView` paints
+them behind the ink and caches the layer per dress revision. A dressed page is bigger than
+its text, so call `resetView()` after a dress to fit the border too.
+
+```swift
+let set = try QvpOrnaments(path: pagesDir + "/ornaments.qvo")
+let info = page.dress(set, DressSpec(style: "mushaf-qalon", pageFrame: .absent, lineArt: [.surahHeader]))
+view.resetView()
+// info?.ayahMarks, info?.overflow; set.list[i].licence says what each design may be published under
+page.undress()
+```
+
+A kind left nil takes the `style`'s ornament. `.absent` leaves the kind as printed. A host
+that draws the layer itself reads `page.dressGeometry()`: one `CGPath` per draw, with the
+placement index it goes under. `QvpPageCanvas` does not draw the layer yet.
 
 ### QvpPageCanvas (SwiftUI, iOS 17+ / macOS 14+)
 
