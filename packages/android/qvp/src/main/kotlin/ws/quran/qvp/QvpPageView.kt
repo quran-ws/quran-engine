@@ -34,6 +34,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             releaseBase()
             baseKey = ""
             ornamentLayer = null; ornamentKey = ""
+            readOverflow()
             selectionHandle = 0
             // A step means the same size to the reader on any page: the engine chose every page's
             // steps so the ink barely changes across a turn. So the step carries over, and the new
@@ -161,7 +162,14 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     }
     /** How far the dress border reaches past the content on each side, in layout px. Zero when the
      * page is not dressed. */
-    private fun overflow(): QvpInsets = page?.takeIf { it.isOpen }?.dressInfo()?.overflow ?: QvpInsets.ZERO
+    private fun overflow(): QvpInsets = overflowNow
+    private var overflowNow = QvpInsets.ZERO
+    /** Ask the engine for the dress once and keep its overflow for the gestures in between. Called
+     * where the dress can have changed: a new page, a layout, a reset and every draw. */
+    private fun readOverflow(info: QvpDressInfo? = page?.takeIf { it.isOpen }?.dressInfo()): QvpDressInfo? {
+        overflowNow = info?.overflow ?: QvpInsets.ZERO
+        return info
+    }
 
     /** Scroll the page by [dy] points, held against the viewport. */
     fun scrollPage(by: Float) {
@@ -343,10 +351,12 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val p = page ?: return
         if (width == 0 || height == 0) return
         p.layout(layoutSpecInForce())
+        readOverflow()
         baseKey = ""; invalidate()
     }
     fun resetView() {
         val l = page?.currentLayout
+        readOverflow()
         val o = overflow()
         // A reflowed page is taller than the screen on purpose: fitting its height would undo the
         // size the reader asked for. It opens at its top and the reader scrolls. A dressed page
@@ -450,7 +460,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             i += 2
         }
         val ink = p.defaultInk
-        val dressed = p.dressInfo()
+        val dressed = readOverflow()
         val (top, bandH) = band()
         val bandPx = kotlin.math.ceil(bandH).toInt().coerceAtLeast(1)
         // The key holds where the band starts, never where the reader has scrolled to, so a drag
@@ -533,7 +543,10 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private fun drawOrnaments(canvas: Canvas, p: QvpPage, info: QvpDressInfo, top: Float, bandH: Float) {
         val padTop = kotlin.math.ceil(kotlin.math.max(info.overflow.top, 0f) * viewScale)
         val padBottom = kotlin.math.ceil(kotlin.math.max(info.overflow.bottom, 0f) * viewScale)
-        val layerH = kotlin.math.ceil(bandH + padTop + padBottom).toInt().coerceIn(1, MAX_INK_PX.toInt() * 2)
+        // One layer never passes what a bitmap may be or what the base ink may take; the top of the
+        // band stays where it is and the layer is cut at the bottom.
+        val layerH = ornamentLayerHeight(bandH + padTop + padBottom, width, inkBudget)
+        if (layerH == 0) { ornamentLayer = null; ornamentKey = ""; return }
         val key = "${System.identityHashCode(p)}|${info.revision}|$viewScale|$viewOx|$top|$width|$layerH"
         var b = ornamentLayer
         if (b == null || key != ornamentKey) {
@@ -588,6 +601,15 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         const val MAX_ZOOM = 12f
         /** A bitmap taller than this cannot be drawn on every device, so the ink keeps a band. */
         private const val MAX_INK_PX = 4096f
+        /** The height of the ornament layer for [wanted] px of band plus border, at [width] px wide:
+         * no taller than [MAX_INK_PX], and no larger in bytes than [budget]. 0 when not even one
+         * row fits, and the layer is then skipped. */
+        internal fun ornamentLayerHeight(wanted: Float, width: Int, budget: Int): Int {
+            if (width <= 0) return 0
+            val h = kotlin.math.ceil(wanted).toInt().coerceIn(1, MAX_INK_PX.toInt())
+            val rows = (budget.toLong().coerceAtLeast(0L) / (width.toLong() * 4)).coerceAtMost(h.toLong())
+            return rows.toInt()
+        }
         /** Log the band arithmetic, for tracking down ink that does not reach the screen. */
         var TRACE = false
     }

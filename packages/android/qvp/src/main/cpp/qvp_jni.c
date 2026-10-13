@@ -652,14 +652,16 @@ void FN(ornamentsFree)(JNIEnv* env, jclass c, jlong h) { qvp_ornaments_free((Qvp
 jint FN(ornamentCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_ornament_count(OR(h)); }
 /* QvpOrnament's numbers {kind, lineage, nParts, hasSlices, redistributable}; null when there is no such ornament */
 jintArray FN(ornamentInfo)(JNIEnv* env, jclass c, jlong h, jint i) {
-    QvpOrnament o; if (!qvp_ornament_info(OR(h), (uint32_t)i, &o)) return NULL;
+    QvpOrnament o = {0}; if (!qvp_ornament_info(OR(h), (uint32_t)i, &o)) return NULL;
     jint v[5] = { (jint)o.kind, (jint)o.lineage, (jint)o.n_parts, (jint)o.has_slices, (jint)o.redistributable };
     return ints(env, v, 5);
 }
 /* QvpOrnament's strings {style, riwayah, licenseId, licenseStatus, attribution} */
 jobjectArray FN(ornamentStrings)(JNIEnv* env, jclass c, jlong h, jint i) {
-    QvpOrnament o; if (!qvp_ornament_info(OR(h), (uint32_t)i, &o)) return NULL;
-    jobjectArray arr = (*env)->NewObjectArray(env, 5, (*env)->FindClass(env, "java/lang/String"), NULL);
+    QvpOrnament o = {0}; if (!qvp_ornament_info(OR(h), (uint32_t)i, &o)) return NULL;
+    jclass sc = (*env)->FindClass(env, "java/lang/String");
+    jobjectArray arr = (*env)->NewObjectArray(env, 5, sc, NULL);
+    (*env)->DeleteLocalRef(env, sc);
     (*env)->SetObjectArrayElement(env, arr, 0, qstr(env, o.style)); (*env)->SetObjectArrayElement(env, arr, 1, qstr(env, o.riwayah));
     (*env)->SetObjectArrayElement(env, arr, 2, qstr(env, o.license_id)); (*env)->SetObjectArrayElement(env, arr, 3, qstr(env, o.license_status));
     (*env)->SetObjectArrayElement(env, arr, 4, qstr(env, o.attribution));
@@ -671,11 +673,11 @@ jint FN(ornamentFind)(JNIEnv* env, jclass c, jlong h, jint kind, jstring style) 
 }
 /* QvpOrnamentPart's numbers {colour, stroke}; null when there is no such part */
 jintArray FN(ornamentPart)(JNIEnv* env, jclass c, jlong h, jint i, jint part) {
-    QvpOrnamentPart p; if (!qvp_ornament_part(OR(h), (uint32_t)i, (uint32_t)part, &p)) return NULL;
+    QvpOrnamentPart p = {0}; if (!qvp_ornament_part(OR(h), (uint32_t)i, (uint32_t)part, &p)) return NULL;
     jint v[2] = { (jint)p.color, (jint)p.stroke }; return ints(env, v, 2);
 }
 jstring FN(ornamentPartName)(JNIEnv* env, jclass c, jlong h, jint i, jint part) {
-    QvpOrnamentPart p; if (!qvp_ornament_part(OR(h), (uint32_t)i, (uint32_t)part, &p)) return NULL;
+    QvpOrnamentPart p = {0}; if (!qvp_ornament_part(OR(h), (uint32_t)i, (uint32_t)part, &p)) return NULL;
     return qstr(env, p.name);
 }
 /* QvpDressSpec by value: an ornament index of -1 is QVP_NONE; colours are (ornament, part, rgba)
@@ -697,7 +699,7 @@ void FN(undress)(JNIEnv* env, jclass c, jlong h) { qvp_undress(PG(h)); }
 /* QvpDressInfo: {ayahMark, surahHeader, pageFrame (-1 for none), nAyahMarks, nSurahHeaders, nFrameRepeats,
    frameStretched, nDraws, revision}, then viewBox[4] and overflow[4] as float bits; null when not dressed */
 jintArray FN(dressInfo)(JNIEnv* env, jclass c, jlong h) {
-    QvpDressInfo d; if (!qvp_dress_info(PG(h), &d)) return NULL;
+    QvpDressInfo d = {0}; if (!qvp_dress_info(PG(h), &d)) return NULL;
     jint v[17] = { (jint)d.ayah_mark, (jint)d.surah_header, (jint)d.page_frame, (jint)d.n_ayah_marks, (jint)d.n_surah_headers,
                    (jint)d.n_frame_repeats, (jint)d.frame_stretched, (jint)d.n_draws, (jint)d.revision };
     for (int k = 0; k < 4; k++) { v[9 + k] = ibits(d.view_box[k]); v[13 + k] = ibits(d.overflow[k]); }
@@ -705,9 +707,9 @@ jintArray FN(dressInfo)(JNIEnv* env, jclass c, jlong h) {
 }
 /* QvpDressGeometry, as the page geometry comes: the ops, the points, and 9 ints per draw {opStart, opCount,
    ptStart, ptCount, colour, flags, strokeWidth (float bits), part, placement (-1 for the border)} */
-jbyteArray FN(dressGeomOps)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g; qvp_dress_geometry(PG(h), &g); return bytes_out(env, g.ops, g.ops_len); }
-jfloatArray FN(dressGeomPts)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g; qvp_dress_geometry(PG(h), &g); return floats(env, g.pts, (jsize)g.pts_len); }
-jintArray FN(dressGeomTable)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g; qvp_dress_geometry(PG(h), &g); return ints(env, (const jint*)g.table, (jsize)(g.n_draws * 9)); }
+jbyteArray FN(dressGeomOps)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g = {0}; qvp_dress_geometry(PG(h), &g); return bytes_out(env, g.ops, g.ops_len); }
+jfloatArray FN(dressGeomPts)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g = {0}; qvp_dress_geometry(PG(h), &g); return floats(env, g.pts, (jsize)g.pts_len); }
+jintArray FN(dressGeomTable)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g = {0}; qvp_dress_geometry(PG(h), &g); return ints(env, (const jint*)g.table, (jsize)(g.n_draws * 9)); }
 
 /* ───────── names ───────── */
 jstring FN(markName)(JNIEnv* env, jclass c, jint m) { QvpStr s; qvp_mark_name((uint8_t)m, &s); return qstr(env, s); }

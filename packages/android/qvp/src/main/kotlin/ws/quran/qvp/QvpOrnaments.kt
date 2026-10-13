@@ -22,7 +22,13 @@ class QvpOrnaments(bytes: ByteArray) : AutoCloseable {
     /** How many ornaments the set holds. */
     val count: Int = QvpNative.ornamentCount(h)
     /** Every ornament, in the set's order: `list[i].index == i`. */
-    val list: List<QvpOrnament> = List(count) { ornament(it) }
+    val list: List<QvpOrnament> = try {
+        List(count) { ornament(it) }
+    } catch (e: Throwable) {
+        // the set is not handed out, so nobody could close it
+        close()
+        throw e
+    }
 
     private fun ornament(i: Int): QvpOrnament {
         val v = QvpNative.ornamentInfo(h, i) ?: error("qvp_ornament_info failed for $i")
@@ -31,9 +37,14 @@ class QvpOrnaments(bytes: ByteArray) : AutoCloseable {
             val p = QvpNative.ornamentPart(h, i, k) ?: error("qvp_ornament_part failed for $i, $k")
             QvpOrnamentPart(k, p[0], p[1] != 0, QvpNative.ornamentPartName(h, i, k) ?: "")
         }
-        return QvpOrnament(i, QvpOrnamentKind.entries[v[0]], QvpLineage.entries[v[1]], s[0], s[1], v[3] != 0,
+        return QvpOrnament(i, kindOf(v[0], i), lineageOf(v[1], i), s[0], s[1], v[3] != 0,
                            QvpLicence(s[2], s[3], v[4] != 0, s[4]), parts)
     }
+
+    private fun kindOf(k: Int, i: Int) = QvpOrnamentKind.entries.getOrNull(k)
+        ?: throw IllegalStateException("ornament $i has an unknown kind $k")
+    private fun lineageOf(l: Int, i: Int) = QvpLineage.entries.getOrNull(l)
+        ?: throw IllegalStateException("ornament $i has an unknown lineage $l")
 
     /** The ornament of [kind] in [style], or null when that mushaf has none of that kind. */
     fun find(kind: QvpOrnamentKind, style: String): QvpOrnament? =

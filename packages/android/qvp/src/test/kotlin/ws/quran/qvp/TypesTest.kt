@@ -48,4 +48,18 @@ class TypesTest {
                                               bits(-34.5f), bits(-23.5f), bits(414f), bits(622f), bits(50f), bits(45f), bits(49f), bits(44f)))
         assertEquals(QvpDressInfo(0, 1, null, 7, 1, 0, true, 18, 3, QvpViewBox(-34.5f, -23.5f, 414f, 622f), QvpInsets(50f, 45f, 49f, 44f)), info)
     }
+
+    @Test
+    fun ornamentLayerStaysWithinABitmapAndTheBudget() {
+        val max = 4096
+        assertEquals(1000, QvpPageView.ornamentLayerHeight(999.2f, 1080, 64 shl 20))
+        // band plus border past the bitmap limit is cut at the bottom, never past 4096
+        assertEquals(max, QvpPageView.ornamentLayerHeight(8000f, 1080, 64 shl 20))
+        // the budget shrinks it: 1080 px wide is 4320 bytes a row
+        assertEquals(1000, QvpPageView.ornamentLayerHeight(3000f, 1080, 1080 * 4 * 1000))
+        // not one row fits, or no width yet: skipped
+        assertEquals(0, QvpPageView.ornamentLayerHeight(3000f, 1080, 1000))
+        assertEquals(0, QvpPageView.ornamentLayerHeight(3000f, 0, 64 shl 20))
+        assertEquals(0, QvpPageView.ornamentLayerHeight(3000f, 1080, 0))
+    }
 }
