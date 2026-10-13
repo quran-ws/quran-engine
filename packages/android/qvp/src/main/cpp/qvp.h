@@ -45,6 +45,7 @@ extern "C" {
 #define QVP_DEFAULT_REVEAL_LIT     1u
 #define QVP_DEFAULT_REVEAL_GREY    0xc9c4b8ffu
 #define QVP_DEFAULT_CROP_PAD       2.0f
+#define QVP_DEFAULT_AYAH_MARK_SCALE_SCAN 1.5f   /* a dressed scanned medallion's size when ayah_mark_scale is 0 */
 typedef struct QvpPage QvpPage;
 typedef struct QvpAtlas QvpAtlas;
 typedef struct QvpOrnaments QvpOrnaments;
@@ -137,7 +138,7 @@ typedef struct { float x0, y0, x1, y1; uint32_t n_words, ayah_mark_decoration; }
 typedef struct { uint32_t kind, lineage, n_parts, has_slices, redistributable, _pad; QvpStr style, riwayah, license_id, license_status, attribution; } QvpOrnament;
 typedef struct { uint32_t color, stroke; QvpStr name; } QvpOrnamentPart;
 typedef struct { uint32_t ayah_mark, surah_header, page_frame /* ornament indices, QVP_NONE for none */; float gap /* text to border, page units */, band_gap /* band to border */,
-                 ayah_mark_scale /* 1 = as tall as the printed ring */, page_frame_scale /* 1 = the design's width; the band grows outward */; uint32_t line_art /* QVP_LINE_ART_* bits */;
+                 ayah_mark_scale /* 1 = as tall as the printed ring; 0 = the design's own: QVP_DEFAULT_AYAH_MARK_SCALE_SCAN for a scan, 1 for a font */; uint32_t page_frame_rings /* rings of the frame's pattern, nested; 0 = 1 */, line_art /* QVP_LINE_ART_* bits */;
                  const uint32_t* colors /* (ornament, part, rgba) triples, NULL for the designs' own */; uint32_t n_colors; } QvpDressSpec;
 typedef struct { uint32_t ayah_mark, surah_header, page_frame, n_ayah_marks, n_surah_headers, n_frame_repeats, frame_stretched, n_draws,
                  revision /* bumped on every rebuild: cache the ornament raster against it */;

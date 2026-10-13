@@ -31,6 +31,10 @@ pub const REVEAL_LIT: u32 = 1;
 pub const REVEAL_GREY: Rgba = 0xc9c4b8ff;
 /// Padding (page units) around a crop.
 pub const CROP_PAD: f32 = 2.0;
+/// A dressed medallion's size against the printed ring when the host asks for the design's
+/// own: a scanned mushaf's cartouche wants more room than the ring's box; a font marker
+/// takes the ring's size, 1.
+pub const AYAH_MARK_SCALE_SCAN: f32 = 1.5;
 
 /// How far a row that comes out much shorter than the row beside it is opened towards it, as
 /// a share of the difference. Rows of a page vary in width, but one row far shorter than its

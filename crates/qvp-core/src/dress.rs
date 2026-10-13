@@ -31,12 +31,14 @@ pub struct DressSpec {
     /// Air between a band and the border, in page units. A band is narrower than the
     /// column by twice this.
     pub band_gap: f32,
-    /// The medallion's size against the printed ring: 1 is as tall as the ring.
+    /// The medallion's size against the printed ring: 1 is as tall as the ring. 0 takes the
+    /// design's own: [`crate::defaults::AYAH_MARK_SCALE_SCAN`] for a scanned mushaf's
+    /// medallion, 1 for a font marker.
     pub ayah_mark_scale: f32,
-    /// The border's width against the design's own: 1 is the mushaf's proportion. The band
-    /// grows outward and its motifs keep their size along the edge. A frame that tiles
-    /// honours it exactly; a frame without slices keeps its printed proportions.
-    pub page_frame_scale: f32,
+    /// How many rings of the frame's pattern the border is, nested one inside the other,
+    /// each one band wide. The motifs keep their size: a wider border has more of them. 0
+    /// is 1. A frame without slices cannot nest and keeps its printed proportions.
+    pub page_frame_rings: u32,
     /// Which kinds are drawn as line art: only their constant-width strokes, the same
     /// drawing with the fills taken away, so one ink is left. A bitmask of
     /// [`LINE_ART_AYAH_MARK`], [`LINE_ART_SURAH_HEADER`] and [`LINE_ART_PAGE_FRAME`];
@@ -55,8 +57,8 @@ impl Default for DressSpec {
             page_frame: NONE,
             gap: 5.0,
             band_gap: 5.0,
-            ayah_mark_scale: 1.0,
-            page_frame_scale: 1.0,
+            ayah_mark_scale: 0.0,
+            page_frame_rings: 1,
             line_art: 0,
             colors: vec![],
         }
@@ -298,44 +300,40 @@ impl<'a> Builder<'a> {
 
     /// The corner keeps its shape; only the straight run repeats. Stretching one drawing
     /// to a different page is what makes the side borders fatter than the top and bottom.
-    ///
-    /// `thick` widens the band: the corners grow by it both ways, and each straight run is
-    /// stretched by it across the edge only, so the motifs keep their size along the run.
-    fn tile_frame(&mut self, sl: &Slices, pal: &Palette, frame_tf: &Tf, unit_w: f32, unit_h: f32, thick: f32) {
-        let t = if thick > 0.0 { thick } else { 1.0 };
-        let (cw, ch) = (sl.corner_w * t, sl.corner_h * t);
+    fn tile_frame(&mut self, sl: &Slices, pal: &Palette, frame_tf: &Tf, unit_w: f32, unit_h: f32) {
+        let (cw, ch) = (sl.corner_w, sl.corner_h);
         let turn = sl.rotate;
         let put = |b: &mut Builder<'a>, asset: &Asset, local: Tf| {
             // the slice's own viewBox already sits at the origin at its own size
             let fit = Tf::fit(asset.view_box, 0.0, 0.0, asset.width(), asset.height(), false);
             b.place(asset, pal, OrnamentKind::PageFrame, &frame_tf.then(&local.then(&fit)), true, NONE);
         };
-        put(self, &sl.corner, Tf::scale(t, t));
+        put(self, &sl.corner, Tf::IDENTITY);
         put(
             self,
             &sl.corner,
             if turn {
-                Tf { a: -t, b: 0.0, c: 0.0, d: -t, e: unit_w, f: ch }
+                Tf { a: -1.0, b: 0.0, c: 0.0, d: -1.0, e: unit_w, f: ch }
             } else {
-                Tf::translate(unit_w, 0.0).then(&Tf::scale(-t, t))
+                Tf::translate(unit_w, 0.0).then(&Tf::scale(-1.0, 1.0))
             },
         );
         put(
             self,
             &sl.corner,
             if turn {
-                Tf { a: -t, b: 0.0, c: 0.0, d: -t, e: cw, f: unit_h }
+                Tf { a: -1.0, b: 0.0, c: 0.0, d: -1.0, e: cw, f: unit_h }
             } else {
-                Tf::translate(0.0, unit_h).then(&Tf::scale(t, -t))
+                Tf::translate(0.0, unit_h).then(&Tf::scale(1.0, -1.0))
             },
         );
         put(
             self,
             &sl.corner,
             if turn {
-                Tf::translate(unit_w - cw, unit_h - ch).then(&Tf::scale(t, t))
+                Tf::translate(unit_w - cw, unit_h - ch)
             } else {
-                Tf { a: -t, b: 0.0, c: 0.0, d: -t, e: unit_w, f: unit_h }
+                Tf { a: -1.0, b: 0.0, c: 0.0, d: -1.0, e: unit_w, f: unit_h }
             },
         );
         // a whole number of repeats, each nudged to fit exactly: a part-drawn motif at the
@@ -348,15 +346,15 @@ impl<'a> Builder<'a> {
         for i in 0..nh {
             let x = cw + i as f32 * step_h;
             let k = step_h / sl.repeat_h.max(f32::EPSILON);
-            put(self, &sl.edge_h, Tf::translate(x, 0.0).then(&Tf::scale(k, t)));
-            put(self, &sl.edge_h, Tf::translate(x, unit_h).then(&Tf::scale(k, -t)));
+            put(self, &sl.edge_h, Tf::translate(x, 0.0).then(&Tf::scale(k, 1.0)));
+            put(self, &sl.edge_h, Tf::translate(x, unit_h).then(&Tf::scale(k, -1.0)));
         }
         let (nv, step_v) = run(unit_h - 2.0 * ch, sl.repeat_v);
         for i in 0..nv {
             let y = ch + i as f32 * step_v;
             let k = step_v / sl.repeat_v.max(f32::EPSILON);
-            put(self, &sl.edge_v, Tf::translate(0.0, y).then(&Tf::scale(t, k)));
-            put(self, &sl.edge_v, Tf::translate(unit_w, y).then(&Tf::scale(-t, k)));
+            put(self, &sl.edge_v, Tf::translate(0.0, y).then(&Tf::scale(1.0, k)));
+            put(self, &sl.edge_v, Tf::translate(unit_w, y).then(&Tf::scale(-1.0, k)));
         }
         self.out.n_frame_repeats = (nh + nv) * 2;
     }
@@ -541,21 +539,31 @@ impl Page {
                 let pal = palette(o, oi, spec);
                 let gap = spec.gap;
                 let unit = (laid_w + 2.0 * gap) / slot[2].max(f32::EPSILON); // page units per frame unit
-                let thick = if spec.page_frame_scale > 0.0 { spec.page_frame_scale } else { 1.0 };
+                let rings = spec.page_frame_rings.max(1);
                 let (asset_w, asset_h) = (o.asset.width(), o.asset.height());
                 match &o.slices {
                     Some(sl) => {
-                        // A wider border grows outward by `thick`: the margins are `thick`
-                        // times the design's, the slot stays on the grown page box, and the
-                        // motifs keep their size along the edge. The bottom margin is the
-                        // frame's own, not a copy of its top.
-                        let box_x = laid_left - gap - thick * slot[0] * unit;
-                        let box_y = laid_top - gap - thick * slot[1] * unit;
-                        let unit_w = (laid_w + 2.0 * gap) / unit + thick * (slot[0] + (asset_w - slot[0] - slot[2]));
-                        let unit_h = (laid_h + 2.0 * gap) / unit + thick * (slot[1] + (asset_h - slot[1] - slot[3]));
+                        // A wider border is more rings of the pattern, nested, each one band
+                        // wide: the margins are `rings` times the design's, the slot stays on
+                        // the grown page box, and no motif changes size. The bottom margin is
+                        // the frame's own, not a copy of its top.
+                        let n = rings as f32;
+                        let (ml, mt) = (slot[0], slot[1]);
+                        let (mr, mb) = (asset_w - slot[0] - slot[2], asset_h - slot[1] - slot[3]);
+                        let box_x = laid_left - gap - n * ml * unit;
+                        let box_y = laid_top - gap - n * mt * unit;
+                        let unit_w = (laid_w + 2.0 * gap) / unit + n * (ml + mr);
+                        let unit_h = (laid_h + 2.0 * gap) / unit + n * (mt + mb);
                         let (box_w, box_h) = (unit_w * unit, unit_h * unit);
                         let frame_tf = Tf::fit([0.0, 0.0, unit_w, unit_h], box_x, box_y, box_w, box_h, false);
-                        b.tile_frame(sl, &pal, &frame_tf, unit_w, unit_h, thick);
+                        let mut repeats = 0;
+                        for r in 0..rings {
+                            let k = r as f32;
+                            let ring_tf = frame_tf.then(&Tf::translate(k * ml, k * mt));
+                            b.tile_frame(sl, &pal, &ring_tf, unit_w - k * (ml + mr), unit_h - k * (mt + mb));
+                            repeats += b.out.n_frame_repeats;
+                        }
+                        b.out.n_frame_repeats = repeats;
                         b.out.view_box = [box_x, box_y, box_w, box_h];
                     }
                     None => {
@@ -630,7 +638,13 @@ impl Page {
                 if m.r <= 0.0 {
                     continue;
                 }
-                let size = if spec.ayah_mark_scale > 0.0 { spec.ayah_mark_scale } else { 1.0 };
+                let size = if spec.ayah_mark_scale > 0.0 {
+                    spec.ayah_mark_scale
+                } else if o.lineage == Lineage::Scan {
+                    crate::defaults::AYAH_MARK_SCALE_SCAN
+                } else {
+                    1.0
+                };
                 let s = 2.0 * m.r * size / o.asset.height().max(f32::EPSILON);
                 let tf = Tf { a: s, b: 0.0, c: 0.0, d: s, e: m.cx - s * scx, f: m.cy - s * scy };
                 let path = if m.ornament_path != NONE {
@@ -742,7 +756,7 @@ mod tests {
             gap: 5.0,
             band_gap: 5.0,
             ayah_mark_scale: 1.0,
-            page_frame_scale: 1.0,
+            page_frame_rings: 1,
             line_art: 0,
             colors: vec![],
         }
@@ -1133,15 +1147,22 @@ mod tests {
     #[test]
     fn the_medallion_and_border_sizes_are_knobs() {
         let (mut p, _, _) = page();
+        // the design's own size for a scanned medallion is 1.5 rings; a font marker's is 1
+        let d = p.dress(&set(), &DressSpec { ayah_mark_scale: 0.0, ..all() }).unwrap().clone();
+        let (_, y0, _, y1) = draw_box(&d, 4);
+        assert!(near(y1 - y0, 9.0), "{}", y1 - y0);
         // twice the ring: 12 units tall, still on the ring centre
         let d = p.dress(&set(), &DressSpec { ayah_mark_scale: 2.0, ..all() }).unwrap().clone();
         let (x0, y0, x1, y1) = draw_box(&d, 4);
         assert!(near(y1 - y0, 12.0) && near(x1 - x0, 9.6), "{:?}", (x0, y0, x1, y1));
         assert!(near((x0 + x1) / 2.0, 45.0) && near((y0 + y1) / 2.0, 13.0), "{:?}", (x0, y0, x1, y1));
-        // a tiled border twice as thick: the slot stays on the grown box, the margins double
+        // two rings of the border: one more margin on each side, the slot still on the
+        // grown box, every motif the same size, so eight corners and at least twice the
+        // repeats (the inner ring is the single ring; the outer one is bigger)
         let one = p.dress(&tiled_set(false), &frame_only()).unwrap().clone();
-        let two = p.dress(&tiled_set(false), &DressSpec { page_frame_scale: 2.0, ..frame_only() }).unwrap().clone();
+        let two = p.dress(&tiled_set(false), &DressSpec { page_frame_rings: 2, ..frame_only() }).unwrap().clone();
         let unit = (p.width() + 10.0) / 60.0;
+        assert!(near(one.view_box[2], p.width() + 10.0 + 2.0 * 5.0 * unit), "{:?}", one.view_box);
         assert!(
             near(two.view_box[2], p.width() + 10.0 + 2.0 * 5.0 * unit * 2.0),
             "{:?} vs {:?}",
@@ -1149,18 +1170,11 @@ mod tests {
             two.view_box
         );
         assert!(near(two.view_box[0], -5.0 - 5.0 * unit * 2.0), "{:?}", two.view_box);
-        assert!(near(one.view_box[2], p.width() + 10.0 + 2.0 * 5.0 * unit), "{:?}", one.view_box);
-        // the motifs keep their size along the edge: the runs lose at most the room the
-        // bigger corners take, and the top run's draw is twice as tall
-        assert!(
-            two.n_frame_repeats <= one.n_frame_repeats && two.n_frame_repeats + 4 >= one.n_frame_repeats,
-            "{} vs {}",
-            two.n_frame_repeats,
-            one.n_frame_repeats
-        );
-        let (_, ty0, _, ty1) = draw_box(&two, 4);
+        assert_eq!(two.table.len() as u32, 8 + two.n_frame_repeats);
+        assert!(two.n_frame_repeats >= 2 * one.n_frame_repeats, "{} vs {}", two.n_frame_repeats, one.n_frame_repeats);
         let (_, oy0, _, oy1) = draw_box(&one, 4);
-        assert!(near(ty1 - ty0, 2.0 * (oy1 - oy0)), "{} vs {}", ty1 - ty0, oy1 - oy0);
+        let (_, ty0, _, ty1) = draw_box(&two, 4);
+        assert!(near(ty1 - ty0, oy1 - oy0), "a run's motif keeps its size: {} vs {}", ty1 - ty0, oy1 - oy0);
     }
 
     #[test]

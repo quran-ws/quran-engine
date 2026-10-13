@@ -28,6 +28,7 @@ public enum QvpDefaults {
     public static let GRID_LINES = 15, ASPECT_SLACK: Float = 1.15
     public static let MASK_BLOCK: UInt32 = 0xd9d4c8ff, MASK_PAD: Float = 0.6, MASK_RADIUS: Float = 0.8
     public static let REVEAL_LIT = 1, REVEAL_GREY: UInt32 = 0xc9c4b8ff, CROP_PAD: Float = 2
+    public static let AYAH_MARK_SCALE_SCAN: Float = 1.5
     public static let REFLOW_RELAX: Float = 0.5, REFLOW_MAX_STRETCH: Float = 2
     public static let MIN_ZOOM: Float = 0.5, MAX_ZOOM: Float = 12, ZOOMED_THRESHOLD: Float = 1.02
     public static let ZOOM_SNAP_HYSTERESIS: Float = 0.03, ZOOM_QUANTUM: Float = 0.01

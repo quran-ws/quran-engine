@@ -36,7 +36,7 @@
     selWord: -1, selAyah: null, hlSel: 0, hlAyah: 0, hlSearch: 0, hlPlay: 0, pathHandles: new Map(),
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
-    dress: { ayahMark: null, surahHeader: null, pageFrame: null, gap: 5, bandGap: 5, ayahMarkScale: 1, pageFrameScale: 1, lineArt: [], colors: [] },
+    dress: { ayahMark: null, surahHeader: null, pageFrame: null, gap: 5, bandGap: 5, ayahMarkScale: 0, pageFrameRings: 1, lineArt: [], colors: [] },
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16, surahFrames: true },
     reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
     hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
@@ -547,6 +547,13 @@
     if (same) { sel.value = chosen[0] || ''; sel.querySelector('[value="mixed"]')?.remove(); }
     else { if (!sel.querySelector('[value="mixed"]')) sel.insertAdjacentHTML('beforeend', '<option value="mixed">mixed</option>'); sel.value = 'mixed'; }
   }
+  // the medallion slider shows the design's own size until the reader moves it
+  function showMarkScale() {
+    if (S.dress.ayahMarkScale > 0) return;
+    const o = S.dress.ayahMark === null ? null : ornaments.list[S.dress.ayahMark];
+    const own = o && o.lineage === 'scan' ? QVP.DEFAULTS.AYAH_MARK_SCALE_SCAN : 1;
+    $('dressMarkScale').value = own; $('dressMarkScaleVal').textContent = '×' + own.toFixed(2) + ' (design)';
+  }
   function fillDressPickers() {
     if (!ornaments) { for (const id of ['dressStyle', 'dressMark', 'dressHeader', 'dressFrame']) $(id).disabled = true; return; }
     // presets: every mushaf that has all three kinds
@@ -557,12 +564,12 @@
       if (style === 'mixed') return;
       const s = style ? ornaments.styles().find(x => x.style === style) : null;
       for (const [id, , key] of KIND_PICKERS) { const o = s ? s[key] : null; S.dress[key] = o ? o.index : null; $(id).value = o ? String(o.index) : ''; }
-      S.dress.colors = []; showDressStyle(); dressSwatches(); applyDress();
+      S.dress.colors = []; S.dress.ayahMarkScale = 0; showDressStyle(); showMarkScale(); dressSwatches(); applyDress();
     };
     for (const [id, kind, key] of KIND_PICKERS) {
       const kindSel = $(id);
       for (const o of ornaments.ofKind(kind)) kindSel.insertAdjacentHTML('beforeend', `<option value="${o.index}">${o.style}${o.riwayah ? ', ' + o.riwayah : ''}</option>`);
-      kindSel.onchange = e => { S.dress[key] = e.target.value === '' ? null : +e.target.value; S.dress.colors = []; showDressStyle(); dressSwatches(); applyDress(); };
+      kindSel.onchange = e => { S.dress[key] = e.target.value === '' ? null : +e.target.value; S.dress.colors = []; if (key === 'ayahMark') { S.dress.ayahMarkScale = 0; showMarkScale(); } showDressStyle(); dressSwatches(); applyDress(); };
     }
   }
   fillDressPickers();
@@ -570,7 +577,7 @@
   $('dressGap').oninput = e => { S.dress.gap = +e.target.value; $('dressGapVal').textContent = e.target.value; applyDress(); };
   $('dressBandGap').oninput = e => { S.dress.bandGap = +e.target.value; $('dressBandGapVal').textContent = e.target.value; applyDress(); };
   $('dressMarkScale').oninput = e => { S.dress.ayahMarkScale = +e.target.value; $('dressMarkScaleVal').textContent = '×' + (+e.target.value).toFixed(2); applyDress(); };
-  $('dressFrameScale').oninput = e => { S.dress.pageFrameScale = +e.target.value; $('dressFrameScaleVal').textContent = '×' + (+e.target.value).toFixed(2); applyDress(); };
+  $('dressFrameRings').oninput = e => { S.dress.pageFrameRings = +e.target.value; $('dressFrameRingsVal').textContent = e.target.value; applyDress(); };
   for (const [id, kind] of [['dressLineMark', 'ayah_mark'], ['dressLineHeader', 'surah_header'], ['dressLineFrame', 'page_frame']]) {
     $(id).onchange = e => { S.dress.lineArt = S.dress.lineArt.filter(k => k !== kind); if (e.target.checked) S.dress.lineArt.push(kind); S.dress.colors = []; dressSwatches(); applyDress(); };
   }
