@@ -371,12 +371,12 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
         match tag {
             "path" => {
                 if let Some(d) = n.attribute("d") {
-                    self.emit_d(d, tf, p)?;
+                    self.emit_d(n, d, tf, p)?;
                 }
             }
             "ellipse" | "circle" | "rect" | "polygon" | "polyline" => {
                 if let Some(d) = shape_d(n) {
-                    self.emit_d(&d, tf, p)?;
+                    self.emit_d(n, &d, tf, p)?;
                 }
             }
             "text" | "image" | "line" | "foreignObject" => self.warn(format!("<{tag}> is not drawn")),
@@ -385,8 +385,16 @@ impl<'a, 'd, 'i> AssetCtx<'a, 'd, 'i> {
         Ok(true)
     }
 
-    fn emit_d(&mut self, d: &str, tf: &Affine, p: &Paint) -> Result<(), String> {
-        let Some(part) = p.part else { return Ok(()) };
+    /// Push the outline of `n`, drawn from the path data `d`. An outline with no
+    /// `data-part` on itself or an ancestor has no colour to take, so it is left out with a
+    /// warning.
+    fn emit_d(&mut self, n: Node<'d, 'i>, d: &str, tf: &Affine, p: &Paint) -> Result<(), String> {
+        let Some(part) = p.part else {
+            let id = n.attribute("id").map(|id| format!(" id={id:?}")).unwrap_or_default();
+            let line = n.document().text_pos_at(n.range().start).row;
+            self.warn(format!("<{}{id}> on line {line} has no data-part, it is not drawn", n.tag_name().name()));
+            return Ok(());
+        };
         let cmds = parse_d(d, tf, self.quant)?;
         if cmds.is_empty() {
             return Ok(());
@@ -802,6 +810,19 @@ mod tests {
         assert_eq!((b(2).x0, b(2).y0, b(2).x1, b(2).y1), (100_000, 50_000, 200_000, 100_000));
         assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
         assert!(report.warnings[0].contains("width or a height"), "{:?}", report.warnings);
+    }
+
+    #[test]
+    fn an_outline_with_no_part_is_a_warning() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+<g data-part="c1" fill="#ffffff"><path d="M0 0h200v100H0z"/></g>
+<path id="stray" d="M0 0h10v10H0z"/></svg>"##;
+        let dir = single("surah-headers", "", &[("assets/whole.svg", svg)]);
+        let (set, report) = build(&dir, &BuildOptions::default()).unwrap();
+        assert_eq!(set.ornaments[0].asset.n_paths, 1, "the stray outline is not drawn");
+        assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+        let w = &report.warnings[0];
+        assert!(w.contains("assets/whole.svg") && w.contains("<path id=\"stray\">") && w.contains("line 3"), "{w}");
     }
 
     #[test]
