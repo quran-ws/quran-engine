@@ -993,7 +993,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const top = bandTop - padTop;   // view px; a clamped canvas (H) keeps this top and loses its bottom edge
       const W = this.canvas.width, H = Math.min(MAX_CANVAS_PX, Math.ceil((bandH + padTop + padBottom) * dpr));
       const L = page.currentLayout;
-      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${top.toFixed(1)}|${dpr}|${info.revision}|${W}x${H}`;
+      // `page.h` is the page's engine handle, unique while the page is open: two dressed pages
+      // drawn by one renderer with no layout would otherwise share a revision and a raster
+      const key = `${page.h}|${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${top.toFixed(1)}|${dpr}|${info.revision}|${W}x${H}`;
       if (!this.ornamentLayer || key !== this.ornamentKey || this.ornamentFor !== L) {
         if (!this.ornamentLayer) this.ornamentLayer = document.createElement('canvas');
         this.ornamentLayer.width = W; this.ornamentLayer.height = H;
