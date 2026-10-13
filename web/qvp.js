@@ -265,7 +265,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * takes its medallion, band and border together. Each of `ayahMark`, `surahHeader`
      * and `pageFrame` is an ornament of the set, its index, or a style name (the ornament
      * of that kind in that style), and overrides the style for that kind; leave one out
-     * for none. `colors` is a
+     * for none. Any other value, such as an entry of `set.styles()`, throws a `TypeError`. `colors` is a
      * list of `[ornament, part, colour]`; every part left out keeps the design's own.
      * `gap` is the air between the text and the border and `bandGap` the air between a band
      * and the border, both in page units. `ayahMarkScale` sizes the medallion against the
@@ -280,16 +280,22 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * dress.
      */
     dress(set, { style = null, ayahMark = style, surahHeader = style, pageFrame = style, gap = 5, bandGap = 5, ayahMarkScale = 0, pageFrameScale = 1, lineArt = false, colors = [] } = {}) {
-      const index = (v, kind) => {
+      // An ornament is a non-negative integer index or an object with one, such as an entry
+      // of `set.list`. Anything else (an entry of `set.styles()`, NaN) is a caller's mistake.
+      const ornamentIndex = (v, key) => {
+        const i = typeof v === 'number' ? v : v !== null && typeof v === 'object' ? v.index : undefined;
+        if (!Number.isInteger(i) || i < 0) throw new TypeError(`dress: ${key} must be an ornament, its index or a style name`);
+        return i;
+      };
+      const index = (v, kind, key) => {
         if (v === null || v === undefined) return NONE;
-        if (typeof v === 'number') return v;
         if (typeof v === 'string') { const o = set.find(kind, v); return o ? o.index : NONE; }
-        return v.index;
+        return ornamentIndex(v, key);
       };
       // Resolve every name first: a string lookup writes into scratch2, where the spec goes.
-      const ayah = index(ayahMark, 'ayah_mark'), header = index(surahHeader, 'surah_header'), frame = index(pageFrame, 'page_frame');
+      const ayah = index(ayahMark, 'ayah_mark', 'ayahMark'), header = index(surahHeader, 'surah_header', 'surahHeader'), frame = index(pageFrame, 'page_frame', 'pageFrame');
       const triples = [];
-      for (const [o, part, colour] of colors) triples.push(typeof o === 'object' ? o.index : o, part, rgba(colour));
+      colors.forEach(([o, part, colour], k) => triples.push(ornamentIndex(o, `colors[${k}]`), part, rgba(colour)));
       const cp = triples.length ? this.e.putU32(Uint32Array.from(triples), 2048) : 0;
       const s = this.e.scratch2, d = this.e.dv();
       d.setUint32(s, ayah, true); d.setUint32(s + 4, header, true); d.setUint32(s + 8, frame, true);

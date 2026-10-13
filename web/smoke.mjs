@@ -58,6 +58,15 @@ if (existsSync(setPath) && existsSync(pagePath)) {
     if (!want || named[field] !== want.index) throw new Error(`dress by name: ${field} is ${named[field]}, expected ${want && want.index}`);
   }
   if (!(named.draws > 0)) throw new Error('dress by name drew nothing');
+  // an entry of styles() is not an ornament: it has no index, and the binding says so
+  for (const bad of [set.styles()[0], NaN, -1, 1.5, {}]) {
+    let threw = null;
+    try { page.dress(set, { ayahMark: bad }); } catch (e) { threw = e; }
+    if (!(threw instanceof TypeError) || !threw.message.includes('ayahMark')) throw new Error(`ayahMark ${JSON.stringify(bad)} did not throw a TypeError naming the key: ${threw}`);
+  }
+  let threwColour = null;
+  try { page.dress(set, { style, colors: [[set.styles()[0], 0, '#ff0000']] }); } catch (e) { threwColour = e; }
+  if (!(threwColour instanceof TypeError) || !threwColour.message.includes('colors[0]')) throw new Error('a colour for a non-ornament did not throw');
   if (page.dress(set, { ayahMark: 'no-such-style', surahHeader: 'no-such-style', pageFrame: 'no-such-style' }) !== null) throw new Error('unknown style names were accepted');
   // line art for one kind: the bands keep only their strokes, the medallions keep their fills
   const lined = page.dress(set, { ayahMark: style, surahHeader: style, pageFrame: style, lineArt: ['surah_header'] });
