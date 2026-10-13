@@ -101,6 +101,12 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
      * An undressed page gets the plain clamp. */
     fun dressClamp(view: QvpView, viewportW: Float, viewportH: Float): QvpView =
         QvpView.of(QvpNative.dressClamp(h, view.floats(), viewportW, viewportH))
+    /** For a host that scrolls the page itself: the view that shows the dressed box at [scale],
+     * centred across [viewportW] (at x = 0 when wider) with its top at 0, and the box's size at that
+     * scale, which is the size to give the canvas. An undressed page gets its content centred at the
+     * top and the content's size. */
+    fun dressView(scale: Float, viewportW: Float): QvpDressView =
+        QvpNative.dressView(h, scale, viewportW).let { QvpDressView(QvpView.of(it), it[3], it[4]) }
     /** The readout, or null when the page is not dressed. */
     fun dressInfo(): QvpDressInfo? = QvpNative.dressInfo(h)?.let { QvpDressInfo.of(it) }
     /** Counts up whenever the ornament layer is rebuilt: a new dress, or a layout that moved the

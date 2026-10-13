@@ -947,6 +947,18 @@ final class QvpDressInfo {
   final List<double> overflow;
 }
 
+/// [QvpPage.dressView]: the view for a host that scrolls the page, and the dressed box's size.
+@immutable
+final class QvpDressView {
+  const QvpDressView({required this.view, required this.width, required this.height});
+
+  /// Shows the dressed box with its top at 0, centred across the viewport.
+  final QvpView view;
+
+  /// The dressed box at the asked scale, in viewport px: the size to give the canvas.
+  final double width, height;
+}
+
 /// One entry of the ornament display list, in page units. Paint it behind the page ink.
 @immutable
 final class QvpDressDraw {
@@ -2317,6 +2329,21 @@ class QvpPage extends ChangeNotifier {
     } finally {
       pffi.calloc.free(v);
       pffi.calloc.free(out);
+    }
+  }
+
+  /// For a host that scrolls the page itself: the view that shows the dressed box at [scale],
+  /// centred across [viewportW] (at x = 0 when wider) with its top at 0, and the box's size at
+  /// that scale, which is the size to give the canvas. An undressed page gets its content
+  /// centred at the top and the content's size.
+  QvpDressView dressView(double scale, double viewportW) {
+    final out = pffi.calloc<QvpViewC>(), size = pffi.calloc<ffi.Float>(2);
+    try {
+      _b.dressView(_p, scale, viewportW, out, size);
+      return QvpDressView(view: _readView(out.ref), width: size[0], height: size[1]);
+    } finally {
+      pffi.calloc.free(out);
+      pffi.calloc.free(size);
     }
   }
 

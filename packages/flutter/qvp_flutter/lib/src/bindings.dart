@@ -1099,6 +1099,9 @@ final class QvpBindings {
   late final void Function(PtrPage, ffi.Pointer<QvpViewC>, double, double, ffi.Pointer<QvpViewC>) dressClamp = lib.lookupFunction<
       ffi.Void Function(PtrPage, ffi.Pointer<QvpViewC>, ffi.Float, ffi.Float, ffi.Pointer<QvpViewC>),
       void Function(PtrPage, ffi.Pointer<QvpViewC>, double, double, ffi.Pointer<QvpViewC>)>('qvp_dress_clamp');
+  late final void Function(PtrPage, double, double, ffi.Pointer<QvpViewC>, ffi.Pointer<ffi.Float>) dressView = lib.lookupFunction<
+      ffi.Void Function(PtrPage, ffi.Float, ffi.Float, ffi.Pointer<QvpViewC>, ffi.Pointer<ffi.Float>),
+      void Function(PtrPage, double, double, ffi.Pointer<QvpViewC>, ffi.Pointer<ffi.Float>)>('qvp_dress_view');
   late final void Function(PtrPage, ffi.Pointer<QvpDressGeometryC>) dressGeometry =
       lib.lookupFunction<ffi.Void Function(PtrPage, ffi.Pointer<QvpDressGeometryC>), void Function(PtrPage, ffi.Pointer<QvpDressGeometryC>)>('qvp_dress_geometry');
 

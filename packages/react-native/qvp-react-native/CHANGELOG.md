@@ -14,6 +14,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   same by react tag, and `onDressChanged` reports the engine's readout. Closes issue #116.
 - `Qvp.dressClamp(tag, view, viewportW, viewportH)` clamps a view over the content plus the dress
   overflow, as the engine does (`qvp_dress_clamp`).
+- `Qvp.dressView(tag, scale, viewportW)` returns `{view, width, height}` for a host that scrolls
+  the page: the dressed box's top at 0, centred, and its size (`qvp_dress_view`).
 - `QvpRnPageView.kt` imports `android.util.Base64`, so the module compiles again.
 
 ## [0.5.0] - 2026-10-08

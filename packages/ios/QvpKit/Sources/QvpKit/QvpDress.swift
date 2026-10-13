@@ -4,7 +4,7 @@
 //
 // The binding calls qvp_ornaments_load, qvp_ornaments_free, qvp_ornament_count,
 // qvp_ornament_info, qvp_ornament_find, qvp_ornament_part, qvp_dress, qvp_undress,
-// qvp_dress_info, qvp_dress_geometry and qvp_dress_clamp.
+// qvp_dress_info, qvp_dress_geometry, qvp_dress_clamp and qvp_dress_view.
 import Foundation
 import CoreGraphics
 import QvpFFI
@@ -269,6 +269,13 @@ extension QvpPage {
     }
 }
 
+/// `QvpPage.dressView`: the view for a host that scrolls the page, and the dressed box's size
+/// at that view's scale, in layout px.
+public struct QvpDressView: Equatable {
+    public let view: QvpView
+    public let width: Float, height: Float
+}
+
 // ── what both renderers share: the raster and the overflow of a dressed page ──
 
 /// How far a dress's border reaches past the laid-out content, in layout px.
@@ -290,6 +297,18 @@ extension QvpPage {
         var v = view.c, out = QvpFFI.QvpView()
         qvp_dress_clamp(p, &v, viewportW, viewportH, &out)
         return QvpView(out)
+    }
+
+    /// For a host that scrolls the page itself: the view that shows the dressed box at `scale`,
+    /// centred across `viewportW` (at x = 0 when wider) with its top at 0, and the box's size at
+    /// that scale, which is the size to give the canvas. An undressed page gets its content
+    /// centred at the top and the content's size.
+    public func dressView(_ scale: Float, viewportW: Float) -> QvpDressView {
+        var out = QvpFFI.QvpView(), size: (Float, Float) = (0, 0)
+        withUnsafeMutablePointer(to: &size) { s in
+            s.withMemoryRebound(to: Float.self, capacity: 2) { qvp_dress_view(p, scale, viewportW, &out, $0) }
+        }
+        return QvpDressView(view: QvpView(out), width: size.0, height: size.1)
     }
 
     /// The paper behind the page: the content grown by the dress overflow, so the border sits

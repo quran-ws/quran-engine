@@ -608,6 +608,12 @@ void main() {
     final far = QvpView(scale: l.fitScale, offsetX: 1e5, offsetY: 1e5);
     final held = p.dressClamp(far, 400, 640);
     expect(held.offsetX, lessThan(1e5));
+    // a host that scrolls the page: the size is content plus overflow, the border's top at 0
+    final o = p.dressInfo()!.overflow;
+    final shown = p.dressView(1, 400);
+    expect(shown.width, closeTo(l.contentW + o[0] + o[2], 1e-3));
+    expect(shown.height, closeTo(l.contentH + o[1] + o[3], 1e-3));
+    expect(shown.view.offsetY - shown.view.scale * o[1], closeTo(0, 1e-3));
     expect(state.stats.basePaths, greaterThan(0));
     p.undress();
     await tester.pump();

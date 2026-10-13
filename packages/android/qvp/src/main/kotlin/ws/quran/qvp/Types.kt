@@ -355,6 +355,8 @@ data class QvpViewBox(val x: Float, val y: Float, val width: Float, val height: 
 data class QvpInsets(val left: Float, val top: Float, val right: Float, val bottom: Float) {
     companion object { val ZERO = QvpInsets(0f, 0f, 0f, 0f) }
 }
+/** [QvpPage.dressView]: the view for a host that scrolls the page, and the dressed box's size. */
+data class QvpDressView(val view: QvpView, val width: Float, val height: Float)
 
 /**
  * What a dress put on the page. The three ornament indices are null for a kind left as printed.

@@ -222,6 +222,40 @@ final class QvpDressTests: XCTestCase {
         XCTAssertEqual(c.viewOy + (CGFloat(l.contentH) + o.bottom) * c.viewScale, Self.box.height, accuracy: 0.5, "and so does its bottom")
     }
 
+    /// A host that scrolls a dressed printed page itself: the canvas draws it at scale 1 with
+    /// the border's top and left on the canvas, and `hostPageSize` holds the whole border.
+    @MainActor func testCanvasHostScrollsKeepsTheBorderOnTheCanvas() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let page = try Self.page604(); defer { page.close() }
+        let set = try QvpOrnaments(bytes: Self.ornamentBytes)
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.hostViewportHeight = Self.box.height
+        c.page = page
+        c.setBounds(Self.box, fromCanvas: 1)
+        XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
+        c.resetView()
+        let l = try XCTUnwrap(page.currentLayout)
+        XCTAssertFalse(l.reflowed)
+        let o = try XCTUnwrap(page.dressOverflow)
+        XCTAssertGreaterThan(o.top, 0)
+        XCTAssertGreaterThan(o.left, 0)
+        XCTAssertEqual(c.viewScale, 1, accuracy: 0.0001)
+        // the border's top is the canvas's top, and its left is on the canvas
+        XCTAssertEqual(c.viewOy - o.top, 0, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(c.viewOx - o.left, -0.5)
+        // the size the host gives the canvas holds the whole border
+        let size = try XCTUnwrap(c.hostPageSize)
+        XCTAssertEqual(size.height, CGFloat(l.contentH) + o.top + o.bottom, accuracy: 0.5)
+        XCTAssertEqual(size.width, CGFloat(l.contentW) + o.left + o.right, accuracy: 0.5)
+        // sized so, the border's bottom is on the canvas too
+        c.setBounds(CGSize(width: Self.box.width, height: size.height), fromCanvas: 1)
+        let after = try XCTUnwrap(page.currentLayout), o2 = try XCTUnwrap(page.dressOverflow)
+        XCTAssertEqual(c.viewOy - o2.top, 0, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(c.viewOy + CGFloat(after.contentH) + o2.bottom, size.height + 0.5)
+        XCTAssertEqual(try XCTUnwrap(c.hostPageSize).height, size.height, accuracy: 0.5, "the box, not the canvas, sizes the page")
+    }
+
     #if canImport(UIKit)
     /// The same scroll through QvpPageView's `scroll(by:)`.
     @MainActor func testPageViewScrollKeepsTheBorder() throws {
@@ -244,6 +278,19 @@ final class QvpDressTests: XCTestCase {
         XCTAssertEqual(v.viewOy + (CGFloat(l.contentH) + o.bottom) * v.viewScale, Self.box.height, accuracy: 0.5, "and so does its bottom")
     }
     #endif
+
+    /// `dressView` at scale 1: the size is content plus overflow, and the border's top is at 0.
+    func testDressViewHoldsTheBorder() throws {
+        let page = try Self.page604(); defer { page.close() }
+        let set = try QvpOrnaments(bytes: Self.ornamentBytes)
+        _ = page.layout(QvpLayoutSpec(viewportW: Float(Self.box.width), viewportH: Float(Self.box.height)))
+        XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
+        let l = try XCTUnwrap(page.currentLayout), o = try XCTUnwrap(page.dressInfo()).overflow
+        let d = page.dressView(1, viewportW: Float(Self.box.width))
+        XCTAssertEqual(d.width, l.contentW + o[0] + o[2], accuracy: 0.001)
+        XCTAssertEqual(d.height, l.contentH + o[1] + o[3], accuracy: 0.001)
+        XCTAssertEqual(d.view.offsetY - d.view.scale * o[1], 0, accuracy: 0.001)
+    }
 
     /// An undressed page gets the plain clamp from `dressClamp`.
     func testDressClampOnABarePageIsTheViewClamp() throws {

@@ -276,6 +276,11 @@ jfloatArray FN(viewClamp)(JNIEnv* env, jclass c, jfloatArray view, jfloat cw, jf
 jfloatArray FN(dressClamp)(JNIEnv* env, jclass c, jlong h, jfloatArray view, jfloat vw, jfloat vh) {
     QvpView in = view_of(env, view), out; qvp_dress_clamp(PG(h), &in, vw, vh, &out); return view_out(env, out);
 }
+/* {scale, offsetX, offsetY, width, height}: the view and the dressed box's size, for a host that scrolls */
+jfloatArray FN(dressView)(JNIEnv* env, jclass c, jlong h, jfloat scale, jfloat vw) {
+    QvpView v; float size[2]; qvp_dress_view(PG(h), scale, vw, &v, size);
+    float f[5] = { v.scale, v.offset_x, v.offset_y, size[0], size[1] }; return floats(env, f, 5);
+}
 jfloatArray FN(viewAnchor)(JNIEnv* env, jclass c, jlong h, jfloatArray view, jint word, jfloat nx, jfloat ny, jfloat toX, jfloat toY, jfloat vw, jfloat vh) {
     QvpView in = view_of(env, view), out; qvp_view_anchor(PG(h), &in, (uint32_t)word, nx, ny, toX, toY, vw, vh, &out); return view_out(env, out);
 }

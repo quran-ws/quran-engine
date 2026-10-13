@@ -176,6 +176,12 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
         val d = v.resources.displayMetrics.density
         val c = p.dressClamp(QvpView(scale.toFloat(), (offsetX * d).toFloat(), (offsetY * d).toFloat()), (viewportW * d).toFloat(), (viewportH * d).toFloat())
         mapOf("scale" to c.scale, "offsetX" to c.offsetX / d, "offsetY" to c.offsetY / d) }
+    /** The engine's view and dressed box size for a host that scrolls the page. The viewport, offsets and size are in dp. */
+    @ReactMethod fun dressView(tag: Int, scale: Double, viewportW: Double, promise: Promise) = withPage(tag, promise) { v, p ->
+        val d = v.resources.displayMetrics.density
+        val r = p.dressView(scale.toFloat(), (viewportW * d).toFloat())
+        mapOf("view" to mapOf("scale" to r.view.scale, "offsetX" to r.view.offsetX / d, "offsetY" to r.view.offsetY / d),
+              "width" to r.width / d, "height" to r.height / d) }
     @ReactMethod fun dressInfo(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.dressInfo()?.let { Marshal.dressInfo(it) } }
     @ReactMethod fun dressRevision(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.dressRevision() }
 

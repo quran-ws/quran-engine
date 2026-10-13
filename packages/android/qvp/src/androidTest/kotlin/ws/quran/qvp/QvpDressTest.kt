@@ -89,6 +89,13 @@ class QvpDressTest {
             assertEquals(fit.fitX, held.offsetX, 0.5f)
             assertEquals(fit.fitY, held.offsetY, 0.5f)
 
+            // a host that scrolls the page: the size is content plus overflow, the border's top at 0
+            val shown = page.dressView(1f, 690f)
+            val o = info.overflow
+            assertEquals(fit.contentW + o.left + o.right, shown.width, 1e-3f)
+            assertEquals(fit.contentH + o.top + o.bottom, shown.height, 1e-3f)
+            assertEquals(0f, shown.view.offsetY - shown.view.scale * o.top, 1e-3f)
+
             // one draw per table row, each under a placement of the layout or the border's none
             val draws = page.dressGeometry()
             assertEquals(info.draws, draws.size)

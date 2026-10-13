@@ -272,7 +272,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-172 symbols in the header, 172 Rust exports. web: 171 bound, android: 166 bound, flutter: 171 bound, ios: 164 bound, react-native: 94 bound.
+173 symbols in the header, 173 Rust exports. web: 172 bound, android: 167 bound, flutter: 172 bound, ios: 165 bound, react-native: 95 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -311,6 +311,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_dress_clamp` | yes | yes | yes | yes | yes |
 | `qvp_dress_geometry` | yes | yes | yes | yes | yes |
 | `qvp_dress_info` | yes | yes | yes | yes | yes |
+| `qvp_dress_view` | yes | yes | yes | yes | yes |
 | `qvp_engine_name` | yes | yes | yes | yes | yes |
 | `qvp_family_name` | yes | yes | yes | yes | yes |
 | `qvp_find_word` | yes | yes | yes | yes | yes |

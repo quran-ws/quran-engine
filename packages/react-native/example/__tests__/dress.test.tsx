@@ -1,7 +1,7 @@
 /**
  * The dress surface of @quran.ws/qvp-react-native: the ornament set (loadOrnaments, ornamentList,
  * ornamentCount, ornamentInfo, ornamentPart, ornamentFind, freeOrnaments) and the page
- * (dress, undress, dressClamp, dressInfo, dressRevision), plus the `dress` prop. The native module is the
+ * (dress, undress, dressClamp, dressView, dressInfo, dressRevision), plus the `dress` prop. The native module is the
  * stand-in in jest/qvpModule.js, so this checks what the JavaScript side sends and reads back.
  * The engine's own answers are checked by the Android SDK's tests and crates/qvp-ffi/tests/abi.rs.
  */
@@ -38,6 +38,11 @@ beforeEach(() => {
   M.__answer('dressInfo', INFO);
   M.__answer('dressRevision', INFO.revision);
   M.__answer('dressClamp', (_: number, scale: number, ox: number, oy: number) => ({ scale, offsetX: Math.min(ox, 5), offsetY: oy }));
+  // the stand-in answers as the engine does for content 360 x 600 with overflow 12, 9, 12, 7
+  M.__answer('dressView', (_: number, scale: number, vw: number) => {
+    const [w, h] = [(360 + 12 + 12) * scale, (600 + 9 + 7) * scale];
+    return { view: { scale, offsetX: Math.max((vw - w) / 2, 0) + 12 * scale, offsetY: 9 * scale }, width: w, height: h };
+  });
 });
 
 test('an ornament set loads, lists, finds and groups by style', async () => {
@@ -83,6 +88,11 @@ test('dress sends indices, style names and colours the native side reads', async
   // the engine clamps the view over the content plus the overflow; the wrapper only passes it through
   expect(await Qvp.dressClamp(42, { scale: 2, offsetX: 40, offsetY: -9 }, 390, 700)).toEqual({ scale: 2, offsetX: 5, offsetY: -9 });
   expect(last('dressClamp')).toEqual([42, 2, 40, -9, 390, 700]);
+  // a host that scrolls the page: the size is content plus overflow, the border's top at 0
+  const shown = await Qvp.dressView(42, 1, 390);
+  expect(last('dressView')).toEqual([42, 1, 390]);
+  expect([shown.width, shown.height]).toEqual([360 + 12 + 12, 600 + 9 + 7]);
+  expect(shown.view.offsetY - shown.view.scale * 9).toBe(0);
   await Qvp.undress(42);
   expect(last('undress')).toEqual([42]);
 });
