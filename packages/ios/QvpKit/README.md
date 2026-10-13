@@ -147,9 +147,10 @@ through `onSwipe` instead of panning, so the host can flip pages; double-tap res
 ### Dress
 
 A page can wear another mushaf's ornaments: an ayah medallion, a surah band and a page
-border from an ornament set (`ornaments.qvo`). The engine places them. `QvpPageView` paints
-them behind the ink and caches the layer per dress revision. A dressed page is bigger than
-its text, so call `resetView()` after a dress to fit the border too.
+border from an ornament set (`ornaments.qvo`). The engine places them. `QvpPageView` and
+`QvpPageCanvas` paint them behind the ink and cache the layer per dress revision. A dressed
+page is bigger than its text, so call `resetView()` after a dress to fit the border too. A
+scroll stops at the border, not at the text.
 
 ```swift
 let set = try QvpOrnaments(path: pagesDir + "/ornaments.qvo")
@@ -161,7 +162,7 @@ page.undress()
 
 A kind left nil takes the `style`'s ornament. `.absent` leaves the kind as printed. A host
 that draws the layer itself reads `page.dressGeometry()`: one `CGPath` per draw, with the
-placement index it goes under. `QvpPageCanvas` does not draw the layer yet.
+placement index it goes under.
 
 ### QvpPageCanvas (SwiftUI, iOS 17+ / macOS 14+)
 

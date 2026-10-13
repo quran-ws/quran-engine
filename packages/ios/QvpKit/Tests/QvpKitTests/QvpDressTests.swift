@@ -1,6 +1,7 @@
 // Dress over the Swift wrapper: the same checks as `dress_over_the_abi` in
 // crates/qvp-ffi/tests/abi.rs. Data: <repo>/dist/pages/604.qvp.
 import XCTest
+import SwiftUI
 @testable import QvpKit
 
 final class QvpDressTests: XCTestCase {
@@ -119,4 +120,122 @@ final class QvpDressTests: XCTestCase {
         XCTAssertEqual(set.list.count, set.count)
         for o in set.list { XCTAssertEqual(set.find(o.kind, o.style)?.kind, o.kind) }
     }
+
+    // ── the renderers ──
+
+    static func page604() throws -> QvpPage {
+        let url = QvpKitTests.pages.appendingPathComponent("604.qvp")
+        guard let bytes = try? Data(contentsOf: url) else { throw XCTSkip("no page data at \(url.path); run scripts/sync-test-data.sh") }
+        return try QvpPage(bytes: bytes)
+    }
+    static let box = CGSize(width: 390, height: 700)
+    /// The fixture's border filled red, so a probe can tell it from the ink.
+    static func redBorder(_ set: QvpOrnaments) -> DressSpec {
+        DressSpec(style: "test", ayahMarkScale: 1, colors: [OrnamentColor(set.list[2], part: 0, color: 0xff0000ff)])
+    }
+
+    /// A frame of `c` drawn through the canvas's own drawing path, as RGBA bytes.
+    @available(macOS 14.0, iOS 17.0, *)
+    @MainActor static func render(_ c: QvpCanvasController) throws -> (pixels: [UInt8], width: Int, height: Int) {
+        let view = Canvas { ctx, size in c.draw(in: ctx, size: size, displayScale: 1) }
+            .frame(width: box.width, height: box.height)
+        let r = ImageRenderer(content: view)
+        r.scale = 1
+        let img = try XCTUnwrap(r.cgImage)
+        let w = img.width, h = img.height
+        var px = [UInt8](repeating: 0, count: w * h * 4)
+        let ctx = try XCTUnwrap(CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return (px, w, h)
+    }
+    static func redPixels(_ f: (pixels: [UInt8], width: Int, height: Int)) -> Int {
+        stride(from: 0, to: f.pixels.count, by: 4).filter { f.pixels[$0] > 200 && f.pixels[$0 + 1] < 60 && f.pixels[$0 + 2] < 60 && f.pixels[$0 + 3] > 200 }.count
+    }
+
+    /// QvpPageCanvas paints the ornament layer, fitted with its border, as QvpPageView does.
+    @MainActor func testCanvasDrawsTheDress() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let page = try Self.page604(); defer { page.close() }
+        let set = try QvpOrnaments(bytes: Self.ornamentBytes)
+        let c = QvpCanvasController()
+        c.page = page
+        c.setBounds(Self.box, fromCanvas: 1)
+        let bare = try Self.render(c)
+        XCTAssertNil(c.ornaments.last, "an undressed page has no ornament layer")
+        XCTAssertEqual(Self.redPixels(bare), 0)
+
+        XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
+        c.resetView()
+        let l = try XCTUnwrap(page.currentLayout)
+        let o = try XCTUnwrap(page.dressOverflow)
+        // the fit holds the border, not only the text
+        let s = c.viewScale
+        XCTAssertGreaterThanOrEqual(c.viewOy - o.top * s, -0.5)
+        XCTAssertLessThanOrEqual(c.viewOy + (CGFloat(l.contentH) + o.bottom) * s, Self.box.height + 0.5)
+        XCTAssertGreaterThanOrEqual(c.viewOx - o.left * s, -0.5)
+        XCTAssertLessThanOrEqual(c.viewOx + (CGFloat(l.contentW) + o.right) * s, Self.box.width + 0.5)
+
+        let dressed = try Self.render(c)
+        let layer = try XCTUnwrap(c.ornaments.last, "the canvas rasterised the ornament layer")
+        XCTAssertEqual(layer.width, Int(Self.box.width))
+        XCTAssertGreaterThan(Self.redPixels(dressed), 0, "the red border is on the canvas")
+        // a second frame takes the same raster
+        _ = try Self.render(c)
+        XCTAssertTrue(c.ornaments.last === layer, "one raster per dress revision and view")
+
+        page.undress(); c.resetView()
+        XCTAssertEqual(Self.redPixels(try Self.render(c)), 0, "undress takes the layer off")
+        XCTAssertNil(c.ornaments.last)
+    }
+
+    /// A reflowed, dressed page scrolls to the border's top and bottom, never past them and
+    /// never short of them. The clamp holds content plus overflow.
+    @MainActor func testCanvasScrollKeepsTheBorder() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let page = try Self.page604(); defer { page.close() }
+        let set = try QvpOrnaments(bytes: Self.ornamentBytes)
+        let c = QvpCanvasController()
+        c.page = page
+        c.setBounds(Self.box, fromCanvas: 1)
+        c.zoomToStep(c.zoomSteps.count)
+        let l = try XCTUnwrap(page.currentLayout)
+        XCTAssertTrue(l.reflowed)
+        XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
+        c.resetView()
+        let o = try XCTUnwrap(page.dressOverflow)
+        XCTAssertGreaterThan(o.top, 0)
+        XCTAssertGreaterThan(CGFloat(l.contentH) + o.top + o.bottom, Self.box.height, "the page scrolls")
+        XCTAssertEqual(c.viewOy, o.top * c.viewScale, accuracy: 0.5, "it opens at the border's top")
+
+        // towards the top, past the end
+        c.pan(CGSize(width: 0, height: 5000)); c.panEnded(.zero, velocity: .zero)
+        XCTAssertEqual(c.viewOy, o.top * c.viewScale, accuracy: 0.5, "the border's top stays on the screen")
+        // towards the bottom, past the end
+        c.pan(CGSize(width: 0, height: -100_000)); c.panEnded(.zero, velocity: .zero)
+        XCTAssertEqual(c.viewOy + (CGFloat(l.contentH) + o.bottom) * c.viewScale, Self.box.height, accuracy: 0.5, "and so does its bottom")
+    }
+
+    #if canImport(UIKit)
+    /// The same scroll through QvpPageView's `scroll(by:)`.
+    @MainActor func testPageViewScrollKeepsTheBorder() throws {
+        let page = try Self.page604(); defer { page.close() }
+        let set = try QvpOrnaments(bytes: Self.ornamentBytes)
+        let v = QvpPageView(frame: CGRect(origin: .zero, size: Self.box))
+        v.page = page
+        v.zoomToStep(v.zoomSteps.count)
+        let l = try XCTUnwrap(page.currentLayout)
+        XCTAssertTrue(l.reflowed)
+        XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
+        v.resetView()
+        let o = try XCTUnwrap(page.dressOverflow)
+        XCTAssertGreaterThan(CGFloat(l.contentH) + o.top + o.bottom, Self.box.height, "the page scrolls")
+        XCTAssertEqual(v.viewOy, o.top * v.viewScale, accuracy: 0.5, "it opens at the border's top")
+        v.scroll(by: 5000)
+        XCTAssertGreaterThanOrEqual(v.viewOy, o.top * v.viewScale - 0.5, "the border's top stays on the screen")
+        XCTAssertEqual(v.viewOy, o.top * v.viewScale, accuracy: 0.5)
+        v.scroll(by: -100_000)
+        XCTAssertEqual(v.viewOy + (CGFloat(l.contentH) + o.bottom) * v.viewScale, Self.box.height, accuracy: 0.5, "and so does its bottom")
+    }
+    #endif
 }

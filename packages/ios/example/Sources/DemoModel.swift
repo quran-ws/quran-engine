@@ -75,6 +75,8 @@ final class DemoModel: ObservableObject {
     @Published var dressLineArt: Set<OrnamentKind> = [] { didSet { if dressLineArt != oldValue { dressColors = []; applyDress() } } }
     @Published var dressColors: [OrnamentColor] = [] { didSet { if dressColors != oldValue { applyDress() } } }
     @Published var dressReadout = ""
+    /// True while one pick sets several of the knobs above: the dress is applied once, after.
+    private var dressBatching = false
 
     private var loadMs = 0.0, pageBytes = 0
     private var selWordIdx = -1, selAyah: (Int, Int)?
@@ -310,10 +312,12 @@ final class DemoModel: ObservableObject {
         set {
             guard newValue != "mixed", let set = ornaments else { return }
             let s = set.styles().first { $0.style == newValue }
-            dressAyahMark = s?.ayahMark?.index ?? -1
-            dressSurahHeader = s?.surahHeader?.index ?? -1
-            dressPageFrame = s?.pageFrame?.index ?? -1
-            dressColors = []; dressMarkScale = 0
+            batchDress {
+                dressAyahMark = s?.ayahMark?.index ?? -1
+                dressSurahHeader = s?.surahHeader?.index ?? -1
+                dressPageFrame = s?.pageFrame?.index ?? -1
+                dressColors = []; dressMarkScale = 0
+            }
             objectWillChange.send()
         }
     }
@@ -334,9 +338,16 @@ final class DemoModel: ObservableObject {
     func setDressColor(_ o: Ornament, _ part: OrnamentPart, _ rgba: UInt32) {
         dressColors = dressColors.filter { !($0.ornament == o.index && $0.part == part.index) } + [OrnamentColor(o, part: part.index, color: rgba)]
     }
-    func undress() { dressAyahMark = -1; dressSurahHeader = -1; dressPageFrame = -1; dressColors = [] }
+    func undress() { batchDress { dressAyahMark = -1; dressSurahHeader = -1; dressPageFrame = -1; dressColors = [] } }
+    /// Set several dress knobs and dress the page once, not once per knob.
+    private func batchDress(_ body: () -> Void) {
+        dressBatching = true
+        body()
+        dressBatching = false
+        applyDress()
+    }
     private func applyDress() {
-        guard let p = page else { return }
+        guard !dressBatching, let p = page else { return }
         let none = dressAyahMark < 0 && dressSurahHeader < 0 && dressPageFrame < 0
         if ornaments == nil || none {
             p.undress()

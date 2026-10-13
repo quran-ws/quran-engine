@@ -266,3 +266,101 @@ extension QvpPage {
         return out
     }
 }
+
+// ── what both renderers share: the raster, the fit and the clamp of a dressed page ──
+
+/// How far a dress's border reaches past the laid-out content, in layout px.
+struct DressOverflow: Equatable {
+    let left: CGFloat, top: CGFloat, right: CGFloat, bottom: CGFloat
+}
+
+extension QvpPage {
+    /// The dress overflow of the layout in hand, or nil when the page is not dressed.
+    var dressOverflow: DressOverflow? {
+        guard isOpen, let o = dressInfo()?.overflow, o.count == 4 else { return nil }
+        return DressOverflow(left: CGFloat(o[0]), top: CGFloat(o[1]), right: CGFloat(o[2]), bottom: CGFloat(o[3]))
+    }
+
+    /// The view that shows a dressed page whole: content plus the overflow, so the border is
+    /// not cropped. A page that scrolls stays at scale 1 and opens at the border's top. The
+    /// same rule as `fit()` in the web example.
+    func dressedFit(_ l: QvpLayout, _ o: DressOverflow, viewport: CGSize, scrolls: Bool) -> QvpZoomSpring.ViewTransform {
+        let w = CGFloat(l.contentW) + o.left + o.right, h = CGFloat(l.contentH) + o.top + o.bottom
+        if scrolls { return (1, (viewport.width - w) / 2 + o.left, o.top) }
+        let s = min(1, viewport.height / max(h, 1), viewport.width / max(w, 1))
+        return (s, (viewport.width - w * s) / 2 + o.left * s, (viewport.height - h * s) / 2 + o.top * s)
+    }
+
+    /// `viewClamp` for the page in hand. On a dressed page the border is content too: the
+    /// engine clamps the box that holds content and overflow, and the view is read back from
+    /// that box. So a scroll never pushes the border's top or bottom off the screen.
+    func viewClampDressed(_ v: QvpView, _ l: QvpLayout, viewportW: Float, viewportH: Float) -> QvpView {
+        guard let o = dressOverflow else {
+            return viewClamp(v, contentW: l.contentW, contentH: l.contentH, viewportW: viewportW, viewportH: viewportH)
+        }
+        let left = Float(o.left), top = Float(o.top)
+        let box = viewClamp(QvpView(scale: v.scale, offsetX: v.offsetX - left * v.scale, offsetY: v.offsetY - top * v.scale),
+                            contentW: l.contentW + left + Float(o.right), contentH: l.contentH + top + Float(o.bottom),
+                            viewportW: viewportW, viewportH: viewportH)
+        return QvpView(scale: box.scale, offsetX: box.offsetX + left * box.scale, offsetY: box.offsetY + top * box.scale)
+    }
+
+    /// The ornament layer as a bitmap of `width` × `height` pixels, y-down like the ink bitmap.
+    /// `transform` is the renderer's own page-to-band transform for one placement: each draw
+    /// goes under the placement its page ink goes under, and the border goes under the
+    /// identity placement. Strokes take their width with round caps and joins. Fills take the
+    /// even-odd rule when flagged.
+    func rasterizeOrnaments(width W: Int, height H: Int, scale: CGFloat,
+                            transform: (QvpPlacement) -> CGAffineTransform) -> CGImage? {
+        let draws = dressGeometry()
+        guard W > 0, H > 0, !draws.isEmpty,
+              let oc = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return nil }
+        // flip to y-down page space so `makeImage()` comes out upright
+        oc.translateBy(x: 0, y: CGFloat(H)); oc.scaleBy(x: scale, y: -scale)
+        oc.setAllowsAntialiasing(true); oc.setShouldAntialias(true)
+        oc.setLineCap(.round); oc.setLineJoin(.round)
+        let places = layoutPlacements()
+        var cur: Int?? = .none
+        for d in draws {
+            if cur != .some(d.placement) {
+                if cur != nil { oc.restoreGState() }
+                oc.saveGState()
+                oc.concatenate(transform(d.placement.map { $0 < places.count ? places[$0] : .identity } ?? .identity))
+                cur = .some(d.placement)
+            }
+            oc.addPath(d.path)
+            if d.stroke {
+                oc.setStrokeColor(QvpColor.cgColor(d.color)); oc.setLineWidth(CGFloat(d.strokeWidth)); oc.strokePath()
+            } else {
+                oc.setFillColor(QvpColor.cgColor(d.color)); oc.fillPath(using: d.evenOdd ? .evenOdd : .winding)
+            }
+        }
+        if cur != nil { oc.restoreGState() }
+        return oc.makeImage()
+    }
+}
+
+/// The ornament layer of one page, rasterised once per dress revision, view transform and
+/// band. A tiled border is hundreds of outlines and nothing in it moves while a highlight
+/// animates, so a frame that draws the ink again takes this image as it is. One image per
+/// slot: a page drawn as a stack of canvases keeps one per canvas.
+final class QvpOrnamentRaster {
+    private var slots: [Int: (key: String, image: CGImage)] = [:]
+    /// The last image this cache handed out, for tests and a HUD.
+    private(set) var last: CGImage?
+    func clear() { slots.removeAll(); last = nil }
+    /// The layer of `p` for one band, or nil when the page is not dressed. `key` says where the
+    /// band is and at what view transform. The page, its dress revision and the pixel size
+    /// are added here.
+    func image(_ p: QvpPage, slot: Int = 0, key: String, width W: Int, height H: Int, scale: CGFloat,
+               transform: (QvpPlacement) -> CGAffineTransform) -> CGImage? {
+        guard p.isOpen, let dress = p.dressInfo() else { slots[slot] = nil; last = nil; return nil }
+        let k = "\(ObjectIdentifier(p))|\(dress.revision)|\(key)|\(W)x\(H)|\(scale)"
+        if let e = slots[slot], e.key == k { last = e.image; return e.image }
+        guard let image = p.rasterizeOrnaments(width: W, height: H, scale: scale, transform: transform) else { slots[slot] = nil; return nil }
+        slots[slot] = (k, image); last = image
+        return image
+    }
+}

@@ -1,5 +1,6 @@
 // SwiftUI renderer for a `QvpPage` — the same frame as QvpPageView (UIKit), drawn with
-// `Canvas`: highlight bands → cached base ink (a CGImage of every non-styled path at the
+// `Canvas`: paper → a dress's ornament layer (a CGImage cached per dress revision, view
+// transform and band, shared with QvpPageView) → highlight bands → cached base ink (a CGImage of every non-styled path at the
 // current per-line transform, rebuilt only when the styled set / layout / transform changes)
 // → styled ink from `styledPaths()` → mask boxes. A `TimelineView(.animation)` runs frames only
 // while `page.tick(now)` reports a transition in flight.
@@ -13,6 +14,10 @@
 // engine layout, with a horizontal swipe at the fitted size reported through `onSwipe`.
 // When the page is not zoomed and `onSwipe` is nil the drag gesture is detached entirely,
 // so an enclosing pager (`TabView`, `ScrollView`) keeps its own swipe.
+//
+// After `page.dress(...)` or `page.undress()`, call `resetView()`: a dressed page is fitted
+// with its border. A host that scrolls the page itself (`hostScrolls`) sizes the canvas to
+// `contentH` plus the top and bottom of `page.dressInfo()?.overflow`.
 #if canImport(SwiftUI)
 import SwiftUI
 import CoreGraphics
@@ -26,7 +31,7 @@ import UIKit
 @MainActor @Observable
 public final class QvpCanvasController {
     public var page: QvpPage? {
-        didSet { cache.clear(); selectionHandle = 0; relayout(); resetView(); applyPendingCarry() }
+        didSet { cache.clear(); ornaments.clear(); selectionHandle = 0; relayout(); resetView(); applyPendingCarry() }
     }
     // layout knobs (viewport size comes from the canvas)
     public var padTop: CGFloat = 0 { didSet { relayout() } }
@@ -219,6 +224,8 @@ public final class QvpCanvasController {
     private(set) var revision = 0
     /// Cached base-ink layer. A plain class so draw-time rebuilds don't re-enter observation.
     @ObservationIgnored private let cache = BaseCache()
+    /// The dress's ornament layer, one image per slot like `cache`.
+    @ObservationIgnored let ornaments = QvpOrnamentRaster()
     @ObservationIgnored private var bounds = CGSize.zero
     /// Creation order of the newest canvas that reported a size (see `setBounds`).
     @ObservationIgnored private var newestCanvas = 0
@@ -392,6 +399,12 @@ public final class QvpCanvasController {
     /// The transform `resetView()` applies: content height fitted, centred.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
+        // A dressed page is bigger than its text: the border stands past the content, and the
+        // engine says how far on each side. The view fits content plus that overflow, the way
+        // QvpPageView does. A page that scrolls opens at the border's top.
+        if let l, let p = page, let o = p.dressOverflow {
+            return p.dressedFit(l, o, viewport: bounds, scrolls: l.reflowed || hostScrolls)
+        }
         // A reflowed page is taller than the screen on purpose: fitting its height would undo
         // the size the reader asked for. It opens at its top and the reader scrolls. So does
         // any page a host scrolls itself: a printed page too tall for the box is what that
@@ -600,7 +613,8 @@ public final class QvpCanvasController {
         viewOy += translation.height - lastDrag.height
         lastDrag = translation
         if isReflowed, let l = page?.currentLayout, let p = page {
-            let v = p.viewClamp(currentView, contentW: l.contentW, contentH: l.contentH, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
+            // a dressed page holds its border on the screen too, not only its text
+            let v = p.viewClampDressed(currentView, l, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
             viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
         }
         invalidate()
@@ -669,6 +683,14 @@ public final class QvpCanvasController {
         if let paper = paperColor {
             ctx.fill(Path(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale)),
                      with: .color(color(paper)))
+        }
+        // the ornament layer, behind everything but the paper, under the ink's own transform
+        if W > 0, bandPx > 0,
+           let layer = ornaments.image(p, slot: slot, key: "\(viewScale)|\(viewOx)|\(top)", width: W, height: bandPx, scale: displayScale,
+                                       transform: { self.transform($0, offsetY: -top) }) {
+            ctx.draw(Image(decorative: layer, scale: displayScale),
+                     in: CGRect(x: 0, y: viewOy + top,
+                                width: CGFloat(layer.width) / displayScale, height: CGFloat(layer.height) / displayScale))
         }
         let bands = inputs.bands
         drawBoxes(ctx, bands)
