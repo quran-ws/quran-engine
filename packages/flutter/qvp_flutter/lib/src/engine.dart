@@ -1,4 +1,4 @@
-// QvpEngine / QvpPage / QvpAtlas — the Dart mirror of web/qvp.js over the C
+// QvpEngine / QvpPage / QvpAtlas / QvpOrnaments — the Dart mirror of web/qvp.js over the C
 // ABI in crates/qvp-ffi/include/qvp.h.
 //
 // Everything that decides (hit-testing, layout, style resolution, highlights,
@@ -10,7 +10,7 @@ import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' show Color, Rect;
+import 'dart:ui' show Color, Path, PathFillType, Rect;
 
 import 'package:ffi/ffi.dart' as pffi;
 import 'package:flutter/foundation.dart';
@@ -727,6 +727,254 @@ final class QvpAtlasRubuAlHizb {
 /// One entry of [QvpPage.styled].
 typedef QvpStyledPath = ({int path, int color});
 
+// ───────────── dress: another mushaf's ornaments ─────────────
+
+/// What an ornament replaces. The order is `QVP_ORNAMENT_*`.
+enum QvpOrnamentKind {
+  /// The medallion that closes an ayah.
+  ayahMark,
+
+  /// The band that carries a surah's name.
+  surahHeader,
+
+  /// The border around the page.
+  pageFrame,
+}
+
+/// Where an ornament's artwork came from. The order is `QVP_LINEAGE_*`.
+enum QvpLineage {
+  /// A printed mushaf, traced from a scan.
+  scan,
+
+  /// A font.
+  font,
+}
+
+/// What an ornament may be redistributed under. Read it before you publish a page wearing it.
+@immutable
+final class QvpOrnamentLicence {
+  const QvpOrnamentLicence({required this.id, required this.status, required this.redistributable, required this.attribution});
+
+  /// An SPDX id, or empty when the source does not state one.
+  final String id;
+
+  /// How sure the catalogue is of [id].
+  final String status;
+  final bool redistributable;
+  final String attribution;
+}
+
+/// One printed colour of an ornament's design. A part with alpha 0 is a window the design
+/// leaves open (its slot).
+@immutable
+final class QvpOrnamentPart {
+  const QvpOrnamentPart({required this.index, required this.color, required this.stroke, required this.name});
+  final int index;
+
+  /// 0xRRGGBBAA.
+  final int color;
+
+  /// True for a line-art part, drawn as constant-width strokes.
+  final bool stroke;
+  final String name;
+}
+
+/// One ornament of a [QvpOrnaments] set.
+@immutable
+final class QvpOrnament {
+  const QvpOrnament({
+    required this.index,
+    required this.kind,
+    required this.lineage,
+    required this.style,
+    required this.riwayah,
+    required this.hasSlices,
+    required this.licence,
+    required this.parts,
+  });
+
+  /// Its index in the set, which is what [QvpDressInfo] reports.
+  final int index;
+  final QvpOrnamentKind kind;
+  final QvpLineage lineage;
+
+  /// The mushaf or font it comes from.
+  final String style;
+  final String riwayah;
+
+  /// True when a border can be tiled along the edges. Without slices it keeps its printed
+  /// proportions.
+  final bool hasSlices;
+  final QvpOrnamentLicence licence;
+
+  /// The design's printed palette, one entry per colour.
+  final List<QvpOrnamentPart> parts;
+}
+
+/// A style of a [QvpOrnaments] set, with the ornament it has of each kind or null.
+@immutable
+final class QvpOrnamentStyle {
+  const QvpOrnamentStyle({required this.style, required this.riwayah, required this.lineage, this.ayahMark, this.surahHeader, this.pageFrame});
+  final String style, riwayah;
+  final QvpLineage lineage;
+  final QvpOrnament? ayahMark, surahHeader, pageFrame;
+
+  /// The ornament of [kind], or null.
+  QvpOrnament? of(QvpOrnamentKind kind) => switch (kind) {
+        QvpOrnamentKind.ayahMark => ayahMark,
+        QvpOrnamentKind.surahHeader => surahHeader,
+        QvpOrnamentKind.pageFrame => pageFrame,
+      };
+
+  /// True when the style has all three kinds, so it can dress a page on its own.
+  bool get isComplete => ayahMark != null && surahHeader != null && pageFrame != null;
+}
+
+/// What [QvpPage.dress] puts on the page. [style] names a mushaf and takes its medallion,
+/// band and border together. Each of [ayahMark], [surahHeader] and [pageFrame] is a
+/// [QvpOrnament], its index, or a style name, and overrides [style] for that kind. Lengths are
+/// page units.
+@immutable
+final class QvpDressSpec {
+  const QvpDressSpec({
+    this.style,
+    this.ayahMark,
+    this.surahHeader,
+    this.pageFrame,
+    this.gap = 5,
+    this.bandGap = 5,
+    this.ayahMarkScale = 0,
+    this.pageFrameScale = 1,
+    this.lineArt = const {},
+    this.colors = const [],
+  });
+
+  /// A mushaf whose three ornaments are taken together.
+  final String? style;
+
+  /// A [QvpOrnament], its index or a style name. Null takes [style].
+  final Object? ayahMark, surahHeader, pageFrame;
+
+  /// The air between the text and the border.
+  final double gap;
+
+  /// The air between a band and the border.
+  final double bandGap;
+
+  /// The medallion's size against the printed ring. 0 takes the design's own:
+  /// [QvpDefaults.ayahMarkScaleScan] for a scanned mushaf and 1 for a font marker.
+  final double ayahMarkScale;
+
+  /// The border's size against the design's own. The pattern scales as a whole, so a bigger
+  /// border fits fewer motifs along each edge. Nothing is stretched.
+  final double pageFrameScale;
+
+  /// The kinds drawn as line art, their constant-width strokes alone. Pass
+  /// `QvpOrnamentKind.values.toSet()` for all of them.
+  final Set<QvpOrnamentKind> lineArt;
+
+  /// Repaints: `(ornament, part, colour)`. The ornament is a [QvpOrnament] or its index, and the
+  /// colour is anything [rgba] takes. A part left out keeps the design's own colour.
+  final List<(Object, int, Object)> colors;
+
+  QvpDressSpec copyWith({
+    Object? ayahMark = _keep,
+    Object? surahHeader = _keep,
+    Object? pageFrame = _keep,
+    double? gap,
+    double? bandGap,
+    double? ayahMarkScale,
+    double? pageFrameScale,
+    Set<QvpOrnamentKind>? lineArt,
+    List<(Object, int, Object)>? colors,
+  }) =>
+      QvpDressSpec(
+        style: style,
+        ayahMark: identical(ayahMark, _keep) ? this.ayahMark : ayahMark,
+        surahHeader: identical(surahHeader, _keep) ? this.surahHeader : surahHeader,
+        pageFrame: identical(pageFrame, _keep) ? this.pageFrame : pageFrame,
+        gap: gap ?? this.gap,
+        bandGap: bandGap ?? this.bandGap,
+        ayahMarkScale: ayahMarkScale ?? this.ayahMarkScale,
+        pageFrameScale: pageFrameScale ?? this.pageFrameScale,
+        lineArt: lineArt ?? this.lineArt,
+        colors: colors ?? this.colors,
+      );
+
+  static const Object _keep = Object();
+}
+
+/// The readout of a dressed page.
+@immutable
+final class QvpDressInfo {
+  const QvpDressInfo({
+    required this.ayahMark,
+    required this.surahHeader,
+    required this.pageFrame,
+    required this.ayahMarks,
+    required this.surahHeaders,
+    required this.frameRepeats,
+    required this.frameStretched,
+    required this.draws,
+    required this.revision,
+    required this.viewBox,
+    required this.overflow,
+  });
+
+  /// The ornament index of each kind on the page, or null.
+  final int? ayahMark, surahHeader, pageFrame;
+
+  /// How many medallions and bands were placed.
+  final int ayahMarks, surahHeaders;
+
+  /// How many times the border's repeat was tiled. 0 when it is stretched.
+  final int frameRepeats;
+
+  /// True when the border has no slices and is stretched whole.
+  final bool frameStretched;
+
+  /// How many entries [QvpPage.dressGeometry] holds.
+  final int draws;
+
+  /// Counts up on every rebuild: a new dress, and every layout. Key an ornament raster on it.
+  final int revision;
+
+  /// `x, y, w, h` in page units. A border grows it.
+  final List<double> viewBox;
+
+  /// `left, top, right, bottom` in viewport px: how far the border reaches past the laid-out
+  /// content. Fit content plus overflow, or the border is cropped off.
+  final List<double> overflow;
+}
+
+/// One entry of the ornament display list, in page units. Paint it behind the page ink.
+@immutable
+final class QvpDressDraw {
+  const QvpDressDraw({required this.path, required this.color, required this.kind, required this.evenOdd, required this.stroke, required this.strokeWidth, required this.part, required this.placement});
+
+  /// The outline, with the fill rule already set.
+  final Path path;
+
+  /// 0xRRGGBBAA.
+  final int color;
+  final QvpOrnamentKind kind;
+  final bool evenOdd;
+
+  /// True to stroke the path with [strokeWidth], round caps and round joins. False to fill it.
+  final bool stroke;
+
+  /// Page units.
+  final double strokeWidth;
+
+  /// The part of the ornament's palette it draws.
+  final int part;
+
+  /// The index into [QvpPage.layoutPlacements] to draw it under, as a page draw. Null for the
+  /// border, which is drawn in layout space.
+  final int? placement;
+}
+
+
 // ───────────── engine ─────────────
 
 /// A loaded `libqvp_ffi`. Holds the scratch memory every page shares; not thread-safe (use from one isolate).
@@ -870,6 +1118,13 @@ class QvpEngine {
     final h = withBytes(bytes, (p, n) => b.atlasLoad(p, n));
     if (h == ffi.nullptr) throw const FormatException('qvp_atlas_load failed');
     return QvpAtlas._(this, h);
+  }
+
+  /// Decodes an ornament set (`ornaments.qvo`). The engine copies the bytes. Throws on a bad file.
+  QvpOrnaments loadOrnaments(Uint8List bytes) {
+    final h = withBytes(bytes, (p, n) => b.ornamentsLoad(p, n));
+    if (h == ffi.nullptr) throw const FormatException('qvp_ornaments_load failed');
+    return QvpOrnaments._(this, h);
   }
 
   /// Scales [view] by [factor] about a point in viewport px and holds the scale between [min]
@@ -1985,6 +2240,165 @@ class QvpPage extends ChangeNotifier {
     _touch();
   }
 
+  // ── dress: another mushaf's ornaments ──
+
+  QvpDressSpec? _dressSpec;
+  List<QvpDressDraw>? _dressDraws;
+  int _dressDrawsRevision = -1;
+
+  /// The spec the page is dressed with, or null. A view refits when it changes.
+  QvpDressSpec? get dressSpec => _dressSpec;
+
+  /// Puts other ornaments on the page, up to one per kind, and returns the readout. Returns
+  /// null when the engine refuses the spec: an index out of range, an ornament of another
+  /// kind, or nothing to dress. Replaces any previous dress. The printed rings and bands under
+  /// the new ornaments are hidden.
+  QvpDressInfo? dress(QvpOrnaments set, [QvpDressSpec spec = const QvpDressSpec()]) {
+    // Resolve every name before the struct is written.
+    int index(Object? v, QvpOrnamentKind kind) {
+      final o = v ?? spec.style;
+      if (o == null) return qvpNone;
+      if (o is int) return o;
+      if (o is QvpOrnament) return o.index;
+      return set.find(kind, o as String)?.index ?? qvpNone;
+    }
+
+    final ayahMark = index(spec.ayahMark, QvpOrnamentKind.ayahMark);
+    final surahHeader = index(spec.surahHeader, QvpOrnamentKind.surahHeader);
+    final pageFrame = index(spec.pageFrame, QvpOrnamentKind.pageFrame);
+    final triples = <int>[
+      for (final (o, part, colour) in spec.colors) ...[o is QvpOrnament ? o.index : o as int, part, rgba(colour)],
+    ];
+    var lineArt = 0;
+    for (final k in spec.lineArt) {
+      lineArt |= 1 << k.index;
+    }
+    final c = pffi.calloc<QvpDressSpecC>();
+    try {
+      return _e.withU32(triples, (cp, n) {
+        final r = c.ref;
+        r.ayahMark = ayahMark;
+        r.surahHeader = surahHeader;
+        r.pageFrame = pageFrame;
+        r.gap = spec.gap;
+        r.bandGap = spec.bandGap;
+        r.ayahMarkScale = spec.ayahMarkScale;
+        r.pageFrameScale = spec.pageFrameScale;
+        r.lineArt = lineArt;
+        r.colors = n == 0 ? ffi.nullptr : cp;
+        r.nColors = n ~/ 3;
+        _dressDraws = null;
+        final ok = _b.dress(_p, set._s, c) != 0;
+        _dressSpec = ok ? spec : null;
+        _touch();
+        return ok ? dressInfo() : null;
+      });
+    } finally {
+      pffi.calloc.free(c);
+    }
+  }
+
+  /// Takes the ornaments off. The printed rings and bands come back.
+  void undress() {
+    _b.undress(_p);
+    _dressSpec = null;
+    _dressDraws = null;
+    _touch();
+  }
+
+  /// The readout, or null when the page is not dressed.
+  QvpDressInfo? dressInfo() {
+    final o = pffi.calloc<QvpDressInfoC>();
+    try {
+      if (_b.dressInfo(_p, o) == 0) return null;
+      final i = o.ref;
+      int? id(int v) => v == qvpNone ? null : v;
+      return QvpDressInfo(
+        ayahMark: id(i.ayahMark),
+        surahHeader: id(i.surahHeader),
+        pageFrame: id(i.pageFrame),
+        ayahMarks: i.nAyahMarks,
+        surahHeaders: i.nSurahHeaders,
+        frameRepeats: i.nFrameRepeats,
+        frameStretched: i.frameStretched != 0,
+        draws: i.nDraws,
+        revision: i.revision,
+        viewBox: List<double>.generate(4, (k) => i.viewBox[k], growable: false),
+        overflow: List<double>.generate(4, (k) => i.overflow[k], growable: false),
+      );
+    } finally {
+      pffi.calloc.free(o);
+    }
+  }
+
+  /// Counts up whenever the ornament layer is rebuilt: a new dress, or a layout. 0 when the
+  /// page is not dressed.
+  int dressRevision() => dressInfo()?.revision ?? 0;
+
+  /// The ornament display list in page units. Paint it behind the page ink, each draw under
+  /// its [QvpDressDraw.placement] the way a page draw is placed. Kept until the revision
+  /// changes.
+  List<QvpDressDraw> dressGeometry() {
+    final rev = dressRevision();
+    final kept = _dressDraws;
+    if (kept != null && _dressDrawsRevision == rev) return kept;
+    final g = pffi.calloc<QvpDressGeometryC>();
+    try {
+      _b.dressGeometry(_p, g);
+      final r = g.ref;
+      final n = r.nDraws;
+      if (n == 0 || r.table == ffi.nullptr) {
+        _dressDrawsRevision = rev;
+        return _dressDraws = const [];
+      }
+      // Copied at once: the engine's buffers last until the next dress, undress or layout.
+      final ops = Uint8List.fromList(r.ops.asTypedList(r.opsLen));
+      final pts = Float32List.fromList(r.pts.asTypedList(r.ptsLen));
+      final t = Uint32List.fromList(r.table.asTypedList(n * 9));
+      final tf = t.buffer.asFloat32List();
+      final out = List<QvpDressDraw>.generate(n, (i) {
+        final flags = t[i * 9 + 5], placement = t[i * 9 + 8];
+        final evenOdd = flags & 0x100 != 0;
+        final path = Path()..fillType = evenOdd ? PathFillType.evenOdd : PathFillType.nonZero;
+        var o = t[i * 9];
+        final oe = o + t[i * 9 + 1];
+        var k = t[i * 9 + 2];
+        for (; o < oe; o++) {
+          switch (ops[o]) {
+            case QvpOp.moveTo:
+              path.moveTo(pts[k], pts[k + 1]);
+              k += 2;
+            case QvpOp.lineTo:
+              path.lineTo(pts[k], pts[k + 1]);
+              k += 2;
+            case QvpOp.quadTo:
+              path.quadraticBezierTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3]);
+              k += 4;
+            case QvpOp.cubicTo:
+              path.cubicTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3], pts[k + 4], pts[k + 5]);
+              k += 6;
+            case QvpOp.close:
+              path.close();
+          }
+        }
+        return QvpDressDraw(
+          path: path,
+          color: t[i * 9 + 4],
+          kind: QvpOrnamentKind.values[(flags & 0xff).clamp(0, 2)],
+          evenOdd: evenOdd,
+          stroke: flags & 0x200 != 0,
+          strokeWidth: tf[i * 9 + 6],
+          part: t[i * 9 + 7],
+          placement: placement == qvpNone ? null : placement,
+        );
+      }, growable: false);
+      _dressDrawsRevision = rev;
+      return _dressDraws = out;
+    } finally {
+      pffi.calloc.free(g);
+    }
+  }
+
   // ── crop ──
   QvpCropBounds? cropBounds(Object target, {double pad = QvpDefaults.cropPad, bool keepAyahMarks = true}) {
     final ok = _t(target, (t) => _b.cropBounds(_p, t, pad, keepAyahMarks ? 1 : 0, _e._crop));
@@ -2115,6 +2529,107 @@ class QvpAtlas {
   String json() {
     _b.atlasJson(_a, engine._str);
     return engine._s();
+  }
+}
+
+// ───────────── ornaments ─────────────
+
+/// The ornaments of other mushafs and fonts, from `ornaments.qvo`. None of these outlines is
+/// part of a QVP page. Each ornament says what it may be redistributed under: read
+/// [QvpOrnament.licence] before you publish a page wearing it. Free it after the pages
+/// dressed with it.
+class QvpOrnaments {
+  QvpOrnaments._(this.engine, this._h) {
+    count = _b.ornamentCount(_h);
+    list = List<QvpOrnament>.generate(count, _ornament, growable: false);
+  }
+
+  final QvpEngine engine;
+  ffi.Pointer<QvpOrnamentsC> _h;
+  QvpBindings get _b => engine.b;
+
+  ffi.Pointer<QvpOrnamentsC> get _s {
+    assert(_h != ffi.nullptr, 'QvpOrnaments used after dispose()');
+    return _h;
+  }
+
+  /// How many ornaments the set holds.
+  late final int count;
+
+  /// Every ornament of the set, in its order.
+  late final List<QvpOrnament> list;
+
+  bool get isDisposed => _h == ffi.nullptr;
+
+  void free() {
+    if (_h != ffi.nullptr) {
+      _b.ornamentsFree(_h);
+      _h = ffi.nullptr;
+    }
+  }
+
+  void dispose() => free();
+
+  QvpOrnament _ornament(int i) {
+    final o = pffi.calloc<QvpOrnamentC>();
+    final p = pffi.calloc<QvpOrnamentPartC>();
+    try {
+      if (_b.ornamentInfo(_s, i, o) == 0) throw StateError('qvp_ornament_info($i) failed');
+      final r = o.ref;
+      final parts = <QvpOrnamentPart>[];
+      for (var k = 0; k < r.nParts; k++) {
+        if (_b.ornamentPart(_s, i, k, p) == 0) continue;
+        parts.add(QvpOrnamentPart(index: k, color: p.ref.color, stroke: p.ref.stroke != 0, name: QvpEngine.str(p.ref.name)));
+      }
+      return QvpOrnament(
+        index: i,
+        kind: QvpOrnamentKind.values[r.kind.clamp(0, 2)],
+        lineage: QvpLineage.values[r.lineage.clamp(0, 1)],
+        style: QvpEngine.str(r.style),
+        riwayah: QvpEngine.str(r.riwayah),
+        hasSlices: r.hasSlices != 0,
+        licence: QvpOrnamentLicence(id: QvpEngine.str(r.licenseId), status: QvpEngine.str(r.licenseStatus), redistributable: r.redistributable != 0, attribution: QvpEngine.str(r.attribution)),
+        parts: List.unmodifiable(parts),
+      );
+    } finally {
+      pffi.calloc.free(o);
+      pffi.calloc.free(p);
+    }
+  }
+
+  /// The ornament of [kind] in [style], or null.
+  QvpOrnament? find(QvpOrnamentKind kind, String style) {
+    final i = engine.withString(style, (p, n) => _b.ornamentFind(_s, kind.index, p, n));
+    return i < 0 || i >= list.length ? null : list[i];
+  }
+
+  /// The ornaments of one kind.
+  List<QvpOrnament> ofKind(QvpOrnamentKind kind) => [for (final o in list) if (o.kind == kind) o];
+
+  /// Every style in the set, in the set's order, with the ornament it has of each kind.
+  List<QvpOrnamentStyle> styles() {
+    final order = <String>[];
+    final byStyle = <String, Map<QvpOrnamentKind, QvpOrnament>>{};
+    final first = <String, QvpOrnament>{};
+    for (final o in list) {
+      if (!byStyle.containsKey(o.style)) {
+        order.add(o.style);
+        byStyle[o.style] = {};
+        first[o.style] = o;
+      }
+      byStyle[o.style]![o.kind] = o;
+    }
+    return [
+      for (final s in order)
+        QvpOrnamentStyle(
+          style: s,
+          riwayah: first[s]!.riwayah,
+          lineage: first[s]!.lineage,
+          ayahMark: byStyle[s]![QvpOrnamentKind.ayahMark],
+          surahHeader: byStyle[s]![QvpOrnamentKind.surahHeader],
+          pageFrame: byStyle[s]![QvpOrnamentKind.pageFrame],
+        ),
+    ];
   }
 }
 

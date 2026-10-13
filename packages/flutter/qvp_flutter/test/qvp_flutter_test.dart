@@ -6,7 +6,9 @@
 // (`cargo run -p qvp-convert --release -- batch pages dist/pages`).
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvp_flutter/qvp_flutter.dart';
 
@@ -477,5 +479,132 @@ void main() {
       p.dispose();
     }
     expect(() => QvpPassage.load([two], 2, 1), throwsStateError);
+  });
+
+  // A three-ornament set, one of each kind in the style "test": `ornament_bytes()` in
+  // crates/qvp-ffi/tests/abi.rs, encoded by the engine's own encoder. Each asset is a filled
+  // box (part c1) and a stroked box (part line).
+  Uint8List testOrnaments() => base64Decode(
+    'UVZPMegDAwABBHRlc3QOSGFmcyAnYW4gJ0FzaW0PQ0MtQlktTkMtU0EtNC4wC3Byb3Zpc2lvbmFsAAZhIHRlc3QCAmMx/5tkAAAE'
+    'bGluZf9BNjABAAAAAAAAAAAAAKBCAADIQgEAAKBBAACgQQAAIEIAAHBCAAIAAQAEdGVzdA5IYWZzICdhbiAnQXNpbQ9DQy1CWS1O'
+    'Qy1TQS00LjALcHJvdmlzaW9uYWwABmEgdGVzdAICYzH/m2QAAARsaW5l/0E2MAEAAAAAAAAAAAAASEQAAMhCAQAAyEIAACBBAAAW'
+    'RAAAoEICAgACAAR0ZXN0DkhhZnMgJ2FuICdBc2ltD0NDLUJZLU5DLVNBLTQuMAtwcm92aXNpb25hbAAGYSB0ZXN0AgJjMf+bZAAA'
+    'BGxpbmX/QTYwAQAAAAAAAAAAAACMQgAAyEIBAACgQAAAoEAAAHBCAAC0QgQCAAYAAAAAEwECyAETEwAAACYTAQLIATkTAAAATBMB'
+    'AsgBXxNyAAAAAYDiCQABAMCaDAH/4QkABAAAAAGA4gkAAQDAmgwB/+EJAAQAAAABgNRhAAEAwJoMAf/TYQAEAAAAAYDUYQABAMCa'
+    'DAH/02EABAAAAAHgxQgAAQDAmgwB38UIAAQAAAAB4MUIAAEAwJoMAd/FCAAE',
+      );
+
+  test('dress: ornaments load, find, dress page 604, geometry, undress, a refused spec', () {
+    final set = engine.loadOrnaments(testOrnaments());
+    expect(set.count, 3);
+    expect(set.list.length, 3);
+    final mark = set.list[0];
+    expect(mark.kind, QvpOrnamentKind.ayahMark);
+    expect(mark.lineage, QvpLineage.font);
+    expect(mark.style, 'test');
+    expect(mark.riwayah, "Hafs 'an 'Asim");
+    expect(mark.hasSlices, isFalse);
+    expect(mark.licence.id, 'CC-BY-NC-SA-4.0');
+    expect(mark.licence.status, 'provisional');
+    expect(mark.licence.redistributable, isFalse);
+    expect(mark.licence.attribution, 'a test');
+    expect(mark.parts.length, 2);
+    expect(mark.parts[1].name, 'line');
+    expect(mark.parts[1].color, 0x303641ff);
+    expect(mark.parts[1].stroke, isTrue);
+    expect(set.list[1].lineage, QvpLineage.scan);
+    expect(set.find(QvpOrnamentKind.pageFrame, 'test')?.index, 2);
+    expect(set.find(QvpOrnamentKind.ayahMark, 'nope'), isNull);
+    expect(set.ofKind(QvpOrnamentKind.surahHeader).single.index, 1);
+    final styles = set.styles();
+    expect(styles.length, 1);
+    expect(styles.single.isComplete, isTrue);
+    expect(styles.single.pageFrame?.index, 2);
+
+    final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
+    p.layout(const QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 20, padBottom: 20));
+    expect(p.dressInfo(), isNull);
+    expect(p.dressRevision(), 0);
+    expect(p.dressGeometry(), isEmpty);
+
+    // a style takes all three kinds, and the border's fill is repainted red
+    final info = p.dress(set, QvpDressSpec(style: 'test', ayahMarkScale: 1, colors: [(set.list[2], 0, 0xff0000ff)]))!;
+    expect(p.dressSpec, isNotNull);
+    expect((info.ayahMark, info.surahHeader, info.pageFrame), (0, 1, 2));
+    expect(info.ayahMarks, greaterThan(0));
+    expect(info.surahHeaders, greaterThan(0));
+    expect(info.frameStretched, isTrue, reason: 'no slices in this set');
+    expect(info.frameRepeats, 0);
+    expect(info.viewBox[0], lessThan(0));
+    expect(info.viewBox[2], greaterThan(p.width));
+    expect(info.overflow.every((v) => v > 0), isTrue, reason: '${info.overflow}');
+    expect(info.revision, greaterThan(0));
+    expect(p.dressRevision(), info.revision);
+
+    final draws = p.dressGeometry();
+    expect(draws.length, info.draws);
+    expect(draws.length, (info.ayahMarks + info.surahHeaders + 1) * 2, reason: 'one fill and one stroke per placed asset');
+    expect(identical(p.dressGeometry(), draws), isTrue, reason: 'kept until the revision changes');
+    final places = p.layoutPlacements();
+    var red = 0;
+    for (final d in draws) {
+      expect(d.path.getBounds().isEmpty, isFalse);
+      if (d.stroke) {
+        expect(d.strokeWidth, greaterThan(0));
+        expect(d.color, 0x303641ff);
+      } else if (d.kind == QvpOrnamentKind.pageFrame) {
+        expect(d.color, 0xff0000ff);
+        red++;
+      }
+      // the border belongs to no placement, and the rest are drawn under one that exists
+      expect(d.placement == null, d.kind == QvpOrnamentKind.pageFrame);
+      if (d.placement != null) expect(d.placement, lessThan(places.length));
+    }
+    expect(red, 1);
+
+    // a layout rebuilds the layer
+    p.layout(const QvpLayoutSpec(viewportW: 690, viewportH: 2000, padTop: 20, padBottom: 20, fillHeight: true));
+    expect(p.dressRevision(), isNot(info.revision));
+    expect(identical(p.dressGeometry(), draws), isFalse);
+
+    // a kind key overrides the style, an index and a style name both work, and line art is a set
+    final mixed = p.dress(set, const QvpDressSpec(style: 'test', ayahMark: 0, surahHeader: 'test', lineArt: {QvpOrnamentKind.ayahMark}, pageFrameScale: 1.5));
+    expect(mixed, isNotNull);
+    expect(p.dressGeometry().where((d) => d.kind == QvpOrnamentKind.ayahMark).every((d) => d.stroke), isTrue);
+
+    // refused: an ornament of another kind, or nothing to dress
+    expect(p.dress(set, const QvpDressSpec(ayahMark: 1)), isNull);
+    expect(p.dressInfo(), isNull);
+    expect(p.dress(set, const QvpDressSpec()), isNull);
+    expect(p.dress(set, const QvpDressSpec(style: 'nope')), isNull);
+
+    p.dress(set, const QvpDressSpec(pageFrame: 2));
+    expect(p.dressInfo()?.pageFrame, 2);
+    p.undress();
+    expect(p.dressInfo(), isNull);
+    expect(p.dressSpec, isNull);
+    expect(p.dressRevision(), 0);
+    p.dispose();
+    set.dispose();
+    expect(set.isDisposed, isTrue);
+  });
+
+  testWidgets('a dressed page paints its ornament layer behind the ink', (tester) async {
+    final set = engine.loadOrnaments(testOrnaments());
+    final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
+    await tester.pumpWidget(Directionality(textDirection: TextDirection.ltr, child: SizedBox(width: 400, height: 640, child: QvpPageView(page: p))));
+    final state = tester.state<QvpPageViewState>(find.byType(QvpPageView));
+    final printed = state.controller.scale;
+    expect(p.dress(set, const QvpDressSpec(style: 'test')), isNotNull);
+    await tester.pump();
+    // a dressed page is bigger than its text, so it is fitted smaller
+    expect(state.controller.scale, lessThan(printed));
+    expect(state.stats.basePaths, greaterThan(0));
+    p.undress();
+    await tester.pump();
+    expect(state.controller.scale, closeTo(printed, 1e-6));
+    await tester.pumpWidget(const SizedBox());
+    p.dispose();
+    set.dispose();
   });
 }

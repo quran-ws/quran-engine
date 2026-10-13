@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Dress: `QvpEngine.loadOrnaments` and `QvpOrnaments` (`list`, `find`, `ofKind`, `styles`), and
+  `QvpPage.dress`, `undress`, `dressInfo`, `dressGeometry` and `dressRevision`. `QvpPageView`
+  paints the ornament layer behind the ink and fits the border. The example has a dress panel.
 - Passages: `QvpPassage.load` and `QvpPassage.basmalah`, `layout`, and `paintPassage` to draw a
   layout; the plugin replays `conformance/scenarios/passage.json` (issue #102).
 - `QvpPageView.maxZoom`, `peekScale` and `setZoomMode`, as on iOS and Android. The magnify pinch

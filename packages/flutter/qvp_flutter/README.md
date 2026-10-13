@@ -98,11 +98,30 @@ final basmalah = QvpPassage.basmalah([page], 2);          // one row, no words; 
 passage.close();
 ```
 
+## Dress
+
+A page can wear another mushaf's ornaments: an ayah medallion, a surah band and a page
+border from an ornament set (`ornaments.qvo`). The engine places them. `QvpPageView` paints
+them behind the ink and fits the border on screen.
+
+```dart
+final set = engine.loadOrnaments(bytes);                  // ornaments.qvo
+final info = page.dress(set, const QvpDressSpec(style: 'mushaf-qalon'));   // null when refused
+final mark = set.find(QvpOrnamentKind.ayahMark, 'mushaf-warsh');
+page.dress(set, QvpDressSpec(style: 'mushaf-qalon', ayahMark: mark, gap: 8,
+    lineArt: {QvpOrnamentKind.pageFrame}, colors: [(mark!, 1, '#8a5a1a')]));
+for (final d in page.dressGeometry()) { /* path, color, stroke, strokeWidth, placement */ }
+page.undress();
+set.dispose();                                            // after the pages dressed with it
+```
+
+Each ornament carries its `licence`. Read it before you publish a dressed page.
+
 ## Tests
 
 ```sh
 cargo build -p qvp-ffi --release
-cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target/release/libqvp_ffi.so + dist/pages/042.qvp, atlas.qva
+cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target/release/libqvp_ffi.so + dist/pages/042.qvp, 604.qvp, atlas.qva
 ```
 
 ## Example — Mushaf Vector Reader
@@ -111,8 +130,8 @@ cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target
 surah name, `juz N`), search, selection panel with per-path chips, copy with
 citation, crop → SVG, highlight modes + fade, follow-words, mark colours /
 hide marks / gold markers, themes, memorisation (mask, reveal, greyed page),
-layout controls, page metadata and engine stats. It bundles pages 001–021,
-440–445, 582, 604 and `atlas.qva` as its own assets (copy from `dist/pages`).
+layout controls, a dress panel (another mushaf's ornaments), page metadata and engine stats. It bundles pages 001–021,
+440–445, 582, 604, `atlas.qva` and `ornaments.qvo` (when present) as its own assets (copy from `dist/pages`).
 
 ```sh
 bash scripts/build-engine-android.sh

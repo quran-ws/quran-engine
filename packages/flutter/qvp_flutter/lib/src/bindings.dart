@@ -722,6 +722,98 @@ final class QvpPassageAyahC extends ffi.Struct {
   external double y1;
 }
 
+/// `{ uint32_t kind, lineage, n_parts, has_slices, redistributable, _pad; QvpStr style, riwayah, license_id, license_status, attribution; }`
+final class QvpOrnamentC extends ffi.Struct {
+  @ffi.Uint32()
+  external int kind;
+  @ffi.Uint32()
+  external int lineage;
+  @ffi.Uint32()
+  external int nParts;
+  @ffi.Uint32()
+  external int hasSlices;
+  @ffi.Uint32()
+  external int redistributable;
+  @ffi.Uint32()
+  external int pad;
+  external QvpStrC style;
+  external QvpStrC riwayah;
+  external QvpStrC licenseId;
+  external QvpStrC licenseStatus;
+  external QvpStrC attribution;
+}
+
+/// `{ uint32_t color, stroke; QvpStr name; }`
+final class QvpOrnamentPartC extends ffi.Struct {
+  @ffi.Uint32()
+  external int color;
+  @ffi.Uint32()
+  external int stroke;
+  external QvpStrC name;
+}
+
+/// `{ uint32_t ayah_mark, surah_header, page_frame; float gap, band_gap, ayah_mark_scale, page_frame_scale; uint32_t line_art; const uint32_t* colors; uint32_t n_colors; }`
+final class QvpDressSpecC extends ffi.Struct {
+  @ffi.Uint32()
+  external int ayahMark;
+  @ffi.Uint32()
+  external int surahHeader;
+  @ffi.Uint32()
+  external int pageFrame;
+  @ffi.Float()
+  external double gap;
+  @ffi.Float()
+  external double bandGap;
+  @ffi.Float()
+  external double ayahMarkScale;
+  @ffi.Float()
+  external double pageFrameScale;
+  @ffi.Uint32()
+  external int lineArt;
+  external ffi.Pointer<ffi.Uint32> colors;
+  @ffi.Uint32()
+  external int nColors;
+}
+
+/// `{ uint32_t ayah_mark, surah_header, page_frame, n_ayah_marks, n_surah_headers, n_frame_repeats, frame_stretched, n_draws, revision; float view_box[4], overflow[4]; }`
+final class QvpDressInfoC extends ffi.Struct {
+  @ffi.Uint32()
+  external int ayahMark;
+  @ffi.Uint32()
+  external int surahHeader;
+  @ffi.Uint32()
+  external int pageFrame;
+  @ffi.Uint32()
+  external int nAyahMarks;
+  @ffi.Uint32()
+  external int nSurahHeaders;
+  @ffi.Uint32()
+  external int nFrameRepeats;
+  @ffi.Uint32()
+  external int frameStretched;
+  @ffi.Uint32()
+  external int nDraws;
+  @ffi.Uint32()
+  external int revision;
+  @ffi.Array(4)
+  external ffi.Array<ffi.Float> viewBox;
+  @ffi.Array(4)
+  external ffi.Array<ffi.Float> overflow;
+}
+
+/// `{ const uint8_t* ops; uint32_t ops_len; const float* pts; uint32_t pts_len; const uint32_t* table; uint32_t n_draws; }`
+final class QvpDressGeometryC extends ffi.Struct {
+  external ffi.Pointer<ffi.Uint8> ops;
+  @ffi.Uint32()
+  external int opsLen;
+  external ffi.Pointer<ffi.Float> pts;
+  @ffi.Uint32()
+  external int ptsLen;
+  external ffi.Pointer<ffi.Uint32> table;
+  @ffi.Uint32()
+  external int nDraws;
+}
+
 /// Opaque `QvpPage`.
 final class QvpPageC extends ffi.Opaque {}
 
@@ -731,11 +823,15 @@ final class QvpAtlasC extends ffi.Opaque {}
 /// Opaque `QvpPassage`.
 final class QvpPassageC extends ffi.Opaque {}
 
+/// Opaque `QvpOrnaments`.
+final class QvpOrnamentsC extends ffi.Opaque {}
+
 // ───────────── C function typedefs (native ↔ dart) ─────────────
 
 typedef PtrPage = ffi.Pointer<QvpPageC>;
 typedef PtrAtlas = ffi.Pointer<QvpAtlasC>;
 typedef PtrPassage = ffi.Pointer<QvpPassageC>;
+typedef PtrOrnaments = ffi.Pointer<QvpOrnamentsC>;
 typedef PtrPages = ffi.Pointer<PtrPage>;
 typedef PtrU8 = ffi.Pointer<ffi.Uint8>;
 typedef PtrU16 = ffi.Pointer<ffi.Uint16>;
@@ -982,6 +1078,26 @@ final class QvpBindings {
       lib.lookupFunction<ffi.Uint32 Function(PtrPassage, PtrU32, ffi.Uint32), int Function(PtrPassage, PtrU32, int)>('qvp_passage_draw_list');
   late final int Function(PtrPassage, PtrF32, int) passagePlacements =
       lib.lookupFunction<ffi.Uint32 Function(PtrPassage, PtrF32, ffi.Uint32), int Function(PtrPassage, PtrF32, int)>('qvp_passage_placements');
+
+  // dress: another mushaf's ornaments
+  late final PtrOrnaments Function(PtrU8, int) ornamentsLoad =
+      lib.lookupFunction<PtrOrnaments Function(PtrU8, ffi.Size), PtrOrnaments Function(PtrU8, int)>('qvp_ornaments_load');
+  late final void Function(PtrOrnaments) ornamentsFree = lib.lookupFunction<ffi.Void Function(PtrOrnaments), void Function(PtrOrnaments)>('qvp_ornaments_free');
+  late final int Function(PtrOrnaments) ornamentCount = lib.lookupFunction<ffi.Uint32 Function(PtrOrnaments), int Function(PtrOrnaments)>('qvp_ornament_count');
+  late final int Function(PtrOrnaments, int, ffi.Pointer<QvpOrnamentC>) ornamentInfo = lib.lookupFunction<
+      ffi.Int32 Function(PtrOrnaments, ffi.Uint32, ffi.Pointer<QvpOrnamentC>), int Function(PtrOrnaments, int, ffi.Pointer<QvpOrnamentC>)>('qvp_ornament_info');
+  late final int Function(PtrOrnaments, int, PtrU8, int) ornamentFind =
+      lib.lookupFunction<ffi.Int32 Function(PtrOrnaments, ffi.Uint32, PtrU8, ffi.Uint32), int Function(PtrOrnaments, int, PtrU8, int)>('qvp_ornament_find');
+  late final int Function(PtrOrnaments, int, int, ffi.Pointer<QvpOrnamentPartC>) ornamentPart = lib.lookupFunction<
+      ffi.Int32 Function(PtrOrnaments, ffi.Uint32, ffi.Uint32, ffi.Pointer<QvpOrnamentPartC>),
+      int Function(PtrOrnaments, int, int, ffi.Pointer<QvpOrnamentPartC>)>('qvp_ornament_part');
+  late final int Function(PtrPage, PtrOrnaments, ffi.Pointer<QvpDressSpecC>) dress = lib.lookupFunction<
+      ffi.Int32 Function(PtrPage, PtrOrnaments, ffi.Pointer<QvpDressSpecC>), int Function(PtrPage, PtrOrnaments, ffi.Pointer<QvpDressSpecC>)>('qvp_dress');
+  late final void Function(PtrPage) undress = lib.lookupFunction<ffi.Void Function(PtrPage), void Function(PtrPage)>('qvp_undress');
+  late final int Function(PtrPage, ffi.Pointer<QvpDressInfoC>) dressInfo =
+      lib.lookupFunction<ffi.Int32 Function(PtrPage, ffi.Pointer<QvpDressInfoC>), int Function(PtrPage, ffi.Pointer<QvpDressInfoC>)>('qvp_dress_info');
+  late final void Function(PtrPage, ffi.Pointer<QvpDressGeometryC>) dressGeometry =
+      lib.lookupFunction<ffi.Void Function(PtrPage, ffi.Pointer<QvpDressGeometryC>), void Function(PtrPage, ffi.Pointer<QvpDressGeometryC>)>('qvp_dress_geometry');
 
   // names
   late final void Function(int, PtrStr) markName = lib.lookupFunction<ffi.Void Function(ffi.Uint8, PtrStr), void Function(int, PtrStr)>('qvp_mark_name');
