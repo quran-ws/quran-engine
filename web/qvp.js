@@ -318,6 +318,17 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.e.ex.qvp_dress_clamp(this.h, i, viewportW, viewportH, this.e.scratch);
       return this.e._getView(this.e.scratch);
     }
+    /** For a host that scrolls the page itself: {view, width, height}. `view` shows the
+     * dressed box (content plus dress overflow) at `scale`, centred across `viewportW` (at
+     * x = 0 when wider) with its top at y = 0; `width` and `height` are the box's size at
+     * that scale, the size to give the canvas. An undressed page gets its content centred
+     * at the top and the content's size. */
+    dressView(scale, viewportW) {
+      const s = this.e.scratch;
+      this.e.ex.qvp_dress_view(this.h, scale, viewportW, s, s + 16);
+      const d = this.e.dv();
+      return { view: this.e._getView(s), width: d.getFloat32(s + 16, true), height: d.getFloat32(s + 20, true) };
+    }
     /** The readout, or null when the page is not dressed: {ayahMark, surahHeader, pageFrame,
      * ayahMarks, surahHeaders, frameRepeats, frameStretched, draws, revision, viewBox,
      * overflow}. `viewBox` is [x, y, w, h] in page units; a border grows it. `overflow` is

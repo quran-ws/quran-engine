@@ -579,6 +579,14 @@ fn dress_over_the_abi() {
         let mut held = QvpView { scale: 0.0, offset_x: 0.0, offset_y: 0.0 };
         qvp_dress_clamp(page, &pushed, tall.viewport_w, tall.viewport_h, &mut held);
         assert!((held.offset_y - held.scale * di.overflow[1]).abs() < 1e-2, "{} {}", held.offset_y, held.scale);
+        // a host that scrolls the page: the border's top at 0, the size the whole dressed box
+        let mut shown = QvpView { scale: 0.0, offset_x: 0.0, offset_y: 0.0 };
+        let mut size = [0.0f32; 2];
+        qvp_dress_view(page, 1.0, 2000.0, &mut shown, size.as_mut_ptr());
+        assert_eq!(shown.scale, 1.0);
+        assert!((shown.offset_y - di.overflow[1]).abs() < 1e-3, "{}", shown.offset_y);
+        assert!((size[0] - w).abs() < 1e-3 && (size[1] - h).abs() < 1e-3, "{size:?} vs {w} {h}");
+        assert!((shown.offset_x - di.overflow[0] - (2000.0 - w) / 2.0).abs() < 1e-3, "{}", shown.offset_x);
 
         let mut g = std::mem::zeroed::<QvpDressGeometry>();
         qvp_dress_geometry(page, &mut g);

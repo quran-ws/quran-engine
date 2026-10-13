@@ -1,7 +1,8 @@
 //! Write the cross-wrapper dress scenarios: page 042 dressed in a small synthetic ornament
 //! set, laid out at two viewports and one reflow zoom. For each case it records the layout's
-//! fit, which holds the border, the dress overflow, and the dress clamp of a view pushed
-//! past each edge. Every wrapper's test suite replays them and compares.
+//! fit, which holds the border, the dress overflow, the dress clamp of a view pushed
+//! past each edge, and the dress view at scale 1 for a host that scrolls the page, across
+//! the viewport's width and twice it. Every wrapper's test suite replays them and compares.
 //!
 //! The set is written next to the scenarios as hex, so a wrapper loads the same bytes. It is
 //! one filled and one stroked rectangle per kind, the shape of the ABI test's set: no
@@ -109,15 +110,29 @@ fn main() {
                 )
             })
             .collect();
+        // a host that scrolls the page: at the viewport's width and at twice it, so one case
+        // may start at x = 0 and the other is centred
+        let views: Vec<String> = [w, 2.0 * w]
+            .iter()
+            .map(|&vw| {
+                let (v, bw, bh) = page.dress_view(1.0, vw);
+                format!(
+                    "{{\"scale\": 1, \"viewportW\": {}, \"view\": {{\"scale\": {}, \"offsetX\": {}, \"offsetY\": {}}}, \"width\": {}, \"height\": {}}}",
+                    vw, v.scale, v.offset_x, v.offset_y, bw, bh
+                )
+            })
+            .collect();
         let reflow = if zoom > 0.0 { format!(", \"reflow\": {{\"zoom\": {zoom}}}") } else { String::new() };
         cases.push(format!(
             concat!(
                 "    {{\"spec\": {{\"viewportW\": {}, \"viewportH\": {}, \"padTop\": 24, \"padBottom\": 24, \"padLeft\": 16, \"padRight\": 16{}}},\n",
                 "     \"fit\": {{\"fitScale\": {}, \"fitX\": {}, \"fitY\": {}}},\n",
                 "     \"overflow\": [{}, {}, {}, {}],\n",
-                "     \"clamps\": [\n       {}\n     ]}}"
+                "     \"clamps\": [\n       {}\n     ],\n",
+                "     \"dressViews\": [\n       {}\n     ]}}"
             ),
-            w, h, reflow, l.fit_scale, l.fit_x, l.fit_y, o.0, o.1, o.2, o.3, clamps.join(",\n       ")
+            w, h, reflow, l.fit_scale, l.fit_x, l.fit_y, o.0, o.1, o.2, o.3, clamps.join(",\n       "),
+            views.join(",\n       ")
         ));
     }
     let json = format!(

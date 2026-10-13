@@ -12,6 +12,10 @@
        {"view": {"scale": 3, "offsetX": 0, "offsetY": 10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": 40.415455}},
        {"view": {"scale": 3, "offsetX": -10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": -839.6594, "offsetY": 0}},
        {"view": {"scale": 3, "offsetX": 0, "offsetY": -10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": -1052.5895}}
+     ],
+     "dressViews": [
+       {"scale": 1, "viewportW": 390, "view": {"scale": 1, "offsetX": 19.886475, "offsetY": 13.471818}, "width": 429.77295, "height": 645.6683},
+       {"scale": 1, "viewportW": 780, "view": {"scale": 1, "offsetX": 195, "offsetY": 13.471818}, "width": 429.77295, "height": 645.6683}
      ]},
     {"spec": {"viewportW": 1024, "viewportH": 768, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16},
      "fit": {"fitScale": 0.42926267, "fitX": 292.21753, "fitY": 34.269123},
@@ -21,6 +25,10 @@
        {"view": {"scale": 3, "offsetX": 0, "offsetY": 10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": 239.49759}},
        {"view": {"scale": 3, "offsetX": -10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": -2298.3186, "offsetY": 0}},
        {"view": {"scale": 3, "offsetX": 0, "offsetY": -10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": -4359.8457}}
+     ],
+     "dressViews": [
+       {"scale": 1, "viewportW": 1024, "view": {"scale": 1, "offsetX": 83.43961, "offsetY": 79.83253}, "width": 1190.8792, "height": 1789.1144},
+       {"scale": 1, "viewportW": 2048, "view": {"scale": 1, "offsetX": 512.00006, "offsetY": 79.83253}, "width": 1190.8792, "height": 1789.1144}
      ]},
     {"spec": {"viewportW": 390, "viewportH": 844, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16, "reflow": {"zoom": 2}},
      "fit": {"fitScale": 1, "fitX": -0.000005722046, "fitY": 136.53448},
@@ -30,6 +38,10 @@
        {"view": {"scale": 3, "offsetX": 0, "offsetY": 10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": 409.60345}},
        {"view": {"scale": 3, "offsetX": -10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": -857.81885, "offsetY": 0}},
        {"view": {"scale": 3, "offsetX": 0, "offsetY": -10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": -7755.8564}}
+     ],
+     "dressViews": [
+       {"scale": 1, "viewportW": 390, "view": {"scale": 1, "offsetX": 25.939615, "offsetY": 136.53448}, "width": 441.87924, "height": 3003.1533},
+       {"scale": 1, "viewportW": 780, "view": {"scale": 1, "offsetX": 195, "offsetY": 136.53448}, "width": 441.87924, "height": 3003.1533}
      ]}
   ]
 }

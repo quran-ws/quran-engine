@@ -325,6 +325,7 @@ void      qvp_undress(QvpPage*);
 int       qvp_dress_info(const QvpPage*, QvpDressInfo* out);               /* 0 = not dressed */
 void      qvp_dress_geometry(const QvpPage*, QvpDressGeometry* out);       /* paint it BEHIND the page ink; valid until the next dress, undress or layout */
 void      qvp_dress_clamp(const QvpPage*, const QvpView*, float viewport_w, float viewport_h, QvpView* out);   /* qvp_view_clamp for the content plus the dress overflow: a drag reaches the border, never past it */
+void      qvp_dress_view(const QvpPage*, float scale, float viewport_w, QvpView* out, float* out_size /* w, h */);   /* a host that scrolls the page: the dressed box at scale, centred across viewport_w (x = 0 when wider), top at y = 0; out_size is its size */
 
 /* atlas (cross-page lookup; atlas.qva from the converter) -------------------------------- */
 QvpAtlas* qvp_atlas_load(const uint8_t* bytes, size_t len);

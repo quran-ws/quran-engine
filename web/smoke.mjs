@@ -37,6 +37,12 @@ if (existsSync(setPath) && existsSync(pagePath)) {
   if (draws.length !== info.draws) throw new Error(`dressGeometry gave ${draws.length} draws, info says ${info.draws}`);
   if (!draws.every(d => typeof d.placement === 'number' && typeof d.color === 'number')) throw new Error('a draw lacks its placement or colour');
   if (page.dressRevision() !== info.revision) throw new Error('dressRevision disagrees with dressInfo');
+  // a host that scrolls the page: the size is content plus overflow, the border's top at 0
+  page.layout({ viewportW: 390, viewportH: 844 });
+  const lay = page.currentLayout, over = page.dressInfo().overflow;
+  const shown = page.dressView(1, 390);
+  if (Math.abs(shown.width - (lay.contentW + over[0] + over[2])) > 1e-3 || Math.abs(shown.height - (lay.contentH + over[1] + over[3])) > 1e-3) throw new Error('dressView size is not content plus overflow: ' + JSON.stringify(shown));
+  if (Math.abs(shown.view.offsetY - shown.view.scale * over[1]) > 1e-3) throw new Error('dressView does not put the border top at 0: ' + JSON.stringify(shown));
   if (page.dress(set, { ayahMark: set.find('surah_header', marker.style) }) !== null) throw new Error('an ornament of the wrong kind was accepted');
   page.undress();
   if (page.dressInfo() !== null) throw new Error('undress left a dress behind');

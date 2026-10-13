@@ -28,8 +28,9 @@ for (const c of scenarios.cases) {
 }
 console.log(`ok  ${n} layout scenarios match the engine`)
 
-// conformance/scenarios/dress.json: the layout's fit holds the border, and dressClamp holds a
-// view to the dressed box. The ornament set is the synthetic one the generator wrote as hex.
+// conformance/scenarios/dress.json: the layout's fit holds the border, dressClamp holds a
+// view to the dressed box, and dressView places that box for a host that scrolls the page.
+// The ornament set is the synthetic one the generator wrote as hex.
 const dressed = JSON.parse(readFileSync(new URL('conformance/scenarios/dress.json', root), 'utf8'))
 const hex = readFileSync(new URL(`conformance/${dressed.ornaments}`, root), 'utf8').replace(/\s+/g, '')
 const set = engine.loadOrnaments(Uint8Array.from(hex.match(/../g), b => parseInt(b, 16)))
@@ -46,6 +47,12 @@ for (const c of dressed.cases) {
   for (const { view, held } of c.clamps) {
     const v = page.dressClamp(view, c.spec.viewportW, c.spec.viewportH)
     for (const k of ['scale', 'offsetX', 'offsetY']) near(v[k], held[k], `${tag} dressClamp(${view.offsetX}, ${view.offsetY}) ${k}`)
+  }
+  for (const want of c.dressViews) {
+    const got = page.dressView(want.scale, want.viewportW)
+    for (const k of ['scale', 'offsetX', 'offsetY']) near(got.view[k], want.view[k], `${tag} dressView(${want.viewportW}) ${k}`)
+    near(got.width, want.width, `${tag} dressView(${want.viewportW}) width`)
+    near(got.height, want.height, `${tag} dressView(${want.viewportW}) height`)
   }
   m++
 }

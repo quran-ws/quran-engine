@@ -2907,6 +2907,25 @@ pub unsafe extern "C" fn qvp_dress_clamp(
 ) {
     guard(|| *out = (*page).dress_clamp((*view).into(), viewport_w, viewport_h).into())
 }
+/// The view for a host that scrolls the page itself: the dressed box at `scale`, centred
+/// across `viewport_w` (or at x = 0 when wider) with its top at y = 0. `out_size` gets the
+/// dressed box's width and height at that scale, the size to give the canvas. An undressed
+/// page gets its content centred at the top and the content's size.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_dress_view(
+    page: *const Page,
+    scale: f32,
+    viewport_w: f32,
+    out: *mut QvpView,
+    out_size: *mut f32,
+) {
+    guard(|| {
+        let (v, w, h) = (*page).dress_view(scale, viewport_w);
+        *out = v.into();
+        *out_size = w;
+        *out_size.add(1) = h;
+    })
+}
 #[no_mangle]
 pub unsafe extern "C" fn qvp_dress_geometry(page: *const Page, out: *mut QvpDressGeometry) {
     guard(|| match (*page).dress_of() {

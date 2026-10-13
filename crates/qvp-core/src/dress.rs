@@ -488,6 +488,24 @@ impl Page {
         View { offset_x: held.offset_x + sx, offset_y: held.offset_y + sy, ..held }
     }
 
+    /// The view that shows the page at `scale` to a host that scrolls the page itself: the
+    /// dressed box (the content plus the dress overflow, which grows with `scale` as the
+    /// content does) is centred across `viewport_w`, or starts at x = 0 when it is wider, and
+    /// its top is at y = 0. The second and third values are the dressed box's width and
+    /// height at `scale`: the size such a host gives the canvas, so the whole border is on it.
+    /// An undressed page gets its content centred at the top and the content's size.
+    pub fn dress_view(&self, scale: f32, viewport_w: f32) -> (View, f32, f32) {
+        let (cw, ch) = match &self.layout {
+            Some(l) => (l.content_w, l.content_h),
+            None => (self.width(), self.height()),
+        };
+        let (l, t, r, b) = self.dress_overflow();
+        let (w, h) = ((cw + l + r) * scale, (ch + t + b) * scale);
+        // the content's origin stands `(l, t)` inside the dressed box, `scale` times that on screen
+        let left = ((viewport_w - w) / 2.0).max(0.0);
+        (View { scale, offset_x: left + l * scale, offset_y: t * scale }, w, h)
+    }
+
     /// Re-place the ornaments against the current layout. A layout that respaces the
     /// lines makes the page taller than it is printed, and the border goes around what
     /// is on the page, so it has to follow. Every rebuild bumps the revision, because a
@@ -1229,6 +1247,33 @@ mod tests {
         let l = p.current_layout().unwrap().clone();
         let push = View { offset_x: 1e5, offset_y: 1e5, ..zoomed };
         assert_eq!(p.dress_clamp(push, 200.0, 400.0), push.clamp(l.content_w, l.content_h, 200.0, 400.0));
+    }
+
+    #[test]
+    fn the_dress_view_puts_the_whole_border_at_the_top_of_a_scrolled_canvas() {
+        let (mut p, _, _) = page();
+        p.layout(&LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() });
+        p.dress(&set(), &all()).unwrap();
+        let (x0, y0, x1, y1) = border_in_layout(&p);
+        for (scale, vw) in [(1.0, 1000.0), (1.0, 10.0), (2.5, 1000.0)] {
+            let (v, w, h) = p.dress_view(scale, vw);
+            assert_eq!(v.scale, scale);
+            // the border's top is the canvas's top, and the size holds the whole border
+            assert!(near(v.offset_y + scale * y0, 0.0), "{v:?}");
+            assert!(near(w, scale * (x1 - x0)) && near(h, scale * (y1 - y0)), "{w} {h}");
+            let left = v.offset_x + scale * x0;
+            if w < vw {
+                assert!(near(left, (vw - w) / 2.0), "centred: {left}");
+            } else {
+                assert!(near(left, 0.0), "at the left edge: {left}");
+            }
+        }
+        // undressed, the content is centred at the top at its own size
+        p.undress();
+        let l = p.current_layout().unwrap().clone();
+        let (v, w, h) = p.dress_view(1.0, 1000.0);
+        assert_eq!((w, h), (l.content_w, l.content_h));
+        assert_eq!(v, View { scale: 1.0, offset_x: (1000.0 - l.content_w) / 2.0, offset_y: 0.0 });
     }
 
     /// A set whose page frame tiles: a 10 x 8 corner and two 6 unit edge strips, each one
