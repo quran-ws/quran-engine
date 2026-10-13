@@ -24,46 +24,6 @@ is owed.
 | symbol | wrapper | why |
 |---|---|---|
 | `qvp_alloc` | android | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
-| `qvp_ornaments_load` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_ornaments_load` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_ornaments_load` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_ornaments_load` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
-| `qvp_ornaments_free` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_ornaments_free` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_ornaments_free` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_ornaments_free` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_count` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_count` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_count` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_count` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_info` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_info` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_info` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_info` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_find` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_find` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_find` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_find` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_part` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_part` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_part` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_ornament_part` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
-| `qvp_dress` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_dress` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_dress` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_dress` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
-| `qvp_undress` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_undress` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_undress` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_undress` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
-| `qvp_dress_info` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_dress_info` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_dress_info` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_dress_info` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
-| `qvp_dress_geometry` | android | issue #113: the dress ABI, bound with the web wrapper first |
-| `qvp_dress_geometry` | ios | issue #114: the dress ABI, bound with the web wrapper first |
-| `qvp_dress_geometry` | flutter | issue #115: the dress ABI, bound with the web wrapper first |
-| `qvp_dress_geometry` | react-native | issue #116: the dress ABI, bound with the web wrapper first |
 | `qvp_ayah_marks_view` | android | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
 | `qvp_ayah_marks_view` | ios | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
 | `qvp_ayah_marks_view` | react-native | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
@@ -312,7 +272,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-171 symbols in the header, 171 Rust exports. web: 170 bound, android: 155 bound, flutter: 160 bound, ios: 153 bound, react-native: 82 bound.
+171 symbols in the header, 171 Rust exports. web: 170 bound, android: 165 bound, flutter: 170 bound, ios: 163 bound, react-native: 93 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -341,15 +301,15 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_category_name` | yes | yes | yes | yes | yes |
 | `qvp_citation` | yes | yes | yes | yes | yes |
 | `qvp_color_of` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_colors` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_colors` | yes | yes | yes | yes | yes |
 | `qvp_crop_bounds` | yes | yes | yes | yes | yes |
 | `qvp_crop_svg` | yes | yes | yes | yes | yes |
 | `qvp_dealloc` | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) |
 | `qvp_decoration_info` | yes | yes | yes | yes | gap (list form: bound as `decorations()`) |
 | `qvp_divisions` | yes | yes | yes | yes | yes |
-| `qvp_dress` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
-| `qvp_dress_geometry` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
-| `qvp_dress_info` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
+| `qvp_dress` | yes | yes | yes | yes | yes |
+| `qvp_dress_geometry` | yes | yes | yes | yes | yes |
+| `qvp_dress_info` | yes | yes | yes | yes | yes |
 | `qvp_engine_name` | yes | yes | yes | yes | yes |
 | `qvp_family_name` | yes | yes | yes | yes | yes |
 | `qvp_find_word` | yes | yes | yes | yes | yes |
@@ -402,12 +362,12 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_name` | yes | yes | yes | yes | yes |
 | `qvp_name_count` | yes | yes | yes | yes | yes |
 | `qvp_name_id` | yes | yes | yes | yes | yes |
-| `qvp_ornament_count` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
-| `qvp_ornament_find` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
-| `qvp_ornament_info` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
-| `qvp_ornament_part` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
-| `qvp_ornaments_free` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
-| `qvp_ornaments_load` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
+| `qvp_ornament_count` | yes | yes | yes | yes | yes |
+| `qvp_ornament_find` | yes | yes | yes | yes | yes |
+| `qvp_ornament_info` | yes | yes | yes | yes | yes |
+| `qvp_ornament_part` | yes | yes | yes | yes | yes |
+| `qvp_ornaments_free` | yes | yes | yes | yes | yes |
+| `qvp_ornaments_load` | yes | yes | yes | yes | yes |
 | `qvp_page_free` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_page_grid` | yes | yes | yes | yes | gap (other shape: bound as `grid()`) |
 | `qvp_page_info` | yes | yes | yes | yes | yes |
@@ -459,7 +419,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_text` | yes | yes | yes | yes | yes |
 | `qvp_theme` | yes | yes | yes | yes | yes |
 | `qvp_tick` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_undress` | yes | gap (issue #113: the dress ABI, bound with the web wrapper first) | gap (issue #115: the dress ABI, bound with the web wrapper first) | gap (issue #114: the dress ABI, bound with the web wrapper first) | gap (issue #116: the dress ABI, bound with the web wrapper first) |
+| `qvp_undress` | yes | yes | yes | yes | yes |
 | `qvp_unmask` | yes | yes | yes | yes | yes |
 | `qvp_unmask_all` | yes | yes | yes | yes | yes |
 | `qvp_unmask_next` | yes | yes | yes | yes | yes |
