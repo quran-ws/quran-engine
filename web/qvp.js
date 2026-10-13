@@ -267,8 +267,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * list of `[ornament, part, colour]`; every part left out keeps the design's own.
      * `gap` is the air between the text and the border and `bandGap` the air between a band
      * and the border, both in page units. `ayahMarkScale` sizes the medallion against the
-     * printed ring and `pageFrameScale` the border's thickness against the design's own, 1
-     * being the mushaf's proportion. `lineArt` draws kinds as line art, their constant-width strokes alone: `true` for
+     * printed ring and `pageFrameScale` the border's width against the design's own, 1
+     * being the mushaf's proportion; the band grows outward, the motifs keep their size. `lineArt` draws kinds as line art, their constant-width strokes alone: `true` for
      * every kind, or a list of kinds (`'ayah_mark'`, `'surah_header'`, `'page_frame'`).
      * Returns the readout, or null when the engine refused the spec (an index out of
      * range, an ornament of another kind, or nothing to dress). Replaces any previous

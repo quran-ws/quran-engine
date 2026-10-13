@@ -67,7 +67,7 @@ pub struct DressSpec {
     pub gap: f32,            // air between the text and the border, page units
     pub band_gap: f32,       // air between a band and the border, page units
     pub ayah_mark_scale: f32,  // the medallion's size against the printed ring, 1 = as tall
-    pub page_frame_scale: f32, // the border's thickness against the design's own, 1 = as drawn
+    pub page_frame_scale: f32, // the border's width against the design's own, 1 = as drawn; motifs keep their size along the edge
     pub line_art: u32,       // LINE_ART_* bits: which kinds are drawn as line art
     pub colors: Vec<(u32, u16, Rgba)>,   // (ornament, part, colour) overrides
 }

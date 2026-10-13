@@ -631,9 +631,10 @@ window it leaves for the number, the name or the text area. The paper of a scann
 its pure white `c1`, is left open too, so the host's page shows through; repaint `c1` to put a
 paper colour back. `gap` is the air between the text and the border, and `bandGap` the air between a band and
 the border, both in page units; a band is centred in the column. `ayahMarkScale` sizes the
-medallion against the printed ring, and `pageFrameScale` the border's thickness against the
-design's own, 1 being the mushaf's proportion; a frame that tiles honours it exactly, a frame
-without slices keeps its printed proportions. `lineArt` draws kinds as line
+medallion against the printed ring, and `pageFrameScale` the border's width against the
+design's own, 1 being the mushaf's proportion: the band grows outward and its motifs keep
+their size along the edge. A frame that tiles honours it exactly; a frame without slices keeps
+its printed proportions. `lineArt` draws kinds as line
 art, their constant-width strokes alone, so
 there is one ink: `true` for every kind, or a list such as `['surah_header']` for the bands
 alone. A scanned design's line art is the catalogue's own `line.svg`, stroke for stroke; a
