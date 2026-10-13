@@ -200,7 +200,10 @@ length followed by that many UTF-8 bytes. A `f32` is four bytes, little-endian.
 `redistributable` varint (0 or 1), `attribution` str, `part count` varint, then per part
 `name` str, `color` u32 (`0xRRGGBBAA`), `stroke` varint; then one **asset**; then
 `has_slices` varint, and when 1: `corner_w`, `corner_h`, `repeat_h`, `repeat_v` as f32,
-`rotate` varint, and three assets (corner, horizontal edge, vertical edge).
+`rotate` varint, and three assets (corner, horizontal edge, vertical edge). `rotate` 1
+turns the corners: the top-right and bottom-left are 180° turns of the corner and the
+bottom-right is a plain copy. `rotate` 0 mirrors them. Rotate turns the corners only. The
+straight runs are always mirrored, as the catalogue assembles them.
 
 **Asset**: `view_box` 4 × f32 (`x, y, w, h`), `has_slot` varint, when 1 `slot` 4 × f32,
 `first_path` varint, `path count` varint.

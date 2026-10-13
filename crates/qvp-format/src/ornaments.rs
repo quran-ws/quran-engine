@@ -148,6 +148,8 @@ pub struct Slices {
     pub repeat_v: f32,
     /// When true, the top-right and bottom-left corners are 180° turns of the corner and the
     /// bottom-right is a plain copy. When false, the other three corners are mirror images.
+    /// Rotate turns the corners only. The straight runs are always mirrored, as the
+    /// catalogue assembles them.
     pub rotate: bool,
     pub corner: Asset,
     pub edge_h: Asset,
