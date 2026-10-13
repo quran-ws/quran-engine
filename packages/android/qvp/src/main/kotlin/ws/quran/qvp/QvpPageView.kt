@@ -17,8 +17,9 @@ import android.view.ScaleGestureDetector
 import android.view.View
 
 /**
- * Host-canvas renderer for a [QvpPage]. Draw order per frame:
- * highlight bands (one path per highlight, behind the ink) → cached base ink → styled ink → mask boxes.
+ * Host-canvas renderer for a [QvpPage]. Draw order per frame: the ornament layer of a dressed page
+ * (cached) → highlight bands (one path per highlight, behind the ink) → cached base ink → styled ink
+ * → mask boxes.
  * Each frame calls `page.tick(now)` and keeps animating while the engine says so.
  * Gestures: tap → gap-aware hit-test → [onWordTap]/[onDecorationTap]/[onEmptyTap]; long-press-drag → whole-word
  * selection (engine `select`, band in the selection layer); pinch/pan on top of the engine layout.
@@ -32,6 +33,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             field = v
             releaseBase()
             baseKey = ""
+            ornamentLayer = null; ornamentKey = ""
             selectionHandle = 0
             // A step means the same size to the reader on any page: the engine chose every page's
             // steps so the ink barely changes across a turn. So the step carries over, and the new
@@ -128,27 +130,38 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private val flingCb = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             if (!scroller.computeScrollOffset()) return
-            viewOy = -scroller.currY.toFloat()
+            viewOy = flingTop - scroller.currY.toFloat()
             clampView(); postInvalidateOnAnimation()
             if (!scroller.isFinished) Choreographer.getInstance().postFrameCallback(this)
         }
     }
     private fun fling(vy: Float) {
         val l = page?.currentLayout ?: return
-        val max = kotlin.math.max(0f, l.contentH * viewScale - height).toInt()
+        // a dressed page scrolls from the top of its border, not the top of its text
+        val o = overflow()
+        flingTop = o.top * viewScale
+        val max = kotlin.math.max(0f, (l.contentH + o.top + o.bottom) * viewScale - height).toInt()
         scroller.forceFinished(true)
-        scroller.fling(0, (-viewOy).toInt(), 0, (-vy).toInt(), 0, 0, 0, max)
+        scroller.fling(0, (flingTop - viewOy).toInt(), 0, (-vy).toInt(), 0, 0, 0, max)
         Choreographer.getInstance().postFrameCallback(flingCb)
     }
+    private var flingTop = 0f
     /** Hold the page against the viewport, so no drag opens a blank strip beside it. */
     private fun clampView() {
         val l = page?.currentLayout ?: return
-        val v = QvpView.of(QvpNative.viewClamp(currentView.floats(), l.contentW, l.contentH, width.toFloat(), height.toFloat()))
+        // A dressed page is its content plus the border's overflow, so that is what is held.
+        val o = overflow()
+        val held = QvpView(viewScale, viewOx - o.left * viewScale, viewOy - o.top * viewScale)
+        val v = QvpView.of(QvpNative.viewClamp(held.floats(), l.contentW + o.left + o.right, l.contentH + o.top + o.bottom,
+                                               width.toFloat(), height.toFloat()))
         // Land the page on whole device pixels. A fractional offset makes every blit of the ink
         // a resample and the text reads as soft or ragged; the shift is under one pixel, so the
         // scroll loses nothing a reader can see.
-        viewOx = kotlin.math.round(v.offsetX); viewOy = kotlin.math.round(v.offsetY)
+        viewOx = kotlin.math.round(v.offsetX + o.left * viewScale); viewOy = kotlin.math.round(v.offsetY + o.top * viewScale)
     }
+    /** How far the dress border reaches past the content on each side, in layout px. Zero when the
+     * page is not dressed. */
+    private fun overflow(): QvpInsets = page?.takeIf { it.isOpen }?.dressInfo()?.overflow ?: QvpInsets.ZERO
 
     /** Scroll the page by [dy] points, held against the viewport. */
     fun scrollPage(by: Float) {
@@ -282,6 +295,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         Choreographer.getInstance().removeFrameCallback(frameCb)
         animating = false
         releaseBase()
+        ornamentLayer = null; ornamentKey = ""
         super.onDetachedFromWindow()
     }
 
@@ -333,9 +347,22 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     }
     fun resetView() {
         val l = page?.currentLayout
+        val o = overflow()
         // A reflowed page is taller than the screen on purpose: fitting its height would undo the
-        // size the reader asked for. It opens at its top and the reader scrolls.
-        if (l != null && l.reflowed) { viewScale = 1f; fitScale = 1f; viewOx = l.fitX; viewOy = 0f; invalidate(); return }
+        // size the reader asked for. It opens at its top and the reader scrolls. A dressed page
+        // opens at the top of its border.
+        if (l != null && l.reflowed) {
+            viewScale = 1f; fitScale = 1f; viewOx = l.fitX; viewOy = o.top
+            if (o != QvpInsets.ZERO) clampView()
+            invalidate(); return
+        }
+        if (l != null && o != QvpInsets.ZERO && width > 0 && height > 0) {
+            // A dressed page is bigger than its text: fit the content plus the border's overflow,
+            // or the border is cropped. The clamp centres it.
+            val w = l.contentW + o.left + o.right; val h = l.contentH + o.top + o.bottom
+            viewScale = minOf(l.fitScale, width / w, height / h); fitScale = viewScale
+            clampView(); invalidate(); return
+        }
         viewScale = l?.fitScale ?: 1f; fitScale = viewScale; viewOx = l?.fitX ?: 0f; viewOy = l?.fitY ?: 0f
         invalidate()
     }
@@ -423,13 +450,21 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             i += 2
         }
         val ink = p.defaultInk
+        val dressed = p.dressInfo()
         val (top, bandH) = band()
         val bandPx = kotlin.math.ceil(bandH).toInt().coerceAtLeast(1)
         // The key holds where the band starts, never where the reader has scrolled to, so a drag
         // inside the band is one blit and nothing is drawn again.
-        val key = "${p.pageNo}|$viewScale|$viewOx|$top|$ink|${l.lineSpacing}|${l.lineDy.contentHashCode()}|$styledKey|$width|$bandPx|${zoom.zoom}|${l.rows}"
+        val key = "${p.pageNo}|$viewScale|$viewOx|$top|$ink|${l.lineSpacing}|${l.lineDy.contentHashCode()}|$styledKey|$width|$bandPx|${zoom.zoom}|${l.rows}|${dressed?.revision ?: 0}"
         if (TRACE) android.util.Log.i("QVPTRACE", "band top=$top h=$bandH px=$bandPx contentH=${l.contentH * viewScale} viewOy=$viewOy viewScale=$viewScale height=$height rows=${l.rows}")
-        if (paperColor != Color.TRANSPARENT) { paint.color = paperColor; canvas.drawRect(viewOx, viewOy, viewOx + l.contentW * viewScale, viewOy + l.contentH * viewScale, paint) }
+        if (paperColor != Color.TRANSPARENT) {
+            // the paper runs under the border of a dressed page too
+            val o = dressed?.overflow ?: QvpInsets.ZERO
+            paint.color = paperColor
+            canvas.drawRect(viewOx - o.left * viewScale, viewOy - o.top * viewScale,
+                            viewOx + (l.contentW + o.right) * viewScale, viewOy + (l.contentH + o.bottom) * viewScale, paint)
+        }
+        if (dressed != null) drawOrnaments(canvas, p, dressed, top, bandH) else if (ornamentLayer != null) { ornamentLayer = null; ornamentKey = "" }
         val bands = p.highlightBoxesView()
         drawBoxes(canvas, bands)
         var b = base
@@ -479,6 +514,53 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         drawBoxes(canvas, p.maskBoxesView())
         lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = styled.size / 2; lastBands = bands.size
         if (moving) { animating = true; Choreographer.getInstance().postFrameCallback(frameCb) }
+    }
+
+    private var ornamentLayer: Bitmap? = null
+    private var ornamentKey = ""
+    private val ornamentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+    var lastOrnamentMs = 0.0; var lastOrnamentDraws = 0
+        private set
+
+    /**
+     * The ornament layer of a dressed page, behind everything else. Each draw goes under the
+     * placement its ink is drawn under, so a medallion follows its word and a band its title; the
+     * border has none and sits in layout space. A tiled border is hundreds of outlines and nothing
+     * about it changes while a highlight animates or the reader scrolls inside the band, so the
+     * layer is drawn once per band, view scale and dress revision, and blitted after that. A
+     * border stands past the content's top and bottom, so the layer is the band plus the overflow.
+     */
+    private fun drawOrnaments(canvas: Canvas, p: QvpPage, info: QvpDressInfo, top: Float, bandH: Float) {
+        val padTop = kotlin.math.ceil(kotlin.math.max(info.overflow.top, 0f) * viewScale)
+        val padBottom = kotlin.math.ceil(kotlin.math.max(info.overflow.bottom, 0f) * viewScale)
+        val layerH = kotlin.math.ceil(bandH + padTop + padBottom).toInt().coerceIn(1, MAX_INK_PX.toInt() * 2)
+        val key = "${System.identityHashCode(p)}|${info.revision}|$viewScale|$viewOx|$top|$width|$layerH"
+        var b = ornamentLayer
+        if (b == null || key != ornamentKey) {
+            val t0 = System.nanoTime()
+            val layer = b?.takeIf { it.width == width && it.height == layerH }
+                ?: Bitmap.createBitmap(width, layerH, Bitmap.Config.ARGB_8888).also { it.density = Bitmap.DENSITY_NONE; ornamentLayer = it }
+            b = layer
+            layer.eraseColor(Color.TRANSPARENT)
+            val bc = Canvas(layer)
+            val places = p.layoutPlacements()
+            // the layer's top row is `top - padTop` down the page
+            val dy = padTop - top
+            var cur = Int.MIN_VALUE; var n = 0
+            for (o in p.dressGeometry()) {
+                val g = o.placement ?: -1
+                if (g != cur) {
+                    val q = if (o.placement == null) QvpPlacement.IDENTITY else places.getOrElse(g) { QvpPlacement.IDENTITY }
+                    bc.setMatrix(placementMatrix(q, dy)); cur = g
+                }
+                ornamentPaint.color = QvpColor.argb(o.color)
+                if (o.stroke) { ornamentPaint.style = Paint.Style.STROKE; ornamentPaint.strokeWidth = o.strokeWidth }
+                else ornamentPaint.style = Paint.Style.FILL
+                bc.drawPath(o.path, ornamentPaint); n++
+            }
+            ornamentKey = key; lastOrnamentMs = (System.nanoTime() - t0) / 1e6; lastOrnamentDraws = n
+        }
+        canvas.drawBitmap(b!!, 0f, viewOy + top - padTop, null)
     }
 
     /** Keep ink already drawn, by page and size, so a page the reader turns back to is ready. */

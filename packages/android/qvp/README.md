@@ -84,6 +84,23 @@ val basmalah = QvpPassage.basmalah(listOf(page), surah = 2)   // one row, no wor
 passage.close()
 ```
 
+## Dress a page in another mushaf's ornaments
+
+An ornament set (`ornaments.qvo`, from the data release) holds the medallions, bands and
+borders of other mushafs and fonts. The engine places each one. `QvpPageView` paints them
+behind the ink and fits the border on screen.
+
+```kotlin
+val set = QvpOrnaments(assets.open("pages/ornaments.qvo").readBytes())
+val info = page.dress(set, QvpDressSpec(style = "mushaf-qalon", gap = 5f))   // null when refused
+val marker = set.find(QvpOrnamentKind.AYAH_MARK, "font-003-regular")
+page.dress(set, QvpDressSpec(style = "mushaf-qalon", ayahMark = marker))       // a kind overrides the style
+for (o in set.list) println("${o.style} ${o.kind}: ${o.licence.id}, ${o.licence.status}")
+page.undress()
+```
+
+Each ornament carries its licence. Read it before you publish a dressed page.
+
 ## Verify and benchmark
 
 Unit tests do not need page data:

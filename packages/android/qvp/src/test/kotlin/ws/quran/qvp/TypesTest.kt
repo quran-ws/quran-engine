@@ -33,4 +33,19 @@ class TypesTest {
                                   maxRows = 2, keepAyahMark = true, ellipsisWidth = 12f, maxStretch = -1f)
         assertArrayEquals(floatArrayOf(366f, 0.8f, 1.2f, 4f, 2f, 1f, 2f, 12f, -1f), spec.floats(), 0f)
     }
+
+    /** The dress spec and readout records, in the order qvp_jni.c states. */
+    @Test
+    fun dressRecordsMatchTheBridge() {
+        assertEquals(0, QvpDressSpec().lineArtBits())
+        assertEquals(7, QvpDressSpec(lineArt = QvpDressSpec.ALL_LINE_ART).lineArtBits())
+        assertEquals(2, QvpDressSpec(lineArt = setOf(QvpOrnamentKind.SURAH_HEADER)).lineArtBits())
+        assertEquals(null, QvpDressSpec().colorTriples())
+        assertArrayEquals(intArrayOf(2, 0, 0xff0000ff.toInt(), 1, 1, 0x00ff00ff),
+                          QvpDressSpec(colors = listOf(QvpPartColor(2, 0, 0xff0000ff.toInt()), QvpPartColor(1, 1, 0x00ff00ff))).colorTriples())
+        val bits = { f: Float -> f.toRawBits() }
+        val info = QvpDressInfo.of(intArrayOf(0, 1, -1, 7, 1, 0, 1, 18, 3,
+                                              bits(-34.5f), bits(-23.5f), bits(414f), bits(622f), bits(50f), bits(45f), bits(49f), bits(44f)))
+        assertEquals(QvpDressInfo(0, 1, null, 7, 1, 0, true, 18, 3, QvpViewBox(-34.5f, -23.5f, 414f, 622f), QvpInsets(50f, 45f, 49f, 44f)), info)
+    }
 }

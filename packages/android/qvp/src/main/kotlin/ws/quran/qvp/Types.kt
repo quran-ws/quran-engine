@@ -286,3 +286,91 @@ class QvpPassageLayout(
      * when nothing was cut. */
     val ellipsis: RectF?,
 )
+
+// ── dress: another mushaf's ornaments ──
+/** What an ornament replaces (QVP_ORNAMENT_*). */
+enum class QvpOrnamentKind(val id: Int) { AYAH_MARK(0), SURAH_HEADER(1), PAGE_FRAME(2) }
+/** Where an ornament's artwork came from (QVP_LINEAGE_*): a scanned mushaf or a font. */
+enum class QvpLineage(val id: Int) { SCAN(0), FONT(1) }
+/** What an ornament may be published under. Read it before you publish a page that wears it. */
+data class QvpLicence(val id: String, val status: String, val redistributable: Boolean, val attribution: String)
+/** One printed colour of an ornament's design. [color] is 0xRRGGBBAA; alpha 0 is a slot the design
+ * leaves open. A [stroke] part is the design's line art. */
+data class QvpOrnamentPart(val index: Int, val color: Int, val stroke: Boolean, val name: String)
+
+/** Which ornament a dress takes for one kind: an ornament of the set, its index, a style name (the
+ * ornament of that kind in that mushaf), or [None]. */
+sealed interface QvpOrnamentRef {
+    data class Index(val index: Int) : QvpOrnamentRef
+    data class Style(val style: String) : QvpOrnamentRef
+    /** No ornament of this kind, even when the spec names a style. */
+    data object None : QvpOrnamentRef
+}
+
+/** One ornament of a set: a medallion, a band or a border, from a mushaf or a font. */
+data class QvpOrnament(val index: Int, val kind: QvpOrnamentKind, val lineage: QvpLineage, val style: String, val riwayah: String,
+                       val hasSlices: Boolean, val licence: QvpLicence, val parts: List<QvpOrnamentPart>) : QvpOrnamentRef
+
+/** One mushaf or font of a set, with the ornament it has of each kind, or null. */
+data class QvpOrnamentStyle(val style: String, val riwayah: String, val lineage: QvpLineage,
+                            val ayahMark: QvpOrnament?, val surahHeader: QvpOrnament?, val pageFrame: QvpOrnament?)
+
+/** Repaint one part of one ornament: [color] is 0xRRGGBBAA. */
+data class QvpPartColor(val ornament: Int, val part: Int, val color: Int)
+
+/**
+ * What a dress asks for. [style] names a mushaf and takes its medallion, band and border together.
+ * [ayahMark], [surahHeader] and [pageFrame] override the style for their kind; null keeps the style's.
+ * [gap] is the air between the text and the border, and [bandGap] the air between a band and the
+ * border, in page units. [ayahMarkScale] sizes the medallion against the printed ring: 0 takes the
+ * design's own ([QvpDefaults.AYAH_MARK_SCALE_SCAN] for a scan, 1 for a font). [pageFrameScale]
+ * sizes the border against the design's own; the pattern scales as a whole. [lineArt] draws those
+ * kinds as their strokes alone. [colors] repaints parts; every part left out keeps the design's own.
+ */
+data class QvpDressSpec(
+    val style: String? = null,
+    val ayahMark: QvpOrnamentRef? = null,
+    val surahHeader: QvpOrnamentRef? = null,
+    val pageFrame: QvpOrnamentRef? = null,
+    val gap: Float = 5f,
+    val bandGap: Float = 5f,
+    val ayahMarkScale: Float = 0f,
+    val pageFrameScale: Float = 1f,
+    val lineArt: Set<QvpOrnamentKind> = emptySet(),
+    val colors: List<QvpPartColor> = emptyList(),
+) {
+    /** The QVP_LINE_ART_* bits of [lineArt]. */
+    internal fun lineArtBits(): Int = lineArt.fold(0) { m, k -> m or (1 shl k.id) }
+    internal fun colorTriples(): IntArray? =
+        if (colors.isEmpty()) null else IntArray(colors.size * 3) { k -> colors[k / 3].let { c -> when (k % 3) { 0 -> c.ornament; 1 -> c.part; else -> c.color } } }
+    companion object {
+        /** Every kind as line art. */
+        val ALL_LINE_ART: Set<QvpOrnamentKind> = QvpOrnamentKind.entries.toSet()
+    }
+}
+
+/** A box in page units: x, y, width, height. */
+data class QvpViewBox(val x: Float, val y: Float, val width: Float, val height: Float)
+/** How far something reaches past each side, in viewport px. */
+data class QvpInsets(val left: Float, val top: Float, val right: Float, val bottom: Float) {
+    companion object { val ZERO = QvpInsets(0f, 0f, 0f, 0f) }
+}
+
+/**
+ * What a dress put on the page. The three ornament indices are null for a kind left as printed.
+ * [viewBox] is the page box the border grew, in page units. [overflow] is how far the border reaches
+ * past the laid-out content on each side, in viewport px: fit content plus overflow, or the border is
+ * cropped. [revision] counts up on every rebuild (a new dress, and every layout).
+ */
+data class QvpDressInfo(val ayahMark: Int?, val surahHeader: Int?, val pageFrame: Int?, val ayahMarks: Int, val surahHeaders: Int,
+                        val frameRepeats: Int, val frameStretched: Boolean, val draws: Int, val revision: Int,
+                        val viewBox: QvpViewBox, val overflow: QvpInsets) {
+    internal companion object {
+        fun of(v: IntArray): QvpDressInfo {
+            val id = { x: Int -> if (x == -1) null else x }
+            val f = { k: Int -> Float.fromBits(v[k]) }
+            return QvpDressInfo(id(v[0]), id(v[1]), id(v[2]), v[3], v[4], v[5], v[6] != 0, v[7], v[8],
+                                QvpViewBox(f(9), f(10), f(11), f(12)), QvpInsets(f(13), f(14), f(15), f(16)))
+        }
+    }
+}

@@ -5,6 +5,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- Dress: `QvpOrnaments` loads an ornament set, and `QvpPage.dress`, `undress`, `dressInfo`,
+  `dressGeometry` and `dressRevision` bind the dress section of the ABI. `QvpPageView` paints the
+  ornament layer behind the ink, cached per dress revision, and fits the border on screen. The
+  example app has a dress panel.
 - Passages: `QvpPassage.load` and `QvpPassage.basmalah`, `layout`, and `QvpPassageLayout.draw`
   to draw a layout on a `Canvas`. The instrumented tests replay
   `conformance/scenarios/passage.json` (issue #102), and `scripts/sync-android-test-data.sh`
