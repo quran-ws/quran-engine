@@ -634,7 +634,7 @@ the border, both in page units; a band is centred in the column. `lineArt` draws
 art, their constant-width strokes alone, so
 there is one ink: `true` for every kind, or a list such as `['surah_header']` for the bands
 alone. A scanned design's line art is the catalogue's own `line.svg`, stroke for stroke; a
-font marker has no linework, so it stays in colour.
+font marker has no linework, so its fills are drawn as outlines in its darkest ink instead.
 
 **Every ornament is placed from a measurement**, never a fixed offset: the medallion from
 the printed ring's centre and radius, with the design's slot centre on the ring centre; the

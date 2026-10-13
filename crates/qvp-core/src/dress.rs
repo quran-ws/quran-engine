@@ -178,7 +178,14 @@ struct Palette {
     colors: Vec<Rgba>,
     line: Option<u16>,
     slot: Option<u16>,
+    /// The darkest ink of the design: the last part that is painted. A design with no
+    /// linework is drawn as line art in this colour.
+    ink: Rgba,
 }
+
+/// The stroke width of line art drawn from a design's fills, in asset units: the width
+/// the catalogue's own linework has on a design 100 units tall.
+const LINE_ART_WIDTH: f32 = 1.25;
 
 fn palette(o: &Ornament, index: u32, spec: &DressSpec) -> Palette {
     let mut colors: Vec<Rgba> = o.parts.iter().map(|p| p.color).collect();
@@ -189,7 +196,8 @@ fn palette(o: &Ornament, index: u32, spec: &DressSpec) -> Palette {
             }
         }
     }
-    Palette { colors, line: o.part_index("line"), slot: o.part_index("slot") }
+    let ink = colors.iter().rev().copied().find(|c| c & 0xff != 0).unwrap_or(0x000000ff);
+    Palette { colors, line: o.part_index("line"), slot: o.part_index("slot"), ink }
 }
 
 struct Builder<'a> {
@@ -206,13 +214,18 @@ impl<'a> Builder<'a> {
         let ss = tf.stroke_scale();
         for i in asset.first_path..asset.first_path + asset.n_paths {
             let Some(p) = self.set.paths.get(i as usize).copied() else { continue };
-            if self.line_art & line_art_bit(kind) != 0 && Some(p.part) != pal.line {
+            // Line art keeps the design's own linework. A design with none (a font marker)
+            // is drawn as the outlines of its fills instead, in one ink.
+            let line_art = self.line_art & line_art_bit(kind) != 0;
+            let outlined = line_art && pal.line.is_none();
+            if line_art && !outlined && Some(p.part) != pal.line {
                 continue;
             }
             if drop_slot && Some(p.part) == pal.slot {
                 continue;
             }
-            let color = pal.colors.get(p.part as usize).copied().unwrap_or(0);
+            let own = pal.colors.get(p.part as usize).copied().unwrap_or(0);
+            let color = if outlined && own & 0xff != 0 { pal.ink } else { own };
             if color & 0xff == 0 {
                 continue;
             }
@@ -248,7 +261,14 @@ impl<'a> Builder<'a> {
                     Cmd::Close => self.out.ops.push(OP_CLOSE),
                 }
             }
-            let stroke = p.flags & OPF_STROKE != 0;
+            let stroke = p.flags & OPF_STROKE != 0 || outlined;
+            let stroke_width = if p.flags & OPF_STROKE != 0 {
+                p.stroke_width as f32 / q * ss
+            } else if outlined {
+                LINE_ART_WIDTH * ss
+            } else {
+                0.0
+            };
             self.out.table.push(OrnamentDraw {
                 op_start,
                 op_count: self.out.ops.len() as u32 - op_start,
@@ -258,7 +278,7 @@ impl<'a> Builder<'a> {
                 flags: kind as u32
                     | if p.flags & OPF_EVENODD != 0 { ODF_EVENODD } else { 0 }
                     | if stroke { ODF_STROKE } else { 0 },
-                stroke_width: if stroke { p.stroke_width as f32 / q * ss } else { 0.0 },
+                stroke_width,
                 part: p.part as u32,
                 placement,
             });
@@ -817,6 +837,66 @@ mod tests {
         let d = p.dress(&set(), &DressSpec { colors: vec![(2, 0, 0xff0000ff)], ..all() }).unwrap().clone();
         assert_eq!(d.table[0].color, 0xff0000ff, "the border's fill was repainted");
         assert_eq!(d.table[2].color, 0x00649bff, "the band keeps its own");
+    }
+
+    #[test]
+    fn line_art_outlines_a_design_that_has_no_linework() {
+        let (mut p, _, _) = page();
+        // a font marker: two fills, light then dark, and no `line` part
+        let mut s = OrnamentSet::default();
+        let q = s.quant as i32;
+        let first = s.paths.len() as u32;
+        s.push_path(
+            0,
+            0,
+            0,
+            &[
+                Cmd::MoveTo(0, 0),
+                Cmd::LineTo(80 * q, 0),
+                Cmd::LineTo(80 * q, 100 * q),
+                Cmd::LineTo(0, 100 * q),
+                Cmd::Close,
+            ],
+        );
+        s.push_path(
+            1,
+            0,
+            0,
+            &[Cmd::MoveTo(10 * q, 10 * q), Cmd::LineTo(70 * q, 10 * q), Cmd::LineTo(70 * q, 90 * q), Cmd::Close],
+        );
+        s.ornaments.push(Ornament {
+            kind: OrnamentKind::AyahMark,
+            style: "font-test".into(),
+            lineage: Lineage::Font,
+            riwayah: String::new(),
+            license: License::default(),
+            parts: vec![
+                Part { name: "c1".into(), color: 0xfff8e7ff, stroke: false },
+                Part { name: "c2".into(), color: 0x083a3aff, stroke: false },
+            ],
+            asset: Asset {
+                view_box: [0.0, 0.0, 80.0, 100.0],
+                slot: Some([20.0, 20.0, 40.0, 60.0]),
+                first_path: first,
+                n_paths: 2,
+            },
+            slices: None,
+        });
+        let set = Arc::new(s);
+        let spec = DressSpec { ayah_mark: 0, line_art: LINE_ART_AYAH_MARK, ..DressSpec::default() };
+        let d = p.dress(&set, &spec).unwrap().clone();
+        assert_eq!(d.table.len(), 2, "every fill is kept, as an outline");
+        for t in &d.table {
+            assert_ne!(t.flags & ODF_STROKE, 0);
+            assert!(t.stroke_width > 0.0);
+            assert_eq!(t.color, 0x083a3aff, "one ink, the design's darkest");
+        }
+        // the medallion is 6 units tall for an asset of 100, so the width scales the same way
+        assert!((d.table[0].stroke_width - LINE_ART_WIDTH * 0.06).abs() < 1e-4, "{}", d.table[0].stroke_width);
+        // in colour the same design keeps its two fills
+        let d = p.dress(&set, &DressSpec { ayah_mark: 0, ..DressSpec::default() }).unwrap().clone();
+        assert!(d.table.iter().all(|t| t.flags & ODF_STROKE == 0));
+        assert_eq!(d.table[0].color, 0xfff8e7ff);
     }
 
     #[test]
