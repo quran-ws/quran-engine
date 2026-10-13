@@ -36,7 +36,7 @@
     selWord: -1, selAyah: null, hlSel: 0, hlAyah: 0, hlSearch: 0, hlPlay: 0, pathHandles: new Map(),
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
-    dress: { ayahMark: null, surahHeader: null, pageFrame: null, gap: 5, bandGap: 5, ayahMarkScale: 0, pageFrameRings: 1, lineArt: [], colors: [] },
+    dress: { ayahMark: null, surahHeader: null, pageFrame: null, gap: 5, bandGap: 5, ayahMarkScale: 0, pageFrameScale: 1, lineArt: [], colors: [] },
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16, surahFrames: true },
     reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
     hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
@@ -577,7 +577,7 @@
   $('dressGap').oninput = e => { S.dress.gap = +e.target.value; $('dressGapVal').textContent = e.target.value; applyDress(); };
   $('dressBandGap').oninput = e => { S.dress.bandGap = +e.target.value; $('dressBandGapVal').textContent = e.target.value; applyDress(); };
   $('dressMarkScale').oninput = e => { S.dress.ayahMarkScale = +e.target.value; $('dressMarkScaleVal').textContent = '×' + (+e.target.value).toFixed(2); applyDress(); };
-  $('dressFrameRings').oninput = e => { S.dress.pageFrameRings = +e.target.value; $('dressFrameRingsVal').textContent = e.target.value; applyDress(); };
+  $('dressFrameScale').oninput = e => { S.dress.pageFrameScale = +e.target.value; $('dressFrameScaleVal').textContent = '×' + (+e.target.value).toFixed(2); applyDress(); };
   for (const [id, kind] of [['dressLineMark', 'ayah_mark'], ['dressLineHeader', 'surah_header'], ['dressLineFrame', 'page_frame']]) {
     $(id).onchange = e => { S.dress.lineArt = S.dress.lineArt.filter(k => k !== kind); if (e.target.checked) S.dress.lineArt.push(kind); S.dress.colors = []; dressSwatches(); applyDress(); };
   }

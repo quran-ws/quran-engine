@@ -2739,7 +2739,7 @@ pub struct QvpDressSpec {
     pub gap: f32,
     pub band_gap: f32,
     pub ayah_mark_scale: f32,
-    pub page_frame_rings: u32,
+    pub page_frame_scale: f32,
     pub line_art: u32,
     /// (ornament, part, rgba) triples; NULL for none.
     pub colors: *const u32,
@@ -2862,7 +2862,7 @@ pub unsafe extern "C" fn qvp_dress(page: *mut Page, set: *const Ornaments, spec:
             gap: s.gap,
             band_gap: s.band_gap,
             ayah_mark_scale: s.ayah_mark_scale,
-            page_frame_rings: s.page_frame_rings,
+            page_frame_scale: s.page_frame_scale,
             line_art: s.line_art & LINE_ART_ALL,
             colors,
         };

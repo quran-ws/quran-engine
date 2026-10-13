@@ -270,14 +270,15 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * `gap` is the air between the text and the border and `bandGap` the air between a band
      * and the border, both in page units. `ayahMarkScale` sizes the medallion against the
      * printed ring (0, the default, takes the design's own: `DEFAULTS.AYAH_MARK_SCALE_SCAN`
-     * for a scanned mushaf, 1 for a font marker). `pageFrameRings` is how many rings of the
-     * frame's pattern the border is, nested; the motifs keep their size. `lineArt` draws kinds as line art, their constant-width strokes alone: `true` for
+     * for a scanned mushaf, 1 for a font marker). `pageFrameScale` sizes the border against the
+     * design's own: the pattern scales as a whole, so a bigger border fits fewer motifs
+     * along each edge; nothing is stretched. `lineArt` draws kinds as line art, their constant-width strokes alone: `true` for
      * every kind, or a list of kinds (`'ayah_mark'`, `'surah_header'`, `'page_frame'`).
      * Returns the readout, or null when the engine refused the spec (an index out of
      * range, an ornament of another kind, or nothing to dress). Replaces any previous
      * dress.
      */
-    dress(set, { style = null, ayahMark = style, surahHeader = style, pageFrame = style, gap = 5, bandGap = 5, ayahMarkScale = 0, pageFrameRings = 1, lineArt = false, colors = [] } = {}) {
+    dress(set, { style = null, ayahMark = style, surahHeader = style, pageFrame = style, gap = 5, bandGap = 5, ayahMarkScale = 0, pageFrameScale = 1, lineArt = false, colors = [] } = {}) {
       const index = (v, kind) => {
         if (v === null || v === undefined) return NONE;
         if (typeof v === 'number') return v;
@@ -292,7 +293,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const s = this.e.scratch2, d = this.e.dv();
       d.setUint32(s, ayah, true); d.setUint32(s + 4, header, true); d.setUint32(s + 8, frame, true);
       const lineMask = lineArt === true ? 7 : Array.isArray(lineArt) ? lineArt.reduce((m, k) => m | (1 << ORNAMENT_KIND.indexOf(k)), 0) : 0;
-      d.setFloat32(s + 12, gap, true); d.setFloat32(s + 16, bandGap, true); d.setFloat32(s + 20, ayahMarkScale, true); d.setUint32(s + 24, pageFrameRings, true); d.setUint32(s + 28, lineMask, true);
+      d.setFloat32(s + 12, gap, true); d.setFloat32(s + 16, bandGap, true); d.setFloat32(s + 20, ayahMarkScale, true); d.setFloat32(s + 24, pageFrameScale, true); d.setUint32(s + 28, lineMask, true);
       d.setUint32(s + 32, cp, true); d.setUint32(s + 36, triples.length / 3, true);
       this.ornaments = null;
       if (!this.e.ex.qvp_dress(this.h, set.h, s)) return null;

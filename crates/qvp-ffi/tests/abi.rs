@@ -520,7 +520,7 @@ fn dress_over_the_abi() {
             gap: 5.0,
             band_gap: 5.0,
             ayah_mark_scale: 1.0,
-            page_frame_rings: 1,
+            page_frame_scale: 1.0,
             line_art: 0,
             colors: colors.as_ptr(),
             n_colors: 1,

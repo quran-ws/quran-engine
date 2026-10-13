@@ -35,10 +35,11 @@ pub struct DressSpec {
     /// design's own: [`crate::defaults::AYAH_MARK_SCALE_SCAN`] for a scanned mushaf's
     /// medallion, 1 for a font marker.
     pub ayah_mark_scale: f32,
-    /// How many rings of the frame's pattern the border is, nested one inside the other,
-    /// each one band wide. The motifs keep their size: a wider border has more of them. 0
-    /// is 1. A frame without slices cannot nest and keeps its printed proportions.
-    pub page_frame_rings: u32,
+    /// The border's size against the design's own: 1 is the mushaf's proportion. The
+    /// pattern scales as a whole, so a bigger border fits fewer motifs along each edge and
+    /// a smaller one more; nothing is stretched. 0 is 1. A frame without slices keeps its
+    /// printed proportions.
+    pub page_frame_scale: f32,
     /// Which kinds are drawn as line art: only their constant-width strokes, the same
     /// drawing with the fills taken away, so one ink is left. A bitmask of
     /// [`LINE_ART_AYAH_MARK`], [`LINE_ART_SURAH_HEADER`] and [`LINE_ART_PAGE_FRAME`];
@@ -58,7 +59,7 @@ impl Default for DressSpec {
             gap: 5.0,
             band_gap: 5.0,
             ayah_mark_scale: 0.0,
-            page_frame_rings: 1,
+            page_frame_scale: 1.0,
             line_art: 0,
             colors: vec![],
         }
@@ -539,31 +540,23 @@ impl Page {
                 let pal = palette(o, oi, spec);
                 let gap = spec.gap;
                 let unit = (laid_w + 2.0 * gap) / slot[2].max(f32::EPSILON); // page units per frame unit
-                let rings = spec.page_frame_rings.max(1);
+                let size = if spec.page_frame_scale > 0.0 { spec.page_frame_scale } else { 1.0 };
                 let (asset_w, asset_h) = (o.asset.width(), o.asset.height());
                 match &o.slices {
                     Some(sl) => {
-                        // A wider border is more rings of the pattern, nested, each one band
-                        // wide: the margins are `rings` times the design's, the slot stays on
-                        // the grown page box, and no motif changes size. The bottom margin is
-                        // the frame's own, not a copy of its top.
-                        let n = rings as f32;
-                        let (ml, mt) = (slot[0], slot[1]);
-                        let (mr, mb) = (asset_w - slot[0] - slot[2], asset_h - slot[1] - slot[3]);
-                        let box_x = laid_left - gap - n * ml * unit;
-                        let box_y = laid_top - gap - n * mt * unit;
-                        let unit_w = (laid_w + 2.0 * gap) / unit + n * (ml + mr);
-                        let unit_h = (laid_h + 2.0 * gap) / unit + n * (mt + mb);
+                        // A bigger border draws the frame's units bigger, so fewer motifs fit
+                        // along each edge, and a smaller one more: the pattern scales as a
+                        // whole and nothing is stretched. The margins grow with it; the slot
+                        // stays on the grown page box. The bottom margin is the frame's own,
+                        // not a copy of its top.
+                        let unit = unit * size;
+                        let box_x = laid_left - gap - slot[0] * unit;
+                        let box_y = laid_top - gap - slot[1] * unit;
+                        let unit_w = (laid_w + 2.0 * gap) / unit + slot[0] + (asset_w - slot[0] - slot[2]);
+                        let unit_h = (laid_h + 2.0 * gap) / unit + slot[1] + (asset_h - slot[1] - slot[3]);
                         let (box_w, box_h) = (unit_w * unit, unit_h * unit);
                         let frame_tf = Tf::fit([0.0, 0.0, unit_w, unit_h], box_x, box_y, box_w, box_h, false);
-                        let mut repeats = 0;
-                        for r in 0..rings {
-                            let k = r as f32;
-                            let ring_tf = frame_tf.then(&Tf::translate(k * ml, k * mt));
-                            b.tile_frame(sl, &pal, &ring_tf, unit_w - k * (ml + mr), unit_h - k * (mt + mb));
-                            repeats += b.out.n_frame_repeats;
-                        }
-                        b.out.n_frame_repeats = repeats;
+                        b.tile_frame(sl, &pal, &frame_tf, unit_w, unit_h);
                         b.out.view_box = [box_x, box_y, box_w, box_h];
                     }
                     None => {
@@ -756,7 +749,7 @@ mod tests {
             gap: 5.0,
             band_gap: 5.0,
             ayah_mark_scale: 1.0,
-            page_frame_rings: 1,
+            page_frame_scale: 1.0,
             line_art: 0,
             colors: vec![],
         }
@@ -1156,11 +1149,11 @@ mod tests {
         let (x0, y0, x1, y1) = draw_box(&d, 4);
         assert!(near(y1 - y0, 12.0) && near(x1 - x0, 9.6), "{:?}", (x0, y0, x1, y1));
         assert!(near((x0 + x1) / 2.0, 45.0) && near((y0 + y1) / 2.0, 13.0), "{:?}", (x0, y0, x1, y1));
-        // two rings of the border: one more margin on each side, the slot still on the
-        // grown box, every motif the same size, so eight corners and at least twice the
-        // repeats (the inner ring is the single ring; the outer one is bigger)
+        // a border twice the size: the pattern scales as a whole, so the margins double,
+        // the slot stays on the grown box, a run's motif is twice as big both ways, and
+        // fewer of them fit along the edge
         let one = p.dress(&tiled_set(false), &frame_only()).unwrap().clone();
-        let two = p.dress(&tiled_set(false), &DressSpec { page_frame_rings: 2, ..frame_only() }).unwrap().clone();
+        let two = p.dress(&tiled_set(false), &DressSpec { page_frame_scale: 2.0, ..frame_only() }).unwrap().clone();
         let unit = (p.width() + 10.0) / 60.0;
         assert!(near(one.view_box[2], p.width() + 10.0 + 2.0 * 5.0 * unit), "{:?}", one.view_box);
         assert!(
@@ -1170,11 +1163,16 @@ mod tests {
             two.view_box
         );
         assert!(near(two.view_box[0], -5.0 - 5.0 * unit * 2.0), "{:?}", two.view_box);
-        assert_eq!(two.table.len() as u32, 8 + two.n_frame_repeats);
-        assert!(two.n_frame_repeats >= 2 * one.n_frame_repeats, "{} vs {}", two.n_frame_repeats, one.n_frame_repeats);
-        let (_, oy0, _, oy1) = draw_box(&one, 4);
-        let (_, ty0, _, ty1) = draw_box(&two, 4);
-        assert!(near(ty1 - ty0, oy1 - oy0), "a run's motif keeps its size: {} vs {}", ty1 - ty0, oy1 - oy0);
+        assert_eq!(two.table.len() as u32, 4 + two.n_frame_repeats);
+        assert!(two.n_frame_repeats < one.n_frame_repeats, "{} vs {}", two.n_frame_repeats, one.n_frame_repeats);
+        let (ox0, oy0, ox1, oy1) = draw_box(&one, 4);
+        let (tx0, ty0, tx1, ty1) = draw_box(&two, 4);
+        assert!(near(ty1 - ty0, 2.0 * (oy1 - oy0)), "{} vs {}", ty1 - ty0, oy1 - oy0);
+        let (ow, tw) = (ox1 - ox0, tx1 - tx0);
+        assert!(
+            (tw / ow - 2.0).abs() < 0.2,
+            "a motif twice as wide, within the nudge that fits a whole number: {ow} {tw}"
+        );
     }
 
     #[test]
