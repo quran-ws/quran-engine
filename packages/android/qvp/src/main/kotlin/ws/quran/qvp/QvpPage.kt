@@ -91,10 +91,16 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
         dressDraws = null
         val ok = QvpNative.dress(h, set.handle, ayahMark, surahHeader, pageFrame, spec.gap, spec.bandGap,
                                  spec.ayahMarkScale, spec.pageFrameScale, spec.lineArtBits(), spec.colorTriples())
+        // the dress refits the page, so the layout the wrapper holds is stale now
+        readLayout()
         return if (ok) dressInfo() else null
     }
     /** Take the ornaments off: the printed rings and bands come back. */
-    fun undress() { QvpNative.undress(h); dressDraws = null }
+    fun undress() { QvpNative.undress(h); dressDraws = null; readLayout() }
+    /** The view clamp over the content plus the dress overflow: a drag reaches the border, never past it.
+     * An undressed page gets the plain clamp. */
+    fun dressClamp(view: QvpView, viewportW: Float, viewportH: Float): QvpView =
+        QvpView.of(QvpNative.dressClamp(h, view.floats(), viewportW, viewportH))
     /** The readout, or null when the page is not dressed. */
     fun dressInfo(): QvpDressInfo? = QvpNative.dressInfo(h)?.let { QvpDressInfo.of(it) }
     /** Counts up whenever the ornament layer is rebuilt: a new dress, or a layout that moved the

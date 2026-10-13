@@ -137,11 +137,12 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         }
     }
     private fun fling(vy: Float) {
-        val l = page?.currentLayout ?: return
-        // a dressed page scrolls from the top of its border, not the top of its text
-        val o = overflow()
-        flingTop = o.top * viewScale
-        val max = kotlin.math.max(0f, (l.contentH + o.top + o.bottom) * viewScale - height).toInt()
+        val pg = page?.takeIf { it.isOpen } ?: return
+        // The engine says how far the page may travel: clamp a view pushed past each end.
+        val top = pg.dressClamp(QvpView(viewScale, viewOx, FAR), width.toFloat(), height.toFloat()).offsetY
+        val bottom = pg.dressClamp(QvpView(viewScale, viewOx, -FAR), width.toFloat(), height.toFloat()).offsetY
+        flingTop = top
+        val max = kotlin.math.max(0f, top - bottom).toInt()
         scroller.forceFinished(true)
         scroller.fling(0, (flingTop - viewOy).toInt(), 0, (-vy).toInt(), 0, 0, 0, max)
         Choreographer.getInstance().postFrameCallback(flingCb)
@@ -149,20 +150,16 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private var flingTop = 0f
     /** Hold the page against the viewport, so no drag opens a blank strip beside it. */
     private fun clampView() {
-        val l = page?.currentLayout ?: return
-        // A dressed page is its content plus the border's overflow, so that is what is held.
-        val o = overflow()
-        val held = QvpView(viewScale, viewOx - o.left * viewScale, viewOy - o.top * viewScale)
-        val v = QvpView.of(QvpNative.viewClamp(held.floats(), l.contentW + o.left + o.right, l.contentH + o.top + o.bottom,
-                                               width.toFloat(), height.toFloat()))
+        val pg = page?.takeIf { it.isOpen } ?: return
+        if (pg.currentLayout == null) return
+        val v = pg.dressClamp(QvpView(viewScale, viewOx, viewOy), width.toFloat(), height.toFloat())
         // Land the page on whole device pixels. A fractional offset makes every blit of the ink
         // a resample and the text reads as soft or ragged; the shift is under one pixel, so the
         // scroll loses nothing a reader can see.
-        viewOx = kotlin.math.round(v.offsetX + o.left * viewScale); viewOy = kotlin.math.round(v.offsetY + o.top * viewScale)
+        viewOx = kotlin.math.round(v.offsetX); viewOy = kotlin.math.round(v.offsetY)
     }
     /** How far the dress border reaches past the content on each side, in layout px. Zero when the
-     * page is not dressed. */
-    private fun overflow(): QvpInsets = overflowNow
+     * page is not dressed. Only sizes the paper; the fit and the clamp are the engine's. */
     private var overflowNow = QvpInsets.ZERO
     /** Ask the engine for the dress once and keep its overflow for the gestures in between. Called
      * where the dress can have changed: a new page, a layout, a reset and every draw. */
@@ -357,23 +354,10 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     fun resetView() {
         val l = page?.currentLayout
         readOverflow()
-        val o = overflow()
-        // A reflowed page is taller than the screen on purpose: fitting its height would undo the
-        // size the reader asked for. It opens at its top and the reader scrolls. A dressed page
-        // opens at the top of its border.
-        if (l != null && l.reflowed) {
-            viewScale = 1f; fitScale = 1f; viewOx = l.fitX; viewOy = o.top
-            if (o != QvpInsets.ZERO) clampView()
-            invalidate(); return
-        }
-        if (l != null && o != QvpInsets.ZERO && width > 0 && height > 0) {
-            // A dressed page is bigger than its text: fit the content plus the border's overflow,
-            // or the border is cropped. The clamp centres it.
-            val w = l.contentW + o.left + o.right; val h = l.contentH + o.top + o.bottom
-            viewScale = minOf(l.fitScale, width / w, height / h); fitScale = viewScale
-            clampView(); invalidate(); return
-        }
+        // The engine's fit: a printed page scaled to the viewport with its border, a reflowed one
+        // at scale 1 from its top. The clamp holds it against the viewport.
         viewScale = l?.fitScale ?: 1f; fitScale = viewScale; viewOx = l?.fitX ?: 0f; viewOy = l?.fitY ?: 0f
+        if (l != null && width > 0 && height > 0) clampView()
         invalidate()
     }
     /** Matrix mapping page units of [line] to view px (layout + pan/zoom). */
@@ -598,6 +582,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     companion object {
         /** Pinch limits as multiples of the fitted scale; the same pair on every platform. */
         const val MIN_ZOOM = 0.5f
+        /** An offset far past any page, to ask the clamp for the end of a scroll. */
+        private const val FAR = 1e7f
         const val MAX_ZOOM = 12f
         /** A bitmap taller than this cannot be drawn on every device, so the ink keeps a band. */
         private const val MAX_INK_PX = 4096f

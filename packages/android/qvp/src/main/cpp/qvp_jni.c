@@ -273,6 +273,9 @@ jfloatArray FN(viewPan)(JNIEnv* env, jclass c, jfloatArray view, jfloat dx, jflo
 jfloatArray FN(viewClamp)(JNIEnv* env, jclass c, jfloatArray view, jfloat cw, jfloat ch, jfloat vw, jfloat vh) {
     QvpView in = view_of(env, view), out; qvp_view_clamp(&in, cw, ch, vw, vh, &out); return view_out(env, out);
 }
+jfloatArray FN(dressClamp)(JNIEnv* env, jclass c, jlong h, jfloatArray view, jfloat vw, jfloat vh) {
+    QvpView in = view_of(env, view), out; qvp_dress_clamp(PG(h), &in, vw, vh, &out); return view_out(env, out);
+}
 jfloatArray FN(viewAnchor)(JNIEnv* env, jclass c, jlong h, jfloatArray view, jint word, jfloat nx, jfloat ny, jfloat toX, jfloat toY, jfloat vw, jfloat vh) {
     QvpView in = view_of(env, view), out; qvp_view_anchor(PG(h), &in, (uint32_t)word, nx, ny, toX, toY, vw, vh, &out); return view_out(env, out);
 }

@@ -62,6 +62,7 @@ internal object QvpNative {
     @JvmStatic external fun viewZoomAbout(view: FloatArray, fx: Float, fy: Float, factor: Float, min: Float, max: Float): FloatArray
     @JvmStatic external fun viewPan(view: FloatArray, dx: Float, dy: Float): FloatArray
     @JvmStatic external fun viewClamp(view: FloatArray, contentW: Float, contentH: Float, viewportW: Float, viewportH: Float): FloatArray
+    @JvmStatic external fun dressClamp(h: Long, view: FloatArray, viewportW: Float, viewportH: Float): FloatArray
     @JvmStatic external fun viewAnchor(h: Long, view: FloatArray, word: Int, nx: Float, ny: Float, toX: Float, toY: Float, viewportW: Float, viewportH: Float): FloatArray
     @JvmStatic external fun viewToLayout(h: Long, view: FloatArray, vx: Float, vy: Float): FloatArray
     @JvmStatic external fun viewSwipe(dx: Float, dy: Float, vx: Float, vy: Float): Int

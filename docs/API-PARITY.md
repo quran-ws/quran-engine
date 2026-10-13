@@ -27,7 +27,6 @@ is owed.
 | `qvp_ayah_marks_view` | android | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
 | `qvp_ayah_marks_view` | ios | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
 | `qvp_ayah_marks_view` | react-native | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
-| `qvp_dress_clamp` | android | bound in the wrapper task of this PR |
 | `qvp_dress_clamp` | flutter | bound in the wrapper task of this PR |
 | `qvp_dress_clamp` | ios | bound in the wrapper task of this PR |
 | `qvp_dress_clamp` | react-native | bound in the wrapper task of this PR |
@@ -276,7 +275,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-172 symbols in the header, 172 Rust exports. web: 171 bound, android: 165 bound, flutter: 170 bound, ios: 163 bound, react-native: 93 bound.
+172 symbols in the header, 172 Rust exports. web: 171 bound, android: 166 bound, flutter: 170 bound, ios: 163 bound, react-native: 93 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -312,7 +311,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_decoration_info` | yes | yes | yes | yes | gap (list form: bound as `decorations()`) |
 | `qvp_divisions` | yes | yes | yes | yes | yes |
 | `qvp_dress` | yes | yes | yes | yes | yes |
-| `qvp_dress_clamp` | yes | gap (bound in the wrapper task of this PR) | gap (bound in the wrapper task of this PR) | gap (bound in the wrapper task of this PR) | gap (bound in the wrapper task of this PR) |
+| `qvp_dress_clamp` | yes | yes | gap (bound in the wrapper task of this PR) | gap (bound in the wrapper task of this PR) | gap (bound in the wrapper task of this PR) |
 | `qvp_dress_geometry` | yes | yes | yes | yes | yes |
 | `qvp_dress_info` | yes | yes | yes | yes | yes |
 | `qvp_engine_name` | yes | yes | yes | yes | yes |

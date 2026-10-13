@@ -82,6 +82,13 @@ class QvpDressTest {
             assertEquals(info, page.dressInfo())
             assertEquals(info.revision, page.dressRevision())
 
+            // the dress refit the page: the held layout is the engine's, and the border is in view
+            val fit = page.currentLayout!!
+            assertTrue(fit.fitScale <= layout.fitScale)
+            val held = page.dressClamp(QvpView(fit.fitScale, fit.fitX, fit.fitY), 690f, 1100f)
+            assertEquals(fit.fitX, held.offsetX, 0.5f)
+            assertEquals(fit.fitY, held.offsetY, 0.5f)
+
             // one draw per table row, each under a placement of the layout or the border's none
             val draws = page.dressGeometry()
             assertEquals(info.draws, draws.size)
