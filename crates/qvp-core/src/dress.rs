@@ -14,7 +14,7 @@
 //! the ink. A host paints the list behind the page ink. Only the printed ring is
 //! hidden; the numeral inside it is the print's own ink and stays on top.
 use crate::style::{Paint, Selector};
-use crate::{Handle, Page, Rgba, NONE};
+use crate::{Handle, Page, Placement, Rgba, NONE};
 use qvp_format::ornaments::*;
 use qvp_format::{Cmd, PathKind, OP_CLOSE, OP_CUBIC, OP_LINE, OP_MOVE, OP_QUAD};
 use std::sync::Arc;
@@ -356,6 +356,13 @@ impl Page {
         }
     }
 
+    /// The transform a placement index stands for: the layout's group, or identity
+    /// without a layout.
+    fn placement_at(&self, index: u32) -> Placement {
+        let p = self.layout.as_ref().and_then(|l| l.groups.get(index as usize)).copied().unwrap_or(Placement::IDENTITY);
+        Placement { kx: if p.kx != 0.0 { p.kx } else { 1.0 }, ky: if p.ky != 0.0 { p.ky } else { 1.0 }, ..p }
+    }
+
     /// The laid-out page box in page units: `(left, top, width, height)`. Without a
     /// layout that is the printed page itself.
     fn laid_page_box(&self) -> (f32, f32, f32, f32) {
@@ -548,10 +555,24 @@ impl Page {
                 if h.title_x1 <= h.title_x0 || h.title_y1 <= h.title_y0 {
                     continue;
                 }
-                let tcy = (h.title_y0 + h.title_y1) / 2.0;
-                let y = tcy - (scy - vb[1]) * k;
+                // The column is a laid-out measurement and the title's placement maps its
+                // printed ink into the laid-out page, moving it and, under reflow, scaling
+                // it. The band is worked out where it must land, then taken back through the
+                // inverse of that placement, so the host's transform puts it there.
                 let placement = self.placement_of_path(self.data.decorations[h.decoration as usize].first_path);
-                b.place(&o.asset, &pal, OrnamentKind::SurahHeader, &Tf::fit(vb, x, y, bw, bh, false), false, placement);
+                let pl = self.placement_at(placement);
+                let tcy = pl.ky * (h.title_y0 + h.title_y1) / 2.0 + pl.dy;
+                let y = tcy - (scy - vb[1]) * k;
+                let laid = Tf::fit(vb, x, y, bw, bh, false);
+                let tf = Tf {
+                    a: laid.a / pl.kx,
+                    b: 0.0,
+                    c: 0.0,
+                    d: laid.d / pl.ky,
+                    e: (laid.e - pl.dx) / pl.kx,
+                    f: (laid.f - pl.dy) / pl.ky,
+                };
+                b.place(&o.asset, &pal, OrnamentKind::SurahHeader, &tf, false, placement);
                 b.out.n_surah_headers += 1;
             }
         }
@@ -970,10 +991,16 @@ mod tests {
         let gap = 5.0;
         assert!(l.laid_width < p.width(), "a reflowed row is narrower than the printed page");
         let band = d.table.iter().position(|t| t.flags & 0xff == OrnamentKind::SurahHeader as u32).unwrap();
+        // the band's points are in the title's printed space; where it lands is through the
+        // title's placement, which the host applies
+        let pl = l.groups[d.table[band].placement as usize];
         let (x0, _, x1, _) = draw_box(&d, band);
+        let (lx0, lx1) = (pl.kx * x0 + pl.dx, pl.kx * x1 + pl.dx);
         let band_gap = 5.0;
         let want = l.laid_width + 2.0 * gap - 2.0 * band_gap;
-        assert!(near(x1 - x0, want), "{} vs {}", x1 - x0, want);
+        assert!(near(lx1 - lx0, want), "{} vs {}", lx1 - lx0, want);
+        let centre = l.laid_left + l.laid_width / 2.0;
+        assert!(near((lx0 + lx1) / 2.0, centre), "{} vs {}", (lx0 + lx1) / 2.0, centre);
         let over = p.dress_overflow();
         let limit = (gap + 20.0) * l.scale;
         assert!(over.0 < limit && over.2 < limit, "{over:?} limit {limit}");
