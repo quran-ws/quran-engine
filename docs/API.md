@@ -650,6 +650,14 @@ the printed ring's centre and radius, with the design's slot centre on the ring 
 band from the surah title's box across the text column; the border from the laid-out page
 box. The same rules apply on every page.
 
+**A dress the engine cannot place is refused.** `dress` returns null, and the page is left
+undressed, when:
+
+- an index is out of range;
+- an ornament is of another kind than its key (a band given as `ayahMark`);
+- a band or a border has no slot, so there is no window to put the title or the text in;
+- every kind is left out.
+
 **Paint the display list behind the page ink.** Only the printed ring and the native band
 are hidden; the numeral inside the ring is the print's own ink and stays on top. Each draw
 carries a `placement`, the same index a page draw carries into the layout's placements, so

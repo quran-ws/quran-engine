@@ -275,7 +275,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * along each edge; nothing is stretched. `lineArt` draws kinds as line art, their constant-width strokes alone: `true` for
      * every kind, or a list of kinds (`'ayah_mark'`, `'surah_header'`, `'page_frame'`).
      * Returns the readout, or null when the engine refused the spec (an index out of
-     * range, an ornament of another kind, or nothing to dress). Replaces any previous
+     * range, an ornament of another kind, a band or border with no slot, or nothing to
+     * dress). Replaces any previous
      * dress.
      */
     dress(set, { style = null, ayahMark = style, surahHeader = style, pageFrame = style, gap = 5, bandGap = 5, ayahMarkScale = 0, pageFrameScale = 1, lineArt = false, colors = [] } = {}) {

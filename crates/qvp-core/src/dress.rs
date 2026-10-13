@@ -513,8 +513,8 @@ impl Page {
     }
 
     /// Put other ornaments on this page. Returns `None`, and leaves the page undressed,
-    /// when an index is out of range, names an ornament of another kind, or every index
-    /// is [`NONE`]. Replaces any previous dress. A reflowed page is laid out again from its
+    /// when an index is out of range, names an ornament of another kind, names a band or a
+    /// border with no slot, or every index is [`NONE`]. Replaces any previous dress. A reflowed page is laid out again from its
     /// own spec, so a band holds its title at once; a printed page is refitted.
     pub fn dress(&mut self, set: &Arc<OrnamentSet>, spec: &DressSpec) -> Option<&Dress> {
         let was_dressed = self.take_dress();
@@ -556,6 +556,11 @@ impl Page {
         let header = pick(spec.surah_header, OrnamentKind::SurahHeader)?;
         let frame = pick(spec.page_frame, OrnamentKind::PageFrame)?;
         if mark.is_none() && header.is_none() && frame.is_none() {
+            return None;
+        }
+        // A border and a band are placed by their slot: the text area and the title's window.
+        // One without a slot cannot be placed, so it is refused, not drawn as nothing.
+        if [header, frame].iter().flatten().any(|(_, o)| o.asset.slot.is_none()) {
             return None;
         }
         let pw = self.width();
@@ -947,6 +952,29 @@ mod tests {
         assert!(p.dress(&set(), &DressSpec { page_frame: 9, ..all() }).is_none());
         assert!(p.dress(&set(), &DressSpec::default()).is_none());
         assert!(p.dress_of().is_none());
+    }
+
+    #[test]
+    fn refuses_a_band_or_a_border_without_a_slot() {
+        let (mut p, _, _) = page();
+        for i in [1usize, 2] {
+            let mut s = (*set()).clone();
+            s.ornaments[i].asset.slot = None;
+            let s = Arc::new(s);
+            assert!(p.dress(&s, &all()).is_none(), "ornament {i} has no slot");
+            assert!(p.dress_of().is_none());
+            // the other kinds alone still dress
+            let other = if i == 1 {
+                DressSpec { surah_header: NONE, ..all() }
+            } else {
+                DressSpec { page_frame: NONE, ..all() }
+            };
+            assert!(p.dress(&s, &other).is_some());
+        }
+        // a medallion is placed by its slot centre, which falls back to the design's centre
+        let mut s = (*set()).clone();
+        s.ornaments[0].asset.slot = None;
+        assert!(p.dress(&Arc::new(s), &all()).is_some());
     }
 
     #[test]

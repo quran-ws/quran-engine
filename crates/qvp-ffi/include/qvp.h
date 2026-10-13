@@ -320,7 +320,7 @@ uint32_t  qvp_ornament_count(const QvpOrnaments*);
 int       qvp_ornament_info(const QvpOrnaments*, uint32_t i, QvpOrnament* out);                    /* 0 = no such ornament */
 int32_t   qvp_ornament_find(const QvpOrnaments*, uint32_t kind, const uint8_t* style, uint32_t len);  /* -1 = none of that kind in that style */
 int       qvp_ornament_part(const QvpOrnaments*, uint32_t i, uint32_t part, QvpOrnamentPart* out);
-int       qvp_dress(QvpPage*, const QvpOrnaments*, const QvpDressSpec*);   /* 0 = refused: an index out of range or of another kind, or all QVP_NONE; replaces any previous dress */
+int       qvp_dress(QvpPage*, const QvpOrnaments*, const QvpDressSpec*);   /* 0 = refused: an index out of range or of another kind, a band or border with no slot, or all QVP_NONE; replaces any previous dress */
 void      qvp_undress(QvpPage*);
 int       qvp_dress_info(const QvpPage*, QvpDressInfo* out);               /* 0 = not dressed */
 void      qvp_dress_geometry(const QvpPage*, QvpDressGeometry* out);       /* paint it BEHIND the page ink; valid until the next dress, undress or layout */
