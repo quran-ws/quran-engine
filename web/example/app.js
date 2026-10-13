@@ -36,7 +36,7 @@
     selWord: -1, selAyah: null, hlSel: 0, hlAyah: 0, hlSearch: 0, hlPlay: 0, pathHandles: new Map(),
     hover: -1, theme: 'light', themeHandle: 0, tajwidHandle: 0, hideHandle: 0, ayahMarksHandle: 0,
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
-    dress: { ayahMark: null, surahHeader: null, pageFrame: null, gap: 5, lineArt: false, colors: [] },
+    dress: { ayahMark: null, surahHeader: null, pageFrame: null, gap: 5, bandGap: 5, lineArt: [], colors: [] },
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16, surahFrames: true },
     reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
     hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
@@ -391,7 +391,10 @@
     renderer.baseKey = ''; draw();
   }
   $('ink').oninput = applyTheme;
-  $('theme').onchange = e => { S.theme = e.target.value; $('ink').value = INK[S.theme]; applyTheme(); };
+  $('theme').onchange = e => { S.theme = e.target.value; $('ink').value = INK[S.theme]; applyTheme(); themeToggleLabel(); };
+  // one click between dark and light; the select keeps sepia
+  function themeToggleLabel() { $('themeToggle').textContent = S.theme === 'dark' ? 'light' : 'dark'; }
+  $('themeToggle').onclick = () => { S.theme = S.theme === 'dark' ? 'light' : 'dark'; $('theme').value = S.theme; $('ink').value = INK[S.theme]; applyTheme(); themeToggleLabel(); };
   $('legend').innerHTML = Object.entries(PALETTE).slice(0, 5).map(([c, col]) => `<span class="hint"><i class="sw" style="background:${col}"></i>${engine.categoryName(+c)}</span>`).join('');
 
   // ── memorisation ──
@@ -522,8 +525,8 @@
     for (const i of [S.dress.ayahMark, S.dress.surahHeader, S.dress.pageFrame]) {
       if (i === null) continue;
       const o = ornaments.list[i];
-      // line art draws one ink, so it gets one swatch
-      const parts = S.dress.lineArt ? o.parts.filter(x => x && x.name === 'line') : o.parts.filter(x => x && (x.color & 255) !== 0);
+      // a kind drawn as line art has one ink, so it gets one swatch
+      const parts = S.dress.lineArt.includes(o.kind) ? o.parts.filter(x => x && x.name === 'line') : o.parts.filter(x => x && (x.color & 255) !== 0);
       for (const part of parts) {
         const wrap = document.createElement('label');
         wrap.className = 'hint';
@@ -546,10 +549,14 @@
   fillDressPickers();
   $('undress').onclick = () => { S.dress = { ...S.dress, ayahMark: null, surahHeader: null, pageFrame: null, colors: [] }; for (const id of ['dressMark', 'dressHeader', 'dressFrame']) $(id).value = ''; dressSwatches(); applyDress(); };
   $('dressGap').oninput = e => { S.dress.gap = +e.target.value; $('dressGapVal').textContent = e.target.value; applyDress(); };
-  $('dressLine').onchange = e => { S.dress.lineArt = e.target.checked; S.dress.colors = []; dressSwatches(); applyDress(); };
+  $('dressBandGap').oninput = e => { S.dress.bandGap = +e.target.value; $('dressBandGapVal').textContent = e.target.value; applyDress(); };
+  for (const [id, kind] of [['dressLineMark', 'ayah_mark'], ['dressLineHeader', 'surah_header'], ['dressLineFrame', 'page_frame']]) {
+    $(id).onchange = e => { S.dress.lineArt = S.dress.lineArt.filter(k => k !== kind); if (e.target.checked) S.dress.lineArt.push(kind); S.dress.colors = []; dressSwatches(); applyDress(); };
+  }
   window.__qvp = { S, engine, atlas, renderer, loadPage, fit, selectWord, selectAyah, draw };
   const prefersDark = document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
   if (prefersDark) { S.theme = 'dark'; $('theme').value = 'dark'; $('ink').value = INK.dark; }
+  themeToggleLabel();
   window.addEventListener('resize', resize);
   await loadPage(src.pages[0]);
   resize();

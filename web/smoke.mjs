@@ -51,6 +51,12 @@ if (existsSync(setPath) && existsSync(pagePath)) {
   }
   if (!(named.draws > 0)) throw new Error('dress by name drew nothing');
   if (page.dress(set, { ayahMark: 'no-such-style', surahHeader: 'no-such-style', pageFrame: 'no-such-style' }) !== null) throw new Error('unknown style names were accepted');
+  // line art for one kind: the bands keep only their strokes, the medallions keep their fills
+  const lined = page.dress(set, { ayahMark: style, surahHeader: style, pageFrame: style, lineArt: ['surah_header'] });
+  if (!lined || lined.draws >= named.draws || lined.ayahMarks !== named.ayahMarks) throw new Error('line art for the bands changed the wrong draws');
+  const linedDraws = page.dressGeometry();
+  if (!linedDraws.filter(d => d.kind === 'surah_header').every(d => d.stroke)) throw new Error('a line-art band kept a fill');
+  if (!linedDraws.some(d => d.kind === 'ayah_mark' && !d.stroke)) throw new Error('the medallions lost their fills');
   page.undress();
   set.free(); page.free();
   console.log(`ok  dress: ${info.ayahMarks} medallions, ${info.surahHeaders} bands, ${info.draws} draws, revision ${info.revision}`);

@@ -518,6 +518,7 @@ fn dress_over_the_abi() {
             surah_header: 1,
             page_frame: 2,
             gap: 5.0,
+            band_gap: 5.0,
             line_art: 0,
             colors: colors.as_ptr(),
             n_colors: 1,
@@ -596,10 +597,15 @@ fn dress_over_the_abi() {
         assert_eq!(red, 1);
 
         // line art draws one ink, and only one
-        let spec = QvpDressSpec { line_art: 1, ..spec };
+        let spec = QvpDressSpec { line_art: QVP_LINE_ART_ALL, ..spec };
         assert_eq!(qvp_dress(page, set, &spec), 1);
         qvp_dress_geometry(page, &mut g);
         assert_eq!(g.n_draws, di.n_draws / 2);
+        // line art for the bands alone: each band loses its fill, nothing else changes
+        let spec = QvpDressSpec { line_art: QVP_LINE_ART_SURAH_HEADER, ..spec };
+        assert_eq!(qvp_dress(page, set, &spec), 1);
+        qvp_dress_geometry(page, &mut g);
+        assert_eq!(g.n_draws, di.n_draws - di.n_surah_headers);
 
         // an ornament of the wrong kind, or none at all, changes nothing
         assert_eq!(qvp_dress(page, set, &QvpDressSpec { ayah_mark: 1, ..spec }), 0);

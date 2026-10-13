@@ -629,8 +629,12 @@ index or a style name. `parts` is the design's printed palette, and `colors:
 [[ornament, part, colour]]` repaints any of them. The design's slot is the transparent
 window it leaves for the number, the name or the text area. The paper of a scanned design,
 its pure white `c1`, is left open too, so the host's page shows through; repaint `c1` to put a
-paper colour back. `lineArt: true` keeps only the
-constant-width strokes, so there is one ink.
+paper colour back. `gap` is the air between the text and the border, and `bandGap` the air between a band and
+the border, both in page units; a band is centred in the column. `lineArt` draws kinds as line
+art, their constant-width strokes alone, so
+there is one ink: `true` for every kind, or a list such as `['surah_header']` for the bands
+alone. A scanned design's line art is the catalogue's own `line.svg`, stroke for stroke; a
+font marker has no linework, so it stays in colour.
 
 **Every ornament is placed from a measurement**, never a fixed offset: the medallion from
 the printed ring's centre and radius, with the design's slot centre on the ring centre; the

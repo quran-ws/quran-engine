@@ -25,7 +25,7 @@ placement on what main has.
   dress, and a revision number tells the host its raster went stale.
 - The dressed page is bigger than its text. The engine reports the overflow on each side.
 - A tiled frame keeps its corner and repeats only the straight run.
-- `line_art` keeps only the constant-width strokes, and a host can repaint any part.
+- `line_art` keeps only the constant-width strokes, per kind, and a host can repaint any part.
 - The converter expands `<use>` mirrors, flattens transforms and drops the whole-frame
   outlines of a frame that tiles.
 
@@ -65,7 +65,8 @@ pub struct DressSpec {
     pub surah_header: u32,
     pub page_frame: u32,
     pub gap: f32,            // air between the text and the border, page units
-    pub line_art: bool,
+    pub band_gap: f32,       // air between a band and the border, page units
+    pub line_art: u32,       // LINE_ART_* bits: which kinds are drawn as line art
     pub colors: Vec<(u32, u16, Rgba)>,   // (ornament, part, colour) overrides
 }
 ```
@@ -102,7 +103,7 @@ band follows the title, including the title's banner scaling.
 | ornament | measured from | rule |
 |---|---|---|
 | medallion | `ayah_marks()`: `cx, cy, r, ornament_path` | scale so the asset's height equals `2r`, keep the aspect, put the asset's slot centre on `(cx, cy)` |
-| band | `surah_headers()`: title box, decoration, line | width is the text column, centred on the title's centre, the slot's vertical centre on the title's vertical centre |
+| band | `surah_headers()`: title box, decoration, line | width is the text column less `2·band_gap`, centred in the column, the slot's vertical centre on the title's vertical centre |
 | border | the laid-out page box | the frame's text-area slot maps onto the page box grown by `gap` on every side. A frame with slices is tiled at one uniform scale. A frame without slices is stretched so that its slot lands exactly on the grown page box, with one scale per axis |
 
 The text column is the page width, plus `2·gap` when a border is drawn. It is never this
@@ -171,7 +172,7 @@ enum { QVP_DRAW_EVENODD = 1 << 8, QVP_DRAW_STROKE = 2 << 8 };
 typedef struct { uint32_t kind, lineage, n_parts, has_slices, redistributable, _pad;
                  QvpStr style, riwayah, license_id, license_status, attribution; } QvpOrnament;
 typedef struct { uint32_t color, stroke; QvpStr name; } QvpOrnamentPart;
-typedef struct { uint32_t ayah_mark, surah_header, page_frame; float gap; uint32_t line_art;
+typedef struct { uint32_t ayah_mark, surah_header, page_frame; float gap, band_gap; uint32_t line_art /* QVP_LINE_ART_* bits */;
                  const uint32_t* colors; /* (ornament, part, rgba) triples */ uint32_t n_colors; } QvpDressSpec;
 typedef struct { uint32_t ayah_mark, surah_header, page_frame, n_ayah_marks, n_surah_headers,
                  n_frame_repeats, frame_stretched, n_draws, revision;
@@ -202,7 +203,7 @@ The view box and the overflow are fields of the info struct.
 
 ```js
 const set = engine.loadOrnaments(bytes);         // QvpOrnaments: count, list(), find(kind, style), part(i, p), free()
-page.dress(set, { ayahMark: i, surahHeader: j, pageFrame: k, gap: 5, lineArt: false, colors: [[k, 2, '#7a1f3d']] });
+page.dress(set, { ayahMark: i, surahHeader: j, pageFrame: k, gap: 5, lineArt: ['surah_header'], colors: [[k, 2, '#7a1f3d']] });
 page.dressInfo();        // {ayahMark, surahHeader, pageFrame, ayahMarks, surahHeaders, frameRepeats, frameStretched, draws, revision, viewBox, overflow}
 page.dressGeometry();    // [{path, color, kind, evenOdd, stroke, strokeWidth, part, placement}]
 page.undress();

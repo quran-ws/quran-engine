@@ -23,7 +23,10 @@ pub mod zoom;
 mod zoom_table;
 
 pub use crop::CropBounds;
-pub use dress::{Dress, DressSpec, OrnamentDraw, ODF_EVENODD, ODF_STROKE};
+pub use dress::{
+    line_art_bit, Dress, DressSpec, OrnamentDraw, LINE_ART_ALL, LINE_ART_AYAH_MARK, LINE_ART_PAGE_FRAME,
+    LINE_ART_SURAH_HEADER, ODF_EVENODD, ODF_STROKE,
+};
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
 pub use hit::{Hit, HitArea, HitOptions, LineBand};
 pub use layout::{Draw, Grid, Layout, LayoutSpec};

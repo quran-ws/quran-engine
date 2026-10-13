@@ -75,6 +75,8 @@ enum { QVP_ORNAMENT_AYAH_MARK = 0, QVP_ORNAMENT_SURAH_HEADER, QVP_ORNAMENT_PAGE_
 enum { QVP_LINEAGE_SCAN = 0, QVP_LINEAGE_FONT };
 /* a dress draw's `flags`: the kind in the low byte, these above it */
 enum { QVP_DRAW_EVENODD = 1 << 8, QVP_DRAW_STROKE = 2 << 8 };
+/* QvpDressSpec.line_art: which kinds are drawn as line art, their constant-width strokes alone */
+enum { QVP_LINE_ART_AYAH_MARK = 1, QVP_LINE_ART_SURAH_HEADER = 2, QVP_LINE_ART_PAGE_FRAME = 4, QVP_LINE_ART_ALL = 7 };
 /* mark ids: qvp_mark_name / qvp_mark_from_name. The names are the quran-svg
    `mark-taxonomy` v2 vocabulary (the bundle's schema/mark-taxonomy.json):
    0 none, 1 fathah, 2 kasrah, 3 dammah, 4 tanwin_al_fath, 5 tanwin_al_kasr, 6 tanwin_al_damm,
@@ -134,7 +136,7 @@ typedef struct { float x0, y0, x1, y1; uint32_t n_words, ayah_mark_decoration; }
 /* ornaments: the strings live as long as the QvpOrnaments, not until the next string call */
 typedef struct { uint32_t kind, lineage, n_parts, has_slices, redistributable, _pad; QvpStr style, riwayah, license_id, license_status, attribution; } QvpOrnament;
 typedef struct { uint32_t color, stroke; QvpStr name; } QvpOrnamentPart;
-typedef struct { uint32_t ayah_mark, surah_header, page_frame /* ornament indices, QVP_NONE for none */; float gap /* page units */; uint32_t line_art;
+typedef struct { uint32_t ayah_mark, surah_header, page_frame /* ornament indices, QVP_NONE for none */; float gap /* text to border, page units */, band_gap /* band to border */; uint32_t line_art /* QVP_LINE_ART_* bits */;
                  const uint32_t* colors /* (ornament, part, rgba) triples, NULL for the designs' own */; uint32_t n_colors; } QvpDressSpec;
 typedef struct { uint32_t ayah_mark, surah_header, page_frame, n_ayah_marks, n_surah_headers, n_frame_repeats, frame_stretched, n_draws,
                  revision /* bumped on every rebuild: cache the ornament raster against it */;

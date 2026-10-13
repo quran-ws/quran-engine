@@ -28,9 +28,14 @@ pub struct DressSpec {
     pub page_frame: u32,
     /// Air between the text and the border, in page units.
     pub gap: f32,
-    /// Draw only the constant-width strokes: the same drawing with the fills taken
-    /// away. One ink left means one colour.
-    pub line_art: bool,
+    /// Air between a band and the border, in page units. A band is narrower than the
+    /// column by twice this.
+    pub band_gap: f32,
+    /// Which kinds are drawn as line art: only their constant-width strokes, the same
+    /// drawing with the fills taken away, so one ink is left. A bitmask of
+    /// [`LINE_ART_AYAH_MARK`], [`LINE_ART_SURAH_HEADER`] and [`LINE_ART_PAGE_FRAME`];
+    /// 0 draws every kind in colour.
+    pub line_art: u32,
     /// Colour overrides as (ornament, part, colour). Every part left out keeps the
     /// design's own printed colour.
     pub colors: Vec<(u32, u16, Rgba)>,
@@ -38,8 +43,30 @@ pub struct DressSpec {
 
 impl Default for DressSpec {
     fn default() -> Self {
-        DressSpec { ayah_mark: NONE, surah_header: NONE, page_frame: NONE, gap: 5.0, line_art: false, colors: vec![] }
+        DressSpec {
+            ayah_mark: NONE,
+            surah_header: NONE,
+            page_frame: NONE,
+            gap: 5.0,
+            band_gap: 5.0,
+            line_art: 0,
+            colors: vec![],
+        }
     }
+}
+
+/// Line art for the medallions ([`DressSpec::line_art`]).
+pub const LINE_ART_AYAH_MARK: u32 = 1;
+/// Line art for the surah bands.
+pub const LINE_ART_SURAH_HEADER: u32 = 2;
+/// Line art for the border.
+pub const LINE_ART_PAGE_FRAME: u32 = 4;
+/// Line art for every kind.
+pub const LINE_ART_ALL: u32 = 7;
+
+/// The [`DressSpec::line_art`] bit of one kind.
+pub fn line_art_bit(kind: OrnamentKind) -> u32 {
+    1 << kind as u32
 }
 
 /// One placed outline, in page units.
@@ -167,7 +194,7 @@ fn palette(o: &Ornament, index: u32, spec: &DressSpec) -> Palette {
 
 struct Builder<'a> {
     set: &'a OrnamentSet,
-    line_art: bool,
+    line_art: u32,
     out: Dress,
 }
 
@@ -179,7 +206,7 @@ impl<'a> Builder<'a> {
         let ss = tf.stroke_scale();
         for i in asset.first_path..asset.first_path + asset.n_paths {
             let Some(p) = self.set.paths.get(i as usize).copied() else { continue };
-            if self.line_art && Some(p.part) != pal.line {
+            if self.line_art & line_art_bit(kind) != 0 && Some(p.part) != pal.line {
                 continue;
             }
             if drop_slot && Some(p.part) == pal.slot {
@@ -435,6 +462,7 @@ impl Page {
         // hold one short surah centred in the column, and a band measured from their
         // lines would come out a third of the width it has on the other 602 pages.
         let mut column = laid_w;
+        let mut column_left = laid_left;
 
         // The border. A frame publishes its text area as its slot. Mapping the page box
         // onto that slot makes the band thickness follow at the mushaf's own proportions:
@@ -480,25 +508,27 @@ impl Page {
                     }
                 }
                 column = laid_w + 2.0 * gap;
+                column_left = laid_left - gap;
             }
         }
 
-        // The band spans the column and is centred on the printed title. The column gives
-        // the width and the title gives the centre, and both are measurements. The title
-        // sits in the design's own slot, which is a different point on every design.
+        // The band is centred in the column, `band_gap` short of the border on each side,
+        // and its slot's vertical centre sits on the printed title's. The column is a
+        // measurement, never this page's ink: a title sits where the print put it, which
+        // is not always the middle of the column.
         if let Some((oi, o)) = header {
             let pal = palette(o, oi, spec);
             let vb = o.asset.view_box;
             let (_, scy) = o.asset.slot_centre();
-            let k = column.max(f32::EPSILON) / o.asset.width().max(f32::EPSILON);
-            let (bw, bh) = (o.asset.width() * k, o.asset.height() * k);
+            let bw = (column - 2.0 * spec.band_gap).max(f32::EPSILON);
+            let k = bw / o.asset.width().max(f32::EPSILON);
+            let bh = o.asset.height() * k;
+            let x = column_left + (column - bw) / 2.0;
             for h in self.surah_headers() {
                 if h.title_x1 <= h.title_x0 || h.title_y1 <= h.title_y0 {
                     continue;
                 }
-                let tcx = (h.title_x0 + h.title_x1) / 2.0;
                 let tcy = (h.title_y0 + h.title_y1) / 2.0;
-                let x = tcx - bw / 2.0;
                 let y = tcy - (scy - vb[1]) * k;
                 let placement = self.placement_of_path(self.data.decorations[h.decoration as usize].first_path);
                 b.place(&o.asset, &pal, OrnamentKind::SurahHeader, &Tf::fit(vb, x, y, bw, bh, false), false, placement);
@@ -620,7 +650,7 @@ mod tests {
     }
 
     fn all() -> DressSpec {
-        DressSpec { ayah_mark: 0, surah_header: 1, page_frame: 2, gap: 5.0, line_art: false, colors: vec![] }
+        DressSpec { ayah_mark: 0, surah_header: 1, page_frame: 2, gap: 5.0, band_gap: 5.0, line_art: 0, colors: vec![] }
     }
 
     /// The box of one draw's points, page units.
@@ -663,9 +693,10 @@ mod tests {
         let (x0, y0, x1, y1) = draw_box(&d, 4);
         assert!(near(y1 - y0, 6.0) && near(x1 - x0, 4.8), "{:?}", (x0, y0, x1, y1));
         assert!(near((x0 + x1) / 2.0, 45.0) && near((y0 + y1) / 2.0, 13.0), "{:?}", (x0, y0, x1, y1));
-        // the band spans the column the border encloses, centred on the title (x 20..30)
+        // the band is centred in the column the border encloses (x -5..105), a band gap
+        // of 5 short of the border on each side
         let (bx0, _, bx1, _) = draw_box(&d, 2);
-        assert!(near(bx1 - bx0, p.width() + 10.0) && near((bx0 + bx1) / 2.0, 25.0), "{:?}", (bx0, bx1));
+        assert!(near(bx1 - bx0, p.width()) && near((bx0 + bx1) / 2.0, 50.0), "{:?}", (bx0, bx1));
         // the border grew the page and no word moved
         let vb = d.view_box;
         assert!(vb[0] < 0.0 && vb[1] < 0.0 && vb[2] > p.width() && vb[3] > p.height(), "{vb:?}");
@@ -682,7 +713,7 @@ mod tests {
         let d = p.dress(&set(), &DressSpec { page_frame: NONE, ayah_mark: NONE, ..all() }).unwrap().clone();
         assert_eq!(d.table.len(), 2);
         let (bx0, _, bx1, _) = draw_box(&d, 0);
-        assert!(near(bx1 - bx0, p.width()), "{:?}", (bx0, bx1));
+        assert!(near(bx1 - bx0, p.width() - 10.0) && near((bx0 + bx1) / 2.0, 50.0), "{:?}", (bx0, bx1));
         assert_eq!(p.view_box(), [0.0, 0.0, p.width(), p.height()]);
     }
 
@@ -769,9 +800,20 @@ mod tests {
     #[test]
     fn line_art_keeps_the_strokes_and_colours_override_a_part() {
         let (mut p, _, _) = page();
-        let d = p.dress(&set(), &DressSpec { line_art: true, ..all() }).unwrap().clone();
+        let d = p.dress(&set(), &DressSpec { line_art: LINE_ART_ALL, ..all() }).unwrap().clone();
         assert_eq!(d.table.len(), 3);
         assert!(d.table.iter().all(|t| t.flags & ODF_STROKE != 0));
+        // line art per kind: the band loses its fill, the medallion and the border keep theirs
+        let d = p.dress(&set(), &DressSpec { line_art: LINE_ART_SURAH_HEADER, ..all() }).unwrap().clone();
+        assert_eq!(d.table.len(), 5);
+        let band: Vec<_> = d.table.iter().filter(|t| t.flags & 0xff == OrnamentKind::SurahHeader as u32).collect();
+        assert_eq!(band.len(), 1);
+        assert_ne!(band[0].flags & ODF_STROKE, 0);
+        assert_eq!(
+            d.table.iter().filter(|t| t.flags & ODF_STROKE == 0).count(),
+            2,
+            "the two other kinds keep a fill each"
+        );
         let d = p.dress(&set(), &DressSpec { colors: vec![(2, 0, 0xff0000ff)], ..all() }).unwrap().clone();
         assert_eq!(d.table[0].color, 0xff0000ff, "the border's fill was repainted");
         assert_eq!(d.table[2].color, 0x00649bff, "the band keeps its own");
@@ -849,7 +891,9 @@ mod tests {
         assert!(l.laid_width < p.width(), "a reflowed row is narrower than the printed page");
         let band = d.table.iter().position(|t| t.flags & 0xff == OrnamentKind::SurahHeader as u32).unwrap();
         let (x0, _, x1, _) = draw_box(&d, band);
-        assert!(near(x1 - x0, l.laid_width + 2.0 * gap), "{} vs {}", x1 - x0, l.laid_width + 2.0 * gap);
+        let band_gap = 5.0;
+        let want = l.laid_width + 2.0 * gap - 2.0 * band_gap;
+        assert!(near(x1 - x0, want), "{} vs {}", x1 - x0, want);
         let over = p.dress_overflow();
         let limit = (gap + 20.0) * l.scale;
         assert!(over.0 < limit && over.2 < limit, "{over:?} limit {limit}");

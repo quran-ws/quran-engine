@@ -2725,6 +2725,11 @@ pub struct QvpOrnamentPart {
 
 pub const QVP_DRAW_EVENODD: u32 = 1 << 8;
 pub const QVP_DRAW_STROKE: u32 = 2 << 8;
+/// `QvpDressSpec.line_art` bits: which kinds are drawn as line art.
+pub const QVP_LINE_ART_AYAH_MARK: u32 = 1;
+pub const QVP_LINE_ART_SURAH_HEADER: u32 = 2;
+pub const QVP_LINE_ART_PAGE_FRAME: u32 = 4;
+pub const QVP_LINE_ART_ALL: u32 = 7;
 
 #[repr(C)]
 pub struct QvpDressSpec {
@@ -2732,6 +2737,7 @@ pub struct QvpDressSpec {
     pub surah_header: u32,
     pub page_frame: u32,
     pub gap: f32,
+    pub band_gap: f32,
     pub line_art: u32,
     /// (ornament, part, rgba) triples; NULL for none.
     pub colors: *const u32,
@@ -2852,7 +2858,8 @@ pub unsafe extern "C" fn qvp_dress(page: *mut Page, set: *const Ornaments, spec:
             surah_header: s.surah_header,
             page_frame: s.page_frame,
             gap: s.gap,
-            line_art: s.line_art != 0,
+            band_gap: s.band_gap,
+            line_art: s.line_art & LINE_ART_ALL,
             colors,
         };
         (*page).dress(&*set, &spec).is_some() as i32

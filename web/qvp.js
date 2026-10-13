@@ -265,11 +265,14 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * `surahHeader` and `pageFrame` is an ornament of the set, its index, or a style name
      * (the ornament of that kind in that style); leave one out for none. `colors` is a
      * list of `[ornament, part, colour]`; every part left out keeps the design's own.
+     * `gap` is the air between the text and the border and `bandGap` the air between a band
+     * and the border, both in page units. `lineArt` draws kinds as line art, their constant-width strokes alone: `true` for
+     * every kind, or a list of kinds (`'ayah_mark'`, `'surah_header'`, `'page_frame'`).
      * Returns the readout, or null when the engine refused the spec (an index out of
      * range, an ornament of another kind, or nothing to dress). Replaces any previous
      * dress.
      */
-    dress(set, { ayahMark = null, surahHeader = null, pageFrame = null, gap = 5, lineArt = false, colors = [] } = {}) {
+    dress(set, { ayahMark = null, surahHeader = null, pageFrame = null, gap = 5, bandGap = 5, lineArt = false, colors = [] } = {}) {
       const index = (v, kind) => {
         if (v === null || v === undefined) return NONE;
         if (typeof v === 'number') return v;
@@ -283,8 +286,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const cp = triples.length ? this.e.putU32(Uint32Array.from(triples), 2048) : 0;
       const s = this.e.scratch2, d = this.e.dv();
       d.setUint32(s, ayah, true); d.setUint32(s + 4, header, true); d.setUint32(s + 8, frame, true);
-      d.setFloat32(s + 12, gap, true); d.setUint32(s + 16, lineArt ? 1 : 0, true);
-      d.setUint32(s + 20, cp, true); d.setUint32(s + 24, triples.length / 3, true);
+      const lineMask = lineArt === true ? 7 : Array.isArray(lineArt) ? lineArt.reduce((m, k) => m | (1 << ORNAMENT_KIND.indexOf(k)), 0) : 0;
+      d.setFloat32(s + 12, gap, true); d.setFloat32(s + 16, bandGap, true); d.setUint32(s + 20, lineMask, true);
+      d.setUint32(s + 24, cp, true); d.setUint32(s + 28, triples.length / 3, true);
       this.ornaments = null;
       if (!this.e.ex.qvp_dress(this.h, set.h, s)) return null;
       return this.dressInfo();
