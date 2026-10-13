@@ -399,12 +399,7 @@ public final class QvpCanvasController {
     /// The transform `resetView()` applies: content height fitted, centred.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
-        // A dressed page is bigger than its text: the border stands past the content, and the
-        // engine says how far on each side. The view fits content plus that overflow, the way
-        // QvpPageView does. A page that scrolls opens at the border's top.
-        if let l, let p = page, let o = p.dressOverflow {
-            return p.dressedFit(l, o, viewport: bounds, scrolls: l.reflowed || hostScrolls)
-        }
+        // The layout's fit already holds a dress's border: the engine fits content plus overflow.
         // A reflowed page is taller than the screen on purpose: fitting its height would undo
         // the size the reader asked for. It opens at its top and the reader scrolls. So does
         // any page a host scrolls itself: a printed page too tall for the box is what that
@@ -413,10 +408,13 @@ public final class QvpCanvasController {
         // centring that goes with it: a printed layout's `fitX` centres the page SHRUNK by
         // `fitScale`, so at scale 1 it pushes the page off to one side by half the width
         // the shrink would have freed. Centred at scale 1 instead — the reflow's own rule.
-        if let l, l.reflowed { return (1, CGFloat(l.fitX), 0) }
+        if let l, l.reflowed { return (1, CGFloat(l.fitX), CGFloat(l.fitY)) }
         if hostScrolls {
+            // the engine has no scale-1 answer for a printed page, so the border's side and
+            // top come from the overflow it reports, to keep the border on the canvas
             let contentW = CGFloat(l?.contentW ?? 0)
-            return (1, contentW > 0 ? max((bounds.width - contentW) / 2, 0) : 0, 0)
+            let o = page?.dressOverflow
+            return (1, (contentW > 0 ? max((bounds.width - contentW) / 2, 0) : 0) + (o?.left ?? 0), o?.top ?? 0)
         }
         return (CGFloat(l?.fitScale ?? 1), CGFloat(l?.fitX ?? 0), CGFloat(l?.fitY ?? 0))
     }
@@ -612,9 +610,9 @@ public final class QvpCanvasController {
         if !isReflowed { viewOx += translation.width - lastDrag.width }
         viewOy += translation.height - lastDrag.height
         lastDrag = translation
-        if isReflowed, let l = page?.currentLayout, let p = page {
+        if isReflowed, let p = page {
             // a dressed page holds its border on the screen too, not only its text
-            let v = p.viewClampDressed(currentView, l, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
+            let v = p.dressClamp(currentView, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
             viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
         }
         invalidate()
@@ -681,7 +679,7 @@ public final class QvpCanvasController {
         let key = "\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(zoom.zoom)|\(l.rows)"
 
         if let paper = paperColor {
-            ctx.fill(Path(CGRect(x: viewOx, y: viewOy, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale)),
+            ctx.fill(Path(p.paperRect(l, scale: viewScale, ox: viewOx, oy: viewOy)),
                      with: .color(color(paper)))
         }
         // the ornament layer, behind everything but the paper, under the ink's own transform

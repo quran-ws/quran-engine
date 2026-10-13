@@ -4,7 +4,7 @@
 //
 // The binding calls qvp_ornaments_load, qvp_ornaments_free, qvp_ornament_count,
 // qvp_ornament_info, qvp_ornament_find, qvp_ornament_part, qvp_dress, qvp_undress,
-// qvp_dress_info and qvp_dress_geometry.
+// qvp_dress_info, qvp_dress_geometry and qvp_dress_clamp.
 import Foundation
 import CoreGraphics
 import QvpFFI
@@ -213,10 +213,12 @@ extension QvpPage {
                                  colors: triples.isEmpty ? nil : tp.baseAddress, n_colors: UInt32(triples.count / 3))
             return qvp_dress(p, set.p, &s)
         }
+        // the dress changed the layout's fit: read it again
+        readLayout()
         return ok != 0 ? dressInfo() : nil
     }
     /// Take the ornaments off: the printed rings and bands come back.
-    public func undress() { qvp_undress(p); dressDraws = nil }
+    public func undress() { qvp_undress(p); dressDraws = nil; readLayout() }
     /// The readout, or nil when the page is not dressed.
     public func dressInfo() -> DressInfo? {
         var d = QvpDressInfo()
@@ -267,7 +269,7 @@ extension QvpPage {
     }
 }
 
-// ── what both renderers share: the raster, the fit and the clamp of a dressed page ──
+// ── what both renderers share: the raster and the overflow of a dressed page ──
 
 /// How far a dress's border reaches past the laid-out content, in layout px.
 struct DressOverflow: Equatable {
@@ -281,28 +283,22 @@ extension QvpPage {
         return DressOverflow(left: CGFloat(o[0]), top: CGFloat(o[1]), right: CGFloat(o[2]), bottom: CGFloat(o[3]))
     }
 
-    /// The view that shows a dressed page whole: content plus the overflow, so the border is
-    /// not cropped. A page that scrolls stays at scale 1 and opens at the border's top. The
-    /// same rule as `fit()` in the web example.
-    func dressedFit(_ l: QvpLayout, _ o: DressOverflow, viewport: CGSize, scrolls: Bool) -> QvpZoomSpring.ViewTransform {
-        let w = CGFloat(l.contentW) + o.left + o.right, h = CGFloat(l.contentH) + o.top + o.bottom
-        if scrolls { return (1, (viewport.width - w) / 2 + o.left, o.top) }
-        let s = min(1, viewport.height / max(h, 1), viewport.width / max(w, 1))
-        return (s, (viewport.width - w * s) / 2 + o.left * s, (viewport.height - h * s) / 2 + o.top * s)
+    /// `viewClamp` over the content plus the dress overflow: a drag reaches the border, never
+    /// past it. An undressed page gets the plain clamp. The engine answers, so a scroll never
+    /// pushes the border's top or bottom off the screen.
+    public func dressClamp(_ view: QvpView, viewportW: Float, viewportH: Float) -> QvpView {
+        var v = view.c, out = QvpFFI.QvpView()
+        qvp_dress_clamp(p, &v, viewportW, viewportH, &out)
+        return QvpView(out)
     }
 
-    /// `viewClamp` for the page in hand. On a dressed page the border is content too: the
-    /// engine clamps the box that holds content and overflow, and the view is read back from
-    /// that box. So a scroll never pushes the border's top or bottom off the screen.
-    func viewClampDressed(_ v: QvpView, _ l: QvpLayout, viewportW: Float, viewportH: Float) -> QvpView {
-        guard let o = dressOverflow else {
-            return viewClamp(v, contentW: l.contentW, contentH: l.contentH, viewportW: viewportW, viewportH: viewportH)
-        }
-        let left = Float(o.left), top = Float(o.top)
-        let box = viewClamp(QvpView(scale: v.scale, offsetX: v.offsetX - left * v.scale, offsetY: v.offsetY - top * v.scale),
-                            contentW: l.contentW + left + Float(o.right), contentH: l.contentH + top + Float(o.bottom),
-                            viewportW: viewportW, viewportH: viewportH)
-        return QvpView(scale: box.scale, offsetX: box.offsetX + left * box.scale, offsetY: box.offsetY + top * box.scale)
+    /// The paper behind the page: the content grown by the dress overflow, so the border sits
+    /// on paper. `ox` and `oy` are where the content's origin stands on screen. Sizing only:
+    /// the fit and the clamp are the engine's.
+    func paperRect(_ l: QvpLayout, scale s: CGFloat, ox: CGFloat, oy: CGFloat) -> CGRect {
+        let o = dressOverflow ?? DressOverflow(left: 0, top: 0, right: 0, bottom: 0)
+        return CGRect(x: ox - o.left * s, y: oy - o.top * s,
+                      width: (CGFloat(l.contentW) + o.left + o.right) * s, height: (CGFloat(l.contentH) + o.top + o.bottom) * s)
     }
 
     /// The ornament layer as a bitmap of `width` × `height` pixels, y-down like the ink bitmap.

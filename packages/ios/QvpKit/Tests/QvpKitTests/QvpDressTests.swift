@@ -169,7 +169,11 @@ final class QvpDressTests: XCTestCase {
         c.resetView()
         let l = try XCTUnwrap(page.currentLayout)
         let o = try XCTUnwrap(page.dressOverflow)
-        // the fit holds the border, not only the text
+        // the fit is the engine's: the layout's own, read again after the dress
+        XCTAssertEqual(c.viewScale, CGFloat(l.fitScale), accuracy: 0.0001)
+        XCTAssertEqual(c.viewOx, CGFloat(l.fitX), accuracy: 0.5)
+        XCTAssertEqual(c.viewOy, CGFloat(l.fitY), accuracy: 0.5)
+        // and it holds the border, not only the text
         let s = c.viewScale
         XCTAssertGreaterThanOrEqual(c.viewOy - o.top * s, -0.5)
         XCTAssertLessThanOrEqual(c.viewOy + (CGFloat(l.contentH) + o.bottom) * s, Self.box.height + 0.5)
@@ -208,6 +212,8 @@ final class QvpDressTests: XCTestCase {
         XCTAssertGreaterThan(CGFloat(l.contentH) + o.top + o.bottom, Self.box.height, "the page scrolls")
         XCTAssertEqual(c.viewOy, o.top * c.viewScale, accuracy: 0.5, "it opens at the border's top")
 
+        let held = page.dressClamp(c.currentView, viewportW: Float(Self.box.width), viewportH: Float(Self.box.height))
+        XCTAssertEqual(CGFloat(held.offsetY), c.viewOy, accuracy: 0.5, "the engine's clamp agrees with the view")
         // towards the top, past the end
         c.pan(CGSize(width: 0, height: 5000)); c.panEnded(.zero, velocity: .zero)
         XCTAssertEqual(c.viewOy, o.top * c.viewScale, accuracy: 0.5, "the border's top stays on the screen")
@@ -238,4 +244,15 @@ final class QvpDressTests: XCTestCase {
         XCTAssertEqual(v.viewOy + (CGFloat(l.contentH) + o.bottom) * v.viewScale, Self.box.height, accuracy: 0.5, "and so does its bottom")
     }
     #endif
+
+    /// An undressed page gets the plain clamp from `dressClamp`.
+    func testDressClampOnABarePageIsTheViewClamp() throws {
+        let page = try Self.page604(); defer { page.close() }
+        let l = page.layout(QvpLayoutSpec(viewportW: Float(Self.box.width), viewportH: Float(Self.box.height)))
+        let v = QvpView(scale: 1, offsetX: 500, offsetY: -9000)
+        let a = page.dressClamp(v, viewportW: Float(Self.box.width), viewportH: Float(Self.box.height))
+        let b = page.viewClamp(v, contentW: l.contentW, contentH: l.contentH, viewportW: Float(Self.box.width), viewportH: Float(Self.box.height))
+        XCTAssertEqual(a.offsetX, b.offsetX, accuracy: 0.001)
+        XCTAssertEqual(a.offsetY, b.offsetY, accuracy: 0.001)
+    }
 }

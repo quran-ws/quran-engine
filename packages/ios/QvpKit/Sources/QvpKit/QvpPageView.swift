@@ -81,10 +81,10 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// Scroll the page by `dy` points, held against the viewport: what a reflowed page, which
     /// is taller than the screen, is read with.
     public func scroll(by dy: CGFloat) {
-        guard let p = page, p.isOpen, let l = p.currentLayout else { return }
+        guard let p = page, p.isOpen, p.currentLayout != nil else { return }
         viewOy += dy
         // a dressed page holds its border on the screen too, not only its text
-        let v = p.viewClampDressed(currentView, l, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
+        let v = p.dressClamp(currentView, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
         viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
         refresh()
     }
@@ -313,14 +313,10 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// The transform `resetView()` applies: content height fitted, centred.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
-        // A dressed page is bigger than its text: the border stands past the content, and the
-        // engine says how far on each side. The view fits content plus that overflow.
-        if let l, let p = page, let o = dressOverflow(p) {
-            return p.dressedFit(l, o, viewport: bounds.size, scrolls: l.reflowed)
-        }
+        // The layout's fit already holds a dress's border: the engine fits content plus overflow.
         // A reflowed page is taller than the screen on purpose: fitting its height would undo
         // the size the reader asked for. It opens at its top and the reader scrolls.
-        if let l, l.reflowed { return (1, CGFloat(l.fitX), 0) }
+        if let l, l.reflowed { return (1, CGFloat(l.fitX), CGFloat(l.fitY)) }
         return (CGFloat(l?.fitScale ?? 1), CGFloat(l?.fitX ?? 0), CGFloat(l?.fitY ?? 0))
     }
     /// How far a dress's border reaches past the laid-out content, in layout px: nil when the
@@ -597,7 +593,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         let off = -top
         if let paper = paperColor {
             bc.setFillColor(paper.cgColor)
-            bc.fill(CGRect(x: viewOx, y: off, width: CGFloat(l.contentW) * viewScale, height: CGFloat(l.contentH) * viewScale))
+            bc.fill(p.paperRect(l, scale: viewScale, ox: viewOx, oy: off))
         }
         // the ornament layer, behind everything but the paper
         if dress != nil, let layer = ornaments.image(p, key: "\(viewScale)|\(viewOx)|\(top)", width: W, height: bandPx, scale: scale,
