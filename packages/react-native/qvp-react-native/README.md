@@ -132,7 +132,7 @@ const medallion = await set.find('ayah_mark', 'font-003-regular');
   ornaments by mushaf, and `set.ofKind(kind)` filters them. Read the licence before you
   publish a dressed page.
 - The prop dresses every page the view loads. `qvp.dress(set, spec)`, `qvp.undress()`,
-  `qvp.dressInfo()` and `qvp.dressRevision()` act on the page in the view now.
+  `qvp.dressInfo()` and `qvp.dressRevision()` act on the page in the view now. Do not mix them with the `dress` prop on one view.
 
 ## The module
 

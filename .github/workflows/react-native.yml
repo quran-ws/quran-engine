@@ -40,3 +40,6 @@ jobs:
           set -o pipefail
           npm install --no-audit --no-fund
           npx tsc --noEmit
+      - name: Test the example
+        working-directory: packages/react-native/example
+        run: npm test -- --ci

@@ -23,8 +23,8 @@ export const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGR
 export const DECORATION = { AYAH_MARK: 0, SURAH_NAME: 1, BASMALAH: 2, DIVISION_MARK: 3, SAJDAH_MARK: 4 } as const;
 export const LAYER = { BASE: 0, THEME: 10, HIGHLIGHT: 50, SELECTION: 60, TOP: 100 } as const;
 export const DIVISION = { JUZ: 0, HIZB: 1, NISF: 2, RUBU_AL_HIZB: 3 } as const;
-/** QVP_ORNAMENT_*: the three kinds of ornament a page can be dressed in. */
-export const ORNAMENT_KIND = { AYAH_MARK: 0, SURAH_HEADER: 1, PAGE_FRAME: 2 } as const;
+/** The three kinds of ornament a page can be dressed in, in engine order. Pass one to `find` or `ofKind`. */
+export const ORNAMENT_KIND = ['ayah_mark', 'surah_header', 'page_frame'] as const;
 
 // ── colours ──────────────────────────────────────────────────────────────────────────────────
 export type Color = string | number;
@@ -153,7 +153,7 @@ export interface DressSpec {
 export interface DressInfo {
   ayahMark: number | null; surahHeader: number | null; pageFrame: number | null;
   ayahMarks: number; surahHeaders: number; frameRepeats: number; frameStretched: boolean;
-  draws: number; revision: number; viewBox: number[]; overflow: number[];
+  draws: number; revision: number; viewBox: [number, number, number, number]; overflow: [number, number, number, number];
 }
 /** The `dress` prop: a spec plus the ornament set it names. */
 export interface Dress extends DressSpec { ornaments: QvpOrnaments | number }
@@ -189,8 +189,8 @@ export interface QvpPageViewProps extends ViewProps {
   highlights?: Highlight[];
   mask?: Mask | null;
   reveal?: Reveal | null;
-  /** Another mushaf's ornaments, painted behind the ink. A new object dresses the page again;
-   * `null` undresses it. It is applied again to every page the view loads. */
+  /** Another mushaf's ornaments, painted behind the ink. Native compares the spec by value: an equal
+   * spec is a no-op and a changed one dresses the page again. `null` undresses it. It is applied again to every page the view loads. */
   dress?: Dress | null;
   onWordTap?: (e: { word: Word; hit: Hit }) => void;
   onDecorationTap?: (e: { decoration: Deco; hit: Hit }) => void;
@@ -547,7 +547,11 @@ function dressSpec(spec: DressSpec): object {
     pageFrame: ref(spec.pageFrame === undefined ? spec.style : spec.pageFrame),
     gap: spec.gap, bandGap: spec.bandGap, ayahMarkScale: spec.ayahMarkScale, pageFrameScale: spec.pageFrameScale,
     lineArt: spec.lineArt === true ? ['ayah_mark', 'surah_header', 'page_frame'] : Array.isArray(spec.lineArt) ? spec.lineArt : [],
-    colors: (spec.colors ?? []).map(([o, part, colour]) => [typeof o === 'object' ? o.index : o, part, css(colour)]),
+    // A colour that does not parse is skipped, not sent as a transparent repaint.
+    colors: (spec.colors ?? []).flatMap(([o, part, colour]) => {
+      const c = css(colour);
+      return c === undefined ? [] : [[typeof o === 'object' ? o.index : o, part, c]];
+    }),
   };
 }
 
