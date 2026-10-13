@@ -1,7 +1,7 @@
 /**
  * The dress surface of @quran.ws/qvp-react-native: the ornament set (loadOrnaments, ornamentList,
  * ornamentCount, ornamentInfo, ornamentPart, ornamentFind, freeOrnaments) and the page
- * (dress, undress, dressInfo, dressRevision), plus the `dress` prop. The native module is the
+ * (dress, undress, dressClamp, dressInfo, dressRevision), plus the `dress` prop. The native module is the
  * stand-in in jest/qvpModule.js, so this checks what the JavaScript side sends and reads back.
  * The engine's own answers are checked by the Android SDK's tests and crates/qvp-ffi/tests/abi.rs.
  */
@@ -37,6 +37,7 @@ beforeEach(() => {
   M.__answer('dress', (_: number, __: number, spec: any) => (spec.ayahMark === 99 ? null : INFO));
   M.__answer('dressInfo', INFO);
   M.__answer('dressRevision', INFO.revision);
+  M.__answer('dressClamp', (_: number, scale: number, ox: number, oy: number) => ({ scale, offsetX: Math.min(ox, 5), offsetY: oy }));
 });
 
 test('an ornament set loads, lists, finds and groups by style', async () => {
@@ -79,6 +80,9 @@ test('dress sends indices, style names and colours the native side reads', async
   expect(await Qvp.dress(42, set, { ayahMark: 99 })).toBeNull();
   expect(await Qvp.dressInfo(42)).toEqual(INFO);
   expect(await Qvp.dressRevision(42)).toBe(3);
+  // the engine clamps the view over the content plus the overflow; the wrapper only passes it through
+  expect(await Qvp.dressClamp(42, { scale: 2, offsetX: 40, offsetY: -9 }, 390, 700)).toEqual({ scale: 2, offsetX: 5, offsetY: -9 });
+  expect(last('dressClamp')).toEqual([42, 2, 40, -9, 390, 700]);
   await Qvp.undress(42);
   expect(last('undress')).toEqual([42]);
 });

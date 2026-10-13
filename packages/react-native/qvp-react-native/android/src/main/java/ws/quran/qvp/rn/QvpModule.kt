@@ -171,6 +171,11 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
         val set = QvpOrnamentSets.get(id) ?: throw IllegalStateException("no ornament set $id")
         v.dressNow(p, set, Marshal.dressSpec(opt(spec)))?.let { Marshal.dressInfo(it) } }
     @ReactMethod fun undress(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> v.undressNow(p); null }
+    /** The engine's clamp of a view over the content plus the dress overflow. Offsets and viewport are in dp, like the other view methods. */
+    @ReactMethod fun dressClamp(tag: Int, scale: Double, offsetX: Double, offsetY: Double, viewportW: Double, viewportH: Double, promise: Promise) = withPage(tag, promise) { v, p ->
+        val d = v.resources.displayMetrics.density
+        val c = p.dressClamp(QvpView(scale.toFloat(), (offsetX * d).toFloat(), (offsetY * d).toFloat()), (viewportW * d).toFloat(), (viewportH * d).toFloat())
+        mapOf("scale" to c.scale, "offsetX" to c.offsetX / d, "offsetY" to c.offsetY / d) }
     @ReactMethod fun dressInfo(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.dressInfo()?.let { Marshal.dressInfo(it) } }
     @ReactMethod fun dressRevision(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.dressRevision() }
 

@@ -104,7 +104,9 @@ export interface SurahHeader { decoration: number; surah: number; line: number; 
 export interface Rosette { decoration: number; surah: number; ayah: number; juz: number; hizb: number; nisf: number; rubuAlHizb: number; rubuAlHizbInHizb: number }
 export interface Sajdah { decoration: number; surah: number; ayah: number; signPath: number }
 export interface CropBox { x0: number; y0: number; x1: number; y1: number; nWords: number; ayahMarkDecoration: number }
-export interface Layout { scale: number; offsetX: number; offsetY: number; contentW: number; contentH: number; lineSpacing: number; lineDy: number[]; slots: number[][] }
+/** A zoom and pan of the page: the scale and the offset of its origin. */
+export interface ViewState { scale: number; offsetX: number; offsetY: number }
+export interface Layout { scale: number; offsetX: number; offsetY: number; contentW: number; contentH: number; lineSpacing: number; fitScale: number; fitX: number; fitY: number; lineDy: number[]; slots: number[][] }
 export interface Stats { loadMs: number; bytes: number; baseMs: number; overlayMs: number; basePaths: number; overlayPaths: number; bands: number; hitUs: number; animating: boolean; styleHandles: number; highlightHandles: number; engineVersion: string; viewScale: number; layout: Layout | null }
 export interface AtlasSurah { number: number; page: number; ayahCount: number; place: string; arabic: string; latin: string; english: string }
 export interface AtlasRubuAlHizb { rubuAlHizb: number; surah: number; ayah: number; page: number; ayahKey: string }
@@ -429,6 +431,8 @@ export const Qvp = {
   dress: (tag: number, set: QvpOrnaments | number, spec: DressSpec = {}): Promise<DressInfo | null> => M.dress(tag, ornamentsId(set), dressSpec(spec)),
   /** Take the ornaments off: the printed rings and bands come back. */
   undress: (tag: number): Promise<void> => M.undress(tag),
+  /** Clamp a view (scale and offsets in dp) over the content plus the dress overflow, as the engine does. An undressed page gets the plain clamp. */
+  dressClamp: (tag: number, view: ViewState, viewportW: number, viewportH: number): Promise<ViewState> => M.dressClamp(tag, view.scale, view.offsetX, view.offsetY, viewportW, viewportH),
   /** The readout, or null when the page is not dressed. */
   dressInfo: (tag: number): Promise<DressInfo | null> => M.dressInfo(tag),
   /** Counts up on every rebuild of the ornament layer: a new dress, and every layout. 0 when undressed. */
@@ -556,7 +560,7 @@ function dressSpec(spec: DressSpec): object {
 }
 
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg', 'dress', 'undress', 'dressInfo', 'dressRevision'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg', 'dress', 'undress', 'dressClamp', 'dressInfo', 'dressRevision'] as const;
 type PageMethod = (typeof pageMethods)[number];
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {
