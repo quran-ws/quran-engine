@@ -1,5 +1,5 @@
-// Replay conformance/scenarios/layout.json through the reference wrapper and compare every
-// number with the engine's recorded answer. Needs web/qvp_ffi.wasm and dist/pages/042.qvp.
+// Replay conformance/scenarios/layout.json and dress.json through the reference wrapper and
+// compare every number with the engine's recorded answer. Needs web/qvp_ffi.wasm and dist/pages/042.qvp.
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { QvpEngine, wasmUrl } from './index.mjs'
@@ -26,5 +26,30 @@ for (const c of scenarios.cases) {
   close(page.layoutWastedFraction(c.spec), c.wastedFraction, `${tag} wastedFraction`)
   n++
 }
-page.free()
 console.log(`ok  ${n} layout scenarios match the engine`)
+
+// conformance/scenarios/dress.json: the layout's fit holds the border, and dressClamp holds a
+// view to the dressed box. The ornament set is the synthetic one the generator wrote as hex.
+const dressed = JSON.parse(readFileSync(new URL('conformance/scenarios/dress.json', root), 'utf8'))
+const hex = readFileSync(new URL(`conformance/${dressed.ornaments}`, root), 'utf8').replace(/\s+/g, '')
+const set = engine.loadOrnaments(Uint8Array.from(hex.match(/../g), b => parseInt(b, 16)))
+const near = (a, b, what) => assert.ok(Math.abs(a - b) <= dressed.tolerance * Math.max(1, Math.abs(b)), `${what}: got ${a}, engine says ${b}`)
+let m = 0
+for (const c of dressed.cases) {
+  const tag = `dress ${c.spec.viewportW}x${c.spec.viewportH}${c.spec.reflow ? ' reflow ' + c.spec.reflow.zoom : ''}`
+  page.undress()
+  page.layout(c.spec)
+  assert.ok(page.dress(set, dressed.dress), `${tag}: the engine refused the dress`)
+  const L = page.currentLayout
+  for (const k of ['fitScale', 'fitX', 'fitY']) near(L[k], c.fit[k], `${tag} ${k}`)
+  page.dressInfo().overflow.forEach((v, i) => near(v, c.overflow[i], `${tag} overflow[${i}]`))
+  for (const { view, held } of c.clamps) {
+    const v = page.dressClamp(view, c.spec.viewportW, c.spec.viewportH)
+    for (const k of ['scale', 'offsetX', 'offsetY']) near(v[k], held[k], `${tag} dressClamp(${view.offsetX}, ${view.offsetY}) ${k}`)
+  }
+  m++
+}
+page.undress()
+set.free()
+page.free()
+console.log(`ok  ${m} dress scenarios match the engine`)

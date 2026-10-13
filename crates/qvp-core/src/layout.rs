@@ -124,9 +124,19 @@ pub struct Layout {
     /// then offset by `fit_x`, `fit_y` so the content is centred. A host draws at
     /// `fit_x + fit_scale · vx`, `fit_y + fit_scale · vy`, and applies its own pan and
     /// zoom on top.
+    ///
+    /// A dress is included. On a dressed page the box that is fitted is the content plus
+    /// the dress overflow on each side ([`Page::dress_overflow`]), so the border is in view
+    /// too. `fit_x` and `fit_y` still place the content's own origin: the overflow sits
+    /// to the left of `fit_x` and above `fit_y`. A reflowed page keeps `fit_scale` at 1 and
+    /// puts the top of the border at the top of the viewport. A dress, a new dress and an
+    /// undress refit the current layout.
     pub fit_scale: f32,
     pub fit_x: f32,
     pub fit_y: f32,
+    /// The viewport this layout was made for, in px: what the fit is measured against.
+    pub viewport_w: f32,
+    pub viewport_h: f32,
     /// Where each group of paths is placed. Without reflow there is one group per printed
     /// line, holding that line's `line_dy`. With reflow the groups are the page's words and
     /// decorations: `path_group` says which group a path belongs to.
@@ -368,9 +378,11 @@ impl Page {
             laid_top: spec.pad_top / scale,
             laid_width: (content_w - spec.pad_left - spec.pad_right) / scale,
             laid_height: block_h,
-            fit_scale: 0.0,
+            fit_scale: 1.0,
             fit_x: 0.0,
             fit_y: 0.0,
+            viewport_w: spec.viewport_w,
+            viewport_h: spec.viewport_h,
             line_spacing,
             groups: vec![],
             path_group: vec![],
@@ -378,18 +390,9 @@ impl Page {
             reflow: None,
         };
         layout.groups = layout.line_dy.iter().map(|&d| Placement::shifted(d)).collect();
-        // Fit: shrink to the viewport height when the content is taller, never enlarge;
-        // centre the result. Offsets are never negative.
-        let fit_scale = if layout.content_h > spec.viewport_h && layout.content_h > 0.0 {
-            spec.viewport_h / layout.content_h
-        } else {
-            1.0
-        };
-        layout.fit_scale = fit_scale;
-        layout.fit_x = ((spec.viewport_w - layout.content_w * fit_scale) / 2.0).max(0.0);
-        layout.fit_y = ((spec.viewport_h - layout.content_h * fit_scale) / 2.0).max(0.0);
         self.layout = Some(layout);
-        // a border goes around the laid-out page, so it moves with it
+        // a border goes around the laid-out page, so it moves with it; the fit is set
+        // there too, as it fits the border when there is one
         self.redress();
         self.layout.as_ref().unwrap()
     }
@@ -495,7 +498,7 @@ impl Page {
         }
         omitted_paths.sort_unstable();
         omitted_paths.dedup();
-        let mut layout = Layout {
+        Layout {
             scale,
             // the block's own left margin, kept at the reader's size
             offset_x: spec.pad_left + margin_l / zoom * scale,
@@ -512,13 +515,35 @@ impl Page {
             fit_scale: 1.0,
             fit_x: 0.0,
             fit_y: 0.0,
+            viewport_w: spec.viewport_w,
+            viewport_h: spec.viewport_h,
             groups,
             path_group,
             omitted_paths,
             reflow: Some(flow),
-        };
-        layout.fit_x = ((spec.viewport_w - layout.content_w) / 2.0).max(0.0);
-        layout
+        }
+    }
+
+    /// Set the current layout's fit from the box it has to show: the content, plus the
+    /// dress overflow on each side when the page is dressed. A printed page shrinks to fit
+    /// that box and is never enlarged; a reflowed one keeps scale 1 and starts at the top
+    /// of the box. The centring offsets are never negative on a printed page.
+    pub(crate) fn refit(&mut self) {
+        let (l, t, r, b) = self.dress_overflow();
+        let Some(layout) = self.layout.as_mut() else { return };
+        let (vw, vh) = (layout.viewport_w, layout.viewport_h);
+        let (w, h) = (layout.content_w + l + r, layout.content_h + t + b);
+        if layout.reflow.is_some() {
+            // scrolled, never shrunk: a box wider than the screen loses as much on each side
+            layout.fit_scale = 1.0;
+            layout.fit_x = (vw - w) / 2.0 + l;
+            layout.fit_y = t;
+        } else {
+            let s = if h > 0.0 && w > 0.0 { (vh / h).min(vw / w).min(1.0) } else { 1.0 };
+            layout.fit_scale = s;
+            layout.fit_x = ((vw - w * s) / 2.0).max(0.0) + l * s;
+            layout.fit_y = ((vh - h * s) / 2.0).max(0.0) + t * s;
+        }
     }
 
     pub fn current_layout(&self) -> Option<&Layout> {

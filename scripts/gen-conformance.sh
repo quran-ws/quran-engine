@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Regenerate the cross-wrapper scenarios from the Rust engine (docs/standards/TESTING.md).
-# Input: dist/pages (scripts/sync-test-data.sh). Output: conformance/scenarios/*.json.
+# Input: dist/pages (scripts/sync-test-data.sh). Output: conformance/scenarios/*.json, and the
+# synthetic ornament set the dress scenarios load, conformance/qvo1-dress.hex.
 # `--check` exits 1 when the committed files differ from what the engine produces now.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -10,7 +11,8 @@ mkdir -p "$tmp/scenarios"
 cargo run -q -p qvp-core --release --example scenarios -- dist/pages/042.qvp "$tmp/scenarios/layout.json"
 cargo run -q -p qvp-core --release --example passage_scenarios -- dist/pages "$tmp/scenarios/passage.json"
 cargo run -q -p qvp-core --release --example lite_passage_metrics -- dist/pages > "$tmp/lite-passage-metrics.json"
-for file in scenarios/layout.json scenarios/passage.json lite-passage-metrics.json; do
+cargo run -q -p qvp-core --release --example dress_scenarios -- dist/pages/042.qvp "$tmp/scenarios/dress.json" "$tmp/qvo1-dress.hex"
+for file in scenarios/layout.json scenarios/passage.json lite-passage-metrics.json scenarios/dress.json qvo1-dress.hex; do
   if [ "${1:-}" = "--check" ]; then
     if cmp -s "$tmp/$file" "conformance/$file"; then
       echo "ok   conformance/$file matches the engine"

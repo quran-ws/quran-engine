@@ -2894,6 +2894,19 @@ pub unsafe extern "C" fn qvp_dress_info(page: *const Page, out: *mut QvpDressInf
         1
     })
 }
+/// Hold a view against the viewport for the dressed box (the content plus the dress
+/// overflow), so a drag reaches the border and never goes past it. An undressed page gets
+/// the plain `qvp_view_clamp` of its content.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_dress_clamp(
+    page: *const Page,
+    view: *const QvpView,
+    viewport_w: f32,
+    viewport_h: f32,
+    out: *mut QvpView,
+) {
+    guard(|| *out = (*page).dress_clamp((*view).into(), viewport_w, viewport_h).into())
+}
 #[no_mangle]
 pub unsafe extern "C" fn qvp_dress_geometry(page: *const Page, out: *mut QvpDressGeometry) {
     guard(|| match (*page).dress_of() {

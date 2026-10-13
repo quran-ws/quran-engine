@@ -1,0 +1,35 @@
+{
+  "page": "042.qvp",
+  "ornaments": "qvo1-dress.hex",
+  "tolerance": 0.001,
+  "dress": {"ayahMark": 0, "surahHeader": 1, "pageFrame": 2, "gap": 5, "bandGap": 5, "ayahMarkScale": 1, "pageFrameScale": 1},
+  "cases": [
+    {"spec": {"viewportW": 390, "viewportH": 844, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16},
+     "fit": {"fitScale": 0.9074559, "fitX": 18.046099, "fitY": 141.26732},
+     "overflow": [19.886475, 13.471818, 19.886475, 13.471863],
+     "clamps": [
+       {"view": {"scale": 3, "offsetX": 10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": 59.659424, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": 10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": 40.415455}},
+       {"view": {"scale": 3, "offsetX": -10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": -839.6594, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": -10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": -1052.5895}}
+     ]},
+    {"spec": {"viewportW": 1024, "viewportH": 768, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16},
+     "fit": {"fitScale": 0.42926267, "fitX": 292.21753, "fitY": 34.269123},
+     "overflow": [83.43961, 79.83253, 83.439575, 79.83252],
+     "clamps": [
+       {"view": {"scale": 3, "offsetX": 10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": 250.31885, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": 10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": 239.49759}},
+       {"view": {"scale": 3, "offsetX": -10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": -2298.3186, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": -10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": -4359.8457}}
+     ]},
+    {"spec": {"viewportW": 390, "viewportH": 844, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16, "reflow": {"zoom": 2}},
+     "fit": {"fitScale": 1, "fitX": -0.000005722046, "fitY": 136.53448},
+     "overflow": [25.939615, 136.53448, 25.939636, 136.53442],
+     "clamps": [
+       {"view": {"scale": 3, "offsetX": 10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": 77.81885, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": 10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": 409.60345}},
+       {"view": {"scale": 3, "offsetX": -10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": -857.81885, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": -10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": -7755.8564}}
+     ]}
+  ]
+}

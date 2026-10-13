@@ -14,7 +14,7 @@
 //! the ink. A host paints the list behind the page ink. Only the printed ring is
 //! hidden; the numeral inside it is the print's own ink and stays on top.
 use crate::style::{Paint, Selector};
-use crate::{Handle, Page, Placement, Rgba, NONE};
+use crate::{Handle, Page, Placement, Rgba, View, NONE};
 use qvp_format::ornaments::*;
 use qvp_format::{Cmd, PathKind, OP_CLOSE, OP_CUBIC, OP_LINE, OP_MOVE, OP_QUAD};
 use std::sync::Arc;
@@ -422,14 +422,15 @@ impl Page {
         self.dress.as_ref()
     }
 
-    /// Take the ornaments off: the printed rings and bands come back and the viewBox
-    /// returns to the page's own.
+    /// Take the ornaments off: the printed rings and bands come back, the viewBox
+    /// returns to the page's own and the current layout's fit is the undressed one again.
     pub fn undress(&mut self) {
         if let Some(d) = self.dress.take() {
             for h in d.hidden {
                 self.styles.remove(h);
             }
             self.state_dirty = true;
+            self.refit();
         }
     }
 
@@ -451,11 +452,34 @@ impl Page {
         )
     }
 
+    /// Hold a view against the viewport, as [`View::clamp`] does, but for the dressed box:
+    /// the content plus the dress overflow on each side. A drag then reaches the border's
+    /// edges and never goes past them. An undressed page gets the plain clamp of its
+    /// content.
+    pub fn dress_clamp(&self, view: View, viewport_w: f32, viewport_h: f32) -> View {
+        let (cw, ch) = match &self.layout {
+            Some(l) => (l.content_w, l.content_h),
+            None => (self.width(), self.height()),
+        };
+        let (l, t, r, b) = self.dress_overflow();
+        // the dressed box starts `(l, t)` before the content, which is `scale` times that on screen
+        let (sx, sy) = (l * view.scale, t * view.scale);
+        let shifted = View { offset_x: view.offset_x - sx, offset_y: view.offset_y - sy, ..view };
+        let held = shifted.clamp(cw + l + r, ch + t + b, viewport_w, viewport_h);
+        View { offset_x: held.offset_x + sx, offset_y: held.offset_y + sy, ..held }
+    }
+
     /// Re-place the ornaments against the current layout. A layout that respaces the
     /// lines makes the page taller than it is printed, and the border goes around what
     /// is on the page, so it has to follow. Every rebuild bumps the revision, because a
-    /// layout can move placements without changing the geometry.
+    /// layout can move placements without changing the geometry. The layout's fit is set
+    /// last, dressed or not, as it fits the border too.
     pub(crate) fn redress(&mut self) {
+        self.rebuild_dress();
+        self.refit();
+    }
+
+    fn rebuild_dress(&mut self) {
         let Some(d) = self.dress.as_ref() else { return };
         let (Some(set), spec) = (d.set.clone(), d.spec.clone()) else { return };
         if let Some(mut next) = self.build_dress(&set, &spec) {
@@ -489,6 +513,7 @@ impl Page {
         dress.set = Some(set.clone());
         dress.spec = spec.clone();
         self.dress = Some(dress);
+        self.refit();
         self.dress.as_ref()
     }
 
@@ -1065,6 +1090,92 @@ mod tests {
         let over = p.dress_overflow();
         let limit = (gap + 20.0) * l.scale;
         assert!(over.0 < limit && over.2 < limit, "{over:?} limit {limit}");
+    }
+
+    /// The dressed box, `x0, y0, x1, y1` in layout px: the border's viewBox through the layout.
+    fn border_in_layout(p: &Page) -> (f32, f32, f32, f32) {
+        let l = p.current_layout().unwrap();
+        let vb = p.view_box();
+        (
+            l.offset_x + vb[0] * l.scale,
+            l.offset_y + vb[1] * l.scale,
+            l.offset_x + (vb[0] + vb[2]) * l.scale,
+            l.offset_y + (vb[1] + vb[3]) * l.scale,
+        )
+    }
+
+    #[test]
+    fn a_dressed_printed_fit_holds_the_whole_border() {
+        let (mut p, _, _) = page();
+        // tall enough that the undressed page fits as it is, so only the border shrinks it
+        let spec = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+        let plain = p.layout(&spec).clone();
+        p.dress(&set(), &all()).unwrap();
+        let l = p.current_layout().unwrap().clone();
+        let (x0, y0, x1, y1) = border_in_layout(&p);
+        let to_screen = |x: f32, y: f32| (l.fit_x + l.fit_scale * x, l.fit_y + l.fit_scale * y);
+        let (sx0, sy0) = to_screen(x0, y0);
+        let (sx1, sy1) = to_screen(x1, y1);
+        let e = 1e-3;
+        assert!(sx0 >= -e && sy0 >= -e && sx1 <= 200.0 + e && sy1 <= 400.0 + e, "{:?}", (sx0, sy0, sx1, sy1));
+        assert!(
+            l.fit_scale < plain.fit_scale,
+            "the border is wider than the screen: {} vs {}",
+            l.fit_scale,
+            plain.fit_scale
+        );
+        // centred: as much air on each side
+        assert!(near(sx0, 200.0 - sx1) && near(sy0, 400.0 - sy1), "{:?}", (sx0, sy0, sx1, sy1));
+        // a relayout keeps the dressed fit
+        assert_eq!(p.layout(&spec).fit_scale, l.fit_scale);
+        // undressed, the plain fit comes back
+        p.undress();
+        let back = p.current_layout().unwrap();
+        assert_eq!((back.fit_scale, back.fit_x, back.fit_y), (plain.fit_scale, plain.fit_x, plain.fit_y));
+    }
+
+    #[test]
+    fn a_dressed_reflowed_fit_starts_at_the_top_of_the_border() {
+        let (mut p, _, _) = page();
+        p.dress(&set(), &all()).unwrap();
+        let spec = LayoutSpec {
+            viewport_w: 200.0,
+            viewport_h: 400.0,
+            reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+            ..Default::default()
+        };
+        let l = p.layout(&spec).clone();
+        let over = p.dress_overflow();
+        assert_eq!(l.fit_scale, 1.0);
+        assert!(near(l.fit_y, over.1), "{} vs {over:?}", l.fit_y);
+        let (_, y0, _, _) = border_in_layout(&p);
+        assert!(near(l.fit_y + y0, 0.0), "the border's top is the viewport's top: {}", l.fit_y + y0);
+    }
+
+    #[test]
+    fn the_dress_clamp_reaches_the_border_and_never_passes_it() {
+        let (mut p, _, _) = page();
+        let spec = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+        p.layout(&spec);
+        p.dress(&set(), &all()).unwrap();
+        let (x0, y0, x1, y1) = border_in_layout(&p);
+        // zoomed in far enough that the dressed box overflows the viewport both ways
+        let zoomed = View { scale: 4.0, offset_x: 0.0, offset_y: 0.0 };
+        // pushed past the top and the left: the border's top left corner is the viewport's
+        let a = p.dress_clamp(View { offset_x: 1e5, offset_y: 1e5, ..zoomed }, 200.0, 400.0);
+        assert!(near(a.offset_x + a.scale * x0, 0.0) && near(a.offset_y + a.scale * y0, 0.0), "{a:?}");
+        // pushed past the bottom and the right: the bottom right corner
+        let b = p.dress_clamp(View { offset_x: -1e5, offset_y: -1e5, ..zoomed }, 200.0, 400.0);
+        assert!(near(b.offset_x + b.scale * x1, 200.0) && near(b.offset_y + b.scale * y1, 400.0), "{b:?}");
+        // inside the box the view is left where it is
+        let mid =
+            View { offset_x: (a.offset_x + b.offset_x) / 2.0, offset_y: (a.offset_y + b.offset_y) / 2.0, ..zoomed };
+        assert_eq!(p.dress_clamp(mid, 200.0, 400.0), mid);
+        // undressed, it is the plain clamp of the content
+        p.undress();
+        let l = p.current_layout().unwrap().clone();
+        let push = View { offset_x: 1e5, offset_y: 1e5, ..zoomed };
+        assert_eq!(p.dress_clamp(push, 200.0, 400.0), push.clamp(l.content_w, l.content_h, 200.0, 400.0));
     }
 
     /// A set whose page frame tiles: a 10 x 8 corner and two 6 unit edge strips, each one

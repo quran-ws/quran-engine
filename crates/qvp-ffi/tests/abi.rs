@@ -568,6 +568,17 @@ fn dress_over_the_abi() {
         qvp_layout(page, &tall, &mut lay);
         assert_eq!(qvp_dress_info(page, &mut di), 1);
         assert!(di.view_box[3] > printed_h, "{printed_h} -> {}", di.view_box[3]);
+        // the layout's fit holds the border: content plus overflow inside the viewport
+        assert_eq!(qvp_layout_current(page, &mut lay), 1);
+        let (w, h) = (lay.content_w + di.overflow[0] + di.overflow[2], lay.content_h + di.overflow[1] + di.overflow[3]);
+        assert!(lay.fit_y - lay.fit_scale * di.overflow[1] >= -1e-3, "{} {}", lay.fit_y, lay.fit_scale);
+        assert!(lay.fit_y + lay.fit_scale * (h - di.overflow[1]) <= tall.viewport_h + 1e-3);
+        assert!(lay.fit_x - lay.fit_scale * di.overflow[0] >= -1e-3 && lay.fit_scale * w <= tall.viewport_w + 1e-3);
+        // a drag past the top stops at the border's top edge
+        let pushed = QvpView { scale: 3.0, offset_x: 0.0, offset_y: 1e5 };
+        let mut held = QvpView { scale: 0.0, offset_x: 0.0, offset_y: 0.0 };
+        qvp_dress_clamp(page, &pushed, tall.viewport_w, tall.viewport_h, &mut held);
+        assert!((held.offset_y - held.scale * di.overflow[1]).abs() < 1e-2, "{} {}", held.offset_y, held.scale);
 
         let mut g = std::mem::zeroed::<QvpDressGeometry>();
         qvp_dress_geometry(page, &mut g);

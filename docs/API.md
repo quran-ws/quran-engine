@@ -659,9 +659,17 @@ drawn in layout space. `CanvasRenderer` does all of this.
 
 **A dressed page is bigger than its text.** `viewBox` is the page box the border grew, in
 page units, and `overflow` is how far the border reaches past the laid-out content on each
-side, in viewport px. Fit content plus overflow, or the border is cropped off. A new layout
-re-places the dress and bumps `revision` (on every rebuild: a new dress, and every layout); a host that rasterises the layer keys its cache on
-that number.
+side, in viewport px. The layout's fit includes the dress: `fitScale`, `fitX` and `fitY` fit
+the content plus the overflow in the viewport, so a host that draws at the layout's fit shows
+the whole border with no arithmetic of its own. `fitX` and `fitY` still place the content's
+origin, and the overflow sits to their left and above them. A printed page shrinks to fit
+the dressed box and is never enlarged. A reflowed page keeps `fitScale` at 1 and puts the top
+of the border at the top of the viewport. `dress` and `undress` refit the current layout, and
+the web wrapper reads it again into `page.currentLayout`. To keep a pan inside the dressed
+box, clamp with `page.dressClamp(view, viewportW, viewportH)` in place of
+`engine.viewClamp`: a drag then reaches the border's edges and never goes past them. A new
+layout re-places the dress and bumps `revision` (on every rebuild: a new dress, and every
+layout); a host that rasterises the layer keys its cache on that number.
 
 **The ornaments are not part of the pages.** The data release carries an `ornaments.qvo`
 of the assets whose licence is confirmed (`docs/DATA.md`). A fuller set is built from a
@@ -884,6 +892,7 @@ says which wrapper binds which.
 | dress | `qvp_undress` | `page.undress()` | Take the ornaments off; the printed rings and bands come back. |
 | dress | `qvp_dress_info` | `page.dressInfo()` | Return the readout: chosen ornaments, counts, revision, grown page box and overflow. |
 | dress | `qvp_dress_geometry` | `page.dressGeometry()` | Return the ornament display list, with a layout placement on each draw. |
+| dress | `qvp_dress_clamp` | `page.dressClamp(view, viewportW, viewportH)` | Clamp a view to the content plus the dress overflow, so a drag reaches the border and stops there. |
 | names | `qvp_version` | `engine.version()` | Return the engine version as a string, `0.2.0`. |
 | names | `qvp_format_version` | `engine.formatVersion()` | Return the page format version the engine reads. |
 | names | `qvp_engine_name` | `engine.engineName()` | Return the engine's name, `qvp`. |

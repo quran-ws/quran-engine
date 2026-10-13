@@ -97,14 +97,8 @@
   }
   function fit(redraw = true) {
     const L = relayout(); if (!L) return;
-    const r = stage.getBoundingClientRect();
-    // A dressed page is bigger than its text: the border is drawn around it, and the
-    // engine says by how much on each side, so the view fits content plus overflow.
-    const [l, t, rt, bt] = S.page.dressInfo()?.overflow || [0, 0, 0, 0];
-    const w = L.contentW + l + rt, h = L.contentH + t + bt;
-    const s = L.reflowed ? 1 : Math.min(1, r.height / h, r.width / w);
-    S.view = L.reflowed ? { scale: 1, offsetX: (r.width - w) / 2 + l, offsetY: t }
-                        : { scale: s, offsetX: (r.width - w * s) / 2 + l * s, offsetY: (r.height - h * s) / 2 + t * s };
+    // the engine's fit: on a dressed page it already holds the border
+    S.view = { scale: L.fitScale, offsetX: L.fitX, offsetY: L.fitY };
     renderer.baseKey = '';
     if (redraw) draw();
   }
@@ -289,7 +283,7 @@
         const L = S.page.currentLayout;
         const turns = S.page.sidewaysDrag(S.zoom, S.view, L ? L.fitScale : 0) === 'turnPage';
         const v = engine.viewPan({ ...S.view, offsetX: drag.offsetX, offsetY: drag.offsetY }, turns ? 0 : dx, dy);
-        S.view = turns && L ? engine.viewClamp(v, L.contentW, L.contentH, stage.clientWidth, stage.clientHeight) : v;
+        S.view = turns && L ? S.page.dressClamp(v, stage.clientWidth, stage.clientHeight) : v;
         draw();
       }
       return;

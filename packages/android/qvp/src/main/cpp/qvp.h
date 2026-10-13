@@ -120,7 +120,9 @@ typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pa
 /* the grid a page is designed on: the mushaf's line count (15 here, or more when a page has more) and the printed spacing */
 typedef struct { uint32_t lines; float line_spacing; } QvpGrid;
 /* fit_*: the view transform that shows the whole content (shrink to the viewport height, never enlarge, centred):
-   draw at fit_x + fit_scale·view_x, fit_y + fit_scale·view_y; the host's pan and zoom go on top. */
+   draw at fit_x + fit_scale·view_x, fit_y + fit_scale·view_y; the host's pan and zoom go on top.
+   A dressed page fits the content plus the dress overflow, so the border is in view; fit_x, fit_y still place
+   the content's origin. qvp_dress and qvp_undress refit the current layout: read it again with qvp_layout_current. */
 typedef struct { float scale, offset_x, offset_y, content_w, content_h, line_spacing; uint32_t n_lines; const float* lines; /* n_lines × {dy, slot_top, slot_bottom}; the rows when reflowed */ float fit_scale, fit_x, fit_y; uint32_t reflowed, n_rows; } QvpLayout;
 typedef struct { uint8_t target /* QVP_TARGET_* */; uint32_t a, b, c; const uint32_t* words; uint32_t n_words; } QvpTarget;
 typedef struct { uint8_t selector /* QVP_SELECTOR_* */; uint32_t a, b, c; } QvpSelector;
@@ -322,6 +324,7 @@ int       qvp_dress(QvpPage*, const QvpOrnaments*, const QvpDressSpec*);   /* 0 
 void      qvp_undress(QvpPage*);
 int       qvp_dress_info(const QvpPage*, QvpDressInfo* out);               /* 0 = not dressed */
 void      qvp_dress_geometry(const QvpPage*, QvpDressGeometry* out);       /* paint it BEHIND the page ink; valid until the next dress, undress or layout */
+void      qvp_dress_clamp(const QvpPage*, const QvpView*, float viewport_w, float viewport_h, QvpView* out);   /* qvp_view_clamp for the content plus the dress overflow: a drag reaches the border, never past it */
 
 /* atlas (cross-page lookup; atlas.qva from the converter) -------------------------------- */
 QvpAtlas* qvp_atlas_load(const uint8_t* bytes, size_t len);

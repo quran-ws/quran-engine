@@ -296,16 +296,26 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       d.setFloat32(s + 12, gap, true); d.setFloat32(s + 16, bandGap, true); d.setFloat32(s + 20, ayahMarkScale, true); d.setFloat32(s + 24, pageFrameScale, true); d.setUint32(s + 28, lineMask, true);
       d.setUint32(s + 32, cp, true); d.setUint32(s + 36, triples.length / 3, true);
       this.ornaments = null;
-      if (!this.e.ex.qvp_dress(this.h, set.h, s)) return null;
-      return this.dressInfo();
+      const ok = this.e.ex.qvp_dress(this.h, set.h, s);
+      // the engine refits the current layout to the border (or back without it)
+      if (this.currentLayout) this.layoutCurrent();
+      return ok ? this.dressInfo() : null;
     }
-    /** Take the ornaments off: the printed rings and bands come back. */
-    undress() { this.e.ex.qvp_undress(this.h); this.ornaments = null; }
+    /** Take the ornaments off: the printed rings and bands come back, and the layout's fit is
+     * the undressed one again. */
+    undress() { this.e.ex.qvp_undress(this.h); this.ornaments = null; if (this.currentLayout) this.layoutCurrent(); }
+    /** `engine.viewClamp` for the dressed box: the content plus the dress overflow, so a drag
+     * reaches the border and never goes past it. An undressed page gets the plain clamp. */
+    dressClamp(view, viewportW, viewportH) {
+      const i = this.e._putView(view, this.e.scratch2 + 32768);
+      this.e.ex.qvp_dress_clamp(this.h, i, viewportW, viewportH, this.e.scratch);
+      return this.e._getView(this.e.scratch);
+    }
     /** The readout, or null when the page is not dressed: {ayahMark, surahHeader, pageFrame,
      * ayahMarks, surahHeaders, frameRepeats, frameStretched, draws, revision, viewBox,
      * overflow}. `viewBox` is [x, y, w, h] in page units; a border grows it. `overflow` is
-     * [left, top, right, bottom] in viewport px: fit content plus overflow or the border is
-     * cropped off. */
+     * [left, top, right, bottom] in viewport px. The layout's `fitScale`, `fitX` and `fitY`
+     * already fit the content plus this overflow, and `dressClamp` clamps to it. */
     dressInfo() {
       const s = this.e.scratch;
       if (!this.e.ex.qvp_dress_info(this.h, s)) return null;
