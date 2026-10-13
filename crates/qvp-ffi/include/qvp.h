@@ -136,7 +136,8 @@ typedef struct { float x0, y0, x1, y1; uint32_t n_words, ayah_mark_decoration; }
 /* ornaments: the strings live as long as the QvpOrnaments, not until the next string call */
 typedef struct { uint32_t kind, lineage, n_parts, has_slices, redistributable, _pad; QvpStr style, riwayah, license_id, license_status, attribution; } QvpOrnament;
 typedef struct { uint32_t color, stroke; QvpStr name; } QvpOrnamentPart;
-typedef struct { uint32_t ayah_mark, surah_header, page_frame /* ornament indices, QVP_NONE for none */; float gap /* text to border, page units */, band_gap /* band to border */; uint32_t line_art /* QVP_LINE_ART_* bits */;
+typedef struct { uint32_t ayah_mark, surah_header, page_frame /* ornament indices, QVP_NONE for none */; float gap /* text to border, page units */, band_gap /* band to border */,
+                 ayah_mark_scale /* 1 = as tall as the printed ring */, page_frame_scale /* 1 = the design's thickness */; uint32_t line_art /* QVP_LINE_ART_* bits */;
                  const uint32_t* colors /* (ornament, part, rgba) triples, NULL for the designs' own */; uint32_t n_colors; } QvpDressSpec;
 typedef struct { uint32_t ayah_mark, surah_header, page_frame, n_ayah_marks, n_surah_headers, n_frame_repeats, frame_stretched, n_draws,
                  revision /* bumped on every rebuild: cache the ornament raster against it */;

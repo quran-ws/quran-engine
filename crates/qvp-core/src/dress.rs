@@ -31,6 +31,12 @@ pub struct DressSpec {
     /// Air between a band and the border, in page units. A band is narrower than the
     /// column by twice this.
     pub band_gap: f32,
+    /// The medallion's size against the printed ring: 1 is as tall as the ring.
+    pub ayah_mark_scale: f32,
+    /// The border's thickness against the design's own: 1 is the mushaf's proportion. A
+    /// frame that tiles honours it exactly; a frame without slices keeps its printed
+    /// proportions.
+    pub page_frame_scale: f32,
     /// Which kinds are drawn as line art: only their constant-width strokes, the same
     /// drawing with the fills taken away, so one ink is left. A bitmask of
     /// [`LINE_ART_AYAH_MARK`], [`LINE_ART_SURAH_HEADER`] and [`LINE_ART_PAGE_FRAME`];
@@ -49,6 +55,8 @@ impl Default for DressSpec {
             page_frame: NONE,
             gap: 5.0,
             band_gap: 5.0,
+            ayah_mark_scale: 1.0,
+            page_frame_scale: 1.0,
             line_art: 0,
             colors: vec![],
         }
@@ -502,13 +510,18 @@ impl Page {
                 let pal = palette(o, oi, spec);
                 let gap = spec.gap;
                 let unit = (laid_w + 2.0 * gap) / slot[2].max(f32::EPSILON); // page units per frame unit
+                let thick = if spec.page_frame_scale > 0.0 { spec.page_frame_scale } else { 1.0 };
                 let (asset_w, asset_h) = (o.asset.width(), o.asset.height());
                 match &o.slices {
                     Some(sl) => {
+                        // A thicker border draws the frame's units bigger and tiles fewer of
+                        // them across the same column: the margins grow, the slot stays on
+                        // the grown page box. The bottom margin is the frame's own, not a
+                        // copy of its top.
+                        let unit = unit * thick;
                         let box_x = laid_left - gap - slot[0] * unit;
                         let box_y = laid_top - gap - slot[1] * unit;
-                        let unit_w = asset_w;
-                        // the bottom margin is the frame's own, not a copy of its top
+                        let unit_w = (laid_w + 2.0 * gap) / unit + slot[0] + (asset_w - slot[0] - slot[2]);
                         let unit_h = (laid_h + 2.0 * gap) / unit + slot[1] + (asset_h - slot[1] - slot[3]);
                         let (box_w, box_h) = (unit_w * unit, unit_h * unit);
                         let frame_tf = Tf::fit([0.0, 0.0, unit_w, unit_h], box_x, box_y, box_w, box_h, false);
@@ -587,7 +600,8 @@ impl Page {
                 if m.r <= 0.0 {
                     continue;
                 }
-                let s = 2.0 * m.r / o.asset.height().max(f32::EPSILON);
+                let size = if spec.ayah_mark_scale > 0.0 { spec.ayah_mark_scale } else { 1.0 };
+                let s = 2.0 * m.r * size / o.asset.height().max(f32::EPSILON);
                 let tf = Tf { a: s, b: 0.0, c: 0.0, d: s, e: m.cx - s * scx, f: m.cy - s * scy };
                 let path = if m.ornament_path != NONE {
                     m.ornament_path
@@ -691,7 +705,17 @@ mod tests {
     }
 
     fn all() -> DressSpec {
-        DressSpec { ayah_mark: 0, surah_header: 1, page_frame: 2, gap: 5.0, band_gap: 5.0, line_art: 0, colors: vec![] }
+        DressSpec {
+            ayah_mark: 0,
+            surah_header: 1,
+            page_frame: 2,
+            gap: 5.0,
+            band_gap: 5.0,
+            ayah_mark_scale: 1.0,
+            page_frame_scale: 1.0,
+            line_art: 0,
+            colors: vec![],
+        }
     }
 
     /// The box of one draw's points, page units.
@@ -1048,6 +1072,29 @@ mod tests {
 
     fn frame_only() -> DressSpec {
         DressSpec { ayah_mark: NONE, surah_header: NONE, ..all() }
+    }
+
+    #[test]
+    fn the_medallion_and_border_sizes_are_knobs() {
+        let (mut p, _, _) = page();
+        // twice the ring: 12 units tall, still on the ring centre
+        let d = p.dress(&set(), &DressSpec { ayah_mark_scale: 2.0, ..all() }).unwrap().clone();
+        let (x0, y0, x1, y1) = draw_box(&d, 4);
+        assert!(near(y1 - y0, 12.0) && near(x1 - x0, 9.6), "{:?}", (x0, y0, x1, y1));
+        assert!(near((x0 + x1) / 2.0, 45.0) && near((y0 + y1) / 2.0, 13.0), "{:?}", (x0, y0, x1, y1));
+        // a tiled border twice as thick: the slot stays on the grown box, the margins double
+        let one = p.dress(&tiled_set(false), &frame_only()).unwrap().clone();
+        let two = p.dress(&tiled_set(false), &DressSpec { page_frame_scale: 2.0, ..frame_only() }).unwrap().clone();
+        let unit = (p.width() + 10.0) / 60.0;
+        assert!(
+            near(two.view_box[2], p.width() + 10.0 + 2.0 * 5.0 * unit * 2.0),
+            "{:?} vs {:?}",
+            one.view_box,
+            two.view_box
+        );
+        assert!(near(two.view_box[0], -5.0 - 5.0 * unit * 2.0), "{:?}", two.view_box);
+        assert!(near(one.view_box[2], p.width() + 10.0 + 2.0 * 5.0 * unit), "{:?}", one.view_box);
+        assert!(two.n_frame_repeats < one.n_frame_repeats, "bigger units, fewer of them");
     }
 
     #[test]

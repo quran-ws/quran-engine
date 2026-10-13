@@ -66,6 +66,8 @@ pub struct DressSpec {
     pub page_frame: u32,
     pub gap: f32,            // air between the text and the border, page units
     pub band_gap: f32,       // air between a band and the border, page units
+    pub ayah_mark_scale: f32,  // the medallion's size against the printed ring, 1 = as tall
+    pub page_frame_scale: f32, // the border's thickness against the design's own, 1 = as drawn
     pub line_art: u32,       // LINE_ART_* bits: which kinds are drawn as line art
     pub colors: Vec<(u32, u16, Rgba)>,   // (ornament, part, colour) overrides
 }
@@ -172,7 +174,7 @@ enum { QVP_DRAW_EVENODD = 1 << 8, QVP_DRAW_STROKE = 2 << 8 };
 typedef struct { uint32_t kind, lineage, n_parts, has_slices, redistributable, _pad;
                  QvpStr style, riwayah, license_id, license_status, attribution; } QvpOrnament;
 typedef struct { uint32_t color, stroke; QvpStr name; } QvpOrnamentPart;
-typedef struct { uint32_t ayah_mark, surah_header, page_frame; float gap, band_gap; uint32_t line_art /* QVP_LINE_ART_* bits */;
+typedef struct { uint32_t ayah_mark, surah_header, page_frame; float gap, band_gap, ayah_mark_scale, page_frame_scale; uint32_t line_art /* QVP_LINE_ART_* bits */;
                  const uint32_t* colors; /* (ornament, part, rgba) triples */ uint32_t n_colors; } QvpDressSpec;
 typedef struct { uint32_t ayah_mark, surah_header, page_frame, n_ayah_marks, n_surah_headers,
                  n_frame_repeats, frame_stretched, n_draws, revision;
