@@ -1,8 +1,10 @@
 //! Write the cross-wrapper dress scenarios: page 042 dressed in a small synthetic ornament
-//! set, laid out at two viewports and one reflow zoom. For each case it records the layout's
-//! fit, which holds the border, the dress overflow, the dress clamp of a view pushed
-//! past each edge, and the dress view at scale 1 for a host that scrolls the page, across
-//! the viewport's width and twice it. Every wrapper's test suite replays them and compares.
+//! set, laid out at two viewports and two reflow zooms. For each case it records the layout's
+//! fit, which holds the border, the border's left and right on screen at that fit, the dress
+//! overflow, the dress clamp of a view pushed past each edge, and the dress view for a host
+//! that scrolls the page: at scale 1 across the viewport's width and twice it, and at scale 0
+//! (fit to the width) across the viewport's width. A reflowed case keeps the border inside
+//! the viewport's width. Every wrapper's test suite replays them and compares.
 //!
 //! The set is written next to the scenarios as hex, so a wrapper loads the same bytes. It is
 //! one filled and one stroked rectangle per kind, the shape of the ABI test's set: no
@@ -79,7 +81,8 @@ fn main() {
         line_art: 0,
         colors: vec![],
     };
-    let cases_in: [(f32, f32, f32); 3] = [(390.0, 844.0, 0.0), (1024.0, 768.0, 0.0), (390.0, 844.0, 2.0)];
+    let cases_in: [(f32, f32, f32); 4] =
+        [(390.0, 844.0, 0.0), (1024.0, 768.0, 0.0), (390.0, 844.0, 2.0), (390.0, 844.0, 3.0)];
     let mut cases = Vec::new();
     for (w, h, zoom) in cases_in {
         let spec = LayoutSpec {
@@ -111,27 +114,32 @@ fn main() {
             })
             .collect();
         // a host that scrolls the page: at the viewport's width and at twice it, so one case
-        // may start at x = 0 and the other is centred
-        let views: Vec<String> = [w, 2.0 * w]
+        // may start at x = 0 and the other is centred; then at scale 0, fitted to the width
+        let views: Vec<String> = [(1.0, w), (1.0, 2.0 * w), (0.0, w)]
             .iter()
-            .map(|&vw| {
-                let (v, bw, bh) = page.dress_view(1.0, vw);
+            .map(|&(scale, vw)| {
+                let (v, bw, bh) = page.dress_view(scale, vw);
                 format!(
-                    "{{\"scale\": 1, \"viewportW\": {}, \"view\": {{\"scale\": {}, \"offsetX\": {}, \"offsetY\": {}}}, \"width\": {}, \"height\": {}}}",
-                    vw, v.scale, v.offset_x, v.offset_y, bw, bh
+                    "{{\"scale\": {}, \"viewportW\": {}, \"view\": {{\"scale\": {}, \"offsetX\": {}, \"offsetY\": {}}}, \"width\": {}, \"height\": {}}}",
+                    scale, vw, v.scale, v.offset_x, v.offset_y, bw, bh
                 )
             })
             .collect();
+        // the border's left and right on screen at the layout's fit
+        let vb = page.view_box();
+        let at = |x: f32| l.fit_x + l.fit_scale * (l.offset_x + x * l.scale);
+        let border = (at(vb[0]), at(vb[0] + vb[2]));
         let reflow = if zoom > 0.0 { format!(", \"reflow\": {{\"zoom\": {zoom}}}") } else { String::new() };
         cases.push(format!(
             concat!(
                 "    {{\"spec\": {{\"viewportW\": {}, \"viewportH\": {}, \"padTop\": 24, \"padBottom\": 24, \"padLeft\": 16, \"padRight\": 16{}}},\n",
                 "     \"fit\": {{\"fitScale\": {}, \"fitX\": {}, \"fitY\": {}}},\n",
+                "     \"border\": [{}, {}],\n",
                 "     \"overflow\": [{}, {}, {}, {}],\n",
                 "     \"clamps\": [\n       {}\n     ],\n",
                 "     \"dressViews\": [\n       {}\n     ]}}"
             ),
-            w, h, reflow, l.fit_scale, l.fit_x, l.fit_y, o.0, o.1, o.2, o.3, clamps.join(",\n       "),
+            w, h, reflow, l.fit_scale, l.fit_x, l.fit_y, border.0, border.1, o.0, o.1, o.2, o.3, clamps.join(",\n       "),
             views.join(",\n       ")
         ));
     }

@@ -678,7 +678,10 @@ box, clamp with `page.dressClamp(view, viewportW, viewportH)` in place of
 `engine.viewClamp`: a drag then reaches the border's edges and never goes past them. A host
 that scrolls the page itself calls `page.dressView(scale, viewportW)`. It returns the view
 that puts the dressed box's top at 0 and centres it across the viewport. It also returns the
-box's `width` and `height`: the size to give the canvas. A new
+box's `width` and `height`: the size to give the canvas. A `scale` of 0 asks the engine to fit
+the dressed box to `viewportW`. The scale is then `min(1, viewportW / dressed width)`, so the
+whole border fits across and the page is never enlarged. A reflowed dressed page needs no
+such step: the engine narrows its rows so the border fits across the viewport. A new
 layout re-places the dress and bumps `revision` (on every rebuild: a new dress, and every
 layout); a host that rasterises the layer keys its cache on that number.
 
@@ -904,7 +907,7 @@ says which wrapper binds which.
 | dress | `qvp_dress_info` | `page.dressInfo()` | Return the readout: chosen ornaments, counts, revision, grown page box and overflow. |
 | dress | `qvp_dress_geometry` | `page.dressGeometry()` | Return the ornament display list, with a layout placement on each draw. |
 | dress | `qvp_dress_clamp` | `page.dressClamp(view, viewportW, viewportH)` | Clamp a view to the content plus the dress overflow, so a drag reaches the border and stops there. |
-| dress | `qvp_dress_view` | `page.dressView(scale, viewportW)` | Return `{view, width, height}` for a host that scrolls the page: the dressed box at `scale`, centred, with its top at 0, and its size. |
+| dress | `qvp_dress_view` | `page.dressView(scale, viewportW)` | Return `{view, width, height}` for a host that scrolls the page: the dressed box at `scale`, centred, with its top at 0, and its size. A `scale` of 0 fits the box to `viewportW`, never above 1. |
 | names | `qvp_version` | `engine.version()` | Return the engine version as a string, `0.2.0`. |
 | names | `qvp_format_version` | `engine.formatVersion()` | Return the page format version the engine reads. |
 | names | `qvp_engine_name` | `engine.engineName()` | Return the engine's name, `qvp`. |

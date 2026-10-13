@@ -129,7 +129,8 @@ pub struct Layout {
     /// the dress overflow on each side ([`Page::dress_overflow`]), so the border is in view
     /// too. `fit_x` and `fit_y` still place the content's own origin: the overflow sits
     /// to the left of `fit_x` and above `fit_y`. A reflowed page keeps `fit_scale` at 1 and
-    /// puts the top of the border at the top of the viewport. A dress, a new dress and an
+    /// puts the top of the border at the top of the viewport. Its rows are made narrower so
+    /// that the border fits across the viewport. A dress, a new dress and an
     /// undress refit the current layout.
     pub fit_scale: f32,
     pub fit_x: f32,
@@ -405,7 +406,9 @@ impl Page {
     ///
     /// The ink is `zoom` times the size it has at fit-to-width, so a row holds
     /// `page_w / zoom` page units and the page grows taller than the viewport. `fit_scale`
-    /// stays 1: the content is meant to be scrolled, never shrunk back to the screen.
+    /// stays 1: the content is meant to be scrolled, never shrunk back to the screen. A page
+    /// dressed in a border has narrower rows, so the border fits across the viewport
+    /// (`reflow_row_width`).
     fn layout_reflow(&mut self, spec: &LayoutSpec, r: &ReflowSpec) -> Layout {
         let pw = self.width();
         let ph = self.height();
@@ -415,7 +418,6 @@ impl Page {
             spec.viewport_w
         };
         let crop = (spec.crop_left.max(0.0), spec.crop_right.max(0.0));
-        let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
         let zoom = r.zoom.max(0.01);
         // A row holds the page's text block, not the whole sheet: the print keeps a margin on
         // each side, and a row that ignored it would put the words somewhere the print never
@@ -423,6 +425,7 @@ impl Page {
         let block = self.text_block();
         let page_w = (pw - crop.0 - crop.1).max(1.0);
         let (margin_l, margin_r) = ((block.0 - crop.0).max(0.0), ((pw - crop.1) - block.1).max(0.0));
+        let (pad_left, avail_w) = self.reflow_row_width(content_w, spec, page_w / zoom);
         let row_w = (page_w - margin_l - margin_r).max(1.0) / zoom;
         let scale = avail_w / (page_w / zoom);
         let pitch = self.line_spacing * spec.line_spacing.max(1.0);
@@ -454,7 +457,7 @@ impl Page {
                 } else {
                     f32::INFINITY
                 }
-                .min(self.band_banner_cap((content_w - spec.pad_left - spec.pad_right) / scale)),
+                .min(self.band_banner_cap(avail_w / scale)),
                 surah_frames: spec.surah_frames,
             },
         );
@@ -505,7 +508,7 @@ impl Page {
         Layout {
             scale,
             // the block's own left margin, kept at the reader's size
-            offset_x: spec.pad_left + margin_l / zoom * scale,
+            offset_x: pad_left + margin_l / zoom * scale,
             offset_y: 0.0,
             line_dy: vec![0.0; self.data.lines.len()],
             line_slots,
@@ -513,7 +516,7 @@ impl Page {
             content_w,
             laid_left: -(margin_l / zoom),
             laid_top: spec.pad_top / scale,
-            laid_width: (content_w - spec.pad_left - spec.pad_right) / scale,
+            laid_width: avail_w / scale,
             laid_height: (content_h - spec.pad_top - spec.pad_bottom) / scale,
             line_spacing: pitch,
             fit_scale: 1.0,
@@ -527,6 +530,34 @@ impl Page {
             omitted_paths,
             reflow: Some(flow),
         }
+    }
+
+    /// The left pad and the row width, in viewport px, of a reflowed page `content_w` px wide
+    /// whose laid-out page is `laid_w` page units wide. A reflowed page is scrolled only up
+    /// and down, so a border must fit across the screen. The border reaches `m` page units
+    /// past each side of the row, which is `m · scale` px, and `scale` is the row width over
+    /// `laid_w`. So on each side the room is the pad or the border's reach, whichever is more,
+    /// and the row takes what is left. Undressed, or without a border, the pads are kept.
+    fn reflow_row_width(&self, content_w: f32, spec: &LayoutSpec, laid_w: f32) -> (f32, f32) {
+        let (pl, pr) = (spec.pad_left, spec.pad_right);
+        let Some((ml, mr)) = self.frame_side_margins(laid_w) else {
+            return (pl, (content_w - pl - pr).max(1.0));
+        };
+        // how far the border reaches past each side, in px for each px of row
+        let (kl, kr) = (ml / laid_w.max(f32::EPSILON), mr / laid_w.max(f32::EPSILON));
+        // `row + max(pl, kl · row) + max(pr, kr · row) = content_w`. The sum of the two
+        // maxima is the largest of four straight lines, so the row is the smallest of the
+        // four rows those lines give.
+        let row = [
+            content_w - pl - pr,
+            (content_w - pl) / (1.0 + kr),
+            (content_w - pr) / (1.0 + kl),
+            content_w / (1.0 + kl + kr),
+        ]
+        .into_iter()
+        .fold(f32::INFINITY, f32::min)
+        .max(1.0);
+        (pl.max(kl * row), row)
     }
 
     /// Set the current layout's fit from the box it has to show: the content, plus the

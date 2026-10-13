@@ -44,15 +44,25 @@ for (const c of dressed.cases) {
   const L = page.currentLayout
   for (const k of ['fitScale', 'fitX', 'fitY']) near(L[k], c.fit[k], `${tag} ${k}`)
   page.dressInfo().overflow.forEach((v, i) => near(v, c.overflow[i], `${tag} overflow[${i}]`))
+  // the border on screen at the fit: a reflowed page is scrolled up and down only, so the
+  // border must fit across the viewport
+  const vb = page.dressInfo().viewBox
+  const at = x => L.fitX + L.fitScale * (L.offsetX + x * L.scale)
+  near(at(vb[0]), c.border[0], `${tag} border left`)
+  near(at(vb[0] + vb[2]), c.border[1], `${tag} border right`)
+  if (c.spec.reflow) assert.ok(c.border[0] >= -0.5 && c.border[1] <= c.spec.viewportW + 0.5, `${tag}: border ${c.border} is off the screen`)
   for (const { view, held } of c.clamps) {
     const v = page.dressClamp(view, c.spec.viewportW, c.spec.viewportH)
     for (const k of ['scale', 'offsetX', 'offsetY']) near(v[k], held[k], `${tag} dressClamp(${view.offsetX}, ${view.offsetY}) ${k}`)
   }
   for (const want of c.dressViews) {
     const got = page.dressView(want.scale, want.viewportW)
-    for (const k of ['scale', 'offsetX', 'offsetY']) near(got.view[k], want.view[k], `${tag} dressView(${want.viewportW}) ${k}`)
-    near(got.width, want.width, `${tag} dressView(${want.viewportW}) width`)
-    near(got.height, want.height, `${tag} dressView(${want.viewportW}) height`)
+    const call = `dressView(${want.scale}, ${want.viewportW})`
+    for (const k of ['scale', 'offsetX', 'offsetY']) near(got.view[k], want.view[k], `${tag} ${call} ${k}`)
+    near(got.width, want.width, `${tag} ${call} width`)
+    near(got.height, want.height, `${tag} ${call} height`)
+    // scale 0 fits the dressed box to the width
+    if (want.scale === 0) assert.ok(got.width <= want.viewportW + 0.5 && got.view.scale <= 1, `${tag} ${call}: ${got.width} wide`)
   }
   m++
 }

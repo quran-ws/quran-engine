@@ -6,6 +6,7 @@
   "cases": [
     {"spec": {"viewportW": 390, "viewportH": 844, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16},
      "fit": {"fitScale": 0.9074559, "fitX": 18.046099, "fitY": 141.26732},
+     "border": [0, 390.00003],
      "overflow": [19.886475, 13.471818, 19.886475, 13.471863],
      "clamps": [
        {"view": {"scale": 3, "offsetX": 10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": 59.659424, "offsetY": 0}},
@@ -15,10 +16,12 @@
      ],
      "dressViews": [
        {"scale": 1, "viewportW": 390, "view": {"scale": 1, "offsetX": 19.886475, "offsetY": 13.471818}, "width": 429.77295, "height": 645.6683},
-       {"scale": 1, "viewportW": 780, "view": {"scale": 1, "offsetX": 195, "offsetY": 13.471818}, "width": 429.77295, "height": 645.6683}
+       {"scale": 1, "viewportW": 780, "view": {"scale": 1, "offsetX": 195, "offsetY": 13.471818}, "width": 429.77295, "height": 645.6683},
+       {"scale": 0, "viewportW": 390, "view": {"scale": 0.9074559, "offsetX": 18.046099, "offsetY": 12.225081}, "width": 390, "height": 585.9155}
      ]},
     {"spec": {"viewportW": 1024, "viewportH": 768, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16},
      "fit": {"fitScale": 0.42926267, "fitX": 292.21753, "fitY": 34.269123},
+     "border": [256.40002, 767.6],
      "overflow": [83.43961, 79.83253, 83.439575, 79.83252],
      "clamps": [
        {"view": {"scale": 3, "offsetX": 10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": 250.31885, "offsetY": 0}},
@@ -28,20 +31,38 @@
      ],
      "dressViews": [
        {"scale": 1, "viewportW": 1024, "view": {"scale": 1, "offsetX": 83.43961, "offsetY": 79.83253}, "width": 1190.8792, "height": 1789.1144},
-       {"scale": 1, "viewportW": 2048, "view": {"scale": 1, "offsetX": 512.00006, "offsetY": 79.83253}, "width": 1190.8792, "height": 1789.1144}
+       {"scale": 1, "viewportW": 2048, "view": {"scale": 1, "offsetX": 512.00006, "offsetY": 79.83253}, "width": 1190.8792, "height": 1789.1144},
+       {"scale": 0, "viewportW": 1024, "view": {"scale": 0.85986894, "offsetX": 71.74713, "offsetY": 68.64551}, "width": 1024, "height": 1538.4039}
      ]},
     {"spec": {"viewportW": 390, "viewportH": 844, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16, "reflow": {"zoom": 2}},
-     "fit": {"fitScale": 1, "fitX": -0.000005722046, "fitY": 136.53448},
-     "overflow": [25.939615, 136.53448, 25.939636, 136.53442],
+     "fit": {"fitScale": 1, "fitX": -0.000015258789, "fitY": 117.68681},
+     "border": [-0.000015258789, 390],
+     "overflow": [0, 117.68681, 0.000030517578, 117.68701],
      "clamps": [
-       {"view": {"scale": 3, "offsetX": 10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": 77.81885, "offsetY": 0}},
-       {"view": {"scale": 3, "offsetX": 0, "offsetY": 10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": 409.60345}},
-       {"view": {"scale": 3, "offsetX": -10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": -857.81885, "offsetY": 0}},
-       {"view": {"scale": 3, "offsetX": 0, "offsetY": -10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": -7755.8564}}
+       {"view": {"scale": 3, "offsetX": 10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": 0, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": 10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": 353.06042}},
+       {"view": {"scale": 3, "offsetX": -10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": -780.0001, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": -10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": -6754.637}}
      ],
      "dressViews": [
-       {"scale": 1, "viewportW": 390, "view": {"scale": 1, "offsetX": 25.939615, "offsetY": 136.53448}, "width": 441.87924, "height": 3003.1533},
-       {"scale": 1, "viewportW": 780, "view": {"scale": 1, "offsetX": 195, "offsetY": 136.53448}, "width": 441.87924, "height": 3003.1533}
+       {"scale": 1, "viewportW": 390, "view": {"scale": 1, "offsetX": 0, "offsetY": 117.68681}, "width": 390.00003, "height": 2650.566},
+       {"scale": 1, "viewportW": 780, "view": {"scale": 1, "offsetX": 194.99998, "offsetY": 117.68681}, "width": 390.00003, "height": 2650.566},
+       {"scale": 0, "viewportW": 390, "view": {"scale": 0.99999994, "offsetX": 0, "offsetY": 117.686806}, "width": 390, "height": 2650.5657}
+     ]},
+    {"spec": {"viewportW": 390, "viewportH": 844, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16, "reflow": {"zoom": 3}},
+     "fit": {"fitScale": 1, "fitX": 0, "fitY": 286.37912},
+     "border": [0, 389.99997],
+     "overflow": [0, 286.37912, 0, 286.3794],
+     "clamps": [
+       {"view": {"scale": 3, "offsetX": 10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": 0, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": 10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": 859.1373}},
+       {"view": {"scale": 3, "offsetX": -10000, "offsetY": 0}, "held": {"scale": 3, "offsetX": -780, "offsetY": 0}},
+       {"view": {"scale": 3, "offsetX": 0, "offsetY": -10000}, "held": {"scale": 3, "offsetX": 0, "offsetY": -10000}}
+     ],
+     "dressViews": [
+       {"scale": 1, "viewportW": 390, "view": {"scale": 1, "offsetX": 0, "offsetY": 286.37912}, "width": 390, "height": 5940.154},
+       {"scale": 1, "viewportW": 780, "view": {"scale": 1, "offsetX": 195, "offsetY": 286.37912}, "width": 390, "height": 5940.154},
+       {"scale": 0, "viewportW": 390, "view": {"scale": 1, "offsetX": 0, "offsetY": 286.37912}, "width": 390, "height": 5940.154}
      ]}
   ]
 }

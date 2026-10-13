@@ -401,6 +401,35 @@ impl Page {
         BAND_FILL * slot_h / title_h
     }
 
+    /// How far the border reaches past a laid-out page `laid_w` page units wide, on the
+    /// left and on the right, in page units. These are the margins `build_dress` puts the
+    /// frame at: the gap, then the frame's own margin at the frame's unit. `None` when the
+    /// page is not dressed in a border.
+    pub(crate) fn frame_side_margins(&self, laid_w: f32) -> Option<(f32, f32)> {
+        let d = self.dress.as_ref()?;
+        let set = d.set.as_ref()?;
+        let spec = &d.spec;
+        if spec.page_frame == NONE {
+            return None;
+        }
+        let o = set.ornaments.get(spec.page_frame as usize).filter(|o| o.kind == OrnamentKind::PageFrame)?;
+        let slot = o.asset.slot?;
+        let gap = spec.gap;
+        let span = laid_w + 2.0 * gap;
+        let asset_w = o.asset.width();
+        let unit = span / slot[2].max(f32::EPSILON);
+        Some(match &o.slices {
+            Some(_) => {
+                let unit = unit * if spec.page_frame_scale > 0.0 { spec.page_frame_scale } else { 1.0 };
+                (gap + slot[0] * unit, gap + (asset_w - slot[0] - slot[2]) * unit)
+            }
+            None => {
+                let vb = o.asset.view_box;
+                (gap + (slot[0] - vb[0]) * unit, gap + (vb[0] + asset_w - slot[0] - slot[2]) * unit)
+            }
+        })
+    }
+
     /// The laid-out page box in page units: `(left, top, width, height)`. Without a
     /// layout that is the printed page itself.
     fn laid_page_box(&self) -> (f32, f32, f32, f32) {
@@ -494,12 +523,26 @@ impl Page {
     /// its top is at y = 0. The second and third values are the dressed box's width and
     /// height at `scale`: the size such a host gives the canvas, so the whole border is on it.
     /// An undressed page gets its content centred at the top and the content's size.
+    ///
+    /// A `scale` of 0 or less fits the dressed box to `viewport_w`: the scale is
+    /// `min(1, viewport_w / dressed width)`, so the whole border is on the canvas and the
+    /// page is never enlarged.
     pub fn dress_view(&self, scale: f32, viewport_w: f32) -> (View, f32, f32) {
         let (cw, ch) = match &self.layout {
             Some(l) => (l.content_w, l.content_h),
             None => (self.width(), self.height()),
         };
         let (l, t, r, b) = self.dress_overflow();
+        let scale = if scale > 0.0 {
+            scale
+        } else {
+            let full = cw + l + r;
+            if full > 0.0 && viewport_w > 0.0 {
+                (viewport_w / full).min(1.0)
+            } else {
+                1.0
+            }
+        };
         let (w, h) = ((cw + l + r) * scale, (ch + t + b) * scale);
         // the content's origin stands `(l, t)` inside the dressed box, `scale` times that on screen
         let left = ((viewport_w - w) / 2.0).max(0.0);
@@ -1274,6 +1317,56 @@ mod tests {
         let (v, w, h) = p.dress_view(1.0, 1000.0);
         assert_eq!((w, h), (l.content_w, l.content_h));
         assert_eq!(v, View { scale: 1.0, offset_x: (1000.0 - l.content_w) / 2.0, offset_y: 0.0 });
+    }
+
+    #[test]
+    fn a_reflowed_dressed_page_keeps_the_border_on_a_phone() {
+        let spec = |reflow| LayoutSpec {
+            viewport_w: 390.0,
+            viewport_h: 844.0,
+            pad_top: 24.0,
+            pad_bottom: 24.0,
+            pad_left: 16.0,
+            pad_right: 16.0,
+            reflow,
+            ..Default::default()
+        };
+        for dress in [all(), frame_only(), DressSpec { page_frame_scale: 2.0, ..all() }] {
+            for set in [set(), tiled_set(false)] {
+                let (mut p, _, _) = page();
+                p.dress(&set, &dress).unwrap();
+                let l = p.layout(&spec(Some(ReflowSpec { zoom: 2.0, ..Default::default() }))).clone();
+                assert_eq!(l.fit_scale, 1.0);
+                let (x0, _, x1, _) = border_in_layout(&p);
+                let (left, right) = (l.fit_x + x0, l.fit_x + x1);
+                assert!(left >= -0.5 && right <= 390.5, "border spans {left}..{right}");
+                // the row is narrowed only as far as it must be: the border meets an edge
+                assert!(near(left, 0.0) || near(right, 390.0) || near(l.offset_x, 16.0), "{left}..{right}");
+                assert_eq!(p.dress_overflow().0, 0.0);
+            }
+        }
+        // undressed, the row is the padded viewport as before
+        let (mut p, _, _) = page();
+        let plain = p.layout(&spec(Some(ReflowSpec { zoom: 2.0, ..Default::default() }))).clone();
+        assert!(near(plain.laid_width * plain.scale, 390.0 - 32.0));
+    }
+
+    #[test]
+    fn a_dress_view_at_scale_zero_fits_the_border_to_the_width() {
+        let (mut p, _, _) = page();
+        p.layout(&LayoutSpec { viewport_w: 390.0, viewport_h: 844.0, ..Default::default() });
+        p.dress(&set(), &all()).unwrap();
+        let (x0, _, x1, _) = border_in_layout(&p);
+        let full = x1 - x0;
+        for vw in [390.0f32, 100.0, 2000.0] {
+            let (v, w, _) = p.dress_view(0.0, vw);
+            let want = (vw / full).min(1.0);
+            assert!(near(v.scale, want), "{} vs {want}", v.scale);
+            assert!(w <= vw + 0.5, "{w} in {vw}");
+            let (left, right) = (v.offset_x + v.scale * x0, v.offset_x + v.scale * x1);
+            assert!(left >= -0.5 && right <= vw + 0.5, "border spans {left}..{right} of {vw}");
+            assert_eq!(p.dress_view(-1.0, vw), (v, w, p.dress_view(0.0, vw).2));
+        }
     }
 
     /// A set whose page frame tiles: a 10 x 8 corner and two 6 unit edge strips, each one
