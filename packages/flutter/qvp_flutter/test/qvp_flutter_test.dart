@@ -599,10 +599,20 @@ void main() {
     await tester.pump();
     // a dressed page is bigger than its text, so it is fitted smaller
     expect(state.controller.scale, lessThan(printed));
+    // the engine owns the fit: the view sits where its layout says
+    final l = p.readLayout()!;
+    expect(state.controller.scale, closeTo(l.fitScale, 1e-6));
+    expect(state.controller.offsetX, closeTo(l.fitX, 1e-3));
+    expect(state.controller.offsetY, closeTo(l.fitY, 1e-3));
+    // a drag far to the right is held by the engine, and an undressed page gets the plain clamp
+    final far = QvpView(scale: l.fitScale, offsetX: 1e5, offsetY: 1e5);
+    final held = p.dressClamp(far, 400, 640);
+    expect(held.offsetX, lessThan(1e5));
     expect(state.stats.basePaths, greaterThan(0));
     p.undress();
     await tester.pump();
     expect(state.controller.scale, closeTo(printed, 1e-6));
+    expect(p.dressClamp(far, 400, 640).offsetX, lessThan(1e5));
     await tester.pumpWidget(const SizedBox());
     p.dispose();
     set.dispose();

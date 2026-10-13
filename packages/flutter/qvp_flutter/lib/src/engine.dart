@@ -2306,6 +2306,20 @@ class QvpPage extends ChangeNotifier {
     _touch();
   }
 
+  /// Holds [view] so a drag reaches the border of a dressed page and never goes past it. An
+  /// undressed page gets the plain clamp. The viewport is in the same px as the layout's.
+  QvpView dressClamp(QvpView view, double viewportW, double viewportH) {
+    final v = pffi.calloc<QvpViewC>(), out = pffi.calloc<QvpViewC>();
+    try {
+      _writeView(v, view);
+      _b.dressClamp(_p, v, viewportW, viewportH, out);
+      return _readView(out.ref);
+    } finally {
+      pffi.calloc.free(v);
+      pffi.calloc.free(out);
+    }
+  }
+
   /// The readout, or null when the page is not dressed.
   QvpDressInfo? dressInfo() {
     final o = pffi.calloc<QvpDressInfoC>();

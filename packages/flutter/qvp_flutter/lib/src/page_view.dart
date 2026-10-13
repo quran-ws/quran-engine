@@ -306,27 +306,16 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   }
 
   void _fit(Size size) {
-    final l = page.currentLayout!;
+    // A dress or an undress refits in the engine, so read the layout again.
+    final l = page.readLayout() ?? page.currentLayout!;
     _ctl._fitRequested = false;
     _fittedDress = page.dressSpec;
-    final o = page.dressInfo()?.overflow;
-    if (o == null) {
-      // A reflowed page is taller than the screen because the reader asked for it: show the top
-      // and let them scroll, rather than shrinking it back to fit.
-      _ctl.scale = l.reflowed ? 1 : l.fitScale;
-      _fitScale = _ctl.scale;
-      _ctl.offsetX = l.fitX;
-      _ctl.offsetY = l.reflowed ? 0 : l.fitY;
-      return;
-    }
-    // A dressed page is bigger than its text: the engine says how far the border reaches past
-    // the content on each side, so fit content plus overflow (as the web example does).
-    final w = l.contentW + o[0] + o[2], h = l.contentH + o[1] + o[3];
-    final s = l.reflowed ? 1.0 : math.min(l.fitScale, math.min(size.width / w, size.height / h));
-    _ctl.scale = s;
-    _fitScale = s;
-    _ctl.offsetX = (size.width - w * s) / 2 + o[0] * s;
-    _ctl.offsetY = l.reflowed ? o[1] : (size.height - h * s) / 2 + o[1] * s;
+    // The engine fits the content plus the dress overflow. A reflowed page is taller than the
+    // screen because the reader asked for it: the engine shows its top.
+    _ctl.scale = l.fitScale;
+    _fitScale = l.fitScale;
+    _ctl.offsetX = l.fitX;
+    _ctl.offsetY = l.fitY;
   }
 
   /// Re-runs the engine layout and fits the page.
@@ -372,7 +361,8 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
       // print, it does not shrink the page inside the screen. The engine applies the clamp.
       final floor = math.max(_fitScale, kMinZoom);
       final v = page.engine.viewZoomAbout(QvpView(scale: _gScale, offsetX: _gOx, offsetY: _gOy), f.dx, f.dy, d.scale, min: floor, max: widget.maxZoom);
-      _ctl.set(scale: v.scale, offsetX: v.offsetX, offsetY: v.offsetY);
+      final h = page.dressClamp(v, _size.width, _size.height);
+      _ctl.set(scale: h.scale, offsetX: h.offsetX, offsetY: h.offsetY);
       return;
     }
     // The engine owns the whole pinch: which step it lands on, when it commits, and what holds
@@ -390,7 +380,8 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
       page.readLayout();
       widget.onZoomChanged?.call(c.zoom);
     }
-    _ctl.set(scale: c.view.scale, offsetX: c.view.offsetX, offsetY: c.view.offsetY);
+    final h = page.dressClamp(c.view, _size.width, _size.height);
+    _ctl.set(scale: h.scale, offsetX: h.offsetX, offsetY: h.offsetY);
   }
 
   /// Move the control to one of the page's steps: 0 is the printed page.
