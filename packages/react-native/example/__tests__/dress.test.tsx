@@ -14,7 +14,7 @@ const M = NativeModules.QvpModule as any;
 const licence = { id: 'CC-BY-4.0', status: 'confirmed', redistributable: true, attribution: 'test' };
 const part = (index: number, color: number, name: string) => ({ index, color, stroke: name === 'line', name });
 const ornament = (index: number, kind: Ornament['kind'], style: string): Ornament => ({
-  index, kind, lineage: 'scan', style, riwayah: 'qalon', hasSlices: kind === 'page_frame', licence,
+  index, kind, lineage: 'scan', style, riwayah: "Qalun 'an Nafi'", hasSlices: kind === 'page_frame', licence,
   parts: [part(0, 0xb8860bff, 'c0'), part(1, 0x00000000, 'slot'), part(2, 0x231f20ff, 'line')],
 });
 const LIST = [
