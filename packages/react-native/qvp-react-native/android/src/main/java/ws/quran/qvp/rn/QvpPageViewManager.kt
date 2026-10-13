@@ -39,9 +39,10 @@ class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {
     @ReactProp(name = "highlights") fun setHighlights(v: QvpRnPageView, a: ReadableArray?) { v.highlightsProp = Marshal.plain(a) }
     @ReactProp(name = "mask") fun setMask(v: QvpRnPageView, m: ReadableMap?) { v.maskProp = Marshal.plain(m) }
     @ReactProp(name = "reveal") fun setReveal(v: QvpRnPageView, m: ReadableMap?) { v.revealProp = Marshal.plain(m) }
+    @ReactProp(name = "dress") fun setDress(v: QvpRnPageView, m: ReadableMap?) { v.dressProp = Marshal.plain(m) }
 
     companion object {
         const val NAME = "QvpPageView"
-        val EVENTS = listOf("onWordTap", "onDecorationTap", "onEmptyTap", "onSelectionChanged", "onPageLoad", "onRevealChanged", "onSwipe", "onZoomChanged", "onError")
+        val EVENTS = listOf("onWordTap", "onDecorationTap", "onEmptyTap", "onSelectionChanged", "onPageLoad", "onRevealChanged", "onSwipe", "onZoomChanged", "onDressChanged", "onError")
     }
 }

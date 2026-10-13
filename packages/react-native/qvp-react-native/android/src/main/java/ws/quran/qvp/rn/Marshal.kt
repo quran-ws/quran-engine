@@ -114,6 +114,49 @@ object Marshal {
             ayahMark = colorOrNull(m["ayahMark"]), numeral = colorOrNull(m["numeral"]), headers = colorOrNull(m["headers"]), marks = marks, transitionMs = num(m["ms"] ?: m["transitionMs"]) ?: 0)
     }
 
+    // ── dress ──
+    private val ORNAMENT_KINDS = QvpOrnamentKind.entries.associateBy { it.name.lowercase() }
+    /** 'ayah_mark' | 'surah_header' | 'page_frame' (or QVP_ORNAMENT_*) → [QvpOrnamentKind], or null. */
+    fun ornamentKind(v: Any?): QvpOrnamentKind? = when (v) {
+        is String -> ORNAMENT_KINDS[v.lowercase()]
+        is Number -> QvpOrnamentKind.entries.getOrNull(v.toInt())
+        else -> null
+    }
+    /** One kind of a JS spec: an index, a style name, or null for none (JS has already put the style in each kind). */
+    private fun ornamentRef(v: Any?): QvpOrnamentRef = when (v) {
+        is Number -> QvpOrnamentRef.Index(v.toInt())
+        is String -> QvpOrnamentRef.Style(v)
+        else -> QvpOrnamentRef.None
+    }
+    /** {ayahMark, surahHeader, pageFrame, gap, bandGap, ayahMarkScale, pageFrameScale, lineArt: [kind], colors: [[ornament, part, colour]]} → [QvpDressSpec].
+     * A missing knob keeps the library's default. */
+    fun dressSpec(v: Any?): QvpDressSpec {
+        val m = v as? Map<*, *> ?: return QvpDressSpec()
+        val d = QvpDressSpec()
+        val lineArt = (m["lineArt"] as? Iterable<*>)?.mapNotNull { ornamentKind(it) }?.toSet() ?: emptySet()
+        val colors = (m["colors"] as? Iterable<*>)?.mapNotNull { t ->
+            val l = (t as? Iterable<*>)?.toList() ?: return@mapNotNull null
+            val o = num(l.getOrNull(0)) ?: return@mapNotNull null
+            val part = num(l.getOrNull(1)) ?: return@mapNotNull null
+            QvpPartColor(o, part, color(l.getOrNull(2), 0))
+        } ?: emptyList()
+        return QvpDressSpec(style = null, ayahMark = ornamentRef(m["ayahMark"]), surahHeader = ornamentRef(m["surahHeader"]), pageFrame = ornamentRef(m["pageFrame"]),
+            gap = flt(m["gap"], d.gap), bandGap = flt(m["bandGap"], d.bandGap), ayahMarkScale = flt(m["ayahMarkScale"], d.ayahMarkScale),
+            pageFrameScale = flt(m["pageFrameScale"], d.pageFrameScale), lineArt = lineArt, colors = colors)
+    }
+    /** 0xRRGGBBAA as JS reads it: unsigned. */
+    private fun rgbaJs(c: Int): Long = c.toLong() and 0xffffffffL
+    fun ornamentPart(p: QvpOrnamentPart): Map<String, Any?> = mapOf("index" to p.index, "color" to rgbaJs(p.color), "stroke" to p.stroke, "name" to p.name)
+    fun ornament(o: QvpOrnament): Map<String, Any?> = mapOf("index" to o.index, "kind" to o.kind.name.lowercase(), "lineage" to o.lineage.name.lowercase(),
+        "style" to o.style, "riwayah" to o.riwayah, "hasSlices" to o.hasSlices,
+        "licence" to mapOf("id" to o.licence.id, "status" to o.licence.status, "redistributable" to o.licence.redistributable, "attribution" to o.licence.attribution),
+        "parts" to o.parts.map { ornamentPart(it) })
+    fun dressInfo(i: QvpDressInfo): Map<String, Any?> = mapOf("ayahMark" to i.ayahMark, "surahHeader" to i.surahHeader, "pageFrame" to i.pageFrame,
+        "ayahMarks" to i.ayahMarks, "surahHeaders" to i.surahHeaders, "frameRepeats" to i.frameRepeats, "frameStretched" to i.frameStretched,
+        "draws" to i.draws, "revision" to i.revision,
+        "viewBox" to listOf(i.viewBox.x, i.viewBox.y, i.viewBox.width, i.viewBox.height),
+        "overflow" to listOf(i.overflow.left, i.overflow.top, i.overflow.right, i.overflow.bottom))
+
     // ── Kotlin → JS ──
     fun word(p: QvpPage, w: QvpWord): Map<String, Any?> {
         val forms = LinkedHashMap<String, String>()

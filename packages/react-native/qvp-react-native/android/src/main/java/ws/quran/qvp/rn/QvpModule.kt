@@ -152,6 +152,28 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun atlasPagesOfJuz(id: Int, n: Int, promise: Promise) = withAtlas(id, promise) { it.pagesOfJuz(n)?.let { r -> listOf(r.first, r.second) } }
     @ReactMethod fun atlasSearchSurahs(id: Int, text: String, promise: Promise) = withAtlas(id, promise) { it.searchSurahs(text).map { s -> Marshal.atlasSurah(s) } }
 
+    // ── dress ──
+    // An ornament set is held here by id, like an atlas. The C calls behind each method:
+    // qvp_ornaments_load, qvp_ornaments_free, qvp_ornament_count, qvp_ornament_info and
+    // qvp_ornament_part (one ornament and its parts), qvp_ornament_find, then on the page
+    // qvp_dress, qvp_undress and qvp_dress_info. qvp_dress_geometry is the view's: it paints the layer.
+    private fun withOrnaments(id: Int, promise: Promise, block: (QvpOrnaments) -> Any?) { ui(promise) { block(QvpOrnamentSets.get(id) ?: throw IllegalStateException("no ornament set $id")) } }
+    @ReactMethod fun loadOrnaments(uri: String, promise: Promise) = ui(promise) { QvpOrnamentSets.add(QvpOrnaments(QvpRnBytes.read(ctx, uri))) }
+    @ReactMethod fun freeOrnaments(id: Int, promise: Promise) = ui(promise) { QvpOrnamentSets.free(id); null }
+    @ReactMethod fun ornamentCount(id: Int, promise: Promise) = withOrnaments(id, promise) { it.count }
+    @ReactMethod fun ornamentInfo(id: Int, index: Int, promise: Promise) = withOrnaments(id, promise) { it.list.getOrNull(index)?.let { o -> Marshal.ornament(o) } }
+    @ReactMethod fun ornamentPart(id: Int, index: Int, part: Int, promise: Promise) = withOrnaments(id, promise) { it.list.getOrNull(index)?.parts?.getOrNull(part)?.let { q -> Marshal.ornamentPart(q) } }
+    @ReactMethod fun ornamentList(id: Int, promise: Promise) = withOrnaments(id, promise) { it.list.map { o -> Marshal.ornament(o) } }
+    @ReactMethod fun ornamentFind(id: Int, kind: String, style: String, promise: Promise) = withOrnaments(id, promise) { set ->
+        Marshal.ornamentKind(kind)?.let { k -> set.find(k, style)?.index } ?: -1 }
+    /** Dress the page behind a view. The `dress` prop does the same declaratively; this call lasts until the next page. */
+    @ReactMethod fun dress(tag: Int, id: Int, spec: ReadableMap?, promise: Promise) = withPage(tag, promise) { v, p ->
+        val set = QvpOrnamentSets.get(id) ?: throw IllegalStateException("no ornament set $id")
+        v.dressNow(p, set, Marshal.dressSpec(opt(spec)))?.let { Marshal.dressInfo(it) } }
+    @ReactMethod fun undress(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> v.undressNow(p); null }
+    @ReactMethod fun dressInfo(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.dressInfo()?.let { Marshal.dressInfo(it) } }
+    @ReactMethod fun dressRevision(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.dressRevision() }
+
     // ── names ──
     @ReactMethod fun markName(m: Int, promise: Promise) = ui(promise) { QvpEngine.markName(m) }
     @ReactMethod fun markFromName(s: String, promise: Promise) = ui(promise) { QvpEngine.markFromName(s) }
@@ -162,8 +184,20 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
         "marks" to QvpEngine.names(QvpEngine.Names.MARK), "kinds" to QvpEngine.names(QvpEngine.Names.KIND),
         "families" to QvpEngine.names(QvpEngine.Names.FAMILY), "categories" to QvpEngine.names(QvpEngine.Names.CATEGORY),
         "decorations" to QvpEngine.names(QvpEngine.Names.DECORATION), "divisions" to QvpEngine.names(QvpEngine.Names.DIVISION),
-        "places" to QvpEngine.names(QvpEngine.Names.PLACE))
+        "places" to QvpEngine.names(QvpEngine.Names.PLACE),
+        "defaults" to mapOf("ayahMarkScaleScan" to QvpDefaults.AYAH_MARK_SCALE_SCAN.toDouble()))
 
-    override fun invalidate() { atlases.values.forEach { it.close() }; atlases.clear(); atlasByUri.clear(); super.invalidate() }
+    override fun invalidate() { atlases.values.forEach { it.close() }; atlases.clear(); atlasByUri.clear(); QvpOrnamentSets.clear(); super.invalidate() }
     companion object { const val NAME = "QvpModule" }
+}
+
+/** Ornament sets by id, shared by the module and the views: the `dress` prop names its set by this id.
+ * A dressed page keeps what it needs, so freeing a set never breaks a page that wears it. */
+object QvpOrnamentSets {
+    private val sets = HashMap<Int, QvpOrnaments>()
+    private var next = 1
+    fun add(set: QvpOrnaments): Int { val id = next++; sets[id] = set; return id }
+    fun get(id: Int?): QvpOrnaments? = id?.let { sets[it] }
+    fun free(id: Int) { sets.remove(id)?.close() }
+    fun clear() { sets.values.forEach { it.close() }; sets.clear() }
 }

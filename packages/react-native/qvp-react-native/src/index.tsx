@@ -23,6 +23,8 @@ export const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGR
 export const DECORATION = { AYAH_MARK: 0, SURAH_NAME: 1, BASMALAH: 2, DIVISION_MARK: 3, SAJDAH_MARK: 4 } as const;
 export const LAYER = { BASE: 0, THEME: 10, HIGHLIGHT: 50, SELECTION: 60, TOP: 100 } as const;
 export const DIVISION = { JUZ: 0, HIZB: 1, NISF: 2, RUBU_AL_HIZB: 3 } as const;
+/** QVP_ORNAMENT_*: the three kinds of ornament a page can be dressed in. */
+export const ORNAMENT_KIND = { AYAH_MARK: 0, SURAH_HEADER: 1, PAGE_FRAME: 2 } as const;
 
 // ── colours ──────────────────────────────────────────────────────────────────────────────────
 export type Color = string | number;
@@ -118,6 +120,44 @@ export interface Mask { target?: Target; from?: number; mode?: MaskMode; blockCo
 /** Greyed-page reveal: `revealStart(lit, byAyah, grey, ink, ayahMarks, ms)` then `revealGoto(at)` whenever `at` changes; null → revealStop. */
 export interface Reveal { lit?: number; byAyah?: boolean; grey?: Color; ink?: Color; ayahMarks?: boolean; ms?: number; at?: number }
 
+// ── dress: another mushaf's ornaments ──
+/** The kind of an ornament, as `docs/API.md` names it. */
+export type OrnamentKind = 'ayah_mark' | 'surah_header' | 'page_frame';
+/** Where an ornament comes from: a scanned mushaf or a font. */
+export type Lineage = 'scan' | 'font';
+/** One printed colour of an ornament. `color` is 0xRRGGBBAA; alpha 0 is the design's slot. */
+export interface OrnamentPart { index: number; color: number; stroke: boolean; name: string }
+/** What an ornament may be redistributed under. Read it before you publish a dressed page. */
+export interface Licence { id: string; status: string; redistributable: boolean; attribution: string }
+export interface Ornament { index: number; kind: OrnamentKind; lineage: Lineage; style: string; riwayah: string; hasSlices: boolean; licence: Licence; parts: OrnamentPart[] }
+/** One mushaf or font of a set, with the ornament it has of each kind or null. */
+export interface OrnamentStyle { style: string; riwayah: string; lineage: Lineage; ayahMark: Ornament | null; surahHeader: Ornament | null; pageFrame: Ornament | null }
+/** An ornament of the set, its index, or a style name (the ornament of that kind in that style). */
+export type OrnamentRef = Ornament | number | string | null;
+/**
+ * What to dress a page in. `style` names a mushaf and takes its medallion, band and border
+ * together; a kind key overrides the style for that kind. `gap` is the air between the text and
+ * the border and `bandGap` the air between a band and the border, both in page units.
+ * `ayahMarkScale` 0 takes the design's own size. `lineArt` is `true` for every kind or a list of
+ * kinds. `colors` repaints parts: `[ornament, part, colour]`.
+ */
+export interface DressSpec {
+  style?: string | null;
+  ayahMark?: OrnamentRef; surahHeader?: OrnamentRef; pageFrame?: OrnamentRef;
+  gap?: number; bandGap?: number; ayahMarkScale?: number; pageFrameScale?: number;
+  lineArt?: boolean | OrnamentKind[];
+  colors?: [Ornament | number, number, Color][];
+}
+/** The engine's readout of a dressed page. `viewBox` is [x, y, w, h] in page units; `overflow` is
+ * [left, top, right, bottom] in viewport px, how far the border reaches past the content. */
+export interface DressInfo {
+  ayahMark: number | null; surahHeader: number | null; pageFrame: number | null;
+  ayahMarks: number; surahHeaders: number; frameRepeats: number; frameStretched: boolean;
+  draws: number; revision: number; viewBox: number[]; overflow: number[];
+}
+/** The `dress` prop: a spec plus the ornament set it names. */
+export interface Dress extends DressSpec { ornaments: QvpOrnaments | number }
+
 // ── the view ─────────────────────────────────────────────────────────────────────────────────
 /** What a pinch does to the page: the engine owns the policy, this names which one. */
 export type ZoomMode = 'stepped' | 'continuous' | 'magnify';
@@ -149,6 +189,9 @@ export interface QvpPageViewProps extends ViewProps {
   highlights?: Highlight[];
   mask?: Mask | null;
   reveal?: Reveal | null;
+  /** Another mushaf's ornaments, painted behind the ink. A new object dresses the page again;
+   * `null` undresses it. It is applied again to every page the view loads. */
+  dress?: Dress | null;
   onWordTap?: (e: { word: Word; hit: Hit }) => void;
   onDecorationTap?: (e: { decoration: Deco; hit: Hit }) => void;
   onEmptyTap?: () => void;
@@ -161,9 +204,13 @@ export interface QvpPageViewProps extends ViewProps {
   onSwipe?: (e: { pages: number }) => void;
   /** The size the reader is at changed: a pinch committed, or a step was asked for. */
   onZoomChanged?: (e: Zoom) => void;
+  /** The `dress` prop was applied: the engine's readout, or null when it refused the spec or the page is undressed. */
+  onDressChanged?: (e: { info: DressInfo | null }) => void;
   onError?: (e: { message: string }) => void;
 }
-type NativeProps = ViewProps & Omit<QvpPageViewProps, 'onWordTap' | 'onDecorationTap' | 'onEmptyTap' | 'onSelectionChanged' | 'onPageLoad' | 'onRevealChanged' | 'onSwipe' | 'onZoomChanged' | 'onError'> & {
+type NativeProps = ViewProps & Omit<QvpPageViewProps, 'dress' | 'onWordTap' | 'onDecorationTap' | 'onEmptyTap' | 'onSelectionChanged' | 'onPageLoad' | 'onRevealChanged' | 'onSwipe' | 'onZoomChanged' | 'onDressChanged' | 'onError'> & {
+  dress?: object | null;
+  onDressChanged?: (e: NativeSyntheticEvent<{ info: DressInfo | null }>) => void;
   onWordTap?: (e: NativeSyntheticEvent<{ word: Word; hit: Hit }>) => void;
   onDecorationTap?: (e: NativeSyntheticEvent<{ decoration: Deco; hit: Hit }>) => void;
   onEmptyTap?: (e: NativeSyntheticEvent<{}>) => void;
@@ -195,7 +242,7 @@ export type QvpPageViewHandle = PageApi & { tag: () => number };
 
 export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(function QvpPageView(props, ref) {
   const native = useRef<any>(null);
-  const { theme, styles, highlights, mask, reveal, paperColor, defaultInk, selectionBand, onWordTap, onDecorationTap, onEmptyTap, onSelectionChanged, onPageLoad, onRevealChanged, onSwipe, onZoomChanged, onError, ...rest } = props;
+  const { theme, styles, highlights, mask, reveal, dress, paperColor, defaultInk, selectionBand, onWordTap, onDecorationTap, onEmptyTap, onSelectionChanged, onPageLoad, onRevealChanged, onSwipe, onZoomChanged, onDressChanged, onError, ...rest } = props;
   const tag = () => findNodeHandle(native.current) ?? -1;
   useImperativeHandle(ref, () => ({ tag, ...bindPage(tag) }), []);
   const nTheme = useMemo(() => (theme ? normColors(theme) : null), [theme]);
@@ -203,6 +250,7 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
   const nHighlights = useMemo(() => (highlights ? normColors(highlights) : []), [highlights]);
   const nMask = useMemo(() => (mask ? normColors(mask) : null), [mask]);
   const nReveal = useMemo(() => (reveal ? normColors(reveal) : null), [reveal]);
+  const nDress = useMemo(() => (dress ? { ...dressSpec(dress), ornaments: ornamentsId(dress.ornaments) } : null), [dress]);
   return (
     <NativeQvpPageView
       ref={native}
@@ -215,6 +263,7 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
       highlights={nHighlights}
       mask={nMask}
       reveal={nReveal}
+      dress={nDress}
       onWordTap={onWordTap ? (e: NativeSyntheticEvent<{ word: Word; hit: Hit }>) => onWordTap(e.nativeEvent) : undefined}
       onDecorationTap={onDecorationTap ? (e: NativeSyntheticEvent<{ decoration: Deco; hit: Hit }>) => onDecorationTap(e.nativeEvent) : undefined}
       onEmptyTap={onEmptyTap ? () => onEmptyTap() : undefined}
@@ -223,6 +272,7 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
       onRevealChanged={onRevealChanged ? (e: NativeSyntheticEvent<{ steps: number; at: number | null }>) => onRevealChanged(e.nativeEvent) : undefined}
       onSwipe={onSwipe ? (e: NativeSyntheticEvent<{ pages: number }>) => onSwipe(e.nativeEvent) : undefined}
       onZoomChanged={onZoomChanged ? (e: NativeSyntheticEvent<Zoom>) => onZoomChanged(e.nativeEvent) : undefined}
+      onDressChanged={onDressChanged ? (e: NativeSyntheticEvent<{ info: DressInfo | null }>) => onDressChanged(e.nativeEvent) : undefined}
       onError={onError ? (e: NativeSyntheticEvent<{ message: string }>) => onError(e.nativeEvent) : undefined}
     />
   );
@@ -301,6 +351,11 @@ const FAMILY_NAMES: string[] = NAMES.families ?? [];
 const CATEGORY_NAMES: string[] = NAMES.categories ?? [];
 const DECORATION_NAMES: string[] = NAMES.decorations ?? [];
 export const MARKS: string[] = NAMES.marks ?? [];
+/** The engine's defaults a host shows, read from the native module (QVP_DEFAULT_* in qvp.h). */
+export const DEFAULTS = {
+  /** The size a scanned medallion takes when `ayahMarkScale` is 0, in rings. */
+  AYAH_MARK_SCALE_SCAN: ((NAMES as any).defaults?.ayahMarkScaleScan ?? 0) as number,
+};
 /** A name's id in a table; 255 when the table has no such name. */
 export type NameTable = 'marks' | 'kinds' | 'families' | 'categories' | 'decorations' | 'divisions' | 'places';
 const named = (v: string | number, names: string[]) => { if (typeof v === 'number') return v; const i = names.indexOf(v); return i < 0 ? 255 : i; };
@@ -370,6 +425,14 @@ export const Qvp = {
   revealStepOf: (tag: number, i: number): Promise<number> => M.revealStepOf(tag, i),
   cropBounds: (tag: number, target: Target, opts?: CropOptions): Promise<CropBox | null> => M.cropBounds(tag, target, opts ?? null),
   cropSvg: (tag: number, target: Target, opts?: CropOptions): Promise<string | null> => M.cropSvg(tag, target, opts ? { ...opts, background: css(opts.background) } : null),
+  /** Dress the page in a set's ornaments; the readout, or null when the engine refused the spec. Replaces any previous dress. */
+  dress: (tag: number, set: QvpOrnaments | number, spec: DressSpec = {}): Promise<DressInfo | null> => M.dress(tag, ornamentsId(set), dressSpec(spec)),
+  /** Take the ornaments off: the printed rings and bands come back. */
+  undress: (tag: number): Promise<void> => M.undress(tag),
+  /** The readout, or null when the page is not dressed. */
+  dressInfo: (tag: number): Promise<DressInfo | null> => M.dressInfo(tag),
+  /** Counts up on every rebuild of the ornament layer: a new dress, and every layout. 0 when undressed. */
+  dressRevision: (tag: number): Promise<number> => M.dressRevision(tag),
 
   // engine-wide
   strip: (s: string): Promise<string> => M.arabic('strip', s),
@@ -404,6 +467,16 @@ export const Qvp = {
   atlasJuzOf: (id: number, s: number, a: number): Promise<number | null> => M.atlasJuzOf(id, s, a),
   atlasPagesOfJuz: (id: number, n: number): Promise<[number, number] | null> => M.atlasPagesOfJuz(id, n),
   atlasSearchSurahs: (id: number, text: string): Promise<AtlasSurah[]> => M.atlasSearchSurahs(id, text),
+
+  // ornament sets (ornaments.qvo)
+  loadOrnaments: (uri: string): Promise<number> => M.loadOrnaments(uri),
+  freeOrnaments: (id: number): Promise<void> => M.freeOrnaments(id),
+  ornamentCount: (id: number): Promise<number> => M.ornamentCount(id),
+  ornamentInfo: (id: number, index: number): Promise<Ornament | null> => M.ornamentInfo(id, index),
+  ornamentPart: (id: number, index: number, part: number): Promise<OrnamentPart | null> => M.ornamentPart(id, index, part),
+  ornamentList: (id: number): Promise<Ornament[]> => M.ornamentList(id),
+  /** The index of the ornament of `kind` in `style`, or -1. */
+  ornamentFind: (id: number, kind: OrnamentKind, style: string): Promise<number> => M.ornamentFind(id, kind, style),
 };
 
 /** Cross-page lookup (atlas.qva). `const atlas = await QvpAtlas.load('asset://pages/atlas.qva')`. */
@@ -427,8 +500,59 @@ export class QvpAtlas {
   searchSurahs(text: string) { return Qvp.atlasSearchSurahs(this.id, text); }
 }
 
+/**
+ * An ornament set (ornaments.qvo): the medallions, bands and borders of other mushafs and fonts.
+ * None of these outlines is part of a page, and each one carries its own licence.
+ * `const set = await QvpOrnaments.load('asset://pages/ornaments.qvo')`.
+ */
+export class QvpOrnaments {
+  /** Every ornament of the set, in the set's order. */
+  readonly count: number;
+  private constructor(public readonly id: number, public readonly list: Ornament[]) { this.count = list.length; }
+  /** Load a set from a URI (the same schemes as `pageUri`; `base64:…` for bytes in hand). */
+  static async load(uri: string): Promise<QvpOrnaments> {
+    const id = await Qvp.loadOrnaments(uri);
+    return new QvpOrnaments(id, await Qvp.ornamentList(id));
+  }
+  free() { return Qvp.freeOrnaments(this.id); }
+  /** The ornament of `kind` in `style`, or null; the engine looks it up. */
+  async find(kind: OrnamentKind, style: string): Promise<Ornament | null> {
+    const i = await Qvp.ornamentFind(this.id, kind, style);
+    return i < 0 ? null : this.list[i] ?? null;
+  }
+  /** The ornaments of one kind. */
+  ofKind(kind: OrnamentKind): Ornament[] { return this.list.filter(o => o && o.kind === kind); }
+  /** Every style in the set with the ornament it has of each kind or null, in the set's order. */
+  styles(): OrnamentStyle[] {
+    const out: OrnamentStyle[] = [];
+    const key = { ayah_mark: 'ayahMark', surah_header: 'surahHeader', page_frame: 'pageFrame' } as const;
+    for (const o of this.list) {
+      if (!o) continue;
+      let s = out.find(x => x.style === o.style);
+      if (!s) { s = { style: o.style, riwayah: o.riwayah, lineage: o.lineage, ayahMark: null, surahHeader: null, pageFrame: null }; out.push(s); }
+      s[key[o.kind]] = o;
+    }
+    return out;
+  }
+}
+const ornamentsId = (set: QvpOrnaments | number) => (typeof set === 'number' ? set : set.id);
+/** A spec as the native side reads it: ornaments as indices or style names, colours as '#rrggbbaa'. */
+function dressSpec(spec: DressSpec): object {
+  const ref = (v: OrnamentRef | undefined) => (v == null ? null : typeof v === 'object' ? v.index : v);
+  return {
+    // A kind key that is left out takes the style; a kind key set to null is none. A style name
+    // stays a name: the native side asks the engine for the ornament of that kind.
+    ayahMark: ref(spec.ayahMark === undefined ? spec.style : spec.ayahMark),
+    surahHeader: ref(spec.surahHeader === undefined ? spec.style : spec.surahHeader),
+    pageFrame: ref(spec.pageFrame === undefined ? spec.style : spec.pageFrame),
+    gap: spec.gap, bandGap: spec.bandGap, ayahMarkScale: spec.ayahMarkScale, pageFrameScale: spec.pageFrameScale,
+    lineArt: spec.lineArt === true ? ['ayah_mark', 'surah_header', 'page_frame'] : Array.isArray(spec.lineArt) ? spec.lineArt : [],
+    colors: (spec.colors ?? []).map(([o, part, colour]) => [typeof o === 'object' ? o.index : o, part, css(colour)]),
+  };
+}
+
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg', 'dress', 'undress', 'dressInfo', 'dressRevision'] as const;
 type PageMethod = (typeof pageMethods)[number];
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {

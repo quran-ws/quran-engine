@@ -107,6 +107,33 @@ through `onPassageLayout`, and the view takes its height from it.
 />
 ```
 
+## Dress
+
+A page can wear another mushaf's ornaments: an ayah medallion, a surah band and a page border
+from an ornament set (`ornaments.qvo`, in the data release). The engine places each ornament.
+The native view paints the layer behind the ink and fits the border into the view.
+
+```tsx
+const set = await QvpOrnaments.load('asset://pages/ornaments.qvo');
+const medallion = await set.find('ayah_mark', 'font-003-regular');
+<QvpPageView
+  pageUri="asset://pages/604.qvp"
+  dress={{ ornaments: set, style: 'mushaf-qalon', ayahMark: medallion, gap: 5, lineArt: ['surah_header'] }}
+  onDressChanged={({ info }) => console.log(info?.ayahMarks, info?.frameRepeats)}   // null: refused
+/>
+```
+
+- `style` takes a mushaf's medallion, band and border together. A kind key (`ayahMark`,
+  `surahHeader`, `pageFrame`) overrides the style for that kind. It takes an ornament, an
+  index or a style name. `null` is none.
+- The knobs are `gap`, `bandGap`, `ayahMarkScale` (0 takes the design's own size),
+  `pageFrameScale`, `lineArt` (`true` or a list of kinds) and `colors` (`[ornament, part, colour]`).
+- `set.list` gives each ornament with its `licence` and `parts`. `set.styles()` groups the
+  ornaments by mushaf, and `set.ofKind(kind)` filters them. Read the licence before you
+  publish a dressed page.
+- The prop dresses every page the view loads. `qvp.dress(set, spec)`, `qvp.undress()`,
+  `qvp.dressInfo()` and `qvp.dressRevision()` act on the page in the view now.
+
 ## The module
 
 Everything takes the view's react tag (`findNodeHandle`) — or use the bound forms:
@@ -156,10 +183,10 @@ android/src/main/java/ws/quran/qvp/rn/
   QvpRnPassageView.kt   View: loads the pages, lays the passage out at the view's width, draws it, reports the layout
   QvpPassageViewManager.kt SimpleViewManager<QvpRnPassageView>
   QvpRnBytes.kt         the bytes a URI names (asset, file, path, base64)
-  QvpModule.kt          ReactContextBaseJavaModule: page queries by react tag, engine helpers, atlas
+  QvpModule.kt          ReactContextBaseJavaModule: page queries by react tag, engine helpers, atlas, ornament sets
   Marshal.kt            JS shapes ↔ Kotlin types (targets, selectors, styles, records)
   QvpPackage.kt
-src/index.tsx                              typed API: <QvpPageView/>, <QvpPassageView/>, useQvp(), Qvp, QvpAtlas, Sel, T, constants
+src/index.tsx                              typed API: <QvpPageView/>, <QvpPassageView/>, useQvp(), Qvp, QvpAtlas, QvpOrnaments, Sel, T, constants
 ```
 
 ## iOS — TODO

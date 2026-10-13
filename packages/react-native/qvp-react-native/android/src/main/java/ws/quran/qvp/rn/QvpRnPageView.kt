@@ -1,5 +1,6 @@
 package ws.quran.qvp.rn
 
+import android.util.Base64
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.uimanager.ThemedReactContext
@@ -47,6 +48,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     var highlightsProp: List<Any?>? = null
     var maskProp: Map<String, Any?>? = null
     var revealProp: Map<String, Any?>? = null
+    var dressProp: Map<String, Any?>? = null
     var layoutDirty = true
 
     // ── applied state ──
@@ -59,6 +61,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     private var appliedMask: Map<String, Any?>? = null
     private var appliedReveal: Map<String, Any?>? = null   // without "at"
     private var appliedRevealAt: Long? = null
+    private var appliedDress: Map<String, Any?>? = null
     private var appliedInk: Int? = null
     var revealStepCount = 0; private set
     var loadMs = 0.0; private set
@@ -121,7 +124,11 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
             if (p != null) {
                 applyInk(p); applyTheme(p); applyStyles(p); applyHighlights(p); applyMask(p); applyReveal(p)
             }
-            if (layoutDirty) { layoutDirty = false; inner.relayout(); resetView() }
+            var fit = false
+            if (layoutDirty) { layoutDirty = false; inner.relayout(); fit = true }
+            // After the layout: the engine places the ornaments on the layout in force.
+            if (p != null && applyDress(p)) fit = true
+            if (fit) resetView()
             commitZoom()
             inner.invalidate()
         } catch (e: Exception) {
@@ -134,7 +141,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         val key = pageBase64?.let { "b64:" + it.hashCode() } ?: pageUri
         if (key == loadedKey) return
         // drop everything bound to the old page: handles die with it
-        themeHandle = 0; appliedTheme = null; styleHandles.clear(); highlightHandles.clear(); appliedMask = null; appliedReveal = null; appliedRevealAt = null; appliedInk = null; revealStepCount = 0
+        themeHandle = 0; appliedTheme = null; styleHandles.clear(); highlightHandles.clear(); appliedMask = null; appliedReveal = null; appliedRevealAt = null; appliedInk = null; appliedDress = null; revealStepCount = 0
         page?.close(); page = null; loadedKey = key
         if (key == null) return
         val bytes = pageBase64?.let { Base64.decode(it, Base64.DEFAULT) } ?: readUri(pageUri!!)
@@ -219,6 +226,29 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         val at = (r["at"] as? Number)?.toLong() ?: -1L
         if (at != appliedRevealAt) { appliedRevealAt = at; p.revealGoto(at) }
     }
+
+    /**
+     * The `dress` prop: {ornaments: set id, ...spec}. A new object dresses the page again and null
+     * undresses it. The hosted [QvpPageView] paints the layer behind the ink (qvp_dress_geometry,
+     * through the placements it applies to the ink, rasterised once per dress revision and scale)
+     * and fits the content plus the dress overflow. True when the page changed.
+     */
+    private fun applyDress(p: QvpPage): Boolean {
+        if (dressProp == appliedDress) return false
+        appliedDress = dressProp
+        val d = dressProp
+        val set = d?.let { QvpOrnamentSets.get((it["ornaments"] as? Number)?.toInt()) }
+        val info = when {
+            d == null -> { p.undress(); null }
+            set == null -> { p.undress(); emit("onError", mapOf("message" to "dress: no ornament set ${d["ornaments"]}")); null }
+            else -> p.dress(set, Marshal.dressSpec(d))
+        }
+        emit("onDressChanged", mapOf("info" to info?.let { Marshal.dressInfo(it) }))
+        return true
+    }
+    /** The module's imperative dress: dress, fit the border in, draw. */
+    fun dressNow(p: QvpPage, set: QvpOrnaments, spec: QvpDressSpec): QvpDressInfo? = p.dress(set, spec).also { resetView(); inner.invalidate() }
+    fun undressNow(p: QvpPage) { p.undress(); resetView(); inner.invalidate() }
 
     fun emit(name: String, payload: Map<String, Any?>) = QvpRnEvents.emit(ctx, this, name, payload)
 
