@@ -83,6 +83,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   // ── engine & data ──
   QvpEngine? engine;
   QvpAtlas? atlas;
+  QvpOrnaments? ornaments;
   QvpPage? page;
   String? loadError;
   int n = kPages.first, bytes = 0;
@@ -115,7 +116,12 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   String copied = '';
   bool panelOpen = true;
   double lastHitUs = 0;
-  late final TabController tabs = TabController(length: 8, vsync: this);
+  // ── dress: the ornament of each kind (an index of the set, or null for the print's own) ──
+  int? dressMark, dressHeader, dressFrame;
+  double dressGap = 5, dressBandGap = 5, dressMarkScale = 0, dressFrameScale = 1;
+  Set<QvpOrnamentKind> dressLineArt = {};
+  List<(int, int, int)> dressColors = [];
+  late final TabController tabs = TabController(length: 9, vsync: this);
 
   Palette get pal => widget.palette;
 
@@ -136,9 +142,17 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       } catch (_) {
         a = null;
       }
+      // The ornament set is optional: the dress panel says so when it is missing.
+      QvpOrnaments? o;
+      try {
+        o = e.loadOrnaments((await rootBundle.load('assets/pages/ornaments.qvo')).buffer.asUint8List());
+      } catch (_) {
+        o = null;
+      }
       setState(() {
         engine = e;
         atlas = a;
+        ornaments = o;
       });
       await loadPage(kPages.first);
     } catch (err, st) {
@@ -151,6 +165,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
   void dispose() {
     playTimer?.cancel();
     page?.dispose();
+    ornaments?.dispose();
     atlas?.dispose();
     engine?.dispose();
     tabs.dispose();
@@ -201,7 +216,45 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
     if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
     _applyTheme();
     _applyToggles();
+    _applyDress();
     runSearch();
+  }
+
+  // ── dress: another mushaf's ornaments. The engine places everything. This panel only says
+  // which ornaments, and the readout is the engine's. ──
+  void _applyDress() {
+    final p = page, set = ornaments;
+    if (p == null) return;
+    if (set == null || (dressMark == null && dressHeader == null && dressFrame == null)) {
+      if (p.dressSpec != null) p.undress();
+    } else {
+      p.dress(
+        set,
+        QvpDressSpec(
+          ayahMark: dressMark,
+          surahHeader: dressHeader,
+          pageFrame: dressFrame,
+          gap: dressGap,
+          bandGap: dressBandGap,
+          ayahMarkScale: dressMarkScale,
+          pageFrameScale: dressFrameScale,
+          lineArt: dressLineArt,
+          colors: [for (final c in dressColors) (c.$1, c.$2, c.$3)],
+        ),
+      );
+    }
+    setState(() {});
+  }
+
+  /// Takes every kind from one mushaf, or the print's own when [style] is null.
+  void _dressStyle(String? style) {
+    final s = style == null ? null : ornaments?.styles().where((x) => x.style == style).firstOrNull;
+    dressMark = s?.ayahMark?.index;
+    dressHeader = s?.surahHeader?.index;
+    dressFrame = s?.pageFrame?.index;
+    dressColors = [];
+    dressMarkScale = 0;
+    _applyDress();
   }
 
   // ── selection ──
@@ -607,6 +660,7 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
       ('Styling', _stylingSection),
       ('Memorise', _memoSection),
       ('Layout', _layoutSection),
+      ('Dress', _dressSection),
       ('Page', _pageSection),
       ('Engine', _engineSection),
     ];
@@ -903,6 +957,154 @@ class _ReaderPageState extends State<ReaderPage> with SingleTickerProviderStateM
         ActionChip(label: const Text('Leading to fill'), onPressed: fitGap),
       ]),
       _hint('Layout is computed by the engine (per-line dy, lineSpacing, scale); the view only applies pan and zoom on top. Double-tap the page to fit. Leading only grows — the printed lineSpacing is the floor — and the text width is always the viewport\'s.'),
+    ]);
+  }
+
+  // ── Dress ──
+  static const _kindLabel = {QvpOrnamentKind.ayahMark: 'medallion', QvpOrnamentKind.surahHeader: 'band', QvpOrnamentKind.pageFrame: 'border'};
+  static const _swatches = [0x231f20ff, 0x1a3a6aff, 0x0a4d2aff, 0x6a1a1aff, 0xb8860bff, 0x00649bff, 0xd6a326ff, 0xfffdf7ff];
+
+  Widget _dressSection() {
+    final set = ornaments, p = page!;
+    if (set == null) return _hint('no ornament set (put ornaments.qvo beside the pages)');
+    String label(QvpOrnament o) => '${o.style}${o.riwayah.isNotEmpty ? ', ${o.riwayah}' : ''}';
+    final picks = {QvpOrnamentKind.ayahMark: dressMark, QvpOrnamentKind.surahHeader: dressHeader, QvpOrnamentKind.pageFrame: dressFrame};
+    void pick(QvpOrnamentKind k, int? i) {
+      switch (k) {
+        case QvpOrnamentKind.ayahMark:
+          dressMark = i;
+          dressMarkScale = 0;
+        case QvpOrnamentKind.surahHeader:
+          dressHeader = i;
+        case QvpOrnamentKind.pageFrame:
+          dressFrame = i;
+      }
+      dressColors = [];
+      _applyDress();
+    }
+
+    // the mushaf picker shows the style the three kinds agree on, or "mixed"
+    final presets = set.styles().where((s) => s.isComplete).toList();
+    final chosen = [for (final i in picks.values) i == null ? null : set.list[i].style];
+    final same = chosen.every((s) => s == chosen.first) && (chosen.first == null || presets.any((s) => s.style == chosen.first));
+    final styleValue = same ? chosen.first : 'mixed';
+
+    // the medallion slider shows the design's own size until the reader moves it
+    final mark = dressMark == null ? null : set.list[dressMark!];
+    final ownMarkScale = mark != null && mark.lineage == QvpLineage.scan ? QvpDefaults.ayahMarkScaleScan : 1.0;
+    final markScale = dressMarkScale > 0 ? dressMarkScale : ownMarkScale;
+
+    Widget dropdown<V>(String text, V value, List<DropdownMenuItem<V>> items, ValueChanged<V?> f) => Row(children: [
+          SizedBox(width: 84, child: Text(text, style: const TextStyle(fontSize: 12))),
+          Expanded(child: DropdownButton<V>(isExpanded: true, value: value, items: items, onChanged: f)),
+        ]);
+    Widget slider(String text, double v, double min, double max, int div, String shown, ValueChanged<double> f) => Row(children: [
+          SizedBox(width: 84, child: Text(text, style: const TextStyle(fontSize: 12))),
+          Expanded(child: Slider(value: v, min: min, max: max, divisions: div, onChanged: f)),
+          SizedBox(width: 76, child: Text(shown, style: const TextStyle(fontSize: 12))),
+        ]);
+
+    // One colour well per part of each chosen ornament. A kind drawn as line art has one ink.
+    final wells = <Widget>[];
+    for (final e in picks.entries) {
+      final i = e.value;
+      if (i == null) continue;
+      final o = set.list[i];
+      final parts = dressLineArt.contains(o.kind) ? o.parts.where((x) => x.name == 'line') : o.parts.where((x) => (x.color & 0xff) != 0);
+      for (final part in parts) {
+        final repainted = dressColors.where((c) => c.$1 == i && c.$2 == part.index).firstOrNull;
+        final shown = repainted?.$3 ?? part.color;
+        wells.add(PopupMenuButton<int>(
+          tooltip: '${_kindLabel[o.kind]} ${part.name}',
+          onSelected: (c) {
+            dressColors = [for (final x in dressColors) if (!(x.$1 == i && x.$2 == part.index)) x];
+            if (c != part.color) dressColors.add((i, part.index, c));
+            _applyDress();
+          },
+          itemBuilder: (_) => [
+            for (final c in [part.color, ..._swatches])
+              PopupMenuItem(
+                value: c,
+                child: Row(children: [
+                  Container(width: 18, height: 18, decoration: BoxDecoration(color: QvpColor.toColor(c | 0xff), border: Border.all(color: pal.line))),
+                  const SizedBox(width: 8),
+                  Text(c == part.color ? 'the design\'s own' : QvpColor.hex(c)),
+                ]),
+              ),
+          ],
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 18, height: 18, decoration: BoxDecoration(color: QvpColor.toColor(shown | 0xff), borderRadius: BorderRadius.circular(3), border: Border.all(color: pal.line))),
+            const SizedBox(width: 4),
+            _hint('${_kindLabel[o.kind]} ${part.name}'),
+          ]),
+        ));
+      }
+    }
+
+    // the readout is the engine's
+    final info = p.dressInfo();
+    String readout;
+    if (dressMark == null && dressHeader == null && dressFrame == null) {
+      readout = 'as printed';
+    } else if (info == null) {
+      readout = 'the engine refused that dress';
+    } else {
+      readout = '${info.ayahMarks} medallions · ${info.surahHeaders} band(s) · '
+          '${info.pageFrame == null ? 'no border' : info.frameStretched ? 'the whole frame is stretched (no slices)' : '${info.frameRepeats} border repeats tiled to this page'}'
+          '\nviewBox ${info.viewBox.map((v) => v.toStringAsFixed(1)).join(' ')}';
+      for (final i in picks.values) {
+        if (i == null) continue;
+        final o = set.list[i];
+        readout += '\n${o.style} ${_kindLabel[o.kind]}: ${o.licence.id.isEmpty ? 'licence unstated' : o.licence.id}, ${o.licence.status}, redistributable: ${o.licence.redistributable}';
+      }
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      dropdown<String?>('mushaf', styleValue, [
+        const DropdownMenuItem(value: null, child: Text('as printed')),
+        for (final s in presets) DropdownMenuItem(value: s.style, child: Text('${s.style}${s.riwayah.isNotEmpty ? ', ${s.riwayah}' : ''}', overflow: TextOverflow.ellipsis)),
+        if (!same) const DropdownMenuItem(value: 'mixed', child: Text('mixed')),
+      ], (v) {
+        if (v != 'mixed') _dressStyle(v);
+      }),
+      for (final k in QvpOrnamentKind.values)
+        dropdown<int?>(_kindLabel[k]!, picks[k], [
+          DropdownMenuItem(value: null, child: Text(k == QvpOrnamentKind.pageFrame ? 'none' : 'as printed')),
+          for (final o in set.ofKind(k)) DropdownMenuItem(value: o.index, child: Text(label(o), overflow: TextOverflow.ellipsis)),
+        ], (v) => pick(k, v)),
+      Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        const Text('line art', style: TextStyle(fontSize: 12)),
+        for (final k in QvpOrnamentKind.values)
+          FilterChip(
+            label: Text(_kindLabel[k]!),
+            selected: dressLineArt.contains(k),
+            onSelected: (on) {
+              dressLineArt = {...dressLineArt.where((x) => x != k), if (on) k};
+              dressColors = [];
+              _applyDress();
+            },
+          ),
+      ]),
+      slider('breathing space', dressGap, 0, 24, 24, dressGap.round().toString(), (v) {
+        dressGap = v;
+        _applyDress();
+      }),
+      slider('band to border', dressBandGap, 0, 24, 24, dressBandGap.round().toString(), (v) {
+        dressBandGap = v;
+        _applyDress();
+      }),
+      slider('medallion size', markScale, 0.5, 2.5, 40, '×${markScale.toStringAsFixed(2)}${dressMarkScale > 0 ? '' : ' (design)'}', (v) {
+        dressMarkScale = v;
+        _applyDress();
+      }),
+      slider('border size', dressFrameScale, 0.5, 2.5, 40, '×${dressFrameScale.toStringAsFixed(2)}', (v) {
+        dressFrameScale = v;
+        _applyDress();
+      }),
+      if (wells.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 6), child: Wrap(spacing: 10, runSpacing: 6, children: wells)),
+      OutlinedButton(onPressed: () => _dressStyle(null), child: const Text('As printed')),
+      const SizedBox(height: 6),
+      _hint(readout),
     ]);
   }
 
