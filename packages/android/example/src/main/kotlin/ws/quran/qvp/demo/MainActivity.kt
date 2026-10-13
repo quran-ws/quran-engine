@@ -2,6 +2,7 @@ package ws.quran.qvp.demo
 
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -30,6 +31,7 @@ import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.color.MaterialColors
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.divider.MaterialDivider
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.slider.Slider
@@ -45,6 +47,8 @@ class MainActivity : AppCompatActivity() {
     private var pageNo = 1
     private var page: QvpPage? = null
     private var atlas: QvpAtlas? = null
+    /** The ornaments of other mushafs and fonts, when the data folder has ornaments.qvo. */
+    private var ornaments: QvpOrnaments? = null
     private var loadMs = 0.0; private var pageBytes = 0
 
     private lateinit var view: QvpPageView
@@ -75,6 +79,18 @@ class MainActivity : AppCompatActivity() {
     private var playing = false; private var playIdx = 0
     private var theme = "light"; private var hlMode = HighlightMode.BOTH; private var hlMs = 250; private var revealOn = false
     private val handler = Handler(Looper.getMainLooper())
+
+    // dress: which ornament of each kind (an index into the set, null for the print's own) and the knobs
+    private val dressChoice = HashMap<QvpOrnamentKind, Int?>()
+    private var dressGap = 5f; private var dressBandGap = 5f; private var dressMarkScale = 0f; private var dressFrameScale = 1f
+    private val dressLineArt = HashSet<QvpOrnamentKind>()
+    private val dressColors = ArrayList<QvpPartColor>()
+    private lateinit var dressStyleBox: MaterialAutoCompleteTextView
+    private val dressKindBoxes = HashMap<QvpOrnamentKind, MaterialAutoCompleteTextView>()
+    private lateinit var dressParts: ChipGroup
+    private lateinit var dressInfo: TextView
+    private lateinit var dressMarkSlider: Slider
+    private lateinit var dressMarkValue: TextView
     private val themes = mapOf("light" to Triple(0x231f20ff.toInt(), 0xFFFFFDF7.toInt(), 0xFFF6F1E7.toInt()), "sepia" to Triple(0x3b2a14ff.toInt(), 0xFFF3E7CF.toInt(), 0xFFE9DCC3.toInt()), "dark" to Triple(0xe8e4dcff.toInt(), 0xFF1E2126.toInt(), 0xFF15171B.toInt()))
     private val d get() = resources.displayMetrics.density
     private companion object { const val KEY_PAGE = "page"; const val KEY_SHEET = "sheet" }
@@ -86,6 +102,8 @@ class MainActivity : AppCompatActivity() {
         // chrome insets itself out of their way.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         atlas = runCatching { QvpAtlas(assets.open("pages/atlas.qva").readBytes()) }.getOrNull()
+        // the demo works without the ornament set: the dress panel then says where to put it
+        ornaments = runCatching { QvpOrnaments(assets.open("pages/ornaments.qvo").use { it.readBytes() }) }.getOrNull()
 
         val scaffold = CoordinatorLayout(this)
 
@@ -218,6 +236,10 @@ class MainActivity : AppCompatActivity() {
         panel.addSpaced(row(textButton("Clear all") {
             clearAll(); listOf(bTaj, bHide, bMk, playBtn).forEach { it.isChecked = false }
         }))
+
+        // dress
+        panel.addSpaced(divider()); panel.addSpaced(section("Dress (another mushaf's ornaments)"))
+        buildDressPanel(panel)
 
         // memorisation
         panel.addSpaced(divider()); panel.addSpaced(section("Memorisation"))
@@ -431,6 +453,188 @@ class MainActivity : AppCompatActivity() {
         page?.setDefaultColor(ink); view.invalidate()
     }
 
+    // ---- dress: another mushaf's ornaments ------------------------------------------------
+    // The engine places every ornament. This panel only says which ornaments, and the readout is
+    // the engine's.
+
+    private val kindLabel = mapOf(QvpOrnamentKind.AYAH_MARK to "medallion", QvpOrnamentKind.SURAH_HEADER to "band",
+                                  QvpOrnamentKind.PAGE_FRAME to "border")
+    private fun ornamentLabel(o: QvpOrnament) = o.style + if (o.riwayah.isNotEmpty()) ", ${o.riwayah}" else ""
+    private fun noneLabel(kind: QvpOrnamentKind) = if (kind == QvpOrnamentKind.PAGE_FRAME) "none" else "as printed"
+
+    private fun buildDressPanel(panel: LinearLayout) {
+        val set = ornaments
+        // presets: every mushaf that has all three kinds
+        val presets = set?.styles()?.filter { it.ayahMark != null && it.surahHeader != null && it.pageFrame != null }.orEmpty()
+        val (styleView, styleBox) = dropdown("Mushaf", listOf("as printed") + presets.map { s -> s.style + if (s.riwayah.isNotEmpty()) ", ${s.riwayah}" else "" }) { pos ->
+            val s = presets.getOrNull(pos - 1)
+            dressChoice[QvpOrnamentKind.AYAH_MARK] = s?.ayahMark?.index
+            dressChoice[QvpOrnamentKind.SURAH_HEADER] = s?.surahHeader?.index
+            dressChoice[QvpOrnamentKind.PAGE_FRAME] = s?.pageFrame?.index
+            dressColors.clear(); dressMarkScale = 0f
+            showDressChoice(); showMarkScale(); dressSwatches(); applyDress()
+        }
+        dressStyleBox = styleBox
+        panel.addSpaced(styleView)
+        // the three kinds, for mixing one mushaf's medallion with another's border
+        for (kind in QvpOrnamentKind.entries) {
+            val options = set?.ofKind(kind).orEmpty()
+            val (v, box) = dropdown(kindLabel[kind]!!.replaceFirstChar { it.uppercase() }, listOf(noneLabel(kind)) + options.map { ornamentLabel(it) }) { pos ->
+                dressChoice[kind] = options.getOrNull(pos - 1)?.index
+                dressColors.clear()
+                if (kind == QvpOrnamentKind.AYAH_MARK) { dressMarkScale = 0f; showMarkScale() }
+                showDressChoice(); dressSwatches(); applyDress()
+            }
+            dressKindBoxes[kind] = box
+            panel.addSpaced(v)
+        }
+        if (set == null) { (listOf(styleBox) + dressKindBoxes.values).forEach { (it.parent?.parent as? View)?.isEnabled = false; it.isEnabled = false } }
+
+        // line art: a kind drawn as its constant-width strokes alone, in one ink
+        panel.addSpaced(body("Line art"))
+        panel.addSpaced(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(row(*QvpOrnamentKind.entries.map { kind ->
+            toggleButton(kindLabel[kind]!!) { on ->
+                if (on) dressLineArt.add(kind) else dressLineArt.remove(kind)
+                dressColors.clear(); dressSwatches(); applyDress()
+            }
+        }.toTypedArray())) })
+
+        panel.addSpaced(slider("breathing space", 0, 24, 5) { dressGap = it.toFloat(); applyDress() })
+        panel.addSpaced(slider("band to border", 0, 24, 5) { dressBandGap = it.toFloat(); applyDress() })
+        val (markView, markSlider, markValue) = scaleSlider("medallion size") { dressMarkScale = it; applyDress() }
+        dressMarkSlider = markSlider; dressMarkValue = markValue
+        panel.addSpaced(markView)
+        panel.addSpaced(scaleSlider("border size") { dressFrameScale = it; applyDress() }.first)
+        panel.addSpaced(row(textButton("As printed") {
+            QvpOrnamentKind.entries.forEach { dressChoice[it] = null }
+            dressColors.clear(); showDressChoice(); dressSwatches(); applyDress()
+        }))
+        // one colour well per printed part of each chosen ornament
+        dressParts = ChipGroup(this)
+        panel.addSpaced(dressParts)
+        dressInfo = body("")
+        panel.addSpaced(dressInfo)
+        showMarkScale()
+    }
+
+    /** Dress the page as the panel says, or take the dress off, and show the engine's readout. */
+    private fun applyDress() {
+        val p = page ?: return
+        val set = ornaments
+        val chosen = QvpOrnamentKind.entries.mapNotNull { dressChoice[it] }
+        if (set == null || chosen.isEmpty()) {
+            p.undress()
+            dressInfo.text = if (set == null) "no ornament set (put ornaments.qvo beside the pages)" else "as printed"
+        } else {
+            val ref = { k: QvpOrnamentKind -> dressChoice[k]?.let { QvpOrnamentRef.Index(it) } ?: QvpOrnamentRef.None }
+            val info = p.dress(set, QvpDressSpec(
+                ayahMark = ref(QvpOrnamentKind.AYAH_MARK), surahHeader = ref(QvpOrnamentKind.SURAH_HEADER), pageFrame = ref(QvpOrnamentKind.PAGE_FRAME),
+                gap = dressGap, bandGap = dressBandGap, ayahMarkScale = dressMarkScale, pageFrameScale = dressFrameScale,
+                lineArt = dressLineArt.toSet(), colors = dressColors.toList()))
+            dressInfo.text = if (info == null) "the engine refused that dress" else buildString {
+                append("${info.ayahMarks} medallions · ${info.surahHeaders} band(s) · ")
+                append(when {
+                    info.pageFrame == null -> "no border"
+                    info.frameStretched -> "the whole frame is stretched (no slices)"
+                    else -> "${info.frameRepeats} border repeats tiled to this page"
+                })
+                append("\nviewBox %.1f %.1f %.1f %.1f".format(info.viewBox.x, info.viewBox.y, info.viewBox.width, info.viewBox.height))
+                for (o in chosen.map { set.list[it] }) {
+                    val l = o.licence
+                    append("\n${o.style} ${kindLabel[o.kind]}: ${l.id.ifEmpty { "licence unstated" }}, ${l.status}, redistributable: ${l.redistributable}")
+                }
+            }
+        }
+        // a border makes the page bigger than its text, so the page is fitted again
+        view.resetView()
+    }
+
+    /** The mushaf picker shows the style the three kinds agree on, or "mixed"; each kind shows its own. */
+    private fun showDressChoice() {
+        val set = ornaments ?: return
+        val styles = QvpOrnamentKind.entries.map { k -> dressChoice[k]?.let { set.list[it] } }
+        for (kind in QvpOrnamentKind.entries) {
+            val o = dressChoice[kind]?.let { set.list[it] }
+            dressKindBoxes[kind]?.setText(o?.let { ornamentLabel(it) } ?: noneLabel(kind), false)
+        }
+        val first = styles[0]
+        dressStyleBox.setText(when {
+            styles.all { it == null } -> "as printed"
+            styles.all { it != null && it.style == first?.style } -> ornamentLabel(first!!)
+            else -> "mixed"
+        }, false)
+    }
+
+    /** The medallion slider shows the design's own size until the reader moves it. */
+    private fun showMarkScale() {
+        if (dressMarkScale > 0f) return
+        val o = dressChoice[QvpOrnamentKind.AYAH_MARK]?.let { ornaments?.list?.getOrNull(it) }
+        val own = if (o?.lineage == QvpLineage.SCAN) QvpDefaults.AYAH_MARK_SCALE_SCAN else 1f
+        dressMarkSlider.value = own
+        dressMarkValue.text = "×%.2f (design)".format(own)
+    }
+
+    /** One colour well per printed part of each chosen ornament. A kind drawn as line art has one
+     * ink, so it gets one well. */
+    private fun dressSwatches() {
+        dressParts.removeAllViews()
+        val set = ornaments ?: return
+        for (kind in QvpOrnamentKind.entries) {
+            val i = dressChoice[kind] ?: continue
+            val o = set.list[i]
+            val parts = if (kind in dressLineArt) o.parts.filter { it.name == "line" } else o.parts.filter { it.color and 0xff != 0 }
+            for (part in parts) {
+                val now = dressColors.firstOrNull { it.ornament == i && it.part == part.index }?.color ?: part.color
+                dressParts.addView(Chip(this).apply {
+                    text = "${kindLabel[kind]} ${part.name}"
+                    chipIcon = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(QvpColor.argb(now)); setStroke(dp(1), Color.GRAY) }
+                    isChipIconVisible = true
+                    setOnClickListener { pickColour("${kindLabel[kind]} ${part.name}") { c ->
+                        dressColors.removeAll { it.ornament == i && it.part == part.index }
+                        if (c != null) dressColors.add(QvpPartColor(i, part.index, c))
+                        dressSwatches(); applyDress()
+                    } }
+                })
+            }
+        }
+    }
+
+    /** A small palette for a colour well: Android has no colour input of its own. Null is the
+     * design's own colour. */
+    private fun pickColour(title: String, on: (Int?) -> Unit) {
+        val palette = listOf("the design's own" to null, "ink" to 0x231f20ff.toInt(), "gold" to 0xb8860bff.toInt(),
+                             "crimson" to 0xc62828ff.toInt(), "navy" to 0x1a3a6eff, "green" to 0x0a7d32ff, "teal" to 0x00796bff,
+                             "blue" to 0x1a73e8ff, "paper" to 0xfffdf7ff.toInt(), "white" to 0xffffffff.toInt())
+        MaterialAlertDialogBuilder(this).setTitle(title)
+            .setItems(palette.map { it.first }.toTypedArray()) { _, k -> on(palette[k].second) }
+            .show()
+    }
+
+    /** An exposed dropdown menu whose text the panel can set: the dress pickers show "mixed". */
+    private fun dropdown(label: String, items: List<String>, on: (Int) -> Unit): Pair<View, MaterialAutoCompleteTextView> {
+        val til = TextInputLayout(this, null, com.google.android.material.R.attr.textInputOutlinedExposedDropdownMenuStyle).apply { hint = label }
+        val tv = MaterialAutoCompleteTextView(til.context).apply {
+            setSimpleItems(items.toTypedArray())
+            setText(items[0], false)
+            setOnItemClickListener { _, _, pos, _ -> on(pos) }
+        }
+        til.addView(tv)
+        return til to tv
+    }
+
+    /** A size slider from ×0.5 to ×2.5, with its value beside it. */
+    private fun scaleSlider(label: String, on: (Float) -> Unit): Triple<View, Slider, TextView> {
+        val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val lbl = body(label).apply { minWidth = dp(96) }
+        val v = body("×1.00").apply { minWidth = dp(34); gravity = Gravity.END }
+        val s = Slider(this).apply {
+            valueFrom = 0.5f; valueTo = 2.5f; stepSize = 0.05f; value = 1f
+            addOnChangeListener { _, value, fromUser -> if (fromUser) { v.text = "×%.2f".format(value); on(value) } }
+        }
+        r.addView(lbl); r.addView(s, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)); r.addView(v)
+        return Triple(r, s, v)
+    }
+
     private fun stepPage(dir: Int) {
         val i = pages.indexOf(pageNo)
         pages.getOrNull(i + dir)?.let { turnDir = dir; loadPage(it) }
@@ -503,6 +707,7 @@ class MainActivity : AppCompatActivity() {
         selWordIdx = -1; selAyah = null; hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; pathHandles.clear(); tajwid = 0; hideMarksH = 0; ayahMarksH = 0; revealOn = false; revealSeek.isEnabled = false
         p.setDefaultColor(themes[theme]!!.first)
         view.page = p
+        applyDress()
         showSelection(); showMeta(); runSearch()
         slideIn(); prepareNeighbours()
     }
@@ -627,12 +832,13 @@ class MainActivity : AppCompatActivity() {
             "base layer    ${view.lastBasePaths} paths in %.2f ms (cached)\n".format(view.lastBaseMs) +
             "overlay       ${view.lastOverlayPaths} styled + ${view.lastBands} bands in %.2f ms\n".format(view.lastOverlayMs) +
             "hit-test      %.1f µs · %d handles · %d highlights\n".format(view.lastHitUs, p.styleHandles().size, p.highlightHandles().size) +
+            "dress         ${view.lastOrnamentDraws} draws in %.2f ms (cached)\n".format(view.lastOrnamentMs) +
             "layout        ${if (view.fillHeight) "fill height" else "spacing ×%.2f".format(view.lineSpacing)} · lineSpacing %.1f u".format(l?.lineSpacing ?: 0f)
         handler.postDelayed({ hud() }, 1000)
     }
     override fun onDestroy() {
         stopPlay(); page?.close()
         ready.values.forEach { it?.close() }; ready.clear()
-        atlas?.close(); super.onDestroy()
+        atlas?.close(); ornaments?.close(); super.onDestroy()
     }
 }
