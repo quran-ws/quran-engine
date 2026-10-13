@@ -19,6 +19,8 @@ final class DemoModel: ObservableObject {
     let view = QvpPageView()
     private(set) var page: QvpPage?
     private(set) var atlas: QvpAtlas?
+    /// The ornament set beside the pages (ornaments.qvo), when the sync script found one.
+    private(set) var ornaments: QvpOrnaments?
 
     @Published var pageNo = 1
     @Published var pageField = "1"
@@ -60,6 +62,20 @@ final class DemoModel: ObservableObject {
     @Published var flipImage: UIImage?
     @Published var flipOffset: CGFloat = 0
 
+    // ── dress: another mushaf's ornaments. The engine places everything; the panel only says
+    // which ornaments, and the readout is the engine's. -1 is "as printed" (no border). ──
+    @Published var dressAyahMark = -1 { didSet { if dressAyahMark != oldValue { dressColors = []; dressMarkScale = 0; applyDress() } } }
+    @Published var dressSurahHeader = -1 { didSet { if dressSurahHeader != oldValue { dressColors = []; applyDress() } } }
+    @Published var dressPageFrame = -1 { didSet { if dressPageFrame != oldValue { dressColors = []; applyDress() } } }
+    @Published var dressGap: Double = 5 { didSet { if dressGap != oldValue { applyDress() } } }
+    @Published var dressBandGap: Double = 5 { didSet { if dressBandGap != oldValue { applyDress() } } }
+    /// 0 is the design's own size.
+    @Published var dressMarkScale: Double = 0 { didSet { if dressMarkScale != oldValue { applyDress() } } }
+    @Published var dressFrameScale: Double = 1 { didSet { if dressFrameScale != oldValue { applyDress() } } }
+    @Published var dressLineArt: Set<OrnamentKind> = [] { didSet { if dressLineArt != oldValue { dressColors = []; applyDress() } } }
+    @Published var dressColors: [OrnamentColor] = [] { didSet { if dressColors != oldValue { applyDress() } } }
+    @Published var dressReadout = ""
+
     private var loadMs = 0.0, pageBytes = 0
     private var selWordIdx = -1, selAyah: (Int, Int)?
     private var hlSel = 0, hlAyah = 0, hlSearch = 0, hlPlay = 0
@@ -72,6 +88,7 @@ final class DemoModel: ObservableObject {
 
     init() {
         if let u = Bundle.main.url(forResource: "atlas", withExtension: "qva", subdirectory: "pages"), let d = try? Data(contentsOf: u) { atlas = try? QvpAtlas(bytes: d) }
+        if let u = Bundle.main.url(forResource: "ornaments", withExtension: "qvo", subdirectory: "pages") { ornaments = try? QvpOrnaments(path: u.path) }
         view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.fillHeight = true
         view.onSwipe = { [weak self] dir in self?.flip(dir) }   // mushaf order: finger right → next page
         view.isAccessibilityElement = true; view.accessibilityIdentifier = "qvpPage"; view.accessibilityLabel = "mushaf page"
@@ -112,6 +129,8 @@ final class DemoModel: ObservableObject {
             DispatchQueue.main.async { [weak self] in self?.view.scroll(by: -CGFloat(y)) }
         }
         if d.bool(forKey: "qvpControls") { controlsShown = true }
+        if let s = d.string(forKey: "qvpDress") { dressStyle = s }
+        if d.bool(forKey: "qvpLineArt") { dressLineArt = Set(OrnamentKind.allCases) }
     }
 
     // ── navigation ──
@@ -156,6 +175,7 @@ final class DemoModel: ObservableObject {
         tajwid = 0; hideMarksH = 0; ayahMarksH = 0; markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false
         p.setDefaultColor(themeSpec.ink)
         view.page = p
+        applyDress()
         announce(); showMeta(); showTitle(); runSearch(); hud()
         prepareNeighbours(around: target)
     }
@@ -273,6 +293,69 @@ final class DemoModel: ObservableObject {
         hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajwid = 0; hideMarksH = 0; ayahMarksH = 0; selWordIdx = -1; selAyah = nil
         markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false; playing = false
         searchField = ""; stopPlay(); announce(); view.setNeedsDisplay()
+    }
+
+    // ── dress ──
+    /// The mushafs that have all three kinds: the presets.
+    var dressPresets: [OrnamentStyle] { ornaments?.styles().filter { $0.ayahMark != nil && $0.surahHeader != nil && $0.pageFrame != nil } ?? [] }
+    /// The ornament chosen for each kind, in the order medallion, band, border.
+    var dressChosen: [Ornament] { [dressAyahMark, dressSurahHeader, dressPageFrame].compactMap { i in i >= 0 ? ornaments?.list[i] : nil } }
+    /// The style the three kinds agree on, "" when undressed, or "mixed". Setting a style
+    /// takes its medallion, band and border together.
+    var dressStyle: String {
+        get {
+            let styles = [dressAyahMark, dressSurahHeader, dressPageFrame].map { i in i >= 0 ? ornaments?.list[i].style ?? "" : "" }
+            return Set(styles).count == 1 ? styles[0] : "mixed"
+        }
+        set {
+            guard newValue != "mixed", let set = ornaments else { return }
+            let s = set.styles().first { $0.style == newValue }
+            dressAyahMark = s?.ayahMark?.index ?? -1
+            dressSurahHeader = s?.surahHeader?.index ?? -1
+            dressPageFrame = s?.pageFrame?.index ?? -1
+            dressColors = []; dressMarkScale = 0
+            objectWillChange.send()
+        }
+    }
+    /// The medallion's own size: what the size control shows until the reader moves it.
+    var dressMarkScaleShown: Double {
+        if dressMarkScale > 0 { return dressMarkScale }
+        let o = dressAyahMark >= 0 ? ornaments?.list[dressAyahMark] : nil
+        return o?.lineage == .scan ? Double(QvpDefaults.AYAH_MARK_SCALE_SCAN) : 1
+    }
+    /// The parts of a chosen ornament that get a colour well: one ink for line art, else
+    /// every part that is not a window.
+    func dressParts(_ o: Ornament) -> [OrnamentPart] {
+        dressLineArt.contains(o.kind) ? o.parts.filter { $0.name == "line" } : o.parts.filter { $0.color & 0xff != 0 }
+    }
+    func dressColor(_ o: Ornament, _ part: OrnamentPart) -> UInt32 {
+        dressColors.first { $0.ornament == o.index && $0.part == part.index }?.color ?? part.color
+    }
+    func setDressColor(_ o: Ornament, _ part: OrnamentPart, _ rgba: UInt32) {
+        dressColors = dressColors.filter { !($0.ornament == o.index && $0.part == part.index) } + [OrnamentColor(o, part: part.index, color: rgba)]
+    }
+    func undress() { dressAyahMark = -1; dressSurahHeader = -1; dressPageFrame = -1; dressColors = [] }
+    private func applyDress() {
+        guard let p = page else { return }
+        let none = dressAyahMark < 0 && dressSurahHeader < 0 && dressPageFrame < 0
+        if ornaments == nil || none {
+            p.undress()
+            dressReadout = ornaments == nil ? "No ornament set: put ornaments.qvo beside the pages (sync-pages.sh copies it)." : "As printed."
+        } else if let set = ornaments {
+            let pick = { (i: Int) -> OrnamentChoice in i >= 0 ? .index(i) : .absent }
+            let spec = DressSpec(ayahMark: pick(dressAyahMark), surahHeader: pick(dressSurahHeader), pageFrame: pick(dressPageFrame),
+                                 gap: Float(dressGap), bandGap: Float(dressBandGap), ayahMarkScale: Float(dressMarkScale), pageFrameScale: Float(dressFrameScale),
+                                 lineArt: dressLineArt, colors: dressColors)
+            if let info = p.dress(set, spec) {
+                let border = info.pageFrame == nil ? "no border" : info.frameStretched ? "the whole frame is stretched (no slices)" : "\(info.frameRepeats) border repeats tiled to this page"
+                dressReadout = "\(info.ayahMarks) medallions · \(info.surahHeaders) band(s) · \(border)"
+                    + dressChosen.map { "\n\($0.style) \($0.kind.name): \($0.licence.id.isEmpty ? "licence unstated" : $0.licence.id), \($0.licence.status), redistributable: \($0.licence.redistributable)" }.joined()
+            } else {
+                dressReadout = "The engine refused that dress."
+            }
+        }
+        // a dressed page is fitted with its border
+        view.resetView(); view.setNeedsDisplay()
     }
 
     // ── memorisation ──

@@ -23,6 +23,7 @@ struct ReaderView: View {
     @State private var showGoTo = false
     @State private var showSearch = false
     @State private var showSettings = false
+    @State private var showDress = false
 
     var body: some View {
         reader.onAppear {
@@ -30,6 +31,7 @@ struct ReaderView: View {
             case "settings": showSettings = true
             case "search": showSearch = true
             case "goto": showGoTo = true
+            case "dress": showDress = true
             default: break
             }
         }
@@ -72,6 +74,7 @@ struct ReaderView: View {
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { showSearch = true } label: { Label("Search", systemImage: "magnifyingglass") }
+                    Button { showDress = true } label: { Label("Dress", systemImage: "seal") }
                     Button { showSettings = true } label: { Label("Settings", systemImage: "textformat.size") }
                 }
                 ToolbarItemGroup(placement: .bottomBar) {
@@ -98,6 +101,7 @@ struct ReaderView: View {
         .sheet(isPresented: $showGoTo) { GoToSheet(m: m) }
         .sheet(isPresented: $showSearch) { SearchSheet(m: m) }
         .sheet(isPresented: $showSettings) { SettingsSheet(m: m) }
+        .sheet(isPresented: $showDress) { DressSheet(m: m) }
     }
 
     /// Floating, translucent, in the top-right safe area: the only chrome left while the page fills the screen.
@@ -328,5 +332,96 @@ struct SettingsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
+    }
+}
+
+// MARK: - Dress
+
+/// Another mushaf's ornaments on the page: a preset, or one ornament per kind to mix. The
+/// engine places everything; this sheet only says which, and shows the engine's readout.
+struct DressSheet: View {
+    @ObservedObject var m: DemoModel
+    @Environment(\.dismiss) private var dismiss
+
+    private func kindPicker(_ title: String, _ kind: OrnamentKind, _ selection: Binding<Int>, none: String) -> some View {
+        Picker(title, selection: selection) {
+            Text(none).tag(-1)
+            ForEach(m.ornaments?.ofKind(kind) ?? [], id: \.index) { o in
+                Text(o.riwayah.isEmpty ? o.style : "\(o.style), \(o.riwayah)").tag(o.index)
+            }
+        }
+    }
+    private func lineArt(_ kind: OrnamentKind) -> Binding<Bool> {
+        Binding(get: { m.dressLineArt.contains(kind) },
+                set: { on in if on { m.dressLineArt.insert(kind) } else { m.dressLineArt.remove(kind) } })
+    }
+    private func colour(_ o: Ornament, _ part: OrnamentPart) -> Binding<Color> {
+        Binding(get: { Color(cgColor: QvpColor.cgColor(m.dressColor(o, part))) },
+                set: { c in m.setDressColor(o, part, QvpColor.rgba(UIColor(c).cgColor)) })
+    }
+
+    @ViewBuilder private var chooseSection: some View {
+        Section {
+            Picker("Mushaf", selection: Binding(get: { m.dressStyle }, set: { m.dressStyle = $0 })) {
+                Text("As printed").tag("")
+                ForEach(m.dressPresets, id: \.style) { s in Text(s.riwayah.isEmpty ? s.style : "\(s.style), \(s.riwayah)").tag(s.style) }
+                if m.dressStyle == "mixed" { Text("Mixed").tag("mixed") }
+            }
+            kindPicker("Medallion", .ayahMark, $m.dressAyahMark, none: "As printed")
+            kindPicker("Band", .surahHeader, $m.dressSurahHeader, none: "As printed")
+            kindPicker("Border", .pageFrame, $m.dressPageFrame, none: "None")
+        } footer: {
+            Text(m.ornaments == nil ? "No ornaments.qvo beside the pages." : "A mushaf takes its medallion, band and border together. Pick a kind on its own to mix.")
+        }
+        .disabled(m.ornaments == nil)
+    }
+
+    @ViewBuilder private var shapeSection: some View {
+        Section("Line art") {
+            Toggle("Medallion", isOn: lineArt(.ayahMark))
+            Toggle("Band", isOn: lineArt(.surahHeader))
+            Toggle("Border", isOn: lineArt(.pageFrame))
+        }
+        Section("Size and spacing") {
+            LabeledContent("Breathing space") { Text("\(Int(m.dressGap))").monospacedDigit() }
+            Slider(value: $m.dressGap, in: 0...24, step: 1) { Text("Breathing space") }
+            LabeledContent("Band to border") { Text("\(Int(m.dressBandGap))").monospacedDigit() }
+            Slider(value: $m.dressBandGap, in: 0...24, step: 1) { Text("Band to border") }
+            LabeledContent("Medallion size") { Text(String(format: "×%.2f", m.dressMarkScaleShown) + (m.dressMarkScale > 0 ? "" : " (design)")).monospacedDigit() }
+            Slider(value: Binding(get: { m.dressMarkScaleShown }, set: { m.dressMarkScale = $0 }), in: 0.5...2.5, step: 0.05) { Text("Medallion size") }
+            LabeledContent("Border size") { Text(String(format: "×%.2f", m.dressFrameScale)).monospacedDigit() }
+            Slider(value: $m.dressFrameScale, in: 0.5...2.5, step: 0.05) { Text("Border size") }
+        }
+    }
+
+    @ViewBuilder private var coloursSection: some View {
+        let chosen = m.dressChosen
+        if !chosen.isEmpty {
+            Section("Colours") {
+                ForEach(chosen, id: \.index) { o in
+                    ForEach(m.dressParts(o), id: \.index) { part in
+                        ColorPicker("\(o.kind.name.replacingOccurrences(of: "_", with: " ")) \(part.name)", selection: colour(o, part))
+                    }
+                }
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                chooseSection
+                shapeSection
+                coloursSection
+                Section {
+                    Button("As printed") { m.undress() }
+                    Text(m.dressReadout).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("dressReadout")
+                }
+            }
+            .navigationTitle("Dress")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
