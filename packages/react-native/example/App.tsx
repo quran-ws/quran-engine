@@ -6,7 +6,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
-  QvpPageView, QvpAtlas, Qvp, useQvp, Sel, T, KIND, DECORATION, LAYER, rgba,
+  QvpPageView, QvpAtlas, QvpOrnaments, Qvp, useQvp, Sel, T, KIND, DECORATION, LAYER, DEFAULTS, rgba,
+  type Dress, type DressInfo, type Ornament, type OrnamentKind,
   type Word, type Deco, type Highlight, type StyleRule, type Theme, type Mask, type Reveal, type Match, type SelectionInfo, type PageInfo, type Stats, type HighlightMode, type Selector,
 } from '@quran.ws/qvp-react-native';
 
@@ -18,6 +19,12 @@ const THEMES = {
   dark: { ink: '#e8e4dc', paper: '#1e2126', bg: '#15171b', fg: '#e8e4dc', panel: '#1e2126', line: '#3a3f47' },
 } as const;
 type ThemeName = keyof typeof THEMES;
+/** The three kind pickers of the dress panel: the kind, its spec key, its label. */
+const DRESS_KINDS = [['ayah_mark', 'ayahMark', 'medallion'], ['surah_header', 'surahHeader', 'band'], ['page_frame', 'pageFrame', 'border']] as const;
+type DressKey = (typeof DRESS_KINDS)[number][1];
+/** A colour well has no native picker here: a tap steps through these, then back to the design's own. */
+const WELL_COLORS = ['#b8860b', '#1a73e8', '#0a7d32', '#c62828', '#7b1fa2', '#231f20'];
+const partColor = (rgbaValue: number) => '#' + (rgbaValue >>> 8).toString(16).padStart(6, '0');
 
 // ── tiny UI atoms ──
 const FgCtx = React.createContext('#444');
@@ -90,11 +97,23 @@ function Demo() {
   const [meta, setMeta] = useState('');
   const [stats, setStats] = useState<Stats | null>(null);
   const [note, setNote] = useState('');
+  // dress: which ornaments, and the knobs; the engine places everything
+  const [ornaments, setOrnaments] = useState<QvpOrnaments | null>(null);
+  const [dressPick, setDressPick] = useState<Record<DressKey, number | null>>({ ayahMark: null, surahHeader: null, pageFrame: null });
+  const [dressGap, setDressGap] = useState(5);
+  const [dressBandGap, setDressBandGap] = useState(5);
+  const [ayahMarkScale, setAyahMarkScale] = useState(0);
+  const [pageFrameScale, setPageFrameScale] = useState(1);
+  const [lineArt, setLineArt] = useState<OrnamentKind[]>([]);
+  const [dressColors, setDressColors] = useState<[number, number, string][]>([]);
+  const [dressInfo, setDressInfo] = useState<DressInfo | null>(null);
   const pendingAyah = useRef<[number, number] | null>(null);
   const pageViewH = useRef(0);
   const th = THEMES[theme];
 
   useEffect(() => { QvpAtlas.load('asset://pages/atlas.qva').then(setAtlas).catch(e => setNote('no atlas: ' + e.message)); }, []);
+  // The ornament set sits beside the pages when the sync script found one; the demo works without it.
+  useEffect(() => { QvpOrnaments.load('asset://pages/ornaments.qvo').then(setOrnaments).catch(() => setOrnaments(null)); }, []);
   useEffect(() => { const id = setInterval(() => qvp.stats().then(s => s && setStats(s)).catch(() => {}), 1000); return () => clearInterval(id); }, [qvp]);
   const flash = (s: string) => { setNote(s); setTimeout(() => setNote(''), 3000); };
 
@@ -176,6 +195,44 @@ function Demo() {
   }, [hideMarks, gold, pathOn]);
   const markTheme = useMemo<Theme | null>(() => (tajwid ? { diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', sifr: '#ef6c00', ms: 200 } : null), [tajwid]);
   const reveal = useMemo<Reveal | null>(() => (revealOn ? { lit: 2, grey: theme === 'dark' ? '#4a4f57' : '#c9c4b8', ink: th.ink, ms: 150, at: revealPosition } : null), [revealOn, revealPosition, theme, th.ink]);
+  const dress = useMemo<Dress | null>(() => {
+    if (!ornaments || (dressPick.ayahMark === null && dressPick.surahHeader === null && dressPick.pageFrame === null)) return null;
+    return { ornaments, ...dressPick, gap: dressGap, bandGap: dressBandGap, ayahMarkScale, pageFrameScale, lineArt, colors: dressColors };
+  }, [ornaments, dressPick, dressGap, dressBandGap, ayahMarkScale, pageFrameScale, lineArt, dressColors]);
+
+  // ── dress panel ──
+  const fullStyles = useMemo(() => (ornaments ? ornaments.styles().filter(s => s.ayahMark && s.surahHeader && s.pageFrame) : []), [ornaments]);
+  const chosen = DRESS_KINDS.map(([, key]) => (dressPick[key] === null || !ornaments ? null : ornaments.list[dressPick[key]!]));
+  // the mushaf picker shows the style the three kinds agree on, or "mixed"
+  const dressStyle = chosen.every(o => o?.style === chosen[0]?.style) ? chosen[0]?.style ?? '' : 'mixed';
+  const pickStyle = (style: string) => {
+    const s = fullStyles.find(x => x.style === style);
+    setDressPick({ ayahMark: s?.ayahMark?.index ?? null, surahHeader: s?.surahHeader?.index ?? null, pageFrame: s?.pageFrame?.index ?? null });
+    setDressColors([]); setAyahMarkScale(0);
+  };
+  const pickKind = (key: DressKey, index: number | null) => {
+    setDressPick(prev => ({ ...prev, [key]: index }));
+    setDressColors([]);
+    if (key === 'ayahMark') setAyahMarkScale(0);
+  };
+  const undress = () => { setDressPick({ ayahMark: null, surahHeader: null, pageFrame: null }); setDressColors([]); };
+  // the medallion slider shows the design's own size until the reader moves it
+  const markOwn = chosen[0]?.lineage === 'scan' ? DEFAULTS.AYAH_MARK_SCALE_SCAN : 1;
+  // one well per printed part; a kind drawn as line art has one ink, so it gets one well
+  const wells = chosen.flatMap(o => (o ? (lineArt.includes(o.kind) ? o.parts.filter(x => x && x.name === 'line') : o.parts.filter(x => x && (x.color & 255) !== 0)).map(part => ({ o, part })) : []));
+  const stepWell = (o: Ornament, part: number, own: string) => setDressColors(prev => {
+    const at = prev.find(c => c[0] === o.index && c[1] === part);
+    const next = WELL_COLORS[at ? WELL_COLORS.indexOf(at[2]) + 1 : 0];
+    const rest = prev.filter(c => !(c[0] === o.index && c[1] === part));
+    return next && next !== own ? [...rest, [o.index, part, next]] : rest;
+  });
+  const dressReadout = !ornaments ? 'no ornament set (put ornaments.qvo beside the pages)'
+    : !dress ? 'as printed'
+    : !dressInfo ? 'the engine refused that dress'
+    : `${dressInfo.ayahMarks} medallions · ${dressInfo.surahHeaders} band(s) · ` +
+      (dressInfo.pageFrame === null ? 'no border' : dressInfo.frameStretched ? 'the whole frame is stretched (no slices)' : `${dressInfo.frameRepeats} border repeats tiled to this page`) +
+      `\nviewBox ${dressInfo.viewBox.map(v => v.toFixed(1)).join(' ')}` +
+      chosen.filter((o): o is Ornament => !!o).map(o => `\n${o.style} ${o.kind}: ${o.licence.id || 'licence unstated'}, ${o.licence.status}, redistributable: ${o.licence.redistributable}`).join('');
 
   const maskAyah = () => {
     const target = selAyah ? T.ayah(selAyah[0], selAyah[1]) : selWord ? T.ayah(selWord.surah, selWord.ayah) : 'page';
@@ -240,7 +297,8 @@ function Demo() {
         padTop={padTop} padBottom={padBottom} padSide={8}
         lineSpacing={lineSpacing} fillHeight={fillHeight}
         paperColor={th.paper} defaultInk={th.ink}
-        theme={markTheme} styles={styles} highlights={highlights} mask={mask} reveal={reveal}
+        theme={markTheme} styles={styles} highlights={highlights} mask={mask} reveal={reveal} dress={dress}
+        onDressChanged={e => setDressInfo(e.info)}
         onPageLoad={onPageLoad}
         onWordTap={e => selectWord(e.word)}
         onDecorationTap={(e: { decoration: Deco }) => { if (e.decoration.ayah) selectAyah(e.decoration.surah, e.decoration.ayah); }}
@@ -307,6 +365,47 @@ function Demo() {
           {revealOn && <Slider label="position" min={-1} max={Math.max(0, revealStepCount - 1)} value={revealPosition} onChange={setRevealAt} fg={th.fg} fmt={v => `${v + 1}/${revealStepCount}`} />}
         </View>
 
+        <Section title="Dress (another mushaf's ornaments)" fg={th.fg} />
+        {ornaments && (<>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <Text style={[st.small, { color: th.fg, alignSelf: 'center', width: 64 }]}>mushaf</Text>
+            <Btn small label="as printed" on={dressStyle === ''} onPress={() => pickStyle('')} />
+            {fullStyles.map(s => <Btn key={s.style} small label={s.style + (s.riwayah ? ', ' + s.riwayah : '')} on={dressStyle === s.style} onPress={() => pickStyle(s.style)} />)}
+            {dressStyle === 'mixed' && <Btn small label="mixed" on onPress={() => {}} />}
+          </ScrollView>
+          {DRESS_KINDS.map(([kind, key, label]) => (
+            <ScrollView key={kind} horizontal showsHorizontalScrollIndicator={false}>
+              <Text style={[st.small, { color: th.fg, alignSelf: 'center', width: 64 }]}>{label}</Text>
+              <Btn small label={kind === 'page_frame' ? 'none' : 'as printed'} on={dressPick[key] === null} onPress={() => pickKind(key, null)} />
+              {ornaments.ofKind(kind).map(o => <Btn key={o.index} small label={o.style + (o.riwayah ? ', ' + o.riwayah : '')} on={dressPick[key] === o.index} onPress={() => pickKind(key, o.index)} />)}
+            </ScrollView>
+          ))}
+          <View style={st.row}>
+            <Text style={[st.small, { color: th.fg }]}>line art </Text>
+            {DRESS_KINDS.map(([kind, , label]) => <Btn key={kind} small label={label} on={lineArt.includes(kind)} onPress={() => { setLineArt(prev => (prev.includes(kind) ? prev.filter(k => k !== kind) : [...prev, kind])); setDressColors([]); }} />)}
+          </View>
+          <Slider label="breathing space" min={0} max={24} value={dressGap} onChange={setDressGap} fg={th.fg} />
+          <Slider label="band to border" min={0} max={24} value={dressBandGap} onChange={setDressBandGap} fg={th.fg} />
+          <Slider label="medallion size" min={0.5} max={2.5} step={0.05} value={ayahMarkScale || markOwn} onChange={setAyahMarkScale} fg={th.fg} fmt={v => '×' + v.toFixed(2) + (ayahMarkScale ? '' : ' (design)')} />
+          <Slider label="border size" min={0.5} max={2.5} step={0.05} value={pageFrameScale} onChange={setPageFrameScale} fg={th.fg} fmt={v => '×' + v.toFixed(2)} />
+          {wells.length > 0 && (
+            <View style={st.row}>
+              {wells.map(({ o, part }) => {
+                const own = partColor(part.color);
+                const set = dressColors.find(c => c[0] === o.index && c[1] === part.index);
+                return (
+                  <Pressable key={`${o.index}:${part.index}`} onPress={() => stepWell(o, part.index, own)} style={st.well}>
+                    <View style={[st.wellSwatch, { backgroundColor: set ? set[2] : own, borderColor: th.line }]} />
+                    <Text style={[st.small, { color: th.fg }]}>{o.kind.replace('_', ' ')} {part.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+          <View style={st.row}><Btn label="As printed" onPress={undress} /></View>
+        </>)}
+        <Text style={[st.small, { color: th.fg, opacity: 0.8 }]}>{dressReadout}</Text>
+
         <Section title="Layout (engine)" fg={th.fg} />
         <Slider label="line spacing" min={1} max={2.2} step={0.01} value={lineSpacing} onChange={v => { setLineSpacing(v); setFillHeight(false); }} fg={th.fg} fmt={v => '×' + v.toFixed(2)} />
         <Slider label="pad top" min={0} max={120} value={padTop} onChange={setPadTop} fg={th.fg} />
@@ -342,6 +441,8 @@ const st = StyleSheet.create({
   result: { fontSize: 16, textAlign: 'right', paddingVertical: 2 },
   selWord: { fontSize: 26, textAlign: 'right' },
   mono: { fontFamily: 'monospace', fontSize: 10.5 },
+  well: { flexDirection: 'row', alignItems: 'center', gap: 4, margin: 2 },
+  wellSwatch: { width: 22, height: 22, borderRadius: 4, borderWidth: 1 },
   sliderRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 4, flex: 1, minWidth: 200 },
   sliderTrackBox: { flex: 1, height: 28, justifyContent: 'center' },
   sliderTrack: { height: 4, borderRadius: 2, backgroundColor: '#8886' },

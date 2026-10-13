@@ -8,19 +8,23 @@ marker → ayah, long-press-drag selection with copy + citation, highlight mode 
 timer (moveHighlight through the `highlights` prop), mark colours / hide marks / gold markers toggles
 (`theme` / `styles` props), light / sepia / dark, memorisation (mask ayah, reveal next, hide back, unmask,
 greyed page with slider), layout sliders (line spacing, pad top/bottom, fill height, leading-to-fill),
-page metadata and engine stats.
+page metadata and engine stats, and a dress panel: a mushaf preset, a picker for each kind, line
+art per kind, gap, band gap, medallion and border size, a colour well for each part, "As printed",
+and the engine's readout with each ornament's licence.
 
 ## Data
 
 The package ships no page data. The example copies a subset from `dist/pages` (built by
 `cargo run -p qvp-convert --release -- batch pages dist/pages` at the repo root) into
 `android/app/src/main/assets/pages/` (gitignored): pages 001–021, 440–445, 582, 604 (`.qvp` +
-`.words.json`) and `atlas.qva`.
+`.words.json`), `atlas.qva` and `ornaments.qvo` when the release has one.
+`scripts/sync-example-data.sh react-native` copies them. The dress panel works without the ornament set.
 
 ```sh
 mkdir -p android/app/src/main/assets/pages
 for i in $(seq 1 21) 440 441 442 443 444 445 582 604; do n=$(printf %03d $i); cp ../../../dist/pages/$n.qvp ../../../dist/pages/$n.words.json android/app/src/main/assets/pages/; done
 cp ../../../dist/pages/atlas.qva android/app/src/main/assets/pages/
+cp ../../../dist/pages/ornaments.qvo android/app/src/main/assets/pages/   # if present
 ```
 
 ## Build (Android)
@@ -40,5 +44,10 @@ adb shell am start -n ws.quran.qvp_example/.MainActivity
 For live-reload development run `npm start` and build with `debuggableVariants = ["debug"]` again.
 `metro.config.js` adds `../qvp-react-native` to `watchFolders` and resolves `react` / `react-native`
 from this app's `node_modules`.
+
+## Tests
+
+`npm test` runs Jest. `jest/qvpModule.js` stands in for the native module, so the tests check
+what the JavaScript side sends and reads back. `__tests__/dress.test.tsx` covers the dress calls.
 
 iOS is not set up (see the library README).
