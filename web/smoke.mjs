@@ -44,6 +44,14 @@ if (existsSync(setPath) && existsSync(pagePath)) {
   const style = set.list.find(o => o.kind === 'ayah_mark' && set.find('surah_header', o.style) && set.find('page_frame', o.style))?.style;
   if (!style) throw new Error('no style has all three kinds');
   const named = page.dress(set, { ayahMark: style, surahHeader: style, pageFrame: style });
+  // the preset: one mushaf dresses all three kinds, and a kind key overrides it
+  const preset = page.dress(set, { style });
+  if (!preset || preset.ayahMark !== named.ayahMark || preset.surahHeader !== named.surahHeader || preset.pageFrame !== named.pageFrame) throw new Error('the style preset differs from naming the three kinds');
+  const mixed = page.dress(set, { style, ayahMark: marker });
+  if (!mixed || mixed.ayahMark !== marker.index || mixed.surahHeader !== named.surahHeader) throw new Error('a kind key did not override the preset');
+  const full = set.styles().find(s => s.style === style);
+  if (!full || !full.ayahMark || !full.surahHeader || !full.pageFrame) throw new Error('styles() does not list all three kinds of ' + style);
+  page.dress(set, { ayahMark: style, surahHeader: style, pageFrame: style });
   if (!named) throw new Error('dress by style name failed');
   for (const [field, kind] of [['ayahMark', 'ayah_mark'], ['surahHeader', 'surah_header'], ['pageFrame', 'page_frame']]) {
     const want = set.find(kind, style);

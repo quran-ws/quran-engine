@@ -261,9 +261,11 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     free() { this.e.ex.qvp_page_free(this.h); this.h = 0; }
     // ── dress: another mushaf's ornaments ──
     /**
-     * Put other ornaments on the page: up to one per kind. Each of `ayahMark`,
-     * `surahHeader` and `pageFrame` is an ornament of the set, its index, or a style name
-     * (the ornament of that kind in that style); leave one out for none. `colors` is a
+     * Put other ornaments on the page: up to one per kind. `style` names a mushaf and
+     * takes its medallion, band and border together. Each of `ayahMark`, `surahHeader`
+     * and `pageFrame` is an ornament of the set, its index, or a style name (the ornament
+     * of that kind in that style), and overrides the style for that kind; leave one out
+     * for none. `colors` is a
      * list of `[ornament, part, colour]`; every part left out keeps the design's own.
      * `gap` is the air between the text and the border and `bandGap` the air between a band
      * and the border, both in page units. `ayahMarkScale` sizes the medallion against the
@@ -274,7 +276,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * range, an ornament of another kind, or nothing to dress). Replaces any previous
      * dress.
      */
-    dress(set, { ayahMark = null, surahHeader = null, pageFrame = null, gap = 5, bandGap = 5, ayahMarkScale = 1, pageFrameScale = 1, lineArt = false, colors = [] } = {}) {
+    dress(set, { style = null, ayahMark = style, surahHeader = style, pageFrame = style, gap = 5, bandGap = 5, ayahMarkScale = 1, pageFrameScale = 1, lineArt = false, colors = [] } = {}) {
       const index = (v, kind) => {
         if (v === null || v === undefined) return NONE;
         if (typeof v === 'number') return v;
@@ -931,6 +933,18 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     find(kind, style) { const i = this.e.ex.qvp_ornament_find(this.h, ORNAMENT_KIND.indexOf(kind), ...this.e.putStr(style)); return i < 0 ? null : this.list[i]; }
     /** the ornaments of one kind */
     ofKind(kind) { return this.list.filter(o => o && o.kind === kind); }
+    /** every style in the set, with the ornament it has of each kind or null:
+     * [{style, riwayah, lineage, ayahMark, surahHeader, pageFrame}], in the set's order */
+    styles() {
+      const out = [];
+      for (const o of this.list) {
+        if (!o) continue;
+        let s = out.find(x => x.style === o.style);
+        if (!s) { s = { style: o.style, riwayah: o.riwayah, lineage: o.lineage, ayahMark: null, surahHeader: null, pageFrame: null }; out.push(s); }
+        s[{ ayah_mark: 'ayahMark', surah_header: 'surahHeader', page_frame: 'pageFrame' }[o.kind]] = o;
+      }
+      return out;
+    }
   }
 
   /**

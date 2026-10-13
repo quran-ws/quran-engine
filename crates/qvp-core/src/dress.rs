@@ -191,6 +191,9 @@ struct Palette {
     ink: Rgba,
 }
 
+/// How much of a band's slot height a surah title may fill under reflow; the rest is air.
+const BAND_FILL: f32 = 0.9;
+
 /// The stroke width of line art drawn from a design's fills, in asset units: the width
 /// the catalogue's own linework has on a design 100 units tall.
 const LINE_ART_WIDTH: f32 = 1.25;
@@ -373,6 +376,30 @@ impl Page {
     fn placement_at(&self, index: u32) -> Placement {
         let p = self.layout.as_ref().and_then(|l| l.groups.get(index as usize)).copied().unwrap_or(Placement::IDENTITY);
         Placement { kx: if p.kx != 0.0 { p.kx } else { 1.0 }, ky: if p.ky != 0.0 { p.ky } else { 1.0 }, ..p }
+    }
+
+    /// How far a surah title may grow under reflow before it outgrows the band it is
+    /// dressed in: the most a title's `header_scale` may be, in page units, so that the
+    /// tallest title still sits inside the band's slot with some air. Infinite when the
+    /// page is not dressed in a band. `laid_w` is the laid-out page width the band spans.
+    pub(crate) fn band_banner_cap(&self, laid_w: f32) -> f32 {
+        let Some(d) = &self.dress else { return f32::INFINITY };
+        let Some(set) = &d.set else { return f32::INFINITY };
+        let spec = &d.spec;
+        let Some(o) = set.ornaments.get(spec.surah_header as usize).filter(|_| spec.surah_header != NONE) else {
+            return f32::INFINITY;
+        };
+        let Some(slot) = o.asset.slot else { return f32::INFINITY };
+        let framed =
+            spec.page_frame != NONE && set.ornaments.get(spec.page_frame as usize).and_then(|f| f.asset.slot).is_some();
+        let column = if framed { laid_w + 2.0 * spec.gap } else { laid_w };
+        let bw = (column - 2.0 * spec.band_gap).max(f32::EPSILON);
+        let slot_h = slot[3] * bw / o.asset.width().max(f32::EPSILON);
+        let title_h = self.surah_headers().iter().map(|h| h.title_y1 - h.title_y0).fold(0.0, f32::max);
+        if title_h <= 0.0 {
+            return f32::INFINITY;
+        }
+        BAND_FILL * slot_h / title_h
     }
 
     /// The laid-out page box in page units: `(left, top, width, height)`. Without a
@@ -1075,6 +1102,32 @@ mod tests {
 
     fn frame_only() -> DressSpec {
         DressSpec { ayah_mark: NONE, surah_header: NONE, ..all() }
+    }
+
+    #[test]
+    fn under_reflow_the_title_stays_inside_the_band() {
+        let (mut p, _, _) = page();
+        p.dress(&set(), &DressSpec { ayah_mark: NONE, page_frame: NONE, ..all() }).unwrap();
+        let spec = LayoutSpec {
+            viewport_w: 200.0,
+            viewport_h: 400.0,
+            reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+            ..Default::default()
+        };
+        let l = p.layout(&spec).clone();
+        let d = p.dress_of().unwrap().clone();
+        let band = d.table.iter().find(|t| t.flags & 0xff == OrnamentKind::SurahHeader as u32).unwrap();
+        let pl = l.groups[band.placement as usize];
+        // the band's slot is 80 of 100 asset units tall, the band is as wide as the laid page
+        let slot_h = 80.0 * l.laid_width / 800.0;
+        let title_h = 4.0 * pl.ky;
+        assert!(title_h <= 0.9 * slot_h + 1e-3, "title {title_h} in a slot of {slot_h}");
+        assert!(pl.ky > 0.0);
+        // the cap binds: without a band the same layout grows the title more
+        p.undress();
+        let free = p.layout(&spec).clone();
+        let title = p.data().decorations[0].first_path;
+        assert!(free.groups[free.path_group[title as usize] as usize].ky > pl.ky);
     }
 
     #[test]

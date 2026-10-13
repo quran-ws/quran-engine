@@ -538,16 +538,35 @@
       }
     }
   }
+  const KIND_PICKERS = [['dressMark', 'ayah_mark', 'ayahMark'], ['dressHeader', 'surah_header', 'surahHeader'], ['dressFrame', 'page_frame', 'pageFrame']];
+  // the mushaf picker shows the style the three kinds agree on, or "mixed"
+  function showDressStyle() {
+    const sel = $('dressStyle');
+    const chosen = KIND_PICKERS.map(([, , key]) => S.dress[key] === null ? null : ornaments.list[S.dress[key]].style);
+    const same = chosen.every(s => s === chosen[0]);
+    if (same) { sel.value = chosen[0] || ''; sel.querySelector('[value="mixed"]')?.remove(); }
+    else { if (!sel.querySelector('[value="mixed"]')) sel.insertAdjacentHTML('beforeend', '<option value="mixed">mixed</option>'); sel.value = 'mixed'; }
+  }
   function fillDressPickers() {
-    for (const [id, kind, key] of [['dressMark', 'ayah_mark', 'ayahMark'], ['dressHeader', 'surah_header', 'surahHeader'], ['dressFrame', 'page_frame', 'pageFrame']]) {
-      const sel = $(id);
-      if (!ornaments) { sel.disabled = true; continue; }
-      for (const o of ornaments.ofKind(kind)) sel.insertAdjacentHTML('beforeend', `<option value="${o.index}">${o.style}${o.riwayah ? ', ' + o.riwayah : ''}</option>`);
-      sel.onchange = e => { S.dress[key] = e.target.value === '' ? null : +e.target.value; S.dress.colors = []; dressSwatches(); applyDress(); };
+    if (!ornaments) { for (const id of ['dressStyle', 'dressMark', 'dressHeader', 'dressFrame']) $(id).disabled = true; return; }
+    // presets: every mushaf that has all three kinds
+    const sel = $('dressStyle');
+    for (const s of ornaments.styles().filter(s => s.ayahMark && s.surahHeader && s.pageFrame)) sel.insertAdjacentHTML('beforeend', `<option value="${s.style}">${s.style}${s.riwayah ? ', ' + s.riwayah : ''}</option>`);
+    sel.onchange = e => {
+      const style = e.target.value;
+      if (style === 'mixed') return;
+      const s = style ? ornaments.styles().find(x => x.style === style) : null;
+      for (const [id, , key] of KIND_PICKERS) { const o = s ? s[key] : null; S.dress[key] = o ? o.index : null; $(id).value = o ? String(o.index) : ''; }
+      S.dress.colors = []; showDressStyle(); dressSwatches(); applyDress();
+    };
+    for (const [id, kind, key] of KIND_PICKERS) {
+      const kindSel = $(id);
+      for (const o of ornaments.ofKind(kind)) kindSel.insertAdjacentHTML('beforeend', `<option value="${o.index}">${o.style}${o.riwayah ? ', ' + o.riwayah : ''}</option>`);
+      kindSel.onchange = e => { S.dress[key] = e.target.value === '' ? null : +e.target.value; S.dress.colors = []; showDressStyle(); dressSwatches(); applyDress(); };
     }
   }
   fillDressPickers();
-  $('undress').onclick = () => { S.dress = { ...S.dress, ayahMark: null, surahHeader: null, pageFrame: null, colors: [] }; for (const id of ['dressMark', 'dressHeader', 'dressFrame']) $(id).value = ''; dressSwatches(); applyDress(); };
+  $('undress').onclick = () => { S.dress = { ...S.dress, ayahMark: null, surahHeader: null, pageFrame: null, colors: [] }; for (const id of ['dressStyle', 'dressMark', 'dressHeader', 'dressFrame']) $(id).value = ''; if (ornaments) showDressStyle(); dressSwatches(); applyDress(); };
   $('dressGap').oninput = e => { S.dress.gap = +e.target.value; $('dressGapVal').textContent = e.target.value; applyDress(); };
   $('dressBandGap').oninput = e => { S.dress.bandGap = +e.target.value; $('dressBandGapVal').textContent = e.target.value; applyDress(); };
   $('dressMarkScale').oninput = e => { S.dress.ayahMarkScale = +e.target.value; $('dressMarkScaleVal').textContent = '×' + (+e.target.value).toFixed(2); applyDress(); };

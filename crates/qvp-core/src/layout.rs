@@ -440,11 +440,14 @@ impl Page {
                 // carries the reader's zoom — so a banner left at scale 1 grows with it. Its
                 // size against the print is `header_scale · zoom`, and this holds that to what
                 // the host asked for.
+                // A dressed band holds its title too: a name that outgrows the band it is
+                // dressed in is a band that no longer fits.
                 banner_k: if spec.banner_zoom > 0.0 {
                     spec.banner_zoom / r.zoom.max(f32::EPSILON)
                 } else {
                     f32::INFINITY
-                },
+                }
+                .min(self.band_banner_cap((content_w - spec.pad_left - spec.pad_right) / scale)),
                 surah_frames: spec.surah_frames,
             },
         );

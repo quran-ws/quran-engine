@@ -616,16 +616,19 @@ ink.
 
 ```js
 const set = engine.loadOrnaments(await fetchBytes('ornaments.qvo'));
+const info = page.dress(set, { style: 'mushaf-qalon' });            // its medallion, band and border
 const marker = set.find('ayah_mark', 'font-003-regular');
-const info = page.dress(set, { ayahMark: marker, surahHeader: 'mushaf-qalon', pageFrame: 'mushaf-qalon', gap: 5 });
+const mixed = page.dress(set, { style: 'mushaf-qalon', ayahMark: marker, gap: 5 });   // a kind key overrides the style
 // → {ayahMark, surahHeader, pageFrame, ayahMarks, surahHeaders, frameRepeats, frameStretched, draws, revision, viewBox, overflow}
 for (const o of page.dressGeometry()) { /* {path, color, kind, evenOdd, stroke, strokeWidth, part, placement} */ }
 page.undress();
 ```
 
 `set.list` is every ornament the set holds: `{index, kind, lineage, style, riwayah,
-hasSlices, licence, parts}`. A dress names up to one ornament per kind, as an ornament, its
-index or a style name. `parts` is the design's printed palette, and `colors:
+hasSlices, licence, parts}`, and `set.styles()` groups it by mushaf with the ornament of each
+kind. A dress names a `style`, which takes that mushaf's medallion, band and border together,
+or up to one ornament per kind, as an ornament, its index or a style name; a kind key
+overrides the style for that kind. `parts` is the design's printed palette, and `colors:
 [[ornament, part, colour]]` repaints any of them. The design's slot is the transparent
 window it leaves for the number, the name or the text area. The paper of a scanned design,
 its pure white `c1`, is left open too, so the host's page shows through; repaint `c1` to put a
@@ -637,7 +640,8 @@ their size along the edge. A frame that tiles honours it exactly; a frame withou
 its printed proportions. `lineArt` draws kinds as line
 art, their constant-width strokes alone, so
 there is one ink: `true` for every kind, or a list such as `['surah_header']` for the bands
-alone. A scanned design's line art is the catalogue's own `line.svg`, stroke for stroke; a
+alone. Under reflow a band holds its title: the engine caps the title's growth so the tallest
+title on the page stays inside the band's slot, the way `bannerZoom` does. A scanned design's line art is the catalogue's own `line.svg`, stroke for stroke; a
 font marker has no linework, so its fills are drawn as outlines in its darkest ink instead.
 
 **Every ornament is placed from a measurement**, never a fixed offset: the medallion from

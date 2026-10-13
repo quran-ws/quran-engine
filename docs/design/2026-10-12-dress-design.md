@@ -112,6 +112,8 @@ The text column is the page width, plus `2·gap` when a border is drawn. It is n
 page's ink: pages 1 and 2 hold one short surah centred in the column, and a band measured
 from their lines comes out a third of the width it has elsewhere.
 
+Under reflow a dressed band holds its title: `layout_reflow` caps the banner's growth at
+`0.9 · slot height / title height`, so the tallest title stays inside the slot.
 Under reflow the band's width is the text column in printed units, the laid-out width
 before any placement. The title's placement then scales the band with the title, as it
 scales the title's own ink.
