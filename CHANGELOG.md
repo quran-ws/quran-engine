@@ -11,9 +11,16 @@ All notable changes to the engine and its packages. The format follows
   (`docs/FORMAT.md`), built by `qvp-convert ornaments` from `quran-ws/quran-assets`, holds
   ayah medallions, surah bands and page frames. The engine places each one from the page's
   own measurements and hands the host a display list to paint behind the ink; each draw
-  carries a layout placement, so a dressed page reflows. Ten C symbols, bound in the web
-  wrapper; the native wrappers carry declared gaps. The data release ships the
-  redistributable subset as `ornaments.qvo`.
+  carries a layout placement, so a dressed page reflows. Eleven C symbols. Every wrapper
+  binds them and paints the ornament layer behind the ink: web, Android, Flutter, iOS and
+  React Native. A dress names a `style`, which takes that mushaf's medallion, band and border
+  together, and a kind key overrides it. Line art is chosen per kind. `bandGap` sets the air
+  between a band and the border, `ayahMarkScale` sizes the medallion against the printed ring,
+  and `pageFrameScale` sizes the border, which scales its pattern as a whole. Under reflow a
+  band holds its title inside its slot. The layout's fit includes the dress, so the border is
+  in view with no host arithmetic, and `qvp_dress_clamp` keeps a pan inside the dressed box.
+  A band or a border with no slot is refused. The data release ships the redistributable
+  subset as `ornaments.qvo`.
 - Passages reach every wrapper: `qvp.js` (`engine.loadPassage`,
   `engine.loadBasmalah`, `QvpPassage`, `CanvasRenderer.drawPassage`), the Android SDK
   (`QvpPassage`) and the Flutter plugin (`QvpPassage`, `paintPassage`). Each replays
