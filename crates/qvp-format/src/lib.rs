@@ -506,8 +506,8 @@ pub fn decode_cmds(ops: &[u8], ox: i32, oy: i32) -> Result<Vec<Cmd>, Error> {
     let pt = |pos: &mut usize, cx: &mut i32, cy: &mut i32| -> Result<(i32, i32), Error> {
         let dx = unzigzag(read_varint(ops, pos)?);
         let dy = unzigzag(read_varint(ops, pos)?);
-        *cx += dx;
-        *cy += dy;
+        *cx = cx.checked_add(dx).ok_or(Error::Corrupt("coordinate overflow"))?;
+        *cy = cy.checked_add(dy).ok_or(Error::Corrupt("coordinate overflow"))?;
         Ok((*cx, *cy))
     };
     while pos < ops.len() {
@@ -839,6 +839,18 @@ mod tests {
         let bb = encode_cmds(&cmds, 1000, -2000, &mut ops);
         assert_eq!(decode_cmds(&ops, 1000, -2000).unwrap(), cmds);
         assert_eq!(bb, IBox { x0: 0, y0: -2010, x1: 1030, y1: 6 });
+    }
+
+    #[test]
+    fn a_delta_that_overflows_is_corrupt_not_a_panic() {
+        let mut ops = vec![OP_MOVE];
+        write_varint(&mut ops, zigzag(1));
+        write_varint(&mut ops, zigzag(0));
+        assert_eq!(decode_cmds(&ops, i32::MAX, 0), Err(Error::Corrupt("coordinate overflow")));
+        let mut ops = vec![OP_LINE];
+        write_varint(&mut ops, zigzag(0));
+        write_varint(&mut ops, zigzag(i32::MIN));
+        assert_eq!(decode_cmds(&ops, 0, -1), Err(Error::Corrupt("coordinate overflow")));
     }
 
     #[test]

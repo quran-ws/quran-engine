@@ -187,7 +187,7 @@ pub struct Ornament {
 
 impl Ornament {
     pub fn part_index(&self, name: &str) -> Option<u16> {
-        self.parts.iter().position(|p| p.name == name).map(|i| i as u16)
+        self.parts.iter().position(|p| p.name == name).and_then(|i| u16::try_from(i).ok())
     }
 }
 
@@ -567,5 +567,20 @@ mod tests {
         // after the magic, the quant and the one-byte ornament count
         bytes[7] = 200;
         assert!(matches!(OrnamentSet::decode(&bytes), Err(Error::Corrupt("ornament kind"))));
+    }
+
+    #[test]
+    fn a_bad_lineage_is_corrupt() {
+        let mut bytes = sample().encode();
+        // after the magic, the quant, the one-byte ornament count and the kind
+        bytes[8] = 200;
+        assert!(matches!(OrnamentSet::decode(&bytes), Err(Error::Corrupt("ornament lineage"))));
+    }
+
+    #[test]
+    fn part_index_finds_a_part_by_name() {
+        let o = &sample().ornaments[0];
+        assert_eq!(o.part_index(&o.parts[0].name), Some(0));
+        assert_eq!(o.part_index("no such part"), None);
     }
 }

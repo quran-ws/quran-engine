@@ -338,8 +338,12 @@ impl<'a> Builder<'a> {
             },
         );
         // a whole number of repeats, each nudged to fit exactly: a part-drawn motif at the
-        // end of a run is the thing the eye catches
+        // end of a run is the thing the eye catches. When the two corners fill the edge or
+        // overlap it (a very big border), the edge has no run.
         let run = |total: f32, u: f32| -> (u32, f32) {
+            if total.is_nan() || total <= 0.0 {
+                return (0, 0.0);
+            }
             let n = ((total / u.max(f32::EPSILON)).round() as i32).max(1) as u32;
             (n, total / n as f32)
         };
@@ -464,7 +468,7 @@ impl Page {
     fn take_dress(&mut self) -> bool {
         let Some(d) = self.dress.take() else { return false };
         for h in d.hidden {
-            self.styles.remove(h);
+            self.styles.remove_engine(h);
         }
         self.state_dirty = true;
         true
@@ -969,6 +973,22 @@ mod tests {
     }
 
     #[test]
+    fn a_host_cannot_remove_or_recolour_the_hiding_by_handle() {
+        let (mut p, ring, _) = page();
+        p.dress(&set(), &all()).unwrap();
+        let hidden = p.dress.as_ref().unwrap().hidden.clone();
+        assert!(!hidden.is_empty());
+        for &h in &hidden {
+            assert_eq!(p.remove_style(h), 0);
+            assert_eq!(p.recolor_style(h, Paint::new(0xff0000ff)), 0);
+        }
+        assert_eq!(p.color_of(ring) & 0xff, 0, "the ring stays hidden");
+        p.undress();
+        assert_ne!(p.color_of(ring) & 0xff, 0, "undress still removes the hiding");
+        assert!(p.styles.is_empty());
+    }
+
+    #[test]
     fn the_border_follows_the_laid_out_page() {
         let (mut p, _, _) = page();
         let before = p.dress(&set(), &all()).unwrap().clone();
@@ -1204,6 +1224,44 @@ mod tests {
         let over = p.dress_overflow();
         let limit = (gap + 20.0) * l.scale;
         assert!(over.0 < limit && over.2 < limit, "{over:?} limit {limit}");
+    }
+
+    #[test]
+    fn a_band_spans_the_column_when_the_title_shrinks() {
+        // banner_zoom 1 at zoom 2 holds the title at half its laid-out size: kx < 1
+        let spec = LayoutSpec {
+            viewport_w: 200.0,
+            viewport_h: 400.0,
+            reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+            banner_zoom: 1.0,
+            ..Default::default()
+        };
+        let (gap, band_gap) = (5.0, 5.0);
+        for (dress, framed) in [(all(), true), (DressSpec { page_frame: NONE, ..all() }, false)] {
+            let (mut p, _, _) = page();
+            p.dress(&set(), &dress).unwrap();
+            let l = p.layout(&spec).clone();
+            let d = p.dress_of().unwrap().clone();
+            let band = d.table.iter().position(|t| t.flags & 0xff == OrnamentKind::SurahHeader as u32).unwrap();
+            let pl = l.groups[d.table[band].placement as usize];
+            assert!(pl.kx < 1.0, "the title is shrunk: kx {}", pl.kx);
+            let (x0, y0, x1, y1) = draw_box(&d, band);
+            let (lx0, lx1) = (pl.kx * x0 + pl.dx, pl.kx * x1 + pl.dx);
+            let want = if framed { l.laid_width + 2.0 * gap - 2.0 * band_gap } else { l.laid_width - 2.0 * band_gap };
+            assert!(near(lx1 - lx0, want), "framed {framed}: {} vs {}", lx1 - lx0, want);
+            let centre = l.laid_left + l.laid_width / 2.0;
+            assert!(near((lx0 + lx1) / 2.0, centre), "framed {framed}: {} vs {}", (lx0 + lx1) / 2.0, centre);
+            // the slot's vertical centre (50 of the asset's 100) lands on the title's
+            let h = p.surah_headers()[0];
+            let slot_cy = y0 + (y1 - y0) * 0.5;
+            let title_cy = (h.title_y0 + h.title_y1) / 2.0;
+            assert!(
+                near(pl.ky * slot_cy + pl.dy, pl.ky * title_cy + pl.dy),
+                "framed {framed}: {} vs {}",
+                pl.ky * slot_cy + pl.dy,
+                pl.ky * title_cy + pl.dy
+            );
+        }
     }
 
     /// The dressed box, `x0, y0, x1, y1` in layout px: the border's viewBox through the layout.
@@ -1508,6 +1566,15 @@ mod tests {
             (tw / ow - 2.0).abs() < 0.2,
             "a motif twice as wide, within the nudge that fits a whole number: {ow} {tw}"
         );
+    }
+
+    #[test]
+    fn a_border_whose_corners_fill_the_edge_has_no_runs() {
+        let (mut p, _, _) = page();
+        let d = p.dress(&tiled_set(false), &DressSpec { page_frame_scale: 100.0, ..frame_only() }).unwrap().clone();
+        assert_eq!(d.n_frame_repeats, 0);
+        assert_eq!(d.table.len(), 4, "the four corners only");
+        assert!(d.pts.iter().all(|v| v.is_finite()));
     }
 
     #[test]

@@ -475,6 +475,42 @@ fn ornament_bytes() -> Vec<u8> {
 }
 
 #[test]
+fn ornament_and_dress_calls_take_null_handles() {
+    let orn = ornament_bytes();
+    unsafe {
+        let set = qvp_ornaments_load(orn.as_ptr(), orn.len());
+        assert!(!set.is_null());
+        let none = std::ptr::null::<Ornaments>();
+        assert_eq!(qvp_ornament_count(none), 0);
+        assert_eq!(qvp_ornament_find(none, 0, b"test".as_ptr(), 4), -1);
+        assert_eq!(qvp_ornament_find(set, 99, b"test".as_ptr(), 4), -1);
+        assert_eq!(qvp_ornament_find(set, 256, b"test".as_ptr(), 4), -1);
+        let mut o = std::mem::zeroed::<QvpOrnament>();
+        assert_eq!(qvp_ornament_info(none, 0, &mut o), 0);
+        assert_eq!(qvp_ornament_info(set, 0, std::ptr::null_mut()), 0);
+        let mut part = std::mem::zeroed::<QvpOrnamentPart>();
+        assert_eq!(qvp_ornament_part(none, 0, 0, &mut part), 0);
+        assert_eq!(qvp_ornament_part(set, 0, 0, std::ptr::null_mut()), 0);
+
+        let page = std::ptr::null_mut();
+        let mut di = std::mem::zeroed::<QvpDressInfo>();
+        assert_eq!(qvp_dress_info(page, &mut di), 0);
+        qvp_undress(page);
+        let view = QvpView { scale: 1.0, offset_x: 0.0, offset_y: 0.0 };
+        let mut out = QvpView { scale: 7.0, offset_x: 7.0, offset_y: 7.0 };
+        qvp_dress_clamp(page, &view, 100.0, 100.0, &mut out);
+        qvp_dress_view(page, 1.0, 100.0, &mut out, std::ptr::null_mut());
+        assert_eq!(out.scale, 7.0, "a null page writes nothing");
+        let mut g = std::mem::zeroed::<QvpDressGeometry>();
+        g.n_draws = 7;
+        qvp_dress_geometry(page, &mut g);
+        assert_eq!((g.n_draws, g.ops.is_null()), (0, true), "a null page is not dressed");
+        qvp_dress_geometry(page, std::ptr::null_mut());
+        qvp_ornaments_free(set);
+    }
+}
+
+#[test]
 fn dress_over_the_abi() {
     let Some(bytes) = page_bytes("604.qvp") else {
         if std::env::var("QVP_REQUIRE_DATA").is_ok() {
@@ -492,6 +528,8 @@ fn dress_over_the_abi() {
         assert_eq!(qvp_ornament_count(set), 3);
         assert_eq!(qvp_ornament_find(set, 2, b"test".as_ptr(), 4), 2);
         assert_eq!(qvp_ornament_find(set, 0, b"nope".as_ptr(), 4), -1);
+        assert_eq!(qvp_ornament_find(set, 99, b"test".as_ptr(), 4), -1, "no such kind");
+        assert_eq!(qvp_ornament_find(set, 256, b"test".as_ptr(), 4), -1, "a kind past u8 does not wrap to 0");
 
         let mut o = std::mem::zeroed::<QvpOrnament>();
         assert_eq!(qvp_ornament_info(set, 0, &mut o), 1);

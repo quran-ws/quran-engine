@@ -2800,11 +2800,19 @@ pub unsafe extern "C" fn qvp_ornaments_free(s: *mut Ornaments) {
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ornament_count(s: *const Ornaments) -> u32 {
-    guard(|| oset(s).ornaments.len() as u32)
+    guard(|| {
+        if s.is_null() {
+            return 0;
+        }
+        oset(s).ornaments.len() as u32
+    })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ornament_find(s: *const Ornaments, kind: u32, style: *const u8, len: u32) -> i32 {
     guard(|| {
+        if s.is_null() {
+            return -1;
+        }
         let Some(kind) = u8::try_from(kind).ok().and_then(OrnamentKind::from_u8) else { return -1 };
         oset(s).find(kind, in_str(style, len)).map(|i| i as i32).unwrap_or(-1)
     })
@@ -2812,6 +2820,9 @@ pub unsafe extern "C" fn qvp_ornament_find(s: *const Ornaments, kind: u32, style
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ornament_info(s: *const Ornaments, i: u32, out: *mut QvpOrnament) -> i32 {
     guard(|| {
+        if s.is_null() || out.is_null() {
+            return 0;
+        }
         let Some(o) = oset(s).ornaments.get(i as usize) else { return 0 };
         let q = |t: &str| QvpStr { ptr: t.as_ptr(), len: t.len() as u32 };
         *out = QvpOrnament {
@@ -2833,6 +2844,9 @@ pub unsafe extern "C" fn qvp_ornament_info(s: *const Ornaments, i: u32, out: *mu
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ornament_part(s: *const Ornaments, i: u32, part: u32, out: *mut QvpOrnamentPart) -> i32 {
     guard(|| {
+        if s.is_null() || out.is_null() {
+            return 0;
+        }
         let Some(p) = oset(s).ornaments.get(i as usize).and_then(|o| o.parts.get(part as usize)) else { return 0 };
         *out = QvpOrnamentPart {
             color: p.color,
@@ -2849,11 +2863,17 @@ pub unsafe extern "C" fn qvp_dress(page: *mut Page, set: *const Ornaments, spec:
             return 0;
         }
         let s = &*spec;
+        // A triple whose part does not fit in a u16 names no part, so it is skipped.
         let colors = if s.colors.is_null() {
             vec![]
         } else {
-            let t = std::slice::from_raw_parts(s.colors, s.n_colors as usize * 3);
-            (0..s.n_colors as usize).map(|k| (t[k * 3], t[k * 3 + 1] as u16, t[k * 3 + 2])).collect()
+            let Some(n) = (s.n_colors as usize).checked_mul(3) else { return 0 };
+            std::slice::from_raw_parts(s.colors, n)
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .filter_map(|&[o, part, rgba]| Some((o, u16::try_from(part).ok()?, rgba)))
+                .collect()
         };
         let spec = DressSpec {
             ayah_mark: s.ayah_mark,
@@ -2871,11 +2891,18 @@ pub unsafe extern "C" fn qvp_dress(page: *mut Page, set: *const Ornaments, spec:
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_undress(page: *mut Page) {
-    guard(|| (*page).undress())
+    guard(|| {
+        if !page.is_null() {
+            (*page).undress()
+        }
+    })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_dress_info(page: *const Page, out: *mut QvpDressInfo) -> i32 {
     guard(|| {
+        if page.is_null() || out.is_null() {
+            return 0;
+        }
         let Some(d) = (*page).dress_of() else { return 0 };
         let (l, t, r, b) = (*page).dress_overflow();
         *out = QvpDressInfo {
@@ -2905,7 +2932,12 @@ pub unsafe extern "C" fn qvp_dress_clamp(
     viewport_h: f32,
     out: *mut QvpView,
 ) {
-    guard(|| *out = (*page).dress_clamp((*view).into(), viewport_w, viewport_h).into())
+    guard(|| {
+        if page.is_null() || view.is_null() || out.is_null() {
+            return;
+        }
+        *out = (*page).dress_clamp((*view).into(), viewport_w, viewport_h).into()
+    })
 }
 /// The view for a host that scrolls the page itself: the dressed box at `scale`, centred
 /// across `viewport_w` (or at x = 0 when wider) with its top at y = 0. `out_size` gets the
@@ -2920,34 +2952,41 @@ pub unsafe extern "C" fn qvp_dress_view(
     out_size: *mut f32,
 ) {
     guard(|| {
+        if page.is_null() || out.is_null() {
+            return;
+        }
         let (v, w, h) = (*page).dress_view(scale, viewport_w);
         *out = v.into();
-        *out_size = w;
-        *out_size.add(1) = h;
+        if !out_size.is_null() {
+            *out_size = w;
+            *out_size.add(1) = h;
+        }
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_dress_geometry(page: *const Page, out: *mut QvpDressGeometry) {
-    guard(|| match (*page).dress_of() {
-        Some(d) => {
-            *out = QvpDressGeometry {
+    guard(|| {
+        if out.is_null() {
+            return;
+        }
+        // A null page is not dressed: it gets the empty geometry.
+        *out = match if page.is_null() { None } else { (*page).dress_of() } {
+            Some(d) => QvpDressGeometry {
                 ops: d.ops.as_ptr(),
                 ops_len: d.ops.len() as u32,
                 pts: d.pts.as_ptr(),
                 pts_len: d.pts.len() as u32,
                 table: d.table.as_ptr() as *const u32,
                 n_draws: d.table.len() as u32,
-            }
-        }
-        None => {
-            *out = QvpDressGeometry {
+            },
+            None => QvpDressGeometry {
                 ops: std::ptr::null(),
                 ops_len: 0,
                 pts: std::ptr::null(),
                 pts_len: 0,
                 table: std::ptr::null(),
                 n_draws: 0,
-            }
+            },
         }
     })
 }

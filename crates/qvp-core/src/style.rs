@@ -148,9 +148,18 @@ impl StyleEngine {
         self.alloc()
     }
     /// Remove everything added under a handle. Returns the number of rules removed.
+    /// Rules on the engine's own layer, `i32::MAX`, stay: a handle that names them
+    /// removes nothing and returns 0.
     pub fn remove(&mut self, handle: Handle) -> usize {
+        self.remove_where(|r| r.handle == handle && r.layer != LAYER_ENGINE)
+    }
+    /// Remove the engine's own rules under a handle. Returns the number removed.
+    pub(crate) fn remove_engine(&mut self, handle: Handle) -> usize {
+        self.remove_where(|r| r.handle == handle && r.layer == LAYER_ENGINE)
+    }
+    fn remove_where(&mut self, f: impl Fn(&Rule) -> bool) -> usize {
         let n = self.rules.len();
-        self.rules.retain(|r| r.handle != handle);
+        self.rules.retain(|r| !f(r));
         let removed = n - self.rules.len();
         if removed > 0 {
             self.dirty = true;
@@ -158,9 +167,11 @@ impl StyleEngine {
         removed
     }
     /// Change the paint of an existing handle in place (keeps selectors and layer).
+    /// Rules on the engine's own layer, `i32::MAX`, keep their paint: a handle that
+    /// names them changes nothing and returns 0.
     pub fn repaint(&mut self, handle: Handle, paint: Paint) -> usize {
         let mut n = 0;
-        for r in self.rules.iter_mut().filter(|r| r.handle == handle) {
+        for r in self.rules.iter_mut().filter(|r| r.handle == handle && r.layer != LAYER_ENGINE) {
             r.paint = paint;
             n += 1;
         }
@@ -527,6 +538,18 @@ mod tests {
         s.clear_layer(LAYER_ENGINE);
         assert_eq!(s.len(), 2, "clearing the engine layer does nothing");
         assert_ne!(host, engine);
+    }
+
+    #[test]
+    fn a_host_cannot_remove_or_repaint_an_engine_rule() {
+        let mut s = StyleEngine::new();
+        let engine = s.add_engine(Selector::Kind(PathKind::AyahMarkOrnament), Paint::HIDDEN);
+        assert_eq!(s.remove(engine), 0);
+        assert_eq!(s.repaint(engine, Paint::new(0xff0000ff)), 0);
+        assert_eq!(s.rules.len(), 1);
+        assert_eq!(s.rules[0].paint, Paint::HIDDEN);
+        assert_eq!(s.remove_engine(engine), 1);
+        assert!(s.is_empty());
     }
 
     #[test]

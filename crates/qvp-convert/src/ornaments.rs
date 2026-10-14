@@ -19,7 +19,7 @@
 use crate::affine::Affine;
 use crate::json::Json;
 use qvp_format::ornaments::*;
-use qvp_format::{Cmd, IBox};
+use qvp_format::Cmd;
 use roxmltree::Node;
 use std::collections::HashMap;
 use std::path::Path;
@@ -97,6 +97,8 @@ pub fn build(dir: &Path, opts: &BuildOptions) -> Result<(OrnamentSet, Report), S
         // A tiled frame is assembled from its slices, so the whole drawing is dead
         // weight. Its viewBox and slot are still the measurement the border is placed
         // from, so the record stays and only the outlines go.
+        // A failed asset drops the whole record, so the outlines its slices added go too.
+        let mark = Mark::of(&set, &parts);
         let slices = if kind == OrnamentKind::PageFrame {
             read_slices(dir, rec, style, &mut set, &mut parts, &mut report)
         } else {
@@ -105,6 +107,7 @@ pub fn build(dir: &Path, opts: &BuildOptions) -> Result<(OrnamentSet, Report), S
         let asset = match read_asset(dir, rel, &mut set, &mut parts, slices.is_none(), slot, &mut report.warnings) {
             Ok(a) => a,
             Err(e) => {
+                mark.restore(&mut set, &mut parts);
                 report.warnings.push(format!("{style}/{}: {e}", kind.as_str()));
                 continue;
             }
@@ -132,6 +135,25 @@ pub fn build(dir: &Path, opts: &BuildOptions) -> Result<(OrnamentSet, Report), S
     Ok((set, report))
 }
 
+/// The lengths of the outline pool and the palette before a read. A read that fails
+/// cuts them back, so the set keeps no outline that no asset owns.
+struct Mark {
+    paths: usize,
+    ops: usize,
+    parts: usize,
+}
+
+impl Mark {
+    fn of(set: &OrnamentSet, parts: &[Part]) -> Mark {
+        Mark { paths: set.paths.len(), ops: set.ops.len(), parts: parts.len() }
+    }
+    fn restore(&self, set: &mut OrnamentSet, parts: &mut Vec<Part>) {
+        set.paths.truncate(self.paths);
+        set.ops.truncate(self.ops);
+        parts.truncate(self.parts);
+    }
+}
+
 /// The corner and the two repeat units of a frame that tiles, when the catalogue
 /// publishes them and all three read.
 fn read_slices(
@@ -143,6 +165,7 @@ fn read_slices(
     report: &mut Report,
 ) -> Option<Slices> {
     let files = rec.path("slices.files").and_then(|v| v.obj())?;
+    let mark = Mark::of(set, parts);
     let mut slice = |key: &str| -> Result<Asset, String> {
         let p = files.get(key).and_then(|v| v.str()).ok_or_else(|| format!("slices.files has no {key:?}"))?;
         read_asset(dir, p, set, parts, true, None, &mut report.warnings)
@@ -160,6 +183,7 @@ fn read_slices(
             edge_v,
         }),
         (a, b, c) => {
+            mark.restore(set, parts);
             for e in [a, b, c].into_iter().filter_map(|r| r.err()) {
                 report.warnings.push(format!("{style}/page_frame slices: {e}"));
             }
@@ -196,17 +220,24 @@ fn read_asset(
     }
     let first_path = set.paths.len() as u32;
     if geometry {
+        let mark = Mark::of(set, parts);
         let mut cx =
             AssetCtx { quant: set.quant as f64, set, parts, by_id, depth: 0, file: rel, warnings, warned_clip: false };
         cx.warn_clip(root);
-        cx.walk(root, Affine::IDENTITY, &Paint::default()).map_err(|e| format!("{}: {e}", path.display()))?;
+        if let Err(e) = cx.walk(root, Affine::IDENTITY, &Paint::default()) {
+            mark.restore(set, parts);
+            return Err(format!("{}: {e}", path.display()));
+        }
     }
     Ok(Asset { view_box, slot, first_path, n_paths: set.paths.len() as u32 - first_path })
 }
 
 fn numbers(s: &str) -> Option<[f32; 4]> {
-    let v: Vec<f32> =
-        s.split([' ', ',', '\t', '\n']).filter(|t| !t.is_empty()).filter_map(|t| t.parse().ok()).collect();
+    let v: Vec<f32> = s
+        .split(|c: char| c == ',' || c.is_ascii_whitespace())
+        .filter(|t| !t.is_empty())
+        .filter_map(|t| t.parse().ok())
+        .collect();
     (v.len() == 4).then(|| [v[0], v[1], v[2], v[3]])
 }
 
@@ -552,16 +583,6 @@ pub fn describe(set: &OrnamentSet) -> String {
     s
 }
 
-/// The bbox of every outline of an asset, in quantised asset units.
-pub fn asset_bbox(set: &OrnamentSet, a: &Asset) -> IBox {
-    let mut bb = IBox::EMPTY;
-    for i in a.first_path..a.first_path + a.n_paths {
-        if let Some(p) = set.paths.get(i as usize) {
-            bb.union(&p.bbox);
-        }
-    }
-    bb
-}
 /// A dressed page as one standalone SVG, the way `qvp2svg` is for the page itself. The
 /// ornament layer comes first so it paints behind the print, as a host must draw it.
 /// Draws are written in page units with no placement, so this shows the printed layout.
@@ -611,8 +632,10 @@ pub fn dress_svg(page: &mut qvp_core::Page, dress: &qvp_core::Dress) -> String {
         write!(s, "<path d=\"{path}\"").unwrap();
         if d.flags & qvp_core::ODF_STROKE != 0 {
             write!(s, " fill=\"none\" stroke=\"{hex}\" stroke-width=\"{:.4}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"", d.stroke_width).unwrap();
+            put_opacity(&mut s, "stroke-opacity", d.color);
         } else {
             write!(s, " fill=\"{hex}\"").unwrap();
+            put_opacity(&mut s, "fill-opacity", d.color);
             if d.flags & qvp_core::ODF_EVENODD != 0 {
                 s.push_str(" fill-rule=\"evenodd\"");
             }
@@ -620,15 +643,19 @@ pub fn dress_svg(page: &mut qvp_core::Page, dress: &qvp_core::Dress) -> String {
         s.push_str("/>");
     }
     s.push_str("</g>");
-    // the print on top, with the rings the dress hid left out
+    // The print on top, in each path's current colour. The rings the dress hid are
+    // transparent and are left out.
     let colors = page.colors().to_vec();
     let p = page.data();
     for (i, r) in p.paths.iter().enumerate() {
-        if colors[i] & 0xff == 0 {
+        let color = colors[i];
+        if color & 0xff == 0 {
             continue;
         }
         let Ok(cmds) = p.path_cmds(i) else { continue };
-        write!(s, "<path d=\"{}\" fill=\"#231f20\"", qvp_format::svg_path_d(&cmds, p.header.quant)).unwrap();
+        write!(s, "<path d=\"{}\" fill=\"#{:06x}\"", qvp_format::svg_path_d(&cmds, p.header.quant), color >> 8)
+            .unwrap();
+        put_opacity(&mut s, "fill-opacity", color);
         if r.flags & qvp_format::PF_EVENODD != 0 {
             s.push_str(" fill-rule=\"evenodd\"");
         }
@@ -636,6 +663,15 @@ pub fn dress_svg(page: &mut qvp_core::Page, dress: &qvp_core::Dress) -> String {
     }
     s.push_str("</svg>");
     s
+}
+
+/// Write the opacity attribute `name` when `color` is not fully opaque.
+fn put_opacity(s: &mut String, name: &str, color: u32) {
+    use std::fmt::Write;
+    let a = color & 0xff;
+    if a < 0xff {
+        write!(s, " {name}=\"{:.4}\"", a as f32 / 255.0).unwrap();
+    }
 }
 
 #[cfg(test)]
@@ -882,6 +918,67 @@ mod tests {
         assert_eq!(o.asset.n_paths, 2);
         assert!(report.warnings.iter().any(|w| w.contains("edge-v")), "{:?}", report.warnings);
         assert!(report.warnings.iter().any(|w| w.contains("no usable slices")), "{:?}", report.warnings);
+        assert_eq!(set.paths.len(), 2, "the two slices that read leave no outlines behind");
+    }
+
+    /// One good outline, then one whose path data does not parse, in a part the
+    /// palette lacks.
+    const HALF_BAD: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+<g data-part="extra" fill="#123456"><path d="M0 0h10v10H0z"/><path d="M0 0 X"/></g></svg>"##;
+
+    #[test]
+    fn a_failed_read_leaves_no_outlines_ops_or_parts_behind() {
+        let dir = single("surah-headers", "", &[("assets/whole.svg", TINY), ("assets/bad.svg", HALF_BAD)]);
+        let (mut set, _) = build(&dir, &BuildOptions::default()).unwrap();
+        let mut parts = set.ornaments[0].parts.clone();
+        let (paths, ops, n_parts) = (set.paths.len(), set.ops.len(), parts.len());
+        let mut warnings = vec![];
+        let r = read_asset(&dir, "assets/bad.svg", &mut set, &mut parts, true, None, &mut warnings);
+        assert!(r.unwrap_err().contains("path d"));
+        assert_eq!((set.paths.len(), set.ops.len(), parts.len()), (paths, ops, n_parts));
+    }
+
+    #[test]
+    fn a_slice_that_fails_halfway_leaves_no_outlines_behind() {
+        let dir = single(
+            "page-frames",
+            SLICES,
+            &[
+                ("assets/whole.svg", WHOLE),
+                ("assets/corner.svg", TINY),
+                ("assets/edge-h.svg", TINY),
+                ("assets/edge-v.svg", HALF_BAD),
+            ],
+        );
+        let (set, report) = build(&dir, &BuildOptions::default()).unwrap();
+        let o = &set.ornaments[0];
+        assert!(o.slices.is_none());
+        assert_eq!(o.asset.first_path, 0);
+        assert_eq!(set.paths.len(), 2, "only the whole drawing");
+        assert_eq!(o.parts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["c1"]);
+        assert!(report.warnings.iter().any(|w| w.contains("edge-v")), "{:?}", report.warnings);
+    }
+
+    #[test]
+    fn a_dropped_record_takes_its_slices_with_it() {
+        // The slices read, but the record's own drawing is missing, so the record goes.
+        let dir = single(
+            "page-frames",
+            SLICES,
+            &[("assets/corner.svg", TINY), ("assets/edge-h.svg", TINY), ("assets/edge-v.svg", TINY)],
+        );
+        let catalog = std::fs::read_to_string(dir.join("catalog.json")).unwrap();
+        let header = r##"{"id":"surah-headers/h","type":"surah-headers","style":"h","lineage":"scan","riwayah":null,
+ "variants":{"color":"assets/corner.svg"},"palette":[{"name":"c1","hex":"#ffffff"}],
+ "license":{"id":"CC0-1.0","status":"confirmed","attribution":"x"}},"##;
+        std::fs::write(dir.join("catalog.json"), catalog.replacen("\"assets\":[", &format!("\"assets\":[{header}"), 1))
+            .unwrap();
+        let (set, report) = build(&dir, &BuildOptions::default()).unwrap();
+        assert_eq!(set.ornaments.len(), 1, "{:?}", report.warnings);
+        assert_eq!(set.ornaments[0].kind, OrnamentKind::SurahHeader);
+        assert_eq!(set.paths.len(), 1, "the frame's slices are gone");
+        assert_eq!(set.ops.len(), set.paths.iter().map(|p| p.op_len as usize).sum::<usize>());
+        assert!(report.warnings.iter().any(|w| w.contains("t/page_frame")), "{:?}", report.warnings);
     }
 
     #[test]
@@ -991,8 +1088,19 @@ mod tests {
     }
 
     #[test]
+    fn opacity_is_written_only_below_full_alpha() {
+        let mut s = String::new();
+        put_opacity(&mut s, "fill-opacity", 0x231f20ff);
+        assert_eq!(s, "");
+        put_opacity(&mut s, "fill-opacity", 0x231f2080);
+        assert_eq!(s, " fill-opacity=\"0.5020\"");
+    }
+
+    #[test]
     fn view_box_numbers() {
         assert_eq!(numbers("0 0 73.162 100"), Some([0.0, 0.0, 73.162, 100.0]));
         assert_eq!(numbers("0 0 100"), None);
+        assert_eq!(numbers("0\r\n0 73.162,\r100"), Some([0.0, 0.0, 73.162, 100.0]));
+        assert_eq!(numbers("0\x0c0 1 2"), Some([0.0, 0.0, 1.0, 2.0]));
     }
 }
