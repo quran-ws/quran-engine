@@ -118,8 +118,11 @@ export class QvpPassage {
         placements.set(atom.source, { dx, dy, row, size })
         for (const path of atom.indices) drawings.push({ page: atom.page, path, dx, dy, kx: size, ky: size, row })
         const box = [atom.box[0] + dx, atom.box[1] + dy, atom.box[2] + dx, atom.box[3] + dy]
+        // The word alone, without its signs: the word that closes an ayah leaves its medallion out.
+        const wordBox = [atom.word.box[0] * size + dx, atom.word.box[1] * size + dy,
+          atom.word.box[2] * size + dx, atom.word.box[3] * size + dy]
         row_bounds.push(box)
-        result.words.push({ surah: atom.word.surah, ayah: atom.word.ayah, word: atom.word.word, row, box })
+        result.words.push({ surah: atom.word.surah, ayah: atom.word.ayah, word: atom.word.word, row, box, wordBox })
         cursor -= atom.box[2] - atom.box[0]
       }
       result.rows.push({ box: bounds(row_bounds), baseline })
@@ -161,6 +164,8 @@ export class QvpPassage {
       for (const word of result.words) if (word.row >= row) {
         word.box[1] += needed
         word.box[3] += needed
+        word.wordBox[1] += needed
+        word.wordBox[3] += needed
       }
       for (const drawing of drawings) if (drawing.row >= row) drawing.dy += needed
     }
@@ -172,7 +177,10 @@ export class QvpPassage {
     }
     const css_box = box => [box[0] * scale + padding, (box[1] + offset) * scale,
       box[2] * scale + padding, (box[3] + offset) * scale]
-    for (const word of result.words) word.box = css_box(word.box)
+    for (const word of result.words) {
+      word.box = css_box(word.box)
+      word.wordBox = css_box(word.wordBox)
+    }
     for (const row of result.rows) {
       row.box = css_box(row.box)
       row.baseline = (row.baseline + offset) * scale

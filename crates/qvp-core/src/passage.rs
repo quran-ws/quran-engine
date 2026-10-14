@@ -198,6 +198,15 @@ pub struct PassageWord {
     pub x1: f32,
     /// The bottom of the word and its signs.
     pub y1: f32,
+    /// The left edge of the word alone, without its signs. An underline under the word that
+    /// closes an ayah reads this box, which does not hold the ayah medallion.
+    pub word_x0: f32,
+    /// The top of the word alone.
+    pub word_y0: f32,
+    /// The right edge of the word alone.
+    pub word_x1: f32,
+    /// The bottom of the word alone.
+    pub word_y1: f32,
 }
 
 /// The bounds of one ayah that a layout shows, in layout pixels.
@@ -643,7 +652,7 @@ impl Passage {
         // reader's justified rows are, and never on the distance between their boxes.
         let air = median(atoms.iter().map(|a| a.gap).collect(), 0.0);
         let mut out_rows: Vec<(Rect, f64)> = Vec::with_capacity(rows.len());
-        let mut words: Vec<(usize, u32, Rect)> = Vec::new();
+        let mut words: Vec<(usize, u32, Rect, Rect)> = Vec::new();
         let mut draws: Vec<(u16, u32, u32)> = Vec::new();
         // Each placement: dx, dy, kx, ky, and its row.
         let mut placements: Vec<(f64, f64, f64, f64, u32)> = Vec::new();
@@ -705,7 +714,7 @@ impl Passage {
                 // A decoration standing alone, such as a basmalah, is drawn but is no word.
                 if atom.word != NO_WORD {
                     placed.insert((page, atom.word), (r as u32, dx, dy, atom.word_rect));
-                    words.push((i, r as u32, rect));
+                    words.push((i, r as u32, rect, moved(atom.word_rect, dx, dy)));
                 }
                 cursor -= width_of(i);
             }
@@ -773,6 +782,8 @@ impl Passage {
             for word in words.iter_mut().filter(|w| w.1 as usize >= r) {
                 word.2[1] += needed;
                 word.2[3] += needed;
+                word.3[1] += needed;
+                word.3[3] += needed;
             }
             for placement in placements.iter_mut().filter(|p| p.4 as usize >= r) {
                 placement.1 += needed;
@@ -796,8 +807,9 @@ impl Passage {
         };
         let words: Vec<PassageWord> = words
             .into_iter()
-            .map(|(i, row, rect)| {
+            .map(|(i, row, rect, word_rect)| {
                 let (a, [x0, y0, x1, y1]) = (&self.atoms[i], pixels(rect));
+                let [word_x0, word_y0, word_x1, word_y1] = pixels(word_rect);
                 PassageWord {
                     surah: a.atom.surah,
                     ayah: a.atom.ayah,
@@ -808,6 +820,10 @@ impl Passage {
                     y0,
                     x1,
                     y1,
+                    word_x0,
+                    word_y0,
+                    word_x1,
+                    word_y1,
                 }
             })
             .collect();

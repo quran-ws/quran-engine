@@ -74,10 +74,11 @@ class QvpPassage private constructor(handle: Long, surah: Int, from: Int) : Auto
         return QvpPassageLayout(
             v[0], v[1], v[2], v[3],
             List(rows.size / 5) { k -> val o = k * 5; QvpPassageRow(rows[o], rows[o + 1], rows[o + 2], rows[o + 3], rows[o + 4]) },
-            List(words.size / 9) { k ->
-                val o = k * 9
+            List(words.size / 13) { k ->
+                val o = k * 13
                 QvpPassageWord(words[o].toInt(), words[o + 1].toInt(), words[o + 2].toInt(), words[o + 3].toInt(), words[o + 4].toInt(),
-                               words[o + 5], words[o + 6], words[o + 7], words[o + 8])
+                               words[o + 5], words[o + 6], words[o + 7], words[o + 8],
+                               words[o + 9], words[o + 10], words[o + 11], words[o + 12])
             },
             List(ayahs.size / 6) { k -> val o = k * 6; QvpPassageAyah(ayahs[o].toInt(), ayahs[o + 1].toInt(), ayahs[o + 2], ayahs[o + 3], ayahs[o + 4], ayahs[o + 5]) },
             List(draws.size / 3) { k -> QvpPassageDraw(draws[k * 3], draws[k * 3 + 1], draws[k * 3 + 2]) },

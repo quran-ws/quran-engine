@@ -63,6 +63,7 @@ class QvpPassageConformanceTest {
                 val w = l.words[k]; val g = words.getJSONArray(k).doubles()
                 assertEquals(tag, g.take(4).map { it.toInt() }, listOf(w.page, w.ayah, w.word, w.row))
                 listOf(w.x0, w.y0, w.x1, w.y1).zip(g.drop(4)).forEach { (v, e) -> close(v, e, "$tag word $k") }
+                listOf(w.wordX0, w.wordY0, w.wordX1, w.wordY1).zip(g.drop(8)).forEach { (v, e) -> close(v, e, "$tag word $k alone") }
             }
             if (want.isNull("ellipsis")) {
                 assertNull(tag, l.ellipsis)

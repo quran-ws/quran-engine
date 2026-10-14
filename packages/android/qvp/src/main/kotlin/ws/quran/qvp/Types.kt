@@ -253,9 +253,12 @@ data class QvpPassageSpec(
 /** One row of a laid-out passage, in layout px: the box of its ink, and the height its words sit on. */
 data class QvpPassageRow(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val baseline: Float)
 /** One word of a laid-out passage with the signs that go with it, in layout px: its key, the page it
- * is printed on, the row it is on (from 0), and the box of the word and its signs. */
+ * is printed on, the row it is on (from 0), the box of the word and its signs, and the box of the word
+ * alone ([wordX0] to [wordY1]), which leaves out the signs: the word that closes an ayah leaves its
+ * medallion out. */
 data class QvpPassageWord(val surah: Int, val ayah: Int, val word: Int, val page: Int, val row: Int,
-                          val x0: Float, val y0: Float, val x1: Float, val y1: Float) {
+                          val x0: Float, val y0: Float, val x1: Float, val y1: Float,
+                          val wordX0: Float, val wordY0: Float, val wordX1: Float, val wordY1: Float) {
     val wordKey get() = "$surah:$ayah:$word"
 }
 /** The bounds of one ayah that a layout shows, in layout px: the ayah, and the box of its shown words. */

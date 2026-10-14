@@ -169,9 +169,10 @@ if (!has_data) {
     near(got.scale, golden.scale, 'Scale')
     got.rows.forEach((row, i) => [...row.box, row.baseline].forEach((v, k) => near(v, golden.rows[i][k], `Row ${i}`)))
     got.words.forEach((word, i) => {
-      const [, ayah, number, row, ...box] = golden.words[i]
+      const [, ayah, number, row, ...boxes] = golden.words[i]
       assert.deepEqual([word.ayah, word.word, word.row], [ayah, number, row], `Word ${i} of ${label}`)
-      word.box.forEach((v, k) => near(v, box[k], `Word ${i}`))
+      word.box.forEach((v, k) => near(v, boxes[k], `Word ${i}`))
+      word.wordBox.forEach((v, k) => near(v, boxes[4 + k], `Word ${i} alone`))
     })
     replayed++
   }

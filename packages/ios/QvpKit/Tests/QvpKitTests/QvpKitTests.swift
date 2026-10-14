@@ -1062,6 +1062,11 @@ final class QvpKitTests: XCTestCase {
         XCTAssertFalse(l.isTruncated)
         XCTAssertNil(l.ellipsis)
         XCTAssertTrue(l.draws.allSatisfy { $0.page == 42 && $0.placement < l.placements.count && $0.path < page.nPaths })
+        // The word alone is inside its box with signs, and the word that closes the ayah
+        // leaves its medallion out.
+        XCTAssertTrue(l.words.allSatisfy { $0.wordX0 >= $0.x0 && $0.wordX1 <= $0.x1 && $0.wordY0 >= $0.y0 && $0.wordY1 <= $0.y1 })
+        let closing = try XCTUnwrap(l.words.last)
+        XCTAssertGreaterThan(closing.wordX0 - closing.x0, 10)
         let cut = try XCTUnwrap(passage.layout(QvpPassageSpec(width: 366, scale: 0.9, maxRows: 2, keepAyahMark: true, ellipsisWidth: 12)))
         XCTAssertEqual(cut.rows.count, 2)
         XCTAssertTrue(cut.isTruncated)
@@ -1111,6 +1116,7 @@ final class QvpKitTests: XCTestCase {
             for (w, g) in zip(l.words, words) {
                 XCTAssertEqual([w.page, w.ayah, w.word, w.row], g.prefix(4).map(\.intValue), tag)
                 for (v, k) in zip([w.x0, w.y0, w.x1, w.y1], g.dropFirst(4)) { close(v, k, "\(tag) word") }
+                for (v, k) in zip([w.wordX0, w.wordY0, w.wordX1, w.wordY1], g.dropFirst(8)) { close(v, k, "\(tag) word alone") }
             }
             if let e = want["ellipsis"] as? [NSNumber], let got = l.ellipsis {
                 for (v, k) in zip([got.minX, got.minY, got.maxX, got.maxY].map { Float($0) }, e) { close(v, k, "\(tag) ellipsis") }

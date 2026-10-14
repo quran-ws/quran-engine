@@ -883,7 +883,7 @@ says which wrapper binds which.
 | passage | `qvp_passage_line_spacing` | `passage.lineSpacing` | Return the printed line spacing of the passage's first word, in page units. Every word of the passage has that size. |
 | passage | `qvp_passage_layout` | `passage.layout(spec)` | Lay the passage out at a width and keep the layout; 0 when the spec is out of range. |
 | passage | `qvp_passage_rows` | `layout.rows` | Return the rows of the last layout. |
-| passage | `qvp_passage_words` | `layout.words` | Return the words that the last layout shows, with the box of each and its signs. |
+| passage | `qvp_passage_words` | `layout.words` | Return the words that the last layout shows, with the box of each and its signs, and the box of the word alone (`word_x0` to `word_y1`), which leaves out the signs. |
 | passage | `qvp_passage_ayahs` | `layout.ayahs` | Return the bounds of each ayah that the last layout shows. |
 | passage | `qvp_passage_draw_list` | `layout.draws` | Return every path that the last layout draws, as page, path and placement. |
 | passage | `qvp_passage_placements` | `layout.placements` | Return what a passage draw list's placement indexes. |

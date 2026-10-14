@@ -103,7 +103,21 @@ fn main() {
                 .words
                 .iter()
                 .map(|w| {
-                    format!("[{}, {}, {}, {}, {}, {}, {}, {}]", w.page, w.ayah, w.word, w.row, w.x0, w.y0, w.x1, w.y1)
+                    format!(
+                        "[{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}]",
+                        w.page,
+                        w.ayah,
+                        w.word,
+                        w.row,
+                        w.x0,
+                        w.y0,
+                        w.x1,
+                        w.y1,
+                        w.word_x0,
+                        w.word_y0,
+                        w.word_x1,
+                        w.word_y1
+                    )
                 })
                 .collect();
             let ellipsis =
@@ -133,7 +147,7 @@ fn main() {
         }
     }
     let json = format!(
-        "{{\n  \"note\": \"rows: [x0, y0, x1, y1, baseline]; words: [page, ayah, word, row, x0, y0, x1, y1]; layout px\",\n  \"tolerance\": 0.01,\n  \"cases\": [\n{}\n  ]\n}}\n",
+        "{{\n  \"note\": \"rows: [x0, y0, x1, y1, baseline]; words: [page, ayah, word, row, x0, y0, x1, y1 (the word and its signs), x0, y0, x1, y1 (the word alone)]; layout px\",\n  \"tolerance\": 0.01,\n  \"cases\": [\n{}\n  ]\n}}\n",
         cases.join(",\n")
     );
     std::fs::write(out_path, json).expect("write scenarios");

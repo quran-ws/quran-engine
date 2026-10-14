@@ -918,8 +918,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
         // after a cut, where the host draws its ellipsis: from the last row's top to its baseline
         ellipsis: isTruncated ? { x0: d.getFloat32(s + 36, true), y0: d.getFloat32(s + 40, true), x1: d.getFloat32(s + 44, true), y1: d.getFloat32(s + 48, true) } : null };
       L.rows = this._collect(ex.qvp_passage_rows, nRows, 20, (v, o) => ({ x0: v.getFloat32(o, true), y0: v.getFloat32(o + 4, true), x1: v.getFloat32(o + 8, true), y1: v.getFloat32(o + 12, true), baseline: v.getFloat32(o + 16, true) }));
-      L.words = this._collect(ex.qvp_passage_words, nWords, 28, (v, o) => ({ surah: v.getUint16(o, true), ayah: v.getUint16(o + 2, true), word: v.getUint16(o + 4, true), page: v.getUint16(o + 6, true), row: v.getUint32(o + 8, true),
-        x0: v.getFloat32(o + 12, true), y0: v.getFloat32(o + 16, true), x1: v.getFloat32(o + 20, true), y1: v.getFloat32(o + 24, true) }));
+      L.words = this._collect(ex.qvp_passage_words, nWords, 44, (v, o) => ({ surah: v.getUint16(o, true), ayah: v.getUint16(o + 2, true), word: v.getUint16(o + 4, true), page: v.getUint16(o + 6, true), row: v.getUint32(o + 8, true),
+        x0: v.getFloat32(o + 12, true), y0: v.getFloat32(o + 16, true), x1: v.getFloat32(o + 20, true), y1: v.getFloat32(o + 24, true),
+        wordX0: v.getFloat32(o + 28, true), wordY0: v.getFloat32(o + 32, true), wordX1: v.getFloat32(o + 36, true), wordY1: v.getFloat32(o + 40, true) }));
       L.ayahs = this._collect(ex.qvp_passage_ayahs, nAyahs, 20, (v, o) => ({ surah: v.getUint16(o, true), ayah: v.getUint16(o + 2, true), x0: v.getFloat32(o + 4, true), y0: v.getFloat32(o + 8, true), x1: v.getFloat32(o + 12, true), y1: v.getFloat32(o + 16, true) }));
       // every path to draw, in drawing order: page number, path index on that page, placement index
       L.draws = this._collect(ex.qvp_passage_draw_list, nDraws, 12, (v, o) => ({ page: v.getUint32(o, true), path: v.getUint32(o + 4, true), placement: v.getUint32(o + 8, true) }));

@@ -284,8 +284,11 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
 /** Where the rows of a passage start: at the right edge, in the middle, or across the width. */
 export type PassageAlign = 'right' | 'center' | 'justified';
 export interface PassageRow { x0: number; y0: number; x1: number; y1: number; baseline: number }
-/** One word of a laid-out passage with its signs, in dp: its key, the page it is printed on and its row. */
-export interface PassageWord { surah: number; ayah: number; word: number; wordKey: string; page: number; row: number; x0: number; y0: number; x1: number; y1: number }
+/** One word of a laid-out passage with its signs, in dp: its key, the page it is printed on and its row.
+ * `x0`…`y1` is the word and its signs; `wordX0`…`wordY1` is the word alone, which leaves out the signs:
+ * the word that closes an ayah leaves its medallion out. */
+export interface PassageWord { surah: number; ayah: number; word: number; wordKey: string; page: number; row: number; x0: number; y0: number; x1: number; y1: number;
+  wordX0: number; wordY0: number; wordX1: number; wordY1: number }
 export interface PassageAyah { surah: number; ayah: number; x0: number; y0: number; x1: number; y1: number }
 export interface PassageText { surah: number; ayah: number; text: string }
 /** A laid-out passage, in dp. `printedLineSpacing` is the passage's printed line, in page units: what

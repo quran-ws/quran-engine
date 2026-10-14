@@ -191,7 +191,8 @@ object Marshal {
     fun passageLayoutMap(l: QvpPassageLayout, p: QvpPassage): Map<String, Any?> = mapOf("width" to l.width, "height" to l.height, "scale" to l.scale, "lineSpacing" to l.lineSpacing,
         "printedLineSpacing" to p.lineSpacing, "isTruncated" to l.isTruncated, "ellipsis" to l.ellipsis?.let { listOf(it.left, it.top, it.right, it.bottom) },
         "rows" to l.rows.map { mapOf("x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1, "baseline" to it.baseline) },
-        "words" to l.words.map { mapOf("surah" to it.surah, "ayah" to it.ayah, "word" to it.word, "wordKey" to it.wordKey, "page" to it.page, "row" to it.row, "x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1) },
+        "words" to l.words.map { mapOf("surah" to it.surah, "ayah" to it.ayah, "word" to it.word, "wordKey" to it.wordKey, "page" to it.page, "row" to it.row, "x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1,
+            "wordX0" to it.wordX0, "wordY0" to it.wordY0, "wordX1" to it.wordX1, "wordY1" to it.wordY1) },
         "ayahs" to l.ayahs.map { mapOf("surah" to it.surah, "ayah" to it.ayah, "x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1) },
         "texts" to p.ayahs.map { mapOf("surah" to it.surah, "ayah" to it.ayah, "text" to it.text) })
     fun cropBounds(c: QvpCropBounds): Map<String, Any?> = mapOf("x0" to c.x0, "y0" to c.y0, "x1" to c.x1, "y1" to c.y1, "nWords" to c.nWords, "ayahMarkDecoration" to c.ayahMarkDecoration)

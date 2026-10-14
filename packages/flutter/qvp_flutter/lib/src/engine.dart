@@ -2774,7 +2774,8 @@ final class QvpPassageRow {
 /// One word of a laid-out passage with the signs that go with it, in layout px.
 @immutable
 final class QvpPassageWord {
-  const QvpPassageWord({required this.surah, required this.ayah, required this.word, required this.page, required this.row, required this.x0, required this.y0, required this.x1, required this.y1});
+  const QvpPassageWord({required this.surah, required this.ayah, required this.word, required this.page, required this.row, required this.x0, required this.y0, required this.x1, required this.y1,
+      required this.wordX0, required this.wordY0, required this.wordX1, required this.wordY1});
 
   /// The word's key and the page it is printed on.
   final int surah, ayah, word, page;
@@ -2784,6 +2785,10 @@ final class QvpPassageWord {
 
   /// The box of the word and its signs.
   final double x0, y0, x1, y1;
+
+  /// The box of the word alone, without its signs: the word that closes an ayah leaves its
+  /// medallion out.
+  final double wordX0, wordY0, wordX1, wordY1;
 
   /// `surah:ayah:word`
   String get wordKey => '$surah:$ayah:$word';
@@ -3008,7 +3013,8 @@ class QvpPassage {
     final n = _b.passageWords(_p, o, cap).clamp(0, cap);
     return List.generate(n, (i) {
       final w = (o + i).ref;
-      return QvpPassageWord(surah: w.surah, ayah: w.ayah, word: w.word, page: w.page, row: w.row, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1);
+      return QvpPassageWord(surah: w.surah, ayah: w.ayah, word: w.word, page: w.page, row: w.row, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1,
+          wordX0: w.wordX0, wordY0: w.wordY0, wordX1: w.wordX1, wordY1: w.wordY1);
     }, growable: false);
   }
 

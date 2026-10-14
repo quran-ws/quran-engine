@@ -258,6 +258,12 @@ fn passage_end_to_end() {
         assert_eq!(qvp_passage_words(passage, words.as_mut_ptr(), layout.n_words), layout.n_words);
         assert!(words.iter().all(|w| w.page == 42 && w.surah == 2 && w.ayah == 255));
         assert_eq!((words[0].word, words[0].row), (1, 0));
+        // The word alone leaves out its signs. Every word's own box is inside its box with
+        // signs, and the word that closes the ayah holds the medallion, to its left.
+        assert_eq!(std::mem::size_of::<QvpPassageWord>(), 44);
+        assert!(words.iter().all(|w| w.word_x0 >= w.x0 && w.word_x1 <= w.x1 && w.word_y0 >= w.y0 && w.word_y1 <= w.y1));
+        let closing = words[words.len() - 1];
+        assert!(closing.word_x0 - closing.x0 > 10.0, "{} {}", closing.x0, closing.word_x0);
         let mut ayahs = vec![std::mem::zeroed::<QvpPassageAyah>(); 2];
         assert_eq!(qvp_passage_ayahs(passage, ayahs.as_mut_ptr(), 2), 1);
         let mut draws = vec![0u32; layout.n_draws as usize * 3];

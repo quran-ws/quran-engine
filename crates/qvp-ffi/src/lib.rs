@@ -2484,6 +2484,10 @@ pub struct QvpPassageWord {
     pub y0: f32,
     pub x1: f32,
     pub y1: f32,
+    pub word_x0: f32,
+    pub word_y0: f32,
+    pub word_x1: f32,
+    pub word_y1: f32,
 }
 
 #[repr(C)]
@@ -2644,6 +2648,10 @@ pub unsafe extern "C" fn qvp_passage_words(passage: *const Passage, out: *mut Qv
                 y0: w.y0,
                 x1: w.x1,
                 y1: w.y1,
+                word_x0: w.word_x0,
+                word_y0: w.word_y0,
+                word_x1: w.word_x1,
+                word_y1: w.word_y1,
             })
             .collect();
         fill(out, cap, &words)

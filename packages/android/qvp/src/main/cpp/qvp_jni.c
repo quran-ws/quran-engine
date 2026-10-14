@@ -606,19 +606,21 @@ jfloatArray FN(passageRows)(JNIEnv* env, jclass c, jlong h) {
     for (uint32_t i = 0; i < n; i++) { float* o = v + i * 5; o[0] = r[i].x0; o[1] = r[i].y0; o[2] = r[i].x1; o[3] = r[i].y1; o[4] = r[i].baseline; }
     jfloatArray a = floats(env, v, (jsize)(n * 5)); free(v); free(r); return a;
 }
-/* 9 per word: surah, ayah, word, page, row, x0, y0, x1, y1 */
+/* 13 per word: surah, ayah, word, page, row, x0, y0, x1, y1 (the word and its signs),
+   word_x0, word_y0, word_x1, word_y1 (the word alone) */
 jfloatArray FN(passageWords)(JNIEnv* env, jclass c, jlong h) {
     uint32_t n = qvp_passage_words(PS(h), NULL, 0);
     if (!n) return floats(env, NULL, 0);
     QvpPassageWord* w = (QvpPassageWord*)malloc(n * sizeof(QvpPassageWord));
     qvp_passage_words(PS(h), w, n);
-    float* v = (float*)malloc(n * 9 * sizeof(float));
+    float* v = (float*)malloc(n * 13 * sizeof(float));
     for (uint32_t i = 0; i < n; i++) {
-        float* o = v + i * 9;
+        float* o = v + i * 13;
         o[0] = w[i].surah; o[1] = w[i].ayah; o[2] = w[i].word; o[3] = w[i].page; o[4] = (float)w[i].row;
         o[5] = w[i].x0; o[6] = w[i].y0; o[7] = w[i].x1; o[8] = w[i].y1;
+        o[9] = w[i].word_x0; o[10] = w[i].word_y0; o[11] = w[i].word_x1; o[12] = w[i].word_y1;
     }
-    jfloatArray a = floats(env, v, (jsize)(n * 9)); free(v); free(w); return a;
+    jfloatArray a = floats(env, v, (jsize)(n * 13)); free(v); free(w); return a;
 }
 /* 6 per ayah: surah, ayah, x0, y0, x1, y1 */
 jfloatArray FN(passageAyahs)(JNIEnv* env, jclass c, jlong h) {

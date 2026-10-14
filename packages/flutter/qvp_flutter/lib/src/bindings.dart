@@ -684,7 +684,7 @@ final class QvpPassageRowC extends ffi.Struct {
   external double baseline;
 }
 
-/// `{ uint16_t surah, ayah, word, page; uint32_t row; float x0, y0, x1, y1; }`
+/// `{ uint16_t surah, ayah, word, page; uint32_t row; float x0, y0, x1, y1, word_x0, word_y0, word_x1, word_y1; }`
 final class QvpPassageWordC extends ffi.Struct {
   @ffi.Uint16()
   external int surah;
@@ -704,6 +704,14 @@ final class QvpPassageWordC extends ffi.Struct {
   external double x1;
   @ffi.Float()
   external double y1;
+  @ffi.Float()
+  external double wordX0;
+  @ffi.Float()
+  external double wordY0;
+  @ffi.Float()
+  external double wordX1;
+  @ffi.Float()
+  external double wordY1;
 }
 
 /// `{ uint16_t surah, ayah; float x0, y0, x1, y1; }`

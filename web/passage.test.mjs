@@ -35,6 +35,7 @@ for (const c of scenarios.cases) {
   L.words.forEach((w, i) => {
     assert.deepEqual([w.page, w.ayah, w.word, w.row], want.words[i].slice(0, 4), `${tag} word ${i}`)
     ;[w.x0, w.y0, w.x1, w.y1].forEach((v, j) => close(v, want.words[i][4 + j], `${tag} word ${i} box[${j}]`))
+    ;[w.wordX0, w.wordY0, w.wordX1, w.wordY1].forEach((v, j) => close(v, want.words[i][8 + j], `${tag} word ${i} alone[${j}]`))
   })
   if (want.ellipsis) {
     assert.ok(L.ellipsis, `${tag} ellipsis`)

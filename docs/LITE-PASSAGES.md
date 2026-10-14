@@ -32,7 +32,8 @@ Pages 1 and 2 print their words smaller than the other pages. A passage draws ev
 
 - `width`, `height`, `scale`: CSS-pixel canvas dimensions and the actual scale from page units. Scale shrinks only if a whole word and its attached signs would exceed the width.
 - `rows`: each row's `box` and `baseline` in CSS pixels.
-- `words`: `{surah, ayah, word, row, box}`. A box includes signs that travel with that word.
+- `words`: `{surah, ayah, word, row, box, wordBox}`. `box` includes the signs that travel with
+  that word. `wordBox` is the word alone: the word that closes an ayah leaves its medallion out.
 - `ayahs`: `{surah, ayah, text, box}`, suitable for an accessible text layer or scrolling to a cited ayah.
 
 `align` accepts `right`, `center` or `justified`. A justified row but the last opens its word gaps, in equal shares, until it reaches both edges, by at most `maxStretch` times the passage's usual air between two words (0 or less lifts the cap); two words drawn as one piece of calligraphy keep their distance, and what a row has left over is split between its two sides. `lineSpacing` is a multiplier, at least 1. The rows may need more room for tall ink. The layout balances row lengths, and stretches gaps only to justify; it is intentionally not the full page reader's fitted breaking or zoom policy. A surah's basmalah is not part of this module: the engine loads it (`qvp_passage_load_basmalah`). Layout is independent of canvas resolution and can run without the DOM.

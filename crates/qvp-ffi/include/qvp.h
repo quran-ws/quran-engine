@@ -357,7 +357,8 @@ typedef struct { float width /* <= 0: one row, as wide as the passage */, scale 
 typedef struct { float width, height, scale, line_spacing /* page units */; uint32_t n_rows, n_words, n_ayahs, n_draws;
                  uint8_t is_truncated, _pad[3]; float ellipsis_x0, ellipsis_y0, ellipsis_x1, ellipsis_y1; /* after a cut: from the last row's top to its baseline */ } QvpPassageLayout;
 typedef struct { float x0, y0, x1, y1, baseline; } QvpPassageRow;
-typedef struct { uint16_t surah, ayah, word, page; uint32_t row; float x0, y0, x1, y1; } QvpPassageWord;   /* a box includes the word's signs */
+typedef struct { uint16_t surah, ayah, word, page; uint32_t row; float x0, y0, x1, y1 /* the word and its signs */,
+                 word_x0, word_y0, word_x1, word_y1 /* the word alone: no ayah medallion */; } QvpPassageWord;
 typedef struct { uint16_t surah, ayah; float x0, y0, x1, y1; } QvpPassageAyah;                            /* the ayahs with a word shown */
 QvpPassage* qvp_passage_load(const QvpPage* const* pages, uint32_t n_pages, uint16_t surah, uint16_t from, uint16_t to);   /* NULL: an ayah missing or incomplete, a page repeated, over 4096 words, over the measuring budget */
 QvpPassage* qvp_passage_load_basmalah(const QvpPage* const* pages, uint32_t n_pages, uint16_t surah);   /* the basmalah printed above a surah, on one row; no ayahs, no words. NULL: surah 1 or 9, not on the pages, a page repeated */

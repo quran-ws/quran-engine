@@ -428,6 +428,8 @@ void main() {
         expect([w.page, w.ayah, w.word, w.row], g.sublist(0, 4).map((v) => v.toInt()).toList(), reason: '$tag word $i');
         close(w.x0, g[4], '$tag word $i x0'); close(w.y0, g[5], '$tag word $i y0');
         close(w.x1, g[6], '$tag word $i x1'); close(w.y1, g[7], '$tag word $i y1');
+        close(w.wordX0, g[8], '$tag word $i wordX0'); close(w.wordY0, g[9], '$tag word $i wordY0');
+        close(w.wordX1, g[10], '$tag word $i wordX1'); close(w.wordY1, g[11], '$tag word $i wordY1');
       }
       final e = (want['ellipsis'] as List<dynamic>?)?.cast<num>();
       if (e != null) {

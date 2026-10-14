@@ -33,6 +33,13 @@ All notable changes to the engine and its packages. The format follows
   58 passage cases, from 52.
 - The Flutter page view takes `maxZoom` and reports `peekScale`, as the iOS and Android page
   views do, and `setZoomMode` switches the pinch to magnify.
+- A passage word gives the box of the word alone, without its signs: `QvpPassageWord.word_x0`,
+  `word_y0`, `word_x1`, `word_y1`, and `wordX0` to `wordY1` in `qvp.js`, the Android SDK, the
+  Flutter plugin, QvpKit and React Native (`wordBox` in `web/lite-passage.mjs`). The word that
+  closes an ayah carries the ayah medallion, so its box with signs runs under the medallion; an
+  app that underlines a word reads the word's own box instead. `QvpPassageWord` grows from 28
+  to 44 bytes, so every caller must use the new header. `conformance/scenarios/passage.json`
+  gives each word both boxes, and every wrapper's replay checks the second.
 
 ### Fixed
 - `surah_headers_view` on a reflowed page returned the printed text block scaled by the banner's

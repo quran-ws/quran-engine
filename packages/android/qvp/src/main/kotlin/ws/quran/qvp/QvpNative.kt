@@ -171,7 +171,8 @@ internal object QvpNative {
     @JvmStatic external fun passageAyahText(h: Long, i: Int): String
     @JvmStatic external fun passageLineSpacing(h: Long): Float
     @JvmStatic external fun passageLayout(h: Long, spec: FloatArray): FloatArray?
-    // the last layout: 5 per row {x0, y0, x1, y1, baseline}; 9 per word {surah, ayah, word, page, row, x0, y0, x1, y1};
+    // the last layout: 5 per row {x0, y0, x1, y1, baseline};
+    // 13 per word {surah, ayah, word, page, row, x0, y0, x1, y1, wordX0, wordY0, wordX1, wordY1};
     // 6 per ayah {surah, ayah, x0, y0, x1, y1}; 3 per draw {page, path, placement}; 4 per placement {dx, dy, kx, ky}
     @JvmStatic external fun passageRows(h: Long): FloatArray
     @JvmStatic external fun passageWords(h: Long): FloatArray

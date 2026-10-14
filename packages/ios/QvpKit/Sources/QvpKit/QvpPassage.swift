@@ -64,6 +64,9 @@ public struct QvpPassageWord: Equatable {
     public let row: Int
     /// The box of the word and its signs.
     public let x0: Float, y0: Float, x1: Float, y1: Float
+    /// The box of the word alone, without its signs: the word that closes an ayah leaves its
+    /// medallion out. An underline under the word reads this box.
+    public let wordX0: Float, wordY0: Float, wordX1: Float, wordY1: Float
 }
 
 /// The bounds of one ayah that a layout shows, in layout points.
@@ -187,7 +190,8 @@ public final class QvpPassage {
             width: out.width, height: out.height, scale: out.scale, lineSpacing: out.line_spacing,
             rows: rows.map { QvpPassageRow(x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1, baseline: $0.baseline) },
             words: words.map { QvpPassageWord(surah: Int($0.surah), ayah: Int($0.ayah), word: Int($0.word), page: Int($0.page), row: Int($0.row),
-                                              x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1) },
+                                              x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1,
+                                              wordX0: $0.word_x0, wordY0: $0.word_y0, wordX1: $0.word_x1, wordY1: $0.word_y1) },
             ayahs: ayahs.map { QvpPassageAyah(surah: Int($0.surah), ayah: Int($0.ayah), x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1) },
             draws: stride(from: 0, to: draws.count, by: 3).map { QvpPassageDraw(page: Int(draws[$0]), path: Int(draws[$0 + 1]), placement: Int(draws[$0 + 2])) },
             placements: stride(from: 0, to: placements.count, by: 4).map {
