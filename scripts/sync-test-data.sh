@@ -17,6 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 tag="${QVP_DATA_TAG:-data-v0.4.0}"
+pages_fetched=""
 asset="quran-engine-pages-hafs-kfgqpc.tar.gz"
 base="https://github.com/quran-ws/quran-engine/releases/download/$tag"
 
@@ -33,17 +34,38 @@ else
   rm -rf dist/pages && mkdir -p dist/pages
   tar -xzf "dist/$asset" -C dist/pages --strip-components=1
   echo "$tag" > dist/pages/.tag
+  pages_fetched=1
   echo "fetched  dist/pages ($tag, checksum verified)"
 fi
 
-# the ornament set, when the data release has one; a release without it is not an error
-if [ -f dist/pages/ornaments.qvo ] && [ "$(cat dist/pages/.tag 2>/dev/null)" = "$tag" ]; then
-  echo "kept     dist/pages/ornaments.qvo ($tag)"
-elif curl --fail --location --retry 3 --silent --show-error "$base/ornaments.qvo" --output dist/pages/ornaments.qvo 2>/dev/null; then
-  echo "fetched  dist/pages/ornaments.qvo ($tag)"
+# The ornament set. A data tarball that carries it has its checksum verified with the
+# tarball, so use that copy. An older release can have the set only as a separate asset,
+# or have none. Only HTTP 404 means none. Any other failure stops the script.
+if [ -n "${QVP_KEEP_PAGES:-}" ] && [ -f dist/pages/atlas.qva ]; then
+  echo "skipped  dist/pages/ornaments.qvo (QVP_KEEP_PAGES is set)"
+elif [ -f dist/pages/ornaments.qvo ]; then
+  if [ -n "$pages_fetched" ]; then
+    echo "fetched  dist/pages/ornaments.qvo ($tag, from the data tarball)"
+  else
+    echo "kept     dist/pages/ornaments.qvo ($tag)"
+  fi
 else
-  rm -f dist/pages/ornaments.qvo
-  echo "skipped  dist/pages/ornaments.qvo ($tag has none)"
+  part="dist/pages/ornaments.qvo.part"
+  status="$(curl --location --retry 3 --silent --show-error --write-out '%{http_code}' \
+    "$base/ornaments.qvo" --output "$part")" || {
+    rm -f "$part"
+    echo "error: could not fetch $base/ornaments.qvo" >&2
+    exit 1
+  }
+  case "$status" in
+    200) mv "$part" dist/pages/ornaments.qvo
+         echo "fetched  dist/pages/ornaments.qvo ($tag)" ;;
+    404) rm -f "$part"
+         echo "skipped  dist/pages/ornaments.qvo ($tag has none)" ;;
+    *)   rm -f "$part"
+         echo "error: $base/ornaments.qvo returned HTTP $status" >&2
+         exit 1 ;;
+  esac
 fi
 
 svg_tag="${QVP_SVG_TAG:-v1.1.2}"

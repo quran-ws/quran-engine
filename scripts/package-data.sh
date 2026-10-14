@@ -40,7 +40,7 @@ done
 ornaments_commit="${QVP_ASSETS_COMMIT:-}"
 if [ -f dist/pages/ornaments.qvo ]; then
   [ -n "$ornaments_commit" ] || { echo "error: dist/pages/ornaments.qvo is present; set QVP_ASSETS_COMMIT to the quran-assets commit it was built from" >&2; exit 1; }
-  [ -x target/release/qvp-convert ] || cargo build -q -p qvp-convert --release
+  cargo build -q -p qvp-convert --release
   info="$(target/release/qvp-convert ornaments-info dist/pages/ornaments.qvo)" || {
     echo "error: dist/pages/ornaments.qvo does not decode" >&2
     exit 1

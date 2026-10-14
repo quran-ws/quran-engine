@@ -48,9 +48,9 @@ on 2029-09-13 and must be replaced in GitHub before then.
    of every generated page, sidecar, atlas and surah-name asset), the upstream rights notice,
    and `dist/quran-engine-pages-hafs-kfgqpc.tar.gz` with its `.sha256`. With an ornament
    set at `dist/pages/ornaments.qvo`, set `QVP_ASSETS_COMMIT` to the quran-assets commit
-   it was built from. The tarball then carries the set. In step 5, upload the same file as
-   a separate asset beside the tarball, so that `scripts/sync-test-data.sh` can fetch it
-   on its own.
+   it was built from. The tarball then carries the set, and `scripts/sync-test-data.sh`
+   uses that copy. In step 5, upload the same file as a separate asset beside the
+   tarball, for users who fetch the set on its own.
 5. `gh release create data-vX.Y.Z` with the tarball, the checksum, a sample page and, when
    there is one, `dist/pages/ornaments.qvo`.
    `publish-cdn.yml` mirrors it to `cdn.quran.ws/qvp/` under an immutable folder.
