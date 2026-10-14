@@ -4,6 +4,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-14
+
 ### Added
 - Dress: `QvpOrnaments` loads an ornament set, and `QvpPage.dress`, `undress`, `dressInfo`,
   `dressGeometry` and `dressRevision` bind the dress section of the ABI. `QvpPageView` paints the

@@ -4,6 +4,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-14
+
 ### Added
 - `<QvpPassageView />`: a range of complete ayahs, or a surah's basmalah, laid out by the engine on
   rows of the view's width and drawn natively. The layout comes back through `onPassageLayout`,

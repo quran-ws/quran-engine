@@ -1,4 +1,4 @@
-## Unreleased
+## 0.7.0
 
 - Dress: `QvpEngine.loadOrnaments` and `QvpOrnaments` (`list`, `find`, `ofKind`, `styles`), and
   `QvpPage.dress`, `undress`, `dressInfo`, `dressGeometry` and `dressRevision`. `QvpPageView`
