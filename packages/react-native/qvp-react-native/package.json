@@ -10,6 +10,7 @@
     "src",
     "android/build.gradle",
     "android/src",
+    "!android/src/test",
     "README.md",
     "package.json"
   ],

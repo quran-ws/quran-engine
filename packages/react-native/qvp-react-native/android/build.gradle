@@ -50,4 +50,5 @@ dependencies {
     // version pinned by the React Native Gradle Plugin of the consuming app
     implementation "com.facebook.react:react-android"
     if (qvpProject != null) implementation project(":qvp")
+    testImplementation "junit:junit:4.13.2"
 }

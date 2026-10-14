@@ -129,7 +129,7 @@ object Marshal {
         else -> QvpOrnamentRef.None
     }
     /** {ayahMark, surahHeader, pageFrame, gap, bandGap, ayahMarkScale, pageFrameScale, lineArt: [kind], colors: [[ornament, part, colour]]} → [QvpDressSpec].
-     * A missing knob keeps the library's default. */
+     * A missing number keeps the library's default. A missing kind draws none. */
     fun dressSpec(v: Any?): QvpDressSpec {
         val m = v as? Map<*, *> ?: return QvpDressSpec()
         val d = QvpDressSpec()

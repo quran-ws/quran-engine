@@ -1,6 +1,6 @@
 # The React Native package: install, typecheck, and build the TypeScript output.
 # The example's Android build runs in the Android workflow's toolchain when it is wired
-# there; this job covers the JavaScript side.
+# there. This job covers the JavaScript side and the JVM unit tests of the Android module.
 name: React Native
 
 on:
@@ -8,6 +8,8 @@ on:
     paths:
       - ".github/workflows/react-native.yml"
       - "packages/react-native/**"
+      # The Android module's unit tests compile against the Kotlin library.
+      - "packages/android/qvp/src/main/kotlin/**"
   push:
     branches: [main]
   workflow_dispatch:
@@ -29,6 +31,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
@@ -43,3 +50,9 @@ jobs:
       - name: Test the example
         working-directory: packages/react-native/example
         run: npm test -- --ci
+      # The JVM unit tests of the Android module. Gradle runs in the example's build, because
+      # that build includes the module and the Kotlin library as projects. The tests need no
+      # native libraries and no page data.
+      - name: Test the Android module
+        working-directory: packages/react-native/example/android
+        run: ./gradlew --no-daemon :quran.ws_qvp-react-native:testDebugUnitTest
