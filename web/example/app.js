@@ -526,11 +526,21 @@
         wrap.className = 'hint';
         const set = S.dress.colors.find(c => c[0] === i && c[1] === part.index);
         const own = '#' + (part.color >>> 8).toString(16).padStart(6, '0');
-        wrap.innerHTML = `<input type="color" value="${set ? set[2] : own}"> ${o.kind.replace('_', ' ')} ${part.name}`;
-        wrap.firstChild.onchange = e => { S.dress.colors = S.dress.colors.filter(c => !(c[0] === i && c[1] === part.index)); S.dress.colors.push([i, part.index, e.target.value]); applyDress(); };
+        const input = document.createElement('input');
+        input.type = 'color';
+        input.value = set ? set[2] : own;
+        wrap.append(input, ` ${o.kind.replace('_', ' ')} ${part.name}`);
+        input.onchange = e => { S.dress.colors = S.dress.colors.filter(c => !(c[0] === i && c[1] === part.index)); S.dress.colors.push([i, part.index, e.target.value]); applyDress(); };
         host.append(wrap);
       }
     }
+  }
+  // an <option> built from data, which is text and never markup
+  function option(value, text) {
+    const el = document.createElement('option');
+    el.value = value;
+    el.textContent = text;
+    return el;
   }
   const KIND_PICKERS = [['dressMark', 'ayah_mark', 'ayahMark'], ['dressHeader', 'surah_header', 'surahHeader'], ['dressFrame', 'page_frame', 'pageFrame']];
   // the mushaf picker shows the style the three kinds agree on, or "mixed"
@@ -539,7 +549,7 @@
     const chosen = KIND_PICKERS.map(([, , key]) => S.dress[key] === null ? null : ornaments.list[S.dress[key]].style);
     const same = chosen.every(s => s === chosen[0]);
     if (same) { sel.value = chosen[0] || ''; sel.querySelector('[value="mixed"]')?.remove(); }
-    else { if (!sel.querySelector('[value="mixed"]')) sel.insertAdjacentHTML('beforeend', '<option value="mixed">mixed</option>'); sel.value = 'mixed'; }
+    else { if (!sel.querySelector('[value="mixed"]')) sel.append(option('mixed', 'mixed')); sel.value = 'mixed'; }
   }
   // the medallion slider shows the design's own size until the reader moves it
   function showMarkScale() {
@@ -552,7 +562,7 @@
     if (!ornaments) { for (const id of ['dressStyle', 'dressMark', 'dressHeader', 'dressFrame']) $(id).disabled = true; return; }
     // presets: every mushaf that has all three kinds
     const sel = $('dressStyle');
-    for (const s of ornaments.styles().filter(s => s.ayahMark && s.surahHeader && s.pageFrame)) sel.insertAdjacentHTML('beforeend', `<option value="${s.style}">${s.style}${s.riwayah ? ', ' + s.riwayah : ''}</option>`);
+    for (const s of ornaments.styles().filter(s => s.ayahMark && s.surahHeader && s.pageFrame)) sel.append(option(s.style, s.style + (s.riwayah ? ', ' + s.riwayah : '')));
     sel.onchange = e => {
       const style = e.target.value;
       if (style === 'mixed') return;
@@ -562,7 +572,7 @@
     };
     for (const [id, kind, key] of KIND_PICKERS) {
       const kindSel = $(id);
-      for (const o of ornaments.ofKind(kind)) kindSel.insertAdjacentHTML('beforeend', `<option value="${o.index}">${o.style}${o.riwayah ? ', ' + o.riwayah : ''}</option>`);
+      for (const o of ornaments.ofKind(kind)) kindSel.append(option(String(o.index), o.style + (o.riwayah ? ', ' + o.riwayah : '')));
       kindSel.onchange = e => { S.dress[key] = e.target.value === '' ? null : +e.target.value; S.dress.colors = []; if (key === 'ayahMark') { S.dress.ayahMarkScale = 0; showMarkScale(); } showDressStyle(); dressSwatches(); applyDress(); };
     }
   }
