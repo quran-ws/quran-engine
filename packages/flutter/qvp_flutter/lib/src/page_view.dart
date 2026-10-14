@@ -182,8 +182,9 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
   QvpViewLayout? _laidOut;
   int _selHandle = 0, _selAnchor = -1;
   bool _selecting = false;
-  /// The dress the page was last fitted with: a new one changes the page's size.
+  /// The dress the page was last fitted with, and the dressed box the engine gave for it.
   QvpDressSpec? _fittedDress;
+  List<double>? _fittedBox;
 
   // scale gesture
   double _gScale = 1, _gOx = 0, _gOy = 0;
@@ -220,7 +221,15 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     _selAnchor = -1;
     _laidOut = null;
     _fittedDress = widget.page.dressSpec;
+    _fittedBox = null;
     _ctl._fitRequested = true;
+  }
+
+  /// The dressed box as the engine gives it: the view box, then the overflow. Null when the
+  /// page is not dressed.
+  List<double>? _dressBox() {
+    final info = page.dressInfo();
+    return info == null ? null : [...info.viewBox, ...info.overflow];
   }
 
   void _applyInk() {
@@ -258,17 +267,22 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
       page.removeHighlight(h);
       return; // removeHighlight notifies again
     }
-    // A dress or an undress changes how big the page is: fit it again.
+    // A dress or an undress can change how big the page is. Fit it again only when the
+    // engine's dressed box changed. A new colour keeps the box, so it keeps the reader's zoom.
     if (!page.isDisposed && !identical(page.dressSpec, _fittedDress) && mounted) {
       _fittedDress = page.dressSpec;
-      _ctl._fitRequested = true;
-      // A dress made while the tree builds waits for the frame to end.
-      if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
-        SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() {});
-        });
-      } else {
-        setState(() {});
+      final box = _dressBox();
+      if (!listEquals(box, _fittedBox)) {
+        _fittedBox = box;
+        _ctl._fitRequested = true;
+        // A dress made while the tree builds waits for the frame to end.
+        if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() {});
+          });
+        } else {
+          setState(() {});
+        }
       }
     }
     _ensureTicking();
@@ -310,6 +324,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     final l = page.readLayout() ?? page.currentLayout!;
     _ctl._fitRequested = false;
     _fittedDress = page.dressSpec;
+    _fittedBox = _dressBox();
     // The engine fits the content plus the dress overflow. A reflowed page is taller than the
     // screen because the reader asked for it: the engine shows its top.
     _ctl.scale = l.fitScale;
@@ -378,6 +393,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     if (c.relaid) {
       _zoom = c.zoom;
       page.readLayout();
+      _fittedBox = _dressBox(); // a new layout moves the overflow, not the dress
       widget.onZoomChanged?.call(c.zoom);
     }
     final h = page.dressClamp(c.view, _size.width, _size.height);
@@ -395,6 +411,7 @@ class QvpPageViewState extends State<QvpPageView> with SingleTickerProviderState
     );
     setState(() => _zoom = c.zoom);
     page.readLayout();
+    _fittedBox = _dressBox(); // a new layout moves the overflow, not the dress
     _ctl.set(scale: c.view.scale, offsetX: c.view.offsetX, offsetY: c.view.offsetY);
     widget.onZoomChanged?.call(c.zoom);
   }
@@ -649,8 +666,7 @@ class _QvpPainter extends CustomPainter {
   /// and sits in layout space. It is recorded once per dress revision (a new dress or a new
   /// layout) and rasterised once per view scale, so a highlight animation or a pan never
   /// redraws a tiled border's hundreds of outlines.
-  void _drawOrnaments(ui.Canvas canvas, QvpLayout? l) {
-    final info = page.dressInfo();
+  void _drawOrnaments(ui.Canvas canvas, QvpLayout? l, QvpDressInfo? info) {
     if (info == null) {
       if (cache.ornaments != null) cache.dropOrnaments();
       return;
@@ -699,7 +715,7 @@ class _QvpPainter extends CustomPainter {
     final h = ((l?.contentH ?? page.height) + o[1] + o[3]) * view.scale * dpr;
     final fits = w >= 1 && h >= 1 && w <= 1 << 14 && h <= 1 << 14 && w * h <= 1 << 25;
     final imageKey = '$key|${view.scale.toStringAsFixed(5)}|$dpr';
-    if (fits && (imageKey != cache.ornamentImageKey || cache.ornamentImage == null)) {
+    if (fits && imageKey != cache.ornamentImageKey) {
       cache.ornamentImage?.dispose();
       cache.ornamentImage = null;
       final rec = ui.PictureRecorder();
@@ -710,10 +726,11 @@ class _QvpPainter extends CustomPainter {
       final pic = rec.endRecording();
       try {
         cache.ornamentImage = pic.toImageSync(w.ceil(), h.ceil());
-        cache.ornamentImageKey = imageKey;
       } catch (_) {
-        // no GPU image available: replay the picture
+        // No GPU image is available: replay the picture. The key is set all the same, so the
+        // next frame does not try again at this scale.
       }
+      cache.ornamentImageKey = imageKey;
       pic.dispose();
     }
     final img = fits && cache.ornamentImageKey == imageKey ? cache.ornamentImage : null;
@@ -772,11 +789,13 @@ class _QvpPainter extends CustomPainter {
     final styled = page.styledPaths();
     final styledSet = <int>{for (final s in styled) s.path};
     final ink = page.defaultInk;
+    // read once per frame: the paper and the ornament layer both use it
+    final dress = page.dressInfo();
 
     // paper, grown by the dress overflow so a border sits on it
     final paperColor = paper;
     if (paperColor != null) {
-      final o = page.dressInfo()?.overflow ?? const [0.0, 0.0, 0.0, 0.0];
+      final o = dress?.overflow ?? const [0.0, 0.0, 0.0, 0.0];
       final rect = Rect.fromLTRB(view.offsetX - o[0] * view.scale, view.offsetY - o[1] * view.scale, view.offsetX + ((l?.contentW ?? page.width) + o[2]) * view.scale,
           view.offsetY + ((l?.contentH ?? page.height) + o[3]) * view.scale);
       if (paperShadow) canvas.drawShadow(ui.Path()..addRect(rect), const Color(0x66000000), 6, false);
@@ -828,7 +847,7 @@ class _QvpPainter extends CustomPainter {
 
     final sw = Stopwatch()..start();
     // 0. the ornament layer of a dressed page, behind everything else
-    _drawOrnaments(canvas, l);
+    _drawOrnaments(canvas, l, dress);
 
     // 1. highlight bands (behind the ink)
     final bands = page.highlightBoxesView();

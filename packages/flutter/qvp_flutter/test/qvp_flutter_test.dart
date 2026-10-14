@@ -615,6 +615,16 @@ void main() {
     expect(shown.height, closeTo(l.contentH + o[1] + o[3], 1e-3));
     expect(shown.view.offsetY - shown.view.scale * o[1], closeTo(0, 1e-3));
     expect(state.stats.basePaths, greaterThan(0));
+    // A new colour keeps the dressed box, so the reader's zoom stays.
+    state.controller.set(scale: l.fitScale * 2, offsetX: -40, offsetY: -60);
+    expect(p.dress(set, QvpDressSpec(style: 'test', colors: [(set.list[2], 0, 0xff0000ff)])), isNotNull);
+    await tester.pump();
+    expect(state.controller.scale, closeTo(l.fitScale * 2, 1e-6));
+    expect((state.controller.offsetX, state.controller.offsetY), (-40, -60));
+    // A bigger border grows the box, so the page is fitted again.
+    expect(p.dress(set, const QvpDressSpec(style: 'test', pageFrameScale: 2, gap: 20)), isNotNull);
+    await tester.pump();
+    expect(state.controller.scale, closeTo(p.readLayout()!.fitScale, 1e-6));
     p.undress();
     await tester.pump();
     expect(state.controller.scale, closeTo(printed, 1e-6));
