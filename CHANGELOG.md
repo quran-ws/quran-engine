@@ -6,6 +6,10 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.7.0] - 2026-10-14
+
 ### Added
 - `dress`: put another mushaf's or a font's ornaments on a page. A new QVO1 ornament set
   (`docs/FORMAT.md`), built by `qvp-convert ornaments` from `quran-ws/quran-assets`, holds
@@ -606,7 +610,8 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/quran-ws/quran-engine/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/quran-ws/quran-engine/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/quran-ws/quran-engine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/quran-ws/quran-engine/compare/v0.4.0...v0.5.0

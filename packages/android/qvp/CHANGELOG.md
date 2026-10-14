@@ -4,6 +4,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.7.0] - 2026-10-14
+
 ### Added
 - Dress: `QvpOrnaments` loads an ornament set, and `QvpPage.dress`, `undress`, `dressInfo`,
   `dressGeometry` and `dressRevision` bind the dress section of the ABI. `QvpPageView` paints the
@@ -13,6 +17,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   to draw a layout on a `Canvas`. The instrumented tests replay
   `conformance/scenarios/passage.json` (issue #102), and `scripts/sync-android-test-data.sh`
   copies the pages and the scenario file they read.
+- `QvpPassageWord.wordX0` to `wordY1`: the box of the word alone, without its signs. The word that
+  closes an ayah leaves its medallion out, so an underline under it stops at the word.
 
 ### Fixed
 - `QvpPage.zoomSpec` keeps the host's reflow knobs on the printed page, with zoom 0, so the first

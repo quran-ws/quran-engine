@@ -4,11 +4,17 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.7.0] - 2026-10-14
+
 ### Added
 - Dress: `QvpOrnaments` loads an ornament set, and `QvpPage.dress`, `undress`, `dressInfo`,
   `dressGeometry` and `dressRevision` bind the engine's dress. `QvpPageView` and
   `QvpPageCanvas` paint the ornament layer behind the ink, fit the border and keep it on
   screen when the page scrolls. The demo has a dress sheet.
+- `QvpPassageWord.wordX0` to `wordY1`: the box of the word alone, without its signs. The word that
+  closes an ayah leaves its medallion out, so an underline under it stops at the word.
 
 ### Fixed
 - `QvpViewPolicy.clampZoom(_:fit:ceiling:)`, the magnify pinch's ceiling, is applied by the

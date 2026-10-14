@@ -1,5 +1,9 @@
 ## Unreleased
 
+Nothing yet.
+
+## 0.7.0
+
 - Dress: `QvpEngine.loadOrnaments` and `QvpOrnaments` (`list`, `find`, `ofKind`, `styles`), and
   `QvpPage.dress`, `undress`, `dressInfo`, `dressGeometry` and `dressRevision`. `QvpPageView`
   paints the ornament layer behind the ink and fits the border. The example has a dress panel.
@@ -11,6 +15,8 @@
   off it reflows with the host's fill rather than the engine's defaults.
 - Engine: a passage cut to a row with no room for one word, the ellipsis and the medallion
   shrinks the scale rather than placing them outside the layout.
+- `QvpPassageWord.wordX0` to `wordY1`: the box of the word alone, without its signs. The word that
+  closes an ayah leaves its medallion out, so an underline under it stops at the word.
 
 ## 0.6.1
 

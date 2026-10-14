@@ -4,6 +4,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.7.0] - 2026-10-14
+
 ### Added
 - `<QvpPassageView />`: a range of complete ayahs, or a surah's basmalah, laid out by the engine on
   rows of the view's width and drawn natively. The layout comes back through `onPassageLayout`,
@@ -17,6 +21,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 - `Qvp.dressView(tag, scale, viewportW)` returns `{view, width, height}` for a host that scrolls
   the page: the dressed box's top at 0, centred, and its size (`qvp_dress_view`).
 - `QvpRnPageView.kt` imports `android.util.Base64`, so the module compiles again.
+- `PassageWord.wordX0` to `wordY1` in `onPassageLayout`: the box of the word alone, without its
+  signs. The word that closes an ayah leaves its medallion out.
 
 ## [0.5.0] - 2026-10-08
 
