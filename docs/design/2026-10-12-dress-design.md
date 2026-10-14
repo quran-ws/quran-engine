@@ -237,6 +237,19 @@ whole-frame outlines are dropped and its view box and slot are kept. Each asset'
 comes from the catalogue, and the walk assigns every outline to the part its `data-part`
 names. The report lists what went in and warns about what did not.
 
+QVO1 has no arc operation, so arcs are the one place the ornament converter is not
+lossless. `shape_d` writes `<ellipse>`, `<circle>` and a rounded `<rect>` as arcs, and
+`svgtypes::SimplifyingPathParser` turns every arc into cubics, as it does an `A` or `a` in
+a `d`. It asks `kurbo` for an error of at most 0.1 asset units and uses at least one cubic
+for each quarter turn. A quarter-circle cubic strays from the circle by about 0.03% of the
+radius. The difference is too small to see, but the curve is not the source curve.
+
+At `quran-assets` d4cae84 this touches 4 assets in the redistributable set, the circles
+and ellipses of `ayah-markers/font-012-{extralight,light,regular-black,thin}`. It also
+touches 24 provisional scanned assets: `color.svg`, `line.svg` and `mono.svg` of the
+douri, hafs-adi, hafs-madinah-kabir, hafs-madinah-mumtaza, qalon, shubah, sousi and warsh
+sets.
+
 The JSON reader is the PR's hand-written `json.rs`. The converter has no JSON dependency and
 this adds none.
 

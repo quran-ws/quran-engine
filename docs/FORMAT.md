@@ -195,6 +195,9 @@ length followed by that many UTF-8 bytes. A `f32` is four bytes, little-endian.
 | opcode length | varint |
 | opcodes | the QVP1 opcode encoding with origin 0,0 |
 
+The opcodes are those of QVP1: move, line, quadratic and cubic. There is no arc operation.
+The converter writes an SVG arc, circle, ellipse or rounded rectangle as cubics.
+
 **Ornament**: `kind` u8 (0 ayah mark, 1 surah header, 2 page frame), `lineage` u8 (0 scan,
 1 font), `style` str, `riwayah` str, `license_id` str, `license_status` str,
 `redistributable` varint (0 or 1), `attribution` str, `part count` varint, then per part

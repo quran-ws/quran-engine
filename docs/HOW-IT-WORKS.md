@@ -31,7 +31,9 @@ source SVG ──converter──▶ page file ──engine──▶ outlines + c
    separate outlines with their own names.
 2. **The converter** (`crates/qvp-convert`) reads the SVG and writes a page file. It is
    lossless: no curve is simplified, no point is dropped. A test renders the source and the
-   page file back to pixels and compares them. All 604 pages must match.
+   page file back to pixels and compares them. All 604 pages must match. The page SVGs
+   draw no arcs. Only the optional ornament set has them, and the converter writes those
+   arcs as close cubic curves (`docs/DATA.md`).
 3. **The page file** (`.qvp`, Quran Vector Page) holds the outlines, plus tables that say
    which outline belongs to which word, which word to which line and ayah, and where each
    one sits on the page. A page is about 210 KB, a quarter of the SVG. Coordinates are

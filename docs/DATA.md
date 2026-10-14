@@ -46,6 +46,12 @@ each publisher settles permission. They are not in any release. Build a local se
 `--redistributable` to use them, and read each ornament's licence, which the engine
 reports, before you publish a page wearing it.
 
+The format has no arc, so the converter writes each arc, circle, ellipse and rounded
+corner in an ornament as cubic curves. The cubics follow the source curve to within 0.1
+asset units, too close to see, but they are an approximation, not the source curve. In the
+released set this applies to four ayah markers, `font-012` in the extralight, light,
+regular-black and thin weights.
+
 ## How it is built
 
 ```sh
