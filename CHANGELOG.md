@@ -6,7 +6,11 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+- The test and example scripts and CI fetch `data-v0.5.0` by default. Its pages are
+  byte-identical to `data-v0.4.0`. It adds `ornaments.qvo`, which holds ayah medallions only.
+  The web smoke test skips its dress-by-style checks when no style in the set has all three
+  ornament kinds.
 
 ## [0.7.0] - 2026-10-14
 

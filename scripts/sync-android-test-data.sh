@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-tag="${QVP_DATA_TAG:-data-v0.4.0}"
+tag="${QVP_DATA_TAG:-data-v0.5.0}"
 destination="packages/android/qvp/src/androidTest/assets"
 mkdir -p "$destination"
 
@@ -57,10 +57,12 @@ expected = {
     "598.qvp": "e381d05d13f3e374f4148d8c5a5b6a610e3b9f2576e9cb255191a2af0cfe7fdf",
     "604.qvp": "3c4cab0889bd6a850a403b1e41a58f0e2546f0da41376880f6a35229cd053ec3",
 }
-# The digests are those of data-v0.4.0. 001 and 042 are byte-identical in the two releases
-# before it. Nobody checked the other pages there.
+# The digests are those of data-v0.4.0 and data-v0.5.0, whose pages are byte-identical.
+# 001 and 042 are byte-identical in the two releases before them.
+# Nobody checked the other pages there.
 # A page the table does not list is copied unchecked.
 checked = {
+    "data-v0.5.0": set(expected),
     "data-v0.4.0": set(expected),
     "data-v0.3.0": {"001.qvp", "042.qvp"},
     "data-v0.2.0": {"001.qvp", "042.qvp"},
