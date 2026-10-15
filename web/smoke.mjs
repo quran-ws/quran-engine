@@ -44,7 +44,18 @@ if (existsSync(setPath) && existsSync(pagePath)) {
   if (Math.abs(shown.width - (lay.contentW + over[0] + over[2])) > 1e-3 || Math.abs(shown.height - (lay.contentH + over[1] + over[3])) > 1e-3) throw new Error('dressView size is not content plus overflow: ' + JSON.stringify(shown));
   if (Math.abs(shown.view.offsetY - shown.view.scale * over[1]) > 1e-3) throw new Error('dressView does not put the border top at 0: ' + JSON.stringify(shown));
   const wrongKind = set.list.find(o => o.kind !== 'ayah_mark');
-  if (wrongKind && page.dress(set, { ayahMark: wrongKind }) !== null) throw new Error('an ornament of the wrong kind was accepted');
+  if (!wrongKind) console.log('skip dress by wrong kind: the set holds ayah marks only');
+  else if (page.dress(set, { ayahMark: wrongKind }) !== null) throw new Error('an ornament of the wrong kind was accepted');
+  // an entry of styles() is not an ornament: it has no index, and the binding says so
+  for (const bad of [set.styles()[0], NaN, -1, 1.5, {}]) {
+    let threw = null;
+    try { page.dress(set, { ayahMark: bad }); } catch (e) { threw = e; }
+    if (!(threw instanceof TypeError) || !threw.message.includes('ayahMark')) throw new Error(`ayahMark ${JSON.stringify(bad)} did not throw a TypeError naming the key: ${threw}`);
+  }
+  let threwColour = null;
+  try { page.dress(set, { ayahMark: marker, colors: [[set.styles()[0], 0, '#ff0000']] }); } catch (e) { threwColour = e; }
+  if (!(threwColour instanceof TypeError) || !threwColour.message.includes('colors[0]')) throw new Error('a colour for a non-ornament did not throw');
+  if (page.dress(set, { ayahMark: 'no-such-style', surahHeader: 'no-such-style', pageFrame: 'no-such-style' }) !== null) throw new Error('unknown style names were accepted');
   page.undress();
   if (page.dressInfo() !== null) throw new Error('undress left a dress behind');
   // The style-name form: three string lookups in one call must not corrupt the spec.
@@ -68,16 +79,6 @@ if (existsSync(setPath) && existsSync(pagePath)) {
       if (!want || named[field] !== want.index) throw new Error(`dress by name: ${field} is ${named[field]}, expected ${want && want.index}`);
     }
     if (!(named.draws > 0)) throw new Error('dress by name drew nothing');
-    // an entry of styles() is not an ornament: it has no index, and the binding says so
-    for (const bad of [set.styles()[0], NaN, -1, 1.5, {}]) {
-      let threw = null;
-      try { page.dress(set, { ayahMark: bad }); } catch (e) { threw = e; }
-      if (!(threw instanceof TypeError) || !threw.message.includes('ayahMark')) throw new Error(`ayahMark ${JSON.stringify(bad)} did not throw a TypeError naming the key: ${threw}`);
-    }
-    let threwColour = null;
-    try { page.dress(set, { style, colors: [[set.styles()[0], 0, '#ff0000']] }); } catch (e) { threwColour = e; }
-    if (!(threwColour instanceof TypeError) || !threwColour.message.includes('colors[0]')) throw new Error('a colour for a non-ornament did not throw');
-    if (page.dress(set, { ayahMark: 'no-such-style', surahHeader: 'no-such-style', pageFrame: 'no-such-style' }) !== null) throw new Error('unknown style names were accepted');
     // line art for one kind: the bands keep only their strokes, the medallions keep their fills
     const lined = page.dress(set, { ayahMark: style, surahHeader: style, pageFrame: style, lineArt: ['surah_header'] });
     if (!lined || lined.draws >= named.draws || lined.ayahMarks !== named.ayahMarks) throw new Error('line art for the bands changed the wrong draws');
