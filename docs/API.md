@@ -247,6 +247,12 @@ as far as `maxStretch` allows, so a shortfall the spacing can absorb costs littl
 cannot moves the cut; it also charges for the step between a row and the row above it, and for
 the spacing spent, which makes a better cut worth more than a wider gap.
 
+`printed` keeps each printed line on one row, in its own word order. It uses the full page
+width instead of keeping the printed text block's side margins. Fill, gaps and vertical
+stacking work as in other reflow modes; the printed line positions do not come back.
+`reflowMaxZoom(spec)` returns the zoom at which the widest row, with the requested gaps,
+reaches the page width. A larger zoom is clamped rather than breaking the row.
+
 Over all 604 pages at zoom 1.3, 1.8 and 2.4, counting every row that does not end a block,
 because a row that ends a block is short only because the text ran out:
 
@@ -411,7 +417,8 @@ deceleration, the rubber band at the ends, the indicator — is the platform's o
 
 `reflowMaxZoom(spec)` is the largest zoom at which every word still fits a row (2.44 on page
 121, whose longest word is 121 of 345 page units). Clamp a pinch to it; past it the engine
-still lays the page out, but ink wider than a row runs past the margin.
+still lays the page out, but ink wider than a row runs past the margin. With `breaks: 'printed'`,
+the limit measures whole printed rows instead, and the engine clamps to it.
 
 **Groups.** A reflowed page shifts words, not lines, so `L.lineDy[line]` no longer places a
 path. `L.groups` holds one `{dx, dy, kx, ky}` per group and `L.pathGroup[i]` the group of path

@@ -44,6 +44,8 @@ pub enum Breaks {
     /// three long words, whose two gaps can close almost nothing, is not, and the breaks move
     /// instead.
     Fitted = 2,
+    /// Keep each printed line on one row and clamp the zoom so the widest row fits.
+    Printed = 3,
 }
 
 /// How a reflowed row fills the width.
@@ -414,20 +416,37 @@ impl Page {
     ///
     /// The atoms are measured the way [`Page::layout`] builds them for a reflowed page, with the page's own median
     /// gap as the tolerance that sorts a mark into the row or the margin. `word_gap` is a
-    /// multiplier on the gaps *between* atoms; it does not change what an atom holds, so it
-    /// takes no part in the measure. The spec stays in the signature because the ABI passes it.
-    pub fn reflow_max_zoom(&self, _spec: &ReflowSpec) -> f32 {
+    /// multiplier on the gaps *between* atoms; it does not change what an atom holds.
+    /// With [`Breaks::Printed`], the widest printed row, including the requested gaps, bounds
+    /// the zoom against the page width instead of the text block.
+    pub fn reflow_max_zoom(&self, spec: &ReflowSpec) -> f32 {
         let d = self.data();
         let median = self.median_word_gap();
         let anchors = self.deco_anchor_words();
         let sajdah_line = self.sajdah_line_decos();
         let mut word_decos: Vec<Vec<u32>> = vec![Vec::new(); d.words.len()];
         for (di, &wi) in anchors.iter().enumerate() {
-            if wi != NONE && !sajdah_line[di] {
+            if wi != NONE && (spec.breaks == Breaks::Printed || !sajdah_line[di]) {
                 word_decos[wi as usize].push(di as u32);
             }
         }
         let block = self.text_block();
+        if spec.breaks == Breaks::Printed {
+            let widest = self
+                .line_words
+                .iter()
+                .map(|words| {
+                    let atoms: Vec<Atom> = words
+                        .iter()
+                        .rev()
+                        .map(|&(_, wi)| self.atom(wi, &word_decos[wi as usize], median, block))
+                        .collect();
+                    atoms.iter().map(|a| a.width).sum::<f32>()
+                        + atoms.windows(2).map(|p| self.atom_gap(&p[0], &p[1], spec, median)).sum::<f32>()
+                })
+                .fold(0.0f32, f32::max);
+            return if widest > 0.0 { self.width() / widest } else { f32::INFINITY };
+        }
         let widest = (0..d.words.len() as u32)
             .map(|wi| self.atom(wi, &word_decos[wi as usize], median, block).width)
             .fold(0.0f32, f32::max);
@@ -563,42 +582,11 @@ impl Page {
         // that medallion twice and tear the row open
         let carried = |prev: &Atom, next: &Atom| self.words_interlock(prev.word, next.word);
         let interlocked = |prev: &Atom, next: &Atom| carried(prev, next).is_some();
-        let gap_of = |prev: &Atom, next: &Atom| -> f32 {
-            // A word the print carries under the one before it keeps the distance the print
-            // gave it, whatever the rest of the row is set at: the pair is one piece of
-            // calligraphy. Only a row break between them sets them as two ordinary words.
-            if carried(prev, next).is_some() {
-                return prev.x0 - next.x1;
-            }
-            let air = median * spec.word_gap.max(0.0);
-            match spec.gaps {
-                // Leave the same air between the strokes of every pair. Shifting the second
-                // word by `t` changes the air and the box gap alike, so the box gap that
-                // leaves the wanted air is the printed one moved by the difference.
-                GapMode::Uniform => match Page::slice_clearance(&prev.slices, &next.slices, 0.0) {
-                    Some(now) => (prev.x0 - next.x1) + (air - now),
-                    // no band in common: neither word has ink at any height the other does, so
-                    // nothing can meet and the boxes may sit the wanted air apart
-                    None => air,
-                },
-                GapMode::Printed => {
-                    let (a, b) = (&d.words[prev.word as usize], &d.words[next.word as usize]);
-                    // the print's own distance, where the print set the two together
-                    if a.line_index == b.line_index {
-                        prev.x0 - next.x1
-                    } else {
-                        match Page::slice_clearance(&prev.slices, &next.slices, 0.0) {
-                            Some(now) => (prev.x0 - next.x1) + (air - now),
-                            None => air,
-                        }
-                    }
-                }
-            }
-        };
+        let gap_of = |prev: &Atom, next: &Atom| self.atom_gap(prev, next, spec, median);
         // Text flows from one printed line into the next only when the reader has zoomed in and
         // the rows are narrower than the printed lines. At the printed size the page is the
         // printed page: every line keeps its own row, including the short ones a surah ends on.
-        let flows_on = row_w + 0.01 < block.1 - block.0;
+        let flows_on = spec.breaks != Breaks::Printed && row_w + 0.01 < block.1 - block.0;
         // The atoms of the page in reading order, cut into blocks by the banners that text
         // never flows across.
         enum Block {
@@ -640,6 +628,7 @@ impl Page {
             }
             let width = |i: usize, j: usize| (w[j] - w[i]) + (g[j] - g[i + 1]);
             match spec.breaks {
+                Breaks::Printed => vec![],
                 Breaks::Greedy => {
                     let (mut cuts, mut start) = (vec![], 0usize);
                     for j in 1..n {
@@ -827,7 +816,7 @@ impl Page {
                     }
                 }
             }
-            (ok && lines.len() == rows.len()).then_some(lines)
+            (spec.breaks != Breaks::Printed && ok && lines.len() == rows.len()).then_some(lines)
         };
         // The printed line positions come back only when the reader asked for no more leading
         // than the print has. A reader opening the lines up wants that on a reproduced page
@@ -1272,6 +1261,40 @@ impl Page {
             out.y1 = y1 + shift;
         }
         out
+    }
+
+    fn atom_gap(&self, prev: &Atom, next: &Atom, spec: &ReflowSpec, median: f32) -> f32 {
+        let d = self.data();
+        // A word the print carries under the one before it keeps the distance the print
+        // gave it, whatever the rest of the row is set at: the pair is one piece of
+        // calligraphy. Only a row break between them sets them as two ordinary words.
+        if self.words_interlock(prev.word, next.word).is_some() {
+            return prev.x0 - next.x1;
+        }
+        let air = median * spec.word_gap.max(0.0);
+        match spec.gaps {
+            // Leave the same air between the strokes of every pair. Shifting the second
+            // word by `t` changes the air and the box gap alike, so the box gap that
+            // leaves the wanted air is the printed one moved by the difference.
+            GapMode::Uniform => match Page::slice_clearance(&prev.slices, &next.slices, 0.0) {
+                Some(now) => (prev.x0 - next.x1) + (air - now),
+                // no band in common: neither word has ink at any height the other does, so
+                // nothing can meet and the boxes may sit the wanted air apart
+                None => air,
+            },
+            GapMode::Printed => {
+                let (a, b) = (&d.words[prev.word as usize], &d.words[next.word as usize]);
+                // the print's own distance, where the print set the two together
+                if a.line_index == b.line_index {
+                    prev.x0 - next.x1
+                } else {
+                    match Page::slice_clearance(&prev.slices, &next.slices, 0.0) {
+                        Some(now) => (prev.x0 - next.x1) + (air - now),
+                        None => air,
+                    }
+                }
+            }
+        }
     }
 
     /// Build the row unit for a word: the ink printed with it keeps its printed offset, and

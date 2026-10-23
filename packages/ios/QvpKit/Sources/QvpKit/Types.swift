@@ -38,7 +38,7 @@ public enum QvpDefaults {
 /// How a reflowed row fills the width, how the words are broken onto rows, and where the air
 /// between two words comes from.
 public enum QvpFill: Int { case ragged = 0, justified, centred }
-public enum QvpBreaks: Int { case greedy = 0, even, fitted }
+public enum QvpBreaks: Int { case greedy = 0, even, fitted, printed }
 public enum QvpGapMode: Int { case printed = 0, uniform }
 
 /// Ask for a reflowed page: the same page width with bigger ink, so fewer words fit a row and

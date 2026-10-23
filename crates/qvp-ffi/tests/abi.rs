@@ -98,6 +98,14 @@ fn abi_end_to_end() {
         let n_pg = qvp_layout_path_groups(page, std::ptr::null_mut(), 0);
         assert!(n_pg > 0);
         assert!(qvp_reflow_max_zoom(page, &reflowed) >= 1.0);
+        let printed = QvpLayoutSpec { reflow_breaks: 3, ..reflowed };
+        let cap = qvp_reflow_max_zoom(page, &printed);
+        let mut fitted = std::mem::zeroed::<QvpLayout>();
+        qvp_layout(page, &QvpLayoutSpec { reflow_zoom: cap, ..printed }, &mut fitted);
+        let mut clamped = std::mem::zeroed::<QvpLayout>();
+        qvp_layout(page, &QvpLayoutSpec { reflow_zoom: cap * 2.0, ..printed }, &mut clamped);
+        assert_eq!(clamped.n_rows, lay.n_lines);
+        assert_eq!(clamped.scale, fitted.scale);
         // the reflow knobs ride on the printed page: the pinch that leaves it, which the engine
         // lays out inside the call, reflows with the host's fill and not the default
         let first_step = |fill: u8| -> Vec<f32> {

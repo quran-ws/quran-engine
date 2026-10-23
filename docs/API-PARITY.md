@@ -8,6 +8,10 @@ means the wrapper binds the symbol under the name `docs/standards/NAMING.md` pre
 `scripts/check-parity.py` regenerates the table between the markers; `--check` verifies
 it. A second table lists platform-level gaps.
 
+All wrappers accept the printed break mode (C: `QVP_BREAKS_PRINTED`, Swift:
+`QvpBreaks.printed`, Kotlin: `QvpBreaks.PRINTED`, web and Flutter: `printed`).
+React Native forwards its `reflowBreaks` prop to the native view.
+
 ## Declared gaps
 
 A gap is one of four kinds. Each row says which, so the reader can tell whether anything

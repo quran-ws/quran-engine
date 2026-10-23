@@ -162,6 +162,8 @@ export interface Dress extends DressSpec { ornaments: QvpOrnaments | number }
 
 // ── the view ─────────────────────────────────────────────────────────────────────────────────
 /** What a pinch does to the page: the engine owns the policy, this names which one. */
+/** How the words are broken onto rows. */
+export type Breaks = 'greedy' | 'even' | 'fitted' | 'printed';
 export type ZoomMode = 'stepped' | 'continuous' | 'magnify';
 /** Where the reader's zoom control stands: the mode, the step, and the size in force. */
 export interface Zoom { mode: ZoomMode; step: number; zoom: number }
@@ -177,6 +179,8 @@ export interface QvpPageViewProps extends ViewProps {
   lineSpacing?: number; fillHeight?: boolean;
   /** Draw source-native frames around surah names on the printed page. */
   surahFrames?: boolean;
+  /** Keep the printed rows or break them again as the reader zooms in. */
+  reflowBreaks?: Breaks;
   paperColor?: Color; defaultInk?: Color; selectionBand?: Color;
   selectionEnabled?: boolean; zoomEnabled?: boolean; hitMaxDistance?: number;
   /** What a pinch does to the page. `stepped` reflows onto the page's own zoom steps and is

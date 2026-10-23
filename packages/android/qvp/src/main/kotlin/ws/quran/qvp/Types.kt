@@ -119,7 +119,7 @@ data class QvpLineBand(val line: Int, val lineNumber: Int, val y0: Float, val y1
 /** How a reflowed row fills the width, how the words are broken onto rows, and where the air
  * between two words comes from. */
 enum class QvpFill(val id: Int) { RAGGED(0), JUSTIFIED(1), CENTRED(2) }
-enum class QvpBreaks(val id: Int) { GREEDY(0), EVEN(1), FITTED(2) }
+enum class QvpBreaks(val id: Int) { GREEDY(0), EVEN(1), FITTED(2), PRINTED(3) }
 enum class QvpGapMode(val id: Int) { PRINTED(0), UNIFORM(1) }
 
 /** Ask for a reflowed page: the same page width with bigger ink, so fewer words fit a row and the

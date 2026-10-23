@@ -1549,6 +1549,7 @@ unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
                 0 => qvp_core::Breaks::Greedy,
                 1 => qvp_core::Breaks::Even,
                 2 => qvp_core::Breaks::Fitted,
+                3 => qvp_core::Breaks::Printed,
                 _ => qvp_core::ReflowSpec::default().breaks,
             },
             gaps: if s.reflow_gaps == 0 { qvp_core::GapMode::Printed } else { qvp_core::GapMode::Uniform },

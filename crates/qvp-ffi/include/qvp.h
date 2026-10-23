@@ -67,6 +67,7 @@ enum { QVP_SELECTOR_PAGE = 0, QVP_SELECTOR_PATH, QVP_SELECTOR_WORD_PATH, QVP_SEL
        QVP_SELECTOR_WORD, QVP_SELECTOR_AYAH, QVP_SELECTOR_LINE, QVP_SELECTOR_MARK, QVP_SELECTOR_CATEGORY, QVP_SELECTOR_FAMILY, QVP_SELECTOR_KIND, QVP_SELECTOR_DECORATION, QVP_SELECTOR_DECORATION_INDEX };
 enum { QVP_HIGHLIGHT_INK = 0, QVP_HIGHLIGHT_BAND, QVP_HIGHLIGHT_BOTH };
 enum { QVP_BAND_LINE_SPACING = 0, QVP_BAND_INK };
+enum { QVP_BREAKS_GREEDY = 0, QVP_BREAKS_EVEN, QVP_BREAKS_FITTED, QVP_BREAKS_PRINTED };
 enum { QVP_MASK_HIDE = 0, QVP_MASK_BLOCK, QVP_MASK_BLUR };
 enum { QVP_LAYER_BASE = 0, QVP_LAYER_THEME = 10, QVP_LAYER_HIGHLIGHT = 50, QVP_LAYER_SELECTION = 60, QVP_LAYER_TOP = 100 };
 enum { QVP_DIVISION_JUZ = 0, QVP_DIVISION_HIZB, QVP_DIVISION_NISF, QVP_DIVISION_RUBU_AL_HIZB };
@@ -110,7 +111,7 @@ typedef struct { uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; 
    0 = none). max_aspect_slack: the content is never wider than viewport_h·page_w/page_h·slack (0 = no bound). */
 /* reflow_zoom: break the words onto rows of the page's own width, with ink reflow_zoom times the size it has at
    fit-to-width (1 or less = lay the page out as printed). The other reflow fields are read at every zoom: on a printed page they are what the
-   zoom control reflows the page with. reflow_fill: 0 ragged, 1 justified, 2 centred, 255 the engine's own default. reflow_breaks: 0 greedy, 1 even, 2 fitted, 255 default.
+   zoom control reflows the page with. reflow_fill: 0 ragged, 1 justified, 2 centred, 255 the engine's own default. reflow_breaks: 0 greedy, 1 even, 2 fitted, 3 printed, 255 default.
    reflow_relax: how far a row much shorter than the row beside it is opened towards it, 0 to 1 (negative = default). banner_zoom: how big a banner (surah
    name, basmalah) may get as the reader zooms, as a multiple of its printed size (0 or below = uncapped, 1 = held at the print). reflow_gaps: 0 the printed gap
    between the two words, 1 the page's median gap. reflow_word_gap: multiplier on every gap (0 = 1). reflow_max_stretch: how far a justified row's gaps may stretch,

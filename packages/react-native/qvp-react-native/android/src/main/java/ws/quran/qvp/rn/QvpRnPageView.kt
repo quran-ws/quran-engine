@@ -87,6 +87,10 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     fun setPadTopDp(v: Float) { inner.padTop = v * density; layoutDirty = true }
     fun setPadBottomDp(v: Float) { inner.padBottom = v * density; layoutDirty = true }
     fun setPadSideDp(v: Float) { inner.padSide = v * density; layoutDirty = true }
+    fun setReflowBreaksProp(v: String?) {
+        inner.reflowBreaks = QvpBreaks.entries.find { it.name.equals(v, ignoreCase = true) } ?: QvpBreaks.FITTED
+        layoutDirty = true
+    }
     fun setLineSpacingProp(v: Float) { inner.lineSpacing = v; layoutDirty = true }
 
     // ── the reader's zoom control ──

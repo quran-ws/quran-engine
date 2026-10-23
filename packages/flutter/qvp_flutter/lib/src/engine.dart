@@ -390,7 +390,7 @@ final class QvpReflowSpec {
   /// 1 or less is the printed page; [QvpPage.zoomSpec] hands back 0 there, as the C header
   /// does. The largest this page can reach is [QvpPage.reflowMaxZoom].
   final double zoom;
-  /// `ragged` | `justified` | `centred`; `greedy` | `even` | `fitted`; `printed` | `uniform`.
+  /// `ragged` | `justified` | `centred`; `greedy` | `even` | `fitted` | `printed`; `printed` | `uniform`.
   final String fill, breaks, gaps;
   final double wordGap, maxStretch, relax;
 
@@ -1711,7 +1711,7 @@ class QvpPage extends ChangeNotifier {
   }
 
   static const _fill = {'ragged': 0, 'justified': 1, 'centred': 2, 'centered': 2};
-  static const _breaks = {'greedy': 0, 'even': 1, 'fitted': 2};
+  static const _breaks = {'greedy': 0, 'even': 1, 'fitted': 2, 'printed': 3};
 
   // ── the reader's zoom control ──
   // The engine owns the policy: which step a pinch lands on, when it commits, and what holds

@@ -16,6 +16,23 @@ const cjs = (await import('./index.cjs')).default;
 if (!cjs.QvpEngine) throw new Error('CJS entry did not expose QvpEngine');
 console.log('ok  both entry points expose QvpEngine');
 
+for (const n of ['001', '002']) {
+  const file = new URL(`../dist/pages/${n}.qvp`, import.meta.url);
+  if (!existsSync(file)) { console.log(`skip printed breaks: ${n}.qvp is missing`); continue; }
+  const page = engine.loadPage(readFileSync(file));
+  const spec = { viewportW: 390, viewportH: 844, reflow: { breaks: 'printed', zoom: 2 } };
+  const cap = page.reflowMaxZoom(spec);
+  if (!(cap > 1.2)) throw new Error(`printed breaks did not enlarge page ${n}`);
+  spec.reflow.zoom = cap;
+  const fitted = page.layout(spec);
+  const rows = Array.from({ length: fitted.rows }, (_, r) => page.rowWords(r));
+  spec.reflow.zoom = cap * 2;
+  const clamped = page.layout(spec);
+  if (clamped.scale !== fitted.scale || rows.some((ws, r) => JSON.stringify(page.rowWords(r)) !== JSON.stringify(ws))) throw new Error('printed breaks did not clamp');
+  page.free();
+}
+console.log('ok  printed breaks reach the core and clamp');
+
 // ── dress: another mushaf's ornaments ──
 // The engine refuses bytes that are not a set, and the binding reports it.
 let refused = false;

@@ -6,6 +6,11 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+### Added
+- Reflow can keep the print's line breaks with `breaks: 'printed'` (`QvpBreaks.printed`
+  in Swift). Each line stays whole while its ink grows to fill the page width.
+  `reflowMaxZoom` measures the widest row in this mode, and larger zooms clamp to it.
+
 ### Changed
 - The test and example scripts and CI fetch `data-v0.5.0` by default. Its pages are
   byte-identical to `data-v0.4.0`. It adds `ornaments.qvo`, which holds ayah medallions only.

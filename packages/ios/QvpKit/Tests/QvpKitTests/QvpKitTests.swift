@@ -28,6 +28,22 @@ final class QvpKitTests: XCTestCase {
     override class func tearDown() { page?.close(); page = nil; super.tearDown() }
     var page: QvpPage { Self.page }
 
+    func testPrintedBreaksKeepRowsAndClampZoom() throws {
+        for n in [1, 2] {
+            let p = try QvpPage(bytes: Data(contentsOf: Self.pages.appendingPathComponent(String(format: "%03d.qvp", n))))
+            defer { p.close() }
+            var spec = QvpLayoutSpec(viewportW: 390, viewportH: 844, reflow: QvpReflowSpec(zoom: 2, breaks: .printed))
+            let cap = p.reflowMaxZoom(spec)
+            XCTAssertGreaterThan(cap, 1.2)
+            spec.reflow?.zoom = cap
+            let fitted = p.layout(spec)
+            spec.reflow?.zoom = cap * 2
+            let clamped = p.layout(spec)
+            XCTAssertEqual(clamped.scale, fitted.scale)
+            XCTAssertEqual(clamped.rows, p.lines.count)
+        }
+    }
+
     func testEngineVersionNamesArabicTools() {
         XCTAssertGreaterThan(QvpEngine.formatVersion(), 0)
         XCTAssertTrue(QvpEngine.version().split(separator: ".").count == 3)

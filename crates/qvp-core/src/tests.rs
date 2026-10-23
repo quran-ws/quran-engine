@@ -598,6 +598,39 @@ fn layout_fit_crop_and_aspect_bound() {
 }
 
 #[test]
+fn printed_breaks_clamp_whole_rows_and_apply_fill() {
+    use crate::{Breaks, Fill, GapMode};
+    let mut p = packed_page();
+    let base = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    let mut r = ReflowSpec { breaks: Breaks::Printed, gaps: GapMode::Printed, relax: 0.0, ..Default::default() };
+    let cap = p.reflow_max_zoom(&r);
+    assert!((cap - 100.0 / 76.0).abs() < 1e-5);
+    for fill in [Fill::Centred, Fill::Ragged, Fill::Justified] {
+        r.fill = fill;
+        let at_cap = p.layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: cap, ..r }), ..base }).clone();
+        let clamped = p.layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 4.0, ..r }), ..base }).clone();
+        assert_eq!(at_cap.scale, clamped.scale);
+        assert_eq!(at_cap.reflow, clamped.reflow);
+        let flow = clamped.reflow.unwrap();
+        assert_eq!(flow.row_words, vec![vec![0, 1, 2, 3], vec![4, 5, 6, 7], vec![8, 9, 10, 11]]);
+        assert!(!flow.as_printed);
+        assert!((p.word_bounds_view(0).2 - base.viewport_w).abs() < 0.01);
+        assert!(p.word_bounds_view(3).0.abs() < 0.01);
+    }
+    for fill in [Fill::Centred, Fill::Ragged] {
+        let l = p.layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 1.1, fill, ..r }), ..base }).clone();
+        let right = p.word_bounds_view(0).2;
+        let left = p.word_bounds_view(3).0;
+        if fill == Fill::Centred {
+            assert!((left - (base.viewport_w - right)).abs() < 0.01);
+        } else {
+            assert!((right - base.viewport_w).abs() < 0.01);
+        }
+        assert!(!l.reflow.unwrap().as_printed);
+    }
+}
+
+#[test]
 fn reflow_breaks_words_onto_rows_of_the_same_width() {
     let mut p = packed_page();
     let printed = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };

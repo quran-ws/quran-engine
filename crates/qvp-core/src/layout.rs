@@ -418,13 +418,23 @@ impl Page {
             spec.viewport_w
         };
         let crop = (spec.crop_left.max(0.0), spec.crop_right.max(0.0));
-        let zoom = r.zoom.max(0.01);
+        let page_w = (pw - crop.0 - crop.1).max(1.0);
+        let zoom = if r.breaks == crate::Breaks::Printed {
+            r.zoom.min(self.reflow_max_zoom(r) * (page_w / pw))
+        } else {
+            r.zoom
+        }
+        .max(0.01);
         // A row holds the page's text block, not the whole sheet: the print keeps a margin on
         // each side, and a row that ignored it would put the words somewhere the print never
-        // does. At zoom 1 this reproduces the printed lines where they are.
+        // does. At zoom 1 this reproduces the printed lines where they are. Printed breaks
+        // use the full sheet width so a short printed line can grow without changing its words.
         let block = self.text_block();
-        let page_w = (pw - crop.0 - crop.1).max(1.0);
-        let (margin_l, margin_r) = ((block.0 - crop.0).max(0.0), ((pw - crop.1) - block.1).max(0.0));
+        let (margin_l, margin_r) = if r.breaks == crate::Breaks::Printed {
+            (0.0, 0.0)
+        } else {
+            ((block.0 - crop.0).max(0.0), ((pw - crop.1) - block.1).max(0.0))
+        };
         let (pad_left, avail_w) = self.reflow_row_width(content_w, spec, page_w / zoom);
         let row_w = (page_w - margin_l - margin_r).max(1.0) / zoom;
         let scale = avail_w / (page_w / zoom);
@@ -453,7 +463,7 @@ impl Page {
                 // A dressed band holds its title too: a name that outgrows the band it is
                 // dressed in is a band that no longer fits.
                 banner_k: if spec.banner_zoom > 0.0 {
-                    spec.banner_zoom / r.zoom.max(f32::EPSILON)
+                    spec.banner_zoom / zoom.max(f32::EPSILON)
                 } else {
                     f32::INFINITY
                 }
