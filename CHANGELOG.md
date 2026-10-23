@@ -12,6 +12,7 @@ All notable changes to the engine and its packages. The format follows
   `reflowMaxZoom` measures the widest row in this mode, and larger zooms clamp to it.
 
 ### Changed
+- Reflow sizes a surah banner's row from its ink and normal line spacing, not its printed slot.
 - The test and example scripts and CI fetch `data-v0.5.0` by default. Its pages are
   byte-identical to `data-v0.4.0`. It adds `ornaments.qvo`, which holds ayah medallions only.
   The web smoke test skips its dress-by-style checks when no style in the set has all three

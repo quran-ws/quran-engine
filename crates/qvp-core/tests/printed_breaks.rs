@@ -1,5 +1,6 @@
 //! Printed breaks keep each line whole while the ink grows to fill the page width.
 //! Needs dist/pages from scripts/sync-test-data.sh.
+use qvp_core::qvp_format::DecoKind;
 use qvp_core::{Breaks, Fill, GapMode, LayoutSpec, Page, ReflowSpec};
 use std::path::Path;
 
@@ -31,6 +32,26 @@ fn printed_rows_keep_their_words_and_fit_at_max_zoom() {
             .collect();
         if n == 1 {
             assert_eq!(expected.iter().filter(|ws| !ws.is_empty()).count(), 7);
+        }
+        for breaks in [Breaks::Printed, Breaks::Greedy, Breaks::Even, Breaks::Fitted] {
+            let reflow = ReflowSpec { breaks, ..Default::default() };
+            let zoom = if breaks == Breaks::Printed { page.reflow_max_zoom(&reflow) } else { 1.6 };
+            for banner_zoom in [0.0, 1.0] {
+                let layout = page
+                    .layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom, ..reflow }), banner_zoom, ..base })
+                    .clone();
+                let flow = layout.reflow.as_ref().unwrap();
+                let (di, header) =
+                    page.data().decorations.iter().enumerate().find(|(_, d)| d.kind == DecoKind::SurahName).unwrap();
+                let p = flow.deco_place[di];
+                let bottom = p.apply(0.0, header.bbox.y1 as f32 / page.quant()).1;
+                // The next row is text on page 1 and the basmalah on page 2.
+                let row = header.line as usize + 1;
+                assert!(
+                    flow.row_baseline[row] - bottom <= flow.pitch + 0.01,
+                    "page {n}, {breaks:?}, banner zoom {banner_zoom}: the banner keeps its printed slot"
+                );
+            }
         }
         for gaps in [GapMode::Printed, GapMode::Uniform] {
             for fill in [Fill::Centred, Fill::Justified, Fill::Ragged] {

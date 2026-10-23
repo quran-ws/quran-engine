@@ -999,10 +999,8 @@ impl Page {
                             }
                         }
                     }
-                    // A banner keeps clear of the text on both sides, with the air the print
-                    // gives it, shrunk as the banner is: the print sets a surah name apart
-                    // from the ayah under it, and a banner set tight against the first row
-                    // reads as part of it.
+                    // A banner keeps the print's air only within a normal line pitch. Its
+                    // row holds its own ink, not the blank slot the print set it inside.
                     if headers.contains_key(&prev) || headers.contains_key(&r) {
                         let air = headers
                             .get(&prev)
@@ -1017,6 +1015,8 @@ impl Page {
                                 })
                             })
                             .unwrap_or(0.0);
+                        let beside = if headers.contains_key(&prev) { ascents[r] } else { descents[prev] };
+                        let air = air.min((pitch - beside).max(0.0));
                         need = need.max(descents[prev] + ascents[r] + air);
                     }
                     row_y[prev] + pitch.max(need)

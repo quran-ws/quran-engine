@@ -252,6 +252,7 @@ width instead of keeping the printed text block's side margins. Fill, gaps and v
 stacking work as in other reflow modes; the printed line positions do not come back.
 `reflowMaxZoom(spec)` returns the zoom at which the widest row, with the requested gaps,
 reaches the page width. A larger zoom is clamped rather than breaking the row.
+Reflow sizes a banner's row from its ink and normal line spacing, without carrying over a large printed gap.
 
 Over all 604 pages at zoom 1.3, 1.8 and 2.4, counting every row that does not end a block,
 because a row that ends a block is short only because the text ran out:
