@@ -35,5 +35,7 @@ open("Package.swift", "w").write(swift)
 PY
 sed -i.bak -E "s/^version: .*/version: $v/" packages/flutter/qvp_flutter/pubspec.yaml && rm packages/flutter/qvp_flutter/pubspec.yaml.bak
 sed -i.bak -E "s/^version = \".*\"$/version = \"$v\"/" packages/flutter/qvp_flutter/android/build.gradle && rm packages/flutter/qvp_flutter/android/build.gradle.bak
+sed -i.bak -E "s/s\.version *= *'.*'/s.version          = '$v'/" packages/flutter/qvp_flutter/ios/qvp_flutter.podspec && rm packages/flutter/qvp_flutter/ios/qvp_flutter.podspec.bak
+sed -i.bak -E "s/s\.version *= *'.*'/s.version          = '$v'/" packages/flutter/qvp_flutter/macos/qvp_flutter.podspec && rm packages/flutter/qvp_flutter/macos/qvp_flutter.podspec.bak
 cargo update -q --workspace 2>/dev/null || true
 scripts/check-versions.sh

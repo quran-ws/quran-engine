@@ -1,10 +1,19 @@
-/// Flutter wrapper for the QVP vector mushaf engine (dart:ffi over `libqvp_ffi`).
+/// Flutter wrapper for the QVP vector mushaf engine.
 ///
-/// `QvpEngine` loads the library, `QvpPage` is one decoded page (geometry
-/// copied out once; styles, highlights, masks, layout and hit-testing live in
-/// the engine), `QvpAtlas` is the cross-page index and `QvpPageView` is the
-/// host renderer. Method names mirror `web/qvp.js` one to one.
+/// `QvpEngine` initializes the engine (native via `dart:ffi`, web via WebAssembly).
+/// `QvpPage` represents a decoded page with geometry copied once; layout, styles,
+/// highlights, masks and hit-testing live in the engine.
+/// `QvpAtlas` provides cross-page index and lookups.
+/// `QvpPassage` lays out contiguous ayah ranges across pages.
+/// `QvpOrnaments` dresses pages with medallions, headers and page frames.
+/// `QvpPageView` is the host Flutter renderer.
 library;
 
+export 'src/atlas.dart';
+export 'src/backend/qvp_backend.dart';
 export 'src/engine.dart';
+export 'src/ornaments.dart';
+export 'src/page.dart';
 export 'src/page_view.dart';
+export 'src/passage.dart';
+export 'src/types.dart';

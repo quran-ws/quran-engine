@@ -41,12 +41,12 @@ WRAPPERS = {
 
 
 def header_symbols() -> list[str]:
-    text = HEADER.read_text()
+    text = HEADER.read_text(encoding="utf-8")
     return sorted(set(re.findall(r"\b(qvp_[a-z0-9_]+)\s*\(", text)))
 
 
 def rust_exports() -> list[str]:
-    text = RUST.read_text()
+    text = RUST.read_text(encoding="utf-8")
     return sorted(set(re.findall(r'#\[no_mangle\]\s*pub\s+(?:unsafe\s+)?extern\s+"C"\s+fn\s+(qvp_[a-z0-9_]+)', text)))
 
 
@@ -65,7 +65,7 @@ def source_text(paths: list[str]) -> str:
         files = [p] if p.is_file() else sorted(q for q in p.rglob("*") if q.is_file())
         for f in files:
             try:
-                chunks.append(f.read_text())
+                chunks.append(f.read_text(encoding="utf-8"))
             except UnicodeDecodeError:
                 pass
     return "\n".join(chunks)
@@ -82,7 +82,7 @@ def declared_gaps() -> dict[tuple[str, str], str]:
     gaps: dict[tuple[str, str], str] = {}
     if not PARITY.exists():
         return gaps
-    section = PARITY.read_text().split("## Declared gaps", 1)
+    section = PARITY.read_text(encoding="utf-8").split("## Declared gaps", 1)
     if len(section) < 2:
         return gaps
     for line in section[1].splitlines():
@@ -109,7 +109,7 @@ def check_js_names(problems: list[str]) -> None:
         if not path.exists():
             problems.append(f"{rel} is listed as a published entry point but does not exist")
             continue
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         for old, new in BANNED_JS_NAMES.items():
             if re.search(rf"\b{old}\b", text):
                 problems.append(f"{rel} uses `{old}`; the name is `{new}` (docs/standards/NAMING.md)")
@@ -119,7 +119,7 @@ DEFAULT_SITES = {
     "core": "crates/qvp-core/src/defaults.rs",
     "web": "web/qvp.js",
     "android": "packages/android/qvp/src/main/kotlin/ws/quran/qvp/Types.kt",
-    "flutter": "packages/flutter/qvp_flutter/lib/src/engine.dart",
+    "flutter": "packages/flutter/qvp_flutter/lib/src/types.dart",
     "ios": "packages/ios/QvpKit/Sources/QvpKit/Types.swift",
 }
 
@@ -130,12 +130,12 @@ def number(text: str) -> float:
 
 
 def header_defaults() -> dict[str, float]:
-    return {m.group(1): number(m.group(2)) for m in re.finditer(r"#define QVP_DEFAULT_([A-Z_]+)\s+(0x[0-9a-fA-F]+u?|[0-9.]+f?)", HEADER.read_text())}
+    return {m.group(1): number(m.group(2)) for m in re.finditer(r"#define QVP_DEFAULT_([A-Z_]+)\s+(0x[0-9a-fA-F]+u?|[0-9.]+f?)", HEADER.read_text(encoding="utf-8"))}
 
 
 def defaults_in(path: str, names: list[str]) -> dict[str, float | None]:
     """Each default's value in a source file: NAME (any case, camel or snake) = or : value."""
-    text = (ROOT / path).read_text()
+    text = (ROOT / path).read_text(encoding="utf-8")
     # Search from the defaults block on, not from the top of the file.
     for marker in ("QvpDefaults", "DEFAULTS = "):
         if marker in text:
@@ -209,7 +209,7 @@ def main(argv: list[str]) -> int:
     )
     block = f"{BEGIN}\n{summary}\n\n{table}\n{END}"
 
-    current = PARITY.read_text() if PARITY.exists() else ""
+    current = PARITY.read_text(encoding="utf-8") if PARITY.exists() else ""
     if BEGIN in current and END in current:
         new = current[: current.index(BEGIN)] + block + current[current.index(END) + len(END):]
     else:
@@ -219,7 +219,7 @@ def main(argv: list[str]) -> int:
         if new != current:
             problems.append("docs/API-PARITY.md is out of date; run scripts/check-parity.py")
     else:
-        PARITY.write_text(new)
+        PARITY.write_text(new, encoding="utf-8")
 
     print(summary + f" {len(header_defaults())} defaults agree across the header, the core and the wrappers." if not any("default" in p for p in problems) else summary)
     for p in problems:

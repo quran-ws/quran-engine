@@ -27,7 +27,12 @@ String _findRepo() {
 
 void main() {
   final repo = _findRepo();
-  final libPath = Platform.environment['QVP_LIB'] ?? '$repo/target/release/libqvp_ffi.so';
+  final libPath = Platform.environment['QVP_LIB'] ??
+      (Platform.isWindows
+          ? (File('$repo/target/release/qvp_ffi.dll').existsSync()
+              ? '$repo/target/release/qvp_ffi.dll'
+              : '$repo/packages/flutter/qvp_flutter/windows/qvp_ffi.dll')
+          : '$repo/target/release/libqvp_ffi.so');
   final pagePath = '$repo/dist/pages/042.qvp';
   final wordsPath = '$repo/dist/pages/042.words.json';
   final atlasPath = '$repo/dist/pages/atlas.qva';
@@ -95,6 +100,9 @@ void main() {
     expect(page.lineBands().length, 15);
     expect(page.hitAreas().length, 147);
     expect(page.text('page'), contains(w0.text));
+    expect(page.path(0), isNotNull);
+    expect(identical(page.path(0), page.path(0)), isTrue);
+    expect(page.buildPaths().length, page.nPaths);
   });
 
   test('search الله → 7 matches', () {

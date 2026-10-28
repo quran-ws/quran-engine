@@ -118,6 +118,15 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /** how many pages a released drag turns, in reading order: a mushaf runs right to left, so a
      * flick to the right is the next page. Add it to the page you are on. */
     swipePages(dx, dy, vx = 0, vy = 0) { return this.ex.qvp_swipe_pages(dx, dy, vx, vy); }
+    /** true once the reader has zoomed in, by either road: a magnified view, or a page reflowed above the printed size */
+    zoomIsZoomed(zoom, view, fitScale = 0) {
+      const d = this.dv(), z = this.scratch2 + 41984;
+      d.setUint32(z, ZOOM_MODE[zoom && zoom.mode] ?? 0, true);
+      d.setUint32(z + 4, (zoom && zoom.step) || 0, true);
+      d.setFloat32(z + 8, (zoom && zoom.zoom) || 1, true);
+      const v = this._putView(view, this.scratch2 + 42000);
+      return !!this.ex.qvp_zoom_is_zoomed(z, v, fitScale);
+    }
     /** a scratch buffer of at least `len` bytes, kept between calls */
     buf(len) { if (len > this._bufLen) { this._buf = this.ex.qvp_alloc(len); this._bufLen = len; } return this._buf; }
     /** write a JS string into scratch2 at offset; returns [ptr, len] */
@@ -670,9 +679,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /** true once the reader has zoomed in, by either road: a magnified view, or a page reflowed
      * above the printed size. `fitScale` is the scale the page is fitted at (0 = it is at it). */
     zoomIsZoomed(zoom, view, fitScale = 0) {
-      const z = this._putZoom(zoom, this.e.scratch2 + 41984);
-      const v = this.e._putView(view, this.e.scratch2 + 42000);
-      return !!this.e.ex.qvp_zoom_is_zoomed(z, v, fitScale);
+      return this.e.zoomIsZoomed(zoom, view, fitScale);
     }
     /** what a sideways drag on this page means: 'pan' it, or 'turnPage' */
     sidewaysDrag(zoom, view, fitScale = 0) {

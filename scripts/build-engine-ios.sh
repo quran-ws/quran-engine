@@ -50,3 +50,11 @@ xcodebuild -create-xcframework \
 
 echo "engine packaged: $XC"
 ls "$XC"
+
+for dest in packages/flutter/qvp_flutter/ios packages/flutter/qvp_flutter/macos; do
+  if [ -d "$dest" ]; then
+    rm -rf "$dest/QvpEngine.xcframework"
+    cp -R "$XC" "$dest/"
+    echo "copied to $dest/QvpEngine.xcframework"
+  fi
+done

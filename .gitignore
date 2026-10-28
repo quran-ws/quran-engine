@@ -18,6 +18,10 @@ packages/android/qvp/prebuilt/
 packages/android/qvp/src/androidTest/assets/
 packages/android/example/src/main/assets/pages/
 packages/flutter/**/android/src/main/jniLibs/
+packages/flutter/**/windows/*.dll
+packages/flutter/**/linux/*.so
+packages/flutter/**/ios/*.xcframework/
+packages/flutter/**/macos/*.xcframework/
 packages/flutter/**/build/
 packages/flutter/**/.dart_tool/
 packages/flutter/**/assets/pages/
