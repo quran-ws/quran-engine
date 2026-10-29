@@ -1,4 +1,4 @@
-# Publish a data release to cdn.quran.ws/qvp/. Versions are immutable: this runs once per
+# Publish a data release to its edition's folder under cdn.quran.ws/qvp/. Versions are immutable: this runs once per
 # release and refuses to overwrite a folder that already exists.
 name: publish-cdn
 
@@ -8,14 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release tag to publish (e.g. v0.1.0)'
+        description: 'Release tag to publish (e.g. data-v0.5.0 or data-hafs-qcf-v1-1405h-v0.1.0)'
         required: true
 
 jobs:
   publish:
-    # Only data releases (data-vX.Y.Z, and the first one, v0.1.0) go to the CDN; code
-    # releases (vX.Y.Z) carry the engine, not pages.
-    if: ${{ inputs.version != '' || startsWith(github.event.release.tag_name, 'data-v') || github.event.release.tag_name == 'v0.1.0' }}
+    # Only data releases (data-vX.Y.Z, data-hafs-qcf-v1-1405h-vX.Y.Z, and the first one, v0.1.0)
+    # go to the CDN; code releases (vX.Y.Z) carry the engine, not pages.
+    if: ${{ inputs.version != '' || startsWith(github.event.release.tag_name, 'data-v') || startsWith(github.event.release.tag_name, 'data-hafs-qcf-v1-1405h-v') || github.event.release.tag_name == 'v0.1.0' }}
     runs-on: ubuntu-latest
     # The R2 credentials live in this environment, not in repo secrets, so only a run
     # started from a tag — and approved — can reach them.
@@ -44,8 +44,11 @@ jobs:
           VERSION: ${{ inputs.version || github.event.release.tag_name }}
         run: |
           # the tag may carry a data- prefix; the URL never does
-          v="${VERSION#data-}"
-          base="https://cdn.quran.ws/qvp/$v"
+          case "$VERSION" in
+            data-hafs-qcf-v1-1405h-v*) family=qvp/hafs-qcf-v1-1405h; v="${VERSION#data-hafs-qcf-v1-1405h-}" ;;
+            *) family=qvp; v="${VERSION#data-}" ;;
+          esac
+          base="https://cdn.quran.ws/$family/$v"
           curl -fsS "$base/manifest.json" -o /tmp/m.json
 
           # a page: CORS must be present, and the bytes must match the manifest digest.
@@ -67,11 +70,13 @@ jobs:
           [ "$want" = "$got" ] || { echo "bundle digest mismatch: want $want got $got"; exit 1; }
 
           # latest.json must name this version, or consumers that follow it never see it
-          got=$(curl -fsS "https://cdn.quran.ws/qvp/latest.json" | jq -r .version)
+          got=$(curl -fsS "https://cdn.quran.ws/$family/latest.json" | jq -r .version)
           [ "$got" = "$v" ] || { echo "latest.json names '$got', expected '$v'"; exit 1; }
 
           # the old hostname must still resolve, or links published before the move break
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -I "https://qvp.quran.ws/$v/manifest.json")
-          [ "$code" = 301 ] || echo "::warning::qvp.quran.ws returned $code, expected 301 — check the redirect rule"
+          if [ "$family" = qvp ]; then
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -I "https://qvp.quran.ws/$v/manifest.json")
+            [ "$code" = 301 ] || echo "::warning::qvp.quran.ws returned $code, expected 301 — check the redirect rule"
+          fi
 
           echo "pages, digests, bundle encoding and latest all ok"

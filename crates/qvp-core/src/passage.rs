@@ -297,6 +297,8 @@ struct Atom {
     surah: u16,
     ayah: u16,
     number: u16,
+    /// The logical words that share this printed unit, from `number` on.
+    count: u16,
     /// The word's own paths, then the paths of its signs.
     paths: Vec<u32>,
     signs: Vec<Sign>,
@@ -403,12 +405,15 @@ impl Passage {
             }
             let mut text = Vec::with_capacity(words.len());
             for &(pi, wi) in &words {
+                text.push(pages[pi].word_text(wi));
+                if pages[pi].printed_word(wi) != Some(wi) {
+                    continue;
+                }
                 atoms.push(PassageAtom {
                     page: pages[pi].page_number(),
                     atom: prepared[pi].atoms[wi as usize].clone(),
                     size: 1.0,
                 });
-                text.push(pages[pi].word_text(wi));
             }
             ayahs.push((surah, ayah, text.join(" ")));
         }
@@ -432,7 +437,7 @@ impl Passage {
                 let natural = a.rect[0] - b.rect[2];
                 let joined = previous.page == atom.page
                     && a.line == b.line
-                    && a.word + 1 == b.word
+                    && a.word + a.count as u32 == b.word
                     && clearance(&a.word_bands, &b.word_bands)
                         .is_some_and(|air| -air >= b.pitch * defaults::INTERLOCK_DEPTH as f64);
                 if joined {
@@ -507,6 +512,7 @@ impl Passage {
             surah,
             ayah: 0,
             number: 0,
+            count: 0,
             paths,
             signs: Vec::new(),
             rect,
@@ -807,13 +813,13 @@ impl Passage {
         };
         let words: Vec<PassageWord> = words
             .into_iter()
-            .map(|(i, row, rect, word_rect)| {
+            .flat_map(|(i, row, rect, word_rect)| {
                 let (a, [x0, y0, x1, y1]) = (&self.atoms[i], pixels(rect));
                 let [word_x0, word_y0, word_x1, word_y1] = pixels(word_rect);
-                PassageWord {
+                (0..a.atom.count).map(move |k| PassageWord {
                     surah: a.atom.surah,
                     ayah: a.atom.ayah,
-                    word: a.atom.number,
+                    word: a.atom.number + k,
                     page: a.page,
                     row,
                     x0,
@@ -824,7 +830,7 @@ impl Passage {
                     word_y0,
                     word_x1,
                     word_y1,
-                }
+                })
             })
             .collect();
         let mut ayahs: Vec<PassageAyah> = Vec::new();
@@ -981,7 +987,7 @@ pub(crate) fn prepare(page: &Page) -> Result<Prepared, PassageError> {
             // A medallion or a sajdah sign: the last word of its ayah.
             data.words.iter().rposition(|w| w.surah == deco.surah && w.ayah == deco.ayah).map(|wi| wi as u32)
         };
-        let owner = owner.ok_or(PassageError::UnattachedSign)?;
+        let owner = owner.and_then(|wi| page.printed_word(wi)).ok_or(PassageError::UnattachedSign)?;
         let baseline = baselines[data.words[owner as usize].line_index as usize];
         let bands = trace(geometry, paths.iter().copied(), baseline, &mut budget)?;
         signs[owner as usize].push(Sign { kind: deco.kind, paths, rect: sign_rect, bands });
@@ -1008,6 +1014,7 @@ pub(crate) fn prepare(page: &Page) -> Result<Prepared, PassageError> {
                 surah: w.surah,
                 ayah: w.ayah,
                 number: w.word,
+                count: page.word_group(wi as u32).map_or(1, |(_, count)| count),
                 paths,
                 signs: own.clone(),
                 rect: own.iter().fold(word_rect, |r, s| union(r, s.rect)),
@@ -1191,6 +1198,7 @@ impl Atom {
             surah: self.surah,
             ayah: self.ayah,
             number: self.number,
+            count: self.count,
             paths: self.paths.clone(),
             signs: self
                 .signs
@@ -1529,6 +1537,20 @@ mod tests {
             );
             assert_eq!(p.ky, 1.0);
         }
+    }
+
+    #[test]
+    fn two_words_of_one_printed_unit_draw_it_once() {
+        let mut data = synthetic_data(1, 1);
+        data.words[2].first_path = data.words[1].first_path;
+        data.words[2].bbox = data.words[1].bbox;
+        let page = Page::load(&encode(&data)).unwrap();
+        let mut passage = Passage::load(&[&page], 1, 1, 1).unwrap();
+        let l = passage.layout(&spec(70.0)).unwrap().clone();
+        assert_eq!(l.draws.iter().filter(|d| d.path == 1).count(), 1);
+        let words: Vec<_> = l.words.iter().map(|w| (w.word, [w.x0, w.y0, w.x1, w.y1])).collect();
+        assert_eq!(words.iter().map(|w| w.0).collect::<Vec<_>>(), [1, 2, 3]);
+        assert_eq!(words[1].1, words[2].1);
     }
 
     #[test]

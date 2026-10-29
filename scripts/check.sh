@@ -70,6 +70,7 @@ for check in "$@"; do
       node web/smoke.mjs
       node web/lite.test.mjs
       node web/lite-passage.test.mjs
+      node conformance/test_qcf_v1_semantics_audit.mjs
       # The example is plain JavaScript that no test loads, so parse it here. This is a
       # syntax check, not a typecheck; it catches the file being left unrunnable.
       node --check web/example/app.js

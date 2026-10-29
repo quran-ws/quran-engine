@@ -57,6 +57,18 @@ on 2029-09-13 and must be replaced in GitHub before then.
 
 A published data version is never rewritten. Cut a new one.
 
+## A QCF V1 data release (`data-hafs-qcf-v1-1405h-vX.Y.Z`)
+
+1. Convert the corpus into `dist/hafs-qcf-v1-1405h` and run the semantic audit, as
+   `docs/QCF-V1-DATA.md` shows.
+2. `QVP_SOURCE_VERSION=<tag> scripts/package-data.sh X.Y.Z hafs-qcf-v1-1405h`.
+3. `gh release create data-hafs-qcf-v1-1405h-vX.Y.Z` with the tarball and its checksum.
+   `publish-cdn.yml` mirrors it to `qvp/hafs-qcf-v1-1405h/vX.Y.Z/` and moves only that
+   folder's `latest.json`.
+
+The two editions have separate version sequences. A release of one never writes to the
+folder of the other.
+
 ## Before either
 
 `scripts/check.sh` green locally, `CHANGELOG.md` has the section, no open issue carries the

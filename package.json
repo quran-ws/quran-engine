@@ -63,7 +63,7 @@
   "scripts": {
     "build:wasm": "cargo build -p qvp-ffi --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm",
     "prepack": "npm run build:wasm",
-    "test": "node web/smoke.mjs && node web/lite.test.mjs && node web/lite-passage.test.mjs",
-    "test:lite": "node web/lite.test.mjs && node web/lite-passage.test.mjs"
+    "test": "node web/smoke.mjs && node web/lite.test.mjs && node web/lite-passage.test.mjs && node conformance/test_qcf_v1_semantics_audit.mjs",
+    "test:lite": "node web/lite.test.mjs && node web/lite-passage.test.mjs && node conformance/test_qcf_v1_semantics_audit.mjs"
   }
 }

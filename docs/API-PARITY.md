@@ -276,7 +276,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-173 symbols in the header, 173 Rust exports. web: 172 bound, android: 167 bound, flutter: 172 bound, ios: 165 bound, react-native: 95 bound.
+174 symbols in the header, 174 Rust exports. web: 173 bound, android: 168 bound, flutter: 173 bound, ios: 166 bound, react-native: 96 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -441,6 +441,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_word_bands_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_word_bounds_view` | yes | yes | yes | yes | yes |
 | `qvp_word_form` | yes | yes | yes | yes | yes |
+| `qvp_word_group` | yes | yes | yes | yes | yes |
 | `qvp_word_info` | yes | yes | yes | yes | gap (list form: bound as `word(i)` and `words()`) |
 | `qvp_word_label` | yes | yes | yes | yes | yes |
 | `qvp_zoom_at_step` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |

@@ -17,7 +17,7 @@ and under what terms an app may use it.
 | `surah-names/qvp/all.qvp`, `surah-names/svg/all.svg` | all 114 titles on one frame-free sprite sheet |
 | `surah-names/surah-names.woff2` | all titles as OpenType/CFF glyphs at private-use code points |
 | `surah-names/surah-names.css`, `surah-names/map.json` | browser classes and the code-point and metadata map |
-| `VERSION.json` | provenance: data version, source release, engine commit, format version, page and surah-name counts, digests of every generated data file, and, when a set was packaged, an `ornaments` record (source, source commit, redistributable only) |
+| `VERSION.json` | provenance: package name, edition, data version, source release, engine commit, format version, page and surah-name counts, digests of every generated data file, and, when a set was packaged, an `ornaments` record (source, source commit, redistributable only) |
 | `ornaments.qvo` | the ornament set in the QVO1 format: every asset of `quran-ws/quran-assets` whose licence is confirmed, today the 40 font-derived ayah markers |
 
 The data covers 604 pages, 77,432 words, 6,236 ayahs and 114 surahs. The individual QVPs

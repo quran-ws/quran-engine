@@ -314,6 +314,44 @@ pub fn encode(p: &PageData) -> Vec<u8> {
     o
 }
 
+/// Two consecutive words of one ayah fragment that own the same nonempty path range: one
+/// printed unit that holds both.
+pub fn same_printed_unit(left: &WordRec, right: &WordRec) -> bool {
+    left.n_paths > 0
+        && left.first_path == right.first_path
+        && left.n_paths == right.n_paths
+        && left.surah == right.surah
+        && left.ayah == right.ayah
+        && left.line_index == right.line_index
+        && left.ayah_index == right.ayah_index
+        && right.word == left.word.saturating_add(1)
+}
+
+// Path ranges are disjoint, except that consecutive words may share one printed unit. Sorted by
+// start, any overlap shows up between neighbours, so one pass over the sorted ranges finds it.
+pub(crate) fn validate_word_paths(words: &[WordRec], path_count: usize) -> Result<(), Error> {
+    let mut order = Vec::with_capacity(words.len());
+    for (index, word) in words.iter().enumerate() {
+        let end = word.first_path.checked_add(word.n_paths as u32).ok_or(Error::Bounds("word paths"))?;
+        if end as usize > path_count {
+            return Err(Error::Bounds("word paths"));
+        }
+        if word.n_paths > 0 {
+            order.push(index);
+        }
+    }
+    order.sort_unstable_by_key(|&index| (words[index].first_path, index));
+    for pair in order.windows(2) {
+        let (left, right) = (&words[pair[0]], &words[pair[1]]);
+        if right.first_path < left.first_path + left.n_paths as u32
+            && !(pair[1] == pair[0] + 1 && same_printed_unit(left, right))
+        {
+            return Err(Error::Corrupt("word path overlap"));
+        }
+    }
+    Ok(())
+}
+
 // ───────────────────────────── decode ─────────────────────────────
 
 pub fn decode(b: &[u8]) -> Result<PageData, Error> {
@@ -415,6 +453,7 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
             bbox: IBox::EMPTY,
         });
     }
+    validate_word_paths(&words, n_paths)?;
     if t.pos + n_paths * 4 > b.len() {
         return Err(Error::Truncated("paths"));
     }

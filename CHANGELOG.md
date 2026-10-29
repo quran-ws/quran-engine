@@ -10,6 +10,13 @@ All notable changes to the engine and its packages. The format follows
 - Reflow can keep the print's line breaks with `breaks: 'printed'` (`QvpBreaks.printed`
   in Swift). Each line stays whole while its ink grows to fill the page width.
   `reflowMaxZoom` measures the widest row in this mode, and larger zooms clamp to it.
+- `qvp_word_group` / `page.wordGroup(i)` (every wrapper): the logical words that share one
+  printed glyph. Hits, layout, masks, highlights, crops and passages use the glyph once. Text,
+  search, citation and recitation keep every word.
+- A second data edition, Hafs QCF V1 1405H (`docs/QCF-V1-DATA.md`), with its own tag
+  `data-hafs-qcf-v1-1405h-vX.Y.Z` and CDN folder `qvp/hafs-qcf-v1-1405h/`.
+  `scripts/package-data.sh` and `scripts/publish-cdn.sh` take the edition, and `VERSION.json`
+  records it.
 
 ### Changed
 - Reflow sizes a surah banner's row from its ink and normal line spacing, not its printed slot.

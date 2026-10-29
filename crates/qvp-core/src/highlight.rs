@@ -102,9 +102,10 @@ impl Page {
     /// Band boxes for a word list on a reflowed page, one per row (page units, placed).
     pub(crate) fn reflow_bands(&self, words: &[u32], height: BandHeight, pad_x: f32, pad_y: f32) -> Vec<BandBox> {
         let q = self.quant();
+        let words = self.printed_words(words);
         let Some(flow) = self.current_layout().and_then(|l| l.reflow.as_ref()) else { return vec![] };
         let mut by_row: Vec<Option<BandBox>> = vec![None; flow.row_band.len()];
-        for &wi in words {
+        for &wi in &words {
             let r = flow.word_row[wi as usize];
             if r as usize >= by_row.len() {
                 continue;
@@ -130,10 +131,11 @@ impl Page {
     /// Band boxes for a word list (page units, before seams).
     pub fn word_bands(&self, words: &[u32], height: BandHeight, pad_x: f32, pad_y: f32) -> Vec<BandBox> {
         let q = self.quant();
+        let words = self.printed_words(words);
         let d = self.data();
         let bands = self.line_bands();
         let mut by_line: Vec<Option<BandBox>> = vec![None; d.lines.len()];
-        for &wi in words {
+        for &wi in &words {
             let w = &d.words[wi as usize];
             let li = w.line_index as usize;
             let (x0, x1) = (w.bbox.x0 as f32 / q - pad_x, w.bbox.x1 as f32 / q + pad_x);
@@ -153,7 +155,7 @@ impl Page {
     /// Add a highlight. Returns a handle; `remove_highlight(handle)` removes it (animated when
     /// transition_ms > 0). Ink recolouring goes through the style engine under the same handle.
     pub fn highlight(&mut self, target: &Target, style: HighlightStyle) -> Handle {
-        let words = self.target_words(target);
+        let words = self.printed_words(&self.target_words(target));
         let h = self.styles.new_handle();
         self.install_highlight(h, words, style);
         h
@@ -196,7 +198,7 @@ impl Page {
 
     /// Move an existing highlight to a new target (the band slides, ink fades).
     pub fn move_highlight(&mut self, handle: Handle, target: &Target) -> bool {
-        let words = self.target_words(target);
+        let words = self.printed_words(&self.target_words(target));
         let Some(i) = self.highlights.iter().position(|x| x.handle == handle && !x.removing) else { return false };
         let style = self.highlights[i].style;
         // ink rules: replace under the same handle

@@ -46,6 +46,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun lines(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.lines.map { Marshal.line(it) } }
     @ReactMethod fun decorations(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.decorations.map { Marshal.decoration(it) } }
     @ReactMethod fun findWord(tag: Int, s: Int, a: Int, w: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.findWord(s, a, w) }
+    @ReactMethod fun wordGroup(tag: Int, index: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.wordGroup(index).toList() }
     @ReactMethod fun targetWords(tag: Int, target: Dynamic, promise: Promise) = withPage(tag, promise) { _, p -> p.targetWords(tgt(target, p)).toList() }
     @ReactMethod fun wordForm(tag: Int, index: Int, form: String?, promise: Promise) = withPage(tag, promise) { _, p -> p.wordForm(index, Marshal.form(form)) }
     @ReactMethod fun hasForm(tag: Int, form: String?, promise: Promise) = withPage(tag, promise) { _, p -> p.hasForm(Marshal.form(form)) }

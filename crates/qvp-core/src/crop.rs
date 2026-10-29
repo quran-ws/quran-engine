@@ -91,6 +91,8 @@ impl Page {
             let dc = &d.decorations[cb.ayah_mark_decoration as usize];
             path_ids.extend(dc.first_path..dc.first_path + dc.n_paths as u32);
         }
+        path_ids.sort_unstable();
+        path_ids.dedup();
         for pi in path_ids {
             let c = colors[pi as usize];
             if c & 0xff == 0 {
