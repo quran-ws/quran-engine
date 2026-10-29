@@ -1,4 +1,5 @@
 //! QVP → SVG, used by the identity test and as a debugging aid.
+use qvp_format::codec::same_printed_unit;
 use qvp_format::*;
 use std::fmt::Write;
 
@@ -64,15 +65,9 @@ pub fn to_svg(p: &PageData) -> Result<String, Error> {
                 w.surah, w.ayah, w.word, text
             )
             .unwrap();
-            let owner = wi.checked_sub(1).filter(|owner| {
-                let candidate = &p.words[*owner as usize];
-                *owner >= l.first_word
-                    && candidate.line_index == w.line_index
-                    && candidate.ayah_index == w.ayah_index
-                    && candidate.first_path == w.first_path
-                    && candidate.n_paths == w.n_paths
-                    && w.n_paths != 0
-            });
+            let owner = wi
+                .checked_sub(1)
+                .filter(|owner| *owner >= l.first_word && same_printed_unit(&p.words[*owner as usize], w));
             if let Some(owner) = owner {
                 let owner = &p.words[owner as usize];
                 write!(s, " data-shared-paths-with=\"{}:{}:{}\"/>", owner.surah, owner.ayah, owner.word).unwrap();

@@ -99,24 +99,13 @@ struct Silhouettes {
     decorations: Vec<Vec<(i16, f32, f32)>>,
 }
 
-fn same_printed_unit(left: &WordRec, right: &WordRec) -> bool {
-    left.n_paths > 0
-        && left.first_path == right.first_path
-        && left.n_paths == right.n_paths
-        && left.surah == right.surah
-        && left.ayah == right.ayah
-        && left.line_index == right.line_index
-        && left.ayah_index == right.ayah_index
-        && right.word == left.word.saturating_add(1)
-}
-
 fn word_groups(words: &[WordRec]) -> (Vec<u32>, Vec<u16>) {
     let mut owner: Vec<u32> = (0..words.len() as u32).collect();
     let mut count = vec![1u16; words.len()];
     let mut first = 0usize;
     while first < words.len() {
         let mut end = first + 1;
-        while end < words.len() && same_printed_unit(&words[end - 1], &words[end]) {
+        while end < words.len() && codec::same_printed_unit(&words[end - 1], &words[end]) {
             end += 1;
         }
         let size = (end - first) as u16;

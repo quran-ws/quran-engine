@@ -314,44 +314,39 @@ pub fn encode(p: &PageData) -> Vec<u8> {
     o
 }
 
-// Two adjacent logical words may name one printed unit by owning the exact same
-// non-empty path range. Any partial or cross-record overlap remains corrupt.
+/// Two consecutive words of one ayah fragment that own the same nonempty path range: one
+/// printed unit that holds both.
+pub fn same_printed_unit(left: &WordRec, right: &WordRec) -> bool {
+    left.n_paths > 0
+        && left.first_path == right.first_path
+        && left.n_paths == right.n_paths
+        && left.surah == right.surah
+        && left.ayah == right.ayah
+        && left.line_index == right.line_index
+        && left.ayah_index == right.ayah_index
+        && right.word == left.word.saturating_add(1)
+}
+
+// Path ranges are disjoint, except that consecutive words may share one printed unit. Sorted by
+// start, any overlap shows up between neighbours, so one pass over the sorted ranges finds it.
 pub(crate) fn validate_word_paths(words: &[WordRec], path_count: usize) -> Result<(), Error> {
+    let mut order = Vec::with_capacity(words.len());
     for (index, word) in words.iter().enumerate() {
         let end = word.first_path.checked_add(word.n_paths as u32).ok_or(Error::Bounds("word paths"))?;
         if end as usize > path_count {
             return Err(Error::Bounds("word paths"));
         }
-        let mut overlaps = false;
-        for left in &words[..index] {
-            let left_end = left.first_path + left.n_paths as u32;
-            if word.first_path >= left_end || left.first_path >= end {
-                continue;
-            }
-            overlaps = true;
-            let exact = word.n_paths > 0
-                && word.first_path == left.first_path
-                && word.n_paths == left.n_paths
-                && word.surah == left.surah
-                && word.ayah == left.ayah
-                && word.line_index == left.line_index
-                && word.ayah_index == left.ayah_index;
-            if !exact {
-                return Err(Error::Corrupt("word path overlap"));
-            }
+        if word.n_paths > 0 {
+            order.push(index);
         }
-        if overlaps {
-            let left = &words[index - 1];
-            let contiguous = word.first_path == left.first_path
-                && word.n_paths == left.n_paths
-                && word.surah == left.surah
-                && word.ayah == left.ayah
-                && word.line_index == left.line_index
-                && word.ayah_index == left.ayah_index
-                && word.word == left.word.saturating_add(1);
-            if !contiguous {
-                return Err(Error::Corrupt("word path overlap"));
-            }
+    }
+    order.sort_unstable_by_key(|&index| (words[index].first_path, index));
+    for pair in order.windows(2) {
+        let (left, right) = (&words[pair[0]], &words[pair[1]]);
+        if right.first_path < left.first_path + left.n_paths as u32
+            && !(pair[1] == pair[0] + 1 && same_printed_unit(left, right))
+        {
+            return Err(Error::Corrupt("word path overlap"));
         }
     }
     Ok(())
