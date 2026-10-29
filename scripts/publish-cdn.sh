@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Publish one version of the page data to cdn.quran.ws/qvp/ (Cloudflare R2).
+# Publish one version of an edition's page data to cdn.quran.ws (Cloudflare R2). The default
+# edition publishes to qvp/<version>/, and QCF V1 1405H to qvp/hafs-qcf-v1-1405h/<version>/.
 #
 # The host carries every artefact of the stack, so the page data lives under a folder of its
 # own; scripts/cdn-put.sh holds the layout and the upload itself.
@@ -11,6 +12,7 @@
 #   scripts/publish-cdn.sh v0.1.0                 # publish an extracted package in dist/pages
 #   scripts/publish-cdn.sh v0.1.0 --from-release  # fetch the release tarball instead
 #   scripts/publish-cdn.sh v0.1.0 --from-release --stage-only  # stage, upload nothing
+#   scripts/publish-cdn.sh data-hafs-qcf-v1-1405h-v0.1.0 --from-release  # the QCF V1 edition
 #
 # Two shapes of the same data go up. The individual objects are what a reader fetches — it
 # wants page 42 or one surah title, not the whole data set. The bundle is for "download the
@@ -48,20 +50,33 @@ done
 # shellcheck source=scripts/cdn-put.sh
 . scripts/cdn-put.sh
 
-FAMILY=qvp
 RELEASE="$VERSION"           # the tag, for `gh release download`
-VERSION="$(cdn_version "$VERSION")"   # the folder, without the data- prefix
+case "$RELEASE" in
+  data-hafs-qcf-v1-1405h-v*)
+    EDITION=hafs-qcf-v1-1405h
+    FAMILY="qvp/$EDITION"
+    VERSION="${RELEASE#data-"$EDITION"-}"
+    SRC="dist/$EDITION"
+    STAGE="dist/cdn/$EDITION/$VERSION"
+    ;;
+  *)
+    EDITION=hafs-kfgqpc
+    FAMILY=qvp
+    VERSION="$(cdn_version "$RELEASE")"   # the folder, without the data- prefix
+    SRC=dist/pages
+    STAGE="dist/cdn/$VERSION"
+    ;;
+esac
 PREFIX="$FAMILY/$VERSION"
-SRC=dist/pages
-STAGE="dist/cdn/$VERSION"
+PACKAGE="quran-engine-pages-$EDITION"
 
 # 1. Source the files. The release tarball is canonical; a local dist/pages must be an
 #    extracted package, including VERSION.json. Either way we publish exactly the signed bytes.
 if [ "$FROM_RELEASE" = 1 ]; then
-  TAR=dist/quran-engine-pages-hafs-kfgqpc.tar.gz
+  TAR="dist/$PACKAGE.tar.gz"
   mkdir -p dist && rm -rf "$SRC"
   gh release download "$RELEASE" --repo quran-ws/quran-engine --clobber -D dist \
-    -p 'quran-engine-pages-hafs-kfgqpc.tar.gz*'
+    -p "$PACKAGE.tar.gz*"
   echo "== verifying $TAR"
   want=$(cut -d' ' -f1 < "$TAR.sha256"); got=$(sha256 "$TAR")
   [ "$want" = "$got" ] || { echo "sha256 mismatch: want $want got $got" >&2; exit 1; }
@@ -75,6 +90,9 @@ fi
   echo "no packaged VERSION.json in $SRC — run scripts/package-data.sh and publish the extracted release, or pass --from-release" >&2
   exit 1
 }
+# Releases before the edition field are the default edition.
+packaged="$(jq -r '.edition // "hafs-kfgqpc"' "$SRC/VERSION.json")"
+[ "$packaged" = "$EDITION" ] || { echo "$SRC holds edition $packaged, but $RELEASE is $EDITION" >&2; exit 1; }
 pages=( "$SRC"/*.qvp )
 sidecars=( "$SRC"/*.words.json )
 [ "${#pages[@]}" = 604 ] || { echo "expected 604 QVP pages in $SRC, found ${#pages[@]}" >&2; exit 1; }
@@ -123,7 +141,7 @@ done
 # 2b. The solid bundle, named for the edition alone: the host says the format and the prefix
 #     says the version, so anything more just repeats the URL. Built once per release; quality
 #     11 over the complete data tree takes a few minutes.
-BUNDLE="hafs-kfgqpc.tar.br"
+BUNDLE="$EDITION.tar.br"
 echo "== building $BUNDLE (solid brotli, this takes a few minutes)"
 # COPYFILE_DISABLE: macOS tar otherwise stores extended attributes as AppleDouble "._name"
 # members. `tar tf` on macOS hides them, but Linux, iOS and every JS untar see them — the
