@@ -1,6 +1,5 @@
-# The React Native package: install, typecheck, and build the TypeScript output.
-# The example's Android build runs in the Android workflow's toolchain when it is wired
-# there. This job covers the JavaScript side and the JVM unit tests of the Android module.
+# The React Native package: install, typecheck, and build the TypeScript output, then
+# compile the Android module's Kotlin and run its JVM unit tests.
 name: React Native
 
 on:
@@ -8,7 +7,9 @@ on:
     paths:
       - ".github/workflows/react-native.yml"
       - "packages/react-native/**"
-      # The Android module's unit tests compile against the Kotlin library.
+      # The Android module compiles against the Kotlin library, so a change to the library's
+      # sources or its build file can break the module.
+      - "packages/android/qvp/build.gradle.kts"
       - "packages/android/qvp/src/main/kotlin/**"
   push:
     branches: [main]
@@ -50,9 +51,14 @@ jobs:
       - name: Test the example
         working-directory: packages/react-native/example
         run: npm test -- --ci
-      # The JVM unit tests of the Android module. Gradle runs in the example's build, because
-      # that build includes the module and the Kotlin library as projects. The tests need no
-      # native libraries and no page data.
-      - name: Test the Android module
+      # Compile the Android module's Kotlin in release and debug, and run its JVM unit tests.
+      # Gradle runs in the example's build, because that build includes the module and the
+      # Kotlin library as projects. A Kotlin error in the module, or a change to the library's
+      # API that the module calls, fails here. These tasks need no native libraries and no
+      # page data.
+      - name: Compile and test the Android module
         working-directory: packages/react-native/example/android
-        run: ./gradlew --no-daemon :quran.ws_qvp-react-native:testDebugUnitTest
+        run: >-
+          ./gradlew --no-daemon
+          :quran.ws_qvp-react-native:compileReleaseKotlin
+          :quran.ws_qvp-react-native:testDebugUnitTest
