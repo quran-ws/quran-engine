@@ -17,9 +17,10 @@ All notable changes to the engine and its packages. The format follows
   byte-identical to `data-v0.4.0`. It adds `ornaments.qvo`, which holds ayah medallions only.
   The web smoke test skips its dress-by-style checks when no style in the set has all three
   ornament kinds.
-- The React Native workflow compiles the Android module's Kotlin in release as well as
-  debug. It also runs when the Kotlin library's build file changes, so a library change that
-  breaks the module fails CI.
+- The React Native workflow compiles the Android module's Kotlin in release as well as in
+  debug. It also runs when the Kotlin library's build file changes. Such a change broke the
+  module once (#83) and now fails CI. The job installs the Android SDK, NDK and CMake the
+  library's build reads. Gradle no longer downloads them mid-build.
 
 ## [0.7.0] - 2026-10-14
 
