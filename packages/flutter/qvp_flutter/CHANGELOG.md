@@ -7,6 +7,8 @@
   `QvpDressInfo.revision` and held per page, which is what a repaint of a dress depends on.
 - `QvpPage.batch(fn)` notifies listeners once however many mutations `fn` makes.
 - `QvpPage.ayahMarks()` holds its answer until the next mutation.
+- `QvpPageViewStats.basePaths` counts the paths a replayed picture draws, not only the
+  paths of a frame that recorded one.
 - Platforms: iOS, macOS, Windows, Linux and web, alongside Android.
   - iOS and macOS link `QvpEngine.xcframework` through a podspec and resolve symbols with
     `DynamicLibrary.process()`. `scripts/build-engine-ios.sh` copies the framework into both.

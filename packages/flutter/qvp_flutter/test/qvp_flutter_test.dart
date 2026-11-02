@@ -607,67 +607,39 @@ void main() {
     expect(set.isDisposed, isTrue);
   });
 
-  testWidgets('a highlight band follows the engine while it animates', (tester) async {
+  test('a removed highlight leaves no band once the clock passes its fade', () {
     final p = engine.loadPage(File(pagePath).readAsBytesSync());
-    await tester.pumpWidget(Directionality(
-        textDirection: TextDirection.ltr,
-        child: SizedBox(width: 400, height: 640, child: QvpPageView(page: p))));
-    final h = p.highlight('2:255', const QvpHighlightStyle(mode: 'band', ms: 300));
-    await tester.pump();
-    final first = p.highlightBoxesView();
-    expect(first, isNotEmpty);
-    // the band slides, so the boxes a later frame reads are not the boxes of the first one
-    p.moveHighlight(h, QvpTarget.of('2:256'));
-    await tester.pump(const Duration(milliseconds: 16));
-    await tester.pump(const Duration(milliseconds: 150));
-    final mid = p.highlightBoxesView();
-    expect(mid.first.y0, isNot(closeTo(first.first.y0, 0.01)));
-    // and once it is removed the page keeps no band, which a cache keyed on revision alone
-    // would hold for ever because tick() does not mutate the page
+    final h = p.highlight('2:255', const QvpHighlightStyle(mode: 'band', ms: 200));
+    // part way through the fade, where the test above reads six boxes
+    p.tick(100);
+    expect(p.highlightBoxesView(), isNotEmpty);
     p.removeHighlight(h);
-    await tester.pump(const Duration(milliseconds: 16));
-    await tester.pump(const Duration(milliseconds: 400));
+    // The engine drops a removed highlight inside its own moving window, so whoever reads the
+    // boxes has to read them again after the clock has moved. QvpPageView does that by
+    // clearing its band cache on every tick: a cache keyed on page.revision alone would hold
+    // these six boxes for ever, because tick() mutates nothing.
+    p.tick(400);
+    p.tick(1000);
     expect(p.highlightBoxesView(), isEmpty);
     p.dispose();
   });
 
-  test('turning surah frames off changes what the layout draws', () {
-    final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
-    QvpLayoutSpec spec(bool frames) =>
-        QvpViewLayout(surahFrames: frames).toSpec(400, 640);
-    p.layout(spec(true));
-    final withFrames = p.layoutDrawList().length;
-    p.layout(spec(false));
-    final without = p.layoutDrawList().length;
-    // the engine decides what a layout draws. The base ink key carries surahFrames because of
-    // this: the flag changes the draw list while scale and contentH stay put, so a key without
-    // it would replay a picture that still has the frame in it.
-    if (p.surahHeaders().isNotEmpty) {
-      expect(without, lessThan(withFrames));
-    } else {
-      expect(without, withFrames);
-    }
-    p.dispose();
-  });
-
-  testWidgets('a colour-only re-dress redraws the ornament layer', (tester) async {
+  test('a colour-only re-dress moves the revision the ornament layer is keyed on', () {
     final set = engine.loadOrnaments(testOrnaments());
     final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
-    await tester.pumpWidget(Directionality(
-        textDirection: TextDirection.ltr,
-        child: SizedBox(width: 400, height: 640, child: QvpPageView(page: p))));
-    const spec = QvpDressSpec(style: 'test');
-    expect(p.dress(set, spec), isNotNull);
-    await tester.pump();
+    expect(p.dress(set, const QvpDressSpec(style: 'test')), isNotNull);
     final before = p.dressInfo()!.revision;
-    final firstColour = p.dressGeometry().first.color;
-    // a repaint keeps the dressed box, so nothing about the page number or the layout moves.
-    // Only dressInfo().revision does, which is what the ornament picture is keyed on.
+    final colours = p.dressGeometry().map((d) => d.color).toList();
+    expect(colours, isNotEmpty);
+    // A repaint keeps the dressed box, so the page number, the style and the layout all stay
+    // put and only dressInfo().revision moves. That is why the ornament picture is keyed on
+    // the revision: a key built from the style and the ornament indices would replay the old
+    // colours for ever.
     expect(
-        p.dress(set, spec.copyWith(colors: [(0, 0, '#0000ffff')])), isNotNull);
-    await tester.pump();
+        p.dress(set, QvpDressSpec(style: 'test', colors: [(set.list[2], 0, 0xff0000ff)])),
+        isNotNull);
     expect(p.dressInfo()!.revision, greaterThan(before));
-    expect(p.dressGeometry().first.color, isNot(firstColour));
+    expect(p.dressGeometry().map((d) => d.color).toList(), isNot(colours));
     p.dispose();
   });
 

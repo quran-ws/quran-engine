@@ -624,7 +624,11 @@ class QvpPageViewState extends State<QvpPageView>
 class _PictureCacheEntry {
   final String key;
   final ui.Picture picture;
-  _PictureCacheEntry(this.key, this.picture);
+  _PictureCacheEntry(this.key, this.picture, this.paths);
+
+  /// How many engine paths the recording draws. A replay draws all of them, so the stats of
+  /// the last frame need this on a cache hit as much as on a fresh recording.
+  final int paths;
 
   void dispose() {
     try {
@@ -648,12 +652,12 @@ class _LruCache {
     return null;
   }
 
-  void put(String key, ui.Picture pic) {
+  void put(String key, ui.Picture pic, int paths) {
     final old = _entries.remove(key);
     if (old != null && old.picture != pic) {
       old.dispose();
     }
-    _entries[key] = _PictureCacheEntry(key, pic);
+    _entries[key] = _PictureCacheEntry(key, pic, paths);
     while (_entries.length > maxEntries) {
       final firstKey = _entries.keys.first;
       _entries.remove(firstKey)?.dispose();
@@ -688,8 +692,8 @@ class _InkCache {
 
   static _PictureCacheEntry? getGlobalInk(String key) =>
       _globalInkCache.get(key);
-  static void keepGlobalInk(String key, ui.Picture pic) =>
-      _globalInkCache.put(key, pic);
+  static void keepGlobalInk(String key, ui.Picture pic, int paths) =>
+      _globalInkCache.put(key, pic, paths);
 
   static void prepare(QvpPage page,
       {Color? inkColor, bool surahFrames = true}) {
@@ -726,7 +730,7 @@ class _InkCache {
     }
     if (open) c.restore();
     final pic = rec.endRecording();
-    keepGlobalInk(key, pic);
+    keepGlobalInk(key, pic, draws.length);
   }
 
   QvpPage? page;
@@ -1070,6 +1074,8 @@ class _QvpPainter extends CustomPainter {
     if (kept != null) {
       cache.picture = kept.picture;
       cache.key = key;
+      // the replay draws every path the recording holds, so the HUD reads the real number
+      cache.basePaths = kept.paths;
     } else {
       final sw = Stopwatch()..start();
       final rec = ui.PictureRecorder();
@@ -1110,7 +1116,7 @@ class _QvpPainter extends CustomPainter {
       cache.key = key;
       cache.basePaths = n;
       cache.baseMs = sw.elapsedMicroseconds / 1000;
-      _InkCache.keepGlobalInk(key, pic);
+      _InkCache.keepGlobalInk(key, pic, n);
     }
 
     final sw = Stopwatch()..start();
