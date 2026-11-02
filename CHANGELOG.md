@@ -10,6 +10,18 @@ All notable changes to the engine and its packages. The format follows
 - Reflow can keep the print's line breaks with `breaks: 'printed'` (`QvpBreaks.printed`
   in Swift). Each line stays whole while its ink grows to fill the page width.
   `reflowMaxZoom` measures the widest row in this mode, and larger zooms clamp to it.
+- Flutter: the package builds for iOS, macOS, Windows, Linux and web, alongside Android.
+  iOS and macOS link `QvpEngine.xcframework` through a podspec and resolve symbols with
+  `DynamicLibrary.process()`. `scripts/build-engine-ios.sh` copies the framework into both.
+  Windows and Linux bundle `qvp_ffi.dll` and `libqvp_ffi.so` through CMake, and fail the
+  build when neither the plugin directory nor `target/release` holds one. Web runs the
+  engine as WebAssembly over `dart:js_interop`, so call `await QvpEngine.initWeb()` before
+  the first engine call.
+- `scripts/sync-flutter-web-engine.sh` refreshes the two web assets the Flutter package
+  ships. `scripts/check-parity.py` fails when its `qvp.js` copy drifts from `web/qvp.js`.
+- Flutter: `QvpPage.batch(fn)` notifies listeners once however many mutations `fn` makes,
+  and `QvpPage.path(i)` builds one path on demand and keeps it. `QvpPage.buildPaths()`
+  returns the whole list as before.
 
 ### Changed
 - Reflow sizes a surah banner's row from its ink and normal line spacing, not its printed slot.
@@ -27,6 +39,42 @@ All notable changes to the engine and its packages. The format follows
   debug. It also runs when the Kotlin library's build file changes. Such a change broke the
   module once (#83) and now fails CI. The job installs the Android SDK, NDK and CMake the
   library's build reads. Gradle no longer downloads them mid-build.
+- Flutter: `QvpPageView` caches the base ink and the ornament layer as `ui.Picture`
+  recordings in layout units, where it recorded rasters at the current transform before. A
+  pan or a pinch now replays the picture instead of redrawing the page. The ink and the
+  draw-list keys carry the engine layout's offsets and the `surahFrames` flag, and the
+  ornament layer is keyed on `QvpDressInfo.revision` and held per page, because a dress
+  changes the colour and stroke width the picture bakes in.
+- Flutter: `engine.dart` splits into `types.dart`, `page.dart`, `atlas.dart`,
+  `ornaments.dart`, `passage.dart` and a backend interface. `QvpEngine` holds a
+  `QvpBackend`, so the Dart API no longer names `dart:ffi` types and the same code compiles
+  for web.
+- Flutter: the native backend marshals input through a bump allocator over one scratch
+  buffer, in place of an allocation per call. A nested call takes a slice of its own, so
+  `text()` can pass two separators without the second overwriting the first.
+- The Flutter package is `dart format` clean, and its workflow checks the formatting before
+  it analyses. `docs/standards/CODE-STYLE.md` names the tool for Dart, and its section order
+  matches the header it describes.
+
+### Removed
+- **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and
+  `QvpEngine.str` are gone. All three named `dart:ffi` types or the native scratch, which
+  cannot sit on a platform-neutral class. `QvpNativeBackend` holds them now. Pass a library
+  to `QvpEngine(library)` or a path to `QvpEngine.open(path:)` as before. Before 1.0 a
+  removal takes a minor bump (`docs/standards/VERSIONING.md`), so the next release is 0.8.0.
+
+### Fixed
+- Flutter: a highlight band no longer freezes part way through a transition, and a removed
+  band no longer stays on the page. The engine's highlight boxes depend on the clock, so the
+  band cache clears on every frame rather than on a revision change.
+- Flutter: styled paint composites with `srcOver`. With `src`, a styled colour part way
+  through a fade wrote its alpha over the paper rect in the same layer and opened a
+  translucent hole.
+- Flutter: a styled path the layout leaves out of the draw list is skipped. The fallback
+  read `pathLine()`, which mixed a printed line number into a list of placements and put the
+  glyph somewhere else on a reflowed page.
+- Flutter: `QvpPageViewStats.basePaths` counts the paths a replayed picture draws, not only
+  the paths of a frame that recorded one.
 
 ## [0.7.0] - 2026-10-14
 
