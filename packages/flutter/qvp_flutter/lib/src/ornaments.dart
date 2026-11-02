@@ -4,7 +4,7 @@ import 'engine.dart';
 /// The ornaments of other mushafs and fonts, from `ornaments.qvo`.
 class QvpOrnaments {
   QvpOrnaments.fromHandle(this.engine, this._backend, this._handle, this.list)
-      : count = list.length;
+    : count = list.length;
 
   final QvpEngine engine;
   final QvpBackend _backend;
@@ -39,8 +39,10 @@ class QvpOrnaments {
   }
 
   /// The ornaments of one kind.
-  List<QvpOrnament> ofKind(QvpOrnamentKind kind) =>
-      [for (final o in list) if (o.kind == kind) o];
+  List<QvpOrnament> ofKind(QvpOrnamentKind kind) => [
+    for (final o in list)
+      if (o.kind == kind) o,
+  ];
 
   /// Every style in the set, with the ornament it has of each kind.
   List<QvpOrnamentStyle> styles() {

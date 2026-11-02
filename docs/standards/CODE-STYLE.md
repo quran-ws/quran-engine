@@ -40,7 +40,7 @@ One standard for Rust, C, JavaScript, Kotlin, Dart and Swift.
 | C header | block comment at top | `/** … */` above each declaration | `check-parity.py` requires a block per symbol |
 | JavaScript / TypeScript | `//` line | JSDoc `/** … */` | eslint `jsdoc/require-jsdoc` on exports |
 | Kotlin | `//` line | KDoc `/** … */` | detekt `UndocumentedPublicFunction` |
-| Dart | `//` line | `///` | `public_member_api_docs` lint |
+| Dart | `//` line | `///` | `dart format` in CI; `public_member_api_docs` lint is not yet on (issue #135) |
 | Swift | `//` line | `///` | swiftlint `missing_docs` |
 | shell / Python | purpose, inputs, outputs at the top | n/a | review |
 
