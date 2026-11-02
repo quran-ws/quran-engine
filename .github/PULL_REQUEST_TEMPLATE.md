@@ -4,11 +4,13 @@
 
 ## Tier
 
-<!-- Delete the two that do not apply. See docs/standards/API-DESIGN.md. -->
+<!-- Keep the one that applies and delete the rest. See docs/standards/API-DESIGN.md. -->
 
 - Core behaviour: changed in Rust once; every platform receives it with the next native build.
 - Engine API: a C symbol. Bound in all five wrappers under the parity table's name, or declared in `docs/API-PARITY.md` as a gap with an issue number.
+- Lite passage layout: the no-Wasm port in `web/lite-passage.mjs`. It follows `crates/qvp-core/src/passage.rs` and replays `conformance/scenarios/passage.json`.
 - Platform convenience: one platform's idiom, documented in that package's README. It computes nothing the engine can compute.
+- None of these: tooling, CI, tests or documents. Say which.
 
 ## Checklist
 

@@ -56,8 +56,17 @@ for check in "$@"; do
       scripts/check-terminology.sh
       ;;
     docs)
-      step "rustdoc with missing docs as errors, prose lint on changed documents"
+      step "rustdoc with missing docs as errors, then the prose report"
       RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --release
+      # The prose report, for a writer to read. The counts are a guide, so this check
+      # fails only when rustdoc or the linter's own tests fail. CONTRIBUTING.md holds
+      # the rules.
+      python3 scripts/test_ste_lint.py
+      documents="$(git ls-files '*.md' | grep -v node_modules || true)"
+      if [ -n "$documents" ]; then
+        printf '%s\n' "$documents" | tr '\n' '\0' |
+          xargs -0 python3 scripts/ste_lint.py
+      fi
       ;;
     structure)
       step "repository structure"
