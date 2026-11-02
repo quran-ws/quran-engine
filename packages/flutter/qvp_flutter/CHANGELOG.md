@@ -1,14 +1,12 @@
 ## Unreleased
 
-- Platform support: added iOS, macOS, Windows, Linux, and Web platforms.
-  - iOS & macOS: CocoaPods podspecs linking against `QvpEngine.xcframework` using `DynamicLibrary.process()`.
-  - Windows & Linux: CMake bundling and runtime resolution of `qvp_ffi.dll` and `libqvp_ffi.so`.
-  - Web: Flutter Web support over `dart:js_interop` and WebAssembly (`qvp_ffi.wasm` & `qvp.js`).
-- Architecture: modularized the monolith `engine.dart` into high-level domain classes (`types.dart`, `engine.dart`, `page.dart`, `atlas.dart`, `ornaments.dart`, `passage.dart`) and decoupled driver backends (`qvp_backend_native.dart` via `dart:ffi`, `qvp_backend_web.dart` via Wasm/JS).
-- Rendering performance: replaced raster base-ink caching (`toImageSync`) with direct GPU vector
-  `ui.Picture` caching in layout units. Pinching and panning no longer invalidate the base ink picture.
-- Caching: memoized `QvpPage.ayahMarks()` and cached placement/dress/band queries in `_InkCache`.
-- Engine: added `QvpPage.batch(fn)` to suppress multiple listener notifications during batch updates.
+- Added iOS, macOS, Windows, Linux, and Web platform support:
+  - iOS and macOS link against QvpEngine.xcframework using DynamicLibrary.process().
+  - Windows and Linux bundle qvp_ffi.dll and libqvp_ffi.so via CMake.
+  - Web loads qvp_ffi.wasm over dart:js_interop.
+- Split engine.dart into types.dart, page.dart and one backend per platform.
+- Replaced raster base-ink image caching with vector picture recording in layout units.
+- Added QvpPage.batch to group updates into a single notification.
 
 ## 0.7.0
 

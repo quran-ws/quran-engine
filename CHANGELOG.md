@@ -10,6 +10,7 @@ All notable changes to the engine and its packages. The format follows
 - Reflow can keep the print's line breaks with `breaks: 'printed'` (`QvpBreaks.printed`
   in Swift). Each line stays whole while its ink grows to fill the page width.
   `reflowMaxZoom` measures the widest row in this mode, and larger zooms clamp to it.
+- Flutter: add iOS, macOS, Windows, Linux and Web platform support, and split engine.dart into types, page and backends.
 
 ### Changed
 - Reflow sizes a surah banner's row from its ink and normal line spacing, not its printed slot.
