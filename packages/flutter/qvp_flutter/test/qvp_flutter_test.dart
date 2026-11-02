@@ -19,8 +19,9 @@ String _findRepo() {
   if (env != null) return env;
   var d = Directory.current;
   for (var i = 0; i < 6; i++) {
-    if (File('${d.path}/crates/qvp-ffi/include/qvp.h').existsSync())
+    if (File('${d.path}/crates/qvp-ffi/include/qvp.h').existsSync()) {
       return d.path;
+    }
     d = d.parent;
   }
   throw StateError('repository root not found; set QVP_REPO');

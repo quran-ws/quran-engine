@@ -87,8 +87,9 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   static ffi.DynamicLibrary resolveLibrary({String? path}) {
-    if (kIsWeb)
+    if (kIsWeb) {
       throw UnsupportedError('QvpNativeBackend runs on native platforms.');
+    }
     if (path != null) return ffi.DynamicLibrary.open(path);
     if (Platform.isAndroid) return ffi.DynamicLibrary.open('libqvp_ffi.so');
     if (Platform.isIOS || Platform.isMacOS) {
@@ -107,8 +108,9 @@ class QvpNativeBackend implements QvpBackend {
         'qvp_ffi.dll',
         '${File(Platform.resolvedExecutable).parent.path}\\qvp_ffi.dll',
       ]) {
-        if (File(p).existsSync())
+        if (File(p).existsSync()) {
           return ffi.DynamicLibrary.open(File(p).absolute.path);
+        }
       }
       return ffi.DynamicLibrary.open('qvp_ffi.dll');
     }
@@ -117,8 +119,9 @@ class QvpNativeBackend implements QvpBackend {
         'libqvp_ffi.so',
         '${File(Platform.resolvedExecutable).parent.path}/lib/libqvp_ffi.so',
       ]) {
-        if (File(p).existsSync())
+        if (File(p).existsSync()) {
           return ffi.DynamicLibrary.open(File(p).absolute.path);
+        }
       }
       return ffi.DynamicLibrary.open('libqvp_ffi.so');
     }
@@ -423,8 +426,9 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   QvpWordInfo _readWord(ffi.Pointer<QvpPageC> h, int i) {
-    if (b.wordInfo(h, i, _wordInfo) == 0)
+    if (b.wordInfo(h, i, _wordInfo) == 0) {
       throw StateError('qvp_word_info($i) failed');
+    }
     final w = _wordInfo.ref;
     return QvpWordInfo(
       index: i,
@@ -445,8 +449,9 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   QvpAyahInfo _readAyah(ffi.Pointer<QvpPageC> h, int i) {
-    if (b.ayahInfo(h, i, _ayahInfo) == 0)
+    if (b.ayahInfo(h, i, _ayahInfo) == 0) {
       throw StateError('qvp_ayah_info($i) failed');
+    }
     final a = _ayahInfo.ref;
     return QvpAyahInfo(
       index: i,
@@ -467,8 +472,9 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   QvpLineInfo _readLine(ffi.Pointer<QvpPageC> h, int i) {
-    if (b.lineInfo(h, i, _lineInfo) == 0)
+    if (b.lineInfo(h, i, _lineInfo) == 0) {
       throw StateError('qvp_line_info($i) failed');
+    }
     final l = _lineInfo.ref;
     return QvpLineInfo(
       index: i,
@@ -487,8 +493,9 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   QvpDecorationInfo _readDeco(ffi.Pointer<QvpPageC> h, int i) {
-    if (b.decorationInfo(h, i, _decoInfo) == 0)
+    if (b.decorationInfo(h, i, _decoInfo) == 0) {
       throw StateError('qvp_decoration_info($i) failed');
+    }
     final d = _decoInfo.ref;
     return QvpDecorationInfo(
       index: i,
@@ -1449,8 +1456,10 @@ class QvpNativeBackend implements QvpBackend {
     required double pad,
     required bool keepAyahMarks,
   }) => _withTarget(handle, target, (t) {
-    if (b.cropBounds(_page(handle), t, pad, keepAyahMarks ? 1 : 0, _crop) == 0)
+    if (b.cropBounds(_page(handle), t, pad, keepAyahMarks ? 1 : 0, _crop) ==
+        0) {
       return null;
+    }
     final c = _crop.ref;
     return QvpCropBounds(
       x0: c.x0,
@@ -1478,8 +1487,9 @@ class QvpNativeBackend implements QvpBackend {
           background ?? 0,
           _str,
         ) ==
-        0)
+        0) {
       return null;
+    }
     return _s();
   });
 
@@ -1612,8 +1622,9 @@ class QvpNativeBackend implements QvpBackend {
     }
     final p = b.passageLoad(pList, pages.length, surah, from, to);
     pffi.malloc.free(pList);
-    if (p == ffi.nullptr)
+    if (p == ffi.nullptr) {
       throw const FormatException('qvp_passage_load failed');
+    }
 
     final n = b.passageAyahCount(p);
     final ayahs = List<QvpPassageText>.generate(n, (i) {
@@ -1635,8 +1646,9 @@ class QvpNativeBackend implements QvpBackend {
     }
     final p = b.passageLoadBasmalah(pList, pages.length, surah);
     pffi.malloc.free(pList);
-    if (p == ffi.nullptr)
+    if (p == ffi.nullptr) {
       throw const FormatException('qvp_passage_load_basmalah failed');
+    }
     return (NativePassageHandle(p), const [], b.passageLineSpacing(p));
   }
 
@@ -1652,8 +1664,9 @@ class QvpNativeBackend implements QvpBackend {
   @override
   QvpPassageLayout? passageLayout(PassageHandle handle, QvpPassageSpec spec) {
     _writePassageSpec(_passageSpec, spec);
-    if (b.passageLayout(_passage(handle), _passageSpec, _passageLayout) == 0)
+    if (b.passageLayout(_passage(handle), _passageSpec, _passageLayout) == 0) {
       return null;
+    }
     final l = _passageLayout.ref;
     final p = _passage(handle);
 
@@ -1756,8 +1769,9 @@ class QvpNativeBackend implements QvpBackend {
   @override
   (OrnamentsHandle, List<QvpOrnament>) ornamentsLoad(Uint8List bytes) {
     final h = _withBytes(bytes, (p, n) => b.ornamentsLoad(p, n));
-    if (h == ffi.nullptr)
+    if (h == ffi.nullptr) {
       throw const FormatException('qvp_ornaments_load failed');
+    }
 
     final n = b.ornamentCount(h);
     final pPart = _scratch.cast<QvpOrnamentPartC>();

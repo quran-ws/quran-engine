@@ -179,10 +179,11 @@ int rgba(Object c, [double? alpha]) {
   var h = (c as String).trim();
   if (h.startsWith('#')) h = h.substring(1);
   if (h.length == 3 || h.length == 4) h = h.split('').map((x) => x + x).join();
-  if (h.length == 6)
+  if (h.length == 6) {
     h += alpha != null
         ? (alpha * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0')
         : 'ff';
+  }
   return int.parse(h, radix: 16) & 0xffffffff;
 }
 
@@ -279,10 +280,12 @@ final class QvpTarget {
   static QvpTarget parse(String s) {
     if (s == 'page') return T.page();
     RegExpMatch? m;
-    if ((m = RegExp(r'^line:(\d+)$').firstMatch(s)) != null)
+    if ((m = RegExp(r'^line:(\d+)$').firstMatch(s)) != null) {
       return T.line(int.parse(m!.group(1)!));
-    if ((m = RegExp(r'^surah:(\d+)$').firstMatch(s)) != null)
+    }
+    if ((m = RegExp(r'^surah:(\d+)$').firstMatch(s)) != null) {
       return T.surah(int.parse(m!.group(1)!));
+    }
     if ((m = RegExp(r'^(\d+):(\d+)-(\d+)$').firstMatch(s)) != null) {
       return T.ayahRange(
         int.parse(m!.group(1)!),
@@ -300,8 +303,9 @@ final class QvpTarget {
         ],
       );
     }
-    if ((m = RegExp(r'^(\d+):(\d+)$').firstMatch(s)) != null)
+    if ((m = RegExp(r'^(\d+):(\d+)$').firstMatch(s)) != null) {
       return T.ayah(int.parse(m!.group(1)!), int.parse(m.group(2)!));
+    }
     throw ArgumentError('bad target $s');
   }
 

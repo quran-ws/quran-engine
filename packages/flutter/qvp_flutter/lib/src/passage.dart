@@ -45,12 +45,13 @@ class QvpPassage {
   }
 
   static QvpEngine _engineOf(List<QvpPage> pages) {
-    if (pages.isEmpty)
+    if (pages.isEmpty) {
       throw ArgumentError.value(
         pages,
         'pages',
         'a passage needs at least one page',
       );
+    }
     for (final p in pages) {
       if (p.isDisposed) throw StateError('QvpPassage: a page was disposed');
     }

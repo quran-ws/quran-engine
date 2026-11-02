@@ -151,10 +151,11 @@ class QvpWebBackend implements QvpBackend {
 
   static JSObject get _qvp {
     final qvp = globalContext['QVP'] as JSObject?;
-    if (qvp == null)
+    if (qvp == null) {
       throw StateError(
         'QVP JavaScript library is not loaded. Ensure qvp.js is included in web/index.html or available as an asset.',
       );
+    }
     return qvp;
   }
 

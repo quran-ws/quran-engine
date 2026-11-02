@@ -301,10 +301,11 @@ class _ReaderPageState extends State<ReaderPage>
     final e = engine;
     if (e == null) return;
     var target = want;
-    if (!kPages.contains(target))
+    if (!kPages.contains(target)) {
       target = kPages.reduce(
         (a, b) => (b - want).abs() < (a - want).abs() ? b : a,
       );
+    }
     final data = (await rootBundle.load('assets/pages/${_pad(target)}.qvp'))
         .buffer
         .asUint8List();
@@ -334,8 +335,9 @@ class _ReaderPageState extends State<ReaderPage>
       cropInfo = null;
       pageCtl.text = '$target';
     });
-    if (old != null)
+    if (old != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
     _applyTheme();
     _applyToggles();
     _applyDress();
@@ -527,13 +529,14 @@ class _ReaderPageState extends State<ReaderPage>
       String fold(String t) =>
           t.toLowerCase().replaceAll(RegExp('[^a-z0-9]'), '');
       final q = fold(v);
-      if (q.isNotEmpty)
+      if (q.isNotEmpty) {
         su = a
             .surahs()
             .where(
               (s) => fold(s.latin).contains(q) || fold(s.english).contains(q),
             )
             .toList();
+      }
     }
     if (su.isNotEmpty) {
       await loadPage(su.first.page);
@@ -601,8 +604,9 @@ class _ReaderPageState extends State<ReaderPage>
     playing = false;
     playTimer?.cancel();
     playTimer = null;
-    if (hlPlay != 0 && page != null && !page!.isDisposed)
+    if (hlPlay != 0 && page != null && !page!.isDisposed) {
       page!.removeHighlight(hlPlay);
+    }
     hlPlay = 0;
     if (notify) setState(() {});
   }
@@ -672,13 +676,14 @@ class _ReaderPageState extends State<ReaderPage>
       p.removeStyle(ayahMarksHandle);
       ayahMarksHandle = 0;
     }
-    if (goldAyahMarks)
+    if (goldAyahMarks) {
       ayahMarksHandle = p.style(
         Sel.decoration(QvpDecorationKind.ayahMark),
         '#b8860b',
         ms: 300,
         layer: QvpLayer.theme + 1,
       );
+    }
     setState(() {});
   }
 
@@ -758,7 +763,7 @@ class _ReaderPageState extends State<ReaderPage>
   @override
   Widget build(BuildContext context) {
     final p = page;
-    if (loadError != null)
+    if (loadError != null) {
       return Scaffold(
         body: Center(
           child: Padding(
@@ -767,8 +772,10 @@ class _ReaderPageState extends State<ReaderPage>
           ),
         ),
       );
-    if (p == null)
+    }
+    if (p == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return LayoutBuilder(
       builder: (context, c) {
         final wide = c.maxWidth >= 800;
@@ -1141,8 +1148,9 @@ class _ReaderPageState extends State<ReaderPage>
         '$s:$a · ${c.count} words${c.isComplete ? '' : ' (continues on another page)'}',
         false,
       ));
-      if (ws.isNotEmpty)
+      if (ws.isNotEmpty) {
         rows.add(('label', p.ayahLabel(p.words[ws.first].ayahIndex), false));
+      }
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1572,8 +1580,9 @@ class _ReaderPageState extends State<ReaderPage>
 
   Widget _dressSection() {
     final set = ornaments, p = page!;
-    if (set == null)
+    if (set == null) {
       return _hint('no ornament set (put ornaments.qvo beside the pages)');
+    }
     String label(QvpOrnament o) =>
         '${o.style}${o.riwayah.isNotEmpty ? ', ${o.riwayah}' : ''}';
     final picks = {
@@ -1884,23 +1893,27 @@ class _ReaderPageState extends State<ReaderPage>
         '${s.number}${s.latin.isNotEmpty ? ' ${s.latin}' : ''}${s.arabic.isNotEmpty ? ' ${s.arabic}' : ''}${s.hasBanner ? ' (banner)' : ''}',
     ];
     var t = 'surahs: ${names.join(', ')}';
-    if (dv.isNotEmpty)
+    if (dv.isNotEmpty) {
       t +=
           '\nstarts here: ${dv.map((d) => '${d.division} ${d.number} at ${d.surah}:${d.ayah}').join(', ')}';
+    }
     final a = atlas;
     if (a != null && p.words.isNotEmpty) {
       final j = a.juzOf(p.words.first.surah, p.words.first.ayah);
       if (j != null) t += '\njuz $j · pages ${a.pagesOfJuz(j)?.join('–')}';
       final r = a.pageRange(p.page);
-      if (r != null)
+      if (r != null) {
         t += '\nrange ${r.first.$1}:${r.first.$2} → ${r.last.$1}:${r.last.$2}';
+      }
     }
     final ros = p.rosettes(), saj = p.sajdahs();
-    if (ros.isNotEmpty)
+    if (ros.isNotEmpty) {
       t +=
           '\nrosettes: ${ros.map((r) => 'hizb ${r.hizb} rubuAlHizb ${r.rubuAlHizbInHizb}').join(', ')}';
-    if (saj.isNotEmpty)
+    }
+    if (saj.isNotEmpty) {
       t += '\nsajdah: ${saj.map((s) => '${s.surah}:${s.ayah}').join(', ')}';
+    }
     t += '\nayahs: ${p.ayahKeys().map((k) => '${k.$1}:${k.$2}').join(' ')}';
     return _hint(t);
   }
