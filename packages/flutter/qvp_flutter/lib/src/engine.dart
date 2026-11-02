@@ -20,7 +20,8 @@ export 'types.dart';
 /// Creates and manages pages, atlases, ornaments, and provides text tools.
 class QvpEngine {
   /// Opens with an existing backend or default native library.
-  QvpEngine([dynamic library]) : backend = createDefaultBackend(library: library) {
+  QvpEngine([dynamic library])
+    : backend = createDefaultBackend(library: library) {
     _initNames();
   }
 
@@ -79,7 +80,8 @@ class QvpEngine {
   int nameCount(int table) => backend.nameCount(table);
   String name(int table, int id) => backend.name(table, id);
   int nameId(int table, String s) => backend.nameId(table, s);
-  List<String> names(int table) => List.generate(nameCount(table), (i) => name(table, i), growable: false);
+  List<String> names(int table) =>
+      List.generate(nameCount(table), (i) => name(table, i), growable: false);
 
   String markName(int m) => backend.markName(m);
   String familyName(int f) => backend.familyName(f);
@@ -118,8 +120,14 @@ class QvpEngine {
   }
 
   /// Scales [view] by [factor] about a focal point in viewport px.
-  QvpView viewZoomAbout(QvpView view, double focalX, double focalY, double factor, {double min = 0, double max = 0}) =>
-      backend.viewZoomAbout(view, focalX, focalY, factor, min: min, max: max);
+  QvpView viewZoomAbout(
+    QvpView view,
+    double focalX,
+    double focalY,
+    double factor, {
+    double min = 0,
+    double max = 0,
+  }) => backend.viewZoomAbout(view, focalX, focalY, factor, min: min, max: max);
 
   /// Releases backend resources. Free pages and atlases first.
   void dispose() {

@@ -64,7 +64,9 @@ class QvpAtlas {
   /// Surahs matching a (partial, any-script) name.
   List<QvpAtlasSurah> searchSurahs(String text) {
     final ids = _backend.atlasSearchSurahs(handle, text);
-    return [for (final k in ids) surah(k)].whereType<QvpAtlasSurah>().toList(growable: false);
+    return [for (final k in ids) surah(k)]
+        .whereType<QvpAtlasSurah>()
+        .toList(growable: false);
   }
 
   /// Full atlas in JSON format.

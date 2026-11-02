@@ -19,7 +19,8 @@ String _findRepo() {
   if (env != null) return env;
   var d = Directory.current;
   for (var i = 0; i < 6; i++) {
-    if (File('${d.path}/crates/qvp-ffi/include/qvp.h').existsSync()) return d.path;
+    if (File('${d.path}/crates/qvp-ffi/include/qvp.h').existsSync())
+      return d.path;
     d = d.parent;
   }
   throw StateError('repository root not found; set QVP_REPO');
@@ -27,14 +28,15 @@ String _findRepo() {
 
 void main() {
   final repo = _findRepo();
-  final libPath = Platform.environment['QVP_LIB'] ??
+  final libPath =
+      Platform.environment['QVP_LIB'] ??
       (Platform.isWindows
           ? (File('$repo/target/release/qvp_ffi.dll').existsSync()
-              ? '$repo/target/release/qvp_ffi.dll'
-              : '$repo/packages/flutter/qvp_flutter/windows/qvp_ffi.dll')
+                ? '$repo/target/release/qvp_ffi.dll'
+                : '$repo/packages/flutter/qvp_flutter/windows/qvp_ffi.dll')
           : Platform.isMacOS
-              ? '$repo/target/release/libqvp_ffi.dylib'
-              : '$repo/target/release/libqvp_ffi.so');
+          ? '$repo/target/release/libqvp_ffi.dylib'
+          : '$repo/target/release/libqvp_ffi.so');
   final pagePath = '$repo/dist/pages/042.qvp';
   final wordsPath = '$repo/dist/pages/042.words.json';
   final atlasPath = '$repo/dist/pages/atlas.qva';
@@ -43,8 +45,16 @@ void main() {
   late QvpPage page;
 
   setUpAll(() {
-    expect(File(libPath).existsSync(), isTrue, reason: 'engine library not found at $libPath');
-    expect(File(pagePath).existsSync(), isTrue, reason: 'page not found at $pagePath');
+    expect(
+      File(libPath).existsSync(),
+      isTrue,
+      reason: 'engine library not found at $libPath',
+    );
+    expect(
+      File(pagePath).existsSync(),
+      isTrue,
+      reason: 'page not found at $pagePath',
+    );
     engine = QvpEngine.open(path: libPath);
     page = engine.loadPage(File(pagePath).readAsBytesSync());
   });
@@ -84,8 +94,14 @@ void main() {
     expect(page.decorations.length, page.nDecorations);
     expect(page.table.length, 1061 * 8);
     for (var i = 0; i < page.nPaths; i++) {
-      expect(page.pathOpStart(i) + page.pathOpCount(i), lessThanOrEqualTo(page.ops.length));
-      expect(page.pathPtStart(i) + page.pathPtCount(i), lessThanOrEqualTo(page.pts.length));
+      expect(
+        page.pathOpStart(i) + page.pathOpCount(i),
+        lessThanOrEqualTo(page.ops.length),
+      );
+      expect(
+        page.pathPtStart(i) + page.pathPtCount(i),
+        lessThanOrEqualTo(page.pts.length),
+      );
       expect(page.pathLine(i), lessThan(page.nLines));
     }
     final w0 = page.words[0];
@@ -166,66 +182,112 @@ void main() {
     expect(inside!.path, greaterThanOrEqualTo(0));
     expect(page.pathWord(inside.path), 0);
     // far outside the page, with a distance cap → nothing
-    expect(page.hitTest(-500, -500, const QvpHitOptions(maxDistance: 6)), isNull);
+    expect(
+      page.hitTest(-500, -500, const QvpHitOptions(maxDistance: 6)),
+      isNull,
+    );
   });
 
   test('layout fillHeight 690×1100 pads 50 → scale 2.0, 15 lineDy; hitTestView hits word 0', () {
-    final l = page.layout(const QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true));
+    final l = page.layout(
+      const QvpLayoutSpec(
+        viewportW: 690,
+        viewportH: 1100,
+        padTop: 50,
+        padBottom: 50,
+        fillHeight: true,
+      ),
+    );
     expect(l.scale, closeTo(2.0, 1e-5));
     expect(l.lineDy.length, 15);
     expect(l.slots.length, 15);
     expect(page.currentLayout, same(l));
     final w = page.words[0];
     final viewX = l.offsetX + (w.x0 + w.x1) / 2 * l.scale;
-    final viewY = l.offsetY + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale;
-    final h = page.hitTestView(viewX, viewY, const QvpHitOptions(maxDistance: 6));
+    final viewY =
+        l.offsetY + ((w.y0 + w.y1) / 2 + l.lineDy[w.lineIndex]) * l.scale;
+    final h = page.hitTestView(
+      viewX,
+      viewY,
+      const QvpHitOptions(maxDistance: 6),
+    );
     expect(h, isNotNull);
     expect(h!.word, 0);
     final box = page.wordBoundsView(0);
     expect(box.x0, lessThan(viewX));
     expect(box.x1, greaterThan(viewX));
-    expect(page.layoutLineSpacingToFill(const QvpLayoutSpec(viewportW: 600, viewportH: 1000)), greaterThanOrEqualTo(1));
+    expect(
+      page.layoutLineSpacingToFill(
+        const QvpLayoutSpec(viewportW: 600, viewportH: 1000),
+      ),
+      greaterThanOrEqualTo(1),
+    );
     expect(page.grid.lines, 15);
-    expect(page.layoutWastedFraction(const QvpLayoutSpec(viewportW: 600, viewportH: 1000)), inInclusiveRange(0, 1));
-    expect(page.layoutPrintedHeight(const QvpLayoutSpec(viewportW: 600, viewportH: 1000)), greaterThan(0));
+    expect(
+      page.layoutWastedFraction(
+        const QvpLayoutSpec(viewportW: 600, viewportH: 1000),
+      ),
+      inInclusiveRange(0, 1),
+    );
+    expect(
+      page.layoutPrintedHeight(
+        const QvpLayoutSpec(viewportW: 600, viewportH: 1000),
+      ),
+      greaterThan(0),
+    );
   });
 
-  test('style(Sel.wordMark(w,1), colour) → styledPaths() has exactly 1 path', () {
-    page.clearStyles();
-    expect(page.styledPaths(), isEmpty);
-    final w = 0;
-    final h = page.style(Sel.wordMark(w, 1), '#ef6c00');
-    expect(h, greaterThan(0));
-    final s = page.styledPaths();
-    expect(s.length, 1);
-    expect(s.first.color, 0xef6c00ff);
-    expect(page.pathWord(s.first.path), w);
-    expect(page.pathNthMark(s.first.path), 1);
-    expect(page.colorOf(s.first.path), 0xef6c00ff);
-    expect(page.colors()[s.first.path], 0xef6c00ff);
-    expect(page.styleHandles(), contains(h));
-    expect(page.removeStyle(h), greaterThan(0));
-    expect(page.styledPaths(), isEmpty);
-    // theme + hide + target styling under handles
-    final th = page.theme(const QvpTheme(diacritics: '#1a73e8', dots: '#c62828', marks: {'shaddah': '#0a7d32'}));
-    expect(page.styledPaths(), isNotEmpty);
-    final hh = page.hide(Sel.kind(QvpKind.mark));
-    expect(page.styledPaths().where((p) => (p.color & 0xff) == 0), isNotEmpty);
-    page.removeStyle(hh);
-    page.removeStyle(th);
-    final ht = page.styleTarget('2:255', '#0a7d32', layer: QvpLayer.top);
-    expect(page.styledPaths().length, greaterThan(50));
-    page.removeStyle(ht);
-    expect(page.styledPaths(), isEmpty);
-    page.setDefaultColor('#3b2a14');
-    expect(page.defaultInk, 0x3b2a14ff);
-    expect(page.colors()[0], 0x3b2a14ff);
-    page.setDefaultColor('#231f20');
-  });
+  test(
+    'style(Sel.wordMark(w,1), colour) → styledPaths() has exactly 1 path',
+    () {
+      page.clearStyles();
+      expect(page.styledPaths(), isEmpty);
+      final w = 0;
+      final h = page.style(Sel.wordMark(w, 1), '#ef6c00');
+      expect(h, greaterThan(0));
+      final s = page.styledPaths();
+      expect(s.length, 1);
+      expect(s.first.color, 0xef6c00ff);
+      expect(page.pathWord(s.first.path), w);
+      expect(page.pathNthMark(s.first.path), 1);
+      expect(page.colorOf(s.first.path), 0xef6c00ff);
+      expect(page.colors()[s.first.path], 0xef6c00ff);
+      expect(page.styleHandles(), contains(h));
+      expect(page.removeStyle(h), greaterThan(0));
+      expect(page.styledPaths(), isEmpty);
+      // theme + hide + target styling under handles
+      final th = page.theme(
+        const QvpTheme(
+          diacritics: '#1a73e8',
+          dots: '#c62828',
+          marks: {'shaddah': '#0a7d32'},
+        ),
+      );
+      expect(page.styledPaths(), isNotEmpty);
+      final hh = page.hide(Sel.kind(QvpKind.mark));
+      expect(
+        page.styledPaths().where((p) => (p.color & 0xff) == 0),
+        isNotEmpty,
+      );
+      page.removeStyle(hh);
+      page.removeStyle(th);
+      final ht = page.styleTarget('2:255', '#0a7d32', layer: QvpLayer.top);
+      expect(page.styledPaths().length, greaterThan(50));
+      page.removeStyle(ht);
+      expect(page.styledPaths(), isEmpty);
+      page.setDefaultColor('#3b2a14');
+      expect(page.defaultInk, 0x3b2a14ff);
+      expect(page.colors()[0], 0x3b2a14ff);
+      page.setDefaultColor('#231f20');
+    },
+  );
 
   test("highlight('2:255', both, 200 ms): tick(100) true, 6 boxes, tick(1000) false", () {
     page.clearHighlights();
-    final h = page.highlight('2:255', const QvpHighlightStyle(mode: 'both', ms: 200));
+    final h = page.highlight(
+      '2:255',
+      const QvpHighlightStyle(mode: 'both', ms: 200),
+    );
     expect(h, greaterThan(0));
     expect(page.tick(100), isTrue);
     final boxes = page.highlightBoxesView();
@@ -235,7 +297,10 @@ void main() {
     expect(page.highlightWords(h).length, 50);
     expect(page.tick(1000), isFalse);
     expect(page.moveHighlight(h, T.word(0)), isTrue);
-    expect(page.restyleHighlight(h, const QvpHighlightStyle(mode: 'band')), isTrue);
+    expect(
+      page.restyleHighlight(h, const QvpHighlightStyle(mode: 'band')),
+      isTrue,
+    );
     expect(page.removeHighlight(h), isTrue);
     page.tick(5000);
     page.clearHighlights();
@@ -303,31 +368,72 @@ void main() {
   });
 
   test('layout scenarios match the engine (conformance/scenarios/layout.json)', () {
-    final json = jsonDecode(File('$repo/conformance/scenarios/layout.json').readAsStringSync()) as Map<String, dynamic>;
+    final json = jsonDecode(
+      File('$repo/conformance/scenarios/layout.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
     final tolerance = (json['tolerance'] as num).toDouble();
     final cases = json['cases'] as List<dynamic>;
-    void close(double a, num b, String what) => expect((a - b).abs() <= tolerance * (b.abs() < 1 ? 1 : b.abs()), isTrue, reason: '$what: got $a, engine says $b');
+    void close(double a, num b, String what) => expect(
+      (a - b).abs() <= tolerance * (b.abs() < 1 ? 1 : b.abs()),
+      isTrue,
+      reason: '$what: got $a, engine says $b',
+    );
     for (final c in cases) {
-      final s = c['spec'] as Map<String, dynamic>, want = c['layout'] as Map<String, dynamic>;
+      final s = c['spec'] as Map<String, dynamic>,
+          want = c['layout'] as Map<String, dynamic>;
       double f(String k) => (s[k] as num).toDouble();
       final spec = QvpLayoutSpec(
-        viewportW: f('viewportW'), viewportH: f('viewportH'), padTop: f('padTop'), padBottom: f('padBottom'), padLeft: f('padLeft'), padRight: f('padRight'),
-        lineSpacing: f('lineSpacing'), fillHeight: s['fillHeight'] as bool, gridLines: s['gridLines'] as int,
-        cropLeft: f('cropLeft'), cropRight: f('cropRight'), maxAspectSlack: f('maxAspectSlack'));
-      final tag = '${spec.viewportW}x${spec.viewportH} fill=${spec.fillHeight} slack=${spec.maxAspectSlack} crop=${spec.cropLeft}';
+        viewportW: f('viewportW'),
+        viewportH: f('viewportH'),
+        padTop: f('padTop'),
+        padBottom: f('padBottom'),
+        padLeft: f('padLeft'),
+        padRight: f('padRight'),
+        lineSpacing: f('lineSpacing'),
+        fillHeight: s['fillHeight'] as bool,
+        gridLines: s['gridLines'] as int,
+        cropLeft: f('cropLeft'),
+        cropRight: f('cropRight'),
+        maxAspectSlack: f('maxAspectSlack'),
+      );
+      final tag =
+          '${spec.viewportW}x${spec.viewportH} fill=${spec.fillHeight} slack=${spec.maxAspectSlack} crop=${spec.cropLeft}';
       final l = page.layout(spec);
-      close(l.scale, want['scale'] as num, '$tag scale'); close(l.offsetX, want['offsetX'] as num, '$tag offsetX'); close(l.offsetY, want['offsetY'] as num, '$tag offsetY');
-      close(l.contentW, want['contentW'] as num, '$tag contentW'); close(l.contentH, want['contentH'] as num, '$tag contentH'); close(l.lineSpacing, want['lineSpacing'] as num, '$tag lineSpacing');
-      close(l.fitScale, want['fitScale'] as num, '$tag fitScale'); close(l.fitX, want['fitX'] as num, '$tag fitX'); close(l.fitY, want['fitY'] as num, '$tag fitY');
-      close(l.lineDy.first, want['lineDy0'] as num, '$tag lineDy[0]'); close(l.lineDy.last, want['lineDyLast'] as num, '$tag lineDy[last]');
-      close(page.layoutLineSpacingToFill(spec), c['lineSpacingToFill'] as num, '$tag lineSpacingToFill');
-      close(page.layoutWastedFraction(spec), c['wastedFraction'] as num, '$tag wastedFraction');
+      close(l.scale, want['scale'] as num, '$tag scale');
+      close(l.offsetX, want['offsetX'] as num, '$tag offsetX');
+      close(l.offsetY, want['offsetY'] as num, '$tag offsetY');
+      close(l.contentW, want['contentW'] as num, '$tag contentW');
+      close(l.contentH, want['contentH'] as num, '$tag contentH');
+      close(l.lineSpacing, want['lineSpacing'] as num, '$tag lineSpacing');
+      close(l.fitScale, want['fitScale'] as num, '$tag fitScale');
+      close(l.fitX, want['fitX'] as num, '$tag fitX');
+      close(l.fitY, want['fitY'] as num, '$tag fitY');
+      close(l.lineDy.first, want['lineDy0'] as num, '$tag lineDy[0]');
+      close(l.lineDy.last, want['lineDyLast'] as num, '$tag lineDy[last]');
+      close(
+        page.layoutLineSpacingToFill(spec),
+        c['lineSpacingToFill'] as num,
+        '$tag lineSpacingToFill',
+      );
+      close(
+        page.layoutWastedFraction(spec),
+        c['wastedFraction'] as num,
+        '$tag wastedFraction',
+      );
     }
     expect(cases.length, 40);
   });
 
   test('the reader\'s zoom control reflows the page and one loop draws it', () {
-    const spec = QvpLayoutSpec(viewportW: 390, viewportH: 844, padTop: 12, padBottom: 12, padLeft: 8, padRight: 8, surahFrames: false);
+    const spec = QvpLayoutSpec(
+      viewportW: 390,
+      viewportH: 844,
+      padTop: 12,
+      padBottom: 12,
+      padLeft: 8,
+      padRight: 8,
+      surahFrames: false,
+    );
 
     // a zeroed control is stepped, on the printed page, and asks for no reflow when the host
     // gave it no knobs
@@ -338,7 +444,13 @@ void main() {
 
     // the host's reflow knobs survive the printed page, with zoom 0, so the first pinch that
     // leaves it reflows with them and not with the engine's defaults
-    final knobbed = spec.copyWith(reflow: const QvpReflowSpec(fill: 'justified', maxStretch: 3, wordGap: 1.5));
+    final knobbed = spec.copyWith(
+      reflow: const QvpReflowSpec(
+        fill: 'justified',
+        maxStretch: 3,
+        wordGap: 1.5,
+      ),
+    );
     final kept = page.zoomSpec(knobbed, printed).reflow;
     expect(kept, isNotNull);
     expect(kept!.zoom, 0);
@@ -401,57 +513,94 @@ void main() {
   });
 
   test('passage scenarios match the engine (conformance/scenarios/passage.json)', () {
-    final json = jsonDecode(File('$repo/conformance/scenarios/passage.json').readAsStringSync()) as Map<String, dynamic>;
+    final json = jsonDecode(
+      File('$repo/conformance/scenarios/passage.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
     final tolerance = (json['tolerance'] as num).toDouble();
     final cases = json['cases'] as List<dynamic>;
-    void close(double a, num b, String what) => expect((a - b).abs() <= tolerance, isTrue, reason: '$what: got $a, engine says $b');
-    QvpPage load(int n) => engine.loadPage(File('$repo/dist/pages/${n.toString().padLeft(3, '0')}.qvp').readAsBytesSync());
+    void close(double a, num b, String what) => expect(
+      (a - b).abs() <= tolerance,
+      isTrue,
+      reason: '$what: got $a, engine says $b',
+    );
+    QvpPage load(int n) => engine.loadPage(
+      File('$repo/dist/pages/${n.toString().padLeft(3, '0')}.qvp')
+          .readAsBytesSync(),
+    );
     for (final c in cases) {
       final numbers = (c['pages'] as List<dynamic>).cast<int>();
-      final surah = c['surah'] as int, from = c['from'] as int, to = c['to'] as int;
+      final surah = c['surah'] as int,
+          from = c['from'] as int,
+          to = c['to'] as int;
       final basmalah = c['basmalah'] as bool? ?? false;
       final pages = [for (final n in numbers) load(n)];
-      final passage = basmalah ? QvpPassage.basmalah(pages, surah) : QvpPassage.load(pages, surah, from, to: to);
+      final passage = basmalah
+          ? QvpPassage.basmalah(pages, surah)
+          : QvpPassage.load(pages, surah, from, to: to);
       // The passage keeps what it needs.
       for (final p in pages) {
         p.dispose();
       }
-      final s = c['spec'] as Map<String, dynamic>, want = c['layout'] as Map<String, dynamic>;
+      final s = c['spec'] as Map<String, dynamic>,
+          want = c['layout'] as Map<String, dynamic>;
       double f(String k) => (s[k] as num).toDouble();
       final spec = QvpPassageSpec(
-        width: f('width'), scale: f('scale'), lineSpacing: f('lineSpacing'), padding: f('padding'),
-        align: QvpPassageAlign.values.byName(s['align'] as String), maxRows: s['maxRows'] as int,
-        keepAyahMark: s['keepAyahMark'] as bool, ellipsisWidth: f('ellipsisWidth'), maxStretch: f('maxStretch'));
-      final tag = '${basmalah ? 'basmalah of ' : ''}$surah:$from-$to at ${spec.width} ${s['align']} rows ${spec.maxRows}';
+        width: f('width'),
+        scale: f('scale'),
+        lineSpacing: f('lineSpacing'),
+        padding: f('padding'),
+        align: QvpPassageAlign.values.byName(s['align'] as String),
+        maxRows: s['maxRows'] as int,
+        keepAyahMark: s['keepAyahMark'] as bool,
+        ellipsisWidth: f('ellipsisWidth'),
+        maxStretch: f('maxStretch'),
+      );
+      final tag =
+          '${basmalah ? 'basmalah of ' : ''}$surah:$from-$to at ${spec.width} ${s['align']} rows ${spec.maxRows}';
       final l = passage.layout(spec);
       expect(l, isNotNull, reason: tag);
       expect(passage.currentLayout, same(l));
-      close(l!.width, want['width'] as num, '$tag width'); close(l.height, want['height'] as num, '$tag height');
-      close(l.scale, want['scale'] as num, '$tag scale'); close(l.lineSpacing, want['lineSpacing'] as num, '$tag lineSpacing');
+      close(l!.width, want['width'] as num, '$tag width');
+      close(l.height, want['height'] as num, '$tag height');
+      close(l.scale, want['scale'] as num, '$tag scale');
+      close(l.lineSpacing, want['lineSpacing'] as num, '$tag lineSpacing');
       expect(l.isTruncated, want['isTruncated'] as bool, reason: tag);
       expect(l.draws.length, want['draws'] as int, reason: tag);
-      final rows = want['rows'] as List<dynamic>, words = want['words'] as List<dynamic>;
+      final rows = want['rows'] as List<dynamic>,
+          words = want['words'] as List<dynamic>;
       expect(l.rows.length, rows.length, reason: tag);
       expect(l.words.length, words.length, reason: tag);
       for (var i = 0; i < l.rows.length && i < rows.length; i++) {
         final r = l.rows[i], g = (rows[i] as List<dynamic>).cast<num>();
-        close(r.x0, g[0], '$tag row $i x0'); close(r.y0, g[1], '$tag row $i y0');
-        close(r.x1, g[2], '$tag row $i x1'); close(r.y1, g[3], '$tag row $i y1');
+        close(r.x0, g[0], '$tag row $i x0');
+        close(r.y0, g[1], '$tag row $i y0');
+        close(r.x1, g[2], '$tag row $i x1');
+        close(r.y1, g[3], '$tag row $i y1');
         close(r.baseline, g[4], '$tag row $i baseline');
       }
       for (var i = 0; i < l.words.length && i < words.length; i++) {
         final w = l.words[i], g = (words[i] as List<dynamic>).cast<num>();
-        expect([w.page, w.ayah, w.word, w.row], g.sublist(0, 4).map((v) => v.toInt()).toList(), reason: '$tag word $i');
-        close(w.x0, g[4], '$tag word $i x0'); close(w.y0, g[5], '$tag word $i y0');
-        close(w.x1, g[6], '$tag word $i x1'); close(w.y1, g[7], '$tag word $i y1');
-        close(w.wordX0, g[8], '$tag word $i wordX0'); close(w.wordY0, g[9], '$tag word $i wordY0');
-        close(w.wordX1, g[10], '$tag word $i wordX1'); close(w.wordY1, g[11], '$tag word $i wordY1');
+        expect(
+          [w.page, w.ayah, w.word, w.row],
+          g.sublist(0, 4).map((v) => v.toInt()).toList(),
+          reason: '$tag word $i',
+        );
+        close(w.x0, g[4], '$tag word $i x0');
+        close(w.y0, g[5], '$tag word $i y0');
+        close(w.x1, g[6], '$tag word $i x1');
+        close(w.y1, g[7], '$tag word $i y1');
+        close(w.wordX0, g[8], '$tag word $i wordX0');
+        close(w.wordY0, g[9], '$tag word $i wordY0');
+        close(w.wordX1, g[10], '$tag word $i wordX1');
+        close(w.wordY1, g[11], '$tag word $i wordY1');
       }
       final e = (want['ellipsis'] as List<dynamic>?)?.cast<num>();
       if (e != null) {
         expect(l.ellipsis, isNotNull, reason: tag);
-        close(l.ellipsis!.left, e[0], '$tag ellipsis x0'); close(l.ellipsis!.top, e[1], '$tag ellipsis y0');
-        close(l.ellipsis!.right, e[2], '$tag ellipsis x1'); close(l.ellipsis!.bottom, e[3], '$tag ellipsis y1');
+        close(l.ellipsis!.left, e[0], '$tag ellipsis x0');
+        close(l.ellipsis!.top, e[1], '$tag ellipsis y0');
+        close(l.ellipsis!.right, e[2], '$tag ellipsis x1');
+        close(l.ellipsis!.bottom, e[3], '$tag ellipsis y1');
       } else {
         expect(l.ellipsis, isNull, reason: tag);
       }
@@ -474,7 +623,10 @@ void main() {
   });
 
   test('a basmalah passage has no ayahs; surah 1, surah 9 and a page without it fail to load', () {
-    QvpPage load(int n) => engine.loadPage(File('$repo/dist/pages/${n.toString().padLeft(3, '0')}.qvp').readAsBytesSync());
+    QvpPage load(int n) => engine.loadPage(
+      File('$repo/dist/pages/${n.toString().padLeft(3, '0')}.qvp')
+          .readAsBytesSync(),
+    );
     final two = load(2), one = load(1), tawbah = load(187);
     final basmalah = QvpPassage.basmalah([two], 2);
     expect(basmalah.ayahs, isEmpty);
@@ -482,7 +634,13 @@ void main() {
     expect(basmalah.lineSpacing, first.lineSpacing);
     expect(first.ayahs.single.ayahKey, '2:1');
     first.close();
-    final l = basmalah.layout(QvpPassageSpec(width: 366, scale: 22 / basmalah.lineSpacing, align: QvpPassageAlign.center));
+    final l = basmalah.layout(
+      QvpPassageSpec(
+        width: 366,
+        scale: 22 / basmalah.lineSpacing,
+        align: QvpPassageAlign.center,
+      ),
+    );
     expect(l, isNotNull);
     expect(l!.rows.length, 1);
     expect(l.words, isEmpty);
@@ -510,7 +668,7 @@ void main() {
     'BGxpbmX/QTYwAQAAAAAAAAAAAACMQgAAyEIBAACgQAAAoEAAAHBCAAC0QgQCAAYAAAAAEwECyAETEwAAACYTAQLIATkTAAAATBMB'
     'AsgBXxNyAAAAAYDiCQABAMCaDAH/4QkABAAAAAGA4gkAAQDAmgwB/+EJAAQAAAABgNRhAAEAwJoMAf/TYQAEAAAAAYDUYQABAMCa'
     'DAH/02EABAAAAAHgxQgAAQDAmgwB38UIAAQAAAAB4MUIAAEAwJoMAd/FCAAE',
-      );
+  );
 
   test('dress: ornaments load, find, dress page 604, geometry, undress, a refused spec', () {
     final set = engine.loadOrnaments(testOrnaments());
@@ -539,14 +697,30 @@ void main() {
     expect(styles.single.isComplete, isTrue);
     expect(styles.single.pageFrame?.index, 2);
 
-    final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
-    p.layout(const QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 20, padBottom: 20));
+    final p = engine.loadPage(
+      File('$repo/dist/pages/604.qvp').readAsBytesSync(),
+    );
+    p.layout(
+      const QvpLayoutSpec(
+        viewportW: 690,
+        viewportH: 1100,
+        padTop: 20,
+        padBottom: 20,
+      ),
+    );
     expect(p.dressInfo(), isNull);
     expect(p.dressRevision(), 0);
     expect(p.dressGeometry(), isEmpty);
 
     // a style takes all three kinds, and the border's fill is repainted red
-    final info = p.dress(set, QvpDressSpec(style: 'test', ayahMarkScale: 1, colors: [(set.list[2], 0, 0xff0000ff)]))!;
+    final info = p.dress(
+      set,
+      QvpDressSpec(
+        style: 'test',
+        ayahMarkScale: 1,
+        colors: [(set.list[2], 0, 0xff0000ff)],
+      ),
+    )!;
     expect(p.dressSpec, isNotNull);
     expect((info.ayahMark, info.surahHeader, info.pageFrame), (0, 1, 2));
     expect(info.ayahMarks, greaterThan(0));
@@ -555,14 +729,26 @@ void main() {
     expect(info.frameRepeats, 0);
     expect(info.viewBox[0], lessThan(0));
     expect(info.viewBox[2], greaterThan(p.width));
-    expect(info.overflow.every((v) => v > 0), isTrue, reason: '${info.overflow}');
+    expect(
+      info.overflow.every((v) => v > 0),
+      isTrue,
+      reason: '${info.overflow}',
+    );
     expect(info.revision, greaterThan(0));
     expect(p.dressRevision(), info.revision);
 
     final draws = p.dressGeometry();
     expect(draws.length, info.draws);
-    expect(draws.length, (info.ayahMarks + info.surahHeaders + 1) * 2, reason: 'one fill and one stroke per placed asset');
-    expect(identical(p.dressGeometry(), draws), isTrue, reason: 'kept until the revision changes');
+    expect(
+      draws.length,
+      (info.ayahMarks + info.surahHeaders + 1) * 2,
+      reason: 'one fill and one stroke per placed asset',
+    );
+    expect(
+      identical(p.dressGeometry(), draws),
+      isTrue,
+      reason: 'kept until the revision changes',
+    );
     final places = p.layoutPlacements();
     var red = 0;
     for (final d in draws) {
@@ -581,14 +767,37 @@ void main() {
     expect(red, 1);
 
     // a layout rebuilds the layer
-    p.layout(const QvpLayoutSpec(viewportW: 690, viewportH: 2000, padTop: 20, padBottom: 20, fillHeight: true));
+    p.layout(
+      const QvpLayoutSpec(
+        viewportW: 690,
+        viewportH: 2000,
+        padTop: 20,
+        padBottom: 20,
+        fillHeight: true,
+      ),
+    );
     expect(p.dressRevision(), isNot(info.revision));
     expect(identical(p.dressGeometry(), draws), isFalse);
 
     // a kind key overrides the style, an index and a style name both work, and line art is a set
-    final mixed = p.dress(set, const QvpDressSpec(style: 'test', ayahMark: 0, surahHeader: 'test', lineArt: {QvpOrnamentKind.ayahMark}, pageFrameScale: 1.5));
+    final mixed = p.dress(
+      set,
+      const QvpDressSpec(
+        style: 'test',
+        ayahMark: 0,
+        surahHeader: 'test',
+        lineArt: {QvpOrnamentKind.ayahMark},
+        pageFrameScale: 1.5,
+      ),
+    );
     expect(mixed, isNotNull);
-    expect(p.dressGeometry().where((d) => d.kind == QvpOrnamentKind.ayahMark).every((d) => d.stroke), isTrue);
+    expect(
+      p
+          .dressGeometry()
+          .where((d) => d.kind == QvpOrnamentKind.ayahMark)
+          .every((d) => d.stroke),
+      isTrue,
+    );
 
     // refused: an ornament of another kind, or nothing to dress
     expect(p.dress(set, const QvpDressSpec(ayahMark: 1)), isNull);
@@ -609,7 +818,10 @@ void main() {
 
   test('a removed highlight leaves no band once the clock passes its fade', () {
     final p = engine.loadPage(File(pagePath).readAsBytesSync());
-    final h = p.highlight('2:255', const QvpHighlightStyle(mode: 'band', ms: 200));
+    final h = p.highlight(
+      '2:255',
+      const QvpHighlightStyle(mode: 'band', ms: 200),
+    );
     // part way through the fade, where the test above reads six boxes
     p.tick(100);
     expect(p.highlightBoxesView(), isNotEmpty);
@@ -624,24 +836,33 @@ void main() {
     p.dispose();
   });
 
-  test('a colour-only re-dress moves the revision the ornament layer is keyed on', () {
-    final set = engine.loadOrnaments(testOrnaments());
-    final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
-    expect(p.dress(set, const QvpDressSpec(style: 'test')), isNotNull);
-    final before = p.dressInfo()!.revision;
-    final colours = p.dressGeometry().map((d) => d.color).toList();
-    expect(colours, isNotEmpty);
-    // A repaint keeps the dressed box, so the page number, the style and the layout all stay
-    // put and only dressInfo().revision moves. That is why the ornament picture is keyed on
-    // the revision: a key built from the style and the ornament indices would replay the old
-    // colours for ever.
-    expect(
-        p.dress(set, QvpDressSpec(style: 'test', colors: [(set.list[2], 0, 0xff0000ff)])),
-        isNotNull);
-    expect(p.dressInfo()!.revision, greaterThan(before));
-    expect(p.dressGeometry().map((d) => d.color).toList(), isNot(colours));
-    p.dispose();
-  });
+  test(
+    'a colour-only re-dress moves the revision the ornament layer is keyed on',
+    () {
+      final set = engine.loadOrnaments(testOrnaments());
+      final p = engine.loadPage(
+        File('$repo/dist/pages/604.qvp').readAsBytesSync(),
+      );
+      expect(p.dress(set, const QvpDressSpec(style: 'test')), isNotNull);
+      final before = p.dressInfo()!.revision;
+      final colours = p.dressGeometry().map((d) => d.color).toList();
+      expect(colours, isNotEmpty);
+      // A repaint keeps the dressed box, so the page number, the style and the layout all stay
+      // put and only dressInfo().revision moves. That is why the ornament picture is keyed on
+      // the revision: a key built from the style and the ornament indices would replay the old
+      // colours for ever.
+      expect(
+        p.dress(
+          set,
+          QvpDressSpec(style: 'test', colors: [(set.list[2], 0, 0xff0000ff)]),
+        ),
+        isNotNull,
+      );
+      expect(p.dressInfo()!.revision, greaterThan(before));
+      expect(p.dressGeometry().map((d) => d.color).toList(), isNot(colours));
+      p.dispose();
+    },
+  );
 
   test('batch notifies once', () {
     final p = engine.loadPage(File(pagePath).readAsBytesSync());
@@ -661,10 +882,19 @@ void main() {
     p.dispose();
   });
 
-  testWidgets('a dressed page paints its ornament layer behind the ink', (tester) async {
+  testWidgets('a dressed page paints its ornament layer behind the ink', (
+    tester,
+  ) async {
     final set = engine.loadOrnaments(testOrnaments());
-    final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
-    await tester.pumpWidget(Directionality(textDirection: TextDirection.ltr, child: SizedBox(width: 400, height: 640, child: QvpPageView(page: p))));
+    final p = engine.loadPage(
+      File('$repo/dist/pages/604.qvp').readAsBytesSync(),
+    );
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(width: 400, height: 640, child: QvpPageView(page: p)),
+      ),
+    );
     final state = tester.state<QvpPageViewState>(find.byType(QvpPageView));
     final printed = state.controller.scale;
     expect(p.dress(set, const QvpDressSpec(style: 'test')), isNotNull);
@@ -689,12 +919,24 @@ void main() {
     expect(state.stats.basePaths, greaterThan(0));
     // A new colour keeps the dressed box, so the reader's zoom stays.
     state.controller.set(scale: l.fitScale * 2, offsetX: -40, offsetY: -60);
-    expect(p.dress(set, QvpDressSpec(style: 'test', colors: [(set.list[2], 0, 0xff0000ff)])), isNotNull);
+    expect(
+      p.dress(
+        set,
+        QvpDressSpec(style: 'test', colors: [(set.list[2], 0, 0xff0000ff)]),
+      ),
+      isNotNull,
+    );
     await tester.pump();
     expect(state.controller.scale, closeTo(l.fitScale * 2, 1e-6));
     expect((state.controller.offsetX, state.controller.offsetY), (-40, -60));
     // A bigger border grows the box, so the page is fitted again.
-    expect(p.dress(set, const QvpDressSpec(style: 'test', pageFrameScale: 2, gap: 20)), isNotNull);
+    expect(
+      p.dress(
+        set,
+        const QvpDressSpec(style: 'test', pageFrameScale: 2, gap: 20),
+      ),
+      isNotNull,
+    );
     await tester.pump();
     expect(state.controller.scale, closeTo(p.readLayout()!.fitScale, 1e-6));
     p.undress();

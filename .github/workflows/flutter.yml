@@ -45,6 +45,13 @@ jobs:
         run: cargo build -p qvp-ffi --release
       - name: Example assets (the analyzer checks the asset directory exists)
         run: scripts/sync-example-data.sh flutter
+      # dart format is the house style for this package. It runs before the analyzer so a
+      # formatting failure is not buried under analyzer output. The Dart that checks here is
+      # the one the pinned Flutter brings, so a Flutter upgrade may ask for a reformat commit.
+      - name: Format
+        working-directory: packages/flutter/qvp_flutter
+        run: dart format --output=none --set-exit-if-changed lib test example/lib
+
       - name: Analyze
         working-directory: packages/flutter/qvp_flutter
         run: flutter pub get && flutter analyze
