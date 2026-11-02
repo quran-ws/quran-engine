@@ -30,7 +30,10 @@ Future<QvpBackend> initWebBackend({List<int>? wasmBytes, String? wasmAssetPath, 
     wasmBytes: wasmBytes,
     wasmAssetPath: wasmAssetPath,
     wasmUrl: wasmUrl,
-  ).then((b) => _defaultWebBackend = b);
+  ).then((b) => _defaultWebBackend = b).catchError((Object e, StackTrace st) {
+    _initWebFuture = null;
+    Error.throwWithStackTrace(e, st);
+  });
 }
 
 final class WebPageHandle implements PageHandle {
@@ -136,6 +139,7 @@ class QvpWebBackend implements QvpBackend {
     for (final url in const [
       'assets/packages/qvp_flutter/assets/js/qvp.js',
       'packages/qvp_flutter/assets/js/qvp.js',
+      'js/qvp.js',
       'qvp.js',
       'assets/qvp.js',
     ]) {
