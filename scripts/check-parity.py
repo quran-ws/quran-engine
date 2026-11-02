@@ -26,6 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 HEADER = ROOT / "crates/qvp-ffi/include/qvp.h"
+WEB_QVP_JS = ROOT / "web/qvp.js"
 RUST = ROOT / "crates/qvp-ffi/src/lib.rs"
 ANDROID_HEADER = ROOT / "packages/android/qvp/src/main/cpp/qvp.h"
 PARITY = ROOT / "docs/API-PARITY.md"
@@ -179,6 +180,10 @@ def main(argv: list[str]) -> int:
 
     if ANDROID_HEADER.read_bytes() != HEADER.read_bytes():
         problems.append(f"{ANDROID_HEADER.relative_to(ROOT)} differs from {HEADER.relative_to(ROOT)}; run scripts/build-engine-android.sh")
+
+    flutter_qvp_js = ROOT / "packages/flutter/qvp_flutter/assets/js/qvp.js"
+    if flutter_qvp_js.exists() and flutter_qvp_js.read_bytes() != WEB_QVP_JS.read_bytes():
+        problems.append(f"{flutter_qvp_js.relative_to(ROOT)} differs from {WEB_QVP_JS.relative_to(ROOT)}; copy it with scripts/sync-flutter-web-engine.sh")
 
     texts = {w: source_text(paths) for w, paths in WRAPPERS.items()}
     gaps = declared_gaps()

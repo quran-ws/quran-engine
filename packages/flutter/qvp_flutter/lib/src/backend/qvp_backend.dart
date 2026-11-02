@@ -3,7 +3,8 @@ import 'dart:typed_data';
 
 import '../types.dart';
 
-export 'qvp_backend_native.dart';
+export 'qvp_backend_native.dart'
+    if (dart.library.js_interop) 'qvp_backend_web.dart';
 
 /// Opaque handle representing a loaded page in backend memory.
 abstract interface class PageHandle {}
@@ -58,8 +59,9 @@ class QvpPageData {
 
 /// Abstract contract for QVP engine platform operations.
 ///
-/// Implemented by [QvpNativeBackend] over `dart:ffi`. One implementation per
-/// platform keeps the engine call surface in one place.
+/// Implemented by [QvpNativeBackend] on native platforms via `dart:ffi` and by
+/// [QvpWebBackend] on web via WebAssembly. One implementation per platform keeps the
+/// engine call surface in one place.
 abstract interface class QvpBackend {
   // ── Engine information & name tables ──
   String get version;

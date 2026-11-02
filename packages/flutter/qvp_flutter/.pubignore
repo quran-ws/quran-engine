@@ -13,3 +13,8 @@ android/local.properties
 .DS_Store
 !android/src/main/jniLibs/
 !android/src/main/jniLibs/**
+!windows/*.dll
+!ios/QvpEngine.xcframework/
+!ios/QvpEngine.xcframework/**
+!macos/QvpEngine.xcframework/
+!macos/QvpEngine.xcframework/**

@@ -14,13 +14,22 @@ dependencies:
   qvp_flutter: ^0.2.2
 ```
 
-The pub.dev package includes the Android engine for arm64-v8a, armeabi-v7a and x86_64.
-When developing this repository, produce those libraries with:
+The pub.dev package supports Android, iOS, macOS, Windows, Linux, and Web.
+When developing this repository, produce the native engines with:
 
 ```sh
+# Android: arm64-v8a, armeabi-v7a, x86_64
 export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
-bash scripts/build-engine-android.sh          # needs rustup targets + cargo-ndk (installed on demand)
-cargo build -p qvp-ffi --release              # host lib for `flutter test`: target/release/libqvp_ffi.so
+bash scripts/build-engine-android.sh
+
+# iOS & macOS: produces QvpEngine.xcframework
+bash scripts/build-engine-ios.sh
+
+# Windows: target/release/qvp_ffi.dll
+powershell scripts/build-engine-windows.ps1    # or: cargo build -p qvp-ffi --release
+
+# Host lib for `flutter test` on Linux: target/release/libqvp_ffi.so
+cargo build -p qvp-ffi --release
 ```
 
 Page data comes from the converter: `cargo run -p qvp-convert --release -- batch pages dist/pages`

@@ -1,5 +1,14 @@
 ## Unreleased
 
+- Platforms: iOS, macOS, Windows, Linux and web, alongside Android.
+  - iOS and macOS link `QvpEngine.xcframework` through a podspec and resolve symbols with
+    `DynamicLibrary.process()`. `scripts/build-engine-ios.sh` copies the framework into both.
+  - Windows and Linux bundle `qvp_ffi.dll` and `libqvp_ffi.so` through CMake, and fail the
+    build when neither the plugin directory nor `target/release` holds one.
+  - Web runs the engine as WebAssembly over `dart:js_interop`. Call
+    `await QvpEngine.initWeb()` before the first engine call.
+- `scripts/sync-flutter-web-engine.sh` refreshes the two web assets the package ships.
+  `scripts/check-parity.py` fails when the `qvp.js` copy drifts from `web/qvp.js`.
 - Split `engine.dart` into `types.dart`, `page.dart`, `atlas.dart`, `ornaments.dart`,
   `passage.dart` and a backend interface. `QvpEngine` now holds a `QvpBackend`, so the
   Dart API no longer names `dart:ffi` types and the same code compiles for web.
