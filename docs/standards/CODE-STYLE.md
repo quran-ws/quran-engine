@@ -27,8 +27,9 @@ One standard for Rust, C, JavaScript, Kotlin, Dart and Swift.
 - A file opens with one line saying what it is for.
 - No licence or copyright banners. The composite `LICENSE` maps licences by directory.
 - Every wrapper file follows the header's section order: page, metadata, text and search,
-  hit testing, layout, styles, colours, highlights, selection, mask, reveal, crop, atlas,
-  passage, names. The same feature sits at the same place in every language.
+  hit testing, layout, styles, clock and display list, highlights, selection, memorisation,
+  crop, dress, atlas, passage, names. The same feature sits at the same place in every
+  language. `crates/qvp-ffi/include/qvp.h` is the list, so read it there when in doubt.
 - Rust files: imports, constants, types, public impl, private impl, `mod tests` last.
 
 ## Per language
