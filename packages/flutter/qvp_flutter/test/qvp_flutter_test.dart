@@ -27,7 +27,14 @@ String _findRepo() {
 
 void main() {
   final repo = _findRepo();
-  final libPath = Platform.environment['QVP_LIB'] ?? '$repo/target/release/libqvp_ffi.so';
+  final libPath = Platform.environment['QVP_LIB'] ??
+      (Platform.isWindows
+          ? (File('$repo/target/release/qvp_ffi.dll').existsSync()
+              ? '$repo/target/release/qvp_ffi.dll'
+              : '$repo/packages/flutter/qvp_flutter/windows/qvp_ffi.dll')
+          : Platform.isMacOS
+              ? '$repo/target/release/libqvp_ffi.dylib'
+              : '$repo/target/release/libqvp_ffi.so');
   final pagePath = '$repo/dist/pages/042.qvp';
   final wordsPath = '$repo/dist/pages/042.words.json';
   final atlasPath = '$repo/dist/pages/atlas.qva';
