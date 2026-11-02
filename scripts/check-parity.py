@@ -119,7 +119,7 @@ DEFAULT_SITES = {
     "core": "crates/qvp-core/src/defaults.rs",
     "web": "web/qvp.js",
     "android": "packages/android/qvp/src/main/kotlin/ws/quran/qvp/Types.kt",
-    "flutter": "packages/flutter/qvp_flutter/lib/src/engine.dart",
+    "flutter": "packages/flutter/qvp_flutter/lib/src/types.dart",
     "ios": "packages/ios/QvpKit/Sources/QvpKit/Types.swift",
 }
 

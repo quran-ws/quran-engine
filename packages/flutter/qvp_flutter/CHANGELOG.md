@@ -1,6 +1,17 @@
 ## Unreleased
 
-Nothing yet.
+- Split `engine.dart` into `types.dart`, `page.dart`, `atlas.dart`, `ornaments.dart`,
+  `passage.dart` and a backend interface. `QvpEngine` now holds a `QvpBackend`, so the
+  Dart API no longer names `dart:ffi` types and the same code compiles for web.
+- The native backend marshals input through a bump allocator over one scratch buffer
+  rather than an allocation per call. Nested marshalling takes a slice of its own, so
+  `text()` can pass two separators safely.
+- `QvpPage.path(i)` builds one path on demand and keeps it. `QvpPage.buildPaths()`
+  returns the whole list as before.
+- **Breaking.** `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and `QvpEngine.str`
+  are gone. All three named `dart:ffi` types or the native scratch, which cannot sit on a
+  platform-neutral class. `QvpNativeBackend` holds them now. Pass a library to
+  `QvpEngine(library)` or a path to `QvpEngine.open(path:)` as before.
 
 ## 0.7.0
 
