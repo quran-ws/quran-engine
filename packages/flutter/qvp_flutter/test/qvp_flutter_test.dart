@@ -101,7 +101,16 @@ void main() {
     expect(page.ayahMarks(), isNotEmpty);
     expect(page.lineBands().length, 15);
     expect(page.hitAreas().length, 147);
-    expect(page.text('page'), contains(w0.text));
+    final pageTxt = page.text('page');
+    expect(pageTxt, contains(w0.text));
+    // two separators go through one scratch buffer; a shared offset would make both of them
+    // the line separator and leave no spaces at all
+    expect(pageTxt, contains(' '));
+    expect(page.text('page', 'rasmUthmani', '_', '|'), contains('_'));
+    expect(page.text('page', 'rasmUthmani', '_', '|'), contains('|'));
+    // path(i) builds one path and keeps it; buildPaths still returns the whole list
+    expect(identical(page.path(0), page.path(0)), isTrue);
+    expect(page.buildPaths().length, page.nPaths);
   });
 
   test('search الله → 7 matches', () {
@@ -596,6 +605,88 @@ void main() {
     p.dispose();
     set.dispose();
     expect(set.isDisposed, isTrue);
+  });
+
+  testWidgets('a highlight band follows the engine while it animates', (tester) async {
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(width: 400, height: 640, child: QvpPageView(page: p))));
+    final h = p.highlight('2:255', const QvpHighlightStyle(mode: 'band', ms: 300));
+    await tester.pump();
+    final first = p.highlightBoxesView();
+    expect(first, isNotEmpty);
+    // the band slides, so the boxes a later frame reads are not the boxes of the first one
+    p.moveHighlight(h, QvpTarget.of('2:256'));
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 150));
+    final mid = p.highlightBoxesView();
+    expect(mid.first.y0, isNot(closeTo(first.first.y0, 0.01)));
+    // and once it is removed the page keeps no band, which a cache keyed on revision alone
+    // would hold for ever because tick() does not mutate the page
+    p.removeHighlight(h);
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(p.highlightBoxesView(), isEmpty);
+    p.dispose();
+  });
+
+  test('turning surah frames off changes what the layout draws', () {
+    final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
+    QvpLayoutSpec spec(bool frames) =>
+        QvpViewLayout(surahFrames: frames).toSpec(400, 640);
+    p.layout(spec(true));
+    final withFrames = p.layoutDrawList().length;
+    p.layout(spec(false));
+    final without = p.layoutDrawList().length;
+    // the engine decides what a layout draws. The base ink key carries surahFrames because of
+    // this: the flag changes the draw list while scale and contentH stay put, so a key without
+    // it would replay a picture that still has the frame in it.
+    if (p.surahHeaders().isNotEmpty) {
+      expect(without, lessThan(withFrames));
+    } else {
+      expect(without, withFrames);
+    }
+    p.dispose();
+  });
+
+  testWidgets('a colour-only re-dress redraws the ornament layer', (tester) async {
+    final set = engine.loadOrnaments(testOrnaments());
+    final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
+    await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(width: 400, height: 640, child: QvpPageView(page: p))));
+    const spec = QvpDressSpec(style: 'test');
+    expect(p.dress(set, spec), isNotNull);
+    await tester.pump();
+    final before = p.dressInfo()!.revision;
+    final firstColour = p.dressGeometry().first.color;
+    // a repaint keeps the dressed box, so nothing about the page number or the layout moves.
+    // Only dressInfo().revision does, which is what the ornament picture is keyed on.
+    expect(
+        p.dress(set, spec.copyWith(colors: [(0, 0, '#0000ffff')])), isNotNull);
+    await tester.pump();
+    expect(p.dressInfo()!.revision, greaterThan(before));
+    expect(p.dressGeometry().first.color, isNot(firstColour));
+    p.dispose();
+  });
+
+  test('batch notifies once', () {
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    var n = 0;
+    p.addListener(() => n++);
+    p.batch(() {
+      p.highlight('2:255');
+      p.highlight('2:256');
+      p.setDefaultColor(const Color(0xFF112233));
+    });
+    expect(n, 1);
+    // and the memo behind ayahMarks() is dropped by a mutation, not held past it
+    final marks = p.ayahMarks();
+    expect(identical(p.ayahMarks(), marks), isTrue);
+    p.highlight('2:255');
+    expect(identical(p.ayahMarks(), marks), isFalse);
+    p.dispose();
   });
 
   testWidgets('a dressed page paints its ornament layer behind the ink', (tester) async {

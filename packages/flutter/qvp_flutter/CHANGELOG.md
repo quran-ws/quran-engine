@@ -1,5 +1,12 @@
 ## Unreleased
 
+- `QvpPageView` caches the base ink and the ornament layer as `ui.Picture` recordings in
+  layout units rather than rasters at the current transform, so a pan or a pinch replays the
+  picture instead of redrawing the page. Keys carry the engine layout's offsets and the
+  `surahFrames` flag, so a relayout redraws. The ornament layer is keyed on
+  `QvpDressInfo.revision` and held per page, which is what a repaint of a dress depends on.
+- `QvpPage.batch(fn)` notifies listeners once however many mutations `fn` makes.
+- `QvpPage.ayahMarks()` holds its answer until the next mutation.
 - Platforms: iOS, macOS, Windows, Linux and web, alongside Android.
   - iOS and macOS link `QvpEngine.xcframework` through a podspec and resolve symbols with
     `DynamicLibrary.process()`. `scripts/build-engine-ios.sh` copies the framework into both.

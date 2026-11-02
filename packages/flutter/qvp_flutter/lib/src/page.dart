@@ -76,7 +76,30 @@ class QvpPage extends ChangeNotifier {
 
   bool get isDisposed => _handle == null;
 
+  int _batchDepth = 0;
+  bool _needsNotify = false;
+
+  /// Runs [fn] and notifies listeners once at the end, however many mutations it makes.
+  /// Nested calls notify when the outermost one returns.
+  void batch(void Function() fn) {
+    _batchDepth++;
+    try {
+      fn();
+    } finally {
+      _batchDepth--;
+      if (_batchDepth == 0 && _needsNotify) {
+        _needsNotify = false;
+        _touch();
+      }
+    }
+  }
+
   void _touch() {
+    _cachedAyahMarks = null;
+    if (_batchDepth > 0) {
+      _needsNotify = true;
+      return;
+    }
     revision++;
     notifyListeners();
   }
@@ -102,6 +125,7 @@ class QvpPage extends ChangeNotifier {
 
   /// Frees backend page memory. Geometry and info lists stay usable.
   void free() {
+    _cachedAyahMarks = null;
     _lazyPaths = null;
     if (_handle != null) {
       _backend.pageFree(_handle!);
@@ -168,8 +192,12 @@ class QvpPage extends ChangeNotifier {
   /// The surah headings in viewport px through current layout.
   List<QvpSurahHeader> surahHeadersView() => _backend.surahHeaders(handle, view: true);
 
-  /// Ayah medallions on the page.
-  List<QvpAyahMark> ayahMarks() => _backend.ayahMarks(handle);
+  List<QvpAyahMark>? _cachedAyahMarks;
+
+  /// Ayah medallions on the page. Held until the next mutation, because a dressed page asks
+  /// for them on every frame.
+  List<QvpAyahMark> ayahMarks() =>
+      _cachedAyahMarks ??= _backend.ayahMarks(handle);
 
   /// Drawn hizb rosettes.
   List<QvpRosette> rosettes() => _backend.rosettes(handle);
