@@ -19,10 +19,6 @@ concurrency:
   group: react-native-${{ github.ref }}
   cancel-in-progress: true
 
-# The Kotlin library pins this version. The Android SDK workflow installs the same one.
-env:
-  NDK_VERSION: 27.2.12479018
-
 jobs:
   typecheck:
     name: typecheck and build
@@ -44,14 +40,13 @@ jobs:
       - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
-      # The Kotlin library declares a CMake build and an NDK version, so the Android Gradle
-      # plugin reads the NDK when it configures the project, even though this job builds
-      # nothing native. Install the tools here. Left to Gradle, the NDK download sits in the
-      # middle of the build, where it once ran past the job's timeout.
+      # The two SDK platforms the build reads: 35 for the Kotlin library, 36 for the
+      # example. No NDK and no CMake, because `-PqvpSkipNative=true` below drops the
+      # library's native build.
       - name: Install Android build tools
         run: >-
           sdkmanager "platforms;android-35" "platforms;android-36"
-          "build-tools;36.0.0" "ndk;$NDK_VERSION" "cmake;3.22.1"
+          "build-tools;36.0.0"
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
@@ -73,9 +68,13 @@ jobs:
       # page data. `assembleRelease` would need both: it links the static engine libraries at
       # packages/android/qvp/prebuilt/<abi>/libqvp_ffi.a, which scripts/build-engine-android.sh
       # writes and which this repository never holds.
+      #
+      # `-PqvpSkipNative=true` drops the library's CMake build, which this job never runs.
+      # Without it the Android Gradle plugin installs an NDK of about 2.5 GB to configure a
+      # native build that no task here calls.
       - name: Compile and test the Android module
         working-directory: packages/react-native/example/android
         run: >-
-          ./gradlew --no-daemon
+          ./gradlew --no-daemon -PqvpSkipNative=true
           :quran.ws_qvp-react-native:compileReleaseKotlin
           :quran.ws_qvp-react-native:testDebugUnitTest

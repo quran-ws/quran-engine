@@ -14,6 +14,9 @@ Cover the Kotlin SDK, and the Flutter and React Native packages, which build on 
   example: `scripts/sync-example-data.sh android`.
 - Tests: `./gradlew :qvp:test` (unit) and `./gradlew :qvp:connectedAndroidTest` (device or
   emulator. Needs page data from `scripts/sync-android-test-data.sh`).
+- `-PqvpSkipNative=true` drops the Kotlin library's CMake build, so a Kotlin compile needs
+  no NDK and no prebuilt engine. The React Native CI job uses it. Never use it to build an
+  AAR or to run anything that calls the engine.
 - Flutter: `cd packages/flutter/qvp_flutter && flutter analyze && flutter test`. Example
   with `cd example && flutter run`.
 - React Native: `cd packages/react-native/example && npm install && npx react-native

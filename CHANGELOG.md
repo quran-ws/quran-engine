@@ -13,6 +13,11 @@ All notable changes to the engine and its packages. The format follows
 
 ### Changed
 - Reflow sizes a surah banner's row from its ink and normal line spacing, not its printed slot.
+- `-PqvpSkipNative=true` drops the Kotlin library's CMake build, its NDK version and its
+  ABI filters. A root build that compiles only the Kotlin, such as the React Native
+  example's, no longer installs an NDK of about 2.5 GB to configure a native build that it
+  never calls. `scripts/package-android.sh` leaves the property unset, so the published AAR
+  still holds all three ABIs.
 - The test and example scripts and CI fetch `data-v0.5.0` by default. Its pages are
   byte-identical to `data-v0.4.0`. It adds `ornaments.qvo`, which holds ayah medallions only.
   The web smoke test skips its dress-by-style checks when no style in the set has all three
