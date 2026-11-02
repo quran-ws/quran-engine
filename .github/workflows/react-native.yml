@@ -1,6 +1,5 @@
-# The React Native package: install, typecheck, and build the TypeScript output.
-# The example's Android build runs in the Android workflow's toolchain when it is wired
-# there. This job covers the JavaScript side and the JVM unit tests of the Android module.
+# The React Native package: install, typecheck, and build the TypeScript output, then
+# compile the Android module's Kotlin and run its JVM unit tests.
 name: React Native
 
 on:
@@ -8,7 +7,9 @@ on:
     paths:
       - ".github/workflows/react-native.yml"
       - "packages/react-native/**"
-      # The Android module's unit tests compile against the Kotlin library.
+      # The Android module compiles against the Kotlin library, so a change to the library's
+      # sources or its build file can break the module.
+      - "packages/android/qvp/build.gradle.kts"
       - "packages/android/qvp/src/main/kotlin/**"
   push:
     branches: [main]
@@ -18,11 +19,15 @@ concurrency:
   group: react-native-${{ github.ref }}
   cancel-in-progress: true
 
+# The Kotlin library pins this version. The Android SDK workflow installs the same one.
+env:
+  NDK_VERSION: 27.2.12479018
+
 jobs:
   typecheck:
     name: typecheck and build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: packages/react-native/qvp-react-native
@@ -36,6 +41,17 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      # The Kotlin library declares a CMake build and an NDK version, so the Android Gradle
+      # plugin reads the NDK when it configures the project, even though this job builds
+      # nothing native. Install the tools here. Left to Gradle, the NDK download sits in the
+      # middle of the build, where it once ran past the job's timeout.
+      - name: Install Android build tools
+        run: >-
+          sdkmanager "platforms;android-35" "platforms;android-36"
+          "build-tools;36.0.0" "ndk;$NDK_VERSION" "cmake;3.22.1"
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
@@ -50,9 +66,16 @@ jobs:
       - name: Test the example
         working-directory: packages/react-native/example
         run: npm test -- --ci
-      # The JVM unit tests of the Android module. Gradle runs in the example's build, because
-      # that build includes the module and the Kotlin library as projects. The tests need no
-      # native libraries and no page data.
-      - name: Test the Android module
+      # Compile the Android module's Kotlin in release and debug, and run its JVM unit tests.
+      # Gradle runs in the example's build, because that build includes the module and the
+      # Kotlin library as projects. A Kotlin error in the module, or a change to the library's
+      # API that the module calls, fails here. These tasks need no native libraries and no
+      # page data. `assembleRelease` would need both: it links the static engine libraries at
+      # packages/android/qvp/prebuilt/<abi>/libqvp_ffi.a, which scripts/build-engine-android.sh
+      # writes and which this repository never holds.
+      - name: Compile and test the Android module
         working-directory: packages/react-native/example/android
-        run: ./gradlew --no-daemon :quran.ws_qvp-react-native:testDebugUnitTest
+        run: >-
+          ./gradlew --no-daemon
+          :quran.ws_qvp-react-native:compileReleaseKotlin
+          :quran.ws_qvp-react-native:testDebugUnitTest
