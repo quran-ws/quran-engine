@@ -101,7 +101,16 @@ void main() {
     expect(page.ayahMarks(), isNotEmpty);
     expect(page.lineBands().length, 15);
     expect(page.hitAreas().length, 147);
-    expect(page.text('page'), contains(w0.text));
+    final pageTxt = page.text('page');
+    expect(pageTxt, contains(w0.text));
+    // two separators go through one scratch buffer; a shared offset would make both of them
+    // the line separator and leave no spaces at all
+    expect(pageTxt, contains(' '));
+    expect(page.text('page', 'rasmUthmani', '_', '|'), contains('_'));
+    expect(page.text('page', 'rasmUthmani', '_', '|'), contains('|'));
+    // path(i) builds one path and keeps it; buildPaths still returns the whole list
+    expect(identical(page.path(0), page.path(0)), isTrue);
+    expect(page.buildPaths().length, page.nPaths);
   });
 
   test('search الله → 7 matches', () {
@@ -596,6 +605,60 @@ void main() {
     p.dispose();
     set.dispose();
     expect(set.isDisposed, isTrue);
+  });
+
+  test('a removed highlight leaves no band once the clock passes its fade', () {
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    final h = p.highlight('2:255', const QvpHighlightStyle(mode: 'band', ms: 200));
+    // part way through the fade, where the test above reads six boxes
+    p.tick(100);
+    expect(p.highlightBoxesView(), isNotEmpty);
+    p.removeHighlight(h);
+    // The engine drops a removed highlight inside its own moving window, so whoever reads the
+    // boxes has to read them again after the clock has moved. QvpPageView does that by
+    // clearing its band cache on every tick: a cache keyed on page.revision alone would hold
+    // these six boxes for ever, because tick() mutates nothing.
+    p.tick(400);
+    p.tick(1000);
+    expect(p.highlightBoxesView(), isEmpty);
+    p.dispose();
+  });
+
+  test('a colour-only re-dress moves the revision the ornament layer is keyed on', () {
+    final set = engine.loadOrnaments(testOrnaments());
+    final p = engine.loadPage(File('$repo/dist/pages/604.qvp').readAsBytesSync());
+    expect(p.dress(set, const QvpDressSpec(style: 'test')), isNotNull);
+    final before = p.dressInfo()!.revision;
+    final colours = p.dressGeometry().map((d) => d.color).toList();
+    expect(colours, isNotEmpty);
+    // A repaint keeps the dressed box, so the page number, the style and the layout all stay
+    // put and only dressInfo().revision moves. That is why the ornament picture is keyed on
+    // the revision: a key built from the style and the ornament indices would replay the old
+    // colours for ever.
+    expect(
+        p.dress(set, QvpDressSpec(style: 'test', colors: [(set.list[2], 0, 0xff0000ff)])),
+        isNotNull);
+    expect(p.dressInfo()!.revision, greaterThan(before));
+    expect(p.dressGeometry().map((d) => d.color).toList(), isNot(colours));
+    p.dispose();
+  });
+
+  test('batch notifies once', () {
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    var n = 0;
+    p.addListener(() => n++);
+    p.batch(() {
+      p.highlight('2:255');
+      p.highlight('2:256');
+      p.setDefaultColor(const Color(0xFF112233));
+    });
+    expect(n, 1);
+    // and the memo behind ayahMarks() is dropped by a mutation, not held past it
+    final marks = p.ayahMarks();
+    expect(identical(p.ayahMarks(), marks), isTrue);
+    p.highlight('2:255');
+    expect(identical(p.ayahMarks(), marks), isFalse);
+    p.dispose();
   });
 
   testWidgets('a dressed page paints its ornament layer behind the ink', (tester) async {
