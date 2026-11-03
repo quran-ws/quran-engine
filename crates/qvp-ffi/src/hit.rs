@@ -102,49 +102,35 @@ pub unsafe extern "C" fn qvp_line_bands(page: *const Page, out: *mut QvpLineBand
         fill(out, cap, &v)
     })
 }
+/// One hit box, page units or viewport px depending on the call.
+fn hit_area(h: &HitArea) -> QvpHitArea {
+    QvpHitArea {
+        word: h.word,
+        line: h.line,
+        x0: h.x0,
+        y0: h.y0,
+        x1: h.x1,
+        y1: h.y1,
+        ink_x0: h.ink_x0,
+        ink_y0: h.ink_y0,
+        ink_x1: h.ink_x1,
+        ink_y1: h.ink_y1,
+    }
+}
+/// The hit boxes in page units: the partition a tap is resolved with.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_hit_areas(page: *const Page, gap_bias: f32, out: *mut QvpHitArea, cap: u32) -> u32 {
+    guard(|| {
+        let v: Vec<QvpHitArea> = (*page).hit_areas(gap_bias).iter().map(hit_area).collect();
+        fill(out, cap, &v)
+    })
+}
 /// The hit boxes in viewport px through the current layout: the partition a tap is resolved
 /// with, so an overlay and a tap agree. On a reflowed page these are the rows' own boxes.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_hit_areas_view(page: *const Page, gap_bias: f32, out: *mut QvpHitArea, cap: u32) -> u32 {
     guard(|| {
-        let v: Vec<QvpHitArea> = (*page)
-            .hit_areas_view(gap_bias)
-            .iter()
-            .map(|h| QvpHitArea {
-                word: h.word,
-                line: h.line,
-                x0: h.x0,
-                y0: h.y0,
-                x1: h.x1,
-                y1: h.y1,
-                ink_x0: h.ink_x0,
-                ink_y0: h.ink_y0,
-                ink_x1: h.ink_x1,
-                ink_y1: h.ink_y1,
-            })
-            .collect();
-        fill(out, cap, &v)
-    })
-}
-#[no_mangle]
-pub unsafe extern "C" fn qvp_hit_areas(page: *const Page, gap_bias: f32, out: *mut QvpHitArea, cap: u32) -> u32 {
-    guard(|| {
-        let v: Vec<QvpHitArea> = (*page)
-            .hit_areas(gap_bias)
-            .iter()
-            .map(|h| QvpHitArea {
-                word: h.word,
-                line: h.line,
-                x0: h.x0,
-                y0: h.y0,
-                x1: h.x1,
-                y1: h.y1,
-                ink_x0: h.ink_x0,
-                ink_y0: h.ink_y0,
-                ink_x1: h.ink_x1,
-                ink_y1: h.ink_y1,
-            })
-            .collect();
+        let v: Vec<QvpHitArea> = (*page).hit_areas_view(gap_bias).iter().map(hit_area).collect();
         fill(out, cap, &v)
     })
 }

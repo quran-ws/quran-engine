@@ -53,7 +53,7 @@ pub(crate) unsafe fn hstyle(s: *const QvpHighlightStyle) -> HighlightStyle {
             2 => HighlightMode::Both,
             _ => HighlightMode::Band,
         },
-        height: if s.height == 1 { BandHeight::Ink } else { BandHeight::LineSpacing },
+        height: band_height(s.height),
         ink: s.ink,
         band: s.band,
         pad_x: s.pad_x,
@@ -62,6 +62,15 @@ pub(crate) unsafe fn hstyle(s: *const QvpHighlightStyle) -> HighlightStyle {
         seam: s.seam,
         transition_ms: s.transition_ms,
         layer: s.layer,
+    }
+}
+
+/// The header's band height code: 1 the ink, anything else the line spacing.
+pub(crate) fn band_height(height: u8) -> BandHeight {
+    if height == 1 {
+        BandHeight::Ink
+    } else {
+        BandHeight::LineSpacing
     }
 }
 

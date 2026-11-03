@@ -284,24 +284,25 @@ pub unsafe extern "C" fn qvp_surah_headers_view(page: *const Page, out: *mut Qvp
         fill(out, cap, &v)
     })
 }
+/// One ayah medallion, page units or viewport px depending on the call.
+fn ayah_mark(m: &MarkerInfo) -> QvpAyahMark {
+    QvpAyahMark {
+        decoration: m.decoration,
+        surah: m.surah,
+        ayah: m.ayah,
+        line: m.line,
+        cx: m.cx,
+        cy: m.cy,
+        r: m.r,
+        ornament_path: m.ornament_path,
+        numeral_path: m.numeral_path,
+    }
+}
+/// The ayah medallions on the page, in page units.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ayah_marks(page: *const Page, out: *mut QvpAyahMark, cap: u32) -> u32 {
     guard(|| {
-        let v: Vec<QvpAyahMark> = (*page)
-            .ayah_marks()
-            .iter()
-            .map(|m| QvpAyahMark {
-                decoration: m.decoration,
-                surah: m.surah,
-                ayah: m.ayah,
-                line: m.line,
-                cx: m.cx,
-                cy: m.cy,
-                r: m.r,
-                ornament_path: m.ornament_path,
-                numeral_path: m.numeral_path,
-            })
-            .collect();
+        let v: Vec<QvpAyahMark> = (*page).ayah_marks().iter().map(ayah_mark).collect();
         fill(out, cap, &v)
     })
 }
@@ -309,21 +310,7 @@ pub unsafe extern "C" fn qvp_ayah_marks(page: *const Page, out: *mut QvpAyahMark
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ayah_marks_view(page: *const Page, out: *mut QvpAyahMark, cap: u32) -> u32 {
     guard(|| {
-        let v: Vec<QvpAyahMark> = (*page)
-            .ayah_marks_view()
-            .iter()
-            .map(|m| QvpAyahMark {
-                decoration: m.decoration,
-                surah: m.surah,
-                ayah: m.ayah,
-                line: m.line,
-                cx: m.cx,
-                cy: m.cy,
-                r: m.r,
-                ornament_path: m.ornament_path,
-                numeral_path: m.numeral_path,
-            })
-            .collect();
+        let v: Vec<QvpAyahMark> = (*page).ayah_marks_view().iter().map(ayah_mark).collect();
         fill(out, cap, &v)
     })
 }
