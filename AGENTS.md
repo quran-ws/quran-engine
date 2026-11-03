@@ -9,6 +9,7 @@ beyond them: exact commands, invariants that are easy to break, and where to loo
 scripts/check.sh                      # everything CI runs
 scripts/check.sh test                 # unit tests, no data
 scripts/sync-test-data.sh             # pages/, index/ (quran-svg-elements) and dist/pages/ (data release)
+QVP_SYNC=pages scripts/sync-test-data.sh   # dist/pages/ only: enough for every wrapper build and test
 scripts/check.sh gates                # identity gate (8 pages), line-shift gate, ABI test, conformance
 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity   # all 604 pages
 cargo run -p qvp-convert --release -- batch pages dist/pages          # rebuild page data

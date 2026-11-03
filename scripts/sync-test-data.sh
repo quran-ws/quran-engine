@@ -12,9 +12,18 @@
 #   QVP_DATA_TAG   data release tag (default data-v0.5.0)
 #   QVP_SVG_TAG    quran-svg-elements release tag (default v1.1.2)
 #   QVP_KEEP_PAGES keep dist/pages as it is, whatever built it
+#   QVP_SYNC       what to fetch: `all` (default) or `pages`, which fetches the data release
+#                  and leaves pages/ and index/ alone. A job that reads dist/pages only,
+#                  such as a wrapper build, has no use for the 440 MB the SVG bundle unpacks to.
 # Output: the directories above; a line per artifact saying fetched, kept or skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+sync="${QVP_SYNC:-all}"
+case "$sync" in
+  all|pages) ;;
+  *) echo "error: QVP_SYNC must be all or pages, not '$sync'" >&2; exit 2 ;;
+esac
 
 tag="${QVP_DATA_TAG:-data-v0.5.0}"
 pages_fetched=""
@@ -66,6 +75,11 @@ else
          echo "error: $base/ornaments.qvo returned HTTP $status" >&2
          exit 1 ;;
   esac
+fi
+
+if [ "$sync" = pages ]; then
+  echo "skipped  pages/ and index/ (QVP_SYNC=pages)"
+  exit 0
 fi
 
 svg_tag="${QVP_SVG_TAG:-v1.1.2}"
