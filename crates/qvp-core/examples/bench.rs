@@ -93,6 +93,46 @@ fn main() {
     let b = page.highlight_boxes_view();
     println!("highlight ayah {surah}:{ayah}: {} band boxes, tick+boxes {:?}", b.len(), t.elapsed());
     page.remove_highlight(h);
+
+    // The layouts a reader's gestures ask for: the printed page, a reflowed page, and a
+    // continuous pinch that lays the page out again on every frame.
+    let spec = LayoutSpec { viewport_w: 390.0, viewport_h: 844.0, ..Default::default() };
+    let t = Instant::now();
+    for _ in 0..100 {
+        let _ = page.layout(&spec);
+    }
+    println!("printed layout: {:?} per layout", t.elapsed() / 100);
+    let reflowed = LayoutSpec { reflow: Some(ReflowSpec { zoom: 1.6, ..Default::default() }), ..spec };
+    let _ = page.layout(&reflowed);
+    let t = Instant::now();
+    for _ in 0..20 {
+        let _ = page.layout(&reflowed);
+    }
+    println!("reflow layout (zoom 1.6): {:?} per layout", t.elapsed() / 20);
+    let pinch = Zoom { mode: ZoomMode::Continuous, step: 0, zoom: 1.0 };
+    let focal = (spec.viewport_w / 2.0, spec.viewport_h / 2.0);
+    let _ = page.layout(&spec);
+    let t = Instant::now();
+    let mut relaid = 0;
+    for frame in 1..=10 {
+        let c = page.zoom_pinch(&spec, pinch, View::default(), 1.0 + 0.08 * frame as f32, focal);
+        relaid += c.relaid as u32;
+    }
+    println!("continuous pinch, ten frames: {:?} per frame; {relaid} relaid", t.elapsed() / 10);
+    let _ = page.layout(&spec);
+
+    // The clock once everything has settled: what a host pays per frame for nothing.
+    page.tick(10_000.0);
+    let t = Instant::now();
+    for i in 0..100_000 {
+        let _ = page.tick(10_001.0 + i as f64);
+    }
+    println!("idle tick: {:?} per tick", t.elapsed() / 100_000);
+    let t = Instant::now();
+    for _ in 0..100_000 {
+        let _ = page.colors();
+    }
+    println!("colors() after settling: {:?} per call", t.elapsed() / 100_000);
     println!(
         "surahs: {:?}",
         page.surahs().iter().map(|s| (s.number, s.latin.clone(), s.has_banner)).collect::<Vec<_>>()

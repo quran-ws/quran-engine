@@ -286,6 +286,60 @@ fn styles_layers_handles_and_subword() {
 }
 
 #[test]
+fn an_idle_tick_visits_no_path_and_leaves_the_colours_alone() {
+    let mut p = page();
+    p.style(Selector::Word(0), Paint::new(0xff0000ff));
+    let h = p.style(Selector::Path(3), Paint::fade(0x00ff00ff, 100));
+    p.tick(0.0);
+    assert_eq!(p.animating, vec![3], "only the fading path is listed, by its index");
+    assert!(p.tick(50.0));
+    assert!(!p.tick(100.0), "the transition ends on time");
+    assert!(p.animating.is_empty(), "a finished transition leaves the list");
+    let settled = p.colors().to_vec();
+    assert_eq!(settled[0], 0xff0000ff);
+    assert_eq!(settled[3], 0x00ff00ff);
+    for ms in 1..=5 {
+        assert!(!p.tick(100.0 + 1000.0 * ms as f64));
+        assert!(p.animating.is_empty());
+        assert_eq!(p.colors(), &settled[..], "an idle tick changes no colour");
+    }
+    // A fade back restarts the clock for that path alone, and a rule with no transition
+    // that lands mid-fade settles the path at once and takes it off the list.
+    p.remove_style(h);
+    p.tick(6000.0);
+    assert_eq!(p.animating, vec![3]);
+    p.style(Selector::Path(3), Paint::new(0x0000ffff));
+    p.tick(6010.0);
+    assert!(p.animating.is_empty());
+    assert_eq!(p.color_of(3), 0x0000ffff);
+    assert_eq!(p.colors()[3], 0x0000ffff);
+}
+
+#[test]
+fn a_reflow_measures_the_page_once_and_lays_it_out_the_same_twice() {
+    let mut p = packed_page();
+    assert!(p.reflow_prepared.get().is_none(), "nothing is measured before a reflow asks");
+    let spec = LayoutSpec {
+        viewport_w: 200.0,
+        viewport_h: 400.0,
+        reflow: Some(ReflowSpec { zoom: 1.5, ..Default::default() }),
+        ..Default::default()
+    };
+    let first = p.layout(&spec).clone();
+    let prepared = p.reflow_prepared.get().expect("the first reflow measures the page") as *const _;
+    let second = p.layout(&spec).clone();
+    assert_eq!(first, second);
+    assert!(std::ptr::eq(prepared, p.reflow_prepared.get().unwrap()), "the second reflow reads the same measure");
+    // another zoom and the zoom ceiling read the same measure too
+    let other = LayoutSpec { reflow: Some(ReflowSpec { zoom: 3.0, ..Default::default() }), ..spec };
+    let _ = p.layout(&other);
+    let _ = p.reflow_max_zoom(&ReflowSpec::default());
+    let _ = p.reflow_max_zoom(&ReflowSpec { breaks: Breaks::Printed, ..Default::default() });
+    assert!(std::ptr::eq(prepared, p.reflow_prepared.get().unwrap()));
+    assert!(first.reflow.as_ref().is_some_and(|f| f.row_band.len() > 3), "the page did reflow");
+}
+
+#[test]
 fn transitions_run_on_the_clock() {
     let mut p = page();
     p.tick(0.0);

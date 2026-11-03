@@ -363,23 +363,30 @@ impl Page {
     }
 
     /// Advance the engine clock. Returns true while any colour or band is still moving.
+    ///
+    /// Only the paths with a transition running are visited, so a settled page pays nothing
+    /// per frame however many paths it has.
     pub fn tick(&mut self, now_ms: f64) -> bool {
         self.clock_ms = now_ms;
         self.refresh_targets();
-        let mut moving = false;
-        for a in self.anim.iter_mut() {
-            if a.dur > 0.0 {
-                let t = (self.clock_ms - a.t0) / a.dur;
-                if t >= 1.0 {
-                    a.cur = a.to;
-                    a.dur = 0.0;
-                } else {
-                    a.cur = lerp_rgba(a.from, a.to, if a.smooth { ease_in_out(t) } else { ease_out(t) });
-                    moving = true;
-                }
+        let (anim, colors, now) = (&mut self.anim, &mut self.colors, self.clock_ms);
+        self.animating.retain(|&pi| {
+            let a = &mut anim[pi as usize];
+            if a.dur <= 0.0 {
+                return false;
             }
-        }
-        moving | self.highlights_moving()
+            let t = (now - a.t0) / a.dur;
+            let moving = t < 1.0;
+            if moving {
+                a.cur = lerp_rgba(a.from, a.to, if a.smooth { ease_in_out(t) } else { ease_out(t) });
+            } else {
+                a.cur = a.to;
+                a.dur = 0.0;
+            }
+            colors[pi as usize] = a.cur;
+            moving
+        });
+        !self.animating.is_empty() | self.highlights_moving()
     }
 
     /// Recompute targets when rules changed; start transitions where targets moved.
@@ -401,17 +408,27 @@ impl Page {
                 a.target = p.color;
                 a.target_ms = p.transition_ms;
                 let ms = p.transition_ms.max(prev_ms) as f64;
+                // a path is listed as animating while its transition runs, and once: a
+                // transition that restarts a running one is already listed
+                let running = a.dur > 0.0;
                 if ms > 0.0 {
                     a.from = a.cur;
                     a.to = p.color;
                     a.t0 = self.clock_ms;
                     a.dur = ms;
                     a.smooth = word != NONE && fading.contains(&word);
+                    if !running {
+                        self.animating.push(pi as u32);
+                    }
                 } else {
                     a.from = p.color;
                     a.to = p.color;
                     a.cur = p.color;
                     a.dur = 0.0;
+                    self.colors[pi] = p.color;
+                    if running {
+                        self.animating.retain(|&x| x != pi as u32);
+                    }
                 }
             } else if p.transition_ms != a.target_ms {
                 a.target_ms = p.transition_ms;
@@ -422,15 +439,13 @@ impl Page {
     /// Current (possibly mid-transition) colour of a path.
     pub fn color_of(&mut self, pi: u32) -> Rgba {
         self.refresh_targets();
-        self.anim[pi as usize].cur
+        self.colors[pi as usize]
     }
 
-    /// Full display list: current colour per path.
+    /// Full display list: current colour per path. Kept up to date by the clock and read
+    /// here, never rebuilt.
     pub fn colors(&mut self) -> &[Rgba] {
         self.refresh_targets();
-        for (i, a) in self.anim.iter().enumerate() {
-            self.colors[i] = a.cur;
-        }
         &self.colors
     }
 
@@ -438,7 +453,7 @@ impl Page {
     pub fn styled_paths(&mut self) -> Vec<(u32, Rgba)> {
         self.refresh_targets();
         let d = self.styles.default_ink;
-        self.anim.iter().enumerate().filter(|(_, a)| a.cur != d).map(|(i, a)| (i as u32, a.cur)).collect()
+        self.colors.iter().enumerate().filter(|(_, &c)| c != d).map(|(i, &c)| (i as u32, c)).collect()
     }
 
     // ── convenience API (what apps call) ──
