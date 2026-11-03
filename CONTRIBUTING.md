@@ -72,7 +72,7 @@ this repository has adopted. Run the terminology audit before you add a word.
 Bind every engine function in every wrapper, in this order, in one pull request:
 
 1. `crates/qvp-core`: the logic and a unit test on a synthesised page.
-2. `crates/qvp-ffi/src/lib.rs` and `include/qvp.h`: the symbol, with a doc block above it.
+2. `crates/qvp-ffi/src/<section>.rs` and `include/qvp.h`: the symbol, with a doc block above it. The module is named for the header section the symbol sits in.
 3. `crates/qvp-ffi/tests/abi.rs`: a call on a real page.
 4. `web/qvp.js`: the reference binding. Its name is the name.
 5. Kotlin: `packages/android/qvp/src/main/cpp/qvp_jni.c`, `QvpNative.kt`, `QvpPage.kt`.
