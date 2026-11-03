@@ -62,9 +62,12 @@ jobs:
       # dart format is the house style for this package. It runs before the analyzer so a
       # formatting failure is not buried under analyzer output. The Dart that checks here is
       # the one the pinned Flutter brings, so a Flutter upgrade may ask for a reformat commit.
+      # pub get comes first: the formatter takes the language version from the resolved
+      # package config, and without one it formats for the newest language, which is not
+      # what a contributor's `flutter pub get && dart format` does.
       - name: Format
         working-directory: packages/flutter/qvp_flutter
-        run: dart format --output=none --set-exit-if-changed lib test example/lib
+        run: flutter pub get && dart format --output=none --set-exit-if-changed lib test example/lib
 
       - name: Analyze
         working-directory: packages/flutter/qvp_flutter
