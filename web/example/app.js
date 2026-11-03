@@ -464,6 +464,8 @@
   $('rFill').onchange = e => { S.reflow.fill = e.target.value; S.reflow.on = true; reflowUI(); };
   $('rGaps').onchange = e => { S.reflow.gaps = e.target.value; S.reflow.on = true; reflowUI(); };
   $('rBreaks').onchange = e => { S.reflow.breaks = e.target.value; S.reflow.on = true; reflowUI(); };
+  // the sliders start at the engine's defaults, from the state, so no number lives in the HTML
+  $('rRelax').value = S.reflow.relax; $('rStretch').value = S.reflow.maxStretch;
   $('rRelax').oninput = e => { S.reflow.relax = +e.target.value; S.reflow.on = true; reflowUI(); };
   $('rStretch').oninput = e => { S.reflow.maxStretch = +e.target.value; S.reflow.on = true; reflowUI(); };
 

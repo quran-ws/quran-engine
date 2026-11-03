@@ -12,6 +12,9 @@ All notable changes to the engine and its packages. The format follows
   Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
   from the table and the reflow specs take their defaults from it, so no wrapper copies the
   numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
+- React Native: `DEFAULTS` holds every engine default under its header name, read from the
+  native module, which sends the whole `QvpDefaults` table. A key the native module lacks is
+  an error that names the key and says the native module is older than the package.
 - Reflow can keep the print's line breaks with `breaks: 'printed'` (`QvpBreaks.printed`
   in Swift). Each line stays whole while its ink grows to fill the page width.
   `reflowMaxZoom` measures the widest row in this mode, and larger zooms clamp to it.
@@ -135,7 +138,8 @@ All notable changes to the engine and its packages. The format follows
 ### Fixed
 - Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
   steps, as the Swift, Dart and web wrappers do. They truncated, so alpha 0.5 gave `0x7f` on
-  Android and `0x80` everywhere else.
+  Android and `0x80` everywhere else. A NaN or out-of-range alpha clamps to 0 or 255 in every wrapper, where Swift trapped
+  and Dart threw.
 - A malformed page, atlas or ornament file is an error from the decoder, not a panic or
   an abort. On wasm32 a panic is a trap, so a damaged download could take a host app down.
   The page decoder checks the magic, the version, `quant`, every count against its

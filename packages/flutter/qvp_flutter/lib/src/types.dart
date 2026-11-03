@@ -177,6 +177,11 @@ abstract final class QvpOp {
 // ───────────── colours ─────────────
 
 /// 0xRRGGBBAA from an int (passed through), a `#rgb` / `#rrggbb` / `#rrggbbaa` string, or a Flutter [Color].
+/// 0..1 → 0..255, rounded to the nearest step, as in every wrapper. NaN and out-of-range
+/// values clamp first, so a bad alpha is 0 or 255, never a thrown error.
+int _alpha8(double alpha) =>
+    ((alpha.isNaN ? 0.0 : alpha.clamp(0.0, 1.0)) * 255).round();
+
 /// [alpha] (0..1) replaces the alpha of 6-digit strings and Colors.
 int rgba(Object c, [double? alpha]) {
   if (c is int) return c & 0xffffffff;
@@ -186,7 +191,7 @@ int rgba(Object c, [double? alpha]) {
   if (h.length == 3 || h.length == 4) h = h.split('').map((x) => x + x).join();
   if (h.length == 6) {
     h += alpha != null
-        ? (alpha * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0')
+        ? _alpha8(alpha).toRadixString(16).padLeft(2, '0')
         : 'ff';
   }
   return int.parse(h, radix: 16) & 0xffffffff;
@@ -201,9 +206,7 @@ abstract final class QvpColor {
     (rgba >> 8) & 0xff,
   );
   static int fromColor(Color c, [double? alpha]) {
-    final a = alpha != null
-        ? (alpha * 255).round().clamp(0, 255)
-        : (c.a * 255).round();
+    final a = alpha != null ? _alpha8(alpha) : (c.a * 255).round();
     return (((c.r * 255).round() << 24) |
             ((c.g * 255).round() << 16) |
             ((c.b * 255).round() << 8) |
@@ -214,7 +217,7 @@ abstract final class QvpColor {
   /// CSS-style string `#rrggbbaa`.
   static String hex(int rgba) => '#${rgba.toRadixString(16).padLeft(8, '0')}';
   static int withAlpha(int rgba, double alpha) =>
-      (rgba & 0xffffff00) | (alpha * 255).round().clamp(0, 255);
+      (rgba & 0xffffff00) | _alpha8(alpha);
 }
 
 // ───────────── selectors & targets ─────────────

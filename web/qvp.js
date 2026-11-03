@@ -31,13 +31,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   const names = table => { if (!NAMES) throw new Error('QvpEngine.init() first: names come from the engine'); return NAMES[table]; };
   const idOf = (table, v) => { if (typeof v !== 'string') return v; const i = names(table).indexOf(v); return i < 0 ? 255 : i; };
 
+  // 0..1 → 0..255, rounded to the nearest step, as in every wrapper. NaN and out-of-range values
+  // clamp first, so a bad alpha is 0 or 255.
+  const alpha8 = a => Math.round((Number.isNaN(a) ? 0 : Math.min(Math.max(a, 0), 1)) * 255);
   // colours: numbers are 0xRRGGBBAA; strings '#rgb', '#rrggbb', '#rrggbbaa'
   function rgba(c, alpha) {
     if (typeof c === 'number') return c >>> 0;
     if (typeof c !== 'string') return 0;
     let h = c.trim().replace('#', '');
     if (h.length === 3 || h.length === 4) h = [...h].map(x => x + x).join('');
-    if (h.length === 6) h += alpha !== undefined ? Math.round(alpha * 255).toString(16).padStart(2, '0') : 'ff';
+    if (h.length === 6) h += alpha !== undefined ? alpha8(alpha).toString(16).padStart(2, '0') : 'ff';
     return parseInt(h, 16) >>> 0;
   }
   const css = c => `rgba(${(c >>> 24) & 255},${(c >>> 16) & 255},${(c >>> 8) & 255},${(c & 255) / 255})`;
@@ -588,7 +591,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     // ── hit testing ──
     hitTestExact(x, y) { return this.e.ex.qvp_hit_test_exact(this.h, x, y, this.e.scratch) ? this._hit(this.e.scratch) : null; }
     hitTestExactView(viewX, viewY) { return this.e.ex.qvp_hit_test_exact_view(this.h, viewX, viewY, this.e.scratch) ? this._hit(this.e.scratch) : null; }
-    _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o.maxDistance ?? 0, true); d.setFloat32(at + 4, o.gapBias ?? DEFAULTS.GAP_BIAS, true); d.setUint8(at + 8, o.preferExact === false ? 0 : 1); return at; }
+    // No options: a NULL pointer, and the engine applies its own defaults. With options, maxDistance 0 is the
+    // engine's sentinel for unlimited; gap bias has no sentinel, so DEFAULTS.GAP_BIAS (the engine's own number) fills it.
+    _hitOpt(o) { if (!o || Object.keys(o).length === 0) return 0; const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o.maxDistance ?? 0, true); d.setFloat32(at + 4, o.gapBias ?? DEFAULTS.GAP_BIAS, true); d.setUint8(at + 8, o.preferExact === false ? 0 : 1); return at; }
     /** the one hit shape for every hit test; the exact variants report distance 0 and isExact */
     _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), decoration: f(d.getUint32(s + 8, true)), line: f(d.getUint32(s + 12, true)), distance: d.getFloat32(s + 16, true), isExact: !!d.getUint8(s + 20) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
     /** gap-aware: every point on a printed line resolves to the word the user meant */

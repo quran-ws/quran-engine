@@ -16,6 +16,20 @@ class TypesTest {
         assertEquals(0x1a73e880, QvpColor.withAlpha(0x1a73e8ff, 0.5f))
         assertEquals(0x1a73e880, QvpColor.parse("#1a73e8", 0.5f))
         assertEquals(0xd6a3264d.toInt(), QvpColor.parse("#d6a326", 0.3f))
+        // a NaN alpha is 0 and an out-of-range one clamps, in every wrapper
+        assertEquals(0x1a73e800, QvpColor.parse("#1a73e8", Float.NaN))
+        assertEquals(0x1a73e8ff, QvpColor.withAlpha(0x1a73e800, 2f))
+    }
+
+    /** `QvpDefaults.all` names every constant of the object, so a host that reads the table whole misses none. */
+    @Test
+    fun defaultsTableListsEveryConstant() {
+        val camel = { name: String -> name.lowercase().split('_').let { it[0] + it.drop(1).joinToString("") { p -> p.replaceFirstChar(Char::uppercase) } } }
+        val constants = QvpDefaults::class.java.declaredFields
+            .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type.isPrimitive }
+            .map { camel(it.name) }.toSet()
+        assertEquals(constants, QvpDefaults.all.keys)
+        assertEquals(QvpDefaults.SELECTION_PAD_X, QvpDefaults.all["selectionPadX"])
     }
 
     @Test

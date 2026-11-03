@@ -30,6 +30,22 @@ object QvpDefaults {
     const val SWIPE_AXIS_RATIO = 1.5f; const val SWIPE_DISTANCE = 40f; const val SWIPE_VELOCITY = 500f
     const val ZOOM_SNAP_HYSTERESIS = 0.03f; const val ZOOM_QUANTUM = 0.01f
     const val REFLOW_RELAX = 0.5f; const val REFLOW_MAX_STRETCH = 2f
+
+    /** Every default by its camelCase name, for a host that reads the table whole (the React Native
+     * module's constants). Member references only: the numbers live above, where the parity check
+     * reads them, and [TypesTest] checks that no constant is missing here. */
+    val all: Map<String, Number> = mapOf(
+        "ink" to INK, "highlightInk" to HIGHLIGHT_INK, "highlightBand" to HIGHLIGHT_BAND,
+        "highlightPadX" to HIGHLIGHT_PAD_X, "highlightPadY" to HIGHLIGHT_PAD_Y, "highlightSeam" to HIGHLIGHT_SEAM,
+        "selectionBand" to SELECTION_BAND, "selectionPadX" to SELECTION_PAD_X, "gapBias" to GAP_BIAS, "tapDistance" to TAP_DISTANCE,
+        "gridLines" to GRID_LINES, "aspectSlack" to ASPECT_SLACK,
+        "maskBlock" to MASK_BLOCK, "maskPad" to MASK_PAD, "maskRadius" to MASK_RADIUS,
+        "revealLit" to REVEAL_LIT, "revealGrey" to REVEAL_GREY, "cropPad" to CROP_PAD,
+        "ayahMarkScaleScan" to AYAH_MARK_SCALE_SCAN,
+        "minZoom" to MIN_ZOOM, "maxZoom" to MAX_ZOOM, "zoomedThreshold" to ZOOMED_THRESHOLD,
+        "swipeAxisRatio" to SWIPE_AXIS_RATIO, "swipeDistance" to SWIPE_DISTANCE, "swipeVelocity" to SWIPE_VELOCITY,
+        "zoomSnapHysteresis" to ZOOM_SNAP_HYSTERESIS, "zoomQuantum" to ZOOM_QUANTUM,
+        "reflowRelax" to REFLOW_RELAX, "reflowMaxStretch" to REFLOW_MAX_STRETCH)
 }
 
 /** A mark id by its name, from the engine (255 = unknown). */
@@ -39,14 +55,17 @@ fun markId(name: String): Int = QvpEngine.markFromName(name)
 object QvpColor {
     fun argb(rgba: Int): Int = (rgba shl 24) or (rgba ushr 8)
     fun rgba(argb: Int): Int = (argb shl 8) or (argb ushr 24)
-    /** '#rrggbb' or '#rrggbbaa' → 0xRRGGBBAA. Alpha rounds to the nearest of 255 steps, as in every wrapper. */
+    /** 0..1 → 0..255, rounded to the nearest step, as in every wrapper. NaN and out-of-range values clamp
+     * first, so a bad alpha is 0 or 255, never a throw. */
+    fun alpha8(alpha: Float): Int = ((if (alpha.isNaN()) 0f else alpha.coerceIn(0f, 1f)) * 255f).roundToInt()
+    /** '#rrggbb' or '#rrggbbaa' → 0xRRGGBBAA; [alpha] applies to the 3 and 6 digit forms. */
     fun parse(hex: String, alpha: Float = 1f): Int {
         var h = hex.trim().removePrefix("#")
         if (h.length == 3) h = h.map { "$it$it" }.joinToString("")
-        if (h.length == 6) h += "%02x".format((alpha * 255).roundToInt().coerceIn(0, 255))
+        if (h.length == 6) h += "%02x".format(alpha8(alpha))
         return h.toLong(16).toInt()
     }
-    fun withAlpha(rgba: Int, alpha: Float): Int = (rgba and 0xffffff00.toInt()) or (alpha * 255).roundToInt().coerceIn(0, 255)
+    fun withAlpha(rgba: Int, alpha: Float): Int = (rgba and 0xffffff00.toInt()) or alpha8(alpha)
 }
 
 /** What a style rule applies to (mirrors Sel in web/qvp.js). */

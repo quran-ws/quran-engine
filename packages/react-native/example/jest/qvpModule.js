@@ -11,7 +11,8 @@ const answers = {};
 const constants = {
   version: 'test', formatVersion: 0,
   marks: [], kinds: [], families: [], categories: [], decorations: [], divisions: [], places: [],
-  defaults: { ayahMarkScaleScan: 1.5, reflowRelax: 0.5, reflowMaxStretch: 2, selectionPadX: 0.6 },
+  // the keys the package reads itself; the real module sends the whole QvpDefaults table
+  defaults: { ayahMarkScaleScan: 1.5, reflowRelax: 0.5, reflowMaxStretch: 2, selectionPadX: 0.6, gapBias: 0.6 },
 };
 const module = new Proxy({}, {
   get(_, name) {

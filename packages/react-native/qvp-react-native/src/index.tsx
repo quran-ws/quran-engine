@@ -356,24 +356,42 @@ const M = NativeModules.QvpModule as any;
 // message says what to do instead.
 if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not linked (Android only for now; see README)');
 
+/** The native module's constants: the engine's name tables, and its defaults by camelCase name
+ * (`QVP_DEFAULT_*` in qvp.h; colours as unsigned 0xRRGGBBAA). */
+interface NativeConstants { version?: string; formatVersion?: number; marks?: string[]; kinds?: string[]; families?: string[]; categories?: string[]; decorations?: string[]; divisions?: string[]; places?: string[]; defaults?: Record<string, number> }
 // The engine's name tables, read through the native module's constants; no table lives here.
-const NAMES = (M.getConstants?.() ?? {}) as { marks?: string[]; kinds?: string[]; families?: string[]; categories?: string[]; decorations?: string[]; divisions?: string[]; places?: string[] };
+const NAMES = (M.getConstants?.() ?? {}) as NativeConstants;
 const KIND_NAMES: string[] = NAMES.kinds ?? [];
 const FAMILY_NAMES: string[] = NAMES.families ?? [];
 const CATEGORY_NAMES: string[] = NAMES.categories ?? [];
 const DECORATION_NAMES: string[] = NAMES.decorations ?? [];
 export const MARKS: string[] = NAMES.marks ?? [];
-/** The engine's defaults a host shows, read from the native module (QVP_DEFAULT_* in qvp.h). */
-export const DEFAULTS = {
-  /** The size a scanned medallion takes when `ayahMarkScale` is 0, in rings. */
-  AYAH_MARK_SCALE_SCAN: ((NAMES as any).defaults?.ayahMarkScaleScan ?? 0) as number,
-  /** How far a reflowed row much shorter than its neighbours opens towards them. */
-  REFLOW_RELAX: ((NAMES as any).defaults?.reflowRelax ?? 0) as number,
-  /** How far a reflowed row's gaps may open, in word gaps. */
-  REFLOW_MAX_STRETCH: ((NAMES as any).defaults?.reflowMaxStretch ?? 0) as number,
-  /** Side padding of the selection band, page units. */
-  SELECTION_PAD_X: ((NAMES as any).defaults?.selectionPadX ?? 0) as number,
+/** One default from the native module. No fallback: a missing key means the native module
+ * predates this package, and the error says so. */
+const nativeDefault = (key: string): number => {
+  const v = NAMES.defaults?.[key];
+  if (typeof v !== 'number') throw new Error(`@quran.ws/qvp-react-native: native module QvpModule is older than this package (no default ${key}); rebuild the Android app`);
+  return v;
 };
+const SNAKE = (camel: string) => camel.replace(/([A-Z])/g, '_$1').toUpperCase();
+/** The engine's defaults (QVP_DEFAULT_* in qvp.h), read from the native module: every one under
+ * its header name, and the ones a host reads most with their own doc comments. */
+export const DEFAULTS: Readonly<Record<string, number>> & {
+  /** The size a scanned medallion takes when `ayahMarkScale` is 0, in rings. */
+  readonly AYAH_MARK_SCALE_SCAN: number;
+  /** How far a reflowed row much shorter than its neighbours opens towards them. */
+  readonly REFLOW_RELAX: number;
+  /** How far a reflowed row's gaps may open, in word gaps. */
+  readonly REFLOW_MAX_STRETCH: number;
+  /** Side padding of the selection band, page units. */
+  readonly SELECTION_PAD_X: number;
+} = Object.freeze({
+  ...Object.fromEntries(Object.entries(NAMES.defaults ?? {}).map(([k, v]) => [SNAKE(k), v])),
+  AYAH_MARK_SCALE_SCAN: nativeDefault('ayahMarkScaleScan'),
+  REFLOW_RELAX: nativeDefault('reflowRelax'),
+  REFLOW_MAX_STRETCH: nativeDefault('reflowMaxStretch'),
+  SELECTION_PAD_X: nativeDefault('selectionPadX'),
+});
 /** A name's id in a table; 255 when the table has no such name. */
 export type NameTable = 'marks' | 'kinds' | 'families' | 'categories' | 'decorations' | 'divisions' | 'places';
 const named = (v: string | number, names: string[]) => { if (typeof v === 'number') return v; const i = names.indexOf(v); return i < 0 ? 255 : i; };

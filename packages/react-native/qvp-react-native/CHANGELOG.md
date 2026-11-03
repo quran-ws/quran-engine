@@ -10,6 +10,9 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
   from the table and the reflow specs take their defaults from it, so no wrapper copies the
   numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
+- React Native: `DEFAULTS` holds every engine default under its header name, read from the
+  native module, which sends the whole `QvpDefaults` table. A key the native module lacks is
+  an error that names the key and says the native module is older than the package.
 
 ### Fixed
 - The example builds from a fresh clone. The root `.gitignore` ignored every PNG, so git

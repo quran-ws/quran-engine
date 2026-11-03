@@ -59,16 +59,19 @@ public func markId(_ name: String) -> Int { QvpEngine.markFromName(name) }
 
 /// 0xRRGGBBAA helpers.
 public enum QvpColor {
+    /// 0...1 → 0...255, rounded to the nearest step, as in every wrapper. NaN and out-of-range
+    /// values clamp first, so a bad alpha is 0 or 255, never a trap.
+    public static func alpha8(_ alpha: Float) -> UInt32 { UInt32(((alpha.isNaN ? 0 : min(max(alpha, 0), 1)) * 255).rounded()) }
     /// "#rgb", "#rrggbb" or "#rrggbbaa" → 0xRRGGBBAA (alpha applies to 3/6-digit forms).
     public static func parse(_ hex: String, alpha: Float = 1) -> UInt32 {
         var h = hex.trimmingCharacters(in: .whitespaces)
         if h.hasPrefix("#") { h.removeFirst() }
         if h.count == 3 || h.count == 4 { h = h.map { "\($0)\($0)" }.joined() }
-        if h.count == 6 { h += String(format: "%02x", Int((alpha * 255).rounded()).clamped(0, 255)) }
+        if h.count == 6 { h += String(format: "%02x", alpha8(alpha)) }
         return UInt32(h, radix: 16) ?? 0
     }
     public static func withAlpha(_ rgba: UInt32, _ alpha: Float) -> UInt32 {
-        (rgba & 0xFFFF_FF00) | UInt32(Int((alpha * 255).rounded()).clamped(0, 255))
+        (rgba & 0xFFFF_FF00) | alpha8(alpha)
     }
     public static func components(_ rgba: UInt32) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {
         (CGFloat((rgba >> 24) & 255) / 255, CGFloat((rgba >> 16) & 255) / 255, CGFloat((rgba >> 8) & 255) / 255, CGFloat(rgba & 255) / 255)
