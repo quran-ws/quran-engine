@@ -43,7 +43,7 @@ console.log('ok  printed breaks reach the core and clamp');
 // ── the wrapper's own bounds: inputs that outgrow the scratch, a freed handle, a bad spec ──
 {
   const file = new URL('../dist/pages/002.qvp', import.meta.url);
-  if (!existsSync(file)) console.log('skip wrapper bounds: 002.qvp is missing');
+  if (!existsSync(file)) skipData('wrapper bounds: 002.qvp is missing');
   else {
     const page = engine.loadPage(readFileSync(file));
     // A word list longer than its scratch region used to overwrite the target struct behind it,
@@ -183,12 +183,14 @@ if (existsSync(atlasPath)) {
   if (!freedAtlas || freedAtlas.message !== 'QvpAtlas was freed') throw new Error('a call on a freed atlas did not throw: ' + freedAtlas);
   console.log('ok  atlas free twice is safe and a freed atlas refuses every call');
 } else {
-  console.log('skip atlas: dist/pages/atlas.qva is missing');
+  skipData('atlas: dist/pages/atlas.qva is missing');
 }
 // The engine goes last. It frees a page still open, after which the page's own free does
 // nothing, its cached records stay readable, and a call that reaches the engine throws. free is
 // idempotent here too.
-const open = existsSync(new URL('002.qvp', dataDir)) ? engine.loadPage(readFileSync(new URL('002.qvp', dataDir))) : null;
+const openPath = new URL('002.qvp', dataDir);
+if (!existsSync(openPath)) skipData('free order: 002.qvp is missing');
+const open = existsSync(openPath) ? engine.loadPage(readFileSync(openPath)) : null;
 engine.free(); engine.free();
 if (open) {
   open.free();
