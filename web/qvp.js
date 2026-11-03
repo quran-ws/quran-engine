@@ -77,9 +77,12 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
 
   // The inputs of one call go in scratch2 (64 KB). A struct has its own offset, written where
   // it is used. The inputs that vary in length have these regions, [offset, capacity in bytes]:
-  // one that outgrows its region goes in a block from the engine's allocator (`_input`).
+  // one that outgrows its region goes in a block from the engine's allocator for the length
+  // of the call (`_input`, `_withInputs`).
   const SCRATCH = 1 << 16;
   const IN = { STRING: [0, 1024], WORDS: [1024, 3072], PAIRS: [20480, 4096], LINE_SEP: [45056, 1024], TRIPLES: [49152, 4096] };
+  /** the error for an engine record call that answered 0 for an index below the count */
+  const refused = (call, i, of) => new Error(`${call}(${i}) returned 0 on ${of}`);
 
   class QvpEngine {
     static async init(wasmBytes) {
@@ -92,7 +95,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.scratch = this.ex.qvp_alloc(SCRATCH);   // 64 KB for outputs
       this.scratch2 = this.ex.qvp_alloc(SCRATCH);  // 64 KB for inputs
       this._buf = 0; this._bufLen = 0;             // grown on demand for the bigger reads
-      this._spill = new Map();                     // the inputs that outgrew their region, by region offset
+      this._spill = [];                            // the blocks the call in hand took for inputs that outgrew their region
+      this._live = new Set();                      // the pages, atlases, ornament sets and passages not freed yet
       this.td = new TextDecoder();
       this.te = new TextEncoder();
       // Load every name table from the engine once; Sel and markId read them.
@@ -100,22 +104,23 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     }
     /** the wasm exports every call goes through; a freed engine has none */
     get ex() { if (!this._ex) throw new Error('QvpEngine was freed'); return this._ex; }
-    /** Free the engine's scratch memory. Free the pages, atlases, ornament sets and passages
-     * loaded from it first: after this, every call on the engine throws. Safe to call more
-     * than once. */
+    /** Free every page, atlas, ornament set and passage still open, then the engine's scratch
+     * memory. After this, every call that reaches the engine throws, and `free()` on an object
+     * it owned does nothing. Safe to call more than once. */
     free() {
       const ex = this._ex;
       if (!ex) return;
+      for (const o of [...this._live]) o.free();
       ex.qvp_dealloc(this.scratch, SCRATCH); ex.qvp_dealloc(this.scratch2, SCRATCH);
       if (this._buf) ex.qvp_dealloc(this._buf, this._bufLen);
-      for (const b of this._spill.values()) ex.qvp_dealloc(b.p, b.len);
-      this._spill.clear(); this._buf = 0; this._bufLen = 0; this.scratch = 0; this.scratch2 = 0; this._ex = null;
+      for (const b of this._spill) ex.qvp_dealloc(b.p, b.len);
+      this._spill.length = 0; this._buf = 0; this._bufLen = 0; this.scratch = 0; this.scratch2 = 0; this._ex = null;
     }
     /** All names of a table (QVP_NAMES_* id or key), index = id. */
     names(table) { const t = typeof table === 'string' ? NAMES_TABLE[table] : table; const n = this.ex.qvp_name_count(t); return Array.from({ length: n }, (_, i) => this.name(t, i)); }
     nameCount(table) { return this.ex.qvp_name_count(typeof table === 'string' ? NAMES_TABLE[table] : table); }
     name(table, id) { this.ex.qvp_name(typeof table === 'string' ? NAMES_TABLE[table] : table, id, this.scratch); return this.qstr(this.scratch); }
-    nameId(table, s) { const [p, n] = this.putStr(s); return this.ex.qvp_name_id(typeof table === 'string' ? NAMES_TABLE[table] : table, p, n); }
+    nameId(table, s) { return this._withInputs(() => { const [p, n] = this.putStr(s); return this.ex.qvp_name_id(typeof table === 'string' ? NAMES_TABLE[table] : table, p, n); }); }
     dv() { return new DataView(this.mem.buffer); }
     str(ptr, len) { return this.td.decode(new Uint8Array(this.mem.buffer, ptr, len)); }
     qstr(at) { const d = this.dv(); return this.str(d.getUint32(at, true), d.getUint32(at + 4, true)); }
@@ -151,13 +156,19 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * so read one ask out before the next */
     buf(len) { if (len > this._bufLen) { if (this._buf) this.ex.qvp_dealloc(this._buf, this._bufLen); this._buf = this.ex.qvp_alloc(len); this._bufLen = len; } return this._buf; }
     /** `len` bytes for an input: its region of scratch2 when it fits, else a block from the
-     * engine's allocator, kept until a bigger input of the same region replaces it or `free`.
-     * A new block can grow the memory, so take a DataView after this call, never before it. */
+     * engine's allocator that lives until the `_withInputs` around the call returns. A new
+     * block can grow the memory, so take a DataView after this call, never before it. */
     _input([off, cap], len) {
       if (len <= cap) return this.scratch2 + off;
-      let b = this._spill.get(off);
-      if (!b || b.len < len) { if (b) this.ex.qvp_dealloc(b.p, b.len); b = { p: this.ex.qvp_alloc(len), len }; this._spill.set(off, b); }
+      const b = { p: this.ex.qvp_alloc(len), len };
+      this._spill.push(b);
       return b.p;
+    }
+    /** Run `fn`, an engine call with inputs that may outgrow their regions, then free the
+     * blocks it took. Nests: an inner call frees its own blocks only. */
+    _withInputs(fn) {
+      const from = this._spill.length;
+      try { return fn(); } finally { while (this._spill.length > from) { const b = this._spill.pop(); this.ex.qvp_dealloc(b.p, b.len); } }
     }
     /** write a JS string into its input region; returns [ptr, len] */
     putStr(s, region = IN.STRING) { const b = this.te.encode(s), p = this._input(region, b.length); new Uint8Array(this.mem.buffer, p, b.length).set(b); return [p, b.length]; }
@@ -169,7 +180,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     kindName(k) { return this.nameOf('qvp_kind_name', k); }
     categoryName(c) { return this.nameOf('qvp_category_name', c); }
     markCategory(m) { return this.ex.qvp_mark_category(markId(m)); }
-    markFromName(s) { const [p, n] = this.putStr(s); return this.ex.qvp_mark_from_name(p, n); }
+    markFromName(s) { return this._withInputs(() => { const [p, n] = this.putStr(s); return this.ex.qvp_mark_from_name(p, n); }); }
     /** The engine version, e.g. '0.2.0'. */
     version() { this.ex.qvp_version(this.scratch); return this.qstr(this.scratch); }
     /** The page format version the engine reads. */
@@ -181,7 +192,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     fold(s) { return this._arabic(1, s); }
     normalize(s) { return this._arabic(2, s); }
     looseKey(s) { return this._arabic(3, s); }
-    _arabic(op, s) { const [p, n] = this.putStr(s); this.ex.qvp_arabic(op, p, n, this.scratch); return this.qstr(this.scratch); }
+    _arabic(op, s) { this._withInputs(() => { const [p, n] = this.putStr(s); this.ex.qvp_arabic(op, p, n, this.scratch); }); return this.qstr(this.scratch); }
     loadPage(bytes) {
       const p = this.ex.qvp_alloc(bytes.length);
       new Uint8Array(this.mem.buffer, p, bytes.length).set(bytes);
@@ -206,7 +217,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const h = this.ex.qvp_ornaments_load(p, bytes.length);
       this.ex.qvp_dealloc(p, bytes.length);
       if (!h) throw new Error('qvp_ornaments_load failed');
-      return new QvpOrnaments(this, h);
+      // a set the engine loaded but refuses to describe is freed, not leaked
+      try { return new QvpOrnaments(this, h); } catch (e) { this.ex.qvp_ornaments_free(h); throw e; }
     }
     /** Load the ayahs `from` to `to` of `surah` from the pages that print them, in any order.
      * The passage copies what it needs, so the pages can be freed after this. Throws when an
@@ -298,11 +310,13 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.lineSpacing = ex.qvp_page_line_spacing(handle);
       this.currentLayout = null;
       this._defaultInk = DEFAULTS.INK;
+      engine._live.add(this);   // last: a page the engine refuses to describe is freed by loadPage, not by engine.free
     }
     /** the engine's handle; a freed page has none */
     get h() { if (!this._h) throw new Error('QvpPage was freed'); return this._h; }
-    /** Free the engine's page. Safe to call more than once; every other call after it throws. */
-    free() { if (this._h) { this.e.ex.qvp_page_free(this._h); this._h = 0; } }
+    /** Free the engine's page. Safe to call more than once; every call that reaches the engine
+     * after it throws. Does nothing after `engine.free()`, which freed the page. */
+    free() { if (this._h) { this.e.ex.qvp_page_free(this._h); this._h = 0; this.e._live.delete(this); } }
     // ── dress: another mushaf's ornaments ──
     /**
      * Put other ornaments on the page: up to one per kind. `style` names a mushaf and
@@ -336,18 +350,20 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
         if (typeof v === 'string') { const o = set.find(kind, v); return o ? o.index : NONE; }
         return ornamentIndex(v, key);
       };
-      // Resolve every name first: a string lookup writes into scratch2, where the spec goes.
       const ayah = index(ayahMark, 'ayah_mark', 'ayahMark'), header = index(surahHeader, 'surah_header', 'surahHeader'), frame = index(pageFrame, 'page_frame', 'pageFrame');
       const triples = [];
       colors.forEach(([o, part, colour], k) => triples.push(ornamentIndex(o, `colors[${k}]`), part, rgba(colour)));
-      const cp = triples.length ? this.e.putU32(Uint32Array.from(triples), IN.TRIPLES) : 0;
-      const s = this.e.scratch2, d = this.e.dv();
-      d.setUint32(s, ayah, true); d.setUint32(s + 4, header, true); d.setUint32(s + 8, frame, true);
       const lineMask = lineArt === true ? 7 : Array.isArray(lineArt) ? lineArt.reduce((m, k) => m | (1 << ORNAMENT_KIND.indexOf(k)), 0) : 0;
-      d.setFloat32(s + 12, gap, true); d.setFloat32(s + 16, bandGap, true); d.setFloat32(s + 20, ayahMarkScale, true); d.setFloat32(s + 24, pageFrameScale, true); d.setUint32(s + 28, lineMask, true);
-      d.setUint32(s + 32, cp, true); d.setUint32(s + 36, triples.length / 3, true);
       this.ornaments = null;
-      const ok = this.e.ex.qvp_dress(this.h, set.h, s);
+      const ok = this.e._withInputs(() => {
+        // the colour triples first: a long list takes a new block, which can move the memory
+        const cp = triples.length ? this.e.putU32(Uint32Array.from(triples), IN.TRIPLES) : 0;
+        const s = this.e.scratch2 + 36864, d = this.e.dv();   // the dress spec (QvpDressSpec, 40 bytes)
+        d.setUint32(s, ayah, true); d.setUint32(s + 4, header, true); d.setUint32(s + 8, frame, true);
+        d.setFloat32(s + 12, gap, true); d.setFloat32(s + 16, bandGap, true); d.setFloat32(s + 20, ayahMarkScale, true); d.setFloat32(s + 24, pageFrameScale, true); d.setUint32(s + 28, lineMask, true);
+        d.setUint32(s + 32, cp, true); d.setUint32(s + 36, triples.length / 3, true);
+        return this.e.ex.qvp_dress(this.h, set.h, s);
+      });
       // the engine refits the current layout to the border (or back without it)
       if (this.currentLayout) this.layoutCurrent();
       return ok ? this.dressInfo() : null;
@@ -462,7 +478,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     // ── info records ──
     // The engine answers 0 for an index it has no record of. Every index below the page's
     // counts has one, so a 0 here is the engine refusing the page, and the load fails.
-    _refused(call, i) { return new Error(`${call}(${i}) returned 0 on page ${this.page}`); }
+    _refused(call, i) { return refused(call, i, `page ${this.page}`); }
     _word(i) {
       const ex = this.e.ex, s = this.e.scratch; if (!ex.qvp_word_info(this.h, i, s)) throw this._refused('qvp_word_info', i);
       const d = this.e.dv();
@@ -495,7 +511,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       if (t instanceof Array) t = T.words(t);
       return writeTarget(this.e, this.e.scratch2 + 4096, t);
     }
-    targetWords(t) { const n = this.e.ex.qvp_target_words(this.h, this._target(t), this.e.scratch, 16384); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 16384))); }
+    targetWords(t) { const n = this.e._withInputs(() => this.e.ex.qvp_target_words(this.h, this._target(t), this.e.scratch, 16384)); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 16384))); }
 
     // ── metadata ──
     surahs() {
@@ -551,13 +567,14 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
 
     // ── text & search ──
     text(target = 'page', { form = 'rasm_uthmani', wordSep = ' ', lineSep = '\n' } = {}) {
-      const [wp, wn] = this.e.putStr(wordSep), [lp, ln] = this.e.putStr(lineSep, IN.LINE_SEP);
-      this.e.ex.qvp_text(this.h, this._target(target), FORM[form] ?? 0, wp, wn, lp, ln, this.e.scratch);
+      this.e._withInputs(() => {
+        const [wp, wn] = this.e.putStr(wordSep), [lp, ln] = this.e.putStr(lineSep, IN.LINE_SEP);
+        this.e.ex.qvp_text(this.h, this._target(target), FORM[form] ?? 0, wp, wn, lp, ln, this.e.scratch);
+      });
       return this.e.qstr(this.e.scratch);
     }
     search(query, { form = 'search', mode = 'includes', normalize = true, looseMatch = true, limit = 0 } = {}) {
-      const [qp, qn] = this.e.putStr(query);
-      const n = this.e.ex.qvp_search(this.h, qp, qn, FORM[form] ?? 4, { includes: 0, exact: 1, prefix: 2 }[mode] ?? 0, normalize ? 1 : 0, looseMatch ? 1 : 0, limit, this.e.scratch, 1024);
+      const n = this.e._withInputs(() => { const [qp, qn] = this.e.putStr(query); return this.e.ex.qvp_search(this.h, qp, qn, FORM[form] ?? 4, { includes: 0, exact: 1, prefix: 2 }[mode] ?? 0, normalize ? 1 : 0, looseMatch ? 1 : 0, limit, this.e.scratch, 1024); });
       const d = this.e.dv(), out = [];
       for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 12; const w = d.getUint32(o, true); out.push({ word: w, index: d.getUint32(o + 4, true), isLooseMatch: !!d.getUint8(o + 8), wordKey: this.wordKey(w), text: this.words[w].text }); }
       return out;
@@ -566,7 +583,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /** attach a words sidecar (object or JSON string/bytes); returns words updated */
     attachWords(sidecar) { const s = typeof sidecar === 'string' ? sidecar : sidecar instanceof Uint8Array ? this.e.td.decode(sidecar) : JSON.stringify(sidecar); const b = this.e.te.encode(s); const p = this.e.ex.qvp_alloc(b.length); new Uint8Array(this.e.mem.buffer, p, b.length).set(b); const n = this.e.ex.qvp_attach_words(this.h, p, b.length); this.e.ex.qvp_dealloc(p, b.length); return n; }
     hasForm(form) { return !!this.e.ex.qvp_has_form(this.h, FORM[form] ?? 0); }
-    citation(words) { const p = this.e.putU32(Uint32Array.from(words)); this.e.ex.qvp_citation(this.h, p, words.length, this.e.scratch); return this.e.qstr(this.e.scratch); }
+    citation(words) { this.e._withInputs(() => this.e.ex.qvp_citation(this.h, this.e.putU32(Uint32Array.from(words)), words.length, this.e.scratch)); return this.e.qstr(this.e.scratch); }
 
     // ── hit testing ──
     hitTestExact(x, y) { return this.e.ex.qvp_hit_test_exact(this.h, x, y, this.e.scratch) ? this._hit(this.e.scratch) : null; }
@@ -585,26 +602,28 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     // ── layout ──
     /** Write a layout spec (QvpLayoutSpec, 76 bytes) at scratch offset `s`. */
     _writeLayoutSpec(spec, s) {
-      // The engine lays out whatever numbers it gets and cannot refuse a spec, so a viewport
-      // that is not a number is refused here, before anything of the page changes.
-      if (!Number.isFinite(spec.viewportW) || !Number.isFinite(spec.viewportH)) throw new TypeError('layout: viewportW and viewportH must be finite numbers');
+      // The engine lays out whatever numbers it gets and cannot refuse a spec, so a field that
+      // is not a finite number is refused here by name, before anything of the page changes.
+      // A field left out (undefined or null) takes its default; the viewport has none.
+      const number = (o, key, fallback, prefix = '') => { const v = o[key] ?? fallback; if (!Number.isFinite(v)) throw new TypeError(`layout: ${prefix}${key} must be a finite number`); return v; };
+      const n = (key, fallback) => number(spec, key, fallback);
+      const r = spec.reflow, rn = (key, fallback) => number(r, key, fallback, 'reflow.');
       const d = this.e.dv();
-      d.setFloat32(s, spec.viewportW, true); d.setFloat32(s + 4, spec.viewportH, true); d.setFloat32(s + 8, spec.padTop || 0, true); d.setFloat32(s + 12, spec.padBottom || 0, true);
-      d.setFloat32(s + 16, spec.padLeft || 0, true); d.setFloat32(s + 20, spec.padRight || 0, true); d.setFloat32(s + 24, spec.lineSpacing ?? 1, true);
-      d.setUint8(s + 28, spec.fillHeight ? 1 : 0); d.setUint32(s + 32, spec.gridLines || 0, true);
-      d.setFloat32(s + 36, spec.cropLeft || 0, true); d.setFloat32(s + 40, spec.cropRight || 0, true); d.setFloat32(s + 44, spec.maxAspectSlack || 0, true);
-      const r = spec.reflow;
-      d.setFloat32(s + 48, r ? (r.zoom ?? 1) : 0, true);
+      d.setFloat32(s, n('viewportW'), true); d.setFloat32(s + 4, n('viewportH'), true); d.setFloat32(s + 8, n('padTop', 0), true); d.setFloat32(s + 12, n('padBottom', 0), true);
+      d.setFloat32(s + 16, n('padLeft', 0), true); d.setFloat32(s + 20, n('padRight', 0), true); d.setFloat32(s + 24, n('lineSpacing', 1), true);
+      d.setUint8(s + 28, spec.fillHeight ? 1 : 0); d.setUint32(s + 32, n('gridLines', 0), true);
+      d.setFloat32(s + 36, n('cropLeft', 0), true); d.setFloat32(s + 40, n('cropRight', 0), true); d.setFloat32(s + 44, n('maxAspectSlack', 0), true);
+      d.setFloat32(s + 48, r ? rn('zoom', 1) : 0, true);
       // 255 asks the engine for its own default
       const fill = { ragged: 0, justified: 1, centred: 2, centered: 2 }[r && r.fill] ?? 255;
       const breaks = { greedy: 0, even: 1, fitted: 2, printed: 3 }[r && r.breaks] ?? 255;
       d.setUint8(s + 52, fill); d.setUint8(s + 53, breaks); d.setUint8(s + 54, r && r.gaps === 'printed' ? 0 : 1);
-      d.setFloat32(s + 56, r ? (r.wordGap ?? 1) : 1, true);
-      d.setFloat32(s + 60, r ? (r.maxStretch ?? 0) : 0, true);
-      d.setFloat32(s + 64, r && r.relax !== undefined ? r.relax : -1, true);
+      d.setFloat32(s + 56, r ? rn('wordGap', 1) : 1, true);
+      d.setFloat32(s + 60, r ? rn('maxStretch', 0) : 0, true);
+      d.setFloat32(s + 64, r ? rn('relax', -1) : -1, true);
       // bannerZoom: how big a surah name or basmalah may get against its printed size as the
       // reader zooms; 0 lets it grow with the page until it fills the row.
-      d.setFloat32(s + 68, spec.bannerZoom ?? 0, true);
+      d.setFloat32(s + 68, n('bannerZoom', 0), true);
       // Native frames preserve the printed page by default; a host may supply its own.
       d.setUint8(s + 72, spec.surahFrames === false ? 0 : 1);
     }
@@ -773,7 +792,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /** every zoom the search weighs for one step of a zoom control, with its cost */
     zoomLevelCandidates(spec, nominal, band, floor) {
       const s = this.e.scratch; this._writeLayoutSpec(spec, s);
-      // one block, two halves: `buf` hands back the same scratch every time
+      // one block, two halves: a second `buf` could replace the first and free it
       const N = 64, z = this.e.buf(N * 8), c = z + N * 4;
       const n = this.e.ex.qvp_zoom_level_candidates(this.h, s, nominal, band || 0, floor || 0, z, c, N);
       const zs = new Float32Array(this.e.mem.buffer, z, n), cs = new Float32Array(this.e.mem.buffer, c, n);
@@ -806,7 +825,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
 
     // ── styles (handles undo exactly) ──
     style(sel, color, { ms = 0, layer = LAYER.BASE } = {}) { return this.e.ex.qvp_style_add(this.h, layer, writeSel(this.e, this.e.scratch2 + 12288, sel), rgba(color), ms); }
-    styleTarget(target, color, { ms = 0, layer = LAYER.BASE } = {}) { return this.e.ex.qvp_style_add_target(this.h, layer, this._target(target), rgba(color), ms); }
+    styleTarget(target, color, { ms = 0, layer = LAYER.BASE } = {}) { return this.e._withInputs(() => this.e.ex.qvp_style_add_target(this.h, layer, this._target(target), rgba(color), ms)); }
     removeStyle(handle) { return this.e.ex.qvp_style_remove(this.h, handle); }
     recolorStyle(handle, color, ms = 0) { return this.e.ex.qvp_style_recolor(this.h, handle, rgba(color), ms); }
     hide(sel) { return this.e.ex.qvp_style_hide(this.h, writeSel(this.e, this.e.scratch2 + 12288, sel)); }
@@ -816,14 +835,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     get defaultInk() { return this._defaultInk; }
     /** {ink, diacritics, dots, waqf, sifr, ayahMark, numeral, headers, marks: {name: colour}, ms} → handle */
     theme(t) {
-      // the pairs first: a long list takes a new block, which can move the memory
       const pairs = Object.entries(t.marks || {}).flatMap(([m, col]) => [markId(m), rgba(col)]);
-      const mp = pairs.length ? this.e.putU32(Uint32Array.from(pairs), IN.PAIRS) : 0;
-      const d = this.e.dv(), at = this.e.scratch2 + 16384, c = v => (v === undefined || v === null ? 0 : rgba(v));
-      ['ink', 'diacritics', 'dots', 'waqf', 'sifr', 'ayahMark', 'numeral', 'headers'].forEach((k, i) => d.setUint32(at + i * 4, c(t[k]), true));
-      d.setUint32(at + 32, t.ms || 0, true);
-      d.setUint32(at + 36, mp, true); d.setUint32(at + 40, pairs.length / 2, true);
-      return this.e.ex.qvp_theme(this.h, at);
+      return this.e._withInputs(() => {
+        // the pairs first: a long list takes a new block, which can move the memory
+        const mp = pairs.length ? this.e.putU32(Uint32Array.from(pairs), IN.PAIRS) : 0;
+        const d = this.e.dv(), at = this.e.scratch2 + 16384, c = v => (v === undefined || v === null ? 0 : rgba(v));
+        ['ink', 'diacritics', 'dots', 'waqf', 'sifr', 'ayahMark', 'numeral', 'headers'].forEach((k, i) => d.setUint32(at + i * 4, c(t[k]), true));
+        d.setUint32(at + 32, t.ms || 0, true);
+        d.setUint32(at + 36, mp, true); d.setUint32(at + 40, pairs.length / 2, true);
+        return this.e.ex.qvp_theme(this.h, at);
+      });
     }
     styleHandles() { const n = this.e.ex.qvp_style_handles(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
 
@@ -841,8 +862,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
 
     // ── highlights ──
     /** style: {mode:'ink'|'band'|'both', height:'lineSpacing'|'ink', ink, band, padX, padY, radius, seam, ms, layer} */
-    highlight(target, style = {}) { return this.e.ex.qvp_highlight_add(this.h, this._target(target), writeHl(this.e, this.e.scratch2 + 24576, style)); }
-    moveHighlight(handle, target) { return !!this.e.ex.qvp_highlight_move(this.h, handle, this._target(target)); }
+    highlight(target, style = {}) { return this.e._withInputs(() => this.e.ex.qvp_highlight_add(this.h, this._target(target), writeHl(this.e, this.e.scratch2 + 24576, style))); }
+    moveHighlight(handle, target) { return !!this.e._withInputs(() => this.e.ex.qvp_highlight_move(this.h, handle, this._target(target))); }
     restyleHighlight(handle, style) { return !!this.e.ex.qvp_highlight_restyle(this.h, handle, writeHl(this.e, this.e.scratch2 + 24576, style)); }
     removeHighlight(handle) { return !!this.e.ex.qvp_highlight_remove(this.h, handle); }
     clearHighlights() { this.e.ex.qvp_highlight_clear(this.h); }
@@ -850,7 +871,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     highlightWords(h) { const n = this.e.ex.qvp_highlight_words(this.h, h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
     highlightBoxesView() { const n = this.e.ex.qvp_highlight_boxes_view(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
-    wordBands(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_word_bands(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
+    wordBands(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const n = this.e._withInputs(() => this.e.ex.qvp_word_bands(this.h, this.e.putU32(Uint32Array.from(words)), words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64)); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
 
     // ── selection ──
     select(anchor, focus = anchor) { this.e.ex.qvp_select(this.h, anchor < 0 ? NONE : anchor, focus < 0 ? NONE : focus); }
@@ -859,7 +880,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     selectionText(form = 'rasm_uthmani', includeCitation = false) { this.e.ex.qvp_selection_text(this.h, FORM[form] ?? 0, includeCitation ? 1 : 0, this.e.scratch); return this.e.qstr(this.e.scratch); }
 
     // ── memorisation ──
-    mask(target, mode = 'hide') { this.e.ex.qvp_mask(this.h, this._target(target), { hide: 0, block: 1, blur: 2 }[mode] ?? 0); }
+    mask(target, mode = 'hide') { this.e._withInputs(() => this.e.ex.qvp_mask(this.h, this._target(target), { hide: 0, block: 1, blur: 2 }[mode] ?? 0)); }
     maskFrom(i, mode = 'hide') { this.e.ex.qvp_mask_from(this.h, i, { hide: 0, block: 1, blur: 2 }[mode] ?? 0); }
     maskOptions({ blockColor = DEFAULTS.MASK_BLOCK, padX = DEFAULTS.MASK_PAD, padY = DEFAULTS.MASK_PAD, radius = DEFAULTS.MASK_RADIUS, reverse = false } = {}) { this.e.ex.qvp_mask_options(this.h, rgba(blockColor), padX, padY, radius, reverse ? 1 : 0); }
     unmaskNext(n = 1) { return this.e.ex.qvp_unmask_next(this.h, n); }
@@ -872,7 +893,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     maskHidden() { const n = this.e.ex.qvp_mask_hidden(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     maskWords() { const n = this.e.ex.qvp_mask_words(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
     /** band boxes for a word list in viewport px through the current layout */
-    wordBandsView(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const p = this.e.putU32(Uint32Array.from(words)); const n = this.e.ex.qvp_word_bands_view(this.h, p, words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
+    wordBandsView(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const n = this.e._withInputs(() => this.e.ex.qvp_word_bands_view(this.h, this.e.putU32(Uint32Array.from(words)), words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64)); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
     maskBoxesView() { const n = this.e.ex.qvp_mask_boxes_view(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
     /** greyed page with a lit window: {lit, byAyah, grey, ink, ayahMarks, ms} → steps */
     revealStart({ lit = DEFAULTS.REVEAL_LIT, byAyah = false, grey = DEFAULTS.REVEAL_GREY, ink = DEFAULTS.INK, ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms); }
@@ -883,16 +904,17 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     revealStop() { this.e.ex.qvp_reveal_stop(this.h); }
 
     // ── crop ──
-    cropBounds(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true } = {}) { if (!this.e.ex.qvp_crop_bounds(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, this.e.scratch)) return null; const d = this.e.dv(), s = this.e.scratch; return { x0: d.getFloat32(s, true), y0: d.getFloat32(s + 4, true), x1: d.getFloat32(s + 8, true), y1: d.getFloat32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDecoration: d.getUint32(s + 20, true) }; }
-    cropSvg(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true, background = null } = {}) { if (!this.e.ex.qvp_crop_svg(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, background ? rgba(background) : 0, this.e.scratch)) return null; return this.e.qstr(this.e.scratch); }
+    cropBounds(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true } = {}) { if (!this.e._withInputs(() => this.e.ex.qvp_crop_bounds(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, this.e.scratch))) return null; const d = this.e.dv(), s = this.e.scratch; return { x0: d.getFloat32(s, true), y0: d.getFloat32(s + 4, true), x1: d.getFloat32(s + 8, true), y1: d.getFloat32(s + 12, true), nWords: d.getUint32(s + 16, true), ayahMarkDecoration: d.getUint32(s + 20, true) }; }
+    cropSvg(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true, background = null } = {}) { if (!this.e._withInputs(() => this.e.ex.qvp_crop_svg(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, background ? rgba(background) : 0, this.e.scratch))) return null; return this.e.qstr(this.e.scratch); }
   }
 
   class QvpAtlas {
-    constructor(engine, handle) { this.e = engine; this._h = handle; }
+    constructor(engine, handle) { this.e = engine; this._h = handle; engine._live.add(this); }
     /** the engine's handle; a freed atlas has none */
     get h() { if (!this._h) throw new Error('QvpAtlas was freed'); return this._h; }
-    /** Free the engine's atlas. Safe to call more than once; every other call after it throws. */
-    free() { if (this._h) { this.e.ex.qvp_atlas_free(this._h); this._h = 0; } }
+    /** Free the engine's atlas. Safe to call more than once; every call that reaches the engine
+     * after it throws. Does nothing after `engine.free()`, which freed the atlas. */
+    free() { if (this._h) { this.e.ex.qvp_atlas_free(this._h); this._h = 0; this.e._live.delete(this); } }
     pageOf(surah, ayah) { const p = this.e.ex.qvp_atlas_page_of(this.h, surah, ayah); return p < 0 ? null : p; }
     pageRange(page) { if (!this.e.ex.qvp_atlas_page_range(this.h, page, this.e.scratch)) return null; const v = new Uint16Array(this.e.mem.buffer, this.e.scratch, 4); return { first: [v[0], v[1]], last: [v[2], v[3]] }; }
     _surah(s) { const d = this.e.dv(); return { number: d.getUint16(s, true), page: d.getUint16(s + 2, true), ayahCount: d.getUint16(s + 4, true), place: names('place')[d.getUint8(s + 6)] || '', arabic: this.e.qstr(s + 8), latin: this.e.qstr(s + 16), english: this.e.qstr(s + 24) }; }
@@ -910,7 +932,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     divisionOf(kind, surah, ayah) { const v = this.e.ex.qvp_atlas_division_of(this.h, { juz: 0, hizb: 1, nisf: 2, rubu_al_hizb: 3 }[kind], surah, ayah); return v < 0 ? null : v; }
     juzOf(surah, ayah) { return this.divisionOf('juz', surah, ayah); }
     pagesOfJuz(n) { if (!this.e.ex.qvp_atlas_pages_of_juz(this.h, n, this.e.scratch)) return null; const v = new Uint16Array(this.e.mem.buffer, this.e.scratch, 2); return [v[0], v[1]]; }
-    searchSurahs(text) { const [p, n] = this.e.putStr(text); const c = this.e.ex.qvp_atlas_search_surahs(this.h, p, n, this.e.scratch, 128); return Array.from(new Uint16Array(this.e.mem.buffer, this.e.scratch, Math.min(c, 128))).map(k => this.surah(k)); }
+    searchSurahs(text) { const c = this.e._withInputs(() => { const [p, n] = this.e.putStr(text); return this.e.ex.qvp_atlas_search_surahs(this.h, p, n, this.e.scratch, 128); }); return Array.from(new Uint16Array(this.e.mem.buffer, this.e.scratch, Math.min(c, 128))).map(k => this.surah(k)); }
   }
 
   // where the rows of a passage start (QVP_ALIGN_*)
@@ -932,11 +954,13 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.lineSpacing = ex.qvp_passage_line_spacing(handle);
       /** the last layout */
       this.currentLayout = null;
+      engine._live.add(this);
     }
     /** the engine's handle; a freed passage has none */
     get h() { if (!this._h) throw new Error('QvpPassage was freed'); return this._h; }
-    /** Free the engine's passage. Safe to call more than once; every other call after it throws. */
-    free() { if (this._h) { this.e.ex.qvp_passage_free(this._h); this._h = 0; } }
+    /** Free the engine's passage. Safe to call more than once; every call that reaches the
+     * engine after it throws. Does nothing after `engine.free()`, which freed the passage. */
+    free() { if (this._h) { this.e.ex.qvp_passage_free(this._h); this._h = 0; this.e._live.delete(this); } }
     /** Write a passage spec (QvpPassageSpec, 32 bytes) at `at`. A knob left out takes the
      * engine's default, and so does `maxStretch` 0. */
     _writeSpec(spec, at) {
@@ -995,14 +1019,17 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.count = engine.ex.qvp_ornament_count(handle);
       /** every ornament: {index, kind, lineage, style, riwayah, hasSlices, licence, parts} */
       this.list = Array.from({ length: this.count }, (_, i) => this._ornament(i));
+      engine._live.add(this);   // last: a set the engine refuses to describe is freed by loadOrnaments, not by engine.free
     }
     /** the engine's handle; a freed set has none */
     get h() { if (!this._h) throw new Error('QvpOrnaments was freed'); return this._h; }
-    /** Free the engine's ornament set. Safe to call more than once; every other call after it throws. */
-    free() { if (this._h) { this.e.ex.qvp_ornaments_free(this._h); this._h = 0; } }
+    /** Free the engine's ornament set. Safe to call more than once; every call that reaches the
+     * engine after it throws. Does nothing after `engine.free()`, which freed the set. */
+    free() { if (this._h) { this.e.ex.qvp_ornaments_free(this._h); this._h = 0; this.e._live.delete(this); } }
+    // Every index below the set's counts has a record; a 0 is the engine refusing the set, and the load fails.
     _ornament(i) {
       const s = this.e.scratch;
-      if (!this.e.ex.qvp_ornament_info(this.h, i, s)) return null;
+      if (!this.e.ex.qvp_ornament_info(this.h, i, s)) throw refused('qvp_ornament_info', i, 'the ornament set');
       const d = this.e.dv(), u = k => d.getUint32(s + k * 4, true);
       return {
         index: i, kind: ORNAMENT_KIND[u(0)], lineage: LINEAGE[u(1)], style: this.e.qstr(s + 24), riwayah: this.e.qstr(s + 32), hasSlices: !!u(3),
@@ -1013,20 +1040,19 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     }
     _part(i, k) {
       const s = this.e.scratch2 + 4096;   // not `scratch`: an ornament is being read out of it
-      if (!this.e.ex.qvp_ornament_part(this.h, i, k, s)) return null;
+      if (!this.e.ex.qvp_ornament_part(this.h, i, k, s)) throw refused('qvp_ornament_part', `${i}, ${k}`, 'the ornament set');
       const d = this.e.dv();
       return { index: k, color: d.getUint32(s, true), stroke: !!d.getUint32(s + 4, true), name: this.e.qstr(s + 8) };
     }
     /** the ornament of `kind` ('ayah_mark' | 'surah_header' | 'page_frame') in `style`, or null */
-    find(kind, style) { const i = this.e.ex.qvp_ornament_find(this.h, ORNAMENT_KIND.indexOf(kind), ...this.e.putStr(style)); return i < 0 ? null : this.list[i]; }
+    find(kind, style) { const i = this.e._withInputs(() => this.e.ex.qvp_ornament_find(this.h, ORNAMENT_KIND.indexOf(kind), ...this.e.putStr(style))); return i < 0 ? null : this.list[i]; }
     /** the ornaments of one kind */
-    ofKind(kind) { return this.list.filter(o => o && o.kind === kind); }
+    ofKind(kind) { return this.list.filter(o => o.kind === kind); }
     /** every style in the set, with the ornament it has of each kind or null:
      * [{style, riwayah, lineage, ayahMark, surahHeader, pageFrame}], in the set's order */
     styles() {
       const out = [];
       for (const o of this.list) {
-        if (!o) continue;
         let s = out.find(x => x.style === o.style);
         if (!s) { s = { style: o.style, riwayah: o.riwayah, lineage: o.lineage, ayahMark: null, surahHeader: null, pageFrame: null }; out.push(s); }
         s[{ ayah_mark: 'ayahMark', surah_header: 'surahHeader', page_frame: 'pageFrame' }[o.kind]] = o;

@@ -130,17 +130,20 @@ All notable changes to the engine and its packages. The format follows
 - Flutter: `QvpPageViewStats.basePaths` counts the paths a replayed picture draws, not only
   the paths of a frame that recorded one.
 - Web: `free()` on a page, atlas, ornament set or passage is safe to call twice, and any
-  call on a freed one throws `QvpPage was freed` (or the class's name) instead of handing
-  the engine a null handle.
+  call that reaches the engine on a freed one throws `QvpPage was freed` (or the class's
+  name) instead of handing the engine a null handle. Cached records such as `page.words`
+  stay readable.
 - Web: an input longer than its scratch region, such as a target of over 768 words, a
   separator of over 256 bytes, or a long search string, goes in a block from the engine's
-  allocator. Before, it overwrote the struct or the separator behind it.
-- Web: `page.layout(spec)` and the other layout calls refuse a spec whose `viewportW` or
-  `viewportH` is not a finite number, with a `TypeError`, and keep the layout in hand. A
-  page the engine loads but gives no word, ayah, line or decoration record for fails to
-  load instead of leaving a null in `page.words`.
-- Web: the wrapper frees a read buffer it outgrows, and `engine.free()` releases the
-  scratch buffers. Every call on a freed engine throws `QvpEngine was freed`.
+  allocator for the length of the call. Before, it overwrote the struct or the separator
+  behind it.
+- Web: `page.layout(spec)` and the other layout calls refuse a spec with a field that is
+  not a finite number, with a `TypeError` that names the field, and keep the layout in hand.
+  A page or ornament set the engine loads but gives no record for fails to load instead of
+  leaving a null in `page.words` or `set.list`.
+- Web: the wrapper frees a read buffer it outgrows. `engine.free()` frees every page, atlas,
+  ornament set and passage still open, then the scratch buffers; `free()` on one of them
+  afterwards does nothing, and every call on a freed engine throws `QvpEngine was freed`.
 - React Native: the package checks that the native module is linked before it reads the
   module's constants. Without the module, the error now says `QvpModule not linked` instead
   of a `TypeError`.

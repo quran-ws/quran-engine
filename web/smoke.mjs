@@ -61,12 +61,17 @@ console.log('ok  printed breaks reach the core and clamp');
     // An Arabic string and a search query longer than the region take a block of their own.
     const long = plain.repeat(8);
     if (engine.strip(long).length === 0 || page.search(long).length !== 0) throw new Error('a long string broke strip or search');
-    console.log('ok  inputs that outgrow the scratch reach the engine whole');
-    // A spec with no viewport is refused before the engine sees it, and the layout in hand stays.
+    // the blocks those inputs took go when their call returns; none pins memory for the session
+    if (engine._spill.length) throw new Error(`${engine._spill.length} input blocks outlived their call`);
+    console.log('ok  inputs that outgrow the scratch reach the engine whole, and their blocks go with the call');
+    // A spec with a field that is not a finite number is refused by name before the engine sees
+    // it, and the layout in hand stays.
     const before = page.layout({ viewportW: 390, viewportH: 844 });
-    let refused = null;
-    try { page.layout({}); } catch (e) { refused = e; }
-    if (!(refused instanceof TypeError) || !refused.message.includes('viewportW')) throw new Error('a spec with no viewport was not refused: ' + refused);
+    for (const [bad, field] of [[{}, 'viewportW'], [{ viewportW: 390, viewportH: '844' }, 'viewportH'], [{ viewportW: 390, viewportH: 844, padTop: NaN }, 'padTop'], [{ viewportW: 390, viewportH: 844, reflow: { zoom: Infinity } }, 'reflow.zoom']]) {
+      let refused = null;
+      try { page.layout(bad); } catch (e) { refused = e; }
+      if (!(refused instanceof TypeError) || !refused.message.includes(field)) throw new Error(`a spec with a bad ${field} was not refused by name: ${refused}`);
+    }
     if (page.currentLayout !== before) throw new Error('a refused spec replaced the layout');
     const after = page.layout({ viewportW: 390, viewportH: 844 });
     if (after.scale !== before.scale || after.rows !== before.rows) throw new Error('the layout after a refused spec differs');
@@ -180,9 +185,20 @@ if (existsSync(atlasPath)) {
 } else {
   console.log('skip atlas: dist/pages/atlas.qva is missing');
 }
-// The engine's scratch goes last. free is idempotent here too, and every call after it throws.
+// The engine goes last. It frees a page still open, after which the page's own free does
+// nothing, its cached records stay readable, and a call that reaches the engine throws. free is
+// idempotent here too.
+const open = existsSync(new URL('002.qvp', dataDir)) ? engine.loadPage(readFileSync(new URL('002.qvp', dataDir))) : null;
 engine.free(); engine.free();
+if (open) {
+  open.free();
+  if (!(open.words.length > 0) || open.currentLayout !== null) throw new Error('a page freed by the engine lost its cached records');
+  let freedByEngine = null;
+  try { open.text(); } catch (e) { freedByEngine = e; }
+  // the call names whichever it meets first: the page's handle or the engine's exports
+  if (!freedByEngine || !/^Qvp(Page|Engine) was freed$/.test(freedByEngine.message)) throw new Error('a page freed by the engine did not refuse a call: ' + freedByEngine);
+}
 let freedEngine = null;
 try { engine.strip('x'); } catch (e) { freedEngine = e; }
 if (!freedEngine || freedEngine.message !== 'QvpEngine was freed') throw new Error('a call on a freed engine did not throw: ' + freedEngine);
-console.log('ok  engine.free() releases the scratch once and refuses every call after it');
+console.log('ok  engine.free() frees what is still open, releases the scratch once and refuses every call after it');

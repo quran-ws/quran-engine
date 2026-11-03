@@ -41,11 +41,14 @@ const page   = engine.loadPage(await fetchBytes('pages/042.qvp'));
 const atlas  = engine.loadAtlas(await fetchBytes('pages/atlas.qva'));   // optional
 page.attachWords(await fetchJson('pages/042.words.json'));               // optional forms
 page.free(); atlas.free();
-engine.free();                                            // web: the engine's scratch memory, after every handle
+engine.free();                                            // web: frees what is still open, then the engine's scratch memory
 ```
 
-`free()` is safe to call twice. Any call on a freed page, atlas, ornament set, passage or
-engine throws an error that names it, such as `QvpPage was freed`.
+`free()` is safe to call twice. On a freed page, atlas, ornament set, passage or engine, any
+call that reaches the engine throws an error that names it, such as `QvpPage was freed`.
+Cached arrays such as `page.words`, `page.lines` and `page.currentLayout` stay readable.
+`engine.free()` frees every handle still open; `free()` on one of them afterwards does
+nothing.
 
 `page.width/height/page/nLines/nAyahs/nWords/nPaths/nDecorations`, `page.lineSpacing`,
 `page.grid`.
