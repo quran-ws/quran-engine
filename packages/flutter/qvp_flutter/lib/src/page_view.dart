@@ -586,7 +586,7 @@ class QvpPageViewState extends State<QvpPageView>
         QvpHighlightStyle(
           mode: 'band',
           band: widget.selectionBand,
-          padX: 0.6,
+          padX: QvpDefaults.selectionPadX,
           ms: 0,
           layer: QvpLayer.selection,
         ),

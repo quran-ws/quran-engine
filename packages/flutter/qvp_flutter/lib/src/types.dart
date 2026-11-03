@@ -94,6 +94,7 @@ abstract final class QvpDefaults {
   static const double highlightPadX = 1.2,
       highlightPadY = 0,
       highlightSeam = 0.25,
+      selectionPadX = 0.6,
       gapBias = 0.6,
       tapDistance = 6,
       aspectSlack = 1.15,
@@ -113,6 +114,10 @@ abstract final class QvpDefaults {
   /// How far a justified row's gaps may open, as a multiple of the usual air between two
   /// words: what a reflowed page and a passage stretch to unless the host says otherwise.
   static const double reflowMaxStretch = 2;
+
+  /// How far a reflowed row much shorter than its neighbours opens towards them, as a share
+  /// of the difference.
+  static const double reflowRelax = 0.5;
 }
 
 /// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
@@ -550,7 +555,7 @@ final class QvpReflowSpec {
     this.gaps = 'uniform',
     this.wordGap = 1,
     this.maxStretch = QvpDefaults.reflowMaxStretch,
-    this.relax = 0.5,
+    this.relax = QvpDefaults.reflowRelax,
   });
 
   /// 1 or less is the printed page; [QvpPage.zoomSpec] hands back 0 there, as the C header

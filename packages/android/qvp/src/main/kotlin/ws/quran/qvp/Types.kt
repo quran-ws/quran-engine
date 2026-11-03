@@ -1,6 +1,7 @@
 package ws.quran.qvp
 
 import android.graphics.RectF
+import kotlin.math.roundToInt
 
 /** Constants mirroring qvp.h. Colours everywhere are 0xRRGGBBAA (see [QvpColor]). */
 object QvpKind { const val BODY = 0; const val MARK = 1; const val AYAH_NUMBER = 2; const val AYAH_MARK_ORNAMENT = 3; const val HEADER_INK = 4; const val ORNAMENT = 5; const val PAGE_NUMBER = 6; const val RUNNING_HEAD = 7; const val OTHER = 255 }
@@ -19,7 +20,7 @@ enum class Division(val id: Int) { JUZ(0), HIZB(1), NISF(2), RUBU_AL_HIZB(3) }
 object QvpDefaults {
     const val INK = 0x231f20ff.toInt(); const val HIGHLIGHT_INK = 0x1a73e8ff.toInt(); const val HIGHLIGHT_BAND = 0xd6a3264d.toInt()
     const val HIGHLIGHT_PAD_X = 1.2f; const val HIGHLIGHT_PAD_Y = 0f; const val HIGHLIGHT_SEAM = 0.25f
-    const val SELECTION_BAND = 0x2d6fd640; const val GAP_BIAS = 0.6f; const val TAP_DISTANCE = 6f
+    const val SELECTION_BAND = 0x2d6fd640; const val SELECTION_PAD_X = 0.6f; const val GAP_BIAS = 0.6f; const val TAP_DISTANCE = 6f
     const val GRID_LINES = 15; const val ASPECT_SLACK = 1.15f
     const val MASK_BLOCK = 0xd9d4c8ff.toInt(); const val MASK_PAD = 0.6f; const val MASK_RADIUS = 0.8f
     const val REVEAL_LIT = 1; const val REVEAL_GREY = 0xc9c4b8ff.toInt(); const val CROP_PAD = 2f
@@ -38,14 +39,14 @@ fun markId(name: String): Int = QvpEngine.markFromName(name)
 object QvpColor {
     fun argb(rgba: Int): Int = (rgba shl 24) or (rgba ushr 8)
     fun rgba(argb: Int): Int = (argb shl 8) or (argb ushr 24)
-    /** '#rrggbb' or '#rrggbbaa' → 0xRRGGBBAA */
+    /** '#rrggbb' or '#rrggbbaa' → 0xRRGGBBAA. Alpha rounds to the nearest of 255 steps, as in every wrapper. */
     fun parse(hex: String, alpha: Float = 1f): Int {
         var h = hex.trim().removePrefix("#")
         if (h.length == 3) h = h.map { "$it$it" }.joinToString("")
-        if (h.length == 6) h += "%02x".format((alpha * 255).toInt().coerceIn(0, 255))
+        if (h.length == 6) h += "%02x".format((alpha * 255).roundToInt().coerceIn(0, 255))
         return h.toLong(16).toInt()
     }
-    fun withAlpha(rgba: Int, alpha: Float): Int = (rgba and 0xffffff00.toInt()) or (alpha * 255).toInt().coerceIn(0, 255)
+    fun withAlpha(rgba: Int, alpha: Float): Int = (rgba and 0xffffff00.toInt()) or (alpha * 255).roundToInt().coerceIn(0, 255)
 }
 
 /** What a style rule applies to (mirrors Sel in web/qvp.js). */

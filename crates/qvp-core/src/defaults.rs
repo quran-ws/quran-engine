@@ -14,6 +14,9 @@ pub const HIGHLIGHT_PAD_Y: f32 = 0.0;
 pub const HIGHLIGHT_SEAM: f32 = 0.25;
 /// Band colour a view uses for the word selection.
 pub const SELECTION_BAND: Rgba = 0x2d6fd640;
+/// Side padding (page units) of the selection band. The engine draws no selection of its own:
+/// a view passes this as `pad_x` when it highlights the selected words as a band.
+pub const SELECTION_PAD_X: f32 = 0.6;
 /// Share of the gap between two words that belongs to the preceding word.
 pub const GAP_BIAS: f32 = 0.6;
 /// How far (page units) a tap may land from the ink and still hit the nearest word.

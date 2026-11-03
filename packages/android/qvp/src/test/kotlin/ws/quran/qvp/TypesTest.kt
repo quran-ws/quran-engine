@@ -12,7 +12,10 @@ class TypesTest {
         assertEquals(rgba, QvpColor.rgba(QvpColor.argb(rgba)))
         assertEquals(0x1a73e8ff, QvpColor.parse("#1a73e8"))
         assertEquals(0xaabbccff.toInt(), QvpColor.parse("#abc"))
-        assertEquals(0x1a73e87f, QvpColor.withAlpha(0x1a73e8ff, 0.5f))
+        // alpha rounds to the nearest step: 0.5 is 0x80 in every wrapper, not 0x7f
+        assertEquals(0x1a73e880, QvpColor.withAlpha(0x1a73e8ff, 0.5f))
+        assertEquals(0x1a73e880, QvpColor.parse("#1a73e8", 0.5f))
+        assertEquals(0xd6a3264d.toInt(), QvpColor.parse("#d6a326", 0.3f))
     }
 
     @Test

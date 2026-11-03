@@ -367,6 +367,12 @@ export const MARKS: string[] = NAMES.marks ?? [];
 export const DEFAULTS = {
   /** The size a scanned medallion takes when `ayahMarkScale` is 0, in rings. */
   AYAH_MARK_SCALE_SCAN: ((NAMES as any).defaults?.ayahMarkScaleScan ?? 0) as number,
+  /** How far a reflowed row much shorter than its neighbours opens towards them. */
+  REFLOW_RELAX: ((NAMES as any).defaults?.reflowRelax ?? 0) as number,
+  /** How far a reflowed row's gaps may open, in word gaps. */
+  REFLOW_MAX_STRETCH: ((NAMES as any).defaults?.reflowMaxStretch ?? 0) as number,
+  /** Side padding of the selection band, page units. */
+  SELECTION_PAD_X: ((NAMES as any).defaults?.selectionPadX ?? 0) as number,
 };
 /** A name's id in a table; 255 when the table has no such name. */
 export type NameTable = 'marks' | 'kinds' | 'families' | 'categories' | 'decorations' | 'divisions' | 'places';

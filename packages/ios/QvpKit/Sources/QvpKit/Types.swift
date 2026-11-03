@@ -24,7 +24,7 @@ public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rubuAlHizb }
 public enum QvpDefaults {
     public static let INK: UInt32 = 0x231f20ff, HIGHLIGHT_INK: UInt32 = 0x1a73e8ff, HIGHLIGHT_BAND: UInt32 = 0xd6a3264d
     public static let HIGHLIGHT_PAD_X: Float = 1.2, HIGHLIGHT_PAD_Y: Float = 0, HIGHLIGHT_SEAM: Float = 0.25
-    public static let SELECTION_BAND: UInt32 = 0x2d6fd640, GAP_BIAS: Float = 0.6, TAP_DISTANCE: Float = 6
+    public static let SELECTION_BAND: UInt32 = 0x2d6fd640, SELECTION_PAD_X: Float = 0.6, GAP_BIAS: Float = 0.6, TAP_DISTANCE: Float = 6
     public static let GRID_LINES = 15, ASPECT_SLACK: Float = 1.15
     public static let MASK_BLOCK: UInt32 = 0xd9d4c8ff, MASK_PAD: Float = 0.6, MASK_RADIUS: Float = 0.8
     public static let REVEAL_LIT = 1, REVEAL_GREY: UInt32 = 0xc9c4b8ff, CROP_PAD: Float = 2

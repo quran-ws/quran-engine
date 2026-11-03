@@ -106,4 +106,5 @@ test('the dress prop goes to the native view with the set id and a normalised sp
   const native = tree!.root.findAll(n => typeof n.type === 'string' && n.props.dress !== undefined)[0];
   expect(native.props.dress).toMatchObject({ ornaments: 7, ayahMark: 'mushaf-qalon', surahHeader: 'mushaf-qalon', pageFrame: 'mushaf-qalon', colors: [[0, 0, '#ffffffff']] });
   expect(DEFAULTS.AYAH_MARK_SCALE_SCAN).toBe(1.5);
+  expect([DEFAULTS.REFLOW_RELAX, DEFAULTS.REFLOW_MAX_STRETCH, DEFAULTS.SELECTION_PAD_X]).toEqual([0.5, 2, 0.6]);
 });

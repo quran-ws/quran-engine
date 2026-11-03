@@ -4,7 +4,12 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- `QVP_DEFAULT_REFLOW_RELAX`, `QVP_DEFAULT_REFLOW_MAX_STRETCH` and `QVP_DEFAULT_SELECTION_PAD_X`
+  in `qvp.h`, mirrored in every wrapper's defaults table (`QvpDefaults` in Kotlin, Swift and
+  Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
+  from the table and the reflow specs take their defaults from it, so no wrapper copies the
+  numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
 
 ## [0.7.0] - 2026-10-14
 
