@@ -52,7 +52,7 @@ jobs:
           QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
         run: scripts/sync-test-data.sh
       - name: Run
-        run: cargo run -p qvp-core --release --example bench -- dist/pages/042.qvp | tee bench.txt
+        run: cargo run -p qvp-core --profile dist --example bench -- dist/pages/042.qvp | tee bench.txt
       - uses: actions/upload-artifact@v7
         with:
           name: bench-${{ github.run_id }}

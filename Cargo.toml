@@ -9,7 +9,9 @@ license = "MIT"
 repository = "https://github.com/quran-ws/quran-engine"
 homepage = "https://quran.ws/blocks/quran-engine"
 
-# This table declares the internal crates once. A crate names them with `workspace = true`.
+# The internal crates. A crate names them with `workspace = true`. The version here must
+# equal `[workspace.package] version`: `scripts/set-version.sh` rewrites it and
+# `scripts/check-versions.sh` checks it.
 [workspace.dependencies]
 qvp-format = { path = "crates/qvp-format", version = "0.7.0" }
 qvp-core = { path = "crates/qvp-core", version = "0.7.0" }

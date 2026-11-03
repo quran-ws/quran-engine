@@ -1,7 +1,8 @@
 // dart:ffi tests against the host build of libqvp_ffi.
 //
 // Library: $QVP_LIB, else <repo>/target/release/libqvp_ffi.so
-// (build with `cargo build -p qvp-ffi --release`).
+// (build with `cargo build -p qvp-ffi --release`). On Windows the probe also
+// accepts <repo>/target/dist/qvp_ffi.dll and the plugin directory's copy.
 // Data: <repo>/dist/pages/042.qvp, 042.words.json, atlas.qva
 // (`cargo run -p qvp-convert --release -- batch pages dist/pages`).
 import 'dart:convert';
@@ -27,14 +28,20 @@ String _findRepo() {
   throw StateError('repository root not found; set QVP_REPO');
 }
 
+/// The first path that exists, else the last one.
+String _firstExisting(List<String> paths) =>
+    paths.firstWhere((p) => File(p).existsSync(), orElse: () => paths.last);
+
 void main() {
   final repo = _findRepo();
   final libPath =
       Platform.environment['QVP_LIB'] ??
       (Platform.isWindows
-          ? (File('$repo/target/release/qvp_ffi.dll').existsSync()
-                ? '$repo/target/release/qvp_ffi.dll'
-                : '$repo/packages/flutter/qvp_flutter/windows/qvp_ffi.dll')
+          ? _firstExisting([
+              '$repo/target/dist/qvp_ffi.dll',
+              '$repo/target/release/qvp_ffi.dll',
+              '$repo/packages/flutter/qvp_flutter/windows/qvp_ffi.dll',
+            ])
           : Platform.isMacOS
           ? '$repo/target/release/libqvp_ffi.dylib'
           : '$repo/target/release/libqvp_ffi.so');

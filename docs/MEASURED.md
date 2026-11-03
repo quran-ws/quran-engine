@@ -6,11 +6,11 @@ this file is for people working on the engine itself.
 
 ## Measured
 
-Page 042, release build, Apple silicon — run it yourself and expect different
+Page 042, the `dist` build (the shipped profile), Apple silicon — run it yourself and expect different
 numbers on different hardware:
 
 ```sh
-cargo run -p qvp-core --release --example bench -- dist/pages/042.qvp
+cargo run -p qvp-core --profile dist --example bench -- dist/pages/042.qvp
 ```
 
 | | |
@@ -42,7 +42,7 @@ Cargo has no per-target profile setting, so a smaller wasm would need
 for the target in `.cargo/config.toml`.
 
 Android wrapper baseline for page 042 on the API 35 arm64 Android emulator
-(`Google sdk_gphone64_arm64`), using debug instrumentation with the release-built Rust core:
+(`Google sdk_gphone64_arm64`), using debug instrumentation with the Rust core built with the `dist` profile:
 
 | | |
 |---|---|

@@ -21,7 +21,14 @@ check packages/flutter/qvp_flutter/ios/qvp_flutter.podspec "$(sed -n 's/.*s\.ver
 check packages/flutter/qvp_flutter/macos/qvp_flutter.podspec "$(sed -n 's/.*s\.version *= *'"'"'\([^'"'"']*\)'"'"'.*/\1/p' packages/flutter/qvp_flutter/macos/qvp_flutter.podspec)"
 check packages/android/build.gradle.kts/qvpVersion "$(sed -n 's/.*gradleProperty("qvpVersion").getOrElse("\([^"]*\)").*/\1/p' packages/android/build.gradle.kts)"
 check packages/ios/example/project.yml "$(sed -n 's/^ *CFBundleShortVersionString: *//p' packages/ios/example/project.yml | tr -d '"')"
-for dep in $(sed -n 's/^\(qvp-[a-z]*\) = { path = .*version = "\(.*\)" }$/\1=\2/p' Cargo.toml); do
+# [workspace.dependencies] holds exactly qvp-format and qvp-core. A different set means the
+# line shape changed and the match below no longer sees it, or a crate was added or lost.
+deps="$(sed -n 's/^\(qvp-[a-z]*\) = { path = .*version = "\(.*\)" }$/\1=\2/p' Cargo.toml)"
+names="$(printf '%s\n' "$deps" | cut -d= -f1 | sort | tr '\n' ' ')"
+if [ "$names" != "qvp-core qvp-format " ]; then
+  echo "MISMATCH Cargo.toml [workspace.dependencies] lists '$names'; want qvp-core and qvp-format" ; status=1
+fi
+for dep in $deps; do
   check "Cargo.toml [workspace.dependencies] ${dep%%=*}" "${dep#*=}"
 done
 # Internal crates are declared once, in the workspace. A crate manifest must not carry its own version for one.

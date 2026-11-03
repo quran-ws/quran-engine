@@ -15,8 +15,10 @@ import json, re, sys
 v = sys.argv[1]
 cargo = open("Cargo.toml").read()
 cargo = re.sub(r'^version = ".*"$', f'version = "{v}"', cargo, count=1, flags=re.M)
-# The internal crates are declared once, under [workspace.dependencies].
-cargo = re.sub(r'^(qvp-[a-z]+ = \{ path = "[^"]+", version = ")[^"]+(" \})$', lambda m: m.group(1) + v + m.group(2), cargo, flags=re.M)
+# The internal crates, qvp-format and qvp-core, are under [workspace.dependencies].
+cargo, replacements = re.subn(r'^(qvp-[a-z]+ = \{ path = "[^"]+", version = ")[^"]+(" \})$', lambda m: m.group(1) + v + m.group(2), cargo, flags=re.M)
+if replacements != 2:
+    raise SystemExit(f"error: Cargo.toml [workspace.dependencies] has {replacements} internal crate versions, want 2")
 open("Cargo.toml", "w").write(cargo)
 for p in ("package.json", "packages/react-native/qvp-react-native/package.json"):
     d = json.load(open(p)); d["version"] = v
