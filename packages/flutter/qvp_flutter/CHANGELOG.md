@@ -26,6 +26,8 @@
   `text()` can pass two separators safely.
 - `QvpPage.path(i)` builds one path on demand and keeps it. `QvpPage.buildPaths()`
   returns the whole list as before.
+- The package is `dart format` clean, and the Flutter workflow checks the formatting before
+  it analyses.
 - **Breaking.** `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and `QvpEngine.str`
   are gone. All three named `dart:ffi` types or the native scratch, which cannot sit on a
   platform-neutral class. `QvpNativeBackend` holds them now. Pass a library to
