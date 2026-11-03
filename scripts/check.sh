@@ -98,8 +98,13 @@ for check in "$@"; do
         while IFS= read -r f; do
           if [ -f "$f" ] && head -n 1 "$f" | grep -q '^#!.*bash'; then scripts+=("$f"); fi
         done < <(git ls-files | grep -v '\.[^/]*$')
-        shellcheck "${scripts[@]}"
-        echo "ok   shellcheck: ${#scripts[@]} scripts, no findings"
+        # bash 3.2 treats an empty array as unbound under set -u, so test the length first.
+        if [ "${#scripts[@]}" -eq 0 ]; then
+          echo "ok   shellcheck: 0 scripts"
+        else
+          shellcheck "${scripts[@]}"
+          echo "ok   shellcheck: ${#scripts[@]} scripts, no findings"
+        fi
       fi
       ;;
     web)

@@ -24,9 +24,3 @@ updates:
   - package-ecosystem: pub
     directory: /packages/flutter/qvp_flutter
     schedule: { interval: monthly }
-  - package-ecosystem: swift
-    directory: /
-    schedule: { interval: monthly }
-  - package-ecosystem: swift
-    directory: /packages/ios/QvpKit
-    schedule: { interval: monthly }

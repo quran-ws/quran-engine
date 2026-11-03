@@ -42,8 +42,8 @@ All notable changes to the engine and its packages. The format follows
   table without rewriting it; a `shell` check runs shellcheck over every script; the
   `standards` job calls `scripts/check.sh`; `npm test` builds the wasm first and runs the
   replay tests; `scripts/check-terminology.sh` uses the pinned audit unless
-  `QVP_TERMINOLOGY_SCRIPT` names another; Dependabot covers Gradle, pub, Swift and the
-  React Native package.
+  `QVP_TERMINOLOGY_SCRIPT` names another; Dependabot covers Gradle, pub and the React
+  Native package.
 - The prose linter that the writing rules name is in the repository, at
   `scripts/ste_lint.py`, under its own MIT notice. `scripts/check.sh docs` prints its report
   for every tracked document. The counts guide a writer and fail no check.

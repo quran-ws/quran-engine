@@ -49,7 +49,13 @@ console.log('ok  loadOrnaments refuses foreign bytes');
 // With a set and a page on disk, the whole path: dress, dressInfo, dressGeometry, undress.
 const dataDir = new URL('../dist/pages/', import.meta.url);
 const setPath = new URL('ornaments.qvo', dataDir), pagePath = new URL('604.qvp', dataDir);
-if (existsSync(setPath) && existsSync(pagePath)) {
+if (!existsSync(pagePath)) {
+  skipData('dress with real data: dist/pages/604.qvp is missing');
+} else if (!existsSync(setPath)) {
+  // scripts/sync-test-data.sh accepts a data release that ships no set, so this is a skip
+  // under QVP_REQUIRE_DATA too.
+  console.log('skip dress with real data: this data release ships no dist/pages/ornaments.qvo');
+} else {
   const set = engine.loadOrnaments(readFileSync(setPath));
   if (!set.count || set.list.length !== set.count) throw new Error('the set lists nothing');
   const marker = set.list.find(o => o.kind === 'ayah_mark');
@@ -113,6 +119,4 @@ if (existsSync(setPath) && existsSync(pagePath)) {
   page.undress();
   set.free(); page.free();
   console.log(`ok  dress: ${info.ayahMarks} medallions, ${info.surahHeaders} bands, ${info.draws} draws, revision ${info.revision}`);
-} else {
-  skipData('dress with real data: dist/pages/ornaments.qvo or 604.qvp is missing');
 }
