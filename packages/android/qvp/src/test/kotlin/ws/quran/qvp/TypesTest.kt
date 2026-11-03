@@ -32,6 +32,24 @@ class TypesTest {
         assertEquals(QvpDefaults.SELECTION_PAD_X, QvpDefaults.all["selectionPadX"])
     }
 
+    /** What the React Native bridge exports equals the decimals in qvp.h, not a widened float
+     * (0.6f widened is 0.6000000238418579). The header copy is read from the module's sources. */
+    @Test
+    fun exportedDefaultsEqualTheHeaderDecimals() {
+        val header = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .flatMap { sequenceOf(java.io.File(it, "src/main/cpp/qvp.h"), java.io.File(it, "packages/android/qvp/src/main/cpp/qvp.h")) }
+            .firstOrNull { it.isFile } ?: error("qvp.h not found above " + System.getProperty("user.dir"))
+        val camel = { name: String -> name.lowercase().split('_').let { it[0] + it.drop(1).joinToString("") { p -> p.replaceFirstChar(Char::uppercase) } } }
+        val fromHeader = Regex("""#define QVP_DEFAULT_([A-Z_]+)\s+(0x[0-9a-fA-F]+u?|[0-9.]+f?)""").findAll(header.readText()).associate { m ->
+            val raw = m.groupValues[2]
+            // `u` closes a hex colour and `f` a decimal; a hex digit f is part of the number
+            camel(m.groupValues[1]) to (if (raw.startsWith("0x")) raw.removePrefix("0x").removeSuffix("u").toLong(16).toDouble() else raw.removeSuffix("f").toDouble())
+        }
+        assertEquals(fromHeader, QvpDefaults.decimal)
+        assertEquals(0.6, QvpDefaults.decimal["selectionPadX"])
+        assertEquals(1.2, QvpDefaults.decimal["highlightPadX"])
+    }
+
     @Test
     fun targetParserMatchesTypedTargets() {
         assertArrayEquals(Target.page().arr, Target.parse("page").arr)

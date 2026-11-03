@@ -46,6 +46,13 @@ object QvpDefaults {
         "swipeAxisRatio" to SWIPE_AXIS_RATIO, "swipeDistance" to SWIPE_DISTANCE, "swipeVelocity" to SWIPE_VELOCITY,
         "zoomSnapHysteresis" to ZOOM_SNAP_HYSTERESIS, "zoomQuantum" to ZOOM_QUANTUM,
         "reflowRelax" to REFLOW_RELAX, "reflowMaxStretch" to REFLOW_MAX_STRETCH)
+
+    /** [all] as the decimals the header states, for a bridge that carries doubles. A `Float` widened
+     * with `toDouble()` arrives as 0.6000000238418579, so it goes through its shortest decimal
+     * string instead; a colour is unsigned 0xRRGGBBAA. */
+    val decimal: Map<String, Double> = all.mapValues { (_, v) ->
+        when (v) { is Float -> v.toString().toDouble(); is Int -> (v.toLong() and 0xffffffffL).toDouble(); else -> v.toDouble() }
+    }
 }
 
 /** A mark id by its name, from the engine (255 = unknown). */

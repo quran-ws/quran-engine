@@ -107,6 +107,6 @@ test('the dress prop goes to the native view with the set id and a normalised sp
   expect(native.props.dress).toMatchObject({ ornaments: 7, ayahMark: 'mushaf-qalon', surahHeader: 'mushaf-qalon', pageFrame: 'mushaf-qalon', colors: [[0, 0, '#ffffffff']] });
   expect(DEFAULTS.AYAH_MARK_SCALE_SCAN).toBe(1.5);
   expect([DEFAULTS.REFLOW_RELAX, DEFAULTS.REFLOW_MAX_STRETCH, DEFAULTS.SELECTION_PAD_X]).toEqual([0.5, 2, 0.6]);
-  // every key the native module sends is reachable under its header name
-  expect(DEFAULTS.GAP_BIAS).toBe(0.6);
+  // every key the native module sends is reachable under its header name, as the header's decimal
+  expect([DEFAULTS.GAP_BIAS, DEFAULTS.HIGHLIGHT_PAD_X, DEFAULTS.INK, DEFAULTS.GRID_LINES]).toEqual([0.6, 1.2, 0x231f20ff, 15]);
 });

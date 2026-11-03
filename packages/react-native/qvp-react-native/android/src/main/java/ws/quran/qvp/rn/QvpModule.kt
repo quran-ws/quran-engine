@@ -196,8 +196,8 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
         "families" to QvpEngine.names(QvpEngine.Names.FAMILY), "categories" to QvpEngine.names(QvpEngine.Names.CATEGORY),
         "decorations" to QvpEngine.names(QvpEngine.Names.DECORATION), "divisions" to QvpEngine.names(QvpEngine.Names.DIVISION),
         "places" to QvpEngine.names(QvpEngine.Names.PLACE),
-        // the whole defaults table, by camelCase name; colours as unsigned 0xRRGGBBAA
-        "defaults" to QvpDefaults.all.mapValues { (_, v) -> if (v is Int) (v.toLong() and 0xffffffffL).toDouble() else v.toDouble() })
+        // the whole defaults table by camelCase name, as the decimals the header states
+        "defaults" to QvpDefaults.decimal)
 
     override fun invalidate() { atlases.values.forEach { it.close() }; atlases.clear(); atlasByUri.clear(); QvpOrnamentSets.clear(); super.invalidate() }
     companion object { const val NAME = "QvpModule" }
