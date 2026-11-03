@@ -16,7 +16,7 @@ done
 [ -z "$extra" ] && ok "root holds only allowed entries" || fail "root has unexpected entries:$extra"
 
 # 2. No generated file is tracked.
-generated="$(git ls-files | grep -E 'packages/ios/.*\.xcodeproj/|/jniLibs/|/prebuilt/|packages/flutter/qvp_flutter/assets/(wasm/qvp_ffi\.wasm|js/qvp\.js)$|^pages/|^index/|^dist/|\.DS_Store$|^\.maestro/|\.qvo$' || true)"
+generated="$(git ls-files | grep -E 'packages/ios/.*\.xcodeproj/|^packages/ios/example/Info\.plist$|/jniLibs/|/prebuilt/|packages/flutter/qvp_flutter/assets/(wasm/qvp_ffi\.wasm|js/qvp\.js)$|^pages/|^index/|^dist/|\.DS_Store$|^\.maestro/|\.qvo$' || true)"
 [ -z "$generated" ] && ok "no generated or local file is tracked" || fail "tracked generated files: $generated"
 
 # 3. Every package directory has README, CHANGELOG and LICENSE.
