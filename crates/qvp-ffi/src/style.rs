@@ -109,14 +109,8 @@ pub unsafe extern "C" fn qvp_colors(page: *mut Page) -> *const u32 {
 #[no_mangle]
 pub unsafe extern "C" fn qvp_styled_paths(page: *mut Page, out: *mut u32, cap: u32) -> u32 {
     guard(|| {
-        let v = (*page).styled_paths();
-        if !out.is_null() {
-            for (i, (index, c)) in v.iter().enumerate().take(cap as usize) {
-                *out.add(i * 2) = *index;
-                *out.add(i * 2 + 1) = *c;
-            }
-        }
-        v.len() as u32
+        let v: Vec<[u32; 2]> = (*page).styled_paths().iter().map(|&(index, c)| [index, c]).collect();
+        fill(out.cast(), cap, &v)
     })
 }
 #[no_mangle]

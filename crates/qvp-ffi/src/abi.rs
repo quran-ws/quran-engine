@@ -85,6 +85,10 @@ pub(crate) unsafe fn in_str<'a>(ptr: *const u8, len: u32) -> &'a str {
     std::str::from_utf8(std::slice::from_raw_parts(ptr, len as usize)).unwrap_or("")
 }
 
+/// Copy up to `cap` items into `out` and return how many there are in all. Every array
+/// output goes through here, so a short buffer always gets a truncated copy and the count
+/// to call again with. A record output casts `out` to a pointer to fixed arrays, so `cap`
+/// counts records.
 pub(crate) unsafe fn fill<T: Copy>(out: *mut T, cap: u32, items: &[T]) -> u32 {
     if !out.is_null() && cap > 0 {
         let n = items.len().min(cap as usize);
@@ -93,10 +97,24 @@ pub(crate) unsafe fn fill<T: Copy>(out: *mut T, cap: u32, items: &[T]) -> u32 {
     items.len() as u32
 }
 
+/// One placement as the `{dx, dy, kx, ky}` record the header describes.
+pub(crate) fn placement(p: &qvp_core::Placement) -> [f32; 4] {
+    [p.dx, p.dy, p.kx, p.ky]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use qvp_core::Page;
+
+    #[test]
+    fn a_short_buffer_gets_a_truncated_copy_and_the_full_count() {
+        let records = [[1u32, 2], [3, 4], [5, 6]];
+        let mut out = [0u32; 4];
+        let n = unsafe { fill(out.as_mut_ptr().cast::<[u32; 2]>(), 2, &records) };
+        assert_eq!((n, out), (3, [1, 2, 3, 4]));
+        assert_eq!(unsafe { fill(std::ptr::null_mut::<[u32; 2]>(), 0, &records) }, 3);
+    }
 
     #[test]
     fn a_panic_inside_an_entry_point_becomes_the_error_value() {

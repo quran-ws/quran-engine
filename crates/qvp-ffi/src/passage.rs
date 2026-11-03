@@ -1,6 +1,6 @@
 //! Passage: a range of complete ayahs laid out on rows of a given width.
 
-use crate::abi::{fill, guard, out_str, QvpStr};
+use crate::abi::{fill, guard, out_str, placement, QvpStr};
 use qvp_core::*;
 
 #[repr(C)]
@@ -248,30 +248,15 @@ pub unsafe extern "C" fn qvp_passage_ayahs(passage: *const Passage, out: *mut Qv
 pub unsafe extern "C" fn qvp_passage_draw_list(passage: *const Passage, out: *mut u32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*passage).current_layout() else { return 0 };
-        let n = l.draws.len().min(cap as usize);
-        if !out.is_null() {
-            for (i, d) in l.draws.iter().take(n).enumerate() {
-                *out.add(i * 3) = d.page as u32;
-                *out.add(i * 3 + 1) = d.path;
-                *out.add(i * 3 + 2) = d.placement;
-            }
-        }
-        l.draws.len() as u32
+        let v: Vec<[u32; 3]> = l.draws.iter().map(|d| [d.page as u32, d.path, d.placement]).collect();
+        fill(out.cast(), cap, &v)
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_passage_placements(passage: *const Passage, out: *mut f32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*passage).current_layout() else { return 0 };
-        let n = l.placements.len().min(cap as usize);
-        if !out.is_null() {
-            for (i, q) in l.placements.iter().take(n).enumerate() {
-                *out.add(i * 4) = q.dx;
-                *out.add(i * 4 + 1) = q.dy;
-                *out.add(i * 4 + 2) = q.kx;
-                *out.add(i * 4 + 3) = q.ky;
-            }
-        }
-        l.placements.len() as u32
+        let v: Vec<[f32; 4]> = l.placements.iter().map(placement).collect();
+        fill(out.cast(), cap, &v)
     })
 }

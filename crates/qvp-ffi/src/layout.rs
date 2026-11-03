@@ -1,6 +1,6 @@
 //! Layout: lay the page out for a viewport and read what the layout draws, and where.
 
-use crate::abi::{guard, LAYOUT_BUF};
+use crate::abi::{fill, guard, placement, LAYOUT_BUF};
 use crate::types::*;
 use qvp_core::*;
 
@@ -112,17 +112,8 @@ unsafe fn read_layout(l: &qvp_core::Layout) -> QvpLayout {
 pub unsafe extern "C" fn qvp_layout_groups(page: *const Page, out: *mut f32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*page).current_layout() else { return 0 };
-        let n = l.groups.len() as u32;
-        if out.is_null() || cap < n {
-            return n;
-        }
-        for (i, g) in l.groups.iter().enumerate() {
-            *out.add(i * 4) = g.dx;
-            *out.add(i * 4 + 1) = g.dy;
-            *out.add(i * 4 + 2) = g.kx;
-            *out.add(i * 4 + 3) = g.ky;
-        }
-        n
+        let v: Vec<[f32; 4]> = l.groups.iter().map(placement).collect();
+        fill(out.cast(), cap, &v)
     })
 }
 /// Paths to draw a second time, at another placement: `n × {first_path, n_paths, dx, dy, kx,
@@ -132,19 +123,15 @@ pub unsafe extern "C" fn qvp_layout_groups(page: *const Page, out: *mut f32, cap
 pub unsafe extern "C" fn qvp_layout_repeats(page: *const Page, out: *mut f32, cap: u32) -> u32 {
     guard(|| {
         let Some(flow) = (*page).current_layout().and_then(|l| l.reflow.as_ref()) else { return 0 };
-        let n = flow.repeats.len() as u32;
-        if out.is_null() || cap < n {
-            return n;
-        }
-        for (i, r) in flow.repeats.iter().enumerate() {
-            *out.add(i * 6) = r.first_path as f32;
-            *out.add(i * 6 + 1) = r.n_paths as f32;
-            *out.add(i * 6 + 2) = r.placement.dx;
-            *out.add(i * 6 + 3) = r.placement.dy;
-            *out.add(i * 6 + 4) = r.placement.kx;
-            *out.add(i * 6 + 5) = r.placement.ky;
-        }
-        n
+        let v: Vec<[f32; 6]> = flow
+            .repeats
+            .iter()
+            .map(|r| {
+                let p = &r.placement;
+                [r.first_path as f32, r.n_paths as f32, p.dx, p.dy, p.kx, p.ky]
+            })
+            .collect();
+        fill(out.cast(), cap, &v)
     })
 }
 /// The group of every path, for [`qvp_layout_groups`]. Empty without reflow, where a path's
@@ -153,14 +140,7 @@ pub unsafe extern "C" fn qvp_layout_repeats(page: *const Page, out: *mut f32, ca
 pub unsafe extern "C" fn qvp_layout_path_groups(page: *const Page, out: *mut u32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*page).current_layout() else { return 0 };
-        let n = l.path_group.len() as u32;
-        if out.is_null() || cap < n {
-            return n;
-        }
-        for (i, g) in l.path_group.iter().enumerate() {
-            *out.add(i) = *g;
-        }
-        n
+        fill(out, cap, &l.path_group)
     })
 }
 /// Paths the current layout does not draw: sheet furniture, and a native surah frame once
@@ -169,14 +149,7 @@ pub unsafe extern "C" fn qvp_layout_path_groups(page: *const Page, out: *mut u32
 pub unsafe extern "C" fn qvp_layout_omitted_paths(page: *const Page, out: *mut u32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*page).current_layout() else { return 0 };
-        let n = l.omitted_paths.len() as u32;
-        if out.is_null() || cap < n {
-            return n;
-        }
-        for (i, p) in l.omitted_paths.iter().enumerate() {
-            *out.add(i) = *p;
-        }
-        n
+        fill(out, cap, &l.omitted_paths)
     })
 }
 /// Everything the current layout draws, in drawing order: `{path, placement}` pairs indexing
@@ -196,13 +169,8 @@ pub unsafe extern "C" fn qvp_layout_draw_list(
 ) -> u32 {
     guard(|| {
         let band = (band_bottom > band_top).then_some((band_top, band_bottom));
-        let list = (*page).layout_draw_list_in(band);
-        let n = list.len().min(cap as usize);
-        for (i, d) in list.iter().take(n).enumerate() {
-            *out.add(i * 2) = d.path;
-            *out.add(i * 2 + 1) = d.placement;
-        }
-        list.len() as u32
+        let v: Vec<[u32; 2]> = (*page).layout_draw_list_in(band).iter().map(|d| [d.path, d.placement]).collect();
+        fill(out.cast(), cap, &v)
     })
 }
 
@@ -212,15 +180,8 @@ pub unsafe extern "C" fn qvp_layout_draw_list(
 pub unsafe extern "C" fn qvp_layout_placements(page: *const Page, out: *mut f32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*page).current_layout() else { return 0 };
-        let ps = l.placements();
-        let n = ps.len().min(cap as usize);
-        for (i, q) in ps.iter().take(n).enumerate() {
-            *out.add(i * 4) = q.dx;
-            *out.add(i * 4 + 1) = q.dy;
-            *out.add(i * 4 + 2) = q.kx;
-            *out.add(i * 4 + 3) = q.ky;
-        }
-        ps.len() as u32
+        let v: Vec<[f32; 4]> = l.placements().iter().map(placement).collect();
+        fill(out.cast(), cap, &v)
     })
 }
 /// The words of a reflowed row, in reading order. Returns the number of words on the row,
@@ -230,14 +191,7 @@ pub unsafe extern "C" fn qvp_layout_row_words(page: *const Page, row: u32, out: 
     guard(|| {
         let Some(flow) = (*page).current_layout().and_then(|l| l.reflow.as_ref()) else { return 0 };
         let Some(words) = flow.row_words.get(row as usize) else { return 0 };
-        let n = words.len() as u32;
-        if out.is_null() || cap < n {
-            return n;
-        }
-        for (i, w) in words.iter().enumerate() {
-            *out.add(i) = *w;
-        }
-        n
+        fill(out, cap, words)
     })
 }
 /// The row a word landed on in a reflowed layout, or `QVP_NONE`.
