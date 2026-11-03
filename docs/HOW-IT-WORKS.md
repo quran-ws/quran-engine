@@ -39,9 +39,9 @@ source SVG ──converter──▶ page file ──engine──▶ outlines + c
    one sits on the page. A page is about 210 KB, a quarter of the SVG. Coordinates are
    *page units*: the printed page's own coordinate space, 345 by 550 for this mushaf.
 4. **The engine** (`crates/qvp-core`, written in Rust) loads a page file and holds its
-   tables and outlines in memory. It exposes about 110 functions through a C header, so
-   the same engine runs inside iOS, Android, Flutter and React Native, and in the browser
-   through WebAssembly.
+   tables and outlines in memory. It exposes about 170 functions through a C header, and
+   `crates/qvp-ffi/include/qvp.h` is the list. So the same engine runs inside iOS, Android,
+   Flutter and React Native, and in the browser through WebAssembly.
 5. **The wrapper** is a thin layer in each language. It passes your calls to the engine,
    and it renders what the engine returns with the platform's own canvas. It computes
    nothing itself.

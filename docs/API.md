@@ -208,9 +208,10 @@ default only when several pages must share one grid.
 const L = page.layout({viewportW, viewportH, padLeft, padRight,
                        reflow: {zoom: 1.6, fill: 'ragged' | 'justified' | 'centred', gaps: 'printed',
                                 wordGap: 1, maxStretch: 1.6}});
-// L.reflowed, L.rows, L.groups (dx, dy, kx, ky per group), L.pathGroup (the group of a path)
+// L.reflowed, L.rows, L.groups (dx, dy, kx, ky per group)
+// L.pathGroup (qvp_layout_path_groups): the group of every path, null until the page reflows
 page.reflowMaxZoom(spec)   // the largest zoom whose rows still hold every word of this page
-L.omitted                  // paths this layout does not draw (the sheet's own furniture)
+L.omitted                  // (qvp_layout_omitted_paths) paths this layout does not draw
 page.rowWords(row)         // the words of a reflowed row, in reading order
 page.wordRow(word)         // the row a word landed on, or null
 ```
@@ -230,8 +231,10 @@ the rows are narrower than the printed lines.
 
 The running head (surah name and juz) and the page number are printed outside the page box.
 They belong to the sheet, and a reflowed page has none, so they are left out and their paths
-are listed in `L.omitted` for renderers to skip. A host that wants them draws its own, from
-`page.pageNumber` and the atlas.
+are listed in `L.omitted` for renderers to skip. `qvp_layout_omitted_paths` is that list. Once
+the page reflows, the native frame around a surah name joins it, because a reflowed title is
+frameless (see `surahFrames` above). A host that needs the sheet's furniture draws its own,
+from `page.pageNumber` and the atlas.
 
 What the engine holds to: a word is placed whole and is never reshaped or resized, an ayah
 keeps the medallion that closes it on the same row, a sajdah line travels with its word, a
@@ -425,7 +428,9 @@ the limit measures whole printed rows instead, and the engine clamps to it.
 path. `L.groups` holds one `{dx, dy, kx, ky}` per group and `L.pathGroup[i]` the group of path
 `i`: draw the path's points at `(kx·p.x + dx, ky·p.y + dy)` in page units, then apply `scale`
 and the offsets as before. Without reflow there is one group per printed line, `dx` is 0, both
-scales are 1 and `dy` is that line's `lineDy`, so one code path serves both. `slots[]` holds
+scales are 1 and `dy` is that line's `lineDy`, so one code path serves both.
+`qvp_layout_path_groups` fills `L.pathGroup`. It returns nothing on a printed page, so there
+`L.pathGroup` is `null` and a path's group is the index of its printed line. `slots[]` holds
 the rows. `L.repeats` lists paths to draw a second time (`{firstPath, nPaths, dx, dy, kx,
 ky}`), which is how one sajdah line covers two rows; a renderer draws them after the main
 pass, in the same colour the path already has.
@@ -440,6 +445,7 @@ view = engine.viewClamp(view, L.contentW, L.contentH, viewportW, viewportH);
 view = page.viewAnchor(view, word, nx, ny, toX, toY, viewportW, viewportH);
 const {x, y} = page.viewToLayout(view, touchX, touchY);       // a touch → the laid-out page
 engine.viewSwipe(dx, dy, vx, vy)                              // +1, -1 or 0
+engine.swipePages(dx, dy, vx, vy)                             // pages turned, in reading order
 ```
 
 A layout places the page's ink; the reader pans and zooms on top of it. That arithmetic is the
@@ -454,6 +460,12 @@ point inside it (`nx`, `ny` from 0 to 1) and asks for the view that brings that 
 place on the screen. A word that moved rows cannot hold both axes on a page of fixed width —
 its new row decides its x — so the vertical place is the one this keeps.
 
+`viewSwipe` says which way the finger went: +1 right, −1 left, 0 when the drag is not a swipe.
+`swipePages` (`qvp_swipe_pages`) says how many pages that turns, in reading order. The pages run
+right to left, so a flick to the right is the page after this one, +1, and a flick to the left
+the page before it, −1. Add the result to the page in hand. The engine holds this sign so no
+host turns the book backwards.
+
 ## The reader's zoom control
 
 ```js
@@ -463,6 +475,10 @@ zoom = c.zoom; view = c.view;                             // c.relaid: the page 
 spec = page.zoomSpec(spec, zoom);                         // the spec to lay out and hit-test with
 page.zoomToStep(spec, zoom, 2, view);                     // a size button, a double tap, a reset
 page.zoomMode(spec, zoom, 'continuous');                  // another policy, same size
+zoom = next.zoomCarried(spec, zoom);                      // the same control on the page turned to
+next.zoomAtStep(spec, step)                               // the reflow zoom a step means; 0 is the printed page
+page.zoomIsZoomed(zoom, view, L.fitScale)                 // true once the reader has zoomed in
+page.sidewaysDrag(zoom, view, L.fitScale)                 // 'pan' or 'turnPage'
 ```
 
 A pinch means two different things on a muṣḥaf page. It can scale the printed page, the way it
@@ -502,6 +518,27 @@ The control owns one field of the spec and leaves the reader's spacing knobs alo
 `zoomSpec` is what a host lays out, draws and hit-tests with. `zoomPinch` and `zoomToStep` lay
 the page out themselves when they commit, and the wrapper reads that layout back — a host does
 not lay out again after `relaid`.
+
+**Across a page turn.** `zoomCarried(spec, zoom)` (`qvp_zoom_carried`) is the same control on
+the page the reader turned to. A step carries as a step, because every page has its own steps.
+Rounding a size onto them would lose a step whenever the new page's step sits a little higher,
+and a reader turning pages would walk back to the printed size. A `continuous` zoom carries as a
+size, held between 1 and the new page's `reflowMaxZoom`. A `magnify` control carries unchanged.
+
+`zoomAtStep(spec, step)` (`qvp_zoom_at_step`) is the reflow zoom one step of this page's control
+means. Step 0 is the printed page.
+
+**What a drag means.** `zoomIsZoomed(zoom, view, fitScale)` (`qvp_zoom_is_zoomed`) is true once
+the reader has zoomed in by either road. One road is the view, scaled more than 2% past the
+scale the page is fitted at. The other is reflow, the page laid out more than 2% above the
+printed size. `fitScale` is `L.fitScale`. 0 means the view is in fitted units already, so a
+`scale` of 1 is the fitted page.
+
+`sidewaysDrag(zoom, view, fitScale)` (`qvp_sideways_drag`) turns that into a decision. A
+reflowed page is the screen's own width and an unzoomed page is fitted to it, so neither has
+sideways travel and the drag means `'turnPage'`. Only a magnified page answers `'pan'`. A host
+reads this and does not decide for itself, so every platform answers the same gesture the
+same way.
 
 ## Where geometry is answered
 

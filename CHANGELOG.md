@@ -66,6 +66,19 @@ All notable changes to the engine and its packages. The format follows
   shape on all three. `QvpWordTapCallback` and `QvpDecorationTapCallback` name the two
   shapes. The index is `word.index`, and a host with no use for the hit takes a second
   parameter and ignores it (issue #139).
+- `scripts/set-version.sh` stamps the default `qvpVersion` in `packages/android/build.gradle.kts`
+  and `CFBundleShortVersionString` in `packages/ios/example/Info.plist`.
+  `scripts/check-versions.sh` checks both, and `docs/standards/VERSIONING.md` names the two
+  files. The Android default was `0.1.0-SNAPSHOT` and is now the plain workspace version, so
+  `publishToMavenLocal` needs no `-PqvpVersion` flag.
+- The documents say what is true today. The README, the package READMEs and `docs/MEASURED.md`
+  name the published version 0.7.0 and the measured wasm size. `docs/HOW-IT-WORKS.md` names the
+  header as the function list. `docs/LITE-PASSAGES.md` names the npm test command. `docs/API.md`
+  documents seven header symbols it left out: `qvp_layout_omitted_paths`,
+  `qvp_layout_path_groups`, `qvp_sideways_drag`, `qvp_swipe_pages`, `qvp_zoom_at_step`,
+  `qvp_zoom_carried` and `qvp_zoom_is_zoomed`. `docs/standards/CODE-STYLE.md` says review
+  enforces the JavaScript, Kotlin and Swift doc blocks until the three linters it named are set
+  up (issue #141).
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and

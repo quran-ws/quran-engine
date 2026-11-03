@@ -56,7 +56,7 @@ https://github.com/quran-ws/quran-engine.git
 Or add the package in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/quran-ws/quran-engine.git", from: "0.2.2")
+.package(url: "https://github.com/quran-ws/quran-engine.git", from: "0.7.0")
 ```
 
 Then add the `QvpKit` product to the app target. SwiftPM downloads the published release's
