@@ -151,6 +151,17 @@ class QvpViewController extends ChangeNotifier {
       Offset((local.dx - offsetX) / scale, (local.dy - offsetY) / scale);
 }
 
+/// A tap on a word: the word itself, as on Android and iOS, and the gap-aware
+/// hit that found it. The index is `word.index`.
+typedef QvpWordTapCallback = void Function(QvpWordInfo word, QvpHit hit);
+
+/// A tap on a decoration (ayah mark, surah banner, …) that is not a word, and
+/// the hit that found it: line / distance / isExact, as for a word.
+typedef QvpDecorationTapCallback = void Function(
+  QvpDecorationInfo decoration,
+  QvpHit hit,
+);
+
 /// Renders a [QvpPage] with the engine's layout, animated highlights, masks,
 /// styled paths, tap / long-press selection and pinch / pan.
 class QvpPageView extends StatefulWidget {
@@ -190,13 +201,11 @@ class QvpPageView extends StatefulWidget {
   final Object? defaultInk;
   final QvpViewController? controller;
 
-  /// Tap on a word (gap-aware). [hit] carries path / decoration / line / distance.
-  /// The word itself, as on Android and iOS, not its index.
-  final void Function(QvpWordInfo word, QvpHit hit)? onWordTap;
+  /// Tap on a word (gap-aware), with the word and its hit.
+  final QvpWordTapCallback? onWordTap;
 
-  /// Tap on a decoration (ayah mark, surah banner, …) that is not a word.
-  /// [hit] carries line / distance / isExact, as it does for a word.
-  final void Function(QvpDecorationInfo deco, QvpHit hit)? onDecorationTap;
+  /// Tap on a decoration that is not a word, with the decoration and its hit.
+  final QvpDecorationTapCallback? onDecorationTap;
   final VoidCallback? onEmptyTap;
 
   /// Whole-word selection changed through long-press-drag (empty list = cleared).

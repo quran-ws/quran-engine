@@ -58,8 +58,9 @@ All notable changes to the engine and its packages. The format follows
 - **Breaking.** Flutter: `QvpPageView.onWordTap` hands the host the `QvpWordInfo` where it
   passed the word's index, and `onDecorationTap` carries the `QvpHit` beside the
   decoration. Android and iOS pass the word and the hit already, so host code reads one
-  shape on all three. The index is `word.index`, and a host with no use for the hit takes a
-  second parameter and ignores it (issue #139).
+  shape on all three. `QvpWordTapCallback` and `QvpDecorationTapCallback` name the two
+  shapes. The index is `word.index`, and a host with no use for the hit takes a second
+  parameter and ignores it (issue #139).
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and

@@ -271,7 +271,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | zoomed threshold and swipe classifier | iOS, `QvpViewPolicy` | a pinch settled within 2% of the fitted scale is not a zoom; a mostly horizontal drag longer than 40 pt or faster than 500 pt/s is a page swipe |
 | zoom spring | iOS, `QvpZoomSpring` | eases a released pinch back to the fitted transform on a display link of its own |
 | page cache | iOS, `QvpPageCache` | the policy in `docs/EXAMPLE-APP.md`; the other platforms follow it in their examples |
-| long press, double tap, tap callbacks | every page view | gesture recognition only; the hit comes from `qvp_hit_test` |
+| long press, double tap, tap callbacks | every page view | gesture recognition only. The hit comes from `qvp_hit_test`. `onWordTap` passes the word and the hit, and `onDecorationTap` the decoration and the hit, on Android, iOS and Flutter. React Native carries the same pair in one event |
 
 ## Matrix
 

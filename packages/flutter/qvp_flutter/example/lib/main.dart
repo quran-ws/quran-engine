@@ -793,7 +793,7 @@ class _ReaderPageState extends State<ReaderPage>
                   hit.distance; // distance in page units of the gap-aware hit
               selectWord(w.index);
             },
-            onDecorationTap: (d, hit) {
+            onDecorationTap: (d, _) {
               if (d.ayah > 0) selectAyah(d.surah, d.ayah);
             },
             onEmptyTap: () => selectWord(-1),
