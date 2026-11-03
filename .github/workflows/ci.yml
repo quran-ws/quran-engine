@@ -16,6 +16,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+# The names of the engine, gates, standards and web jobs are required status checks in the
+# branch ruleset of main. A rename needs the ruleset updated first, or no PR can merge.
 jobs:
   # Which parts changed. Documentation-only changes skip the compile jobs; a skipped
   # required job counts as passing.
@@ -56,7 +58,7 @@ jobs:
       - run: scripts/check.sh fmt lint test docs
 
   gates:
-    name: gates (identity, ABI, conformance, web replays)
+    name: gates (identity, ABI, conformance)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -87,7 +89,7 @@ jobs:
         run: scripts/check.sh gates
 
   standards:
-    name: standards (parity, versions, structure, terminology, shell)
+    name: standards (parity, versions, terminology, structure)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

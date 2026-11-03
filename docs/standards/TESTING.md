@@ -45,10 +45,10 @@ only documents skips `engine`, `gates` and `web`, and a skipped job counts as pa
 
 | job | runs on | contents | `scripts/check.sh` |
 |---|---|---|---|
-| `engine` | PRs that change code | format check, clippy with warnings as errors, workspace tests, rustdoc, the prose report | `fmt lint test docs` |
-| `gates` | PRs that change code | identity gate (8 pages), line shift, zoom control, passage and ABI tests, conformance fixtures, zoom table, then the web tests that read pages with `QVP_REQUIRE_DATA=1`: `smoke.mjs`, `lite-passage.test.mjs`, `scenarios.test.mjs`, `passage.test.mjs` | `gates` |
-| `standards` | every PR | parity (`--check`), versions, structure, terminology (zero findings), shellcheck over every shell script | `parity versions structure terminology shell` |
-| `web` | PRs that change code | wasm build, then without data: `smoke.mjs`, `lite.test.mjs`, `lite-passage.test.mjs`, and a parse of the web example | `web` |
+| `engine (fmt, clippy, tests, rustdoc)` | PRs that change code | format check, clippy with warnings as errors, workspace tests, rustdoc, the prose report | `fmt lint test docs` |
+| `gates (identity, ABI, conformance)` | PRs that change code | identity gate (8 pages), line shift, zoom control, passage and ABI tests, conformance fixtures, zoom table, then the web tests that read pages with `QVP_REQUIRE_DATA=1`: `smoke.mjs`, `lite-passage.test.mjs`, `scenarios.test.mjs`, `passage.test.mjs` | `gates` |
+| `standards (parity, versions, terminology, structure)` | every PR | parity (`--check`), versions, structure, terminology (zero findings), shellcheck over every shell script | `parity versions structure terminology shell` |
+| `web (wasm, smoke, lite)` | PRs that change code | wasm build, then without data: `smoke.mjs`, `lite.test.mjs`, `lite-passage.test.mjs`, and a parse of the web example | `web` |
 | `android`, `ios`, `flutter`, `react-native` | PRs that touch that package or its workflow. `android`, `ios` and `flutter` also run for `crates/` and the Cargo manifests; `react-native` also runs for the Kotlin library | build and the package's tests | none; each workflow lists its commands |
 | `nightly` | schedule | identity gate over all 604 pages, and the benchmark on page 042 uploaded as an artifact for comparison with `docs/MEASURED.md` | none |
 
@@ -57,5 +57,6 @@ leaves `smoke.mjs` and `lite-passage.test.mjs` to `gates`, which runs them with 
 
 ## How it is checked
 
-Branch protection requires `engine`, `gates`, `standards`, `web` and every platform job
-that ran.
+The branch ruleset of `main` requires the four job names in the table above as status
+checks, by exact string, so a rename of one of them needs the ruleset updated first, or no
+PR can merge. Every platform job that ran must pass as well.
