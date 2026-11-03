@@ -7,7 +7,10 @@ plugins {
 android {
     namespace = "ws.quran.qvp_flutter_example"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // The NDK scripts/build-engine-android.sh builds the engine with, and the one the
+    // plugin names. Flutter's own default is a newer NDK, which AGP would download at
+    // configure time: a second NDK on a CI runner that already holds this one.
+    ndkVersion = "27.2.12479018"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

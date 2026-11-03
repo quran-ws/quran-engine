@@ -31,6 +31,9 @@ apply plugin: "com.android.library"
 android {
     namespace = "ws.quran.qvp_flutter"
     compileSdk = 35
+    // The NDK scripts/build-engine-android.sh builds the .so files with. The example app
+    // pins the same string, so the Flutter tool sees one NDK across the project.
+    ndkVersion = "27.2.12479018"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

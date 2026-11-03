@@ -29,7 +29,9 @@ All notable changes to the engine and its packages. The format follows
   `scripts/build-engine-android.sh` and `scripts/sync-flutter-web-engine.sh` take
   `QVP_PROFILE`, `dist` by default. The Flutter example job builds its engine under
   `release`, frees the runner's unused toolchains first and caches the cargo registry
-  without `target/`, after the Android build ran out of disk on main.
+  without `target/`, after the Android build ran out of disk on main. The Flutter plugin
+  and its example pin `ndkVersion` to the repository's NDK, so Gradle no longer
+  downloads Flutter's default NDK beside it.
 - The Flutter package's web engine assets, `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`,
   are build outputs and no longer tracked. The release workflow builds them from the
   tagged commit into the pub.dev package, as it does the Android libraries.
