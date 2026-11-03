@@ -39,18 +39,16 @@ jobs:
           channel: stable
           flutter-version: 3.47.9
           cache: true
-      - name: Cache test data
+      - name: Cache page data
         uses: actions/cache@v4
         with:
-          path: |
-            dist/pages
-            pages
-            index
-          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.2' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+          path: dist/pages
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      # Only the page data. The SVG bundle serves the identity gate, which runs in ci.yml.
       - name: Fetch page data
         env:
           QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
-          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
+          QVP_SYNC: pages
         run: scripts/sync-test-data.sh
       - name: Build the host engine library
         run: cargo build -p qvp-ffi --release
@@ -93,6 +91,24 @@ jobs:
       NDK_VERSION: 27.2.12479018
     steps:
       - uses: actions/checkout@v7
+      # The Android engine build plus Gradle's outputs filled the runner's disk once (run
+      # 41720676524). These directories ship with the image, and nothing in this job reads
+      # them. The step runs before any SDK, cache or data lands, and warns when it found
+      # less than 5 GB to free, because that means the image changed under this list.
+      - name: Free disk space
+        run: |
+          df -h /
+          before=$(df --output=avail -k / | tail -1)
+          for dir in /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL; do
+            if [ -d "$dir" ]; then sudo rm -rf "$dir"; fi
+          done
+          after=$(df --output=avail -k / | tail -1)
+          freed_gb=$(( (after - before) / 1024 / 1024 ))
+          echo "freed ${freed_gb} GB"
+          if [ "$freed_gb" -lt 5 ]; then
+            echo "::warning::Free disk space freed only ${freed_gb} GB. The runner image's large directories moved."
+          fi
+          df -h /
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -101,7 +117,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      # Registry only. This job builds the engine for three Android triples, the host and
+      # wasm, and a restored target/ for all of them counts against the runner's disk as
+      # much as a fresh build does. Under the release profile the rebuild is short.
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
       # `packages` defaults to "tools platform-tools". Google removed the deprecated
       # `tools` package from the SDK repository, so the default install now fails with
       # "Failed to find package 'tools'". The NDK is the one scripts/build-engine-android.sh
@@ -121,28 +142,32 @@ jobs:
           channel: stable
           flutter-version: 3.47.9
           cache: true
-      - name: Cache test data
+      - name: Cache page data
         uses: actions/cache@v4
         with:
-          path: |
-            dist/pages
-            pages
-            index
-          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.2' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+          path: dist/pages
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      # Only the page data. The SVG bundle serves the identity gate, which runs in ci.yml.
       - name: Fetch page data
         env:
           QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
-          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
+          QVP_SYNC: pages
         run: scripts/sync-test-data.sh
       - name: Example assets (the example's pubspec declares the pages directory)
         run: scripts/sync-example-data.sh flutter
       # The plugin's Android module ships src/main/jniLibs/<abi>/libqvp_ffi.so and builds
-      # no native code of its own, so this job builds the engine before the APK.
+      # no native code of its own, so this job builds the engine before the APK. A debug
+      # example APK does not need the shipping profile: `release` skips LTO, whose objects
+      # for three triples are what filled the disk.
       - name: Build the engine for Android
+        env:
+          QVP_PROFILE: release
         run: scripts/build-engine-android.sh
       # The web engine assets are not tracked. The example bundles the plugin's asset
       # directories on every platform, so both builds below need them.
       - name: Build the web engine assets
+        env:
+          QVP_PROFILE: release
         run: scripts/sync-flutter-web-engine.sh
       - name: Build the example for Android
         working-directory: packages/flutter/qvp_flutter/example

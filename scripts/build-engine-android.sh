@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Cross-compile the Rust engine for Android and place the static libs where the
 # Android library (packages/android/qvp) and the .so where the Flutter plugin expect them.
-# Builds with the `dist` profile, the one every shipped artifact uses.
+# Builds with the cargo profile QVP_PROFILE names, `dist` by default. Shipped artifacts
+# keep `dist`. A CI job that only needs a debug example APK sets QVP_PROFILE=release,
+# which skips LTO and its intermediate objects for three targets.
 # Needs: rustup targets (aarch64/x86_64/armv7 android), cargo-ndk, ANDROID_NDK_HOME.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -14,14 +16,15 @@ fi
 : "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME or install NDK 27.2.12479018 under ANDROID_HOME}"
 rustup target add aarch64-linux-android x86_64-linux-android armv7-linux-androideabi >/dev/null
 command -v cargo-ndk >/dev/null || cargo install cargo-ndk
-cargo ndk -t arm64-v8a -t x86_64 -t armeabi-v7a -o dist/android/jniLibs build -p qvp-ffi --profile dist
+profile="${QVP_PROFILE:-dist}"
+cargo ndk -t arm64-v8a -t x86_64 -t armeabi-v7a -o dist/android/jniLibs build -p qvp-ffi --profile "$profile"
 for pair in arm64-v8a:aarch64-linux-android x86_64:x86_64-linux-android armeabi-v7a:armv7-linux-androideabi; do
   abi=${pair%%:*}; triple=${pair##*:}
   mkdir -p "packages/android/qvp/prebuilt/$abi" "packages/flutter/qvp_flutter/android/src/main/jniLibs/$abi"
-  cp "target/$triple/dist/libqvp_ffi.a" "packages/android/qvp/prebuilt/$abi/"
+  cp "target/$triple/$profile/libqvp_ffi.a" "packages/android/qvp/prebuilt/$abi/"
   cp "dist/android/jniLibs/$abi/libqvp_ffi.so" "packages/flutter/qvp_flutter/android/src/main/jniLibs/$abi/"
 done
 # The Android library compiles its JNI shim against a copy of the header. The copy is
 # generated here, never edited; scripts/check-parity.py fails when it drifts.
 cp crates/qvp-ffi/include/qvp.h packages/android/qvp/src/main/cpp/qvp.h
-echo "engine built for android: $(ls packages/android/qvp/prebuilt)"
+echo "engine built for android ($profile profile): $(ls packages/android/qvp/prebuilt)"
