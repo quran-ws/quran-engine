@@ -18,9 +18,12 @@
   - iOS and macOS link `QvpEngine.xcframework` through a podspec and resolve symbols with
     `DynamicLibrary.process()`. `scripts/build-engine-ios.sh` copies the framework into both.
   - Windows and Linux bundle `qvp_ffi.dll` and `libqvp_ffi.so` through CMake, and fail the
-    build when neither the plugin directory nor `target/release` holds one.
+    build when neither the plugin directory nor the Cargo build holds one.
   - Web runs the engine as WebAssembly over `dart:js_interop`. Call
     `await QvpEngine.initWeb()` before the first engine call.
+- Shipped binaries build with the cargo profile `dist`. The Windows and Linux CMake files
+  look under `target/dist/` first, then `target/release/`. `scripts/build-engine-windows.ps1`
+  and `scripts/sync-flutter-web-engine.sh` build with it.
 - `scripts/sync-flutter-web-engine.sh` refreshes the two web assets the package ships.
   `scripts/check-parity.py` fails when the `qvp.js` copy drifts from `web/qvp.js`.
 - Split `engine.dart` into `types.dart`, `page.dart`, `atlas.dart`, `ornaments.dart`,

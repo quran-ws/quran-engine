@@ -12,7 +12,7 @@ scripts/sync-test-data.sh             # pages/, index/ (quran-svg-elements) and 
 scripts/check.sh gates                # identity gate (8 pages), line-shift gate, ABI test, conformance
 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity   # all 604 pages
 cargo run -p qvp-convert --release -- batch pages dist/pages          # rebuild page data
-cargo build -p qvp-ffi --release --target wasm32-unknown-unknown      # the wasm engine
+cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown # the wasm engine
 scripts/build-engine-android.sh       # native libs for Android and Flutter
 scripts/build-engine-ios.sh           # QvpEngine.xcframework
 scripts/check-parity.py               # header vs Rust vs every wrapper
@@ -38,6 +38,12 @@ scripts/check-parity.py               # header vs Rust vs every wrapper
   `.terminology.json`. Run the audit before adding a word.
 - Writing: docs, comments and PR text follow the plain-writing rules in
   `CONTRIBUTING.md`. Lint with the `ste-plain-writing` linter.
+- Build profiles: every shipped binary (wasm, Android, iOS, Windows) builds with
+  `--profile dist`, which adds LTO, one codegen unit and `strip` to `release`. The build
+  scripts pass it and read `target/<triple>/dist/`. Tests, clippy and host builds use
+  `--release`, which has none of those settings so one edit rebuilds in seconds. Do not
+  put LTO back in `release`, and do not set `panic = "abort"`: the FFI panic guard needs
+  unwinding on iOS and Android.
 - Git: no tool attribution or session footers in commits or PRs.
 
 ## Where to look

@@ -3,6 +3,7 @@
 # package (packages/ios/QvpKit). Static libs for device (arm64), simulator (arm64 + x86_64,
 # lipo'd into one fat slice) and — so `swift test` / macOS hosts work too — the Mac (arm64).
 # Output: packages/ios/QvpKit/QvpEngine.xcframework (a build artefact, gitignored).
+# Builds with the `dist` profile, the one every shipped artifact uses.
 # Needs: rustup (targets are added on demand) and Xcode command line tools.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -17,8 +18,8 @@ MAC_TARGETS=(aarch64-apple-darwin)
 rustup target add "${IOS_TARGETS[@]}" "${MAC_TARGETS[@]}" >/dev/null
 
 for t in "${IOS_TARGETS[@]}" "${MAC_TARGETS[@]}"; do
-  echo "== cargo build -p qvp-ffi --release --target $t"
-  cargo build -p qvp-ffi --release --target "$t"
+  echo "== cargo build -p qvp-ffi --profile dist --target $t"
+  cargo build -p qvp-ffi --profile dist --target "$t"
 done
 
 OUT=dist/ios
@@ -27,8 +28,8 @@ mkdir -p "$OUT/sim" "$OUT/include"
 
 # one fat simulator slice (arm64 + x86_64)
 lipo -create \
-  target/aarch64-apple-ios-sim/release/libqvp_ffi.a \
-  target/x86_64-apple-ios/release/libqvp_ffi.a \
+  target/aarch64-apple-ios-sim/dist/libqvp_ffi.a \
+  target/x86_64-apple-ios/dist/libqvp_ffi.a \
   -output "$OUT/sim/libqvp_ffi.a"
 
 # headers + module map shared by every slice: `import QvpFFI` in Swift
@@ -43,9 +44,9 @@ EOF
 XC=packages/ios/QvpKit/QvpEngine.xcframework
 rm -rf "$XC"
 xcodebuild -create-xcframework \
-  -library target/aarch64-apple-ios/release/libqvp_ffi.a -headers "$OUT/include" \
+  -library target/aarch64-apple-ios/dist/libqvp_ffi.a -headers "$OUT/include" \
   -library "$OUT/sim/libqvp_ffi.a"                        -headers "$OUT/include" \
-  -library target/aarch64-apple-darwin/release/libqvp_ffi.a -headers "$OUT/include" \
+  -library target/aarch64-apple-darwin/dist/libqvp_ffi.a -headers "$OUT/include" \
   -output "$XC"
 
 echo "engine packaged: $XC"

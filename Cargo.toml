@@ -9,8 +9,24 @@ license = "MIT"
 repository = "https://github.com/quran-ws/quran-engine"
 homepage = "https://quran.ws/blocks/quran-engine"
 
+# The internal crates. A crate names them with `workspace = true`. The version here must
+# equal `[workspace.package] version`: `scripts/set-version.sh` rewrites it and
+# `scripts/check-versions.sh` checks it.
+[workspace.dependencies]
+qvp-format = { path = "crates/qvp-format", version = "0.7.0" }
+qvp-core = { path = "crates/qvp-core", version = "0.7.0" }
+
+# `release` is what tests, clippy and local builds use. It stays at the default
+# codegen so an incremental rebuild takes seconds.
 [profile.release]
 opt-level = 3
+
+# `dist` builds every shipped artifact: the wasm, the Android, iOS and Windows libraries.
+# Whole-program LTO and one codegen unit make the smallest, fastest binary and cost
+# minutes per build, which is why tests do not use it. `panic` stays `unwind`: the FFI
+# panic guard needs it on iOS and Android.
+[profile.dist]
+inherits = "release"
 lto = true
 codegen-units = 1
 strip = true

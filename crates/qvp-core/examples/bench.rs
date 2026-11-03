@@ -1,4 +1,4 @@
-//! Real-page numbers: cargo run -p qvp-core --release --example bench -- dist/pages/036.qvp
+//! Real-page numbers: cargo run -p qvp-core --profile dist --example bench -- dist/pages/036.qvp
 use qvp_core::*;
 use std::time::Instant;
 

@@ -38,8 +38,8 @@ for check in "$@"; do
       QVP_REQUIRE_DATA=1 node web/lite-passage.test.mjs
       scripts/gen-conformance.sh --check
       cargo run -p qvp-convert --release -- zoom-levels dist/pages crates/qvp-core/src/zoom_table.rs --check
-      cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
-      cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm
+      cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown
+      cp target/wasm32-unknown-unknown/dist/qvp_ffi.wasm web/qvp_ffi.wasm
       node web/scenarios.test.mjs
       node web/passage.test.mjs
       ;;
@@ -74,8 +74,8 @@ for check in "$@"; do
       ;;
     web)
       step "wasm engine and the web tests"
-      cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
-      cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/qvp_ffi.wasm
+      cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown
+      cp target/wasm32-unknown-unknown/dist/qvp_ffi.wasm web/qvp_ffi.wasm
       node web/smoke.mjs
       node web/lite.test.mjs
       node web/lite-passage.test.mjs

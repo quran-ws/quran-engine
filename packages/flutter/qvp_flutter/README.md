@@ -25,8 +25,8 @@ bash scripts/build-engine-android.sh
 # iOS & macOS: produces QvpEngine.xcframework
 bash scripts/build-engine-ios.sh
 
-# Windows: target/release/qvp_ffi.dll
-powershell scripts/build-engine-windows.ps1    # or: cargo build -p qvp-ffi --release
+# Windows: target/dist/qvp_ffi.dll
+powershell scripts/build-engine-windows.ps1    # or: cargo build -p qvp-ffi --profile dist
 
 # Host lib for `flutter test` on Linux: target/release/libqvp_ffi.so
 cargo build -p qvp-ffi --release
