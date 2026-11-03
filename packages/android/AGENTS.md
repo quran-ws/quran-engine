@@ -14,8 +14,10 @@ Cover the Kotlin SDK, and the Flutter and React Native packages, which build on 
   example: `scripts/sync-example-data.sh android`.
 - Tests: `./gradlew :qvp:test` (unit) and `./gradlew :qvp:connectedAndroidTest` (device or
   emulator. Needs page data from `scripts/sync-android-test-data.sh`).
-- Flutter: `cd packages/flutter/qvp_flutter && flutter analyze && flutter test`. Example
-  with `cd example && flutter run`.
+- Flutter: `scripts/sync-flutter-web-engine.sh` first. It builds the wasm engine and
+  copies it and `web/qvp.js` into the package's `assets/`, which the pubspec declares and
+  the repository does not track. Then `cd packages/flutter/qvp_flutter && flutter analyze
+  && flutter test`. Example with `cd example && flutter run`.
 - React Native: `cd packages/react-native/example && npm install && npx react-native
   run-android`.
 - The JNI bridge (`qvp_jni.c`) and the Dart bindings (`bindings.dart`) mirror the header's

@@ -5,10 +5,12 @@
 # Outputs: packages/flutter/qvp_flutter/assets/js/qvp.js
 #          packages/flutter/qvp_flutter/assets/wasm/qvp_ffi.wasm
 #
-# Both files are committed, unlike every other platform's engine binary, because
-# `flutter build web` reads them as package assets and a published package cannot run a
-# script first. scripts/check-parity.py fails when the qvp.js copy drifts from web/qvp.js,
-# so run this after any change to the reference wrapper or the FFI crate.
+# Neither file is tracked. They are build outputs, like every other platform's engine
+# binary. The pubspec declares them as assets, so `flutter analyze`, `flutter test` and
+# `flutter build web` need them on disk: run this before those commands, and again after
+# any change to the reference wrapper or the FFI crate. The release workflow builds them
+# into the pub.dev package. scripts/check-parity.py fails when the qvp.js copy on disk
+# drifts from web/qvp.js.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

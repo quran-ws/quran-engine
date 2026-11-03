@@ -282,6 +282,11 @@ jobs:
           mkdir -p packages/flutter/qvp_flutter/android/src/main/jniLibs
           cp -R artifacts/flutter-android/. \
             packages/flutter/qvp_flutter/android/src/main/jniLibs/
+          # The web engine assets are not tracked. The package ships the wasm the verify
+          # job built from this tag, and the reference wrapper that job checked it against.
+          mkdir -p packages/flutter/qvp_flutter/assets/wasm packages/flutter/qvp_flutter/assets/js
+          cp artifacts/qvp_ffi.wasm/qvp_ffi.wasm packages/flutter/qvp_flutter/assets/wasm/qvp_ffi.wasm
+          cp web/qvp.js packages/flutter/qvp_flutter/assets/js/qvp.js
           cd packages/flutter/qvp_flutter
           flutter pub publish --dry-run
           flutter pub publish --force

@@ -18,3 +18,5 @@ android/local.properties
 !ios/QvpEngine.xcframework/**
 !macos/QvpEngine.xcframework/
 !macos/QvpEngine.xcframework/**
+!assets/wasm/qvp_ffi.wasm
+!assets/js/qvp.js

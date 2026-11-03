@@ -30,7 +30,20 @@ powershell scripts/build-engine-windows.ps1    # or: cargo build -p qvp-ffi --re
 
 # Host lib for `flutter test` on Linux: target/release/libqvp_ffi.so
 cargo build -p qvp-ffi --release
+
+# Web: assets/wasm/qvp_ffi.wasm and assets/js/qvp.js (a copy of web/qvp.js)
+bash scripts/sync-flutter-web-engine.sh
 ```
+
+Run the web step before `flutter analyze`, `flutter test` or any `flutter build`. The
+pubspec declares both files as assets, and the repository does not track them. The release
+workflow builds them from the tagged commit and puts them in the pub.dev package, next to
+the Android libraries.
+
+Flutter bundles a declared asset on every platform. A native app that depends on this
+package carries about 620 KB of web engine that it does not load. Flutter has no
+per-platform asset declaration, so the package cannot leave the two files out of a native
+build.
 
 Page data comes from the converter: `cargo run -p qvp-convert --release -- batch pages dist/pages`
 → `dist/pages/NNN.qvp`, `NNN.words.json` (text forms sidecar) and `atlas.qva`.
@@ -131,6 +144,7 @@ Each ornament carries its `licence`. Read it before you publish a dressed page.
 
 ```sh
 cargo build -p qvp-ffi --release
+bash scripts/sync-flutter-web-engine.sh               # the declared web assets must exist
 cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target/release/libqvp_ffi.so + dist/pages/042.qvp, 604.qvp, atlas.qva
 ```
 

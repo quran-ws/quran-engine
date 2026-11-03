@@ -1,5 +1,10 @@
 ## Unreleased
 
+- The web engine assets, `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`,
+  are build outputs and no longer tracked. The release workflow builds them from the
+  tagged commit into the pub.dev package, as it does the Android libraries.
+  `scripts/sync-flutter-web-engine.sh` produces them locally and the Flutter workflow
+  runs it before the analyzer. `scripts/check-structure.sh` fails when either is tracked.
 - `QvpPageView` caches the base ink and the ornament layer as `ui.Picture` recordings in
   layout units rather than rasters at the current transform, so a pan or a pinch replays the
   picture instead of redrawing the page. Keys carry the engine layout's offsets and the
