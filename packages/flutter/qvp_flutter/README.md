@@ -84,7 +84,7 @@ QvpPageView(
   layout: QvpViewLayout(padTop: 24, padBottom: 24, padSide: 16, lineSpacing: 1, fillHeight: false),
   // spacing only opens up: lineSpacing < 1 is clamped to "as printed"
   paper: Color(0xfffffdf7), defaultInk: '#231f20', controller: QvpViewController(),
-  onWordTap: (word, hit) {}, onDecorationTap: (decoration) {}, onEmptyTap: () {}, onSelectionChanged: (words) {},
+  onWordTap: (word, hit) {}, onDecorationTap: (decoration, hit) {}, onEmptyTap: () {}, onSelectionChanged: (words) {},
 )
 ```
 

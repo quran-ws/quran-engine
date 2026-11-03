@@ -948,4 +948,63 @@ void main() {
     p.dispose();
     set.dispose();
   });
+  testWidgets('a tap hands over the word, the decoration and the hit', (
+    tester,
+  ) async {
+    // Page 1 carries a surah heading as well as words, so one page reaches
+    // both branches of the tap.
+    final p = engine.loadPage(
+      File('$repo/dist/pages/001.qvp').readAsBytesSync(),
+    );
+    QvpWordInfo? word;
+    QvpHit? wordHit;
+    QvpDecorationInfo? deco;
+    QvpHit? decoHit;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: QvpPageView(
+          page: p,
+          onWordTap: (w, h) {
+            word = w;
+            wordHit = h;
+          },
+          onDecorationTap: (d, h) {
+            deco = d;
+            decoHit = h;
+          },
+        ),
+      ),
+    );
+    final c = tester
+        .state<QvpPageViewState>(find.byType(QvpPageView))
+        .controller;
+    // The widget's local space: view units through the layout it set.
+    Offset at(double x0, double y0, double x1, double y1) => Offset(
+      (x0 + x1) / 2 * c.scale + c.offsetX,
+      (y0 + y1) / 2 * c.scale + c.offsetY,
+    );
+
+    // The host is handed the word itself, not its index.
+    final w = p.wordBoundsView(0);
+    await tester.tapAt(at(w.x0, w.y0, w.x1, w.y1));
+    // onDoubleTap puts a double-tap recognizer in the arena, so a single tap
+    // resolves once its timeout has passed.
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(word?.index, 0);
+    expect(word?.text, p.words[0].text);
+    expect(wordHit?.word, 0);
+
+    // A decoration tap carries its hit, so a host reads the line, the distance
+    // and isExact without hit-testing the point again.
+    final h = p.surahHeadersView().first;
+    await tester.tapAt(at(h.titleX0, h.titleY0, h.titleX1, h.titleY1));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(deco?.index, h.decoration);
+    expect(decoHit?.decoration, h.decoration);
+    expect(decoHit!.word, lessThan(0));
+
+    await tester.pumpWidget(const SizedBox());
+    p.dispose();
+  });
 }

@@ -55,6 +55,11 @@ All notable changes to the engine and its packages. The format follows
 - The Flutter package is `dart format` clean, and its workflow checks the formatting before
   it analyses. `docs/standards/CODE-STYLE.md` names the tool for Dart, and its section order
   matches the header it describes.
+- **Breaking.** Flutter: `QvpPageView.onWordTap` hands the host the `QvpWordInfo` where it
+  passed the word's index, and `onDecorationTap` carries the `QvpHit` beside the
+  decoration. Android and iOS pass the word and the hit already, so host code reads one
+  shape on all three. The index is `word.index`, and a host with no use for the hit takes a
+  second parameter and ignores it (issue #139).
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and

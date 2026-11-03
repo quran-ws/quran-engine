@@ -4,7 +4,7 @@
 //   cached ornament layer → highlight bands → cached base ink → styled paths → mask boxes
 // The engine decides everything (layout, hit-testing, colours, boxes); this
 // widget only converts geometry into ui.Path objects once, caches the
-// unstyled ink as an image at the current transform, and forwards gestures
+// unstyled ink as a recorded ui.Picture in layout units, and forwards gestures
 // to the engine's hit test / selection.
 import 'dart:collection';
 import 'dart:math' as math;
@@ -191,10 +191,12 @@ class QvpPageView extends StatefulWidget {
   final QvpViewController? controller;
 
   /// Tap on a word (gap-aware). [hit] carries path / decoration / line / distance.
-  final void Function(int word, QvpHit hit)? onWordTap;
+  /// The word itself, as on Android and iOS, not its index.
+  final void Function(QvpWordInfo word, QvpHit hit)? onWordTap;
 
   /// Tap on a decoration (ayah mark, surah banner, …) that is not a word.
-  final void Function(QvpDecorationInfo decoration)? onDecorationTap;
+  /// [hit] carries line / distance / isExact, as it does for a word.
+  final void Function(QvpDecorationInfo deco, QvpHit hit)? onDecorationTap;
   final VoidCallback? onEmptyTap;
 
   /// Whole-word selection changed through long-press-drag (empty list = cleared).
@@ -450,9 +452,9 @@ class QvpPageViewState extends State<QvpPageView>
   void _onTapUp(TapUpDetails d) {
     final h = _hitAt(d.localPosition, maxDistance: widget.hitMaxDistance);
     if (h != null && h.word >= 0) {
-      widget.onWordTap?.call(h.word, h);
+      widget.onWordTap?.call(page.words[h.word], h);
     } else if (h != null && h.decoration >= 0) {
-      widget.onDecorationTap?.call(page.decorations[h.decoration]);
+      widget.onDecorationTap?.call(page.decorations[h.decoration], h);
     } else {
       widget.onEmptyTap?.call();
     }
