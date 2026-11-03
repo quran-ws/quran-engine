@@ -84,13 +84,14 @@ QvpPageView(
   layout: QvpViewLayout(padTop: 24, padBottom: 24, padSide: 16, lineSpacing: 1, fillHeight: false),
   // spacing only opens up: lineSpacing < 1 is clamped to "as printed"
   paper: Color(0xfffffdf7), defaultInk: '#231f20', controller: QvpViewController(),
-  onWordTap: (word, hit) {}, onDecorationTap: (decoration) {}, onEmptyTap: () {}, onSelectionChanged: (words) {},
+  onWordTap: (word, hit) {}, onDecorationTap: (decoration, hit) {}, onEmptyTap: () {}, onSelectionChanged: (words) {},
 )
 ```
 
-Draw order per frame: highlight bands → cached base ink (image of every
-non-styled path at the current transform; rebuilt only when the styled set,
-layout or transform changes) → styled paths → mask boxes. Each frame calls
+Draw order per frame: cached ornament layer → highlight bands → cached base
+ink (every non-styled path, recorded once as a `ui.Picture` in layout units,
+replayed under the view transform and rebuilt only when the styled set, ink or
+layout changes) → styled paths → mask boxes. Each frame calls
 `page.tick()` first and keeps a `Ticker` running while it returns true. Tap →
 `hitTestView` (gap-aware); long-press-drag → whole-word selection via
 `page.select` with a band highlight in `QvpLayer.selection`; pinch / pan on

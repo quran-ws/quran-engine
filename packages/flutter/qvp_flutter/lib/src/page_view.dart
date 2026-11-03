@@ -4,7 +4,7 @@
 //   cached ornament layer → highlight bands → cached base ink → styled paths → mask boxes
 // The engine decides everything (layout, hit-testing, colours, boxes); this
 // widget only converts geometry into ui.Path objects once, caches the
-// unstyled ink as an image at the current transform, and forwards gestures
+// unstyled ink as a recorded ui.Picture in layout units, and forwards gestures
 // to the engine's hit test / selection.
 import 'dart:collection';
 import 'dart:math' as math;
@@ -151,6 +151,17 @@ class QvpViewController extends ChangeNotifier {
       Offset((local.dx - offsetX) / scale, (local.dy - offsetY) / scale);
 }
 
+/// A tap on a word: the word itself, as on Android and iOS, and the gap-aware
+/// hit that found it. The index is `word.index`.
+typedef QvpWordTapCallback = void Function(QvpWordInfo word, QvpHit hit);
+
+/// A tap on a decoration (ayah mark, surah banner, …) that is not a word, and
+/// the hit that found it: line / distance / isExact, as for a word.
+typedef QvpDecorationTapCallback = void Function(
+  QvpDecorationInfo decoration,
+  QvpHit hit,
+);
+
 /// Renders a [QvpPage] with the engine's layout, animated highlights, masks,
 /// styled paths, tap / long-press selection and pinch / pan.
 class QvpPageView extends StatefulWidget {
@@ -190,11 +201,11 @@ class QvpPageView extends StatefulWidget {
   final Object? defaultInk;
   final QvpViewController? controller;
 
-  /// Tap on a word (gap-aware). [hit] carries path / decoration / line / distance.
-  final void Function(int word, QvpHit hit)? onWordTap;
+  /// Tap on a word (gap-aware), with the word and its hit.
+  final QvpWordTapCallback? onWordTap;
 
-  /// Tap on a decoration (ayah mark, surah banner, …) that is not a word.
-  final void Function(QvpDecorationInfo decoration)? onDecorationTap;
+  /// Tap on a decoration that is not a word, with the decoration and its hit.
+  final QvpDecorationTapCallback? onDecorationTap;
   final VoidCallback? onEmptyTap;
 
   /// Whole-word selection changed through long-press-drag (empty list = cleared).
@@ -450,9 +461,9 @@ class QvpPageViewState extends State<QvpPageView>
   void _onTapUp(TapUpDetails d) {
     final h = _hitAt(d.localPosition, maxDistance: widget.hitMaxDistance);
     if (h != null && h.word >= 0) {
-      widget.onWordTap?.call(h.word, h);
+      widget.onWordTap?.call(page.words[h.word], h);
     } else if (h != null && h.decoration >= 0) {
-      widget.onDecorationTap?.call(page.decorations[h.decoration]);
+      widget.onDecorationTap?.call(page.decorations[h.decoration], h);
     } else {
       widget.onEmptyTap?.call();
     }

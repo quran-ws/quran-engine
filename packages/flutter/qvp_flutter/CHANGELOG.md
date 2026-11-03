@@ -28,6 +28,12 @@
   returns the whole list as before.
 - The package is `dart format` clean, and the Flutter workflow checks the formatting before
   it analyses.
+- **Breaking.** `QvpPageView.onWordTap` hands the host the `QvpWordInfo` where it
+  passed the word's index, and `onDecorationTap` carries the `QvpHit` beside the
+  decoration. Android and iOS pass the word and the hit already, so host code reads one
+  shape on all three. `QvpWordTapCallback` and `QvpDecorationTapCallback` name the two
+  shapes. The index is `word.index`, and a host with no use for the hit takes a second
+  parameter and ignores it (issue #139).
 - **Breaking.** `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and `QvpEngine.str`
   are gone. All three named `dart:ffi` types or the native scratch, which cannot sit on a
   platform-neutral class. `QvpNativeBackend` holds them now. Pass a library to
