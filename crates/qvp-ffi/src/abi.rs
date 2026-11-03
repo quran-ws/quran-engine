@@ -1,4 +1,4 @@
-//! The ABI plumbing every module shares: the panic guard, the string and array helpers.
+//! What every module shares: the panic guard, the string and array helpers.
 
 use std::cell::RefCell;
 

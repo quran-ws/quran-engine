@@ -93,6 +93,15 @@ All notable changes to the engine and its packages. The format follows
   `qvp_zoom_carried` and `qvp_zoom_is_zoomed`. `docs/standards/CODE-STYLE.md` says review
   enforces the JavaScript, Kotlin and Swift doc blocks until the three linters it named are set
   up (issue #141).
+- The FFI crate is one module per header section (`crates/qvp-ffi/src/page.rs`, `text.rs`,
+  `hit.rs`, `view.rs`, `layout.rs`, `style.rs`, `highlight.rs`, `crop.rs`, `dress.rs`,
+  `atlas.rs`, `passage.rs`, `names.rs`, with the shared structs and helpers in `types.rs`,
+  `convert.rs` and `abi.rs`) instead of one file. The header and the 173 exported symbols are
+  unchanged. `scripts/check-parity.py` reads every file under `crates/qvp-ffi/src/`. One
+  behaviour note: `qvp_layout_groups`, `qvp_layout_repeats`, `qvp_layout_path_groups`,
+  `qvp_layout_omitted_paths` and `qvp_layout_row_words` now write a truncated copy when the
+  buffer is short and return the total count, as the header says every array output does.
+  They wrote nothing in that case before.
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and
