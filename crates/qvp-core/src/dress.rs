@@ -822,7 +822,7 @@ mod tests {
         });
         data.ayahs[0].ayah_mark_decoration = decoration as u16;
         data.canonicalize_ops();
-        (Page::from_data(data), ring, numeral)
+        (Page::from_data(data).unwrap(), ring, numeral)
     }
 
     /// One ornament per kind, each a filled unit square and a stroked one, with slots.

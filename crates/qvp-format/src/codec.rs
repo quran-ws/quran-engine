@@ -70,10 +70,19 @@ fn step_u32(acc: &mut i64, delta: i32, what: &'static str) -> Result<u32, Error>
     u32::try_from(*acc).map_err(|_| Error::Corrupt(what))
 }
 
-/// A box stored as origin and size; the far corner must not overflow.
+/// True when a coordinate is inside the envelope every page keeps, so that a
+/// difference of two of them fits an `i32` (`COORD_LIMIT`).
+fn in_envelope(v: i32) -> bool {
+    v.unsigned_abs() < COORD_LIMIT
+}
+
+/// A box stored as origin and size; every corner must lie inside the envelope.
 fn sized_box(x0: i32, y0: i32, w: i32, h: i32, what: &'static str) -> Result<IBox, Error> {
     let x1 = x0.checked_add(w).ok_or(Error::Corrupt(what))?;
     let y1 = y0.checked_add(h).ok_or(Error::Corrupt(what))?;
+    if ![x0, y0, x1, y1].iter().all(|v| in_envelope(*v)) {
+        return Err(Error::Corrupt(what));
+    }
     Ok(IBox { x0, y0, x1, y1 })
 }
 
@@ -616,6 +625,9 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
                 () => {{
                     cx = cx.checked_add(xr.zv("x")?).ok_or(Error::Corrupt("coordinate overflow"))?;
                     cy = cy.checked_add(yr.zv("y")?).ok_or(Error::Corrupt("coordinate overflow"))?;
+                    if !in_envelope(cx) || !in_envelope(cy) {
+                        return Err(Error::Corrupt("coordinate range"));
+                    }
                     (cx, cy)
                 }};
             }

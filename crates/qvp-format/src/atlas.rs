@@ -109,7 +109,7 @@ impl Atlas {
             let n = v(&mut pos)?;
             let first_page = v(&mut pos)?;
             let ayah_count = v(&mut pos)?;
-            let place = v(&mut pos)? as u8;
+            let place = u8::try_from(v(&mut pos)?).map_err(|_| Error::Corrupt("atlas place"))?;
             let st = |pos: &mut usize| -> Result<String, Error> {
                 let len = read_varint(b, pos)? as usize;
                 let end = pos.checked_add(len).ok_or(Error::Truncated("atlas string"))?;

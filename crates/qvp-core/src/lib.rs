@@ -148,12 +148,13 @@ pub struct Page {
 
 impl Page {
     pub fn load(bytes: &[u8]) -> Result<Page, Error> {
-        Ok(Page::from_data(decode(bytes)?))
+        Page::from_data(decode(bytes)?)
     }
 
-    /// Build a page from decoded data. The data must pass `PageData::validate`, as
-    /// everything `decode` returns does: this indexes the tables by each other's values.
-    pub fn from_data(data: PageData) -> Page {
+    /// Build a page from decoded data. The data passes `PageData::validate` first, since
+    /// this indexes the tables by each other's values.
+    pub fn from_data(data: PageData) -> Result<Page, Error> {
+        data.validate()?;
         let q = data.header.quant as f32;
         let mut geom = Geometry::default();
         let mut path_word = vec![NONE; data.paths.len()];
@@ -296,9 +297,7 @@ impl Page {
                 (w.surah, w.ayah, data.lines[w.line_index as usize].line_number)
             } else if di != NONE {
                 let d = &data.decorations[di as usize];
-                // A page of decorations alone has no line to snap to.
-                let line_number = data.lines.get(path_line[i] as usize).map_or(0, |l| l.line_number);
-                (d.surah, d.ayah, line_number)
+                (d.surah, d.ayah, data.lines[path_line[i] as usize].line_number)
             } else {
                 (0, 0, 0)
             };
@@ -425,7 +424,7 @@ impl Page {
         // and ends in each is what makes that air measurable.
         let word_index = data.words.iter().enumerate().map(|(i, w)| ((w.surah, w.ayah, w.word), i as u32)).collect();
         let n = data.paths.len();
-        Page {
+        Ok(Page {
             data,
             geom,
             line_centre,
@@ -452,7 +451,7 @@ impl Page {
             anim: vec![PathAnim::default(); n],
             state_dirty: true,
             colors: vec![DEFAULT_INK; n],
-        }
+        })
     }
 
     pub fn data(&self) -> &PageData {

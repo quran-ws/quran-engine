@@ -1540,7 +1540,7 @@ mod tests {
         for change in [|a: &mut AyahRec| a.fragment = 2, |a: &mut AyahRec| a.fragments = 2] {
             let mut d = synthetic_data(1, 1);
             change(&mut d.ayahs[0]);
-            let p = Page::from_data(d);
+            let p = Page::from_data(d).unwrap();
             assert_eq!(Passage::load(&[&p], 1, 1, 1).err(), Some(PassageError::IncompleteAyah { surah: 1, ayah: 1 }));
         }
         for (surah, from, to) in [(0, 1, 1), (115, 1, 1), (1, 0, 1), (1, 2, 1), (1, 1, 287)] {
@@ -1627,7 +1627,7 @@ mod tests {
             encode_cmds(&cmds, bb.x0, bb.y0, &mut d.ops);
             d.paths[0] =
                 PathRec { ox: bb.x0, oy: bb.y0, op_off: off, op_len: d.ops.len() as u32 - off, bbox: bb, ..d.paths[0] };
-            let p = Page::from_data(d);
+            let p = Page::from_data(d).unwrap();
             assert_eq!(Passage::load(&[&p], 1, 1, 1).err(), Some(PassageError::MeasureLimit));
         }
     }

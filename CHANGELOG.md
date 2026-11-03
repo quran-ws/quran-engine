@@ -108,7 +108,8 @@ All notable changes to the engine and its packages. The format follows
   section and every cross reference before the engine indexes by one, and `Error::Bounds`
   names the table. It bounds each allocation by the bytes that could encode it and checks
   its arithmetic. `docs/FORMAT.md` lists what a reader rejects. The words sidecar reader
-  rejects a lone surrogate and brackets nested past 64 deep.
+  rejects a lone surrogate and brackets nested past 64 deep. In Rust, `Page::from_data`
+  now returns `Result` and runs `PageData::validate` first. The C ABI is unchanged.
 - Flutter: a highlight band no longer freezes part way through a transition, and a removed
   band no longer stays on the page. The engine's highlight boxes depend on the clock, so the
   band cache clears on every frame rather than on a revision change.

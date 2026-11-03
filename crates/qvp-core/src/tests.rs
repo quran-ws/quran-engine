@@ -817,7 +817,7 @@ pub(crate) fn page_with_surah_frame(frame: bool) -> (Page, Option<u32>, u32, u32
         bbox,
     });
     data.canonicalize_ops();
-    (Page::from_data(data), frame_path, title_path, decoration)
+    (Page::from_data(data).unwrap(), frame_path, title_path, decoration)
 }
 
 fn placed_point(page: &Page, layout: &Layout, path: u32, x: f32, y: f32) -> (f32, f32) {
@@ -883,7 +883,7 @@ fn a_surah_name_of_ornaments_alone_keeps_the_decorations_box() {
     deco.first_path = frame_path;
     deco.n_paths = 1;
     deco.bbox = data.paths[frame_path as usize].bbox;
-    let page = Page::from_data(data);
+    let page = Page::from_data(data).unwrap();
     let q = page.quant();
     let frame = page.data().paths[frame_path as usize].bbox;
     let headers = page.surah_headers();

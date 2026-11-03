@@ -64,9 +64,13 @@ pub(crate) fn check(t: &Tables) -> Result<(), Error> {
             return Err(Error::Bounds("path instance"));
         }
     }
-    // The engine gives every path a line, so a page that draws anything has one.
-    if n_paths > 0 && t.lines.is_empty() {
+    // The engine gives every path a line and reads every ayah's line, so a page that
+    // draws or numbers anything has one.
+    if t.lines.is_empty() && n_paths > 0 {
         return Err(Error::Bounds("path line"));
+    }
+    if t.lines.is_empty() && !t.ayahs.is_empty() {
+        return Err(Error::Bounds("ayah line"));
     }
     for d in t.decorations {
         // A decoration is a drawn thing: its first path is the one the engine reads

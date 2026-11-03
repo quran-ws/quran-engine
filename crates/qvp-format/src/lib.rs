@@ -19,6 +19,10 @@ pub const MAGIC: &[u8; 4] = b"QVP1";
 pub const VERSION: u16 = 1;
 pub const DEFAULT_QUANT: u16 = 100;
 pub const NONE_U16: u16 = 0xFFFF;
+/// The envelope of a quantised coordinate: every point and every stored box corner has
+/// an absolute value below this, so the difference of any two fits an `i32` when a run
+/// is re-encoded against its group origin. The decoder rejects a page outside it.
+pub const COORD_LIMIT: u32 = 1 << 30;
 
 // ───────────────────────────── enums ─────────────────────────────
 
@@ -541,6 +545,43 @@ pub fn decode_cmds(ops: &[u8], ox: i32, oy: i32) -> Result<Vec<Cmd>, Error> {
     Ok(out)
 }
 
+// ───────────────────────────── test support ─────────────────────────────
+
+/// Support for the malformed-file tests of this crate and of `qvp-core`: a seeded
+/// generator and the single-byte mutation sweep, so both suites walk the same mutations.
+#[doc(hidden)]
+pub mod testing {
+    /// The seed every sweep starts from. One seed, so a failure names a reproducible
+    /// offset and byte on every machine.
+    pub const SEED: u64 = 0x5eed;
+
+    /// A small linear congruential generator.
+    pub struct Lcg(pub u64);
+
+    impl Lcg {
+        /// The next 31 random bits.
+        pub fn step(&mut self) -> u32 {
+            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (self.0 >> 33) as u32
+        }
+    }
+
+    /// Call `check` on `rounds` copies of `clean`, each with one byte set to a random
+    /// value, with the offset and the value that were written.
+    pub fn each_mutation(clean: &[u8], rounds: usize, mut check: impl FnMut(usize, u8, &[u8])) {
+        let mut rng = Lcg(SEED);
+        let mut bytes = clean.to_vec();
+        for _ in 0..rounds {
+            let at = rng.step() as usize % bytes.len();
+            let value = rng.step() as u8;
+            let kept = bytes[at];
+            bytes[at] = value;
+            check(at, value, &bytes);
+            bytes[at] = kept;
+        }
+    }
+}
+
 // ───────────────────────────── errors ─────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -679,8 +720,8 @@ pub fn svg_path_d(cmds: &[Cmd], quant: u16) -> String {
     use std::fmt::Write;
     fn num(v: i32, quant: u16, out: &mut String) {
         // A quant of 0 is rejected at decode; a page built in memory still must not divide by it.
-        let q = (quant as i32).max(1);
-        let a = v.abs();
+        let q = (quant as u32).max(1);
+        let a = v.unsigned_abs();
         if v < 0 {
             out.push('-');
         }
@@ -1024,27 +1065,28 @@ mod tests {
         }
     }
 
-    /// A small linear congruential generator: the same seed gives the same mutations
-    /// on every machine, so a failure here names a reproducible offset and byte.
-    struct Lcg(u64);
-    impl Lcg {
-        fn step(&mut self) -> u32 {
-            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            (self.0 >> 33) as u32
-        }
-    }
-
     #[test]
     fn single_byte_mutations_decode_or_fail_without_panic() {
         let clean = encode(&sample_page());
-        let mut rng = Lcg(42);
-        for _ in 0..20_000 {
-            let mut bytes = clean.clone();
-            let at = rng.step() as usize % bytes.len();
-            let value = rng.step() as u8;
-            bytes[at] = value;
-            let result = std::panic::catch_unwind(|| decode(&bytes).map(|_| ()));
+        testing::each_mutation(&clean, 20_000, |at, value, bytes| {
+            let result = std::panic::catch_unwind(|| decode(bytes).map(|_| ()));
             assert!(result.is_ok(), "byte {at} set to {value:#04x} panicked the decoder");
-        }
+        });
+    }
+
+    #[test]
+    fn a_coordinate_outside_the_envelope_is_corrupt() {
+        let far = COORD_LIMIT as i32;
+        let mut p = sample_page();
+        let mut ops = Vec::new();
+        let bb = encode_cmds(&[Cmd::MoveTo(far, 0), Cmd::LineTo(far + 1, 1)], far, 0, &mut ops);
+        p.paths[0] = PathRec { ox: far, oy: 0, op_off: 0, op_len: ops.len() as u32, bbox: bb, ..p.paths[0] };
+        p.paths[1] = PathRec { op_off: 0, op_len: 0, ..p.paths[1] };
+        p.glyphs[0] = GlyphRec { op_off: 0, op_len: 0, ..p.glyphs[0] };
+        p.ops = ops;
+        assert_eq!(decode(&encode(&p)).unwrap_err(), Error::Corrupt("coordinate range"));
+        let mut p = sample_page();
+        p.paths[2].bbox = IBox { x0: -far, y0: 0, x1: 0, y1: 0 };
+        assert_eq!(decode(&encode(&p)).unwrap_err(), Error::Corrupt("inst bbox"));
     }
 }

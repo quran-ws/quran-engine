@@ -168,6 +168,9 @@ an error that names the table. A writer keeps them.
   outline) and 26 (glyph instance), and a string takes at least 1 byte.
 - A delta-coded field lands inside its type: a u16 field in 0 to 65535, a path index in
   0 to 2^32 − 1.
+- Every coordinate and every corner of a stored box has an absolute value below 2^30
+  quantised units, so the difference of two of them fits an i32.
+- A page with ayah fragments has at least one line.
 - A line's and an ayah fragment's word run ends inside the words table.
 - A word's path run ends inside the paths table, its line and ayah-fragment indices name
   a record, and each of its five string indices names a string or is absent.

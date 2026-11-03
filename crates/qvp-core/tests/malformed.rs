@@ -25,31 +25,16 @@ fn data(name: &str) -> Option<Vec<u8>> {
     Some(std::fs::read(path).unwrap())
 }
 
-/// A small linear congruential generator: the same seed gives the same mutations on
-/// every machine, so a failure names a reproducible offset and byte.
-struct Lcg(u64);
-impl Lcg {
-    fn step(&mut self) -> u32 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        (self.0 >> 33) as u32
-    }
-}
-
-/// Run `load` on `rounds` single-byte mutations of `clean`, each from the same seed, and
-/// fail on the first panic with the offset and byte that caused it.
+/// Run `load` on `rounds` seeded single-byte mutations of `clean` and fail on the first
+/// panic with the offset and byte that caused it.
 fn mutate(what: &str, clean: &[u8], rounds: usize, load: impl Fn(&[u8]) -> bool) {
-    let mut rng = Lcg(0x5eed);
     let mut accepted = 0usize;
-    for _ in 0..rounds {
-        let mut bytes = clean.to_vec();
-        let at = rng.step() as usize % bytes.len();
-        let value = rng.step() as u8;
-        bytes[at] = value;
-        match catch_unwind(AssertUnwindSafe(|| load(&bytes))) {
+    qvp_core::qvp_format::testing::each_mutation(clean, rounds, |at, value, bytes| {
+        match catch_unwind(AssertUnwindSafe(|| load(bytes))) {
             Ok(ok) => accepted += ok as usize,
             Err(_) => panic!("{what}: byte {at} set to {value:#04x} panicked"),
         }
-    }
+    });
     eprintln!("{what}: {accepted} of {rounds} mutations still load");
 }
 
