@@ -40,6 +40,54 @@ for (const n of ['001', '002']) {
 }
 console.log('ok  printed breaks reach the core and clamp');
 
+// ── the wrapper's own bounds: inputs that outgrow the scratch, a freed handle, a bad spec ──
+{
+  const file = new URL('../dist/pages/002.qvp', import.meta.url);
+  if (!existsSync(file)) skipData('wrapper bounds: 002.qvp is missing');
+  else {
+    const page = engine.loadPage(readFileSync(file));
+    // A word list longer than its scratch region used to overwrite the target struct behind it,
+    // and the engine then resolved a target of another kind.
+    const repeated = Array.from({ length: 1000 }, () => 5);
+    if (JSON.stringify(page.targetWords(repeated)) !== '[5]') throw new Error('a 1,000-word target resolved to ' + JSON.stringify(page.targetWords(repeated)));
+    const handle = page.highlight(repeated);
+    if (JSON.stringify(page.highlightWords(handle)) !== '[5]') throw new Error('a 1,000-word highlight covers ' + JSON.stringify(page.highlightWords(handle)));
+    page.removeHighlight(handle);
+    // A word separator longer than its region used to run into the line separator's.
+    const sep = '•'.repeat(100);   // 300 bytes of UTF-8
+    const plain = page.text('page'), joined = page.text('page', { wordSep: sep });
+    if (joined.split(sep).length !== plain.split(' ').length || joined.split('\n').length !== plain.split('\n').length) throw new Error('a 300-byte separator corrupted the text');
+    if (page.text('page', { wordSep: ' ', lineSep: sep }).split(sep).length !== plain.split('\n').length) throw new Error('a 300-byte line separator corrupted the text');
+    // An Arabic string and a search query longer than the region take a block of their own.
+    const long = plain.repeat(8);
+    if (engine.strip(long).length === 0 || page.search(long).length !== 0) throw new Error('a long string broke strip or search');
+    // the blocks those inputs took go when their call returns; none pins memory for the session
+    if (engine._spill.length) throw new Error(`${engine._spill.length} input blocks outlived their call`);
+    console.log('ok  inputs that outgrow the scratch reach the engine whole, and their blocks go with the call');
+    // A spec with a field that is not a finite number is refused by name before the engine sees
+    // it, and the layout in hand stays.
+    const before = page.layout({ viewportW: 390, viewportH: 844 });
+    for (const [bad, field] of [[{}, 'viewportW'], [{ viewportW: 390, viewportH: '844' }, 'viewportH'], [{ viewportW: 390, viewportH: 844, padTop: NaN }, 'padTop'], [{ viewportW: 390, viewportH: 844, reflow: { zoom: Infinity } }, 'reflow.zoom']]) {
+      let refused = null;
+      try { page.layout(bad); } catch (e) { refused = e; }
+      if (!(refused instanceof TypeError) || !refused.message.includes(field)) throw new Error(`a spec with a bad ${field} was not refused by name: ${refused}`);
+    }
+    if (page.currentLayout !== before) throw new Error('a refused spec replaced the layout');
+    const after = page.layout({ viewportW: 390, viewportH: 844 });
+    if (after.scale !== before.scale || after.rows !== before.rows) throw new Error('the layout after a refused spec differs');
+    console.log('ok  a bad layout spec is refused and the page lays out after it');
+    // free is idempotent, and a call on a freed handle throws one clear error instead of
+    // handing the engine a null
+    page.free(); page.free();
+    for (const call of [() => page.text(), () => page.layout({ viewportW: 390, viewportH: 844 }), () => page.h, () => engine.loadPassage([page], 2, 1)]) {
+      let threw = null;
+      try { call(); } catch (e) { threw = e; }
+      if (!threw || threw.message !== 'QvpPage was freed') throw new Error('a call on a freed page did not throw QvpPage was freed: ' + threw);
+    }
+    console.log('ok  free twice is safe and a freed page refuses every call');
+  }
+}
+
 // ── dress: another mushaf's ornaments ──
 // The engine refuses bytes that are not a set, and the binding reports it.
 let refused = false;
@@ -117,6 +165,42 @@ if (!existsSync(pagePath)) {
     if (!linedDraws.some(d => d.kind === 'ayah_mark' && !d.stroke)) throw new Error('the medallions lost their fills');
   }
   page.undress();
-  set.free(); page.free();
+  set.free(); set.free(); page.free();
+  let freedSet = null;
+  try { set.find('ayah_mark', marker.style); } catch (e) { freedSet = e; }
+  if (!freedSet || freedSet.message !== 'QvpOrnaments was freed') throw new Error('a call on a freed set did not throw: ' + freedSet);
   console.log(`ok  dress: ${info.ayahMarks} medallions, ${info.surahHeaders} bands, ${info.draws} draws, revision ${info.revision}`);
 }
+
+// ── the atlas, and the engine's own memory ──
+const atlasPath = new URL('atlas.qva', dataDir);
+if (existsSync(atlasPath)) {
+  const atlas = engine.loadAtlas(readFileSync(atlasPath));
+  if (atlas.pageOf(2, 255) !== 42) throw new Error('atlas.pageOf(2, 255) is ' + atlas.pageOf(2, 255));
+  atlas.free(); atlas.free();
+  let freedAtlas = null;
+  try { atlas.pageOf(2, 255); } catch (e) { freedAtlas = e; }
+  if (!freedAtlas || freedAtlas.message !== 'QvpAtlas was freed') throw new Error('a call on a freed atlas did not throw: ' + freedAtlas);
+  console.log('ok  atlas free twice is safe and a freed atlas refuses every call');
+} else {
+  skipData('atlas: dist/pages/atlas.qva is missing');
+}
+// The engine goes last. It frees a page still open, after which the page's own free does
+// nothing, its cached records stay readable, and a call that reaches the engine throws. free is
+// idempotent here too.
+const openPath = new URL('002.qvp', dataDir);
+if (!existsSync(openPath)) skipData('free order: 002.qvp is missing');
+const open = existsSync(openPath) ? engine.loadPage(readFileSync(openPath)) : null;
+engine.free(); engine.free();
+if (open) {
+  open.free();
+  if (!(open.words.length > 0) || open.currentLayout !== null) throw new Error('a page freed by the engine lost its cached records');
+  let freedByEngine = null;
+  try { open.text(); } catch (e) { freedByEngine = e; }
+  // the call names whichever it meets first: the page's handle or the engine's exports
+  if (!freedByEngine || !/^Qvp(Page|Engine) was freed$/.test(freedByEngine.message)) throw new Error('a page freed by the engine did not refuse a call: ' + freedByEngine);
+}
+let freedEngine = null;
+try { engine.strip('x'); } catch (e) { freedEngine = e; }
+if (!freedEngine || freedEngine.message !== 'QvpEngine was freed') throw new Error('a call on a freed engine did not throw: ' + freedEngine);
+console.log('ok  engine.free() frees what is still open, releases the scratch once and refuses every call after it');

@@ -10,6 +10,9 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   the repository root only, and the React Native template's icons are tracked. The example
   also gains the template's `debug.keystore`, which its Gradle signing config names and its
   `.gitignore` already allows.
+- React Native: the package checks that the native module is linked before it reads the
+  module's constants. Without the module, the error now says `QvpModule not linked` instead
+  of a `TypeError`.
 
 ## [0.7.0] - 2026-10-14
 
