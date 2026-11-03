@@ -84,10 +84,17 @@ impl Atlas {
             return Err(Error::BadMagic);
         }
         let mut pos = 4;
-        let v = |pos: &mut usize| -> Result<u16, Error> { Ok(read_varint(b, pos)? as u16) };
+        let v = |pos: &mut usize| -> Result<u16, Error> {
+            u16::try_from(read_varint(b, pos)?).map_err(|_| Error::Corrupt("atlas value"))
+        };
         let np = v(&mut pos)? as usize;
         let ns = v(&mut pos)? as usize;
         let nr = v(&mut pos)? as usize;
+        // Six, seven and four varints per record at the least: the counts must fit the
+        // bytes that remain before anything is sized from them.
+        if np * 6 + ns * 7 + nr * 4 > b.len() - pos {
+            return Err(Error::Truncated("atlas"));
+        }
         let mut pages = Vec::with_capacity(np);
         for _ in 0..np {
             pages.push(AtlasPage {
@@ -105,11 +112,10 @@ impl Atlas {
             let place = v(&mut pos)? as u8;
             let st = |pos: &mut usize| -> Result<String, Error> {
                 let len = read_varint(b, pos)? as usize;
-                if *pos + len > b.len() {
-                    return Err(Error::Truncated("atlas string"));
-                }
-                let s = std::str::from_utf8(&b[*pos..*pos + len]).map_err(|_| Error::Corrupt("utf8"))?.to_owned();
-                *pos += len;
+                let end = pos.checked_add(len).ok_or(Error::Truncated("atlas string"))?;
+                let bytes = b.get(*pos..end).ok_or(Error::Truncated("atlas string"))?;
+                let s = std::str::from_utf8(bytes).map_err(|_| Error::Corrupt("utf8"))?.to_owned();
+                *pos = end;
                 Ok(s)
             };
             let arabic = st(&mut pos)?;
@@ -119,12 +125,17 @@ impl Atlas {
         }
         let mut rubu_al_hizbs = Vec::with_capacity(nr);
         for _ in 0..nr {
-            rubu_al_hizbs.push(AtlasRubuAlHizb {
+            let r = AtlasRubuAlHizb {
                 rubu_al_hizb: v(&mut pos)?,
                 surah: v(&mut pos)?,
                 ayah: v(&mut pos)?,
                 page: v(&mut pos)?,
-            });
+            };
+            // The juz, hizb and nisf numbers derive from it as `(r - 1) / n + 1`.
+            if r.rubu_al_hizb == 0 {
+                return Err(Error::Bounds("atlas rubu_al_hizb"));
+            }
+            rubu_al_hizbs.push(r);
         }
         Ok(Atlas { pages, surahs, rubu_al_hizbs })
     }
@@ -152,14 +163,20 @@ impl Atlas {
     pub fn rubu_al_hizb(&self, n: u16) -> Option<&AtlasRubuAlHizb> {
         self.rubu_al_hizbs.iter().find(|r| r.rubu_al_hizb == n)
     }
+    /// The first `rubu_al_hizb` of division `n` when each division holds `per` of them.
+    /// `None` for 0 or for a number past the table.
+    fn division_start(&self, n: u16, per: u16) -> Option<&AtlasRubuAlHizb> {
+        let r = n.checked_sub(1)?.checked_mul(per)?.checked_add(1)?;
+        self.rubu_al_hizb(r)
+    }
     pub fn juz(&self, n: u16) -> Option<&AtlasRubuAlHizb> {
-        self.rubu_al_hizb((n - 1) * 8 + 1)
+        self.division_start(n, 8)
     }
     pub fn hizb(&self, n: u16) -> Option<&AtlasRubuAlHizb> {
-        self.rubu_al_hizb((n - 1) * 4 + 1)
+        self.division_start(n, 4)
     }
     pub fn nisf(&self, n: u16) -> Option<&AtlasRubuAlHizb> {
-        self.rubu_al_hizb((n - 1) * 2 + 1)
+        self.division_start(n, 2)
     }
     /// The `rubu_al_hizb` containing the ayah (largest start ≤ ayah).
     pub fn rubu_al_hizb_at(&self, surah: u16, ayah: u16) -> Option<&AtlasRubuAlHizb> {
@@ -172,24 +189,24 @@ impl Atlas {
         }
     }
     pub fn juz_at(&self, surah: u16, ayah: u16) -> Option<u16> {
-        self.rubu_al_hizb_at(surah, ayah).map(|r| (r.rubu_al_hizb - 1) / 8 + 1)
+        self.rubu_al_hizb_at(surah, ayah).map(|r| r.rubu_al_hizb.saturating_sub(1) / 8 + 1)
     }
     pub fn hizb_at(&self, surah: u16, ayah: u16) -> Option<u16> {
-        self.rubu_al_hizb_at(surah, ayah).map(|r| (r.rubu_al_hizb - 1) / 4 + 1)
+        self.rubu_al_hizb_at(surah, ayah).map(|r| r.rubu_al_hizb.saturating_sub(1) / 4 + 1)
     }
     pub fn nisf_at(&self, surah: u16, ayah: u16) -> Option<u16> {
-        self.rubu_al_hizb_at(surah, ayah).map(|r| (r.rubu_al_hizb - 1) / 2 + 1)
+        self.rubu_al_hizb_at(surah, ayah).map(|r| r.rubu_al_hizb.saturating_sub(1) / 2 + 1)
     }
     /// Pages a juz spans (first..=last).
     pub fn pages_of_juz(&self, n: u16) -> Option<(u16, u16)> {
         let start = self.juz(n)?.page;
-        let end = match self.juz(n + 1) {
+        let end = match n.checked_add(1).and_then(|next| self.juz(next)) {
             Some(next) => {
                 // the next juz starts on `next.page`; if it starts at the top of that page the
                 // previous juz ends on the page before
                 let first_on_page = self.pages.iter().find(|p| p.page == next.page).map(|p| p.first);
                 if first_on_page == Some((next.surah, next.ayah)) {
-                    next.page - 1
+                    next.page.saturating_sub(1)
                 } else {
                     next.page
                 }

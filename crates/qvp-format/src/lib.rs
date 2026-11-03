@@ -11,6 +11,7 @@
 pub mod atlas;
 pub mod codec;
 pub mod ornaments;
+mod validate;
 
 use std::fmt;
 
@@ -572,39 +573,41 @@ pub fn encode(p: &PageData) -> Vec<u8> {
 
 // ───────────────────────────── decode ─────────────────────────────
 
+/// Decode a page. The codec checks the magic, the version, every count against its
+/// section and every cross reference, so a malformed file is an error, never a panic.
 pub fn decode(bytes: &[u8]) -> Result<PageData, Error> {
-    if bytes.len() < 6 || &bytes[0..4] != MAGIC {
-        return Err(Error::BadMagic);
-    }
-    match u16::from_le_bytes([bytes[4], bytes[5]]) {
-        VERSION => codec::decode(bytes),
-        v => Err(Error::BadVersion(v)),
-    }
+    codec::decode(bytes)
 }
 
 impl PageData {
+    /// True when path `i` is a glyph instance. False for an index past the table.
     pub fn is_instance(&self, i: usize) -> bool {
-        self.paths[i].flags & PF_GLYPH != 0
+        self.paths.get(i).is_some_and(|p| p.flags & PF_GLYPH != 0)
     }
     /// Instance record of a glyph-instance path.
     pub fn path_inst(&self, i: usize) -> Option<&InstRec> {
-        let p = &self.paths[i];
+        let p = self.paths.get(i)?;
         if p.flags & PF_GLYPH != 0 {
             self.insts.get(p.op_off as usize)
         } else {
             None
         }
     }
+    /// The bytes of one opcode run, or `Bounds` when the run leaves the stream.
+    fn ops_run(&self, off: u32, len: u32, what: &'static str) -> Result<&[u8], Error> {
+        let end = off.checked_add(len).ok_or(Error::Bounds(what))?;
+        self.ops.get(off as usize..end as usize).ok_or(Error::Bounds(what))
+    }
     /// Glyph outline commands in glyph space (quantised units).
     pub fn glyph_cmds(&self, g: usize) -> Result<Vec<Cmd>, Error> {
-        let g = &self.glyphs[g];
-        decode_cmds(&self.ops[g.op_off as usize..(g.op_off + g.op_len) as usize], 0, 0)
+        let g = self.glyphs.get(g).ok_or(Error::Bounds("glyph"))?;
+        decode_cmds(self.ops_run(g.op_off, g.op_len, "glyph ops")?, 0, 0)
     }
     /// Absolute page-space commands for one path. Glyph instances are
     /// transformed and re-quantised; for exact GPU rendering prefer
     /// `path_inst` + `glyph_cmds` with a canvas transform.
     pub fn path_cmds(&self, i: usize) -> Result<Vec<Cmd>, Error> {
-        let p = &self.paths[i];
+        let p = self.paths.get(i).ok_or(Error::Bounds("path"))?;
         if let Some(inst) = self.path_inst(i) {
             let q = self.header.quant as f64;
             let m = |x: i32, y: i32| -> (i32, i32) {
@@ -640,7 +643,7 @@ impl PageData {
                 })
                 .collect());
         }
-        decode_cmds(&self.ops[p.op_off as usize..(p.op_off + p.op_len) as usize], p.ox, p.oy)
+        decode_cmds(self.ops_run(p.op_off, p.op_len, "path ops")?, p.ox, p.oy)
     }
 }
 
@@ -675,7 +678,8 @@ impl PageData {
 pub fn svg_path_d(cmds: &[Cmd], quant: u16) -> String {
     use std::fmt::Write;
     fn num(v: i32, quant: u16, out: &mut String) {
-        let q = quant as i32;
+        // A quant of 0 is rejected at decode; a page built in memory still must not divide by it.
+        let q = (quant as i32).max(1);
         let a = v.abs();
         if v < 0 {
             out.push('-');
@@ -853,8 +857,9 @@ mod tests {
         assert_eq!(decode_cmds(&ops, 0, -1), Err(Error::Corrupt("coordinate overflow")));
     }
 
-    #[test]
-    fn page_roundtrip() {
+    /// One word of one inline path, one ayah-mark decoration, one glyph outline placed
+    /// once: every table has a record, so every cross reference can be broken.
+    fn sample_page() -> PageData {
         let mut ops = Vec::new();
         let cmds = [Cmd::MoveTo(500, 600), Cmd::LineTo(700, 800), Cmd::Close];
         let bb = encode_cmds(&cmds, 500, 600, &mut ops);
@@ -941,14 +946,105 @@ mod tests {
         });
         // `encode` expects converter-shaped input: one contiguous run per path.
         p.canonicalize_ops();
+        p
+    }
+
+    #[test]
+    fn page_roundtrip() {
+        let p = sample_page();
         let bytes = encode(&p);
         let q = decode(&bytes).unwrap();
         assert_eq!(p, q);
         assert_eq!(decode(b"QVP1\x09\x00xx").unwrap_err(), Error::BadVersion(9));
         // instance: shared ops decode at glyph origin (0,0) → page (10,20) → quantised 1000,2000
         assert_eq!(q.path_cmds(2).unwrap()[0], Cmd::MoveTo(1000, 2000));
-        assert_eq!(q.path_cmds(0).unwrap(), cmds.to_vec());
+        assert_eq!(q.path_cmds(0).unwrap(), [Cmd::MoveTo(500, 600), Cmd::LineTo(700, 800), Cmd::Close]);
         assert!(matches!(decode(&bytes[..bytes.len() - 3]), Err(Error::Truncated(_))));
         assert_eq!(decode(b"nope").unwrap_err(), Error::BadMagic);
+    }
+
+    /// Encode a page with one field broken and name the error the decoder returns.
+    fn decoded_with(change: impl FnOnce(&mut PageData)) -> Result<PageData, Error> {
+        let mut p = sample_page();
+        change(&mut p);
+        decode(&encode(&p))
+    }
+
+    #[test]
+    fn a_dangling_index_is_bounds_not_a_panic() {
+        assert_eq!(decoded_with(|p| p.words[0].text = 7).unwrap_err(), Error::Bounds("word text"));
+        assert_eq!(decoded_with(|p| p.words[0].n_paths = 9).unwrap_err(), Error::Bounds("word paths"));
+        assert_eq!(decoded_with(|p| p.words[0].line_index = 1).unwrap_err(), Error::Bounds("word line"));
+        assert_eq!(decoded_with(|p| p.words[0].ayah_index = 3).unwrap_err(), Error::Bounds("word ayah"));
+        assert_eq!(decoded_with(|p| p.lines[0].n_words = 2).unwrap_err(), Error::Bounds("line words"));
+        assert_eq!(decoded_with(|p| p.ayahs[0].n_words = 2).unwrap_err(), Error::Bounds("ayah words"));
+        assert_eq!(
+            decoded_with(|p| p.ayahs[0].ayah_mark_decoration = 1).unwrap_err(),
+            Error::Bounds("ayah decoration")
+        );
+        assert_eq!(decoded_with(|p| p.decorations[0].first_path = 3).unwrap_err(), Error::Bounds("decoration paths"));
+        assert_eq!(decoded_with(|p| p.decorations[0].n_paths = 0).unwrap_err(), Error::Bounds("decoration paths"));
+        assert_eq!(decoded_with(|p| p.decorations[0].line = 4).unwrap_err(), Error::Bounds("decoration line"));
+        assert_eq!(decoded_with(|p| p.decorations[0].text = 1).unwrap_err(), Error::Bounds("decoration text"));
+        assert_eq!(decoded_with(|p| p.paths[2].op_off = 1).unwrap_err(), Error::Bounds("path instance"));
+        assert_eq!(decoded_with(|p| p.insts[0].glyph = 1).unwrap_err(), Error::Bounds("instance glyph"));
+        // The absent marker stays legal everywhere it is allowed.
+        decoded_with(|p| {
+            p.words[0].text = NONE_U16;
+            p.ayahs[0].ayah_mark_decoration = NONE_U16;
+            p.decorations[0].line = NONE_U16;
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_zero_quant_is_corrupt() {
+        let mut bytes = encode(&sample_page());
+        bytes[6] = 0;
+        bytes[7] = 0;
+        assert_eq!(decode(&bytes).unwrap_err(), Error::Corrupt("quant"));
+        assert_eq!(svg_path_d(&[Cmd::MoveTo(150, -250)], 0), "M150 -250");
+    }
+
+    #[test]
+    fn a_count_past_its_section_is_truncated_before_it_is_allocated() {
+        let mut bytes = encode(&sample_page());
+        bytes[28..32].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(decode(&bytes).unwrap_err(), Error::Truncated("tables"));
+        let mut bytes = encode(&sample_page());
+        bytes[24..26].copy_from_slice(&u16::MAX.to_le_bytes());
+        assert_eq!(decode(&bytes).unwrap_err(), Error::Truncated("tables"));
+    }
+
+    #[test]
+    fn every_prefix_of_a_page_is_an_error() {
+        let bytes = encode(&sample_page());
+        for n in 0..bytes.len() {
+            assert!(decode(&bytes[..n]).is_err(), "a prefix of {n} bytes decoded");
+        }
+    }
+
+    /// A small linear congruential generator: the same seed gives the same mutations
+    /// on every machine, so a failure here names a reproducible offset and byte.
+    struct Lcg(u64);
+    impl Lcg {
+        fn step(&mut self) -> u32 {
+            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (self.0 >> 33) as u32
+        }
+    }
+
+    #[test]
+    fn single_byte_mutations_decode_or_fail_without_panic() {
+        let clean = encode(&sample_page());
+        let mut rng = Lcg(42);
+        for _ in 0..20_000 {
+            let mut bytes = clean.clone();
+            let at = rng.step() as usize % bytes.len();
+            let value = rng.step() as u8;
+            bytes[at] = value;
+            let result = std::panic::catch_unwind(|| decode(&bytes).map(|_| ()));
+            assert!(result.is_ok(), "byte {at} set to {value:#04x} panicked the decoder");
+        }
     }
 }

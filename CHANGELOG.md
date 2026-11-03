@@ -102,6 +102,13 @@ All notable changes to the engine and its packages. The format follows
   removal takes a minor bump (`docs/standards/VERSIONING.md`), so the next release is 0.8.0.
 
 ### Fixed
+- A malformed page, atlas or ornament file is an error from the decoder, not a panic or
+  an abort. On wasm32 a panic is a trap, so a damaged download could take a host app down.
+  The page decoder checks the magic, the version, `quant`, every count against its
+  section and every cross reference before the engine indexes by one, and `Error::Bounds`
+  names the table. It bounds each allocation by the bytes that could encode it and checks
+  its arithmetic. `docs/FORMAT.md` lists what a reader rejects. The words sidecar reader
+  rejects a lone surrogate and brackets nested past 64 deep.
 - Flutter: a highlight band no longer freezes part way through a transition, and a removed
   band no longer stays on the page. The engine's highlight boxes depend on the clock, so the
   band cache clears on every frame rather than on a revision change.

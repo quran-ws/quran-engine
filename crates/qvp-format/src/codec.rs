@@ -50,12 +50,31 @@ fn opt(v: u16) -> u32 {
         v as u32 + 1
     }
 }
-fn unopt(v: u32) -> u16 {
+fn unopt(v: u32, what: &'static str) -> Result<u16, Error> {
     if v == 0 {
-        NONE_U16
+        Ok(NONE_U16)
     } else {
-        (v - 1) as u16
+        u16::try_from(v - 1).map_err(|_| Error::Corrupt(what))
     }
+}
+
+/// Add a delta to a running value and check the result fits a `u16` field.
+fn step_u16(acc: &mut i32, delta: i32, what: &'static str) -> Result<u16, Error> {
+    *acc = acc.checked_add(delta).ok_or(Error::Corrupt(what))?;
+    u16::try_from(*acc).map_err(|_| Error::Corrupt(what))
+}
+
+/// Add a delta to a running path index and check the result fits a `u32` field.
+fn step_u32(acc: &mut i64, delta: i32, what: &'static str) -> Result<u32, Error> {
+    *acc = acc.checked_add(delta as i64).ok_or(Error::Corrupt(what))?;
+    u32::try_from(*acc).map_err(|_| Error::Corrupt(what))
+}
+
+/// A box stored as origin and size; the far corner must not overflow.
+fn sized_box(x0: i32, y0: i32, w: i32, h: i32, what: &'static str) -> Result<IBox, Error> {
+    let x1 = x0.checked_add(w).ok_or(Error::Corrupt(what))?;
+    let y1 = y0.checked_add(h).ok_or(Error::Corrupt(what))?;
+    Ok(IBox { x0, y0, x1, y1 })
 }
 
 struct Rd<'a> {
@@ -68,6 +87,14 @@ impl<'a> Rd<'a> {
     }
     fn zv(&mut self, what: &'static str) -> Result<i32, Error> {
         Ok(unzigzag(self.vi(what)?))
+    }
+    /// A varint that must fit a `u16` field.
+    fn u16(&mut self, what: &'static str) -> Result<u16, Error> {
+        u16::try_from(self.vi(what)?).map_err(|_| Error::Corrupt(what))
+    }
+    /// An `opt`: a `u16` index biased by one, 0 for none.
+    fn opt(&mut self, what: &'static str) -> Result<u16, Error> {
+        unopt(self.vi(what)?, what)
     }
     fn u8(&mut self, what: &'static str) -> Result<u8, Error> {
         let v = *self.b.get(self.pos).ok_or(Error::Truncated(what))?;
@@ -316,35 +343,65 @@ pub fn encode(p: &PageData) -> Vec<u8> {
 
 // ───────────────────────────── decode ─────────────────────────────
 
+/// The fewest bytes one record of each table can take, in table order: lines, ayahs,
+/// words, paths (four column bytes and one varint), decorations, glyph outlines, glyph
+/// instances. A count whose records cannot fit in the tables section is rejected before
+/// anything is allocated for it.
+const MIN_RECORD_BYTES: [u64; 7] = [2, 8, 12, 5, 7, 5, 26];
+
+/// Decode a page from its bytes. A file that fails any check in `docs/FORMAT.md`'s
+/// "What a reader rejects" is an error: `Bounds` for a cross reference, `Truncated` for
+/// a count or run its section cannot hold, `Corrupt` for a value outside its field.
 pub fn decode(b: &[u8]) -> Result<PageData, Error> {
+    if b.len() < 6 || &b[0..4] != MAGIC {
+        return Err(Error::BadMagic);
+    }
+    let version = u16::from_le_bytes([b[4], b[5]]);
+    if version != VERSION {
+        return Err(Error::BadVersion(version));
+    }
     if b.len() < HEADER_LEN {
         return Err(Error::Truncated("header"));
     }
     let u16a = |at: usize| u16::from_le_bytes([b[at], b[at + 1]]);
     let u32a = |at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
     let header = Header {
-        version: u16a(4),
+        version,
         quant: u16a(6),
         page: u16a(8),
         flags: u16a(10),
         width: f32::from_bits(u32a(12)),
         height: f32::from_bits(u32a(16)),
     };
+    if header.quant == 0 {
+        return Err(Error::Corrupt("quant"));
+    }
     let (n_lines, n_ayahs, n_words, n_decorations) =
         (u16a(20) as usize, u16a(22) as usize, u16a(24) as usize, u16a(26) as usize);
     let n_paths = u32a(28) as usize;
     let (n_strings, n_glyphs, n_insts) = (u16a(32) as usize, u16a(34) as usize, u16a(36) as usize);
     let mut at = HEADER_LEN;
     let mut sec = [0usize; 6];
+    let mut sec_len = [0usize; 6];
     for (i, s) in sec.iter_mut().enumerate() {
         let len = u32a(40 + i * 4) as usize;
         *s = at;
-        at += len;
+        sec_len[i] = len;
+        at = at.checked_add(len).ok_or(Error::Truncated("section"))?;
         if at > b.len() {
             return Err(Error::Truncated("section"));
         }
     }
     let (o_t, o_op, o_zs, o_xs, o_ys, o_str) = (sec[0], sec[1], sec[2], sec[3], sec[4], sec[5]);
+    // Every count must fit its section before a vector is sized from it.
+    let counts = [n_lines, n_ayahs, n_words, n_paths, n_decorations, n_glyphs, n_insts];
+    let need: u64 = counts.iter().zip(MIN_RECORD_BYTES).map(|(n, m)| *n as u64 * m).sum();
+    if need > sec_len[0] as u64 {
+        return Err(Error::Truncated("tables"));
+    }
+    if n_strings > sec_len[5] {
+        return Err(Error::Truncated("strings"));
+    }
     let mut t = Rd { b, pos: o_t };
 
     // ── tables (bboxes and origins are filled in after the geometry is decoded) ──
@@ -352,29 +409,31 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
     let mut fw = 0u32;
     for _ in 0..n_lines {
         let line_number = t.u8("line")?;
-        let n_words = t.vi("line")? as u16;
-        lines.push(LineRec { line_number, first_word: fw as u16, n_words, bbox: IBox::EMPTY });
+        let n_words = t.u16("line")?;
+        let first_word = u16::try_from(fw).map_err(|_| Error::Bounds("line words"))?;
+        lines.push(LineRec { line_number, first_word, n_words, bbox: IBox::EMPTY });
         fw += n_words as u32;
     }
     let mut ayahs = Vec::with_capacity(n_ayahs);
     let (mut ps, mut pa) = (0i32, 0i32);
     let mut afw = 0u32;
     for _ in 0..n_ayahs {
-        ps += t.zv("ayah")?;
-        pa += t.zv("ayah")?;
+        let surah = step_u16(&mut ps, t.zv("ayah")?, "ayah")?;
+        let ayah = step_u16(&mut pa, t.zv("ayah")?, "ayah")?;
         let fragment = t.u8("ayah")?;
         let fragments = t.u8("ayah")?;
         let flags = t.u8("ayah")?;
-        let n_words = t.vi("ayah")? as u16;
-        let ayah_mark_decoration = unopt(t.vi("ayah")?);
-        let rubu_al_hizb = t.vi("ayah")? as u16;
+        let n_words = t.u16("ayah")?;
+        let ayah_mark_decoration = t.opt("ayah")?;
+        let rubu_al_hizb = t.u16("ayah")?;
+        let first_word = u16::try_from(afw).map_err(|_| Error::Bounds("ayah words"))?;
         ayahs.push(AyahRec {
-            surah: ps as u16,
-            ayah: pa as u16,
+            surah,
+            ayah,
             fragment,
             fragments,
             flags,
-            first_word: afw as u16,
+            first_word,
             n_words,
             ayah_mark_decoration,
             rubu_al_hizb,
@@ -386,25 +445,25 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
     let (mut ws, mut wa, mut ww, mut wl, mut wai) = (0i32, 0i32, 0i32, 0i32, 0i32);
     let mut wend = 0i64;
     for _ in 0..n_words {
-        let first_path = (wend + t.zv("word")? as i64) as u32;
-        ws += t.zv("word")?;
-        wa += t.zv("word")?;
-        ww += t.zv("word")?;
-        wl += t.zv("word")?;
-        wai += t.zv("word")?;
-        let text = unopt(t.vi("word")?);
-        let rasm_imlai = unopt(t.vi("word")?);
-        let qpc = unopt(t.vi("word")?);
-        let rasm = unopt(t.vi("word")?);
-        let search = unopt(t.vi("word")?);
-        let n_paths = t.vi("word")? as u16;
+        let first_path = step_u32(&mut wend, t.zv("word")?, "word")?;
+        let surah = step_u16(&mut ws, t.zv("word")?, "word")?;
+        let ayah = step_u16(&mut wa, t.zv("word")?, "word")?;
+        let word = step_u16(&mut ww, t.zv("word")?, "word")?;
+        let line_index = step_u16(&mut wl, t.zv("word")?, "word")?;
+        let ayah_index = step_u16(&mut wai, t.zv("word")?, "word")?;
+        let text = t.opt("word")?;
+        let rasm_imlai = t.opt("word")?;
+        let qpc = t.opt("word")?;
+        let rasm = t.opt("word")?;
+        let search = t.opt("word")?;
+        let n_paths = t.u16("word")?;
         wend = first_path as i64 + n_paths as i64;
         words.push(WordRec {
-            surah: ws as u16,
-            ayah: wa as u16,
-            word: ww as u16,
-            line_index: wl as u16,
-            ayah_index: wai as u16,
+            surah,
+            ayah,
+            word,
+            line_index,
+            ayah_index,
             text,
             rasm_imlai,
             qpc,
@@ -415,17 +474,27 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
             bbox: IBox::EMPTY,
         });
     }
-    if t.pos + n_paths * 4 > b.len() {
+    // Four column bytes per path, inside the tables section. The product fits: the
+    // tables check above bounded `n_paths` by the section length. The reader may already
+    // have run past the section; the final position check reports that, so only the
+    // columns' end is tested here.
+    if t.pos + n_paths * 4 > o_op {
         return Err(Error::Truncated("paths"));
     }
     let (c_kind, c_mark, c_family, c_flags) = (t.pos, t.pos + n_paths, t.pos + n_paths * 2, t.pos + n_paths * 3);
     t.pos += n_paths * 4;
     let mut paths = Vec::with_capacity(n_paths);
     let mut n_ops_of = Vec::with_capacity(n_paths);
+    let mut n_inst_paths = 0usize;
     for i in 0..n_paths {
         let flags = b[c_flags + i];
         let v = t.vi("path")?;
-        let (op_off, n_ops) = if flags & PF_GLYPH != 0 { (v, 0) } else { (0, v) };
+        let (op_off, n_ops) = if flags & PF_GLYPH != 0 {
+            n_inst_paths += 1;
+            (v, 0)
+        } else {
+            (0, v)
+        };
         n_ops_of.push(n_ops);
         paths.push(PathRec {
             kind: PathKind::from_u8(b[c_kind + i]),
@@ -439,27 +508,27 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
             bbox: IBox::EMPTY,
         });
     }
-    let mut inst_bbox = Vec::new();
-    for _ in 0..paths.iter().filter(|x| x.flags & PF_GLYPH != 0).count() {
+    let mut inst_bbox = Vec::with_capacity(n_inst_paths);
+    for _ in 0..n_inst_paths {
         let x0 = t.zv("inst bbox")?;
         let y0 = t.zv("inst bbox")?;
         let w = t.zv("inst bbox")?;
         let h = t.zv("inst bbox")?;
-        inst_bbox.push(IBox { x0, y0, x1: x0 + w, y1: y0 + h });
+        inst_bbox.push(sized_box(x0, y0, w, h, "inst bbox")?);
     }
     let mut decorations = Vec::with_capacity(n_decorations);
     let mut dend = 0i64;
     let mut ds = 0i32;
     for _ in 0..n_decorations {
-        let first_path = (dend + t.zv("decoration")? as i64) as u32;
+        let first_path = step_u32(&mut dend, t.zv("decoration")?, "decoration")?;
         let kind = DecoKind::from_u8(t.u8("decoration")?);
-        ds += t.zv("decoration")?;
-        let ayah = t.vi("decoration")? as u16;
-        let text = unopt(t.vi("decoration")?);
-        let n_paths = t.vi("decoration")? as u16;
-        let line = unopt(t.vi("decoration")?);
+        let surah = step_u16(&mut ds, t.zv("decoration")?, "decoration")?;
+        let ayah = t.u16("decoration")?;
+        let text = t.opt("decoration")?;
+        let n_paths = t.u16("decoration")?;
+        let line = t.opt("decoration")?;
         dend = first_path as i64 + n_paths as i64;
-        decorations.push(DecoRec { kind, surah: ds as u16, ayah, text, first_path, n_paths, line, bbox: IBox::EMPTY });
+        decorations.push(DecoRec { kind, surah, ayah, text, first_path, n_paths, line, bbox: IBox::EMPTY });
     }
     let mut glyph_ops = Vec::with_capacity(n_glyphs);
     let mut glyph_bbox = Vec::with_capacity(n_glyphs);
@@ -469,7 +538,7 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         let y0 = t.zv("glyph bbox")?;
         let w = t.zv("glyph bbox")?;
         let h = t.zv("glyph bbox")?;
-        glyph_bbox.push(IBox { x0, y0, x1: x0 + w, y1: y0 + h });
+        glyph_bbox.push(sized_box(x0, y0, w, h, "glyph bbox")?);
     }
     let mut insts = Vec::with_capacity(n_insts);
     for _ in 0..n_insts {
@@ -485,32 +554,55 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
     if t.pos != o_op {
         return Err(Error::Corrupt("tables"));
     }
+    // Every cross reference, before anything indexes by one.
+    validate::check(&validate::Tables {
+        lines: &lines,
+        ayahs: &ayahs,
+        words: &words,
+        paths: &paths,
+        decorations: &decorations,
+        insts: &insts,
+        n_glyphs,
+        n_strings,
+    })?;
 
     // ── geometry: walk the four streams once, rebuilding absolute commands ──
+    let n_inline = n_paths - n_inst_paths;
+    let mut run_lens: Vec<u32> = Vec::with_capacity(n_inline + n_glyphs);
+    run_lens.extend(n_ops_of.iter().zip(&paths).filter(|(_, p)| p.flags & PF_GLYPH == 0).map(|(n, _)| *n));
+    run_lens.extend(glyph_ops.iter().copied());
+    // Every operation takes a quarter of an opcode byte and at least one byte of x and
+    // of y, so the three sections bound the run lengths before the buffer is sized.
+    let total: u64 = run_lens.iter().map(|n| *n as u64).sum();
+    if total > sec_len[1] as u64 * 4 || total > sec_len[3] as u64 || total > sec_len[4] as u64 {
+        return Err(Error::Truncated("opcodes"));
+    }
+    let total = total as usize;
     let mut zr = Rd { b, pos: o_zs };
     let n_z = zr.vi("z")? as usize;
+    // Each close index is at least one byte of its section.
+    if n_z > sec_len[2] {
+        return Err(Error::Truncated("z"));
+    }
     let mut z_next: Vec<u32> = Vec::with_capacity(n_z);
     let mut acc = 0u32;
     for _ in 0..n_z {
-        acc += zr.vi("z")?;
+        acc = acc.checked_add(zr.vi("z")?).ok_or(Error::Corrupt("close indices"))?;
         z_next.push(acc);
+    }
+    if zr.pos != o_xs {
+        return Err(Error::Corrupt("close indices"));
     }
     let mut z_i = 0usize;
     let mut xr = Rd { b, pos: o_xs };
     let mut yr = Rd { b, pos: o_ys };
-    let opbits = &b[o_op..o_op + (o_zs - o_op)];
+    let opbits = &b[o_op..o_zs];
     let mut op_i = 0usize;
     let mut seen: u32 = 0;
     let (mut cx, mut cy) = (0i32, 0i32);
 
-    let n_inline = paths.iter().filter(|x| x.flags & PF_GLYPH == 0).count();
-    let mut run_lens: Vec<u32> = Vec::with_capacity(n_inline + n_glyphs);
-    run_lens.extend(n_ops_of.iter().zip(&paths).filter(|(_, p)| p.flags & PF_GLYPH == 0).map(|(n, _)| *n));
-    run_lens.extend(glyph_ops.iter().copied());
-
     // One buffer for the whole page, sliced per run: a Vec per run costs more in
     // allocator time than the whole varint pass.
-    let total: usize = run_lens.iter().map(|n| *n as usize).sum();
     let mut cmds: Vec<Cmd> = Vec::with_capacity(total + n_z);
     let mut run_at: Vec<u32> = Vec::with_capacity(run_lens.len() + 1);
 
@@ -522,8 +614,8 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
             op_i += 1;
             macro_rules! pt {
                 () => {{
-                    cx += xr.zv("x")?;
-                    cy += yr.zv("y")?;
+                    cx = cx.checked_add(xr.zv("x")?).ok_or(Error::Corrupt("coordinate overflow"))?;
+                    cy = cy.checked_add(yr.zv("y")?).ok_or(Error::Corrupt("coordinate overflow"))?;
                     (cx, cy)
                 }};
             }
@@ -560,6 +652,10 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         }
     }
     run_at.push(cmds.len() as u32);
+    // The streams end together, and every close index named an operation.
+    if xr.pos != o_ys || yr.pos != o_str || z_i != z_next.len() {
+        return Err(Error::Corrupt("coordinates"));
+    }
     let run = |i: usize| &cmds[run_at[i] as usize..run_at[i + 1] as usize];
 
     // ── derive: path bbox from its own points, group origin from the group's union ──
@@ -637,15 +733,13 @@ pub fn decode(b: &[u8]) -> Result<PageData, Error> {
         glyphs.push(GlyphRec { op_off: off, op_len: ops.len() as u32 - off, bbox: *bbox });
     }
 
-    if xr.pos != o_ys || yr.pos != o_str {
-        return Err(Error::Corrupt("coordinates"));
-    }
     let mut sr = Rd { b, pos: o_str };
     let mut strings = Vec::with_capacity(n_strings);
     for _ in 0..n_strings {
         let len = sr.vi("string")? as usize;
-        let s = b.get(sr.pos..sr.pos + len).ok_or(Error::Truncated("string"))?;
-        sr.pos += len;
+        let end = sr.pos.checked_add(len).ok_or(Error::Truncated("string"))?;
+        let s = b.get(sr.pos..end).ok_or(Error::Truncated("string"))?;
+        sr.pos = end;
         strings.push(String::from_utf8_lossy(s).into_owned());
     }
 

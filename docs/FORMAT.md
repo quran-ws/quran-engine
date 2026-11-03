@@ -157,6 +157,31 @@ as it goes.
 
 For each string: a varint byte length, then that many bytes of UTF-8.
 
+### What a reader rejects
+
+The reference decoder checks these before it indexes one table by another, and returns
+an error that names the table. A writer keeps them.
+
+- `quant` is at least 1.
+- Every count fits its section. A record takes at least 2 bytes (line), 8 (ayah
+  fragment), 12 (word), 5 (path, with its column bytes), 7 (decoration), 5 (glyph
+  outline) and 26 (glyph instance), and a string takes at least 1 byte.
+- A delta-coded field lands inside its type: a u16 field in 0 to 65535, a path index in
+  0 to 2^32 − 1.
+- A line's and an ayah fragment's word run ends inside the words table.
+- A word's path run ends inside the paths table, its line and ayah-fragment indices name
+  a record, and each of its five string indices names a string or is absent.
+- A decoration has at least one path, its run ends inside the paths table, and its line
+  and its text name a record or are absent.
+- An ayah fragment's ayah-mark decoration names a decoration or is absent.
+- A glyph-instance path's instance index names an instance, and an instance's glyph index
+  names an outline.
+- A page with paths has at least one line.
+- The run lengths add up to at most four operations per opcode byte and at most one per
+  byte of the x deltas and of the y deltas. The close count is at most one per byte of its
+  section, every close index names an operation, and every stream ends exactly where its
+  section ends.
+
 ## QVA1: the atlas
 
 One small file for the whole mushaf. Everything after the magic is a varint or a
@@ -169,6 +194,9 @@ length-prefixed string.
 | pages, sorted by page | per page: page, first surah, first ayah, last surah, last ayah, word count (six varints) |
 | surahs, sorted by number | per surah: number, first page, ayah count, place (0 makkah, 1 madinah, 255 unknown), then the Arabic, Latin and English names, each a varint length and UTF-8 bytes |
 | `rubu_al_hizb` boundaries, sorted | per boundary: `rubu_al_hizb` number, surah, ayah, page (four varints) |
+
+A reader rejects a varint that does not fit a u16, a `rubu_al_hizb` number of 0, and
+counts whose records cannot fit in the bytes that follow them.
 
 ## Versioning
 

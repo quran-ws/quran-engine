@@ -345,7 +345,7 @@ impl Page {
                     }
                 })
                 .collect();
-            view.sort_by(|a, b| a.y0.partial_cmp(&b.y0).unwrap());
+            view.sort_by(|a, b| a.y0.total_cmp(&b.y0));
             // seam only where two boxes actually meet
             for i in 0..view.len() {
                 if i + 1 < view.len() && (view[i + 1].y0 - view[i].y1).abs() <= seam + 0.01 {

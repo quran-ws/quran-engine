@@ -151,6 +151,8 @@ impl Page {
         Ok(Page::from_data(decode(bytes)?))
     }
 
+    /// Build a page from decoded data. The data must pass `PageData::validate`, as
+    /// everything `decode` returns does: this indexes the tables by each other's values.
     pub fn from_data(data: PageData) -> Page {
         let q = data.header.quant as f32;
         let mut geom = Geometry::default();
@@ -214,7 +216,7 @@ impl Page {
         }
         let line_spacing = {
             let mut d: Vec<f32> = line_centre.windows(2).map(|w| (w[1] - w[0]).abs()).filter(|v| *v > 1.0).collect();
-            d.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            d.sort_by(f32::total_cmp);
             if d.is_empty() {
                 data.header.height / 15.0
             } else {
@@ -294,7 +296,9 @@ impl Page {
                 (w.surah, w.ayah, data.lines[w.line_index as usize].line_number)
             } else if di != NONE {
                 let d = &data.decorations[di as usize];
-                (d.surah, d.ayah, data.lines[path_line[i] as usize].line_number)
+                // A page of decorations alone has no line to snap to.
+                let line_number = data.lines.get(path_line[i] as usize).map_or(0, |l| l.line_number);
+                (d.surah, d.ayah, line_number)
             } else {
                 (0, 0, 0)
             };
@@ -411,7 +415,7 @@ impl Page {
                 if bottoms.is_empty() {
                     return line_centre[li];
                 }
-                bottoms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                bottoms.sort_by(f32::total_cmp);
                 bottoms[bottoms.len() / 2]
             })
             .collect();
