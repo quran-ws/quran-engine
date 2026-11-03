@@ -97,6 +97,15 @@ fn abi_end_to_end() {
         assert_eq!(qvp_layout_groups(page, groups.as_mut_ptr(), n_groups), n_groups);
         let n_pg = qvp_layout_path_groups(page, std::ptr::null_mut(), 0);
         assert!(n_pg > 0);
+        // a short buffer gets the prefix and the total, as the header says every array output does
+        let mut short = vec![0f32; (n_groups as usize - 1) * 4];
+        assert_eq!(qvp_layout_groups(page, short.as_mut_ptr(), n_groups - 1), n_groups);
+        assert_eq!(short, groups[..short.len()]);
+        let mut all_pg = vec![0u32; n_pg as usize];
+        assert_eq!(qvp_layout_path_groups(page, all_pg.as_mut_ptr(), n_pg), n_pg);
+        let mut short_pg = vec![u32::MAX; n_pg as usize - 1];
+        assert_eq!(qvp_layout_path_groups(page, short_pg.as_mut_ptr(), n_pg - 1), n_pg);
+        assert_eq!(short_pg, all_pg[..short_pg.len()]);
         assert!(qvp_reflow_max_zoom(page, &reflowed) >= 1.0);
         let printed = QvpLayoutSpec { reflow_breaks: 3, ..reflowed };
         let cap = qvp_reflow_max_zoom(page, &printed);
