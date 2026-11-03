@@ -72,8 +72,8 @@ These look questionable and are correct:
 `scripts/check-structure.sh` checks:
 
 - the root against the allowlist above
-- that git tracks no generated file (`.xcodeproj`, `jniLibs`, `prebuilt`, `pages/`) and no
-  `.DS_Store`
+- that git tracks no generated file (`.xcodeproj`, `jniLibs`, `prebuilt`, `pages/`, the
+  Flutter package's `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`) and no `.DS_Store`
 - that every package directory has a README, a CHANGELOG and a LICENSE
 - that `CLAUDE.md` is the import plus at most fifteen lines
 - that every link in every `AGENTS.md` resolves

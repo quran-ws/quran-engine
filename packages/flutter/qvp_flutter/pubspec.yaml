@@ -37,6 +37,8 @@ flutter:
       web:
         pluginClass: QvpFlutterWeb
         fileName: src/web/qvp_flutter_web.dart
+  # Directories, not files: Flutter accepts a declared directory whose files are absent, so
+  # a native build of a git or path dependency succeeds without the web engine.
   assets:
-    - assets/wasm/qvp_ffi.wasm
-    - assets/js/qvp.js
+    - assets/wasm/
+    - assets/js/

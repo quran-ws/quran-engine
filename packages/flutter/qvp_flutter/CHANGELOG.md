@@ -1,5 +1,10 @@
 ## Unreleased
 
+- The web engine in the package, `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`, is
+  built from the release tag, so it matches the native libraries and the crates of the same
+  version. The repository no longer tracks the two files. The pubspec declares their
+  directories, so a native build of a `git:` or `path:` dependency runs without them. A web
+  build from such a dependency builds them first (see the README).
 - `QvpPageView` caches the base ink and the ornament layer as `ui.Picture` recordings in
   layout units rather than rasters at the current transform, so a pan or a pinch replays the
   picture instead of redrawing the page. Keys carry the engine layout's offsets and the

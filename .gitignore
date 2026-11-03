@@ -25,6 +25,9 @@ packages/flutter/**/macos/*.xcframework/
 packages/flutter/**/build/
 packages/flutter/**/.dart_tool/
 packages/flutter/**/assets/pages/
+# the web engine the Flutter package ships: built by scripts/sync-flutter-web-engine.sh
+packages/flutter/qvp_flutter/assets/wasm/qvp_ffi.wasm
+packages/flutter/qvp_flutter/assets/js/qvp.js
 # React Native
 packages/react-native/node_modules/
 packages/react-native/**/android/build/

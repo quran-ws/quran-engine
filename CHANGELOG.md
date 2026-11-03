@@ -24,6 +24,11 @@ All notable changes to the engine and its packages. The format follows
   returns the whole list as before.
 
 ### Changed
+- The Flutter package's web engine assets, `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`,
+  are build outputs and no longer tracked. The release workflow builds them from the
+  tagged commit into the pub.dev package, as it does the Android libraries.
+  `scripts/sync-flutter-web-engine.sh` produces them locally and the Flutter workflow
+  runs it before the analyzer. `scripts/check-structure.sh` fails when either is tracked.
 - Reflow sizes a surah banner's row from its ink and normal line spacing, not its printed slot.
 - The prose linter that the writing rules name is in the repository, at
   `scripts/ste_lint.py`, under its own MIT notice. `scripts/check.sh docs` prints its report
