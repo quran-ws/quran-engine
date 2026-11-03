@@ -282,11 +282,19 @@ jobs:
           mkdir -p packages/flutter/qvp_flutter/android/src/main/jniLibs
           cp -R artifacts/flutter-android/. \
             packages/flutter/qvp_flutter/android/src/main/jniLibs/
-          # The web engine assets are not tracked. The package ships the wasm the verify
-          # job built from this tag, and the reference wrapper that job checked it against.
+          # The web engine assets are not tracked. The package takes the wasm the verify
+          # job built, not a fresh build from scripts/sync-flutter-web-engine.sh, so pub.dev,
+          # npm and the CDN ship the same bytes. The size checks guard the copy: the pub
+          # dry run does not validate asset entries.
           mkdir -p packages/flutter/qvp_flutter/assets/wasm packages/flutter/qvp_flutter/assets/js
           cp artifacts/qvp_ffi.wasm/qvp_ffi.wasm packages/flutter/qvp_flutter/assets/wasm/qvp_ffi.wasm
           cp web/qvp.js packages/flutter/qvp_flutter/assets/js/qvp.js
+          for f in assets/wasm/qvp_ffi.wasm assets/js/qvp.js; do
+            test -s "packages/flutter/qvp_flutter/$f" || {
+              echo "::error::packages/flutter/qvp_flutter/$f is missing or empty; the pub.dev package would ship no web engine"
+              exit 1
+            }
+          done
           cd packages/flutter/qvp_flutter
           flutter pub publish --dry-run
           flutter pub publish --force

@@ -181,10 +181,6 @@ def main(argv: list[str]) -> int:
     if ANDROID_HEADER.read_bytes() != HEADER.read_bytes():
         problems.append(f"{ANDROID_HEADER.relative_to(ROOT)} differs from {HEADER.relative_to(ROOT)}; run scripts/build-engine-android.sh")
 
-    flutter_qvp_js = ROOT / "packages/flutter/qvp_flutter/assets/js/qvp.js"
-    if flutter_qvp_js.exists() and flutter_qvp_js.read_bytes() != WEB_QVP_JS.read_bytes():
-        problems.append(f"{flutter_qvp_js.relative_to(ROOT)} differs from {WEB_QVP_JS.relative_to(ROOT)}; copy it with scripts/sync-flutter-web-engine.sh")
-
     texts = {w: source_text(paths) for w, paths in WRAPPERS.items()}
     gaps = declared_gaps()
     rows = []

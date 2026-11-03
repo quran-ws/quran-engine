@@ -10,6 +10,8 @@ on:
       - "Cargo.toml"
       - "crates/**"
       - "packages/flutter/**"
+      - "web/qvp.js"
+      - "scripts/sync-flutter-web-engine.sh"
   push:
     branches: [main]
   workflow_dispatch:
@@ -46,8 +48,8 @@ jobs:
         run: scripts/sync-test-data.sh
       - name: Build the host engine library
         run: cargo build -p qvp-ffi --release
-      # The pubspec declares the web engine assets, which are not tracked. The analyzer
-      # and `flutter test` fail when a declared asset is missing.
+      # The web engine assets are not tracked. `flutter test` and the example build bundle
+      # the asset directories, so a web test or build would fail without this step.
       - name: Build the web engine assets
         run: scripts/sync-flutter-web-engine.sh
       - name: Example assets (the analyzer checks the asset directory exists)

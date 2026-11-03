@@ -35,15 +35,22 @@ cargo build -p qvp-ffi --release
 bash scripts/sync-flutter-web-engine.sh
 ```
 
-Run the web step before `flutter analyze`, `flutter test` or any `flutter build`. The
-pubspec declares both files as assets, and the repository does not track them. The release
-workflow builds them from the tagged commit and puts them in the pub.dev package, next to
-the Android libraries.
+Run the web step before `flutter test` or `flutter build web`. The pubspec declares the
+two asset directories, and the repository does not track the files. The release workflow
+builds them from the tagged commit and puts them in the pub.dev package, next to the
+Android libraries.
 
 Flutter bundles a declared asset on every platform. A native app that depends on this
 package carries about 620 KB of web engine that it does not load. Flutter has no
 per-platform asset declaration, so the package cannot leave the two files out of a native
 build.
+
+### Consuming from git
+
+A `git:` or `path:` dependency has no web engine: the pubspec declares the two asset
+directories, which git tracks with a README each, and a native build runs without the
+files. For web, run `scripts/sync-flutter-web-engine.sh` once in the checkout. The pub.dev
+package needs no step.
 
 Page data comes from the converter: `cargo run -p qvp-convert --release -- batch pages dist/pages`
 → `dist/pages/NNN.qvp`, `NNN.words.json` (text forms sidecar) and `atlas.qva`.

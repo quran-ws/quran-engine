@@ -6,11 +6,11 @@
 #          packages/flutter/qvp_flutter/assets/wasm/qvp_ffi.wasm
 #
 # Neither file is tracked. They are build outputs, like every other platform's engine
-# binary. The pubspec declares them as assets, so `flutter analyze`, `flutter test` and
-# `flutter build web` need them on disk: run this before those commands, and again after
-# any change to the reference wrapper or the FFI crate. The release workflow builds them
-# into the pub.dev package. scripts/check-parity.py fails when the qvp.js copy on disk
-# drifts from web/qvp.js.
+# binary. The pubspec declares their directories as assets, so a native build runs without
+# them and a web build or test needs them on disk: run this before `flutter build web` or
+# `flutter test`, and again after any change to the reference wrapper or the FFI crate.
+# The release workflow puts the wasm its verify job built, and web/qvp.js, in the pub.dev
+# package.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
