@@ -9,7 +9,9 @@ const scenarios = JSON.parse(readFileSync(new URL('conformance/scenarios/passage
 const pagePath = n => new URL(`dist/pages/${String(n).padStart(3, '0')}.qvp`, root)
 const missing = [...new Set(scenarios.cases.flatMap(c => c.pages))].filter(n => !existsSync(pagePath(n)))
 if (missing.length) {
-  console.log(`skip  dist/pages is missing ${missing.map(n => String(n).padStart(3, '0') + '.qvp').join(', ')}; run scripts/sync-test-data.sh`)
+  const hint = `dist/pages is missing ${missing.map(n => String(n).padStart(3, '0') + '.qvp').join(', ')}; run scripts/sync-test-data.sh`
+  if (process.env.QVP_REQUIRE_DATA) throw new Error(hint)
+  console.log(`skip  ${hint}`)
   process.exit(0)
 }
 const engine = await QvpEngine.init(readFileSync(wasmUrl))

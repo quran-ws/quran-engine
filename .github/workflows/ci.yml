@@ -16,6 +16,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+# The names of the engine, gates, standards and web jobs are required status checks in the
+# branch ruleset of main. A rename needs the ruleset updated first, or no PR can merge.
 jobs:
   # Which parts changed. Documentation-only changes skip the compile jobs; a skipped
   # required job counts as passing.
@@ -83,7 +85,7 @@ jobs:
           QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
           QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
         run: scripts/sync-test-data.sh
-      - name: Identity gate (8 pages), ABI test, conformance
+      - name: Identity gate (8 pages), ABI test, conformance, web replays
         run: scripts/check.sh gates
 
   standards:
@@ -95,10 +97,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: python3 scripts/check-parity.py --check
-      - run: scripts/check-versions.sh
-      - run: scripts/check-structure.sh
-      - run: scripts/check-terminology.sh
+      - name: Install shellcheck when the runner lacks it
+        run: command -v shellcheck || (sudo apt-get update && sudo apt-get install -y shellcheck)
+      - run: scripts/check.sh parity versions structure terminology shell
 
   web:
     name: web (wasm, smoke, lite)

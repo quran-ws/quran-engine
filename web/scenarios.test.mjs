@@ -7,6 +7,7 @@ import { QvpEngine, wasmUrl } from './index.mjs'
 const root = new URL('..', import.meta.url)
 const pagePath = new URL('dist/pages/042.qvp', root)
 if (!existsSync(pagePath)) {
+  if (process.env.QVP_REQUIRE_DATA) throw new Error('dist/pages/042.qvp is missing; run scripts/sync-test-data.sh')
   console.log('skip  dist/pages/042.qvp is missing; run scripts/sync-test-data.sh')
   process.exit(0)
 }

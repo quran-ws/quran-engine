@@ -13,17 +13,17 @@ extra=""
 for entry in $(git ls-files | cut -d/ -f1 | sort -u); do
   case " $allowed " in *" $entry "*) ;; *) extra="$extra $entry" ;; esac
 done
-[ -z "$extra" ] && ok "root holds only allowed entries" || fail "root has unexpected entries:$extra"
+if [ -z "$extra" ]; then ok "root holds only allowed entries"; else fail "root has unexpected entries:$extra"; fi
 
 # 2. No generated file is tracked.
 generated="$(git ls-files | grep -E 'packages/ios/.*\.xcodeproj/|^packages/ios/example/Info\.plist$|/jniLibs/|/prebuilt/|packages/flutter/qvp_flutter/assets/(wasm/qvp_ffi\.wasm|js/qvp\.js)$|^pages/|^index/|^dist/|\.DS_Store$|^\.maestro/|\.qvo$' || true)"
-[ -z "$generated" ] && ok "no generated or local file is tracked" || fail "tracked generated files: $generated"
+if [ -z "$generated" ]; then ok "no generated or local file is tracked"; else fail "tracked generated files: $generated"; fi
 
 # 3. Every package directory has README, CHANGELOG and LICENSE.
 for pkg in packages/android/qvp packages/flutter/qvp_flutter packages/ios/QvpKit packages/react-native/qvp-react-native; do
   missing=""
   for f in README.md CHANGELOG.md LICENSE; do [ -f "$pkg/$f" ] || missing="$missing $f"; done
-  [ -z "$missing" ] && ok "$pkg has README, CHANGELOG, LICENSE" || fail "$pkg is missing:$missing"
+  if [ -z "$missing" ]; then ok "$pkg has README, CHANGELOG, LICENSE"; else fail "$pkg is missing:$missing"; fi
 done
 
 # 4. CLAUDE.md is the AGENTS.md import plus at most fifteen lines.
@@ -37,10 +37,11 @@ fi
 for f in $(git ls-files | grep -E '(^|/)AGENTS\.md$'); do
   dir="$(dirname "$f")"
   broken=""
+  # shellcheck disable=SC2016  # the backticks are the Markdown code span, not a command
   for target in $(grep -oE '`[A-Za-z0-9_./-]+\.(md|sh|py|h|json)`' "$f" | tr -d '`' | sort -u); do
     [ -e "$target" ] || [ -e "$dir/$target" ] || broken="$broken $target"
   done
-  [ -z "$broken" ] && ok "$f: every named file exists" || fail "$f names missing files:$broken"
+  if [ -z "$broken" ]; then ok "$f: every named file exists"; else fail "$f names missing files:$broken"; fi
 done
 
 exit $status

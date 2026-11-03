@@ -60,6 +60,7 @@ xargs -P 16 -I{} bash -c 'move "{}"' < "$WORK/todo"
 
 # 3. Verify over HTTPS, against the manifest the release signed. This is the step that makes
 #    the copy trustworthy; without it a short read is invisible.
+# shellcheck disable=SC2013  # a version is one word; a while-read loop would give the body the list as stdin
 for version in $(cut -d/ -f1 "$WORK/todo" | sort -u); do
   echo "== verifying qvp/$version"
   curl -fsS "https://$CDN_HOST/qvp/$version/manifest.json" -o "$WORK/m.json"

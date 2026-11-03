@@ -12,13 +12,20 @@ if (engine.engineName() !== 'qvp' || !/^\d+\.\d+\.\d+$/.test(engine.version()) |
 if (engine.markFromName(engine.markName(1)) !== 1) throw new Error('markFromName does not invert markName');
 console.log('ok  engine name, version and mark names round-trip');
 
+// The sections that need page data skip with a hint, or fail when QVP_REQUIRE_DATA is set
+// (scripts/check.sh gates sets it after scripts/sync-test-data.sh).
+function skipData(what) {
+  if (process.env.QVP_REQUIRE_DATA) throw new Error(`${what}; run scripts/sync-test-data.sh`);
+  console.log(`skip ${what}`);
+}
+
 const cjs = (await import('./index.cjs')).default;
 if (!cjs.QvpEngine) throw new Error('CJS entry did not expose QvpEngine');
 console.log('ok  both entry points expose QvpEngine');
 
 for (const n of ['001', '002']) {
   const file = new URL(`../dist/pages/${n}.qvp`, import.meta.url);
-  if (!existsSync(file)) { console.log(`skip printed breaks: ${n}.qvp is missing`); continue; }
+  if (!existsSync(file)) { skipData(`printed breaks: ${n}.qvp is missing`); continue; }
   const page = engine.loadPage(readFileSync(file));
   const spec = { viewportW: 390, viewportH: 844, reflow: { breaks: 'printed', zoom: 2 } };
   const cap = page.reflowMaxZoom(spec);
@@ -42,7 +49,13 @@ console.log('ok  loadOrnaments refuses foreign bytes');
 // With a set and a page on disk, the whole path: dress, dressInfo, dressGeometry, undress.
 const dataDir = new URL('../dist/pages/', import.meta.url);
 const setPath = new URL('ornaments.qvo', dataDir), pagePath = new URL('604.qvp', dataDir);
-if (existsSync(setPath) && existsSync(pagePath)) {
+if (!existsSync(pagePath)) {
+  skipData('dress with real data: dist/pages/604.qvp is missing');
+} else if (!existsSync(setPath)) {
+  // scripts/sync-test-data.sh accepts a data release that ships no set, so this is a skip
+  // under QVP_REQUIRE_DATA too.
+  console.log('skip dress with real data: this data release ships no dist/pages/ornaments.qvo');
+} else {
   const set = engine.loadOrnaments(readFileSync(setPath));
   if (!set.count || set.list.length !== set.count) throw new Error('the set lists nothing');
   const marker = set.list.find(o => o.kind === 'ayah_mark');
@@ -106,6 +119,4 @@ if (existsSync(setPath) && existsSync(pagePath)) {
   page.undress();
   set.free(); page.free();
   console.log(`ok  dress: ${info.ayahMarks} medallions, ${info.surahHeaders} bands, ${info.draws} draws, revision ${info.revision}`);
-} else {
-  console.log('skip dress with real data: dist/pages/ornaments.qvo or 604.qvp is missing');
 }
