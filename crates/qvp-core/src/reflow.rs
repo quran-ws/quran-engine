@@ -12,6 +12,7 @@
 use crate::defaults;
 use crate::Page;
 use qvp_format::{DecoKind, IBox, Mark, PathKind, NONE_U16};
+use std::sync::Arc;
 
 const NONE: u32 = u32::MAX;
 
@@ -221,6 +222,167 @@ struct Atom {
     width: f32,
 }
 
+/// A sajdah line stroke the reflow draws over its words: the decoration that holds it, the
+/// stroke's own paths, its printed horizontal extent in page units, and the words under it.
+struct SajdahLine {
+    deco: u32,
+    paths: Vec<u32>,
+    x0: f32,
+    x1: f32,
+    words: Vec<u32>,
+}
+
+/// A word measured against the word before it in reading order: how deeply the print
+/// interlocks the two ([`Page::words_interlock`]) and the air between their row units'
+/// strokes ([`Page::slice_clearance`]). Every gap a reflow sets is between two such
+/// neighbours, so both are measured once.
+#[derive(Clone, Copy)]
+struct Neighbour {
+    /// The word before, or `NONE` for the first word of the page.
+    prev: u32,
+    interlock: Option<f32>,
+    clearance: Option<f32>,
+}
+
+/// What a reflow reads off the page alone, measured once per page. A continuous pinch lays
+/// the page out again on every frame, and nothing here changes between two frames: the gap
+/// the print keeps between words, the row unit of every word, how each word meets the one
+/// before it, which strokes are sajdah lines, the native surah frames, the text block and the
+/// group every path is drawn under.
+pub(crate) struct Prepared {
+    /// The page's median word gap, [`Page::median_word_gap`].
+    median: f32,
+    /// The printed text block, [`Page::text_block`].
+    pub block: (f32, f32),
+    /// The row unit of every word, indexed by word.
+    atoms: Vec<Atom>,
+    /// Every word against the word before it in reading order, indexed by word.
+    before: Vec<Neighbour>,
+    /// The widest row unit once the decorations that carry a sajdah line are left out: what
+    /// bounds the zoom under every break strategy but [`Breaks::Printed`].
+    widest_without_sajdah_line: f32,
+    /// The sajdah lines, in decoration order.
+    sajdah_lines: Vec<SajdahLine>,
+    /// The sheet's own furniture, which a reflowed page leaves out: the running head and the
+    /// page number, as decoration indices.
+    omitted: Vec<u32>,
+    /// The native frame paths of every surah name, sorted. [`Page::surah_name_ornament_paths`].
+    pub surah_frame_paths: Vec<u32>,
+    /// The group each path is drawn under on a reflowed page: its word, or its decoration,
+    /// or its decoration's sajdah line. Shared with every [`crate::Layout`] made from it.
+    pub path_group: Arc<[u32]>,
+}
+
+/// Measure a page for reflow. See [`Prepared`].
+pub(crate) fn prepare(page: &Page) -> Prepared {
+    let d = page.data();
+    let median = page.median_word_gap();
+    let block = page.text_block();
+    let anchors = page.deco_anchor_words(median);
+    let sajdah_line_decos = page.sajdah_line_decos();
+    let mut word_decos: Vec<Vec<u32>> = vec![Vec::new(); d.words.len()];
+    for (di, &wi) in anchors.iter().enumerate() {
+        if wi != NONE {
+            word_decos[wi as usize].push(di as u32);
+        }
+    }
+    let atoms: Vec<Atom> =
+        (0..d.words.len() as u32).map(|wi| page.atom(wi, &word_decos[wi as usize], median, block)).collect();
+    // reading order: each line right to left, line after line
+    let mut before = vec![Neighbour { prev: NONE, interlock: None, clearance: None }; d.words.len()];
+    let mut prev = NONE;
+    for words in page.line_words.iter() {
+        for &(_, wi) in words.iter().rev() {
+            if prev != NONE {
+                let (a, b) = (&atoms[prev as usize], &atoms[wi as usize]);
+                before[wi as usize] = Neighbour {
+                    prev,
+                    interlock: page.words_interlock(prev, wi),
+                    clearance: Page::slice_clearance(&a.slices, &b.slices, 0.0),
+                };
+            }
+            prev = wi;
+        }
+    }
+    // The sajdah line is drawn over a span of words, not over one, so it is not what bounds
+    // the zoom. A word whose decorations all stay keeps the unit measured above; one that
+    // loses a decoration is measured again, extent only, since no gap reads its bands.
+    let widest_without_sajdah_line = (0..d.words.len())
+        .map(|wi| {
+            let kept: Vec<u32> = word_decos[wi].iter().copied().filter(|&di| !sajdah_line_decos[di as usize]).collect();
+            if kept.len() == word_decos[wi].len() {
+                atoms[wi].width
+            } else {
+                let (x0, x1, _, _) = page.atom_extent(wi as u32, &kept, median, block);
+                x1 - x0
+            }
+        })
+        .fold(0.0f32, f32::max);
+    let sajdah_lines = (0..d.decorations.len())
+        .filter(|&di| sajdah_line_decos[di])
+        .filter_map(|di| {
+            let deco = &d.decorations[di];
+            // the stroke's own ink, not the decoration's, which also holds the sign in the margin
+            let paths: Vec<u32> = (deco.first_path..deco.first_path + deco.n_paths as u32)
+                .filter(|&pi| d.paths[pi as usize].mark == Mark::SajdahLine)
+                .collect();
+            let mut stroke: Option<IBox> = None;
+            for &pi in &paths {
+                let b = d.paths[pi as usize].bbox;
+                stroke = Some(match stroke {
+                    None => b,
+                    Some(mut acc) => {
+                        acc.union(&b);
+                        acc
+                    }
+                });
+            }
+            let b = stroke?;
+            let q = page.quant();
+            let (x0, x1) = (b.x0 as f32 / q, b.x1 as f32 / q);
+            (x1 > x0).then(|| SajdahLine { deco: di as u32, paths, x0, x1, words: page.words_under_stroke(&b) })
+        })
+        .collect();
+    let omitted = d
+        .decorations
+        .iter()
+        .enumerate()
+        .filter(|(_, deco)| matches!(deco.kind, DecoKind::PageNumber | DecoKind::RunningHead))
+        .map(|(di, _)| di as u32)
+        .collect();
+    // one group per word, then one per decoration, then one per decoration's sajdah line:
+    // a path's group follows the job it does, not only the record it belongs to
+    let (n_words, n_decos) = (d.words.len() as u32, d.decorations.len() as u32);
+    let path_group: Arc<[u32]> = (0..d.paths.len())
+        .map(|i| {
+            let g = &page.geometry().table[i];
+            if g.word != NONE {
+                g.word
+            } else if page.path_deco(i as u32) != NONE {
+                let di = page.path_deco(i as u32);
+                if d.paths[i].mark == Mark::SajdahLine {
+                    n_words + n_decos + di
+                } else {
+                    n_words + di
+                }
+            } else {
+                0
+            }
+        })
+        .collect();
+    Prepared {
+        median,
+        block,
+        atoms,
+        before,
+        widest_without_sajdah_line,
+        sajdah_lines,
+        omitted,
+        surah_frame_paths: page.surah_name_ornament_paths(),
+        path_group,
+    }
+}
+
 impl Page {
     /// The air the print keeps between the letters of two neighbouring words, taken over the
     /// whole page: what a reflowed row leaves between any two words.
@@ -258,9 +420,10 @@ impl Page {
     /// The decoration that closes each ayah, resolved to the word it must travel with.
     /// `NONE` for a decoration that belongs to no single word: a surah banner, a basmalah,
     /// the page number, the running head, or a sajdah line, which spans several words.
-    pub(crate) fn deco_anchor_words(&self) -> Vec<u32> {
+    /// `median` is the page's [`Page::median_word_gap`], the tolerance a mark is matched
+    /// to its word with.
+    pub(crate) fn deco_anchor_words(&self, median: f32) -> Vec<u32> {
         let d = self.data();
-        let median = self.median_word_gap();
         let mut out = vec![NONE; d.decorations.len()];
         // the medallion an ayah record names closes that record's last word, which is the
         // one the reflow must keep it with (an ayah split across lines has one record a line)
@@ -368,29 +531,12 @@ impl Page {
             .map(|&(_, wi)| wi)
     }
 
-    /// The words a sajdah line is drawn over: the ones it spans horizontally on the line
-    /// directly below it. Empty for any other decoration.
-    pub(crate) fn sajdah_line_words(&self, di: usize) -> Vec<u32> {
+    /// The words a sajdah line stroke is drawn over: the ones it spans horizontally on the
+    /// line directly below it. `b` is the box of the stroke's own ink, not the decoration's,
+    /// which can also hold the sign printed in the margin.
+    pub(crate) fn words_under_stroke(&self, b: &IBox) -> Vec<u32> {
         let q = self.quant();
         let d = self.data();
-        let deco = &d.decorations[di];
-        // the stroke's own ink: a decoration can also hold the sign printed in the margin, and
-        // the words under that are not the words the stroke marks
-        let mut stroke: Option<qvp_format::IBox> = None;
-        for pi in deco.first_path..deco.first_path + deco.n_paths as u32 {
-            if d.paths[pi as usize].mark == Mark::SajdahLine {
-                let bb = d.paths[pi as usize].bbox;
-                stroke = Some(match stroke {
-                    None => bb,
-                    Some(mut acc) => {
-                        acc.union(&bb);
-                        acc
-                    }
-                });
-            }
-        }
-        let Some(b) = stroke else { return vec![] };
-        let b = &b;
         let tol = (2.0 * q) as i32;
         // the line under the stroke: the nearest words below it that it overlaps
         let under = d
@@ -420,36 +566,21 @@ impl Page {
     /// With [`Breaks::Printed`], the widest printed row, including the requested gaps, bounds
     /// the zoom against the page width instead of the text block.
     pub fn reflow_max_zoom(&self, spec: &ReflowSpec) -> f32 {
-        let d = self.data();
-        let median = self.median_word_gap();
-        let anchors = self.deco_anchor_words();
-        let sajdah_line = self.sajdah_line_decos();
-        let mut word_decos: Vec<Vec<u32>> = vec![Vec::new(); d.words.len()];
-        for (di, &wi) in anchors.iter().enumerate() {
-            if wi != NONE && (spec.breaks == Breaks::Printed || !sajdah_line[di]) {
-                word_decos[wi as usize].push(di as u32);
-            }
-        }
-        let block = self.text_block();
+        let prep = self.reflow_prepared();
+        let (median, block) = (prep.median, prep.block);
         if spec.breaks == Breaks::Printed {
             let widest = self
                 .line_words
                 .iter()
                 .map(|words| {
-                    let atoms: Vec<Atom> = words
-                        .iter()
-                        .rev()
-                        .map(|&(_, wi)| self.atom(wi, &word_decos[wi as usize], median, block))
-                        .collect();
+                    let atoms: Vec<&Atom> = words.iter().rev().map(|&(_, wi)| &prep.atoms[wi as usize]).collect();
                     atoms.iter().map(|a| a.width).sum::<f32>()
-                        + atoms.windows(2).map(|p| self.atom_gap(&p[0], &p[1], spec, median)).sum::<f32>()
+                        + atoms.windows(2).map(|p| self.atom_gap(p[0], p[1], spec, median)).sum::<f32>()
                 })
                 .fold(0.0f32, f32::max);
             return if widest > 0.0 { self.width() / widest } else { f32::INFINITY };
         }
-        let widest = (0..d.words.len() as u32)
-            .map(|wi| self.atom(wi, &word_decos[wi as usize], median, block).width)
-            .fold(0.0f32, f32::max);
+        let widest = prep.widest_without_sajdah_line;
         if widest > 0.0 {
             ((block.1 - block.0) / widest).max(1.0)
         } else {
@@ -472,11 +603,6 @@ impl Page {
             })
             .collect()
     }
-    /// The paths that are a sajdah line stroke.
-    pub(crate) fn sajdah_line_paths(&self) -> Vec<bool> {
-        self.data().paths.iter().map(|p| p.mark == Mark::SajdahLine).collect()
-    }
-
     /// Native frame paths of a surah name. The printed page draws them; a reflowed page omits
     /// them so the title can grow with the reader instead of being fitted inside the frame.
     pub(crate) fn surah_name_ornament_paths(&self) -> Vec<u32> {
@@ -564,24 +690,17 @@ impl Page {
             *rows;
         let q = self.quant();
         let d = self.data();
-        let median = self.median_word_gap();
-        let anchors = self.deco_anchor_words();
-        let mut word_decos: Vec<Vec<u32>> = vec![Vec::new(); d.words.len()];
-        for (di, &wi) in anchors.iter().enumerate() {
-            if wi != NONE {
-                word_decos[wi as usize].push(di as u32);
-            }
-        }
+        let prep = self.reflow_prepared();
+        let median = prep.median;
 
         // atoms in reading order, and the banner lines that interrupt them
-        let mut rows: Vec<Vec<Atom>> = Vec::new();
+        let mut rows: Vec<Vec<&Atom>> = Vec::new();
         let mut header_rows: Vec<(usize, u32)> = Vec::new(); // (row index, printed line)
-        let mut cur: Vec<Atom> = Vec::new();
+        let mut cur: Vec<&Atom> = Vec::new();
         // between two atoms, not two words: an atom's printed extent already holds the
         // medallion that closes its ayah, so the print's word-to-word distance would count
         // that medallion twice and tear the row open
-        let carried = |prev: &Atom, next: &Atom| self.words_interlock(prev.word, next.word);
-        let interlocked = |prev: &Atom, next: &Atom| carried(prev, next).is_some();
+        let interlocked = |prev: &Atom, next: &Atom| self.neighbour(prev, next).0.is_some();
         let gap_of = |prev: &Atom, next: &Atom| self.atom_gap(prev, next, spec, median);
         // Text flows from one printed line into the next only when the reader has zoomed in and
         // the rows are narrower than the printed lines. At the printed size the page is the
@@ -589,9 +708,9 @@ impl Page {
         let flows_on = spec.breaks != Breaks::Printed && row_w + 0.01 < block.1 - block.0;
         // The atoms of the page in reading order, cut into blocks by the banners that text
         // never flows across.
-        enum Block {
+        enum Block<'a> {
             Banner(u32),
-            Text(Vec<Atom>),
+            Text(Vec<&'a Atom>),
         }
         let mut blocks: Vec<Block> = Vec::new();
         for li in 0..d.lines.len() {
@@ -607,7 +726,7 @@ impl Page {
             }
             // words of the line right to left
             for &(_, wi) in self.line_words[li].iter().rev() {
-                cur.push(self.atom(wi, &word_decos[wi as usize], median, block));
+                cur.push(&prep.atoms[wi as usize]);
             }
         }
         if !cur.is_empty() {
@@ -616,7 +735,7 @@ impl Page {
 
         // Where to break a block into rows. `width(i..j)` is a run of atoms with the gaps that
         // fall between them, so both strategies read it off two prefix sums.
-        let cut_points = |atoms: &[Atom]| -> Vec<usize> {
+        let cut_points = |atoms: &[&Atom]| -> Vec<usize> {
             let n = atoms.len();
             if n == 0 {
                 return vec![];
@@ -624,7 +743,7 @@ impl Page {
             let (mut w, mut g) = (vec![0.0f32; n + 1], vec![0.0f32; n + 1]);
             for i in 0..n {
                 w[i + 1] = w[i] + atoms[i].width;
-                g[i + 1] = g[i] + if i > 0 { gap_of(&atoms[i - 1], &atoms[i]) } else { 0.0 };
+                g[i + 1] = g[i] + if i > 0 { gap_of(atoms[i - 1], atoms[i]) } else { 0.0 };
             }
             let width = |i: usize, j: usize| (w[j] - w[i]) + (g[j] - g[i + 1]);
             match spec.breaks {
@@ -682,7 +801,7 @@ impl Page {
                     // the gaps free to stretch in a run, and how far each may go
                     let mut o = vec![0u32; n + 1];
                     for i in 1..n {
-                        o[i + 1] = o[i] + u32::from(!interlocked(&atoms[i - 1], &atoms[i]));
+                        o[i + 1] = o[i] + u32::from(!interlocked(atoms[i - 1], atoms[i]));
                     }
                     let per_gap = (median * spec.word_gap.max(0.0) * (spec.max_stretch - 1.0)).max(0.0);
                     let per_gap = if spec.max_stretch > 0.0 { per_gap } else { row_w };
@@ -693,14 +812,16 @@ impl Page {
                         (used / row_w, (used + room).min(row_w) / row_w)
                     };
                     // The cost of a row against the row before it. The state has to carry that
-                    // row, so the table is over pairs: `best[i][j]` is the block broken up to
-                    // `j` with its last row running from `i`.
+                    // row, so the table is over pairs: `best[at(i, j)]` is the block broken up
+                    // to `j` with its last row running from `i`. One flat vector a side, not a
+                    // vector of vectors, so a block costs two allocations and not `2n`.
                     const SHORT: f32 = 1.0;
                     const STEP: f32 = 0.6;
                     const SPEND: f32 = 0.25;
                     let fits = |i: usize, j: usize| width(i, j) <= row_w + 0.01 || i + 1 == j;
-                    let mut best: Vec<Vec<f32>> = vec![vec![f32::INFINITY; n + 1]; n + 1];
-                    let mut from: Vec<Vec<usize>> = vec![vec![0usize; n + 1]; n + 1];
+                    let at = |i: usize, j: usize| i * (n + 1) + j;
+                    let mut best: Vec<f32> = vec![f32::INFINITY; (n + 1) * (n + 1)];
+                    let mut from: Vec<u32> = vec![0; (n + 1) * (n + 1)];
                     for j in 1..=n {
                         for i in (0..j).rev() {
                             if !fits(i, j) {
@@ -711,36 +832,35 @@ impl Page {
                             let short = if j == n { 0.0 } else { (1.0 - reached).max(0.0) };
                             let own = SHORT * short * short + SPEND * (reached - natural) * (reached - natural);
                             if i == 0 {
-                                best[i][j] = own;
+                                best[at(i, j)] = own;
                                 continue;
                             }
                             for h in (0..i).rev() {
                                 if !fits(h, i) {
                                     break;
                                 }
-                                if best[h][i].is_infinite() {
+                                if best[at(h, i)].is_infinite() {
                                     continue;
                                 }
                                 let step = reach(h, i).1 - reached;
-                                let cost = best[h][i] + own + STEP * step * step;
-                                if cost < best[i][j] {
-                                    best[i][j] = cost;
-                                    from[i][j] = h;
+                                let cost = best[at(h, i)] + own + STEP * step * step;
+                                if cost < best[at(i, j)] {
+                                    best[at(i, j)] = cost;
+                                    from[at(i, j)] = h as u32;
                                 }
                             }
                         }
                     }
-                    let mut i = (0..n)
-                        .rev()
-                        .filter(|&i| best[i][n].is_finite())
-                        .min_by(|&a, &b| best[a][n].partial_cmp(&best[b][n]).unwrap_or(std::cmp::Ordering::Equal));
+                    let mut i = (0..n).rev().filter(|&i| best[at(i, n)].is_finite()).min_by(|&a, &b| {
+                        best[at(a, n)].partial_cmp(&best[at(b, n)]).unwrap_or(std::cmp::Ordering::Equal)
+                    });
                     let (mut cuts, mut j) = (vec![], n);
                     while let Some(start) = i {
                         if start == 0 {
                             break;
                         }
                         cuts.push(start);
-                        let h = from[start][j];
+                        let h = from[at(start, j)] as usize;
                         j = start;
                         i = Some(h);
                     }
@@ -757,7 +877,7 @@ impl Page {
                 }
                 Block::Text(atoms) => {
                     let cuts: std::collections::HashSet<usize> = cut_points(&atoms).into_iter().collect();
-                    let mut row: Vec<Atom> = Vec::new();
+                    let mut row: Vec<&Atom> = Vec::new();
                     for (i, a) in atoms.into_iter().enumerate() {
                         if i > 0 && cuts.contains(&i) {
                             rows.push(std::mem::take(&mut row));
@@ -824,8 +944,8 @@ impl Page {
         let printed_y = printed_spacing.then_some(()).and(as_printed.clone());
         // The native surah frame belongs to the printed page. Once the page has truly reflowed,
         // the title grows with the reader on its own; the frame neither draws nor constrains it.
-        let omitted_header_paths =
-            if printed_y.is_some() && surah_frames { Vec::new() } else { self.surah_name_ornament_paths() };
+        let omitted_header_paths: &[u32] =
+            if printed_y.is_some() && surah_frames { &[] } else { &prep.surah_frame_paths };
         // Horizontal placement first: it does not depend on the heights, and the heights need
         // to know which ink of two rows ends up over which.
         let last_row = rows.len().saturating_sub(1);
@@ -840,8 +960,8 @@ impl Page {
             .iter()
             .map(|atoms| Measured {
                 ink: atoms.iter().map(|a| a.width).sum(),
-                gaps: atoms.windows(2).map(|p| gap_of(&p[0], &p[1])).collect(),
-                open: atoms.windows(2).map(|p| !interlocked(&p[0], &p[1])).collect(),
+                gaps: atoms.windows(2).map(|p| gap_of(p[0], p[1])).collect(),
+                open: atoms.windows(2).map(|p| !interlocked(p[0], p[1])).collect(),
             })
             .collect();
         let used = |r: usize| measured[r].ink + measured[r].gaps.iter().sum::<f32>();
@@ -969,8 +1089,8 @@ impl Page {
             // the banner is drawn at, which is the size `place_header` fits to the row.
             if let Some(&li) = headers.get(&r) {
                 let c = self.line_centre(li as usize);
-                let k = self.header_scale(li as usize, row_w, banner_k, &omitted_header_paths);
-                let bbox = self.header_bbox(li as usize, &omitted_header_paths);
+                let k = self.header_scale(li as usize, row_w, banner_k, omitted_header_paths);
+                let bbox = self.header_bbox(li as usize, omitted_header_paths);
                 if !bbox.is_empty() {
                     asc = asc.max(k * (c - bbox.y0 as f32 / q));
                     desc = desc.max(k * (bbox.y1 as f32 / q - c));
@@ -1005,13 +1125,13 @@ impl Page {
                         let air = headers
                             .get(&prev)
                             .map(|&li| {
-                                self.header_scale(li as usize, row_w, banner_k, &omitted_header_paths)
-                                    * self.header_air(li as usize, &omitted_header_paths).1
+                                self.header_scale(li as usize, row_w, banner_k, omitted_header_paths)
+                                    * self.header_air(li as usize, omitted_header_paths).1
                             })
                             .or_else(|| {
                                 headers.get(&r).map(|&li| {
-                                    self.header_scale(li as usize, row_w, banner_k, &omitted_header_paths)
-                                        * self.header_air(li as usize, &omitted_header_paths).0
+                                    self.header_scale(li as usize, row_w, banner_k, omitted_header_paths)
+                                        * self.header_air(li as usize, omitted_header_paths).0
                                 })
                             })
                             .unwrap_or(0.0);
@@ -1074,7 +1194,7 @@ impl Page {
             if let Some(&li) = headers.get(&r) {
                 // on its own ink centre: a band beside a banner stops half a line spacing out,
                 // so it is narrower than the banner and its middle is not where the ink goes
-                self.place_header(&mut out, li, centres[r], row_w, banner_k, &omitted_header_paths);
+                self.place_header(&mut out, li, centres[r], row_w, banner_k, omitted_header_paths);
                 continue;
             }
             for (i, a) in atoms.iter().enumerate() {
@@ -1140,33 +1260,11 @@ impl Page {
         // the sajdah line: drawn over the words it marks, wherever they now are. The span can
         // break across rows, so the stroke is drawn once per row, stretched along x to cover
         // that row's part of it. Only this stroke is stretched; the words are not.
-        for (di, carries_line) in self.sajdah_line_decos().into_iter().enumerate() {
-            if !carries_line {
-                continue;
-            }
-            let deco = &d.decorations[di];
-            // the stroke's own ink, not the decoration's, which also holds the sign in the margin
-            let mut stroke: Option<qvp_format::IBox> = None;
-            for pi in deco.first_path..deco.first_path + deco.n_paths as u32 {
-                if d.paths[pi as usize].mark == Mark::SajdahLine {
-                    let b = d.paths[pi as usize].bbox;
-                    stroke = Some(match stroke {
-                        None => b,
-                        Some(mut acc) => {
-                            acc.union(&b);
-                            acc
-                        }
-                    });
-                }
-            }
-            let Some(b) = stroke else { continue };
-            let (bx0, bx1) = (b.x0 as f32 / q, b.x1 as f32 / q);
-            if bx1 <= bx0 {
-                continue;
-            }
-            let words = self.sajdah_line_words(di);
+        for line in &prep.sajdah_lines {
+            let (di, words) = (line.deco as usize, &line.words);
+            let (bx0, bx1) = (line.x0, line.x1);
             let mut by_row: Vec<(u32, f32, f32)> = Vec::new(); // (row, x0, x1) of the placed span
-            for &wi in &words {
+            for &wi in words {
                 let r = out.word_row[wi as usize];
                 if r == NONE {
                     continue;
@@ -1197,15 +1295,8 @@ impl Page {
                     out.sajdah_line_place[di] = p;
                 } else {
                     // only the stroke is drawn again; the sign beside it is printed once
-                    for pi in deco.first_path..deco.first_path + deco.n_paths as u32 {
-                        if d.paths[pi as usize].mark == Mark::SajdahLine {
-                            out.repeats.push(Repeat {
-                                decoration: di as u32,
-                                first_path: pi,
-                                n_paths: 1,
-                                placement: p,
-                            });
-                        }
+                    for &pi in &line.paths {
+                        out.repeats.push(Repeat { decoration: di as u32, first_path: pi, n_paths: 1, placement: p });
                     }
                 }
             }
@@ -1214,11 +1305,7 @@ impl Page {
         // page's own box: they belong to the sheet, not to the text, and a reflowed page has no
         // sheet. They are left out of the layout and listed in `omitted` so a renderer skips
         // them; a host that wants them draws its own, from `page_number` and the atlas.
-        for (di, deco) in d.decorations.iter().enumerate() {
-            if matches!(deco.kind, DecoKind::PageNumber | DecoKind::RunningHead) {
-                out.omitted.push(di as u32);
-            }
-        }
+        out.omitted.clone_from(&prep.omitted);
         // everything is placed: measure what was laid out, and move it so the topmost ink
         // sits where the caller asked the first row to start
         let (mut y0, mut y1) = (f32::INFINITY, f32::NEG_INFINITY);
@@ -1234,7 +1321,7 @@ impl Page {
         }
         for (di, p) in out.deco_place.iter().enumerate() {
             if *p != Placement::IDENTITY && !out.omitted.contains(&(di as u32)) {
-                let bbox = self.decoration_bbox_without(di, &omitted_header_paths);
+                let bbox = self.decoration_bbox_without(di, omitted_header_paths);
                 if !bbox.is_empty() {
                     grow(p, bbox.y0 as f32 / q, bbox.y1 as f32 / q);
                 }
@@ -1263,12 +1350,26 @@ impl Page {
         out
     }
 
+    /// How two row units meet: the depth the print interlocks them to, and the air between
+    /// their strokes. Read off the page's measure when `next` follows `prev` in reading order,
+    /// which is every pair a reflow sets a gap between, and measured on the spot otherwise.
+    fn neighbour(&self, prev: &Atom, next: &Atom) -> (Option<f32>, Option<f32>) {
+        let n = &self.reflow_prepared().before[next.word as usize];
+        debug_assert_eq!(n.prev, prev.word, "a gap between two words that are not reading-order neighbours");
+        if n.prev == prev.word {
+            (n.interlock, n.clearance)
+        } else {
+            (self.words_interlock(prev.word, next.word), Page::slice_clearance(&prev.slices, &next.slices, 0.0))
+        }
+    }
+
     fn atom_gap(&self, prev: &Atom, next: &Atom, spec: &ReflowSpec, median: f32) -> f32 {
         let d = self.data();
+        let (interlock, clearance) = self.neighbour(prev, next);
         // A word the print carries under the one before it keeps the distance the print
         // gave it, whatever the rest of the row is set at: the pair is one piece of
         // calligraphy. Only a row break between them sets them as two ordinary words.
-        if self.words_interlock(prev.word, next.word).is_some() {
+        if interlock.is_some() {
             return prev.x0 - next.x1;
         }
         let air = median * spec.word_gap.max(0.0);
@@ -1276,7 +1377,7 @@ impl Page {
             // Leave the same air between the strokes of every pair. Shifting the second
             // word by `t` changes the air and the box gap alike, so the box gap that
             // leaves the wanted air is the printed one moved by the difference.
-            GapMode::Uniform => match Page::slice_clearance(&prev.slices, &next.slices, 0.0) {
+            GapMode::Uniform => match clearance {
                 Some(now) => (prev.x0 - next.x1) + (air - now),
                 // no band in common: neither word has ink at any height the other does, so
                 // nothing can meet and the boxes may sit the wanted air apart
@@ -1288,7 +1389,7 @@ impl Page {
                 if a.line_index == b.line_index {
                     prev.x0 - next.x1
                 } else {
-                    match Page::slice_clearance(&prev.slices, &next.slices, 0.0) {
+                    match clearance {
                         Some(now) => (prev.x0 - next.x1) + (air - now),
                         None => air,
                     }
@@ -1301,6 +1402,22 @@ impl Page {
     /// a mark the print puts in the margin is re-placed beside the word, where a reflowed
     /// row has room for it.
     fn atom(&self, wi: u32, decos: &[u32], median: f32, block: (f32, f32)) -> Atom {
+        let (x0, x1, inline_decos, margin_decos) = self.atom_extent(wi, decos, median, block);
+        let slices = self.slices_with(wi, &inline_decos);
+        Atom { word: wi, inline_decos, margin_decos, x0, x1, width: x1 - x0, slices }
+    }
+
+    /// The extent of a row unit and how its decorations travel, without its bands: the
+    /// printed extent of the word and its inline ink, the decorations that run inline and the
+    /// marks placed in the margin with their ink width.
+    #[allow(clippy::type_complexity)]
+    fn atom_extent(
+        &self,
+        wi: u32,
+        decos: &[u32],
+        median: f32,
+        block: (f32, f32),
+    ) -> (f32, f32, Vec<u32>, Vec<(u32, f32)>) {
         let q = self.quant();
         let d = self.data();
         let w = &d.words[wi as usize];
@@ -1327,8 +1444,7 @@ impl Page {
                 margin_decos.push((di, bx1 - bx0));
             }
         }
-        let slices = self.slices_with(wi, &inline_decos);
-        Atom { word: wi, inline_decos, margin_decos, x0, x1, width: x1 - x0, slices }
+        (x0, x1, inline_decos, margin_decos)
     }
 
     /// A banner line keeps its printed drawing, shrunk to the row width and centred on it.

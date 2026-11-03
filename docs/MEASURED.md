@@ -21,6 +21,15 @@ cargo run -p qvp-core --profile dist --example bench -- dist/pages/042.qvp
 | full display list, 2 style rules | 0.24 µs |
 | search `الله` over the page | 86 µs |
 | six-line ayah highlight, bands included | 65 µs |
+| printed layout | 0.60 µs |
+| reflow layout, zoom 1.6 | 35 µs |
+| continuous pinch, one frame of ten, page laid out again each frame | 58 µs |
+| idle `tick`, nothing animating | 9 ns |
+| `colors()` after the page settled | 3 ns |
+
+The last five rows are the median of five runs. The reflow and pinch rows read the page's
+reflow measure (`reflow::Prepared`), which the first reflow of a page builds once; the bench
+excludes that first call.
 
 The wasm engine, built with `--profile dist` (`opt-level = 3`, LTO, one codegen unit,
 stripped) for `wasm32-unknown-unknown`, is 527,468 bytes (515 KiB). `opt-level = "s"`

@@ -125,6 +125,10 @@ pub struct Page {
     /// The page measured for passages: each word with the signs that go with it, in the bands
     /// that every page shares. Measured the first time a passage asks.
     passage: std::cell::OnceCell<Result<passage::Prepared, PassageError>>,
+    /// The page measured for reflow: the row unit of every word and everything else a reflow
+    /// reads off the page alone. Measured the first time a reflow asks, so a continuous pinch
+    /// does not measure the page again on every frame.
+    reflow_prepared: std::cell::OnceCell<reflow::Prepared>,
     /// The searched zoom steps of a page the shipped table does not cover, kept so the search
     /// runs at most once a page. See [`Page::zoom_steps`].
     pub(crate) searched_steps: Option<Vec<f32>>,
@@ -142,7 +146,12 @@ pub struct Page {
     pub(crate) dress_revision: u32,
     pub(crate) clock_ms: f64,
     pub(crate) anim: Vec<PathAnim>,
+    /// The paths whose colour is still moving: every path with a transition running, once. A
+    /// clock tick walks these and nothing else, so a settled page costs a tick nothing.
+    pub(crate) animating: Vec<u32>,
     pub(crate) state_dirty: bool,
+    /// The current colour of every path, kept equal to `anim[i].cur` as the clock moves it,
+    /// so a display list is read and never rebuilt.
     colors: Vec<Rgba>,
 }
 
@@ -436,6 +445,7 @@ impl Page {
             silhouettes: std::cell::OnceCell::new(),
             surah_headers: std::cell::OnceCell::new(),
             passage: std::cell::OnceCell::new(),
+            reflow_prepared: std::cell::OnceCell::new(),
             searched_steps: None,
             path_deco,
             path_ctx,
@@ -449,6 +459,7 @@ impl Page {
             dress_revision: 0,
             clock_ms: 0.0,
             anim: vec![PathAnim::default(); n],
+            animating: Vec::new(),
             state_dirty: true,
             colors: vec![DEFAULT_INK; n],
         })
@@ -490,6 +501,10 @@ impl Page {
     /// The page measured for passages, measured once.
     pub(crate) fn passage_prepared(&self) -> Result<&passage::Prepared, PassageError> {
         self.passage.get_or_init(|| passage::prepare(self)).as_ref().map_err(|e| *e)
+    }
+    /// The page measured for reflow, measured once. See [`reflow::Prepared`].
+    pub(crate) fn reflow_prepared(&self) -> &reflow::Prepared {
+        self.reflow_prepared.get_or_init(|| reflow::prepare(self))
     }
     /// The horizontal extent of a word's letters in page units, without the marks drawn over
     /// and under them: what the eye reads as the distance between two words.

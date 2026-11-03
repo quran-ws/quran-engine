@@ -44,6 +44,13 @@ All notable changes to the engine and its packages. The format follows
   `Cargo.toml` declares the internal crate versions once, under `[workspace.dependencies]`,
   and `scripts/check-versions.sh` fails when a crate manifest declares its own.
 - Reflow sizes a surah banner's row from its ink and normal line spacing, not its printed slot.
+- The engine measures a page for reflow once and keeps the measure: the row unit of every
+  word, the air between each word and the one before it, the sajdah lines, the surah frames
+  and the group each path is drawn under. A reflow layout, `reflowMaxZoom` and every frame of
+  a continuous pinch read it. The clock visits only the paths with a transition running, and
+  `colors()` returns the kept display list without a copy. No layout or colour changes: the
+  conformance scenarios are byte for byte the same. On page 042 a reflow layout takes about
+  a fifth of the time it took, and an idle `tick` about a fortieth.
 - `scripts/check.sh` and CI run the same commands once each: `gates` runs the web tests that
   read pages with `QVP_REQUIRE_DATA=1`, so `smoke.mjs`, `scenarios.test.mjs` and
   `passage.test.mjs` fail there without data instead of skipping; `parity` checks the

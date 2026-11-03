@@ -146,7 +146,8 @@ pub struct Layout {
     /// decorations: `path_group` says which group a path belongs to.
     pub groups: Vec<Placement>,
     /// Group of every path. Empty without reflow, where a path's group is its printed line.
-    pub path_group: Vec<u32>,
+    /// A reflowed layout shares the page's own table, so a relayout copies nothing.
+    pub path_group: std::sync::Arc<[u32]>,
     /// Paths this layout does not draw: sheet furniture and a native surah frame hidden by
     /// the spec or by reflow. Sorted.
     pub omitted_paths: Vec<u32>,
@@ -390,7 +391,7 @@ impl Page {
             spec: *spec,
             line_spacing,
             groups: vec![],
-            path_group: vec![],
+            path_group: std::sync::Arc::from(Vec::new()),
             omitted_paths: if spec.surah_frames { vec![] } else { self.surah_name_ornament_paths() },
             reflow: None,
         };
@@ -425,11 +426,12 @@ impl Page {
             r.zoom
         }
         .max(0.01);
+        let prep = self.reflow_prepared();
         // A row holds the page's text block, not the whole sheet: the print keeps a margin on
         // each side, and a row that ignored it would put the words somewhere the print never
         // does. At zoom 1 this reproduces the printed lines where they are. Printed breaks
         // use the full sheet width so a short printed line can grow without changing its words.
-        let block = self.text_block();
+        let block = prep.block;
         let (margin_l, margin_r) = if r.breaks == crate::Breaks::Printed {
             (0.0, 0.0)
         } else {
@@ -487,31 +489,14 @@ impl Page {
         groups.extend_from_slice(&flow.word_place);
         groups.extend_from_slice(&flow.deco_place);
         groups.extend_from_slice(&flow.sajdah_line_place);
-        let stroke = self.sajdah_line_paths();
-        let path_group: Vec<u32> = (0..self.geom.table.len())
-            .map(|i| {
-                let g = &self.geom.table[i];
-                if g.word != u32::MAX {
-                    g.word
-                } else if self.path_deco[i] != u32::MAX {
-                    let di = self.path_deco[i];
-                    if stroke[i] {
-                        (n_words + n_decos) as u32 + di
-                    } else {
-                        n_words as u32 + di
-                    }
-                } else {
-                    0
-                }
-            })
-            .collect();
+        let path_group = std::sync::Arc::clone(&prep.path_group);
         let mut omitted_paths: Vec<u32> = Vec::new();
         for &di in &flow.omitted {
             let deco = &self.data.decorations[di as usize];
             omitted_paths.extend(deco.first_path..deco.first_path + deco.n_paths as u32);
         }
         if !spec.surah_frames || !flow.as_printed {
-            omitted_paths.extend(self.surah_name_ornament_paths());
+            omitted_paths.extend_from_slice(&prep.surah_frame_paths);
         }
         omitted_paths.sort_unstable();
         omitted_paths.dedup();

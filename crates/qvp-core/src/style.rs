@@ -363,23 +363,29 @@ impl Page {
     }
 
     /// Advance the engine clock. Returns true while any colour or band is still moving.
+    ///
+    /// Only the paths with a transition running are visited, so a settled page pays nothing
+    /// per frame however many paths it has.
     pub fn tick(&mut self, now_ms: f64) -> bool {
         self.clock_ms = now_ms;
         self.refresh_targets();
-        let mut moving = false;
-        for a in self.anim.iter_mut() {
-            if a.dur > 0.0 {
-                let t = (self.clock_ms - a.t0) / a.dur;
-                if t >= 1.0 {
-                    a.cur = a.to;
-                    a.dur = 0.0;
-                } else {
-                    a.cur = lerp_rgba(a.from, a.to, if a.smooth { ease_in_out(t) } else { ease_out(t) });
-                    moving = true;
-                }
+        // every listed path has a transition running: `refresh_targets` compacts the list
+        // when it settles one before its time
+        let (anim, colors, now) = (&mut self.anim, &mut self.colors, self.clock_ms);
+        self.animating.retain(|&pi| {
+            let a = &mut anim[pi as usize];
+            let t = (now - a.t0) / a.dur;
+            let moving = t < 1.0;
+            if moving {
+                a.cur = lerp_rgba(a.from, a.to, if a.smooth { ease_in_out(t) } else { ease_out(t) });
+            } else {
+                a.cur = a.to;
+                a.dur = 0.0;
             }
-        }
-        moving | self.highlights_moving()
+            colors[pi as usize] = a.cur;
+            moving
+        });
+        !self.animating.is_empty() | self.highlights_moving()
     }
 
     /// Recompute targets when rules changed; start transitions where targets moved.
@@ -392,6 +398,7 @@ impl Page {
         // words under a fading mask (revealed ones included) ease in and out
         let fading: std::collections::HashSet<u32> =
             if self.mask.transition_ms > 0 { self.mask.words.iter().copied().collect() } else { Default::default() };
+        let mut cut_short = false;
         for pi in 0..self.anim.len() {
             let p = self.target_paint(pi as u32);
             let word = self.path_ctx[pi].word;
@@ -402,35 +409,60 @@ impl Page {
                 a.target_ms = p.transition_ms;
                 let ms = p.transition_ms.max(prev_ms) as f64;
                 if ms > 0.0 {
-                    a.from = a.cur;
-                    a.to = p.color;
-                    a.t0 = self.clock_ms;
-                    a.dur = ms;
-                    a.smooth = word != NONE && fading.contains(&word);
+                    self.start_transition(pi, p.color, ms, word != NONE && fading.contains(&word));
                 } else {
-                    a.from = p.color;
-                    a.to = p.color;
-                    a.cur = p.color;
-                    a.dur = 0.0;
+                    cut_short |= self.settle(pi, p.color);
                 }
             } else if p.transition_ms != a.target_ms {
                 a.target_ms = p.transition_ms;
             }
         }
+        // a path settled mid-transition leaves the list here, once for the whole pass, so
+        // cutting a page-wide fade short costs the list one walk and not one per path
+        if cut_short {
+            let anim = &self.anim;
+            self.animating.retain(|&pi| anim[pi as usize].dur > 0.0);
+        }
+    }
+
+    /// Start a path's colour moving to `to` over `ms` from where it is now, and list it as
+    /// animating. A path whose transition is already running is listed once.
+    fn start_transition(&mut self, pi: usize, to: Rgba, ms: f64, smooth: bool) {
+        let a = &mut self.anim[pi];
+        let running = a.dur > 0.0;
+        a.from = a.cur;
+        a.to = to;
+        a.t0 = self.clock_ms;
+        a.dur = ms;
+        a.smooth = smooth;
+        if !running {
+            self.animating.push(pi as u32);
+        }
+    }
+
+    /// Put a path at `color` now, with no transition. True when this cut a running
+    /// transition short, in which case the path is still listed and the caller compacts.
+    fn settle(&mut self, pi: usize, color: Rgba) -> bool {
+        let a = &mut self.anim[pi];
+        let running = a.dur > 0.0;
+        a.from = color;
+        a.to = color;
+        a.cur = color;
+        a.dur = 0.0;
+        self.colors[pi] = color;
+        running
     }
 
     /// Current (possibly mid-transition) colour of a path.
     pub fn color_of(&mut self, pi: u32) -> Rgba {
         self.refresh_targets();
-        self.anim[pi as usize].cur
+        self.colors[pi as usize]
     }
 
-    /// Full display list: current colour per path.
+    /// Full display list: current colour per path. Kept up to date by the clock and read
+    /// here, never rebuilt.
     pub fn colors(&mut self) -> &[Rgba] {
         self.refresh_targets();
-        for (i, a) in self.anim.iter().enumerate() {
-            self.colors[i] = a.cur;
-        }
         &self.colors
     }
 
@@ -438,7 +470,7 @@ impl Page {
     pub fn styled_paths(&mut self) -> Vec<(u32, Rgba)> {
         self.refresh_targets();
         let d = self.styles.default_ink;
-        self.anim.iter().enumerate().filter(|(_, a)| a.cur != d).map(|(i, a)| (i as u32, a.cur)).collect()
+        self.colors.iter().enumerate().filter(|(_, &c)| c != d).map(|(i, &c)| (i as u32, c)).collect()
     }
 
     // ── convenience API (what apps call) ──
