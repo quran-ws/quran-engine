@@ -1,6 +1,6 @@
 //! Atlas: cross-page lookup from the atlas file.
 
-use crate::abi::{fill, guard, in_str, out_str, QvpStr, STR_BUF};
+use crate::abi::{fill_with, guard, in_str, out_str, QvpStr, STR_BUF};
 use crate::types::*;
 use qvp_core::*;
 
@@ -143,10 +143,7 @@ pub unsafe extern "C" fn qvp_atlas_search_surahs(
     out: *mut u16,
     cap: u32,
 ) -> u32 {
-    guard(|| {
-        let v: Vec<u16> = (*a).search_surahs(in_str(text, len)).iter().map(|s| s.n).collect();
-        fill(out, cap, &v)
-    })
+    guard(|| fill_with(out, cap, (*a).search_surahs(in_str(text, len)).iter().map(|s| s.n)))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_atlas_json(a: *const Atlas, out: *mut QvpStr) {

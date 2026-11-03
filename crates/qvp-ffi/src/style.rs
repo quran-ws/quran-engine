@@ -1,6 +1,6 @@
 //! Styles, the clock and the display list: layered colour rules and the colours they produce.
 
-use crate::abi::{fill, guard};
+use crate::abi::{fill, fill_with, guard};
 use crate::convert::{selector, target};
 use crate::types::*;
 use qvp_core::qvp_format::Mark;
@@ -108,10 +108,7 @@ pub unsafe extern "C" fn qvp_colors(page: *mut Page) -> *const u32 {
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_styled_paths(page: *mut Page, out: *mut u32, cap: u32) -> u32 {
-    guard(|| {
-        let v: Vec<[u32; 2]> = (*page).styled_paths().iter().map(|&(index, c)| [index, c]).collect();
-        fill(out.cast(), cap, &v)
-    })
+    guard(|| fill_with(out.cast(), cap, (*page).styled_paths().iter().map(|&(index, c)| [index, c])))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_color_of(page: *mut Page, pi: u32) -> u32 {

@@ -1,6 +1,7 @@
 //! Passage: a range of complete ayahs laid out on rows of a given width.
 
-use crate::abi::{fill, guard, out_str, placement, QvpStr};
+use crate::abi::{fill_with, guard, out_str, QvpStr};
+use crate::convert::placement;
 use qvp_core::*;
 
 #[repr(C)]
@@ -198,22 +199,21 @@ pub unsafe extern "C" fn qvp_passage_layout(
 pub unsafe extern "C" fn qvp_passage_rows(passage: *const Passage, out: *mut QvpPassageRow, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*passage).current_layout() else { return 0 };
-        let rows: Vec<QvpPassageRow> = l
-            .rows
-            .iter()
-            .map(|r| QvpPassageRow { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, baseline: r.baseline })
-            .collect();
-        fill(out, cap, &rows)
+        fill_with(
+            out,
+            cap,
+            l.rows.iter().map(|r| QvpPassageRow { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, baseline: r.baseline }),
+        )
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_passage_words(passage: *const Passage, out: *mut QvpPassageWord, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*passage).current_layout() else { return 0 };
-        let words: Vec<QvpPassageWord> = l
-            .words
-            .iter()
-            .map(|w| QvpPassageWord {
+        fill_with(
+            out,
+            cap,
+            l.words.iter().map(|w| QvpPassageWord {
                 surah: w.surah,
                 ayah: w.ayah,
                 word: w.word,
@@ -227,36 +227,39 @@ pub unsafe extern "C" fn qvp_passage_words(passage: *const Passage, out: *mut Qv
                 word_y0: w.word_y0,
                 word_x1: w.word_x1,
                 word_y1: w.word_y1,
-            })
-            .collect();
-        fill(out, cap, &words)
+            }),
+        )
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_passage_ayahs(passage: *const Passage, out: *mut QvpPassageAyah, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*passage).current_layout() else { return 0 };
-        let ayahs: Vec<QvpPassageAyah> = l
-            .ayahs
-            .iter()
-            .map(|a| QvpPassageAyah { surah: a.surah, ayah: a.ayah, x0: a.x0, y0: a.y0, x1: a.x1, y1: a.y1 })
-            .collect();
-        fill(out, cap, &ayahs)
+        fill_with(
+            out,
+            cap,
+            l.ayahs.iter().map(|a| QvpPassageAyah {
+                surah: a.surah,
+                ayah: a.ayah,
+                x0: a.x0,
+                y0: a.y0,
+                x1: a.x1,
+                y1: a.y1,
+            }),
+        )
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_passage_draw_list(passage: *const Passage, out: *mut u32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*passage).current_layout() else { return 0 };
-        let v: Vec<[u32; 3]> = l.draws.iter().map(|d| [d.page as u32, d.path, d.placement]).collect();
-        fill(out.cast(), cap, &v)
+        fill_with(out.cast(), cap, l.draws.iter().map(|d| [d.page as u32, d.path, d.placement]))
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_passage_placements(passage: *const Passage, out: *mut f32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*passage).current_layout() else { return 0 };
-        let v: Vec<[f32; 4]> = l.placements.iter().map(placement).collect();
-        fill(out.cast(), cap, &v)
+        fill_with(out.cast(), cap, l.placements.iter().map(placement))
     })
 }

@@ -1,7 +1,7 @@
 //! Page and metadata: load a page and read its words, ayahs, lines, decorations and surahs.
 
-use crate::abi::{fill, guard, out_str, QvpStr, STR_BUF};
-use crate::convert::target;
+use crate::abi::{fill, fill_with, guard, out_str, QvpStr, STR_BUF};
+use crate::convert::{ayah_mark, header, target};
 use crate::types::*;
 use qvp_core::*;
 
@@ -235,92 +235,47 @@ pub unsafe extern "C" fn qvp_surah_at(page: *const Page, i: u32, out: *mut QvpSu
 #[no_mangle]
 pub unsafe extern "C" fn qvp_divisions(page: *const Page, out: *mut QvpDivision, cap: u32) -> u32 {
     guard(|| {
-        let v: Vec<QvpDivision> = (*page)
-            .divisions()
-            .iter()
-            .map(|d| QvpDivision {
+        fill_with(
+            out,
+            cap,
+            (*page).divisions().iter().map(|d| QvpDivision {
                 division: d.kind,
                 line: d.line,
                 number: d.n,
                 surah: d.surah,
                 ayah: d.ayah,
                 ayah_index: d.ayah_index,
-            })
-            .collect();
-        fill(out, cap, &v)
+            }),
+        )
     })
 }
-/// One surah heading, page units or viewport px depending on the call.
-fn header(h: &qvp_core::SurahHeader) -> QvpSurahHeader {
-    QvpSurahHeader {
-        decoration: h.decoration,
-        surah: h.surah,
-        _pad: 0,
-        line: h.line,
-        x0: h.x0,
-        y0: h.y0,
-        x1: h.x1,
-        y1: h.y1,
-        title_x0: h.title_x0,
-        title_y0: h.title_y0,
-        title_x1: h.title_x1,
-        title_y1: h.title_y1,
-    }
-}
-
 /// The surah headings on the page, in page units: the box a frame fills and the title ink.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_surah_headers(page: *const Page, out: *mut QvpSurahHeader, cap: u32) -> u32 {
-    guard(|| {
-        let v: Vec<QvpSurahHeader> = (*page).surah_headers().iter().map(header).collect();
-        fill(out, cap, &v)
-    })
+    guard(|| fill_with(out, cap, (*page).surah_headers().iter().map(header)))
 }
 /// The surah headings in viewport px through the current layout: where each is drawn.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_surah_headers_view(page: *const Page, out: *mut QvpSurahHeader, cap: u32) -> u32 {
-    guard(|| {
-        let v: Vec<QvpSurahHeader> = (*page).surah_headers_view().iter().map(header).collect();
-        fill(out, cap, &v)
-    })
-}
-/// One ayah medallion, page units or viewport px depending on the call.
-fn ayah_mark(m: &MarkerInfo) -> QvpAyahMark {
-    QvpAyahMark {
-        decoration: m.decoration,
-        surah: m.surah,
-        ayah: m.ayah,
-        line: m.line,
-        cx: m.cx,
-        cy: m.cy,
-        r: m.r,
-        ornament_path: m.ornament_path,
-        numeral_path: m.numeral_path,
-    }
+    guard(|| fill_with(out, cap, (*page).surah_headers_view().iter().map(header)))
 }
 /// The ayah medallions on the page, in page units.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ayah_marks(page: *const Page, out: *mut QvpAyahMark, cap: u32) -> u32 {
-    guard(|| {
-        let v: Vec<QvpAyahMark> = (*page).ayah_marks().iter().map(ayah_mark).collect();
-        fill(out, cap, &v)
-    })
+    guard(|| fill_with(out, cap, (*page).ayah_marks().iter().map(ayah_mark)))
 }
 /// The ayah medallions in viewport px through the current layout: where each is drawn.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ayah_marks_view(page: *const Page, out: *mut QvpAyahMark, cap: u32) -> u32 {
-    guard(|| {
-        let v: Vec<QvpAyahMark> = (*page).ayah_marks_view().iter().map(ayah_mark).collect();
-        fill(out, cap, &v)
-    })
+    guard(|| fill_with(out, cap, (*page).ayah_marks_view().iter().map(ayah_mark)))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_rosettes(page: *const Page, out: *mut QvpRosette, cap: u32) -> u32 {
     guard(|| {
-        let v: Vec<QvpRosette> = (*page)
-            .rosettes()
-            .iter()
-            .map(|r| QvpRosette {
+        fill_with(
+            out,
+            cap,
+            (*page).rosettes().iter().map(|r| QvpRosette {
                 decoration: r.decoration,
                 surah: r.surah,
                 ayah: r.ayah,
@@ -330,29 +285,24 @@ pub unsafe extern "C" fn qvp_rosettes(page: *const Page, out: *mut QvpRosette, c
                 rubu_al_hizb: r.rubu_al_hizb,
                 rubu_al_hizb_in_hizb: r.rubu_al_hizb_in_hizb,
                 _pad: 0,
-            })
-            .collect();
-        fill(out, cap, &v)
+            }),
+        )
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_sajdahs(page: *const Page, out: *mut QvpSajdah, cap: u32) -> u32 {
     guard(|| {
-        let v: Vec<QvpSajdah> = (*page)
-            .sajdahs()
-            .iter()
-            .map(|&(d, s, a, p)| QvpSajdah { decoration: d, surah: s, ayah: a, sign_path: p })
-            .collect();
-        fill(out, cap, &v)
+        fill_with(
+            out,
+            cap,
+            (*page).sajdahs().iter().map(|&(d, s, a, p)| QvpSajdah { decoration: d, surah: s, ayah: a, sign_path: p }),
+        )
     })
 }
 /// pairs of (surah, ayah) as u32 = surah<<16 | ayah
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ayah_keys(page: *const Page, out: *mut u32, cap: u32) -> u32 {
-    guard(|| {
-        let v: Vec<u32> = (*page).ayah_keys().iter().map(|(s, a)| (*s as u32) << 16 | *a as u32).collect();
-        fill(out, cap, &v)
-    })
+    guard(|| fill_with(out, cap, (*page).ayah_keys().iter().map(|(s, a)| (*s as u32) << 16 | *a as u32)))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_ayah_word_count(page: *const Page, surah: u16, ayah: u16, is_complete: *mut u8) -> u32 {

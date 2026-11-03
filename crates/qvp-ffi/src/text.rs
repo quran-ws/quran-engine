@@ -1,6 +1,6 @@
 //! Text and search: the text of a target, search, Arabic folding, citations and word sidecars.
 
-use crate::abi::{fill, guard, in_str, out_str, QvpStr};
+use crate::abi::{fill_with, guard, in_str, out_str, QvpStr};
 use crate::convert::target;
 use crate::types::*;
 use qvp_core::*;
@@ -49,12 +49,15 @@ pub unsafe extern "C" fn qvp_search(
             loose: loose_match != 0,
             limit: if limit == 0 { usize::MAX } else { limit as usize },
         };
-        let v: Vec<QvpMatch> = (*page)
-            .search(in_str(query, query_len), &opt)
-            .iter()
-            .map(|m| QvpMatch { word: m.word, index: m.index as u32, is_loose_match: m.loose as u8 })
-            .collect();
-        fill(out, cap, &v)
+        fill_with(
+            out,
+            cap,
+            (*page).search(in_str(query, query_len), &opt).iter().map(|m| QvpMatch {
+                word: m.word,
+                index: m.index as u32,
+                is_loose_match: m.loose as u8,
+            }),
+        )
     })
 }
 /// op (`QVP_ARABIC_*`): 0 strip marks, 1 fold, 2 normalize query (match fold), 3 loose key,

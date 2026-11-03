@@ -1,6 +1,7 @@
 //! Layout: lay the page out for a viewport and read what the layout draws, and where.
 
-use crate::abi::{fill, guard, placement, LAYOUT_BUF};
+use crate::abi::{fill, fill_with, guard, LAYOUT_BUF};
+use crate::convert::placement;
 use crate::types::*;
 use qvp_core::*;
 
@@ -112,8 +113,7 @@ unsafe fn read_layout(l: &qvp_core::Layout) -> QvpLayout {
 pub unsafe extern "C" fn qvp_layout_groups(page: *const Page, out: *mut f32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*page).current_layout() else { return 0 };
-        let v: Vec<[f32; 4]> = l.groups.iter().map(placement).collect();
-        fill(out.cast(), cap, &v)
+        fill_with(out.cast(), cap, l.groups.iter().map(placement))
     })
 }
 /// Paths to draw a second time, at another placement: `n × {first_path, n_paths, dx, dy, kx,
@@ -123,15 +123,14 @@ pub unsafe extern "C" fn qvp_layout_groups(page: *const Page, out: *mut f32, cap
 pub unsafe extern "C" fn qvp_layout_repeats(page: *const Page, out: *mut f32, cap: u32) -> u32 {
     guard(|| {
         let Some(flow) = (*page).current_layout().and_then(|l| l.reflow.as_ref()) else { return 0 };
-        let v: Vec<[f32; 6]> = flow
-            .repeats
-            .iter()
-            .map(|r| {
+        fill_with(
+            out.cast(),
+            cap,
+            flow.repeats.iter().map(|r| {
                 let p = &r.placement;
                 [r.first_path as f32, r.n_paths as f32, p.dx, p.dy, p.kx, p.ky]
-            })
-            .collect();
-        fill(out.cast(), cap, &v)
+            }),
+        )
     })
 }
 /// The group of every path, for [`qvp_layout_groups`]. Empty without reflow, where a path's
@@ -169,8 +168,7 @@ pub unsafe extern "C" fn qvp_layout_draw_list(
 ) -> u32 {
     guard(|| {
         let band = (band_bottom > band_top).then_some((band_top, band_bottom));
-        let v: Vec<[u32; 2]> = (*page).layout_draw_list_in(band).iter().map(|d| [d.path, d.placement]).collect();
-        fill(out.cast(), cap, &v)
+        fill_with(out.cast(), cap, (*page).layout_draw_list_in(band).iter().map(|d| [d.path, d.placement]))
     })
 }
 
@@ -180,8 +178,7 @@ pub unsafe extern "C" fn qvp_layout_draw_list(
 pub unsafe extern "C" fn qvp_layout_placements(page: *const Page, out: *mut f32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*page).current_layout() else { return 0 };
-        let v: Vec<[f32; 4]> = l.placements().iter().map(placement).collect();
-        fill(out.cast(), cap, &v)
+        fill_with(out.cast(), cap, l.placements().iter().map(placement))
     })
 }
 /// The words of a reflowed row, in reading order. Returns the number of words on the row,

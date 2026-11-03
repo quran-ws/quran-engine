@@ -1,7 +1,7 @@
 //! Highlights, selection and memorisation: bands over words, the selected range, masks and reveal.
 
-use crate::abi::{fill, guard, out_str, QvpStr};
-use crate::convert::{band_height, hstyle, target, vb};
+use crate::abi::{fill, fill_with, guard, out_str, QvpStr};
+use crate::convert::{band_height, hstyle, raw_band, target, vb};
 use crate::types::*;
 use qvp_core::*;
 
@@ -45,15 +45,7 @@ pub unsafe extern "C" fn qvp_highlight_words(page: *const Page, handle: u32, out
 /// Band boxes of every highlight in viewport px (animated). Draw each highlight id as one path.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_highlight_boxes_view(page: *const Page, out: *mut QvpBox, cap: u32) -> u32 {
-    guard(|| {
-        let v: Vec<QvpBox> = (*page).highlight_boxes_view().iter().map(vb).collect();
-        fill(out, cap, &v)
-    })
-}
-/// A raw band box: no highlight id, no colour, no radius. Page units or viewport px
-/// depending on the call.
-fn raw_band(line: u32, x0: f32, y0: f32, x1: f32, y1: f32) -> QvpBox {
-    QvpBox { id: 0, line, x0, y0, x1, y1, color: 0, radius: 0.0 }
+    guard(|| fill_with(out, cap, (*page).highlight_boxes_view().iter().map(vb)))
 }
 /// Raw band boxes (page units, no animation) for a word list.
 #[no_mangle]
@@ -69,12 +61,14 @@ pub unsafe extern "C" fn qvp_word_bands(
 ) -> u32 {
     guard(|| {
         let ws = std::slice::from_raw_parts(words, n as usize);
-        let v: Vec<QvpBox> = (*page)
-            .word_bands(ws, band_height(height), pad_x, pad_y)
-            .iter()
-            .map(|b| raw_band(b.line, b.x0, b.y0, b.x1, b.y1))
-            .collect();
-        fill(out, cap, &v)
+        fill_with(
+            out,
+            cap,
+            (*page)
+                .word_bands(ws, band_height(height), pad_x, pad_y)
+                .iter()
+                .map(|b| raw_band(b.line, b.x0, b.y0, b.x1, b.y1)),
+        )
     })
 }
 /// Band boxes for a word list in viewport px through the current layout.
@@ -91,12 +85,14 @@ pub unsafe extern "C" fn qvp_word_bands_view(
 ) -> u32 {
     guard(|| {
         let ws = std::slice::from_raw_parts(words, n as usize);
-        let v: Vec<QvpBox> = (*page)
-            .word_bands_view(ws, band_height(height), pad_x, pad_y)
-            .iter()
-            .map(|b| raw_band(b.line, b.x0, b.y0, b.x1, b.y1))
-            .collect();
-        fill(out, cap, &v)
+        fill_with(
+            out,
+            cap,
+            (*page)
+                .word_bands_view(ws, band_height(height), pad_x, pad_y)
+                .iter()
+                .map(|b| raw_band(b.line, b.x0, b.y0, b.x1, b.y1)),
+        )
     })
 }
 
@@ -220,10 +216,7 @@ pub unsafe extern "C" fn qvp_mask_words(page: *const Page, out: *mut u32, cap: u
 /// Boxes to draw over hidden words in Block/Blur mode (viewport px).
 #[no_mangle]
 pub unsafe extern "C" fn qvp_mask_boxes_view(page: *const Page, out: *mut QvpBox, cap: u32) -> u32 {
-    guard(|| {
-        let v: Vec<QvpBox> = (*page).mask_boxes_view().iter().map(vb).collect();
-        fill(out, cap, &v)
-    })
+    guard(|| fill_with(out, cap, (*page).mask_boxes_view().iter().map(vb)))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_start(

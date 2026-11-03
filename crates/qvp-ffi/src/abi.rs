@@ -86,9 +86,8 @@ pub(crate) unsafe fn in_str<'a>(ptr: *const u8, len: u32) -> &'a str {
 }
 
 /// Copy up to `cap` items into `out` and return how many there are in all. Every array
-/// output goes through here, so a short buffer always gets a truncated copy and the count
-/// to call again with. A record output casts `out` to a pointer to fixed arrays, so `cap`
-/// counts records.
+/// output goes through here or through `fill_with`, so a short buffer gets a truncated copy
+/// and the count to call again with.
 pub(crate) unsafe fn fill<T: Copy>(out: *mut T, cap: u32, items: &[T]) -> u32 {
     if !out.is_null() && cap > 0 {
         let n = items.len().min(cap as usize);
@@ -97,9 +96,17 @@ pub(crate) unsafe fn fill<T: Copy>(out: *mut T, cap: u32, items: &[T]) -> u32 {
     items.len() as u32
 }
 
-/// One placement as the `{dx, dy, kx, ky}` record the header describes.
-pub(crate) fn placement(p: &qvp_core::Placement) -> [f32; 4] {
-    [p.dx, p.dy, p.kx, p.ky]
+/// `fill` for a getter that converts the core's items into C records: each record is written
+/// straight into `out`, with no list in between, and the total is the iterator's length. A
+/// record of fixed arrays casts `out` to a pointer to them, so `cap` counts records.
+pub(crate) unsafe fn fill_with<T>(out: *mut T, cap: u32, records: impl ExactSizeIterator<Item = T>) -> u32 {
+    let n = records.len();
+    if !out.is_null() {
+        for (i, record) in records.take(cap as usize).enumerate() {
+            out.add(i).write(record);
+        }
+    }
+    n as u32
 }
 
 #[cfg(test)]
@@ -114,6 +121,10 @@ mod tests {
         let n = unsafe { fill(out.as_mut_ptr().cast::<[u32; 2]>(), 2, &records) };
         assert_eq!((n, out), (3, [1, 2, 3, 4]));
         assert_eq!(unsafe { fill(std::ptr::null_mut::<[u32; 2]>(), 0, &records) }, 3);
+        let mut out = [0u32; 4];
+        let n = unsafe { fill_with(out.as_mut_ptr().cast::<[u32; 2]>(), 2, records.iter().map(|r| [r[1], r[0]])) };
+        assert_eq!((n, out), (3, [2, 1, 4, 3]));
+        assert_eq!(unsafe { fill_with(std::ptr::null_mut::<[u32; 2]>(), 0, records.iter().copied()) }, 3);
     }
 
     #[test]

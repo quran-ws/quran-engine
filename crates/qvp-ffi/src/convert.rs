@@ -74,6 +74,67 @@ pub(crate) fn band_height(height: u8) -> BandHeight {
     }
 }
 
+/// One box of a highlight or a mask in viewport px, with its handle and animated colour.
 pub(crate) fn vb(b: &ViewBox) -> QvpBox {
     QvpBox { id: b.highlight, line: b.line, x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, color: b.color, radius: b.radius }
+}
+
+/// A raw band box: no highlight id, no colour, no radius. Page units or viewport px
+/// depending on the call.
+pub(crate) fn raw_band(line: u32, x0: f32, y0: f32, x1: f32, y1: f32) -> QvpBox {
+    QvpBox { id: 0, line, x0, y0, x1, y1, color: 0, radius: 0.0 }
+}
+
+/// One surah heading, page units or viewport px depending on the call.
+pub(crate) fn header(h: &SurahHeader) -> QvpSurahHeader {
+    QvpSurahHeader {
+        decoration: h.decoration,
+        surah: h.surah,
+        _pad: 0,
+        line: h.line,
+        x0: h.x0,
+        y0: h.y0,
+        x1: h.x1,
+        y1: h.y1,
+        title_x0: h.title_x0,
+        title_y0: h.title_y0,
+        title_x1: h.title_x1,
+        title_y1: h.title_y1,
+    }
+}
+
+/// One ayah medallion, page units or viewport px depending on the call.
+pub(crate) fn ayah_mark(m: &MarkerInfo) -> QvpAyahMark {
+    QvpAyahMark {
+        decoration: m.decoration,
+        surah: m.surah,
+        ayah: m.ayah,
+        line: m.line,
+        cx: m.cx,
+        cy: m.cy,
+        r: m.r,
+        ornament_path: m.ornament_path,
+        numeral_path: m.numeral_path,
+    }
+}
+
+/// One hit box, page units or viewport px depending on the call.
+pub(crate) fn hit_area(h: &HitArea) -> QvpHitArea {
+    QvpHitArea {
+        word: h.word,
+        line: h.line,
+        x0: h.x0,
+        y0: h.y0,
+        x1: h.x1,
+        y1: h.y1,
+        ink_x0: h.ink_x0,
+        ink_y0: h.ink_y0,
+        ink_x1: h.ink_x1,
+        ink_y1: h.ink_y1,
+    }
+}
+
+/// One placement as the `{dx, dy, kx, ky}` record the header describes.
+pub(crate) fn placement(p: &Placement) -> [f32; 4] {
+    [p.dx, p.dy, p.kx, p.ky]
 }
