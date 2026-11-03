@@ -146,7 +146,8 @@ pub struct Layout {
     /// decorations: `path_group` says which group a path belongs to.
     pub groups: Vec<Placement>,
     /// Group of every path. Empty without reflow, where a path's group is its printed line.
-    pub path_group: Vec<u32>,
+    /// A reflowed layout shares the page's own table, so a relayout copies nothing.
+    pub path_group: std::sync::Arc<[u32]>,
     /// Paths this layout does not draw: sheet furniture and a native surah frame hidden by
     /// the spec or by reflow. Sorted.
     pub omitted_paths: Vec<u32>,
@@ -390,7 +391,7 @@ impl Page {
             spec: *spec,
             line_spacing,
             groups: vec![],
-            path_group: vec![],
+            path_group: std::sync::Arc::from(Vec::new()),
             omitted_paths: if spec.surah_frames { vec![] } else { self.surah_name_ornament_paths() },
             reflow: None,
         };
@@ -488,7 +489,7 @@ impl Page {
         groups.extend_from_slice(&flow.word_place);
         groups.extend_from_slice(&flow.deco_place);
         groups.extend_from_slice(&flow.sajdah_line_place);
-        let path_group = prep.path_group.clone();
+        let path_group = std::sync::Arc::clone(&prep.path_group);
         let mut omitted_paths: Vec<u32> = Vec::new();
         for &di in &flow.omitted {
             let deco = &self.data.decorations[di as usize];

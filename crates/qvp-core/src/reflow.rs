@@ -12,6 +12,7 @@
 use crate::defaults;
 use crate::Page;
 use qvp_format::{DecoKind, IBox, Mark, PathKind, NONE_U16};
+use std::sync::Arc;
 
 const NONE: u32 = u32::MAX;
 
@@ -268,8 +269,8 @@ pub(crate) struct Prepared {
     /// The native frame paths of every surah name, sorted. [`Page::surah_name_ornament_paths`].
     pub surah_frame_paths: Vec<u32>,
     /// The group each path is drawn under on a reflowed page: its word, or its decoration,
-    /// or its decoration's sajdah line.
-    pub path_group: Vec<u32>,
+    /// or its decoration's sajdah line. Shared with every [`crate::Layout`] made from it.
+    pub path_group: Arc<[u32]>,
 }
 
 /// Measure a page for reflow. See [`Prepared`].
@@ -277,7 +278,7 @@ pub(crate) fn prepare(page: &Page) -> Prepared {
     let d = page.data();
     let median = page.median_word_gap();
     let block = page.text_block();
-    let anchors = page.deco_anchor_words();
+    let anchors = page.deco_anchor_words(median);
     let sajdah_line_decos = page.sajdah_line_decos();
     let mut word_decos: Vec<Vec<u32>> = vec![Vec::new(); d.words.len()];
     for (di, &wi) in anchors.iter().enumerate() {
@@ -304,14 +305,16 @@ pub(crate) fn prepare(page: &Page) -> Prepared {
         }
     }
     // The sajdah line is drawn over a span of words, not over one, so it is not what bounds
-    // the zoom. A word whose decorations all stay keeps the unit measured above.
+    // the zoom. A word whose decorations all stay keeps the unit measured above; one that
+    // loses a decoration is measured again, extent only, since no gap reads its bands.
     let widest_without_sajdah_line = (0..d.words.len())
         .map(|wi| {
             let kept: Vec<u32> = word_decos[wi].iter().copied().filter(|&di| !sajdah_line_decos[di as usize]).collect();
             if kept.len() == word_decos[wi].len() {
                 atoms[wi].width
             } else {
-                page.atom(wi as u32, &kept, median, block).width
+                let (x0, x1, _, _) = page.atom_extent(wi as u32, &kept, median, block);
+                x1 - x0
             }
         })
         .fold(0.0f32, f32::max);
@@ -337,7 +340,7 @@ pub(crate) fn prepare(page: &Page) -> Prepared {
             let b = stroke?;
             let q = page.quant();
             let (x0, x1) = (b.x0 as f32 / q, b.x1 as f32 / q);
-            (x1 > x0).then(|| SajdahLine { deco: di as u32, paths, x0, x1, words: page.sajdah_line_words(di) })
+            (x1 > x0).then(|| SajdahLine { deco: di as u32, paths, x0, x1, words: page.words_under_stroke(&b) })
         })
         .collect();
     let omitted = d
@@ -350,7 +353,7 @@ pub(crate) fn prepare(page: &Page) -> Prepared {
     // one group per word, then one per decoration, then one per decoration's sajdah line:
     // a path's group follows the job it does, not only the record it belongs to
     let (n_words, n_decos) = (d.words.len() as u32, d.decorations.len() as u32);
-    let path_group = (0..d.paths.len())
+    let path_group: Arc<[u32]> = (0..d.paths.len())
         .map(|i| {
             let g = &page.geometry().table[i];
             if g.word != NONE {
@@ -417,9 +420,10 @@ impl Page {
     /// The decoration that closes each ayah, resolved to the word it must travel with.
     /// `NONE` for a decoration that belongs to no single word: a surah banner, a basmalah,
     /// the page number, the running head, or a sajdah line, which spans several words.
-    pub(crate) fn deco_anchor_words(&self) -> Vec<u32> {
+    /// `median` is the page's [`Page::median_word_gap`], the tolerance a mark is matched
+    /// to its word with.
+    pub(crate) fn deco_anchor_words(&self, median: f32) -> Vec<u32> {
         let d = self.data();
-        let median = self.median_word_gap();
         let mut out = vec![NONE; d.decorations.len()];
         // the medallion an ayah record names closes that record's last word, which is the
         // one the reflow must keep it with (an ayah split across lines has one record a line)
@@ -527,29 +531,12 @@ impl Page {
             .map(|&(_, wi)| wi)
     }
 
-    /// The words a sajdah line is drawn over: the ones it spans horizontally on the line
-    /// directly below it. Empty for any other decoration.
-    pub(crate) fn sajdah_line_words(&self, di: usize) -> Vec<u32> {
+    /// The words a sajdah line stroke is drawn over: the ones it spans horizontally on the
+    /// line directly below it. `b` is the box of the stroke's own ink, not the decoration's,
+    /// which can also hold the sign printed in the margin.
+    pub(crate) fn words_under_stroke(&self, b: &IBox) -> Vec<u32> {
         let q = self.quant();
         let d = self.data();
-        let deco = &d.decorations[di];
-        // the stroke's own ink: a decoration can also hold the sign printed in the margin, and
-        // the words under that are not the words the stroke marks
-        let mut stroke: Option<qvp_format::IBox> = None;
-        for pi in deco.first_path..deco.first_path + deco.n_paths as u32 {
-            if d.paths[pi as usize].mark == Mark::SajdahLine {
-                let bb = d.paths[pi as usize].bbox;
-                stroke = Some(match stroke {
-                    None => bb,
-                    Some(mut acc) => {
-                        acc.union(&bb);
-                        acc
-                    }
-                });
-            }
-        }
-        let Some(b) = stroke else { return vec![] };
-        let b = &b;
         let tol = (2.0 * q) as i32;
         // the line under the stroke: the nearest words below it that it overlaps
         let under = d
@@ -1368,6 +1355,7 @@ impl Page {
     /// which is every pair a reflow sets a gap between, and measured on the spot otherwise.
     fn neighbour(&self, prev: &Atom, next: &Atom) -> (Option<f32>, Option<f32>) {
         let n = &self.reflow_prepared().before[next.word as usize];
+        debug_assert_eq!(n.prev, prev.word, "a gap between two words that are not reading-order neighbours");
         if n.prev == prev.word {
             (n.interlock, n.clearance)
         } else {
@@ -1414,6 +1402,22 @@ impl Page {
     /// a mark the print puts in the margin is re-placed beside the word, where a reflowed
     /// row has room for it.
     fn atom(&self, wi: u32, decos: &[u32], median: f32, block: (f32, f32)) -> Atom {
+        let (x0, x1, inline_decos, margin_decos) = self.atom_extent(wi, decos, median, block);
+        let slices = self.slices_with(wi, &inline_decos);
+        Atom { word: wi, inline_decos, margin_decos, x0, x1, width: x1 - x0, slices }
+    }
+
+    /// The extent of a row unit and how its decorations travel, without its bands: the
+    /// printed extent of the word and its inline ink, the decorations that run inline and the
+    /// marks placed in the margin with their ink width.
+    #[allow(clippy::type_complexity)]
+    fn atom_extent(
+        &self,
+        wi: u32,
+        decos: &[u32],
+        median: f32,
+        block: (f32, f32),
+    ) -> (f32, f32, Vec<u32>, Vec<(u32, f32)>) {
         let q = self.quant();
         let d = self.data();
         let w = &d.words[wi as usize];
@@ -1440,8 +1444,7 @@ impl Page {
                 margin_decos.push((di, bx1 - bx0));
             }
         }
-        let slices = self.slices_with(wi, &inline_decos);
-        Atom { word: wi, inline_decos, margin_decos, x0, x1, width: x1 - x0, slices }
+        (x0, x1, inline_decos, margin_decos)
     }
 
     /// A banner line keeps its printed drawing, shrunk to the row width and centred on it.

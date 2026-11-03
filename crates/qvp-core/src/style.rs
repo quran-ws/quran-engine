@@ -369,12 +369,11 @@ impl Page {
     pub fn tick(&mut self, now_ms: f64) -> bool {
         self.clock_ms = now_ms;
         self.refresh_targets();
+        // every listed path has a transition running: `refresh_targets` compacts the list
+        // when it settles one before its time
         let (anim, colors, now) = (&mut self.anim, &mut self.colors, self.clock_ms);
         self.animating.retain(|&pi| {
             let a = &mut anim[pi as usize];
-            if a.dur <= 0.0 {
-                return false;
-            }
             let t = (now - a.t0) / a.dur;
             let moving = t < 1.0;
             if moving {
@@ -399,6 +398,7 @@ impl Page {
         // words under a fading mask (revealed ones included) ease in and out
         let fading: std::collections::HashSet<u32> =
             if self.mask.transition_ms > 0 { self.mask.words.iter().copied().collect() } else { Default::default() };
+        let mut cut_short = false;
         for pi in 0..self.anim.len() {
             let p = self.target_paint(pi as u32);
             let word = self.path_ctx[pi].word;
@@ -408,32 +408,49 @@ impl Page {
                 a.target = p.color;
                 a.target_ms = p.transition_ms;
                 let ms = p.transition_ms.max(prev_ms) as f64;
-                // a path is listed as animating while its transition runs, and once: a
-                // transition that restarts a running one is already listed
-                let running = a.dur > 0.0;
                 if ms > 0.0 {
-                    a.from = a.cur;
-                    a.to = p.color;
-                    a.t0 = self.clock_ms;
-                    a.dur = ms;
-                    a.smooth = word != NONE && fading.contains(&word);
-                    if !running {
-                        self.animating.push(pi as u32);
-                    }
+                    self.start_transition(pi, p.color, ms, word != NONE && fading.contains(&word));
                 } else {
-                    a.from = p.color;
-                    a.to = p.color;
-                    a.cur = p.color;
-                    a.dur = 0.0;
-                    self.colors[pi] = p.color;
-                    if running {
-                        self.animating.retain(|&x| x != pi as u32);
-                    }
+                    cut_short |= self.settle(pi, p.color);
                 }
             } else if p.transition_ms != a.target_ms {
                 a.target_ms = p.transition_ms;
             }
         }
+        // a path settled mid-transition leaves the list here, once for the whole pass, so
+        // cutting a page-wide fade short costs the list one walk and not one per path
+        if cut_short {
+            let anim = &self.anim;
+            self.animating.retain(|&pi| anim[pi as usize].dur > 0.0);
+        }
+    }
+
+    /// Start a path's colour moving to `to` over `ms` from where it is now, and list it as
+    /// animating. A path whose transition is already running is listed once.
+    fn start_transition(&mut self, pi: usize, to: Rgba, ms: f64, smooth: bool) {
+        let a = &mut self.anim[pi];
+        let running = a.dur > 0.0;
+        a.from = a.cur;
+        a.to = to;
+        a.t0 = self.clock_ms;
+        a.dur = ms;
+        a.smooth = smooth;
+        if !running {
+            self.animating.push(pi as u32);
+        }
+    }
+
+    /// Put a path at `color` now, with no transition. True when this cut a running
+    /// transition short, in which case the path is still listed and the caller compacts.
+    fn settle(&mut self, pi: usize, color: Rgba) -> bool {
+        let a = &mut self.anim[pi];
+        let running = a.dur > 0.0;
+        a.from = color;
+        a.to = color;
+        a.cur = color;
+        a.dur = 0.0;
+        self.colors[pi] = color;
+        running
     }
 
     /// Current (possibly mid-transition) colour of a path.
