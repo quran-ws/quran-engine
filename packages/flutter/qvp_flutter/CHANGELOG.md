@@ -35,9 +35,9 @@
   it analyses.
 - The example builds from a fresh clone. The root `.gitignore` ignored every PNG, so git
   never tracked the launcher icons and launch images that the Android manifest and the iOS
-  and macOS asset catalogs name. The rule now covers the repository root only, the
-  Flutter template's icons are back, and the example has the template's `web/` folder. The
-  Flutter workflow builds the example for Android and web, so a missing file fails CI.
+  and macOS asset catalogs name. The rule now covers the repository root only, and the
+  Flutter template's icons are tracked. The example gains the template's `web/` folder, and
+  the Flutter workflow builds the example for Android and web, so a missing file fails CI.
 - **Breaking.** `QvpPageView.onWordTap` hands the host the `QvpWordInfo` where it
   passed the word's index, and `onDecorationTap` carries the `QvpHit` beside the
   decoration. Android and iOS pass the word and the hit already, so host code reads one

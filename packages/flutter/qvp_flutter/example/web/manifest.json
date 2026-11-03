@@ -1,12 +1,12 @@
 {
-    "name": "qvp_flutter_example",
-    "short_name": "qvp_flutter_example",
+    "name": "Mushaf Vector Reader",
+    "short_name": "Mushaf Vector Reader",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "description": "Demo of the qvp_flutter plugin: a mushaf page rendered by the QVP engine.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

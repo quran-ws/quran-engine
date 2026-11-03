@@ -14,6 +14,7 @@ on:
       - "scripts/sync-flutter-web-engine.sh"
       - "scripts/build-engine-android.sh"
       - "scripts/sync-example-data.sh"
+      - "scripts/sync-test-data.sh"
   push:
     branches: [main]
   workflow_dispatch:
@@ -41,8 +42,11 @@ jobs:
       - name: Cache test data
         uses: actions/cache@v4
         with:
-          path: dist/pages
-          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
+          path: |
+            dist/pages
+            pages
+            index
+          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.2' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
       - name: Fetch page data
         env:
           QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
@@ -95,6 +99,8 @@ jobs:
           java-version: "17"
           cache: gradle
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       # `packages` defaults to "tools platform-tools". Google removed the deprecated
       # `tools` package from the SDK repository, so the default install now fails with
@@ -118,8 +124,11 @@ jobs:
       - name: Cache test data
         uses: actions/cache@v4
         with:
-          path: dist/pages
-          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
+          path: |
+            dist/pages
+            pages
+            index
+          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.2' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
       - name: Fetch page data
         env:
           QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
@@ -131,6 +140,10 @@ jobs:
       # no native code of its own, so this job builds the engine before the APK.
       - name: Build the engine for Android
         run: scripts/build-engine-android.sh
+      # The web engine assets are not tracked. The example bundles the plugin's asset
+      # directories on every platform, so both builds below need them.
+      - name: Build the web engine assets
+        run: scripts/sync-flutter-web-engine.sh
       - name: Build the example for Android
         working-directory: packages/flutter/qvp_flutter/example
         run: flutter pub get && flutter build apk --debug
