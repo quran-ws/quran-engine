@@ -93,29 +93,13 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      NDK_VERSION: 27.2.12479018
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # `packages` defaults to "tools platform-tools". Google removed the deprecated
-      # `tools` package from the SDK repository, so the default install now fails with
-      # "Failed to find package 'tools'". The next step installs what the build needs.
-      - uses: android-actions/setup-android@v4
+      - uses: ./.github/actions/android-toolchain
         with:
-          packages: platform-tools
-      - name: Install Android build tools
-        run: sdkmanager "platforms;android-35" "ndk;$NDK_VERSION" "cmake;3.22.1"
-      - name: Select NDK
-        run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked
+          cargo-ndk: "true"
       - name: Package and verify AAR
         run: scripts/package-android.sh "${{ needs.verify.outputs.version }}"
       - uses: actions/upload-artifact@v7
@@ -138,24 +122,13 @@ jobs:
     needs: [verify, android]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      NDK_VERSION: 27.2.12479018
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
           name: android-prebuilt
           path: packages/android/qvp/prebuilt
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-      - uses: android-actions/setup-android@v4
-        with:
-          packages: platform-tools
-      - name: Install Android build tools
-        run: sdkmanager "platforms;android-35" "ndk;$NDK_VERSION" "cmake;3.22.1"
+      - uses: ./.github/actions/android-toolchain
       - name: Publish
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}

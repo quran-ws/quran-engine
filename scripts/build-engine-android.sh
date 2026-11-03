@@ -11,13 +11,17 @@ cd "$(dirname "$0")/.."
 # generated here, never edited, before any toolchain check, so syncing the header needs no
 # Android toolchain. scripts/check-parity.py fails when the copy drifts from the source.
 cp crates/qvp-ffi/include/qvp.h packages/android/qvp/src/main/cpp/qvp.h
+# The one place that names the NDK. .github/actions/android-toolchain/action.yml reads
+# this line, so every CI job installs the same NDK this script builds with. The Flutter
+# plugin and its example pin the same string in Gradle, by hand.
+QVP_NDK_VERSION=27.2.12479018
 # shellcheck disable=SC1091
 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 if [ -z "${ANDROID_NDK_HOME:-}" ] && [ -n "${ANDROID_HOME:-}" ]; then
-  candidate="$ANDROID_HOME/ndk/27.2.12479018"
+  candidate="$ANDROID_HOME/ndk/$QVP_NDK_VERSION"
   [ -d "$candidate" ] && export ANDROID_NDK_HOME="$candidate"
 fi
-: "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME or install NDK 27.2.12479018 under ANDROID_HOME}"
+: "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME or install NDK $QVP_NDK_VERSION under ANDROID_HOME}"
 rustup target add aarch64-linux-android x86_64-linux-android armv7-linux-androideabi >/dev/null
 command -v cargo-ndk >/dev/null || cargo install cargo-ndk
 profile="${QVP_PROFILE:-dist}"

@@ -1,0 +1,89 @@
+# The Android toolchain every Android job needs: Java 17 with the Gradle cache, the SDK
+# with platform-tools, the packages the caller names plus the pinned NDK and cmake,
+# ANDROID_NDK_HOME in the job's environment, and cargo-ndk on request.
+#
+# The NDK version lives in scripts/build-engine-android.sh, on its QVP_NDK_VERSION line.
+# This action reads it from there, so the workflows and the script cannot drift apart. The
+# Flutter plugin and its example pin the same string in Gradle, by hand, with a comment.
+#
+# `sdkmanager` downloads from Google's repository, and a download once arrived broken
+# ("Error reading Zip content", run 41723504815), so the install runs up to three times
+# with a pause between tries.
+#
+# A caller that asks for cargo-ndk sets up a Rust toolchain before this action runs.
+name: Android toolchain
+description: Java 17, the Android SDK with the pinned NDK, and cargo-ndk on request.
+
+inputs:
+  packages:
+    description: >-
+      sdkmanager packages to install beside the NDK, space separated, for example
+      "platforms;android-35 system-images;android-35;google_apis;x86_64". Empty installs
+      the NDK alone, for a job whose Gradle plugin fetches its own platform.
+    required: false
+    default: "platforms;android-35"
+  cmake:
+    description: Install cmake 3.22.1, which the Kotlin library's CMake build reads.
+    required: false
+    default: "true"
+  cargo-ndk:
+    description: Install cargo-ndk with `cargo install --locked`.
+    required: false
+    default: "false"
+
+outputs:
+  ndk-version:
+    description: The NDK version the action installed.
+    value: ${{ steps.ndk.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: "17"
+        cache: gradle
+    # `packages` defaults to "tools platform-tools". Google removed the deprecated `tools`
+    # package from the SDK repository, so the default install fails with "Failed to find
+    # package 'tools'". The step after this one installs what the build needs.
+    - uses: android-actions/setup-android@v4
+      with:
+        packages: platform-tools
+    - name: Read the NDK version
+      id: ndk
+      shell: bash
+      run: |
+        version=$(sed -n 's/^QVP_NDK_VERSION=\([0-9.]*\)$/\1/p' "$GITHUB_WORKSPACE/scripts/build-engine-android.sh")
+        if [ -z "$version" ]; then
+          echo "::error::scripts/build-engine-android.sh has no QVP_NDK_VERSION line"
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "NDK_VERSION=$version" >> "$GITHUB_ENV"
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$version" >> "$GITHUB_ENV"
+    - name: Install Android packages
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        CMAKE: ${{ inputs.cmake }}
+        NDK: ${{ steps.ndk.outputs.version }}
+      run: |
+        packages=("ndk;$NDK")
+        if [ "$CMAKE" = "true" ]; then packages+=("cmake;3.22.1"); fi
+        for package in $PACKAGES; do packages+=("$package"); done
+        for attempt in 1 2 3; do
+          if sdkmanager "${packages[@]}"; then
+            exit 0
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "sdkmanager failed on attempt $attempt; trying again in 20 seconds"
+            sleep 20
+          fi
+        done
+        echo "::error::sdkmanager failed three times"
+        exit 1
+    - name: Install cargo-ndk
+      if: inputs.cargo-ndk == 'true'
+      shell: bash
+      run: cargo install cargo-ndk --locked

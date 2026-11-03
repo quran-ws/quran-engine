@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/flutter.yml"
+      - ".github/actions/android-toolchain/**"
       - "Cargo.lock"
       - "Cargo.toml"
       - "crates/**"
@@ -87,8 +88,6 @@ jobs:
     name: build the example
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      NDK_VERSION: 27.2.12479018
     steps:
       - uses: actions/checkout@v7
       # The Android engine build plus Gradle's outputs filled the runner's disk once (run
@@ -109,11 +108,6 @@ jobs:
             echo "::warning::Free disk space freed only ${freed_gb} GB. The runner image's large directories moved."
           fi
           df -h /
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -123,20 +117,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-targets: false
-      # `packages` defaults to "tools platform-tools". Google removed the deprecated
-      # `tools` package from the SDK repository, so the default install now fails with
-      # "Failed to find package 'tools'". The NDK is the one scripts/build-engine-android.sh
-      # reads. The Flutter Gradle plugin fetches the platform and build tools its own
-      # version pins, so this job does not name them.
-      - uses: android-actions/setup-android@v4
+      # The NDK alone. The Flutter Gradle plugin fetches the platform and build tools its own
+      # version pins, and the example has no CMake build.
+      - uses: ./.github/actions/android-toolchain
         with:
-          packages: platform-tools
-      - name: Install the NDK
-        run: sdkmanager "ndk;$NDK_VERSION"
-      - name: Select NDK
-        run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked
+          packages: ""
+          cmake: "false"
+          cargo-ndk: "true"
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
