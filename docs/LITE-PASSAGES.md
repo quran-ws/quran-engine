@@ -54,4 +54,4 @@ A canvas is not an accessible text document. Supply a Unicode text layer for scr
 
 ## Checks
 
-`pnpm run test:lite` runs synthetic tests and the Rust codec fixture without data. With `dist/pages/` present, it also checks all 604 pages at three widths, all ayah medallions, a range spanning pages and the Rust-generated ink measurements. `scripts/check.sh gates` requires those data tests. `scripts/gen-conformance.sh` regenerates `conformance/lite-passage-metrics.json` from Rust; no Wasm is needed by passage consumers.
+`npm run test:lite` runs synthetic tests and the Rust codec fixture without data. With `dist/pages/` present, it also checks all 604 pages at three widths, all ayah medallions, a range spanning pages and the Rust-generated ink measurements. `scripts/check.sh gates` requires those data tests. `scripts/gen-conformance.sh` regenerates `conformance/lite-passage-metrics.json` from Rust; no Wasm is needed by passage consumers.

@@ -19,6 +19,8 @@ check packages/flutter/qvp_flutter/pubspec.yaml "$(sed -n 's/^version: //p' pack
 check packages/flutter/qvp_flutter/android/build.gradle "$(sed -n 's/^version = "\(.*\)"$/\1/p' packages/flutter/qvp_flutter/android/build.gradle)"
 check packages/flutter/qvp_flutter/ios/qvp_flutter.podspec "$(sed -n 's/.*s\.version *= *'"'"'\([^'"'"']*\)'"'"'.*/\1/p' packages/flutter/qvp_flutter/ios/qvp_flutter.podspec)"
 check packages/flutter/qvp_flutter/macos/qvp_flutter.podspec "$(sed -n 's/.*s\.version *= *'"'"'\([^'"'"']*\)'"'"'.*/\1/p' packages/flutter/qvp_flutter/macos/qvp_flutter.podspec)"
+check packages/android/build.gradle.kts/qvpVersion "$(sed -n 's/.*gradleProperty("qvpVersion").getOrElse("\([^"]*\)").*/\1/p' packages/android/build.gradle.kts)"
+check packages/ios/example/project.yml "$(sed -n 's/^ *CFBundleShortVersionString: *//p' packages/ios/example/project.yml | tr -d '"')"
 check Package.swift/XCFramework "$(sed -n 's|.*releases/download/v\([^/]*\)/QvpEngine\.xcframework\.zip.*|\1|p' Package.swift)"
 
 echo "workspace version: $want"

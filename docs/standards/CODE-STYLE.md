@@ -38,10 +38,10 @@ One standard for Rust, C, JavaScript, Kotlin, Dart and Swift.
 |---|---|---|---|
 | Rust | `//!` | `///` | `#![warn(missing_docs)]` in `qvp-core` and `qvp-format`, errors in CI |
 | C header | block comment at top | `/** … */` above each declaration | `check-parity.py` requires a block per symbol |
-| JavaScript / TypeScript | `//` line | JSDoc `/** … */` | eslint `jsdoc/require-jsdoc` on exports |
-| Kotlin | `//` line | KDoc `/** … */` | detekt `UndocumentedPublicFunction` |
+| JavaScript / TypeScript | `//` line | JSDoc `/** … */` | review; eslint `jsdoc/require-jsdoc` is not set up (issue #141) |
+| Kotlin | `//` line | KDoc `/** … */` | review; detekt `UndocumentedPublicFunction` is not set up (issue #141) |
 | Dart | `//` line | `///` | `dart format` in CI; `public_member_api_docs` lint is not yet on (issue #135) |
-| Swift | `//` line | `///` | swiftlint `missing_docs` |
+| Swift | `//` line | `///` | review; swiftlint `missing_docs` is not set up (issue #141) |
 | shell / Python | purpose, inputs, outputs at the top | n/a | review |
 
 ## Formatting
@@ -51,5 +51,7 @@ Reviews do not discuss whitespace. CI runs the formatters in check mode.
 
 ## How it is checked
 
-The `standards` job in CI runs every "enforced by" tool above and `cargo doc` with missing
-docs as errors.
+CI runs the tools the table names: `check-parity.py` in the `standards` job, `cargo doc` with
+missing docs as errors in the `engine` job (`scripts/check.sh docs`), and `dart format` in the
+Flutter workflow. Where the table says review, no tool runs: the JavaScript, Kotlin and Swift
+linters are owed (issue #141), and the Dart doc lint is not on (issue #135).

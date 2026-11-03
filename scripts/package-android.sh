@@ -3,7 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-version="${1:-0.1.0-SNAPSHOT}"
+# The workspace version is the default, as the build file's own default is.
+version="${1:-$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)}"
 scripts/build-engine-android.sh
 (cd packages/android && ./gradlew --no-daemon :qvp:clean :qvp:assembleRelease -PqvpVersion="$version")
 

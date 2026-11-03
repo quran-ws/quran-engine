@@ -1,4 +1,6 @@
-# xcodegen spec for the demo app: `xcodegen generate` writes Demo.xcodeproj, which is not committed.
+# xcodegen spec for the demo app: `xcodegen generate` writes Demo.xcodeproj and Info.plist, neither
+# of which is committed. The version in Info.plist comes from CFBundleShortVersionString below,
+# which scripts/set-version.sh stamps.
 # Page data is NOT in git: example/pages/ is filled from dist/pages by sync-pages.sh (also run as a
 # pre-build step), and bundled as a folder reference under the app's Resources.
 name: Demo
@@ -26,6 +28,7 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: QVP Demo
+        CFBundleShortVersionString: "0.7.0"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]

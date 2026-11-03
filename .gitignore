@@ -53,6 +53,7 @@ packages/ios/QvpKit/.build/
 packages/ios/QvpKit/.swiftpm/
 packages/ios/example/pages/
 packages/ios/example/Demo.xcodeproj/
+packages/ios/example/Info.plist
 packages/ios/example/build/
 packages/ios/**/xcuserdata/
 packages/ios/**/*.xcworkspace/xcshareddata/swiftpm/

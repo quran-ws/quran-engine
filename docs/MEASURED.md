@@ -47,5 +47,5 @@ DOM and stay responsive.
   indexes into `page.decorations`.
 - npm, crates.io, pub.dev and Maven Central publish from the tag workflow; the first three
   through trusted publishing.
-  Android 0.3.0 is available from Maven Central, and iOS 0.3.0 is available through Swift Package
-  Manager.
+  Every package carries the workspace version in `Cargo.toml`, 0.7.0 today: Android from Maven
+  Central, iOS through Swift Package Manager.

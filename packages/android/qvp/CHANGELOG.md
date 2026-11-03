@@ -4,7 +4,9 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+- The build file's default `qvpVersion` is the workspace version, 0.7.0, where it was
+  `0.1.0-SNAPSHOT`. `publishToMavenLocal` needs no `-PqvpVersion` flag.
 
 ## [0.7.0] - 2026-10-14
 
