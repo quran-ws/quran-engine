@@ -34,7 +34,7 @@ pub unsafe extern "C" fn qvp_category_name(c: u8, out: *mut QvpStr) {
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_mark_from_name(s: *const u8, len: u32) -> u8 {
-    guard(|| guard(|| Mark::from_svg(in_str(s, len)) as u8))
+    guard(|| Mark::from_svg(in_str(s, len)) as u8)
 }
 /// The name tables the engine owns. `qvp_name`, `qvp_name_id` and `qvp_name_count` cover
 /// every one of them, so a wrapper never carries a table of its own.
@@ -102,7 +102,7 @@ pub unsafe extern "C" fn qvp_name_id(table: u8, s: *const u8, len: u32) -> u8 {
 }
 #[no_mangle]
 pub extern "C" fn qvp_mark_category(mark: u8) -> u8 {
-    guard(|| guard(|| Mark::from_u8(mark).category() as u8))
+    guard(|| Mark::from_u8(mark).category() as u8)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_version(out: *mut QvpStr) {
@@ -111,12 +111,12 @@ pub unsafe extern "C" fn qvp_version(out: *mut QvpStr) {
 /// The page format version this engine reads (`docs/FORMAT.md`).
 #[no_mangle]
 pub extern "C" fn qvp_format_version() -> u32 {
-    guard(|| guard(|| qvp_core::qvp_format::VERSION as u32))
+    guard(|| qvp_core::qvp_format::VERSION as u32)
 }
 /// Keeps the symbol referenced on platforms that need a C string somewhere.
 #[no_mangle]
 pub extern "C" fn qvp_engine_name() -> *const c_char {
-    guard(|| guard(|| c"qvp".as_ptr()))
+    guard(|| c"qvp".as_ptr())
 }
 
 #[cfg(test)]

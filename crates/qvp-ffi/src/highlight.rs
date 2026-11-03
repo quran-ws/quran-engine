@@ -18,15 +18,15 @@ pub unsafe extern "C" fn qvp_highlight_add(
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_highlight_move(page: *mut Page, handle: u32, t: *const QvpTarget) -> u8 {
-    guard(|| guard(|| (*page).move_highlight(handle, &target(t)) as u8))
+    guard(|| (*page).move_highlight(handle, &target(t)) as u8)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_highlight_restyle(page: *mut Page, handle: u32, style: *const QvpHighlightStyle) -> u8 {
-    guard(|| guard(|| (*page).restyle_highlight(handle, hstyle(style)) as u8))
+    guard(|| (*page).restyle_highlight(handle, hstyle(style)) as u8)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_highlight_remove(page: *mut Page, handle: u32) -> u8 {
-    guard(|| guard(|| (*page).remove_highlight(handle) as u8))
+    guard(|| (*page).remove_highlight(handle) as u8)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_highlight_clear(page: *mut Page) {
@@ -36,11 +36,11 @@ pub unsafe extern "C" fn qvp_highlight_clear(page: *mut Page) {
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_highlight_handles(page: *const Page, out: *mut u32, cap: u32) -> u32 {
-    guard(|| guard(|| fill(out, cap, &(*page).highlight_handles())))
+    guard(|| fill(out, cap, &(*page).highlight_handles()))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_highlight_words(page: *const Page, handle: u32, out: *mut u32, cap: u32) -> u32 {
-    guard(|| guard(|| fill(out, cap, &(*page).highlight_words(handle))))
+    guard(|| fill(out, cap, &(*page).highlight_words(handle)))
 }
 /// Band boxes of every highlight in viewport px (animated). Draw each highlight id as one path.
 #[no_mangle]
@@ -113,7 +113,7 @@ pub unsafe extern "C" fn qvp_select(page: *mut Page, anchor: u32, focus: u32) {
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_selection(page: *const Page, out: *mut u32, cap: u32) -> u32 {
-    guard(|| guard(|| fill(out, cap, &(*page).selection.words())))
+    guard(|| fill(out, cap, &(*page).selection.words()))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_selection_text(page: *const Page, form: u8, include_citation: u8, out: *mut QvpStr) {
@@ -177,19 +177,19 @@ pub unsafe extern "C" fn qvp_mask_transition(page: *mut Page, ms: u32) {
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_unmask_next(page: *mut Page, n: u32) -> u32 {
-    guard(|| guard(|| (*page).unmask_next(n as usize) as u32))
+    guard(|| (*page).unmask_next(n as usize) as u32)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_mask_back(page: *mut Page, n: u32) -> u32 {
-    guard(|| guard(|| (*page).mask_back(n as usize) as u32))
+    guard(|| (*page).mask_back(n as usize) as u32)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_unmask_word(page: *mut Page, word_index: u32) -> u8 {
-    guard(|| guard(|| (*page).unmask_word(word_index) as u8))
+    guard(|| (*page).unmask_word(word_index) as u8)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_mask_word(page: *mut Page, word_index: u32) -> u8 {
-    guard(|| guard(|| (*page).mask_word(word_index) as u8))
+    guard(|| (*page).mask_word(word_index) as u8)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_unmask_all(page: *mut Page) {
@@ -211,11 +211,11 @@ pub unsafe extern "C" fn qvp_unmask(page: *mut Page) {
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_mask_hidden(page: *const Page, out: *mut u32, cap: u32) -> u32 {
-    guard(|| guard(|| fill(out, cap, &(*page).mask_hidden())))
+    guard(|| fill(out, cap, &(*page).mask_hidden()))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_mask_words(page: *const Page, out: *mut u32, cap: u32) -> u32 {
-    guard(|| guard(|| fill(out, cap, (*page).mask_words())))
+    guard(|| fill(out, cap, (*page).mask_words()))
 }
 /// Boxes to draw over hidden words in Block/Blur mode (viewport px).
 #[no_mangle]
@@ -239,19 +239,19 @@ pub unsafe extern "C" fn qvp_reveal_start(
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_goto(page: *mut Page, at: i64) -> u8 {
-    guard(|| guard(|| (*page).reveal_goto(at) as u8))
+    guard(|| (*page).reveal_goto(at) as u8)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_position(page: *const Page) -> i64 {
-    guard(|| guard(|| (*page).reveal_position().unwrap_or(-2)))
+    guard(|| (*page).reveal_position().unwrap_or(-2))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_step_count(page: *const Page) -> u32 {
-    guard(|| guard(|| (*page).reveal_step_count()))
+    guard(|| (*page).reveal_step_count())
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_step_of(page: *const Page, word_index: u32) -> i64 {
-    guard(|| guard(|| (*page).reveal_step_of(word_index).map(|s| s as i64).unwrap_or(-1)))
+    guard(|| (*page).reveal_step_of(word_index).map(|s| s as i64).unwrap_or(-1))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_stop(page: *mut Page) {

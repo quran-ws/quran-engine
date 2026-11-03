@@ -6,11 +6,9 @@ use qvp_core::*;
 
 #[no_mangle]
 pub unsafe extern "C" fn qvp_atlas_load(bytes: *const u8, len: usize) -> *mut Atlas {
-    guard(|| {
-        guard(|| match Atlas::decode(std::slice::from_raw_parts(bytes, len)) {
-            Ok(a) => Box::into_raw(Box::new(a)),
-            Err(_) => std::ptr::null_mut(),
-        })
+    guard(|| match Atlas::decode(std::slice::from_raw_parts(bytes, len)) {
+        Ok(a) => Box::into_raw(Box::new(a)),
+        Err(_) => std::ptr::null_mut(),
     })
 }
 #[no_mangle]
@@ -23,31 +21,29 @@ pub unsafe extern "C" fn qvp_atlas_free(a: *mut Atlas) {
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_atlas_page_of(a: *const Atlas, surah: u16, ayah: u16) -> i32 {
-    guard(|| guard(|| (*a).page_of(surah, ayah).map(|p| p as i32).unwrap_or(-1)))
+    guard(|| (*a).page_of(surah, ayah).map(|p| p as i32).unwrap_or(-1))
 }
 /// out: first_surah, first_ayah, last_surah, last_ayah
 #[no_mangle]
 pub unsafe extern "C" fn qvp_atlas_page_range(a: *const Atlas, page: u16, out: *mut u16) -> i32 {
-    guard(|| {
-        guard(|| match (*a).page_range(page) {
-            Some((f, l)) => {
-                *out = f.0;
-                *out.add(1) = f.1;
-                *out.add(2) = l.0;
-                *out.add(3) = l.1;
-                1
-            }
-            None => 0,
-        })
+    guard(|| match (*a).page_range(page) {
+        Some((f, l)) => {
+            *out = f.0;
+            *out.add(1) = f.1;
+            *out.add(2) = l.0;
+            *out.add(3) = l.1;
+            1
+        }
+        None => 0,
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_atlas_page_count(a: *const Atlas) -> u32 {
-    guard(|| guard(|| (*a).pages.len() as u32))
+    guard(|| (*a).pages.len() as u32)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_atlas_surah_count(a: *const Atlas) -> u32 {
-    guard(|| guard(|| (*a).surahs.len() as u32))
+    guard(|| (*a).surahs.len() as u32)
 }
 unsafe fn atlas_surah_out(s: &qvp_core::qvp_format::atlas::AtlasSurah, out: *mut QvpAtlasSurah) {
     let joined = format!("{}\u{0}{}\u{0}{}", s.arabic, s.latin, s.english);
@@ -71,14 +67,12 @@ unsafe fn atlas_surah_out(s: &qvp_core::qvp_format::atlas::AtlasSurah, out: *mut
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_atlas_surah(a: *const Atlas, n: u16, out: *mut QvpAtlasSurah) -> i32 {
-    guard(|| {
-        guard(|| match (*a).surah(n) {
-            Some(s) => {
-                atlas_surah_out(s, out);
-                1
-            }
-            None => 0,
-        })
+    guard(|| match (*a).surah(n) {
+        Some(s) => {
+            atlas_surah_out(s, out);
+            1
+        }
+        None => 0,
     })
 }
 #[no_mangle]
@@ -132,15 +126,13 @@ pub unsafe extern "C" fn qvp_atlas_division_of(a: *const Atlas, kind: u8, surah:
 /// out: first_page, last_page
 #[no_mangle]
 pub unsafe extern "C" fn qvp_atlas_pages_of_juz(a: *const Atlas, n: u16, out: *mut u16) -> i32 {
-    guard(|| {
-        guard(|| match (*a).pages_of_juz(n) {
-            Some((f, l)) => {
-                *out = f;
-                *out.add(1) = l;
-                1
-            }
-            None => 0,
-        })
+    guard(|| match (*a).pages_of_juz(n) {
+        Some((f, l)) => {
+            *out = f;
+            *out.add(1) = l;
+            1
+        }
+        None => 0,
     })
 }
 #[no_mangle]

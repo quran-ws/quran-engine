@@ -171,7 +171,7 @@ pub unsafe extern "C" fn qvp_decoration_info(page: *const Page, index: u32, out:
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_find_word(page: *const Page, surah: u16, ayah: u16, word: u16) -> i32 {
-    guard(|| guard(|| (*page).find_word(surah, ayah, word).map(|i| i as i32).unwrap_or(-1)))
+    guard(|| (*page).find_word(surah, ayah, word).map(|i| i as i32).unwrap_or(-1))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_target_words(page: *const Page, t: *const QvpTarget, out: *mut u32, cap: u32) -> u32 {
@@ -182,7 +182,7 @@ pub unsafe extern "C" fn qvp_target_words(page: *const Page, t: *const QvpTarget
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_page_line_spacing(page: *const Page) -> f32 {
-    guard(|| guard(|| (*page).line_spacing()))
+    guard(|| (*page).line_spacing())
 }
 /// The grid the page is laid out inside: the mushaf's line count and the printed line spacing.
 #[no_mangle]
@@ -197,7 +197,7 @@ pub unsafe extern "C" fn qvp_page_grid(page: *const Page, out: *mut QvpGrid) {
 
 #[no_mangle]
 pub unsafe extern "C" fn qvp_surah_count(page: *const Page) -> u32 {
-    guard(|| guard(|| (*page).surahs().len() as u32))
+    guard(|| (*page).surahs().len() as u32)
 }
 /// Strings point into a thread-local buffer valid until the next string-returning call.
 #[no_mangle]

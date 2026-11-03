@@ -31,11 +31,11 @@ pub unsafe extern "C" fn qvp_style_add_target(
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_remove(page: *mut Page, handle: u32) -> u32 {
-    guard(|| guard(|| (*page).remove_style(handle) as u32))
+    guard(|| (*page).remove_style(handle) as u32)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_recolor(page: *mut Page, handle: u32, rgba: u32, transition_ms: u32) -> u32 {
-    guard(|| guard(|| (*page).recolor_style(handle, Paint::fade(rgba, transition_ms)) as u32))
+    guard(|| (*page).recolor_style(handle, Paint::fade(rgba, transition_ms)) as u32)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_clear(page: *mut Page) {
@@ -57,11 +57,9 @@ pub unsafe extern "C" fn qvp_style_default_color(page: *mut Page, rgba: u32) {
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_hide(page: *mut Page, sel: *const QvpSelector) -> u32 {
-    guard(|| {
-        guard(|| match selector(sel) {
-            Some(s) => (*page).hide(s),
-            None => 0,
-        })
+    guard(|| match selector(sel) {
+        Some(s) => (*page).hide(s),
+        None => 0,
     })
 }
 #[no_mangle]
@@ -94,7 +92,7 @@ pub unsafe extern "C" fn qvp_theme(page: *mut Page, t: *const QvpTheme) -> u32 {
 /// Handles currently holding rules.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_handles(page: *const Page, out: *mut u32, cap: u32) -> u32 {
-    guard(|| guard(|| fill(out, cap, &(*page).styles.handles())))
+    guard(|| fill(out, cap, &(*page).styles.handles()))
 }
 
 // ───────────── clock & display list ─────────────
@@ -102,11 +100,11 @@ pub unsafe extern "C" fn qvp_style_handles(page: *const Page, out: *mut u32, cap
 /// Advance the clock; returns 1 while something is still animating (keep rendering).
 #[no_mangle]
 pub unsafe extern "C" fn qvp_tick(page: *mut Page, now_ms: f64) -> u8 {
-    guard(|| guard(|| (*page).tick(now_ms) as u8))
+    guard(|| (*page).tick(now_ms) as u8)
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_colors(page: *mut Page) -> *const u32 {
-    guard(|| guard(|| (*page).colors().as_ptr()))
+    guard(|| (*page).colors().as_ptr())
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_styled_paths(page: *mut Page, out: *mut u32, cap: u32) -> u32 {
@@ -123,5 +121,5 @@ pub unsafe extern "C" fn qvp_styled_paths(page: *mut Page, out: *mut u32, cap: u
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_color_of(page: *mut Page, pi: u32) -> u32 {
-    guard(|| guard(|| (*page).color_of(pi)))
+    guard(|| (*page).color_of(pi))
 }

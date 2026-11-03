@@ -84,14 +84,12 @@ pub unsafe extern "C" fn qvp_citation(page: *const Page, words: *const u32, n: u
 /// Attach a JSON sidecar of derived text forms. Returns words updated, or -1 on a parse error.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_attach_words(page: *mut Page, json: *const u8, len: u32) -> i32 {
-    guard(|| {
-        guard(|| match (*page).attach_words_json(std::slice::from_raw_parts(json, len as usize)) {
-            Some(n) => n as i32,
-            None => -1,
-        })
+    guard(|| match (*page).attach_words_json(std::slice::from_raw_parts(json, len as usize)) {
+        Some(n) => n as i32,
+        None => -1,
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_has_form(page: *const Page, form: u8) -> u8 {
-    guard(|| guard(|| (*page).has_form(Form::from_u8(form)) as u8))
+    guard(|| (*page).has_form(Form::from_u8(form)) as u8)
 }
