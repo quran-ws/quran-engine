@@ -45,6 +45,7 @@ for check in "$@"; do
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test line_shift
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test zoom_control
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test passage
+      QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test malformed
       QVP_REQUIRE_DATA=1 cargo test -p qvp-ffi --release --test abi
       scripts/gen-conformance.sh --check
       cargo run -p qvp-convert --release -- zoom-levels dist/pages crates/qvp-core/src/zoom_table.rs --check

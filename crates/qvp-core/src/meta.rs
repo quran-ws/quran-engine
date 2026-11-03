@@ -148,8 +148,10 @@ impl Page {
             if a.flags == 0 || a.rubu_al_hizb == 0 || a.fragment != 1 {
                 continue;
             }
-            let line =
-                d.lines[d.words.get(a.first_word as usize).map(|w| w.line_index as usize).unwrap_or(0)].line_number;
+            let line = d
+                .lines
+                .get(d.words.get(a.first_word as usize).map(|w| w.line_index as usize).unwrap_or(0))
+                .map_or(0, |l| l.line_number);
             let push = |out: &mut Vec<Division>, kind: u8, n: u16| {
                 out.push(Division { kind, n, surah: a.surah, ayah: a.ayah, line, ayah_index: ai as u32 })
             };

@@ -319,6 +319,11 @@ impl<'a> Json<'a> {
                             if (0xD800..0xDC00).contains(&cp) && self.b.get(self.i..self.i + 2) == Some(b"\\u") {
                                 let h2 = std::str::from_utf8(self.b.get(self.i + 2..self.i + 6)?).ok()?;
                                 let lo = u32::from_str_radix(h2, 16).ok()?;
+                                // A high surrogate needs a low one after it; anything else is
+                                // not a character.
+                                if !(0xDC00..0xE000).contains(&lo) {
+                                    return None;
+                                }
                                 self.i += 6;
                                 cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
                             }
@@ -341,8 +346,14 @@ impl<'a> Json<'a> {
         }
         None
     }
-    /// skip any value
-    fn skip(&mut self) -> Option<()> {
+    /// Skip any value. `depth` counts the containers open above it: a sidecar nests two
+    /// deep, and a run of brackets deeper than the limit would otherwise recurse until
+    /// the stack ran out.
+    fn skip(&mut self, depth: u32) -> Option<()> {
+        const MAX_DEPTH: u32 = 64;
+        if depth > MAX_DEPTH {
+            return None;
+        }
         self.ws();
         match *self.b.get(self.i)? {
             b'"' => {
@@ -357,7 +368,7 @@ impl<'a> Json<'a> {
                     }
                     self.string()?;
                     self.eat(b':');
-                    self.skip()?;
+                    self.skip(depth + 1)?;
                     self.eat(b',');
                 }
             }
@@ -368,7 +379,7 @@ impl<'a> Json<'a> {
                     if self.eat(b']') {
                         break;
                     }
-                    self.skip()?;
+                    self.skip(depth + 1)?;
                     self.eat(b',');
                 }
             }
@@ -397,7 +408,7 @@ impl<'a> Json<'a> {
             if self.b.get(self.i) == Some(&b'"') {
                 out.push((k, self.string()?));
             } else {
-                self.skip()?;
+                self.skip(2)?;
             }
             self.eat(b',');
         }
@@ -505,7 +516,7 @@ pub fn parse_words_sidecar(json: &[u8]) -> Option<Vec<(String, WordForms)>> {
             let (_, f) = to_forms(j.string_object()?);
             out.push((key, f));
         } else {
-            j.skip()?;
+            j.skip(1)?;
         }
         j.eat(b',');
     }
@@ -525,5 +536,19 @@ mod sidecar_tests {
         let b = r#"{"page": 42, "words": [{"word_key": "2:253:1", "rasm": "تلك", "search": "تلك"}]}"#;
         let v = parse_words_sidecar(b.as_bytes()).unwrap();
         assert_eq!(v[0].1.search.as_deref(), Some("تلك"));
+    }
+
+    #[test]
+    fn a_broken_sidecar_is_none_not_a_panic() {
+        // a high surrogate followed by something that is not a low one
+        let lone = br#"{"2:255:3": {"search": "\uD83DA"}}"#;
+        assert_eq!(parse_words_sidecar(lone), None);
+        // brackets nested past any sidecar's depth
+        let mut deep = b"{\"x\": ".to_vec();
+        deep.extend(vec![b'['; 100_000]);
+        assert_eq!(parse_words_sidecar(&deep), None);
+        for n in 0..lone.len() {
+            let _ = parse_words_sidecar(&lone[..n]);
+        }
     }
 }

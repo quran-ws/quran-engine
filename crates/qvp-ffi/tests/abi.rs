@@ -213,6 +213,27 @@ fn abi_end_to_end() {
     }
 }
 
+/// A page cut short is null from `qvp_page_load`, not a crash: the file a host hands the
+/// engine may have been truncated by the network.
+#[test]
+fn a_truncated_page_loads_as_null() {
+    let Some(bytes) = page_bytes("036.qvp") else {
+        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
+            panic!("dist/pages/036.qvp is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
+        }
+        eprintln!("skip: dist/pages/036.qvp is missing; run scripts/sync-test-data.sh to enable this test");
+        return;
+    };
+    unsafe {
+        for n in [0, 5, 63, 64, 1000, bytes.len() / 2, bytes.len() - 1] {
+            assert!(qvp_page_load(bytes.as_ptr(), n).is_null(), "{n} of {} bytes loaded", bytes.len());
+        }
+        let page = qvp_page_load(bytes.as_ptr(), bytes.len());
+        assert!(!page.is_null());
+        qvp_page_free(page);
+    }
+}
+
 /// A passage through the C ABI: 2:255 from page 42, laid out, cut to two rows, and the
 /// error returns.
 #[test]

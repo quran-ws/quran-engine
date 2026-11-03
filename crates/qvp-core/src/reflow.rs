@@ -251,7 +251,7 @@ impl Page {
         if gaps.is_empty() {
             return self.line_spacing() * 0.25;
         }
-        gaps.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        gaps.sort_by(f32::total_cmp);
         gaps[gaps.len() / 2]
     }
 

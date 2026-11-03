@@ -624,7 +624,7 @@ mod tests {
         assert!(svg.contains("data-surah-name-en=\"Light &amp; Opening\""));
         assert!(!svg.contains("data-kind=\"ornament\""));
 
-        let mut rendered = qvp_core::Page::from_data(asset);
+        let mut rendered = qvp_core::Page::from_data(asset).unwrap();
         rendered.layout(&qvp_core::LayoutSpec { viewport_w: 39.0, viewport_h: 10.0, ..Default::default() });
         assert_eq!(rendered.layout_draw_list().len(), 2);
     }
