@@ -67,7 +67,7 @@ All notable changes to the engine and its packages. The format follows
   shapes. The index is `word.index`, and a host with no use for the hit takes a second
   parameter and ignores it (issue #139).
 - `scripts/set-version.sh` stamps the default `qvpVersion` in `packages/android/build.gradle.kts`
-  and `CFBundleShortVersionString` in `packages/ios/example/Info.plist`.
+  and `CFBundleShortVersionString` in `packages/ios/example/project.yml`.
   `scripts/check-versions.sh` checks both, and `docs/standards/VERSIONING.md` names the two
   files. The Android default was `0.1.0-SNAPSHOT` and is now the plain workspace version, so
   `publishToMavenLocal` needs no `-PqvpVersion` flag.

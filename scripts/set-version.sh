@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Set one version everywhere: Cargo.toml (the source of truth), every package manifest, the
-# Android library's default qvpVersion and the iOS example's CFBundleShortVersionString.
+# Android library's default qvpVersion and the iOS example's CFBundleShortVersionString in
+# project.yml (xcodegen writes Info.plist from it).
 #
 # Usage: scripts/set-version.sh X.Y.Z
 # Output: the edited files; scripts/check-versions.sh confirms they agree.
@@ -42,15 +43,16 @@ gradle, replacements = re.subn(
 if replacements != 1:
     raise SystemExit("error: packages/android/build.gradle.kts does not contain one default qvpVersion")
 open("packages/android/build.gradle.kts", "w").write(gradle)
-plist = open("packages/ios/example/Info.plist").read()
-plist, replacements = re.subn(
-    r"(<key>CFBundleShortVersionString</key>\s*<string>)[^<]*(</string>)",
-    lambda m: m.group(1) + v + m.group(2),
-    plist,
+spec = open("packages/ios/example/project.yml").read()
+spec, replacements = re.subn(
+    r'^(\s*CFBundleShortVersionString:\s*)"?[^"\n]*"?$',
+    lambda m: m.group(1) + '"' + v + '"',
+    spec,
+    flags=re.M,
 )
 if replacements != 1:
-    raise SystemExit("error: packages/ios/example/Info.plist does not contain one CFBundleShortVersionString")
-open("packages/ios/example/Info.plist", "w").write(plist)
+    raise SystemExit("error: packages/ios/example/project.yml does not contain one CFBundleShortVersionString")
+open("packages/ios/example/project.yml", "w").write(spec)
 PY
 sed -i.bak -E "s/^version: .*/version: $v/" packages/flutter/qvp_flutter/pubspec.yaml && rm packages/flutter/qvp_flutter/pubspec.yaml.bak
 sed -i.bak -E "s/^version = \".*\"$/version = \"$v\"/" packages/flutter/qvp_flutter/android/build.gradle && rm packages/flutter/qvp_flutter/android/build.gradle.bak

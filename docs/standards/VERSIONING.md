@@ -7,10 +7,13 @@ The engine and every SDK share one version, `X.Y.Z`, whose source of truth is
 
 - the root `package.json` (`@quran.ws/engine`)
 - `packages/react-native/qvp-react-native/package.json`
-- `packages/flutter/qvp_flutter/pubspec.yaml` and its `android/build.gradle`
+- `packages/flutter/qvp_flutter/pubspec.yaml`, its `android/build.gradle` and its two
+  podspecs (`ios/qvp_flutter.podspec`, `macos/qvp_flutter.podspec`)
+- the XCFramework release URL in `Package.swift`
 - the default `qvpVersion` in `packages/android/build.gradle.kts`, which `-PqvpVersion`
   overrides at publish time
-- `CFBundleShortVersionString` in `packages/ios/example/Info.plist`
+- `CFBundleShortVersionString` in `packages/ios/example/project.yml`, from which xcodegen
+  writes the example's `Info.plist`
 
 `scripts/check-versions.sh` fails when any of them differ. A wrapper with no changes still
 takes the new number: its version means "binds header version X.Y.Z".

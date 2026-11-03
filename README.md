@@ -19,7 +19,7 @@ Use it when building Quran applications for mobile or desktop and you need fast,
 |---|---|
 | **Package** | `@quran.ws/engine` · `0.7.0` |
 | **Whole mushaf** | 26 MB as one bundle · 41.8 MB page by page · 92.6 MB raw |
-| **Wasm engine** | 527 KB (measured) |
+| **Wasm engine** | 530 KB in the 0.7.0 release |
 | **Licence** | MIT (the code) · source bundle terms (the data) |
 
 ```sh
