@@ -193,7 +193,7 @@ src/index.tsx                              typed API: <QvpPageView/>, <QvpPassag
 
 Not implemented (no macOS in the build environment). The iOS side mirrors the Android module over the
 same `qvp.h`: a Swift `QvpPage`/`QvpAtlas` over `libqvp_ffi.a` (build with
-`cargo build -p qvp-ffi --release --target aarch64-apple-ios[-sim]`), a `UIView` renderer with the
+`cargo build -p qvp-ffi --profile dist --target aarch64-apple-ios[-sim]`), a `UIView` renderer with the
 same draw order (highlight bands → cached base ink → styled ink → mask boxes, `tick(now)` per
 `CADisplayLink` frame), an `RCTViewManager` exposing the props above with the same reconciliation, and
 an `RCTBridgeModule` with the same method names. `src/index.tsx` needs no changes.

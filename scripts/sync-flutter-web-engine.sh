@@ -15,9 +15,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ASSETS=packages/flutter/qvp_flutter/assets
-WASM=target/wasm32-unknown-unknown/release/qvp_ffi.wasm
+WASM=target/wasm32-unknown-unknown/dist/qvp_ffi.wasm
 
-cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
+cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown
 
 mkdir -p "$ASSETS/js" "$ASSETS/wasm"
 cp web/qvp.js "$ASSETS/js/qvp.js"

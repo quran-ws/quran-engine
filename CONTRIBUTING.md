@@ -24,6 +24,19 @@ scripts/check.sh gates         # identity gate, ABI test, conformance
 green in CI. Platform builds need more tools. See `docs/MACOS.md` and each package's
 `AGENTS.md` for the exact versions.
 
+Two cargo profiles exist. Tests, clippy and host builds use `--release`, which has no LTO
+and rebuilds in seconds after one edit. Shipped binaries use `--profile dist`, which adds
+LTO, one codegen unit and `strip`, and takes minutes. The build scripts pass it:
+
+```sh
+cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown   # the wasm engine
+scripts/build-engine-android.sh                                          # Android and Flutter libs
+scripts/build-engine-ios.sh                                              # QvpEngine.xcframework
+powershell scripts/build-engine-windows.ps1                              # qvp_ffi.dll
+```
+
+The output is under `target/<triple>/dist/`.
+
 ## Where things live
 
 `docs/standards/STRUCTURE.md` has the full map. In short:

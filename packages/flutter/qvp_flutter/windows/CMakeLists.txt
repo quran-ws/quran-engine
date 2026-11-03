@@ -5,16 +5,20 @@ set(PLUGIN_NAME "qvp_flutter_plugin")
 
 set(QVP_DLL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/qvp_ffi.dll")
 
-# If not present in plugin directory, check target/release from Cargo build
+# If not present in plugin directory, check the Cargo build: target/dist (the shipped
+# profile), then target/release (a host build for tests)
 if(NOT EXISTS "${QVP_DLL_PATH}")
-  set(CARGO_RELEASE_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../../../target/release/qvp_ffi.dll")
-  if(EXISTS "${CARGO_RELEASE_DLL}")
-    set(QVP_DLL_PATH "${CARGO_RELEASE_DLL}")
-  endif()
+  foreach(profile dist release)
+    set(CARGO_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../../../target/${profile}/qvp_ffi.dll")
+    if(EXISTS "${CARGO_DLL}")
+      set(QVP_DLL_PATH "${CARGO_DLL}")
+      break()
+    endif()
+  endforeach()
 endif()
 
 if(NOT EXISTS "${QVP_DLL_PATH}")
-  message(FATAL_ERROR "qvp_ffi.dll not found in ${CMAKE_CURRENT_SOURCE_DIR} or target/release. Build the Cargo crate first.")
+  message(FATAL_ERROR "qvp_ffi.dll not found in ${CMAKE_CURRENT_SOURCE_DIR}, target/dist or target/release. Build the Cargo crate first.")
 endif()
 
 # Expose prebuilt qvp_ffi.dll to be bundled with the final application binary

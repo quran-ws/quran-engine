@@ -5,10 +5,10 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path "$PSScriptRoot\.."
 Set-Location $repoRoot
 
-Write-Host "== Building qvp-ffi in release mode for Windows..."
-cargo build -p qvp-ffi --release
+Write-Host "== Building qvp-ffi with the dist profile for Windows..."
+cargo build -p qvp-ffi --profile dist
 
-$srcDll = "$repoRoot\target\release\qvp_ffi.dll"
+$srcDll = "$repoRoot\target\dist\qvp_ffi.dll"
 $destDir = "$repoRoot\packages\flutter\qvp_flutter\windows"
 
 if (Test-Path $srcDll) {

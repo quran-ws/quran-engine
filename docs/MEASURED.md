@@ -22,6 +22,25 @@ cargo run -p qvp-core --release --example bench -- dist/pages/042.qvp
 | search `الله` over the page | 86 µs |
 | six-line ayah highlight, bands included | 65 µs |
 
+The wasm engine, built with `--profile dist` (`opt-level = 3`, LTO, one codegen unit,
+stripped) for `wasm32-unknown-unknown`, is 527,468 bytes (515 KiB). `opt-level = "s"`
+gives 506,111 bytes and `"z"` 455,183 bytes, and both cost more time than they save in
+bytes. The table is page 042 under Node 20 on Apple silicon, through `web/qvp.js`: the
+median of seven runs, best of three rounds. Every `s` and `z` number is more than ten
+percent slower than `3`, so the wasm stays at `opt-level = 3`.
+
+| | `3` | `s` | `z` |
+|---|---|---|---|
+| size | 527,468 B | 506,111 B | 455,183 B |
+| page load | 4.6 ms | 8.3 ms | 8.7 ms |
+| 10,000 gap-aware hit tests | 25 ms | 43 ms | 46 ms |
+| 1,000 draw-list calls | 25 ms | 38 ms | 84 ms |
+| one six-line ayah highlight | 0.08 ms | 0.13 ms | 0.18 ms |
+
+Cargo has no per-target profile setting, so a smaller wasm would need
+`CARGO_PROFILE_DIST_OPT_LEVEL=s` in the wasm build commands, or a `rustflags` entry
+for the target in `.cargo/config.toml`.
+
 Android wrapper baseline for page 042 on the API 35 arm64 Android emulator
 (`Google sdk_gphone64_arm64`), using debug instrumentation with the release-built Rust core:
 

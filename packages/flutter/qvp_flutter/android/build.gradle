@@ -3,7 +3,7 @@
 // the engine ends up inside the AAR / APK and dart:ffi can dlopen it.
 //
 // The .so files are produced from the repo root with
-//   cargo ndk -t arm64-v8a -t x86_64 -t armeabi-v7a -o dist/android/jniLibs build -p qvp-ffi --release
+//   cargo ndk -t arm64-v8a -t x86_64 -t armeabi-v7a -o dist/android/jniLibs build -p qvp-ffi --profile dist
 // and copied into src/main/jniLibs.
 
 group = "ws.quran.qvp_flutter"

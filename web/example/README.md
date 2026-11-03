@@ -4,8 +4,8 @@ A Canvas2D reader built on `web/qvp.js`, the reference wrapper. It implements
 `docs/EXAMPLE-APP.md`.
 
 ```sh
-cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
-cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/
+cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown
+cp target/wasm32-unknown-unknown/dist/qvp_ffi.wasm web/
 scripts/sync-test-data.sh                                   # dist/pages
 python3 web/example/build.py dev && (cd dist/web && python3 -m http.server 8765)
 ```

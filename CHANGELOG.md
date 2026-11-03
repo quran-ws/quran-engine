@@ -14,7 +14,7 @@ All notable changes to the engine and its packages. The format follows
   iOS and macOS link `QvpEngine.xcframework` through a podspec and resolve symbols with
   `DynamicLibrary.process()`. `scripts/build-engine-ios.sh` copies the framework into both.
   Windows and Linux bundle `qvp_ffi.dll` and `libqvp_ffi.so` through CMake, and fail the
-  build when neither the plugin directory nor `target/release` holds one. Web runs the
+  build when neither the plugin directory nor the Cargo build holds one. Web runs the
   engine as WebAssembly over `dart:js_interop`, so call `await QvpEngine.initWeb()` before
   the first engine call.
 - `scripts/sync-flutter-web-engine.sh` refreshes the two web assets the Flutter package
@@ -29,6 +29,12 @@ All notable changes to the engine and its packages. The format follows
   tagged commit into the pub.dev package, as it does the Android libraries.
   `scripts/sync-flutter-web-engine.sh` produces them locally and the Flutter workflow
   runs it before the analyzer. `scripts/check-structure.sh` fails when either is tracked.
+- Shipped binaries build with a new cargo profile, `dist`, which holds the LTO, single
+  codegen unit and `strip` settings that `release` held. `release` keeps `opt-level = 3`
+  only, so `scripts/check.sh` rebuilds in seconds after one edit. The build scripts,
+  `npm run build:wasm` and the Flutter desktop CMake files read `target/<triple>/dist/`.
+  `Cargo.toml` declares the internal crate versions once, under `[workspace.dependencies]`,
+  and `scripts/check-versions.sh` fails when a crate manifest declares its own.
 - Reflow sizes a surah banner's row from its ink and normal line spacing, not its printed slot.
 - The prose linter that the writing rules name is in the repository, at
   `scripts/ste_lint.py`, under its own MIT notice. `scripts/check.sh docs` prints its report

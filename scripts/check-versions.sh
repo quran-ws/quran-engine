@@ -21,6 +21,13 @@ check packages/flutter/qvp_flutter/ios/qvp_flutter.podspec "$(sed -n 's/.*s\.ver
 check packages/flutter/qvp_flutter/macos/qvp_flutter.podspec "$(sed -n 's/.*s\.version *= *'"'"'\([^'"'"']*\)'"'"'.*/\1/p' packages/flutter/qvp_flutter/macos/qvp_flutter.podspec)"
 check packages/android/build.gradle.kts/qvpVersion "$(sed -n 's/.*gradleProperty("qvpVersion").getOrElse("\([^"]*\)").*/\1/p' packages/android/build.gradle.kts)"
 check packages/ios/example/project.yml "$(sed -n 's/^ *CFBundleShortVersionString: *//p' packages/ios/example/project.yml | tr -d '"')"
+for dep in $(sed -n 's/^\(qvp-[a-z]*\) = { path = .*version = "\(.*\)" }$/\1=\2/p' Cargo.toml); do
+  check "Cargo.toml [workspace.dependencies] ${dep%%=*}" "${dep#*=}"
+done
+# Internal crates are declared once, in the workspace. A crate manifest must not carry its own version for one.
+if grep -nE '^qvp-[a-z]+ = .*version = "' crates/*/Cargo.toml; then
+  echo "MISMATCH a crate manifest declares an internal dependency version; use workspace = true" ; status=1
+fi
 check Package.swift/XCFramework "$(sed -n 's|.*releases/download/v\([^/]*\)/QvpEngine\.xcframework\.zip.*|\1|p' Package.swift)"
 
 echo "workspace version: $want"

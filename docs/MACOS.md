@@ -17,8 +17,8 @@ cargo run -p qvp-convert --release -- batch pages dist/pages
 ## Web demo
 
 ```sh
-cargo build -p qvp-ffi --release --target wasm32-unknown-unknown
-cp target/wasm32-unknown-unknown/release/qvp_ffi.wasm web/
+cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown
+cp target/wasm32-unknown-unknown/dist/qvp_ffi.wasm web/
 python3 web/example/build.py dev && (cd dist/web && python3 -m http.server 8765)   # http://127.0.0.1:8765/?p=42
 ```
 
