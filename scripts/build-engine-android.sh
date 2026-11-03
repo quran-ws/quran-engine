@@ -21,4 +21,7 @@ for pair in arm64-v8a:aarch64-linux-android x86_64:x86_64-linux-android armeabi-
   cp "target/$triple/dist/libqvp_ffi.a" "packages/android/qvp/prebuilt/$abi/"
   cp "dist/android/jniLibs/$abi/libqvp_ffi.so" "packages/flutter/qvp_flutter/android/src/main/jniLibs/$abi/"
 done
+# The Android library compiles its JNI shim against a copy of the header. The copy is
+# generated here, never edited; scripts/check-parity.py fails when it drifts.
+cp crates/qvp-ffi/include/qvp.h packages/android/qvp/src/main/cpp/qvp.h
 echo "engine built for android: $(ls packages/android/qvp/prebuilt)"

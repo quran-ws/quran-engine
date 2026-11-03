@@ -101,7 +101,9 @@ All notable changes to the engine and its packages. The format follows
   behaviour note: `qvp_layout_groups`, `qvp_layout_repeats`, `qvp_layout_path_groups`,
   `qvp_layout_omitted_paths` and `qvp_layout_row_words` now write a truncated copy when the
   buffer is short and return the total count, as the header says every array output does.
-  They wrote nothing in that case before.
+  They wrote nothing in that case before. `cargo run -p qvp-ffi --release --example bench`
+  times the getters a renderer calls every frame through the C ABI.
+  `scripts/build-engine-android.sh` copies the header to the Android library, as its docs say.
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and

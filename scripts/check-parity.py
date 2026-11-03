@@ -47,7 +47,7 @@ def header_symbols() -> list[str]:
 
 
 def rust_exports() -> list[str]:
-    text = "\n".join(f.read_text() for f in sorted(RUST_SRC.rglob("*.rs")))
+    text = "\n".join(f.read_text() for f in sorted(RUST_SRC.glob("*.rs")))
     return sorted(set(re.findall(r'#\[no_mangle\]\s*pub\s+(?:unsafe\s+)?extern\s+"C"\s+fn\s+(qvp_[a-z0-9_]+)', text)))
 
 
