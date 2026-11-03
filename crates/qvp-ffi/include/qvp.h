@@ -1,4 +1,5 @@
-/* QVP engine C ABI — matches crates/qvp-ffi/src/lib.rs (keep in sync).
+/* QVP engine C ABI. It matches the #[no_mangle] set under crates/qvp-ffi/src/, one module per
+ * header section. scripts/check-parity.py checks the two agree.
  *
  * Conventions
  *  - colours are 0xRRGGBBAA; alpha 0 = hidden / "leave alone"

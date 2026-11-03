@@ -3,7 +3,7 @@
 
 Inputs
   crates/qvp-ffi/include/qvp.h                 the contract
-  crates/qvp-ffi/src/lib.rs                    the #[no_mangle] exports
+  crates/qvp-ffi/src/*.rs                      the #[no_mangle] exports, one module per header section
   packages/android/qvp/src/main/cpp/qvp.h      the Android copy of the header
   the wrapper sources listed in WRAPPERS
   the published JavaScript entry points listed in JS_SURFACES
@@ -27,7 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HEADER = ROOT / "crates/qvp-ffi/include/qvp.h"
 WEB_QVP_JS = ROOT / "web/qvp.js"
-RUST = ROOT / "crates/qvp-ffi/src/lib.rs"
+RUST_SRC = ROOT / "crates/qvp-ffi/src"
 ANDROID_HEADER = ROOT / "packages/android/qvp/src/main/cpp/qvp.h"
 PARITY = ROOT / "docs/API-PARITY.md"
 BEGIN, END = "<!-- parity:begin -->", "<!-- parity:end -->"
@@ -47,7 +47,7 @@ def header_symbols() -> list[str]:
 
 
 def rust_exports() -> list[str]:
-    text = RUST.read_text()
+    text = "\n".join(f.read_text() for f in sorted(RUST_SRC.glob("*.rs")))
     return sorted(set(re.findall(r'#\[no_mangle\]\s*pub\s+(?:unsafe\s+)?extern\s+"C"\s+fn\s+(qvp_[a-z0-9_]+)', text)))
 
 

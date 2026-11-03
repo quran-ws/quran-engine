@@ -1,7 +1,8 @@
 // dart:ffi bindings for crates/qvp-ffi/include/qvp.h.
 //
-// Every struct mirrors the `#[repr(C)]` definition in crates/qvp-ffi/src/lib.rs
-// field by field, in declared order and with the declared width, so dart:ffi
+// Every struct mirrors the `#[repr(C)]` definition in crates/qvp-ffi/src/
+// (types.rs for the shared structs; view.rs, passage.rs and dress.rs for
+// their own) field by field, in declared order and with the declared width, so dart:ffi
 // lays it out exactly like the C compiler does (explicit `_pad` fields are
 // declared where the header declares them). Nothing here decides anything:
 // it is the raw contract, wrapped by engine.dart.
