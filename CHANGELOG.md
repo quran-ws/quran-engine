@@ -141,6 +141,9 @@ All notable changes to the engine and its packages. The format follows
   load instead of leaving a null in `page.words`.
 - Web: the wrapper frees a read buffer it outgrows, and `engine.free()` releases the
   scratch buffers. Every call on a freed engine throws `QvpEngine was freed`.
+- React Native: the package checks that the native module is linked before it reads the
+  module's constants. Without the module, the error now says `QvpModule not linked` instead
+  of a `TypeError`.
 
 ## [0.7.0] - 2026-10-14
 

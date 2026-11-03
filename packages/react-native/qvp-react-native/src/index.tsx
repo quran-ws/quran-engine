@@ -352,6 +352,9 @@ export function QvpPassageView(props: QvpPassageViewProps) {
 
 // ── the module ───────────────────────────────────────────────────────────────────────────────
 const M = NativeModules.QvpModule as any;
+// Before the first use: reading the constants of a missing module is a TypeError, and this
+// message says what to do instead.
+if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not linked (Android only for now; see README)');
 
 // The engine's name tables, read through the native module's constants; no table lives here.
 const NAMES = (M.getConstants?.() ?? {}) as { marks?: string[]; kinds?: string[]; families?: string[]; categories?: string[]; decorations?: string[]; divisions?: string[]; places?: string[] };
@@ -369,7 +372,6 @@ export const DEFAULTS = {
 export type NameTable = 'marks' | 'kinds' | 'families' | 'categories' | 'decorations' | 'divisions' | 'places';
 const named = (v: string | number, names: string[]) => { if (typeof v === 'number') return v; const i = names.indexOf(v); return i < 0 ? 255 : i; };
 export function markId(name: string | number): number { return named(name, MARKS); }
-if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not linked (Android only for now; see README)');
 
 export interface SearchOptions { form?: Form; mode?: 'includes' | 'exact' | 'prefix'; normalize?: boolean; looseMatch?: boolean; limit?: number }
 export interface TextOptions { form?: Form; wordSep?: string; lineSep?: string }
