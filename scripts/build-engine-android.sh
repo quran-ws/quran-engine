@@ -17,8 +17,8 @@ command -v cargo-ndk >/dev/null || cargo install cargo-ndk
 cargo ndk -t arm64-v8a -t x86_64 -t armeabi-v7a -o dist/android/jniLibs build -p qvp-ffi --profile dist
 for pair in arm64-v8a:aarch64-linux-android x86_64:x86_64-linux-android armeabi-v7a:armv7-linux-androideabi; do
   abi=${pair%%:*}; triple=${pair##*:}
-  mkdir -p packages/android/qvp/prebuilt/$abi packages/flutter/qvp_flutter/android/src/main/jniLibs/$abi
-  cp target/$triple/dist/libqvp_ffi.a packages/android/qvp/prebuilt/$abi/
-  cp dist/android/jniLibs/$abi/libqvp_ffi.so packages/flutter/qvp_flutter/android/src/main/jniLibs/$abi/
+  mkdir -p "packages/android/qvp/prebuilt/$abi" "packages/flutter/qvp_flutter/android/src/main/jniLibs/$abi"
+  cp "target/$triple/dist/libqvp_ffi.a" "packages/android/qvp/prebuilt/$abi/"
+  cp "dist/android/jniLibs/$abi/libqvp_ffi.so" "packages/flutter/qvp_flutter/android/src/main/jniLibs/$abi/"
 done
 echo "engine built for android: $(ls packages/android/qvp/prebuilt)"

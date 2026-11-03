@@ -71,4 +71,4 @@ copy_ornaments "$SRC"
 # Record where the bundle came from: the tag its source directory records, or "local"
 # for page data built on this machine. A mismatch makes the next run re-sync.
 cat "$SRC/.tag" 2>/dev/null > pages/.tag || echo local > pages/.tag
-echo "demo pages synced: $(ls pages | wc -l | tr -d ' ') files from $SRC"
+echo "demo pages synced: $(find pages -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ') files from $SRC"

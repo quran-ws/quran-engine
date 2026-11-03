@@ -23,7 +23,7 @@ base="https://github.com/quran-ws/quran-engine/releases/download/$tag"
 
 if [ -n "${QVP_KEEP_PAGES:-}" ] && [ -f dist/pages/atlas.qva ]; then
   echo "skipped  dist/pages (QVP_KEEP_PAGES is set)"
-elif [ -f dist/pages/atlas.qva ] && [ "$(ls dist/pages/*.qvp 2>/dev/null | wc -l)" -ge 604 ] \
+elif [ -f dist/pages/atlas.qva ] && [ "$(find dist/pages -maxdepth 1 -name '*.qvp' 2>/dev/null | wc -l)" -ge 604 ] \
    && [ "$(cat dist/pages/.tag 2>/dev/null)" = "$tag" ]; then
   echo "kept     dist/pages ($tag, 604 pages present)"
 else

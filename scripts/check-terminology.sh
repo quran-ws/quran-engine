@@ -2,20 +2,21 @@
 # Run the Quran.ws terminology audit over this repository with .terminology.json as config.
 #
 # The audit script lives in the quran-ws/guidelines repository (the `quranic-terminology`
-# skill). This script uses a local checkout of that skill when one exists, and clones the
-# guidelines repository at a pinned commit into target/ otherwise.
+# skill). This script clones that repository at a pinned commit into target/ and runs the
+# audit from there, so a developer and CI audit with the same version.
 # Environment: QVP_GUIDELINES_REF (default: the pinned commit below);
+#              QVP_TERMINOLOGY_SCRIPT, a path to audit_terminology.py to run instead of
+#              the pinned clone, for work on the audit itself;
 #              QVP_TERMINOLOGY_BASELINE, the number of errors tolerated (0: any finding fails).
 # Output: the audit's report; exit 1 when the error count exceeds the baseline.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ref="${QVP_GUIDELINES_REF:-79e3c6bb2b52dd1df81b3e64debfebf9dd5f8ea5}"
-local_skill="$HOME/.claude/skills/quranic-terminology/scripts/audit_terminology.py"
 clone="target/guidelines"
 
-if [ -f "$local_skill" ]; then
-  script="$local_skill"
+if [ -n "${QVP_TERMINOLOGY_SCRIPT:-}" ]; then
+  script="$QVP_TERMINOLOGY_SCRIPT"
 else
   if [ ! -d "$clone/.git" ]; then
     git clone --quiet --depth 1 https://github.com/quran-ws/guidelines.git "$clone"

@@ -19,10 +19,10 @@ count="$(find dist/pages -maxdepth 1 -type f -name '*.qvp' | wc -l | tr -d ' ')"
 [ "$count" = 604 ] || { echo "error: expected 604 pages in dist/pages, found $count" >&2; exit 1; }
 sidecars="$(find dist/pages -maxdepth 1 -type f -name '*.words.json' | wc -l | tr -d ' ')"
 [ "$sidecars" = 604 ] || { echo "error: expected 604 word sidecars in dist/pages, found $sidecars" >&2; exit 1; }
-[ -d dist/pages/surah-names/qvp ] && [ -d dist/pages/surah-names/svg ] || {
+if [ ! -d dist/pages/surah-names/qvp ] || [ ! -d dist/pages/surah-names/svg ]; then
   echo "error: dist/pages/surah-names is incomplete; run the batch converter first" >&2
   exit 1
-}
+fi
 surah_names="$(find dist/pages/surah-names/qvp -maxdepth 1 -type f -name '[0-9][0-9][0-9].qvp' | wc -l | tr -d ' ')"
 surah_svgs="$(find dist/pages/surah-names/svg -maxdepth 1 -type f -name '[0-9][0-9][0-9].svg' | wc -l | tr -d ' ')"
 [ "$surah_names" = 114 ] || { echo "error: expected 114 QVP surah names, found $surah_names" >&2; exit 1; }

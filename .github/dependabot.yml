@@ -9,3 +9,24 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule: { interval: monthly }
+  - package-ecosystem: npm
+    directory: /packages/react-native/qvp-react-native
+    schedule: { interval: monthly }
+  - package-ecosystem: gradle
+    directory: /packages/android
+    schedule: { interval: monthly }
+  - package-ecosystem: gradle
+    directory: /packages/flutter/qvp_flutter/android
+    schedule: { interval: monthly }
+  - package-ecosystem: gradle
+    directory: /packages/react-native/qvp-react-native/android
+    schedule: { interval: monthly }
+  - package-ecosystem: pub
+    directory: /packages/flutter/qvp_flutter
+    schedule: { interval: monthly }
+  - package-ecosystem: swift
+    directory: /
+    schedule: { interval: monthly }
+  - package-ecosystem: swift
+    directory: /packages/ios/QvpKit
+    schedule: { interval: monthly }
