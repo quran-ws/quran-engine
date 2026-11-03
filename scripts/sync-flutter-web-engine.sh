@@ -11,13 +11,17 @@
 # `flutter test`, and again after any change to the reference wrapper or the FFI crate.
 # The release workflow puts the wasm its verify job built, and web/qvp.js, in the pub.dev
 # package.
+#
+# Builds with the cargo profile QVP_PROFILE names, `dist` by default. Shipped artifacts
+# keep `dist`. A CI job that only needs the example to build sets QVP_PROFILE=release.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ASSETS=packages/flutter/qvp_flutter/assets
-WASM=target/wasm32-unknown-unknown/dist/qvp_ffi.wasm
+profile="${QVP_PROFILE:-dist}"
+WASM="target/wasm32-unknown-unknown/$profile/qvp_ffi.wasm"
 
-cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown
+cargo build -p qvp-ffi --profile "$profile" --target wasm32-unknown-unknown
 
 mkdir -p "$ASSETS/js" "$ASSETS/wasm"
 cp web/qvp.js "$ASSETS/js/qvp.js"

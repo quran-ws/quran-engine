@@ -11,6 +11,7 @@ on:
       - "crates/**"
       - "packages/ios/**"
       - "scripts/build-engine-ios.sh"
+      - "scripts/sync-test-data.sh"
   push:
     branches: [main]
   workflow_dispatch:

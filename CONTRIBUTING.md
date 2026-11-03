@@ -17,6 +17,7 @@ render results, and compute nothing themselves. The optional JavaScript lite pas
 git clone https://github.com/quran-ws/quran-engine.git && cd quran-engine
 scripts/check.sh test          # unit tests, no data needed
 scripts/sync-test-data.sh      # the quran-svg-elements bundle + the page data release
+QVP_SYNC=pages scripts/sync-test-data.sh   # the page data release only, for wrapper work
 scripts/check.sh gates         # identity gate, ABI test, conformance
 ```
 
