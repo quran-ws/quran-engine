@@ -4,7 +4,12 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+- `scripts/set-version.sh` stamps the default `qvpVersion` in `packages/android/build.gradle.kts`
+  and `CFBundleShortVersionString` in `packages/ios/example/Info.plist`.
+  `scripts/check-versions.sh` checks both, and `docs/standards/VERSIONING.md` names the two
+  files. The Android default was `0.1.0-SNAPSHOT` and is now the plain workspace version, so
+  `publishToMavenLocal` needs no `-PqvpVersion` flag.
 
 ## [0.7.0] - 2026-10-14
 

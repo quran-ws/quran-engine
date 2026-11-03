@@ -8,8 +8,9 @@ The engine and every SDK share one version, `X.Y.Z`, whose source of truth is
 - the root `package.json` (`@quran.ws/engine`)
 - `packages/react-native/qvp-react-native/package.json`
 - `packages/flutter/qvp_flutter/pubspec.yaml` and its `android/build.gradle`
-- the Android library's default `qvpVersion`
-- `MARKETING_VERSION` in `packages/ios/example/project.yml`
+- the default `qvpVersion` in `packages/android/build.gradle.kts`, which `-PqvpVersion`
+  overrides at publish time
+- `CFBundleShortVersionString` in `packages/ios/example/Info.plist`
 
 `scripts/check-versions.sh` fails when any of them differ. A wrapper with no changes still
 takes the new number: its version means "binds header version X.Y.Z".
