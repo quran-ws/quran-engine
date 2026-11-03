@@ -4,7 +4,12 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+- The example builds from a fresh clone. The root `.gitignore` ignored every PNG, so git
+  never tracked the launcher icons that the Android manifest names. The rule now covers
+  the repository root only, and the React Native template's icons are tracked. The example
+  also gains the template's `debug.keystore`, which its Gradle signing config names and its
+  `.gitignore` already allows.
 
 ## [0.7.0] - 2026-10-14
 

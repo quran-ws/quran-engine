@@ -78,6 +78,14 @@ All notable changes to the engine and its packages. The format follows
 - Flutter: a highlight band no longer freezes part way through a transition, and a removed
   band no longer stays on the page. The engine's highlight boxes depend on the clock, so the
   band cache clears on every frame rather than on a revision change.
+- The Flutter and React Native examples build from a fresh clone. The root `.gitignore`
+  ignored every PNG, so git never tracked the launcher icons and launch images that their
+  Android manifests and the Flutter example's iOS and macOS asset catalogs name. The rule
+  now covers the repository root only, and the templates' icons are tracked. The React
+  Native example also gains the template's `debug.keystore`, which its Gradle signing
+  config names and its `.gitignore` already allows. The Flutter example gains the
+  template's `web/` folder, and the Flutter workflow builds the example for Android and
+  web, so a missing file fails CI.
 - Flutter: styled paint composites with `srcOver`. With `src`, a styled colour part way
   through a fade wrote its alpha over the paper rect in the same layer and opened a
   translucent hole.

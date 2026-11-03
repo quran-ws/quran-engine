@@ -169,4 +169,5 @@ bash scripts/build-engine-android.sh
 cd packages/flutter/qvp_flutter/example
 flutter build apk --debug && adb install -r build/app/outputs/flutter-apk/app-debug.apk
 flutter run                                        # or: adb shell am start -n ws.quran.qvp_flutter_example/.MainActivity
+flutter build web                                  # the same app as a web bundle, in build/web
 ```
