@@ -5,7 +5,9 @@ dist/web/
 node_modules/
 web/qvp_ffi.wasm
 .playwright-mcp/
-*.png
+# screenshots dropped at the repository root while testing. A PNG anywhere else, such as
+# an example's launcher icon, is tracked.
+/*.png
 # the quran-svg release bundle: exporter output, not code
 pages/
 index/

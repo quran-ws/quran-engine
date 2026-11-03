@@ -1,5 +1,5 @@
-# The Flutter package: analyze, and run the dart:ffi tests against a host build of the
-# engine and the page data release.
+# The Flutter package: analyze, run the dart:ffi tests against a host build of the
+# engine and the page data release, and build the example for Android and web.
 name: Flutter
 
 on:
@@ -12,6 +12,8 @@ on:
       - "packages/flutter/**"
       - "web/qvp.js"
       - "scripts/sync-flutter-web-engine.sh"
+      - "scripts/build-engine-android.sh"
+      - "scripts/sync-example-data.sh"
   push:
     branches: [main]
   workflow_dispatch:
@@ -74,3 +76,64 @@ jobs:
         env:
           QVP_LIB: ${{ github.workspace }}/target/release/libqvp_ffi.so
         run: flutter test
+
+  # The example is the only app that reads the plugin's manifests, icon catalogs and asset
+  # declarations, and only a build reads them. The analyzer passed while the launcher icons
+  # were missing from git. This job builds the example the way the package README says to:
+  # the Android engine first, then a debug APK, then the web bundle.
+  example:
+    name: build the example
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # `packages` defaults to "tools platform-tools". Google removed the deprecated
+      # `tools` package from the SDK repository, so the default install now fails with
+      # "Failed to find package 'tools'". The NDK is the one scripts/build-engine-android.sh
+      # reads. The Flutter Gradle plugin fetches the platform and build tools its own
+      # version pins, so this job does not name them.
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install the NDK
+        run: sdkmanager "ndk;$NDK_VERSION"
+      - name: Select NDK
+        run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+      - name: Cache test data
+        uses: actions/cache@v4
+        with:
+          path: dist/pages
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
+      - name: Fetch page data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
+        run: scripts/sync-test-data.sh
+      - name: Example assets (the example's pubspec declares the pages directory)
+        run: scripts/sync-example-data.sh flutter
+      # The plugin's Android module ships src/main/jniLibs/<abi>/libqvp_ffi.so and builds
+      # no native code of its own, so this job builds the engine before the APK.
+      - name: Build the engine for Android
+        run: scripts/build-engine-android.sh
+      - name: Build the example for Android
+        working-directory: packages/flutter/qvp_flutter/example
+        run: flutter pub get && flutter build apk --debug
+      - name: Build the example for web
+        working-directory: packages/flutter/qvp_flutter/example
+        run: flutter build web
