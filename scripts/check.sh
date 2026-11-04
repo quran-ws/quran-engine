@@ -64,10 +64,12 @@ for check in "$@"; do
       # The Flutter bindings are generated from the header. Generating them needs Flutter
       # and libclang, which the standards job does not install; the Flutter workflow runs
       # this check on every change to the header or the package. macOS has libclang with
-      # Xcode or the Command Line Tools; Linux has it with libclang-dev.
+      # Xcode or the Command Line Tools; Linux has it with libclang-dev, which installs the
+      # unversioned libclang.so that ffigen loads.
+      libs="$( (ldconfig -p 2>/dev/null || true) | grep 'libclang\.so ' || true)"
       if ! command -v flutter >/dev/null; then
         echo "skip Flutter bindings: Flutter not installed; the Flutter workflow runs it"
-      elif [ "$(uname)" != Darwin ] && ! ldconfig -p 2>/dev/null | grep -q libclang &&
+      elif [ "$(uname)" != Darwin ] && [ -z "$libs" ] &&
         ! ls /usr/lib/llvm-*/lib/libclang.so >/dev/null 2>&1; then
         echo "skip Flutter bindings: libclang not found (install libclang-dev); the Flutter workflow runs it"
       else

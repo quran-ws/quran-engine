@@ -41,8 +41,8 @@ All notable changes to the engine and its packages. The format follows
   `scripts/check-flutter-bindings.sh` fails when the file and the header differ. The Flutter
   workflow runs it, and `scripts/check.sh parity` runs it when Flutter and libclang are
   installed. `scripts/check-parity.py` skips the generated file, so a symbol counts as bound
-  in Flutter only when the package's own code names it. `docs/API-PARITY.md` lists as gaps the 14 symbols that the old
-  file bound and no backend called.
+  in Flutter only when the package's own code names it. `docs/API-PARITY.md` lists as gaps
+  the 14 symbols that the old file bound and no backend called.
   The binding object behind `QvpNativeBackend.b` follows the C names everywhere: `hide`,
   `highlight`, `moveHighlight`, `restyleHighlight`, `removeHighlight`, `clearHighlights`
   and `atlasSurahs` are now `styleHide`, `highlightAdd`, `highlightMove`,
