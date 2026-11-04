@@ -34,7 +34,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             releaseBase()
             baseKey = null
             readPage = null
-            ornamentLayer = null; ornamentKey = null
+            ornamentLayer = null; ornamentKey = null; ornamentProbe.page = null
             readOverflow()
             selectionHandle = 0
             // A step means the same size to the reader on any page: the engine chose every page's
@@ -346,7 +346,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         Choreographer.getInstance().removeFrameCallback(frameCb)
         animating = false
         releaseBase()
-        ornamentLayer = null; ornamentKey = null
+        ornamentLayer = null; ornamentKey = null; ornamentProbe.page = null
+        readPage = null
         super.onDetachedFromWindow()
     }
 

@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'engine.dart';
+import 'page.dart' show pageClock;
 
 /// Layout parameters of [QvpPageView] (viewport size is taken from the widget's constraints).
 /// Spacing only opens up: `lineSpacing` < 1 is clamped by the engine.
@@ -425,10 +426,7 @@ class QvpPageViewState extends State<QvpPageView>
   void _ensureTicking() {
     if (!_ticker.isActive && mounted && !page.isDisposed) {
       final more = page.tick(nowMs);
-      if (more) {
-        _cache.clockMoved();
-        _ticker.start();
-      }
+      if (more) _ticker.start();
     }
   }
 
@@ -440,7 +438,6 @@ class QvpPageViewState extends State<QvpPageView>
       return;
     }
     final more = page.tick(nowMs);
-    _cache.clockMoved();
     _frame.value++;
     if (!more) _ticker.stop();
   }
@@ -1078,7 +1075,7 @@ class _InkCache {
   // What the last frame read from the engine, kept until the page or the clock moves.
   QvpPage? _readPage;
   QvpLayout? _readLayout;
-  int _readRevision = 0, _readClock = 0, _clock = 0;
+  int _readRevision = 0, _readClock = 0;
 
   /// Paths off the default ink, their colours, and a hash of which paths they are: the
   /// base ink leaves them out, so the key of its recording holds the hash.
@@ -1088,12 +1085,9 @@ class _InkCache {
   QvpDressInfo? dress;
   final _BoxLayer bands = _BoxLayer(), masks = _BoxLayer();
 
-  /// The engine clock moved a colour or a band: the next frame reads them again.
-  void clockMoved() => _clock++;
-
   /// Asks the engine again for what is drawn over and under the base ink, if any of it can
-  /// have changed: a call on the page moves its revision, a zoom lays it out again, and the
-  /// ticker reports the clock. The styled paths and the bands follow the clock as well. The
+  /// have changed: a call on the page moves its revision, a zoom lays it out again, and a
+  /// tick from any caller moves [pageClock]. The styled paths and the bands follow the clock as well. The
   /// masks and the dress follow the page alone. A frame where nothing changed asks for nothing.
   void read(QvpPage page) {
     final l = page.currentLayout;
@@ -1101,7 +1095,8 @@ class _InkCache {
         !identical(page, _readPage) ||
         page.revision != _readRevision ||
         !identical(l, _readLayout);
-    if (changed || _clock != _readClock) {
+    final clock = pageClock(page);
+    if (changed || clock != _readClock) {
       styled = page.styledPaths();
       var key = 1;
       for (var i = 0; i < styled.length; i++) {
@@ -1118,7 +1113,7 @@ class _InkCache {
     _readPage = page;
     _readLayout = l;
     _readRevision = page.revision;
-    _readClock = _clock;
+    _readClock = clock;
   }
 
   /// The paper of the last frame, kept while the view and the dress leave it where it is.

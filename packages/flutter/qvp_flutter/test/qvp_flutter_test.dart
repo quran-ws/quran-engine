@@ -1124,8 +1124,8 @@ void main() {
     p.removeHighlight(h);
     // The engine drops a removed highlight inside its own moving window, so whoever reads the
     // boxes has to read them again after the clock has moved. QvpPageView does that by
-    // clearing its band cache on every tick: a cache keyed on page.revision alone would hold
-    // these six boxes for ever, because tick() mutates nothing.
+    // keying its band cache on the page's clock as well. A cache keyed on page.revision alone
+    // would hold these six boxes for ever, because tick() changes no revision.
     p.tick(400);
     p.tick(1000);
     expect(p.highlightBoxesView(), isEmpty);
