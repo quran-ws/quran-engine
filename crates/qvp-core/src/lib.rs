@@ -15,6 +15,7 @@ pub mod meta;
 pub mod passage;
 pub mod reflow;
 pub mod selection;
+mod sidecar;
 pub mod style;
 pub mod target;
 pub mod text;
