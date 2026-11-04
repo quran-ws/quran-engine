@@ -15,6 +15,7 @@ import {
   type NativeSyntheticEvent,
   type ViewProps,
 } from 'react-native';
+import { SELECTOR, TARGET } from './codes';
 
 // ── constants (mirror qvp.h) ─────────────────────────────────────────────────────────────────
 export const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, OTHER: 255 } as const;
@@ -44,38 +45,40 @@ export function rgba(c: Color, alpha: number): string {
 }
 
 // ── targets and selectors (same shapes as web/qvp.js T / Sel) ────────────────────────────────
+// The codes come from qvp.h through codes.ts, which scripts/gen-rn-enums.py writes; the Android
+// module reads them back with the same table.
 export interface TargetObj { target: number; a?: number; b?: number; c?: number; words?: number[] }
 /** 'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | word index | [indices] | T.* */
 export type Target = string | number | number[] | TargetObj;
 export const T = {
-  page: (): TargetObj => ({ target: 0 }),
-  word: (i: number): TargetObj => ({ target: 1, a: i }),
-  words: (ws: number[]): TargetObj => ({ target: 2, words: ws }),
-  ayah: (s: number, a: number): TargetObj => ({ target: 3, a: s, b: a }),
-  ayahRange: (s: number, a: number, b: number): TargetObj => ({ target: 4, a: s, b: a, c: b }),
-  line: (n: number): TargetObj => ({ target: 5, a: n }),
-  surah: (s: number): TargetObj => ({ target: 6, a: s }),
-  range: (a: number, b: number): TargetObj => ({ target: 7, a, b }),
+  page: (): TargetObj => ({ target: TARGET.page }),
+  word: (i: number): TargetObj => ({ target: TARGET.word, a: i }),
+  words: (ws: number[]): TargetObj => ({ target: TARGET.words, words: ws }),
+  ayah: (s: number, a: number): TargetObj => ({ target: TARGET.ayah, a: s, b: a }),
+  ayahRange: (s: number, a: number, b: number): TargetObj => ({ target: TARGET.ayahRange, a: s, b: a, c: b }),
+  line: (n: number): TargetObj => ({ target: TARGET.line, a: n }),
+  surah: (s: number): TargetObj => ({ target: TARGET.surah, a: s }),
+  range: (a: number, b: number): TargetObj => ({ target: TARGET.range, a, b }),
 };
 export interface Selector { selector: number; a?: number; b?: number; c?: number; mark?: string }
 export const Sel = {
-  page: (): Selector => ({ selector: 0 }),
-  path: (p: number): Selector => ({ selector: 1, a: p }),
-  wordPath: (w: number, nth: number): Selector => ({ selector: 2, a: w, b: nth }),
+  page: (): Selector => ({ selector: SELECTOR.page }),
+  path: (p: number): Selector => ({ selector: SELECTOR.path, a: p }),
+  wordPath: (w: number, nth: number): Selector => ({ selector: SELECTOR.wordPath, a: w, b: nth }),
   /** nth mark of the word (0-based, marks only) */
-  wordMark: (w: number, nth: number): Selector => ({ selector: 3, a: w, b: nth }),
-  wordMarkNamed: (w: number, mark: string, nth = 0): Selector => ({ selector: 4, a: w, b: markId(mark), c: nth, mark }),
-  wordBody: (w: number): Selector => ({ selector: 5, a: w }),
-  wordMarks: (w: number): Selector => ({ selector: 6, a: w }),
-  word: (w: number): Selector => ({ selector: 7, a: w }),
-  ayah: (s: number, a: number): Selector => ({ selector: 8, a: s, b: a }),
-  line: (n: number): Selector => ({ selector: 9, a: n }),
-  mark: (m: string | number): Selector => ({ selector: 10, a: markId(m) }),
-  category: (c: string | number): Selector => ({ selector: 11, a: named(c, CATEGORY_NAMES) }),
-  family: (f: string | number): Selector => ({ selector: 12, a: named(f, FAMILY_NAMES) }),
-  kind: (k: string | number): Selector => ({ selector: 13, a: named(k, KIND_NAMES) }),
-  decoration: (k: string | number): Selector => ({ selector: 14, a: named(k, DECORATION_NAMES) }),
-  decorationIndex: (d: number): Selector => ({ selector: 15, a: d }),
+  wordMark: (w: number, nth: number): Selector => ({ selector: SELECTOR.wordMark, a: w, b: nth }),
+  wordMarkNamed: (w: number, mark: string, nth = 0): Selector => ({ selector: SELECTOR.wordMarkNamed, a: w, b: markId(mark), c: nth, mark }),
+  wordBody: (w: number): Selector => ({ selector: SELECTOR.wordBody, a: w }),
+  wordMarks: (w: number): Selector => ({ selector: SELECTOR.wordMarks, a: w }),
+  word: (w: number): Selector => ({ selector: SELECTOR.word, a: w }),
+  ayah: (s: number, a: number): Selector => ({ selector: SELECTOR.ayah, a: s, b: a }),
+  line: (n: number): Selector => ({ selector: SELECTOR.line, a: n }),
+  mark: (m: string | number): Selector => ({ selector: SELECTOR.mark, a: markId(m) }),
+  category: (c: string | number): Selector => ({ selector: SELECTOR.category, a: named(c, CATEGORY_NAMES) }),
+  family: (f: string | number): Selector => ({ selector: SELECTOR.family, a: named(f, FAMILY_NAMES) }),
+  kind: (k: string | number): Selector => ({ selector: SELECTOR.kind, a: named(k, KIND_NAMES) }),
+  decoration: (k: string | number): Selector => ({ selector: SELECTOR.decoration, a: named(k, DECORATION_NAMES) }),
+  decorationIndex: (d: number): Selector => ({ selector: SELECTOR.decorationIndex, a: d }),
 };
 
 // ── records ──────────────────────────────────────────────────────────────────────────────────

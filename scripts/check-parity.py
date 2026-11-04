@@ -8,13 +8,16 @@ Inputs
   the wrapper sources listed in WRAPPERS
   the published JavaScript entry points listed in JS_SURFACES
   docs/API-PARITY.md                           the "Declared gaps" table (symbol, wrapper, issue)
+  the React Native target and selector codes   written by scripts/gen-rn-enums.py
 
 Output
   docs/API-PARITY.md, regenerated between the parity markers (default), or checked
   against the current sources (--check). Exit 1 on: a header/Rust mismatch, a stale
   Android header copy, a symbol that a wrapper neither binds nor declares as a gap, a
   header function without a row in the "Every symbol" table of docs/API.md (or a row
-  without a function), or an abbreviated field name in a published JavaScript entry point.
+  without a function), an abbreviated field name in a published JavaScript entry point, or
+  React Native code files that differ from what scripts/gen-rn-enums.py writes from the
+  header.
 
 A symbol counts as bound in a wrapper when the C name or its camelCase form (with or
 without the object-model noun) appears in that wrapper's sources. A file generated from
@@ -22,6 +25,7 @@ the header (GENERATED) names every symbol, so it does not count: the wrapper mus
 """
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
@@ -195,11 +199,24 @@ def check_defaults(problems: list[str]) -> None:
                 problems.append(f"{site} ({path}) has default {name} = {got[name]}, the header says {value}")
 
 
+def check_rn_codes(problems: list[str]) -> None:
+    """The React Native code files match what scripts/gen-rn-enums.py writes from the header."""
+    spec = importlib.util.spec_from_file_location("gen_rn_enums", ROOT / "scripts/gen-rn-enums.py")
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    header = HEADER.read_text()
+    tables = {prefix: gen.enum(prefix, header) for prefix in gen.TABLES}
+    for path, text in ((gen.TS_OUT, gen.typescript(tables)), (gen.KT_OUT, gen.kotlin(tables))):
+        if not path.exists() or path.read_text() != text:
+            problems.append(f"{path.relative_to(ROOT)} is out of date; run scripts/gen-rn-enums.py")
+
+
 def main(argv: list[str]) -> int:
     check = "--check" in argv
     problems: list[str] = []
     check_defaults(problems)
     check_js_names(problems)
+    check_rn_codes(problems)
 
     symbols = header_symbols()
     exports = rust_exports()
