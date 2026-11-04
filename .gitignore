@@ -9,7 +9,7 @@ web/qvp_ffi.wasm
 # an example's launcher icon, is tracked.
 /*.png
 # the quran-svg release bundle: exporter output, not code
-pages/
+/pages/
 index/
 # Android / Gradle
 packages/android/.gradle/
@@ -26,7 +26,9 @@ packages/flutter/**/ios/*.xcframework/
 packages/flutter/**/macos/*.xcframework/
 packages/flutter/**/build/
 packages/flutter/**/.dart_tool/
-packages/flutter/**/assets/pages/
+# scripts/sync-example-data.sh fills it; the README keeps the directory in a fresh clone
+packages/flutter/**/assets/pages/*
+!packages/flutter/**/assets/pages/README.md
 # the web engine the Flutter package ships: built by scripts/sync-flutter-web-engine.sh
 packages/flutter/qvp_flutter/assets/wasm/qvp_ffi.wasm
 packages/flutter/qvp_flutter/assets/js/qvp.js

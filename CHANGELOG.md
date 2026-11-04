@@ -185,6 +185,10 @@ All notable changes to the engine and its packages. The format follows
   `QvpView.zoomAbout`.
 
 ### Fixed
+- Flutter: `flutter analyze` no longer warns on a fresh clone that the example's
+  `assets/pages/` directory is missing. The directory holds a tracked `README.md`, and
+  `.gitignore` keeps that file while it ignores the page data. The rule `pages/` now matches
+  only the root `pages/`.
 - Flutter: a call on a disposed `QvpEngine` throws `StateError('QvpEngine was disposed')` on a
   native build. A page, atlas or name call after `engine.dispose()` reached freed scratch
   memory. Freeing a page, atlas, passage or ornament set still works afterwards.
