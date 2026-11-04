@@ -5,15 +5,30 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.8.0] - 2026-11-04
+
+### Added
 - `QVP_DEFAULT_REFLOW_RELAX`, `QVP_DEFAULT_REFLOW_MAX_STRETCH` and `QVP_DEFAULT_SELECTION_PAD_X`
   in `qvp.h`, mirrored in every wrapper's defaults table (`QvpDefaults` in Kotlin, Swift and
   Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
   from the table and the reflow specs take their defaults from it, so no wrapper copies the
   numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
+- Reflow can keep the print's line breaks with `QvpBreaks.PRINTED`, and
+  `QvpPageView.reflowBreaks` picks the breaks a pinch reflows with. Each line stays whole
+  while its ink grows to fill the page width. `reflowMaxZoom` measures the widest row in this
+  mode, and larger zooms clamp to it.
 
 ### Changed
-- The build file's default `qvpVersion` is the workspace version, 0.7.0, where it was
-  `0.1.0-SNAPSHOT`. `publishToMavenLocal` needs no `-PqvpVersion` flag.
+- The build file's default `qvpVersion` is the workspace version, where it was
+  `0.1.0-SNAPSHOT`, and `scripts/set-version.sh` stamps it. `publishToMavenLocal` needs no
+  `-PqvpVersion` flag.
 - Android and Flutter: a page view frame where nothing changed asks the engine for the clock
   and nothing else. The views keep the styled paths, the highlight and mask boxes with their
   paths, and the dress readout until a call on the page, a new layout or the clock changes

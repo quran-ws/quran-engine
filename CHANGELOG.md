@@ -7,6 +7,16 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.8.0] - 2026-11-04
+
+### Added
 - `QVP_DEFAULT_REFLOW_RELAX`, `QVP_DEFAULT_REFLOW_MAX_STRETCH` and `QVP_DEFAULT_SELECTION_PAD_X`
   in `qvp.h`, mirrored in every wrapper's defaults table (`QvpDefaults` in Kotlin, Swift and
   Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
@@ -18,6 +28,8 @@ All notable changes to the engine and its packages. The format follows
 - Reflow can keep the print's line breaks with `breaks: 'printed'` (`QvpBreaks.printed`
   in Swift). Each line stays whole while its ink grows to fill the page width.
   `reflowMaxZoom` measures the widest row in this mode, and larger zooms clamp to it.
+  Android's `QvpPageView.reflowBreaks` and the React Native `reflowBreaks` prop pick the
+  breaks a pinch reflows with.
 - Flutter: the package builds for iOS, macOS, Windows, Linux and web, alongside Android.
   iOS and macOS link `QvpEngine.xcframework` through a podspec and resolve symbols with
   `DynamicLibrary.process()`. `scripts/build-engine-ios.sh` copies the framework into both.
@@ -27,11 +39,24 @@ All notable changes to the engine and its packages. The format follows
   the first engine call.
 - `scripts/sync-flutter-web-engine.sh` refreshes the two web assets the Flutter package
   ships. `scripts/check-parity.py` fails when its `qvp.js` copy drifts from `web/qvp.js`.
-- Flutter: `QvpPage.batch(fn)` notifies listeners once however many mutations `fn` makes,
-  and `QvpPage.path(i)` builds one path on demand and keeps it. `QvpPage.buildPaths()`
-  returns the whole list as before.
+- Flutter: `QvpPage.batch(fn)` notifies listeners once however many mutations `fn` makes, and
+  `QvpPage.path(i)` builds one path on demand and keeps it. `QvpPage.buildPaths()` returns the
+  whole list as before. `QvpPage.ayahMarks()` holds its answer until the next mutation.
 
 ### Changed
+- **Breaking.** Flutter: `QvpPageView.onWordTap` hands the host the `QvpWordInfo` where it
+  passed the word's index, and `onDecorationTap` carries the `QvpHit` beside the
+  decoration. Android and iOS pass the word and the hit already, so host code reads one
+  shape on all three. `QvpWordTapCallback` and `QvpDecorationTapCallback` name the two
+  shapes. The index is `word.index`, and a host with no use for the hit takes a second
+  parameter and ignores it (issue #139).
+- **Breaking.** Swift: `QvpOrnaments.find`, `QvpPage.dress` with a closed set and
+  `QvpPassage.layout` on a closed passage stop the program with a fatal error that names the
+  object, such as `QvpOrnaments is closed`. They returned nil, the same answer as a refused
+  spec or no match. Check `isOpen` first where an object can close before its last call.
+- **Breaking.** Rust: the `qvp-core` fields `Page.styles` and `Page.selection` are
+  crate-private. Read them with `styles()` and `selection()`, and change them with
+  `styles_mut()` and `selection_mut()`.
 - CI builds the release XCFramework. `scripts/prepare-ios-release.sh` starts
   `prepare-ios-release.yml`, which builds it on macOS, attaches it to the draft release and
   pushes the commit that sets its URL, checksum and build commit in `Package.swift`.
@@ -55,10 +80,9 @@ All notable changes to the engine and its packages. The format follows
   writes from `qvp.h`, and `scripts/check-parity.py` fails when the table is out of date. The
   example's lock file records the package version, and `scripts/set-version.sh` sets it.
 - One composite action, `.github/actions/android-toolchain`, installs Java 17, the Android
-  SDK, the pinned NDK and cmake, and cargo-ndk on request. The Android, Flutter, React
-  Native and release workflows use it.
-- The action reads the NDK version from `scripts/build-engine-android.sh`.
-- The action retries `sdkmanager` three times.
+  SDK, the pinned NDK and cmake, and cargo-ndk on request. The Android, Flutter, React Native
+  and release workflows use it. It reads the NDK version from
+  `scripts/build-engine-android.sh` and retries `sdkmanager` three times.
 - Dependabot also updates the actions that `.github/actions/*` uses.
 - The React Native workflow runs when the Android toolchain action or the NDK pin changes.
 - `scripts/check-versions.sh` fails when an `ndkVersion` pin or an NDK mention in the Android
@@ -79,10 +103,12 @@ All notable changes to the engine and its packages. The format follows
   and its example pin `ndkVersion` to the repository's NDK, so Gradle no longer
   downloads Flutter's default NDK beside it.
 - The Flutter package's web engine assets, `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`,
-  are build outputs and no longer tracked. The release workflow builds them from the
-  tagged commit into the pub.dev package, as it does the Android libraries.
-  `scripts/sync-flutter-web-engine.sh` produces them locally and the Flutter workflow
-  runs it before the analyzer. `scripts/check-structure.sh` fails when either is tracked.
+  are build outputs and no longer tracked. The release workflow builds them from the tagged
+  commit into the pub.dev package, as it does the Android libraries.
+  `scripts/sync-flutter-web-engine.sh` produces them locally and the Flutter workflow runs it
+  before the analyzer. `scripts/check-structure.sh` fails when either is tracked. The pubspec
+  declares their directories, so a native build of a `git:` or `path:` dependency runs without
+  them. A web build from such a dependency builds them first (see the package README).
 - Shipped binaries build with a new cargo profile, `dist`, which holds the LTO, single
   codegen unit and `strip` settings that `release` held. `release` keeps `opt-level = 3`
   only, so `scripts/check.sh` rebuilds in seconds after one edit. The build scripts,
@@ -135,12 +161,6 @@ All notable changes to the engine and its packages. The format follows
 - The Flutter package is `dart format` clean, and its workflow checks the formatting before
   it analyses. `docs/standards/CODE-STYLE.md` names the tool for Dart, and its section order
   matches the header it describes.
-- **Breaking.** Flutter: `QvpPageView.onWordTap` hands the host the `QvpWordInfo` where it
-  passed the word's index, and `onDecorationTap` carries the `QvpHit` beside the
-  decoration. Android and iOS pass the word and the hit already, so host code reads one
-  shape on all three. `QvpWordTapCallback` and `QvpDecorationTapCallback` name the two
-  shapes. The index is `word.index`, and a host with no use for the hit takes a second
-  parameter and ignores it (issue #139).
 - `scripts/set-version.sh` stamps the default `qvpVersion` in `packages/android/build.gradle.kts`
   and `CFBundleShortVersionString` in `packages/ios/example/project.yml`.
   `scripts/check-versions.sh` checks both, and `docs/standards/VERSIONING.md` names the two
@@ -172,18 +192,11 @@ All notable changes to the engine and its packages. The format follows
   line shifts or the boxes of a highlight that is not moving. A `gap_bias` below 0 in
   `QvpHitOptions` and in `qvp_hit_areas` and `qvp_hit_areas_view` now means the engine
   default, 0.6, as a `max_distance` of 0 or less already means no limit.
-- **Breaking.** Swift: `QvpOrnaments.find`, `QvpPage.dress` with a closed set and
-  `QvpPassage.layout` on a closed passage stop the program with a fatal error that names the
-  object, such as `QvpOrnaments is closed`. They returned nil, the same answer as a refused
-  spec or no match. Check `isOpen` first where an object can close before its last call.
 - The core crate's reflow is a `reflow/` module with one file per step: row units, breaks,
   horizontal and vertical placement, banners and the sajdah line. `Page::from_data` runs
   named load steps in `load.rs`, and the words sidecar parser is in `sidecar.rs`. The unit
   tests share one fixtures module and sit in one file per area. Layouts, hits and the C ABI
   do not change.
-- **Breaking.** Rust: the `qvp-core` fields `Page.styles` and `Page.selection` are
-  crate-private. Read them with `styles()` and `selection()`, and change them with
-  `styles_mut()` and `selection_mut()`.
 - Android and Flutter: a page view frame where nothing changed asks the engine for the clock
   and nothing else. The views keep the styled paths, the highlight and mask boxes with their
   paths, and the dress readout until a call on the page, a new layout or the clock changes
@@ -252,22 +265,25 @@ All notable changes to the engine and its packages. The format follows
   array getter grows its buffer to the total the engine reports, where the Android bridge,
   the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
   highlight handles and a 256 KB scratch.
-- Every pan, zoom and view computation in the page views goes through the engine. The views
-  on iOS, Android and Flutter no longer invert the view transform for a tap, place a
-  magnifying pinch or draw the zoomed line themselves: they call `viewToLayout`,
-  `viewZoomAbout` (the fitted page as the floor, the host's `maxZoom` as the ceiling) and
-  `zoomIsZoomed`, and each holds the view a drag or a pinch produces with `dressClamp`.
-  When the fingers of a stepped pinch come back to the step it began on, the engine lays the
-  page out at that step again. Before, it kept the step the pinch passed through. Every page
-  view and the web example follow one pinch rule, stated in `docs/API.md`: the engine zooms
-  about the focal point the gesture began on, by the factor of the whole gesture, and the
-  host pans the answer by the drift of the focal point. Two fingers drag the page on every platform again,
-  and a step committed in the middle of a gesture anchors on the view the last frame
-  returned. The Flutter view drags with one finger. `zoomSpec` keeps the host's reflow knobs
-  on the printed page on every wrapper. Flutter's `QvpViewController.zoomBy` stops at the
-  fitted page, and a controller that a host hands to a new view keeps working.
-  `conformance/scenarios/zoom.json` holds the engine's answers, and every wrapper test
-  replays them.
+- Every pan, zoom and view computation in the page views goes through the engine. The views on
+  iOS, Android and Flutter no longer invert the view transform for a tap, place a magnifying
+  pinch or draw the zoomed line themselves: they call `viewToLayout`, `viewZoomAbout` (the
+  fitted page as the floor, the host's `maxZoom` as the ceiling) and `zoomIsZoomed`, pan a
+  drag with `viewPan`, and each holds the view a drag or a pinch produces with `dressClamp`.
+  React Native's `hitTestView` and `hitTestExactView` invert the Android view's pan and zoom
+  with `viewToLayout`. When the fingers of a stepped pinch come back to the step it began on,
+  the engine lays the page out at that step again. Before, it kept the step the pinch passed
+  through. Every page view and the web example follow one pinch rule, stated in `docs/API.md`:
+  the engine zooms about the focal point the gesture began on, by the factor of the whole
+  gesture, and the host pans the answer by the drift of the focal point. Two fingers drag the
+  page on every platform again, and a step committed in the middle of a gesture anchors on the
+  view the last frame returned. The Flutter view drags with one finger, which it did not do
+  before, and its `QvpViewController.zoomBy`, `panBy` and `toView` call the engine. On iOS, a
+  pinch that ends while the reader selects no longer leaves the one-finger drag switched off.
+  `zoomSpec` keeps the host's reflow knobs on the printed page on every wrapper. Flutter's
+  `QvpViewController.zoomBy` stops at the fitted page, and a controller that a host hands to a
+  new view keeps working. `conformance/scenarios/zoom.json` holds the engine's answers, and
+  every wrapper test replays them.
 - A malformed page, atlas or ornament file is an error from the decoder, not a panic or
   an abort. On wasm32 a panic is a trap, so a damaged download could take a host app down.
   The page decoder checks the magic, the version, `quant`, every count against its
