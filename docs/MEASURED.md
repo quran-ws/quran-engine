@@ -84,5 +84,5 @@ DOM and stay responsive.
   indexes into `page.decorations`.
 - npm, crates.io, pub.dev and Maven Central publish from the tag workflow; the first three
   through trusted publishing.
-  Every package carries the workspace version in `Cargo.toml`, 0.7.0 today: Android from Maven
+  Every package carries the workspace version in `Cargo.toml`, 0.8.0 today: Android from Maven
   Central, iOS through Swift Package Manager.

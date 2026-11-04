@@ -210,7 +210,7 @@ All notable changes to the engine and its packages. The format follows
   `QvpEngine.str` are gone. All three named `dart:ffi` types or the native scratch, which
   cannot sit on a platform-neutral class. `QvpNativeBackend` holds them now. Pass a library
   to `QvpEngine(library)` or a path to `QvpEngine.open(path:)` as before. Before 1.0 a
-  removal takes a minor bump (`docs/standards/VERSIONING.md`), so the next release is 0.8.0.
+  removal takes a minor bump (`docs/standards/VERSIONING.md`), so this release is 0.8.0.
 - **Breaking.** The pinch limits that each page view kept for itself are gone, because the
   engine applies them. The floor is the fitted page. Flutter: `kMinZoom` and `kMaxZoom` are
   gone. Use `QvpDefaults.maxZoom` and `QvpPageView.maxZoom`. `QvpPageView.minScale` and
