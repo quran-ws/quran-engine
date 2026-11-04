@@ -141,9 +141,11 @@ All notable changes to the engine and its packages. The format follows
 - The core crate's reflow is a `reflow/` module with one file per step: row units, breaks,
   horizontal and vertical placement, banners and the sajdah line. `Page::from_data` runs
   named load steps in `load.rs`, and the words sidecar parser is in `sidecar.rs`. The unit
-  tests share one fixtures module and sit in one file per area. `Page.styles` and
-  `Page.selection` are crate-private, and `styles()`, `styles_mut()`, `selection()` and
-  `selection_mut()` read them. Layouts, hits and the C ABI do not change.
+  tests share one fixtures module and sit in one file per area. Layouts, hits and the C ABI
+  do not change.
+- **Breaking.** Rust: the `qvp-core` fields `Page.styles` and `Page.selection` are
+  crate-private. Read them with `styles()` and `selection()`, and change them with
+  `styles_mut()` and `selection_mut()`.
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and
