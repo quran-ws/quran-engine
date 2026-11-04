@@ -63,11 +63,15 @@ for check in "$@"; do
       python3 scripts/check-parity.py --check
       # The Flutter bindings are generated from the header. Generating them needs Flutter
       # and libclang, which the standards job does not install; the Flutter workflow runs
-      # this check on every change to the header or the package.
-      if command -v flutter >/dev/null; then
-        scripts/check-flutter-bindings.sh
-      else
+      # this check on every change to the header or the package. macOS has libclang with
+      # Xcode or the Command Line Tools; Linux has it with libclang-dev.
+      if ! command -v flutter >/dev/null; then
         echo "skip Flutter bindings: Flutter not installed; the Flutter workflow runs it"
+      elif [ "$(uname)" != Darwin ] && ! ldconfig -p 2>/dev/null | grep -q libclang &&
+        ! ls /usr/lib/llvm-*/lib/libclang.so >/dev/null 2>&1; then
+        echo "skip Flutter bindings: libclang not found (install libclang-dev); the Flutter workflow runs it"
+      else
+        scripts/check-flutter-bindings.sh
       fi
       ;;
     versions)

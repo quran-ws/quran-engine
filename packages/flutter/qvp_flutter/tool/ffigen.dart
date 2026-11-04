@@ -3,13 +3,15 @@
 // Run from the package directory: `dart run tool/ffigen.dart`. An argument writes the
 // bindings to that path instead, which scripts/check-flutter-bindings.sh uses to compare
 // a fresh copy with the committed file. ffigen needs libclang: Xcode or the Command Line
-// Tools on macOS, the libclang-dev package on Linux.
+// Tools on macOS, the libclang-dev package on Linux. The output depends on the ffigen
+// version, which the pubspec pins, and on the Dart formatter: run it with the Flutter
+// version that .github/workflows/flutter.yml pins.
 //
 // The names keep the shape the backend was written against: a struct is the C name plus
 // `C` (`QvpPageInfo` is `QvpPageInfoC`), a field is its C name in camelCase without a
 // leading underscore (`n_lines` is `nLines`, `_pad` is `pad`), and a function is its C
 // name without `qvp_` in camelCase (`qvp_page_load` is `pageLoad`). scripts/check-parity.py
-// counts a function as bound in Flutter by that camelCase name in the backend sources.
+// counts a function as bound in Flutter by that camelCase name in the package's own code.
 import 'dart:io';
 
 import 'package:ffigen/ffigen.dart';

@@ -39,9 +39,9 @@ All notable changes to the engine and its packages. The format follows
 - Flutter: `package:ffigen` generates `lib/src/bindings.dart` from `qvp.h`
   (`dart run tool/ffigen.dart`). Before, the file was written by hand.
   `scripts/check-flutter-bindings.sh` fails when the file and the header differ. The Flutter
-  workflow runs it, and `scripts/check.sh parity` runs it when Flutter is installed.
-  `scripts/check-parity.py` skips the generated file, so a symbol counts as bound in Flutter
-  only when a backend calls it. `docs/API-PARITY.md` lists as gaps the 14 symbols that the old
+  workflow runs it, and `scripts/check.sh parity` runs it when Flutter and libclang are
+  installed. `scripts/check-parity.py` skips the generated file, so a symbol counts as bound
+  in Flutter only when the package's own code names it. `docs/API-PARITY.md` lists as gaps the 14 symbols that the old
   file bound and no backend called.
   The binding object behind `QvpNativeBackend.b` follows the C names everywhere: `hide`,
   `highlight`, `moveHighlight`, `restyleHighlight`, `removeHighlight`, `clearHighlights`

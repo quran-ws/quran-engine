@@ -158,6 +158,8 @@ cd packages/flutter/qvp_flutter && dart run tool/ffigen.dart
 ```
 
 ffigen needs libclang: Xcode or the Command Line Tools on macOS, `libclang-dev` on Linux.
+The pubspec pins ffigen to one version. The tool formats the file with the Dart SDK that
+runs it, so generate it with the Flutter version the Flutter workflow pins.
 `scripts/check-flutter-bindings.sh` generates a fresh copy and fails when it differs from
 the committed file. The Flutter workflow runs it.
 

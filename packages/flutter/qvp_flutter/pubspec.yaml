@@ -20,7 +20,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  ffigen: ^23.0.0
+  # Exact: a newer ffigen may write a different file, and the bindings check would fail.
+  ffigen: 23.0.0
 
 flutter:
   plugin:
