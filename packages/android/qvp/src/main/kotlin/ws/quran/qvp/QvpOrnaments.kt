@@ -12,13 +12,13 @@ import android.graphics.Path
  * closed after a dress. Call [close] when done.
  */
 class QvpOrnaments(bytes: ByteArray) : AutoCloseable {
-    private var nativeHandle: Long = QvpNative.ornamentsLoad(bytes)
-    private val h: Long get() = nativeHandle.takeIf { it != 0L } ?: error("QvpOrnaments is closed")
+    private val nativeHandle = NativeHandle("QvpOrnaments", QvpNative.ornamentsLoad(bytes), QvpNative::ornamentsFree)
+    private val h: Long get() = nativeHandle.get()
     /** The engine's handle, for a page to dress from. Throws once the set is closed. */
     internal val handle: Long get() = h
-    init { require(nativeHandle != 0L) { "qvp_ornaments_load failed (not a QVO1 file?)" } }
+    init { require(nativeHandle.isOpen) { "qvp_ornaments_load failed (not a QVO1 file?)" } }
 
-    val isClosed: Boolean get() = nativeHandle == 0L
+    val isClosed: Boolean get() = !nativeHandle.isOpen
     /** How many ornaments the set holds. */
     val count: Int = QvpNative.ornamentCount(h)
     /** Every ornament, in the set's order: `list[i].index == i`. */
@@ -67,14 +67,8 @@ class QvpOrnaments(bytes: ByteArray) : AutoCloseable {
         return out.values.toList()
     }
 
-    @Synchronized
-    override fun close() {
-        val handle = nativeHandle
-        if (handle != 0L) {
-            nativeHandle = 0L
-            QvpNative.ornamentsFree(handle)
-        }
-    }
+    /** Free the native set. A second call does nothing. */
+    override fun close() = nativeHandle.close()
 }
 
 /**

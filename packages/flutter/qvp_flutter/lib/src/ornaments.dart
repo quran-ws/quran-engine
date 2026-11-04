@@ -16,17 +16,19 @@ class QvpOrnaments {
   /// Every ornament of the set, in order.
   final List<QvpOrnament> list;
 
-  OrnamentsHandle get handle {
-    assert(_handle != null, 'QvpOrnaments used after dispose()');
-    return _handle!;
-  }
+  /// Throws a [StateError] once the set is disposed, in every build mode.
+  OrnamentsHandle get handle =>
+      _handle ?? (throw StateError('QvpOrnaments is disposed'));
 
   bool get isDisposed => _handle == null;
 
+  /// Frees backend set memory. A second call does nothing. A page dressed from the set
+  /// keeps its dress.
   void free() {
-    if (_handle != null) {
-      _backend.ornamentsFree(_handle!);
+    final h = _handle;
+    if (h != null) {
       _handle = null;
+      _backend.ornamentsFree(h);
     }
   }
 

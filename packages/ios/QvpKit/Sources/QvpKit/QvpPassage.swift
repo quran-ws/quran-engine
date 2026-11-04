@@ -167,15 +167,19 @@ public final class QvpPassage {
         lineSpacing = qvp_passage_line_spacing(h)
     }
     deinit { close() }
-    /// Free the native passage. Safe to call more than once.
+    /// Free the native passage. A second call does nothing.
     public func close() { if let p = h { qvp_passage_free(p); h = nil } }
     /// False once `close()` has run.
     public var isOpen: Bool { h != nil }
+    /// The engine handle. Internal: the wrapper marshals through it, no app ever sees it.
+    /// A call on a closed passage stops the program with the fatal error `QvpPassage is closed`.
+    var p: OpaquePointer { guard let h else { fatalError("QvpPassage is closed") }; return h }
 
     /// Lay the passage out. `nil` when the spec is out of range; the last layout then stays.
     @discardableResult
     public func layout(_ spec: QvpPassageSpec) -> QvpPassageLayout? {
-        guard let p = h, spec.maxRows >= 0 else { return nil }
+        guard spec.maxRows >= 0 else { return nil }
+        let p = self.p
         var s = QvpFFI.QvpPassageSpec(width: spec.width, scale: spec.scale, line_spacing: spec.lineSpacing, padding: spec.padding,
                                        align: spec.align.rawValue, keep_ayah_mark: spec.keepAyahMark ? 1 : 0, _pad: (0, 0),
                                        max_rows: UInt32(spec.maxRows), ellipsis_width: spec.ellipsisWidth, max_stretch: spec.maxStretch)

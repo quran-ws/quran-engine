@@ -70,6 +70,12 @@ console.log('ok  printed breaks reach the core and clamp');
     // the blocks those inputs took go when their call returns; none pins memory for the session
     if (engine._spill.length) throw new Error(`${engine._spill.length} input blocks outlived their call`);
     console.log('ok  inputs that outgrow the scratch reach the engine whole, and their blocks go with the call');
+    // An array result larger than the first buffer is read again whole. highlightHandles once
+    // stopped at 1,024; 1,100 highlights must give 1,100 handles.
+    const added = Array.from({ length: 1100 }, (_, i) => page.highlight(i % page.nWords));
+    if (JSON.stringify(page.highlightHandles()) !== JSON.stringify(added)) throw new Error(`highlightHandles returned ${page.highlightHandles().length} of 1100 handles`);
+    page.clearHighlights();
+    console.log('ok  an array result larger than the first buffer comes back whole');
     // A spec with a field that is not a finite number is refused by name before the engine sees
     // it, and the layout in hand stays.
     const before = page.layout({ viewportW: 390, viewportH: 844 });

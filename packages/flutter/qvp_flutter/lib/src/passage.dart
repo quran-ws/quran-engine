@@ -71,18 +71,18 @@ class QvpPassage {
   /// The last layout, if any.
   QvpPassageLayout? currentLayout;
 
-  PassageHandle get handle {
-    assert(_handle != null, 'QvpPassage used after close()');
-    return _handle!;
-  }
+  /// Throws a [StateError] once the passage is closed or disposed, in every build mode.
+  PassageHandle get handle =>
+      _handle ?? (throw StateError('QvpPassage is disposed'));
 
   bool get isDisposed => _handle == null;
 
-  /// Frees backend passage memory.
+  /// Frees backend passage memory. A second call does nothing.
   void close() {
-    if (_handle != null) {
-      _backend.passageFree(_handle!);
+    final h = _handle;
+    if (h != null) {
       _handle = null;
+      _backend.passageFree(h);
     }
   }
 

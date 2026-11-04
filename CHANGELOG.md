@@ -150,6 +150,16 @@ All notable changes to the engine and its packages. The format follows
 - `scripts/check-parity.py` reads a hex colour whole. It stripped every trailing `f` as a
   suffix, so `0x231f20ffu` compared as `0x231f20` and a wrapper colour without its alpha
   byte passed. A failed default now also stops the summary from reporting agreement.
+- Every wrapper handles a freed object, a second free and a large array result the same way
+  (`docs/API.md`, conventions). A call on a freed page, atlas, ornament set or passage throws
+  an error with the object's name: a `StateError` in Dart in every build mode, where a debug
+  assert stood before, a fatal error in Swift, where a closed ornament set returned nil, and a
+  rejection in React Native. The Flutter native backend no longer passes a freed handle's null
+  pointer to the engine. A second `free`, `close` or `dispose` does nothing, Flutter's
+  `QvpPage.dispose` included, and the Kotlin handle is atomic, where `close` held a lock that
+  the calls reading the handle did not. Every array getter grows its buffer to the total the
+  engine reports, where the Android bridge, the web wrapper and the Flutter backend stopped at
+  fixed caps such as 64 line bands, 1,024 highlight handles and a 256 KB scratch.
 - A malformed page, atlas or ornament file is an error from the decoder, not a panic or
   an abort. On wasm32 a panic is a trap, so a damaged download could take a host app down.
   The page decoder checks the magic, the version, `quant`, every count against its

@@ -521,22 +521,26 @@ export const Qvp = {
 /** Cross-page lookup (atlas.qva). `const atlas = await QvpAtlas.load('asset://pages/atlas.qva')`. */
 export class QvpAtlas {
   private constructor(public readonly id: number) {}
+  private freed = false;
+  /** The native id. Throws once the atlas is freed, so every call after `free()` rejects. */
+  private get h(): number { if (this.freed) throw new Error('QvpAtlas was freed'); return this.id; }
   static async load(uri: string): Promise<QvpAtlas> { return new QvpAtlas(await Qvp.loadAtlas(uri)); }
-  free() { return Qvp.freeAtlas(this.id); }
-  pageOf(s: number, a: number) { return Qvp.atlasPageOf(this.id, s, a); }
-  pageRange(page: number) { return Qvp.atlasPageRange(this.id, page); }
-  pageCount() { return Qvp.atlasPageCount(this.id); }
-  surah(n: number) { return Qvp.atlasSurah(this.id, n); }
-  surahs() { return Qvp.atlasSurahs(this.id); }
-  pageOfSurah(n: number) { return Qvp.atlasPageOfSurah(this.id, n); }
-  division(division: DivisionKind, n: number) { return Qvp.atlasDivision(this.id, division, n); }
-  juz(n: number) { return Qvp.atlasDivision(this.id, 'juz', n); }
-  hizb(n: number) { return Qvp.atlasDivision(this.id, 'hizb', n); }
-  rubuAlHizb(n: number) { return Qvp.atlasDivision(this.id, 'rubuAlHizb', n); }
-  divisionOf(division: DivisionKind, s: number, a: number) { return Qvp.atlasDivisionOf(this.id, division, s, a); }
-  juzOf(s: number, a: number) { return Qvp.atlasJuzOf(this.id, s, a); }
-  pagesOfJuz(n: number) { return Qvp.atlasPagesOfJuz(this.id, n); }
-  searchSurahs(text: string) { return Qvp.atlasSearchSurahs(this.id, text); }
+  /** Free the native atlas. A second call does nothing. */
+  async free(): Promise<void> { if (this.freed) return; this.freed = true; await Qvp.freeAtlas(this.id); }
+  async pageOf(s: number, a: number) { return Qvp.atlasPageOf(this.h, s, a); }
+  async pageRange(page: number) { return Qvp.atlasPageRange(this.h, page); }
+  async pageCount() { return Qvp.atlasPageCount(this.h); }
+  async surah(n: number) { return Qvp.atlasSurah(this.h, n); }
+  async surahs() { return Qvp.atlasSurahs(this.h); }
+  async pageOfSurah(n: number) { return Qvp.atlasPageOfSurah(this.h, n); }
+  async division(division: DivisionKind, n: number) { return Qvp.atlasDivision(this.h, division, n); }
+  async juz(n: number) { return Qvp.atlasDivision(this.h, 'juz', n); }
+  async hizb(n: number) { return Qvp.atlasDivision(this.h, 'hizb', n); }
+  async rubuAlHizb(n: number) { return Qvp.atlasDivision(this.h, 'rubuAlHizb', n); }
+  async divisionOf(division: DivisionKind, s: number, a: number) { return Qvp.atlasDivisionOf(this.h, division, s, a); }
+  async juzOf(s: number, a: number) { return Qvp.atlasJuzOf(this.h, s, a); }
+  async pagesOfJuz(n: number) { return Qvp.atlasPagesOfJuz(this.h, n); }
+  async searchSurahs(text: string) { return Qvp.atlasSearchSurahs(this.h, text); }
 }
 
 /**
@@ -548,14 +552,17 @@ export class QvpOrnaments {
   /** Every ornament of the set, in the set's order. */
   readonly count: number;
   private constructor(public readonly id: number, public readonly list: Ornament[]) { this.count = list.length; }
+  private freed = false;
   /** Load a set from a URI (the same schemes as `pageUri`; `base64:…` for bytes in hand). */
   static async load(uri: string): Promise<QvpOrnaments> {
     const id = await Qvp.loadOrnaments(uri);
     return new QvpOrnaments(id, await Qvp.ornamentList(id));
   }
-  free() { return Qvp.freeOrnaments(this.id); }
-  /** The ornament of `kind` in `style`, or null; the engine looks it up. */
+  /** Free the native set. A second call does nothing. `list`, `ofKind` and `styles` stay readable. */
+  async free(): Promise<void> { if (this.freed) return; this.freed = true; await Qvp.freeOrnaments(this.id); }
+  /** The ornament of `kind` in `style`, or null; the engine looks it up. Rejects once the set is freed. */
   async find(kind: OrnamentKind, style: string): Promise<Ornament | null> {
+    if (this.freed) throw new Error('QvpOrnaments was freed');
     const i = await Qvp.ornamentFind(this.id, kind, style);
     return i < 0 ? null : this.list[i] ?? null;
   }

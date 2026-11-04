@@ -11,7 +11,7 @@
 - UI checks: the `DemoUITests` target, or the demo's `-qvpPage`, `-qvpGoto`, `-qvpSearch`,
   `-qvpAyah`, `-qvpWord`, `-qvpTheme` launch arguments. Simulator taps cannot be scripted
   from AppleScript.
-- Every controller operation checks `page.isOpen` before calling the engine. A closed page
-  traps in the engine. The wrapper must not let that happen.
+- Every controller operation checks `page.isOpen` before calling the engine. A call on a
+  closed page is a fatal error, `QvpPage is closed`. The controller must not make one.
 - Rust toolchain: `rustup` with `aarch64-apple-ios`, `aarch64-apple-ios-sim`,
   `x86_64-apple-ios`. `cargo` is under `~/.cargo/bin`.

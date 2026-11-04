@@ -61,14 +61,16 @@ public final class QvpPage {
         lineSpacing = qvp_page_line_spacing(h)
     }
     deinit { close() }
-    /// Free the native page. Safe to call more than once.
+    /// Free the native page. A second call does nothing.
     public func close() { if let p = h { qvp_page_free(p); h = nil } }
     /// False once `close()` has run. A renderer racing a host's page teardown
-    /// must check this before calling into the engine — every engine call on
-    /// a closed page traps.
+    /// must check this before calling into the engine: every engine call on
+    /// a closed page stops the program with the fatal error `QvpPage is closed`.
     public var isOpen: Bool { h != nil }
     /// The engine handle. Internal: the wrapper marshals through it, no app ever sees it.
-    var p: OpaquePointer { h! }
+    /// A closed page has none. A call on it is a programming error, as an index out of range
+    /// is, so this stops the program with a message that names the page, in every build.
+    var p: OpaquePointer { guard let h else { fatalError("QvpPage is closed") }; return h }
 
     // ── geometry ──
     public func pathOpStart(_ i: Int) -> Int { Int(table[i * 8]) }
@@ -388,9 +390,11 @@ public final class QvpAtlas {
         if h == nil { throw QvpError.badAtlas }
     }
     deinit { close() }
+    /// Free the native atlas. A second call does nothing.
     public func close() { if let a = h { qvp_atlas_free(a); h = nil } }
     /// The engine handle. Internal: the wrapper marshals through it, no app ever sees it.
-    var p: OpaquePointer { h! }
+    /// A call on a closed atlas stops the program with the fatal error `QvpAtlas is closed`.
+    var p: OpaquePointer { guard let h else { fatalError("QvpAtlas is closed") }; return h }
     private func surah(_ ok: Int32, _ s: QvpFFI.QvpAtlasSurah) -> QvpAtlasSurah? {
         ok != 0 ? QvpAtlasSurah(number: Int(s.number), page: Int(s.first_page), ayahCount: Int(s.ayah_count), place: place(s.place), arabic: s.arabic.string, latin: s.latin.string, english: s.english.string) : nil
     }

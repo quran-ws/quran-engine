@@ -1020,4 +1020,102 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     p.dispose();
   });
+
+  // The same three rules as every other wrapper (docs/API.md, conventions). `flutter test`
+  // runs in debug mode, where the old handle was only an assert; the error is now the same
+  // StateError in every mode.
+  test(
+    'a disposed page, atlas or passage throws a StateError that names it',
+    () {
+      final p = engine.loadPage(File(pagePath).readAsBytesSync());
+      final passage = QvpPassage.load([p], 2, 255);
+      final h = p.handle;
+      p.dispose();
+      expect(
+        () => p.hitAreas(),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'QvpPage is disposed',
+          ),
+        ),
+      );
+      // the backend refuses the freed handle itself, so the engine never sees a null
+      expect(
+        () => engine.backend.lineBands(h),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'QvpPage is disposed',
+          ),
+        ),
+      );
+      passage.close();
+      expect(
+        () => passage.layout(const QvpPassageSpec(width: 360)),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'QvpPassage is disposed',
+          ),
+        ),
+      );
+      if (!File(atlasPath).existsSync()) return;
+      final atlas = engine.loadAtlas(File(atlasPath).readAsBytesSync());
+      atlas.free();
+      expect(
+        () => atlas.pageOf(2, 255),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'QvpAtlas is disposed',
+          ),
+        ),
+      );
+    },
+  );
+
+  test('a second free, close or dispose does nothing', () {
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    final passage = QvpPassage.load([p], 2, 255);
+    final h = p.handle;
+    p.free();
+    p.free();
+    p.dispose();
+    p.dispose();
+    engine.backend.pageFree(h);
+    expect(p.isDisposed, isTrue);
+    passage.close();
+    passage.dispose();
+    expect(passage.isDisposed, isTrue);
+    if (!File(atlasPath).existsSync()) return;
+    final atlas = engine.loadAtlas(File(atlasPath).readAsBytesSync());
+    atlas.free();
+    atlas.dispose();
+    expect(atlas.isDisposed, isTrue);
+  });
+
+  test('an array larger than the scratch is read in full', () {
+    // A 4 KB scratch holds 102 hit areas and 1,024 handles: page 42 has 147 words, and
+    // 1,100 highlights have 1,100 handles. Both must come back whole.
+    final small = QvpEngine.fromBackend(
+      QvpNativeBackend(path: libPath, scratchBytes: 4096),
+    );
+    final p = small.loadPage(File(pagePath).readAsBytesSync());
+    expect(
+      p.hitAreas().map((a) => a.word).toList(),
+      page.hitAreas().map((a) => a.word).toList(),
+    );
+    expect(p.hitAreas().length, 147);
+    final added = [
+      for (var i = 0; i < 1100; i++) p.highlight(T.word(i % p.nWords)),
+    ];
+    expect(p.highlightHandles(), added);
+    p.dispose();
+    small.dispose();
+  });
 }

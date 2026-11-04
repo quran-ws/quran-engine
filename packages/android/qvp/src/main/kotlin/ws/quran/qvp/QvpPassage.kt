@@ -13,8 +13,8 @@ import android.graphics.RectF
  * from its pages, so the pages can be closed after it is made. Call [close] when done.
  */
 class QvpPassage private constructor(handle: Long, surah: Int, from: Int) : AutoCloseable {
-    private var nativeHandle: Long = handle
-    private val h: Long get() = nativeHandle.takeIf { it != 0L } ?: error("QvpPassage is closed")
+    private val nativeHandle = NativeHandle("QvpPassage", handle, QvpNative::passageFree)
+    private val h: Long get() = nativeHandle.get()
 
     /** The ayahs in reading order. A basmalah has none. */
     val ayahs: List<QvpPassageText>
@@ -58,8 +58,8 @@ class QvpPassage private constructor(handle: Long, surah: Int, from: Int) : Auto
     }
 
     /** False once [close] has been called. */
-    val isOpen: Boolean get() = nativeHandle != 0L
-    val isClosed: Boolean get() = nativeHandle == 0L
+    val isOpen: Boolean get() = nativeHandle.isOpen
+    val isClosed: Boolean get() = !isOpen
 
     /** Lay the passage out. Null when the spec is out of range. The last layout then stays. */
     fun layout(spec: QvpPassageSpec): QvpPassageLayout? {
@@ -88,14 +88,8 @@ class QvpPassage private constructor(handle: Long, surah: Int, from: Int) : Auto
         ).also { currentLayout = it }
     }
 
-    @Synchronized
-    override fun close() {
-        val handle = nativeHandle
-        if (handle != 0L) {
-            nativeHandle = 0L
-            QvpNative.passageFree(handle)
-        }
-    }
+    /** Free the native passage. A second call does nothing. */
+    override fun close() = nativeHandle.close()
 }
 
 /**

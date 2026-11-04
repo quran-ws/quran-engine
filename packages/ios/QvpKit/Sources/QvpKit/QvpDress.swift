@@ -81,15 +81,16 @@ public final class QvpOrnaments {
     /// Load an ornament set from a file.
     public convenience init(path: String) throws { try self.init(bytes: try Data(contentsOf: URL(fileURLWithPath: path))) }
     deinit { close() }
-    /// Free the native set. Safe to call more than once. A page dressed from it keeps its dress.
+    /// Free the native set. A second call does nothing. A page dressed from it keeps its dress.
     public func close() { if let s = h { qvp_ornaments_free(s); h = nil } }
     public var isOpen: Bool { h != nil }
     /// The engine handle. Internal: the wrapper marshals through it, no app ever sees it.
-    var p: OpaquePointer { h! }
+    /// A call on a closed set stops the program with the fatal error `QvpOrnaments is closed`.
+    var p: OpaquePointer { guard let h else { fatalError("QvpOrnaments is closed") }; return h }
 
     /// The ornament of `kind` in `style`, or nil.
     public func find(_ kind: OrnamentKind, _ style: String) -> Ornament? {
-        guard let s = h else { return nil }
+        let s = p
         let i = withBytes(style) { sp, sn in qvp_ornament_find(s, UInt32(kind.rawValue), sp, sn) }
         return i < 0 ? nil : list.first { $0.index == Int(i) }
     }
