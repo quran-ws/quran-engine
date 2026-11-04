@@ -45,6 +45,9 @@ for _ in $(seq 30); do
 done
 [ -n "$run" ] || { echo "error: the workflow run did not start; see gh run list" >&2; exit 1; }
 
-gh run watch "$run" --exit-status
+# Pull also after a failed run: a run that fails after its push has still moved the branch.
+status=0
+gh run watch "$run" --exit-status || status=$?
 git pull -q --ff-only origin "$branch"
+[ "$status" = 0 ] || exit "$status"
 sed -n 's/.*\(releases\/download\/[^"]*\)".*/\1/p; s/.*checksum: "\([0-9a-f]*\)".*/checksum \1/p' Package.swift

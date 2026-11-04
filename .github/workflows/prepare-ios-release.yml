@@ -6,8 +6,9 @@
 # then checks that the tagged commit, the draft and the engine sources agree.
 #
 # Start it with scripts/prepare-ios-release.sh X.Y.Z from the release branch. To run it again,
-# run that script again: it starts a new run from the current branch head. "Re-run jobs" in
-# the Actions page builds the old head, and the workflow refuses it.
+# run that script again: it starts a new run from the current branch head. The workflow
+# refuses a run whose commit is no longer the branch head, so "Re-run jobs" in the Actions
+# page fails after this run pushed its commit or after any other push.
 name: Prepare iOS release
 
 on:

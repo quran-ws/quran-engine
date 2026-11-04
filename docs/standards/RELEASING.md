@@ -9,9 +9,10 @@
    It starts `prepare-ios-release.yml` and waits for it. On a macOS runner, the workflow
    builds the XCFramework with the commands `ios.yml` runs and runs the Swift tests. Then it
    pushes one commit to the release branch. That commit sets the URL, the checksum and the
-   build commit in the root `Package.swift`. Last, it attaches the zip and its checksum to
-   the draft release `vX.Y.Z`. The script then pulls that commit. No release artifact is
-   built on a developer's machine.
+   build commit in the root `Package.swift`. Then it attaches the zip and its checksum to
+   the draft release `vX.Y.Z`. Last, it starts `ci.yml` for the new commit. The script
+   then pulls that commit, also after a failed run. No release artifact is built on a
+   developer's machine.
 3. Review the PR, merge it, then `git tag vX.Y.Z && git push --tags` on the merged commit.
    If the engine sources change after step 2, run step 2 again. `release.yml` refuses a
    tag whose engine sources differ from the build commit.
@@ -33,9 +34,10 @@ is part of the release PR. `scripts/package-ios.sh` writes the zip with sorted e
 fixed date and fixed file modes. The same XCFramework files then give the same checksum.
 To repeat step 2, run the script again. The new run builds the current branch head, pushes a
 new commit and replaces the assets of the draft release. The workflow refuses a run whose
-commit is no longer the branch head, so "Re-run jobs" on an old run fails at its first step. A push
-made with the workflow token does not start other workflows, so `prepare-ios-release.yml`
-starts `ci.yml` for its commit. The required checks of the PR then report on that commit.
+commit is no longer the branch head. "Re-run jobs" therefore fails after the run pushed its
+commit or after any other push. A push made with the workflow token does not start other
+workflows, so `prepare-ios-release.yml` starts `ci.yml` for its commit. The required checks
+of the PR then report on that commit.
 
 crates.io, npm and pub.dev use GitHub trusted publishing with short-lived OpenID Connect
 tokens. Each crate and each npm package trusts `.github/workflows/release.yml` of this
