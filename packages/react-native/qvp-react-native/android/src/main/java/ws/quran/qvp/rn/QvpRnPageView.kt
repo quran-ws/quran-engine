@@ -170,16 +170,25 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         if (key == loadedKey) return
         // drop everything bound to the old page: handles die with it
         themeHandle = 0; appliedTheme = null; styleHandles.clear(); highlightHandles.clear(); appliedMask = null; appliedReveal = null; appliedRevealAt = null; appliedInk = null; appliedDress = null; revealStepCount = 0
-        lock.write { page?.close(); page = null; dropWords() }
         loadedKey = key
-        if (key == null) return
-        val bytes = pageBase64?.let { Base64.decode(it, Base64.DEFAULT) } ?: readUri(pageUri!!)
-        val t0 = System.nanoTime()
-        val p = QvpPage(bytes); p.buildPaths()
-        val ms = (System.nanoTime() - t0) / 1e6
-        // No query sees the page before it is published below, so the sidecar needs no lock.
-        wordsUri?.let { runCatching { p.attachWords(readUri(it)) }.onFailure { e -> Log.w("QvpRn", "words sidecar: $e") } }
-        lock.write { page = p; loadMs = ms; pageBytes = bytes.size }
+        if (key == null) { lock.write { page?.close(); page = null; dropWords() }; return }
+        // Load the new page before the swap, so a query sees the old page or the new one and
+        // never a view with no page. A load that fails leaves no page, as before.
+        val p: QvpPage
+        val bytes: ByteArray
+        val ms: Double
+        try {
+            bytes = pageBase64?.let { Base64.decode(it, Base64.DEFAULT) } ?: readUri(pageUri!!)
+            val t0 = System.nanoTime()
+            p = QvpPage(bytes); p.buildPaths()
+            ms = (System.nanoTime() - t0) / 1e6
+            // No query sees the page before the swap below, so the sidecar needs no lock.
+            wordsUri?.let { runCatching { p.attachWords(readUri(it)) }.onFailure { e -> Log.w("QvpRn", "words sidecar: $e") } }
+        } catch (e: Exception) {
+            lock.write { page?.close(); page = null; dropWords() }
+            throw e
+        }
+        lock.write { val old = page; page = p; dropWords(); loadMs = ms; pageBytes = bytes.size; old?.close() }
         layoutDirty = true
         emit("onPageLoad", Marshal.pageInfo(p, words(p).forms) + mapOf("loadMs" to loadMs, "bytes" to pageBytes, "uri" to pageUri))
     }
