@@ -114,6 +114,8 @@ by its line spacing band, then to a word, with a gap between two words split 60/
 preceding (right-hand) word — trailing ink is drawn *into* the following gap in this
 print. `hitAreas()` returns the same partition as boxes (no dead zones on a line);
 `lineBands()` the line spacing bands. `hitTestExact`/`hitTestExactView` are the exact-only variants.
+A negative `gapBias` means the engine default, 0.6, in the hit tests and in `hitAreas()`, as a
+`maxDistance` of 0 or less means no limit.
 
 ## Layout
 

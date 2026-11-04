@@ -54,10 +54,46 @@ fn main() {
         let mut draws = vec![0u32; n as usize * 2];
         per_call("layout draw list", || qvp_layout_draw_list(page, 0.0, 0.0, draws.as_mut_ptr(), n));
         per_call("layout draw list, count only", || qvp_layout_draw_list(page, 0.0, 0.0, std::ptr::null_mut(), 0));
+        // what a wrapper does every frame: ask the count with a null buffer, then fill
+        per_call("layout draw list, count then fill", || {
+            let n = qvp_layout_draw_list(page, 0.0, 0.0, std::ptr::null_mut(), 0);
+            qvp_layout_draw_list(page, 0.0, 0.0, draws.as_mut_ptr(), n)
+        });
+        // a drag moves the band every frame, so no two frames ask for the same list
+        let mut frame = 0u32;
+        per_call("layout draw list, count then fill, moving band", || {
+            frame += 1;
+            let top = (frame % 400) as f32;
+            let n = qvp_layout_draw_list(page, top, top + 600.0, std::ptr::null_mut(), 0);
+            qvp_layout_draw_list(page, top, top + 600.0, draws.as_mut_ptr(), n)
+        });
         let mut placements = vec![0f32; qvp_layout_placements(page, std::ptr::null_mut(), 0) as usize * 4];
         per_call("layout placements", || {
             qvp_layout_placements(page, placements.as_mut_ptr(), placements.len() as u32 / 4)
         });
+        per_call("layout placements, count then fill", || {
+            let n = qvp_layout_placements(page, std::ptr::null_mut(), 0);
+            qvp_layout_placements(page, placements.as_mut_ptr(), n)
+        });
+
+        // a band over the first 40 words, which cross several lines, and a mask over the page
+        let words = QvpTarget { target: 7, a: 0, b: 39, c: 0, words: std::ptr::null(), n_words: 0 };
+        let handle = qvp_highlight_add(page, &words, std::ptr::null());
+        let mut boxes = vec![std::mem::zeroed::<QvpBox>(); 64];
+        per_call("highlight boxes, count then fill", || {
+            let n = qvp_highlight_boxes_view(page, std::ptr::null_mut(), 0);
+            qvp_highlight_boxes_view(page, boxes.as_mut_ptr(), n)
+        });
+        qvp_highlight_remove(page, handle);
+        let page_target = QvpTarget { target: 0, a: 0, b: 0, c: 0, words: std::ptr::null(), n_words: 0 };
+        qvp_mask(page, &page_target, 1);
+        qvp_mask_all(page);
+        let mut masks = vec![std::mem::zeroed::<QvpBox>(); info.n_words as usize];
+        per_call("mask boxes, count then fill", || {
+            let n = qvp_mask_boxes_view(page, std::ptr::null_mut(), 0);
+            qvp_mask_boxes_view(page, masks.as_mut_ptr(), n)
+        });
+        qvp_unmask(page);
 
         // two selectors: a word and a mark, as a reader with a highlight and a theme has
         qvp_style_add(page, 0, &QvpSelector { selector: 7, a: 3, b: 0, c: 0 }, 0xff0000ff, 0);

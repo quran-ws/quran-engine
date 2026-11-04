@@ -1,6 +1,6 @@
 //! Highlights, selection and memorisation: bands over words, the selected range, masks and reveal.
 
-use crate::abi::{fill, fill_with, guard, out_str, QvpStr};
+use crate::abi::{fill, fill_with, guard, out_str, QvpStr, BOX_BUF};
 use crate::convert::{band_height, hstyle, raw_band, target, vb};
 use crate::types::*;
 use qvp_core::*;
@@ -45,7 +45,13 @@ pub unsafe extern "C" fn qvp_highlight_words(page: *const Page, handle: u32, out
 /// Band boxes of every highlight in viewport px (animated). Draw each highlight id as one path.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_highlight_boxes_view(page: *const Page, out: *mut QvpBox, cap: u32) -> u32 {
-    guard(|| fill_with(out, cap, (*page).highlight_boxes_view().iter().map(vb)))
+    guard(|| {
+        BOX_BUF.with(|b| {
+            let mut b = b.borrow_mut();
+            (*page).highlight_boxes_view_into(&mut b);
+            fill_with(out, cap, b.iter().map(vb))
+        })
+    })
 }
 /// Raw band boxes (page units, no animation) for a word list.
 #[no_mangle]
@@ -216,7 +222,13 @@ pub unsafe extern "C" fn qvp_mask_words(page: *const Page, out: *mut u32, cap: u
 /// Boxes to draw over hidden words in Block/Blur mode (viewport px).
 #[no_mangle]
 pub unsafe extern "C" fn qvp_mask_boxes_view(page: *const Page, out: *mut QvpBox, cap: u32) -> u32 {
-    guard(|| fill_with(out, cap, (*page).mask_boxes_view().iter().map(vb)))
+    guard(|| {
+        BOX_BUF.with(|b| {
+            let mut b = b.borrow_mut();
+            (*page).mask_boxes_view_into(&mut b);
+            fill_with(out, cap, b.iter().map(vb))
+        })
+    })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_reveal_start(

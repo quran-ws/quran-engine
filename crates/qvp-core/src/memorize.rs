@@ -188,8 +188,17 @@ impl Page {
 
     /// Boxes the host must draw over hidden words in Block/Blur mode (viewport px).
     pub fn mask_boxes_view(&self) -> Vec<crate::highlight::ViewBox> {
+        let mut out = Vec::new();
+        self.mask_boxes_view_into(&mut out);
+        out
+    }
+
+    /// Write the same boxes into `out`, after clearing it. A host that asks every frame keeps
+    /// one list and the engine allocates nothing once it is large enough.
+    pub fn mask_boxes_view_into(&self, out: &mut Vec<crate::highlight::ViewBox>) {
+        out.clear();
         if self.mask.mode == MaskMode::Hide || self.mask.hidden.is_empty() {
-            return vec![];
+            return;
         }
         let q = self.quant();
         let (scale, ox, oy) = match self.current_layout() {
@@ -200,33 +209,27 @@ impl Page {
             Some(l) => l.word_placement(wi, li),
             None => crate::Placement::IDENTITY,
         };
-        self.mask
-            .hidden
-            .iter()
-            .map(|&wi| {
-                let w = &self.data().words[wi as usize];
-                let p = place(wi, w.line_index as usize);
-                let (bx0, by0) =
-                    p.apply(w.bbox.x0 as f32 / q - self.mask.pad_x, w.bbox.y0 as f32 / q - self.mask.pad_y);
-                let (bx1, by1) =
-                    p.apply(w.bbox.x1 as f32 / q + self.mask.pad_x, w.bbox.y1 as f32 / q + self.mask.pad_y);
-                crate::highlight::ViewBox {
-                    highlight: 0,
-                    line: w.line_index as u32,
-                    x0: ox + bx0 * scale,
-                    y0: oy + by0 * scale,
-                    x1: ox + bx1 * scale,
-                    y1: oy + by1 * scale,
-                    color: self.mask.block_color,
-                    radius: crate::highlight::clamp_radius(
-                        self.mask.radius * scale,
-                        (w.bbox.x1 - w.bbox.x0) as f32 / q + 2.0 * self.mask.pad_x,
-                        (w.bbox.y1 - w.bbox.y0) as f32 / q + 2.0 * self.mask.pad_y,
-                        scale,
-                    ),
-                }
-            })
-            .collect()
+        out.extend(self.mask.hidden.iter().map(|&wi| {
+            let w = &self.data().words[wi as usize];
+            let p = place(wi, w.line_index as usize);
+            let (bx0, by0) = p.apply(w.bbox.x0 as f32 / q - self.mask.pad_x, w.bbox.y0 as f32 / q - self.mask.pad_y);
+            let (bx1, by1) = p.apply(w.bbox.x1 as f32 / q + self.mask.pad_x, w.bbox.y1 as f32 / q + self.mask.pad_y);
+            crate::highlight::ViewBox {
+                highlight: 0,
+                line: w.line_index as u32,
+                x0: ox + bx0 * scale,
+                y0: oy + by0 * scale,
+                x1: ox + bx1 * scale,
+                y1: oy + by1 * scale,
+                color: self.mask.block_color,
+                radius: crate::highlight::clamp_radius(
+                    self.mask.radius * scale,
+                    (w.bbox.x1 - w.bbox.x0) as f32 / q + 2.0 * self.mask.pad_x,
+                    (w.bbox.y1 - w.bbox.y0) as f32 / q + 2.0 * self.mask.pad_y,
+                    scale,
+                ),
+            }
+        }));
     }
 
     /// Start the greyed-page reveal. Steps are words (or ayahs) in reading order.

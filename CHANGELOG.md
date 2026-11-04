@@ -127,6 +127,13 @@ All notable changes to the engine and its packages. The format follows
   They wrote nothing in that case before. `cargo run -p qvp-ffi --release --example bench`
   times the getters a renderer calls every frame through the C ABI.
   `scripts/build-engine-android.sh` copies the header to the Android library, as its docs say.
+- The getters a renderer calls every frame copy less and return the same numbers. A layout
+  keeps the draw list it built last and the band it was for, so the fill call after a count
+  call copies that list. `qvp_layout_placements` reads the groups in place.
+  `qvp_highlight_boxes_view` and `qvp_mask_boxes_view` reuse one buffer and no longer copy the
+  line shifts or the boxes of a highlight that is not moving. A `gap_bias` below 0 in
+  `QvpHitOptions` and in `qvp_hit_areas` and `qvp_hit_areas_view` now means the engine
+  default, 0.6, as a `max_distance` of 0 or less already means no limit.
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and

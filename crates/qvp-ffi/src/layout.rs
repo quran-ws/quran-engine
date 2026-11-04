@@ -168,7 +168,9 @@ pub unsafe extern "C" fn qvp_layout_draw_list(
 ) -> u32 {
     guard(|| {
         let band = (band_bottom > band_top).then_some((band_top, band_bottom));
-        fill_with(out.cast(), cap, (*page).layout_draw_list_in(band).iter().map(|d| [d.path, d.placement]))
+        // The list a count call built is the one this fill copies.
+        (*page)
+            .with_layout_draw_list(band, |list| fill_with(out.cast(), cap, list.iter().map(|d| [d.path, d.placement])))
     })
 }
 
@@ -178,7 +180,7 @@ pub unsafe extern "C" fn qvp_layout_draw_list(
 pub unsafe extern "C" fn qvp_layout_placements(page: *const Page, out: *mut f32, cap: u32) -> u32 {
     guard(|| {
         let Some(l) = (*page).current_layout() else { return 0 };
-        fill_with(out.cast(), cap, l.placements().iter().map(placement))
+        fill_with(out.cast(), cap, l.placements_iter().map(|p| placement(&p)))
     })
 }
 /// The words of a reflowed row, in reading order. Returns the number of words on the row,
