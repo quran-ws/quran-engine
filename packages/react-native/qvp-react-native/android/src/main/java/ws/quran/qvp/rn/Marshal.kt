@@ -92,24 +92,36 @@ object Marshal {
         }
     }
 
+    /** The constant of [entries] that [v] names, in any of its spellings: the constant's own
+     * (RASM_IMLAI), snake case (rasm_imlai) or the camelCase of the TypeScript types (rasmImlai). */
+    private fun <E : Enum<E>> named(entries: List<E>, v: String): E? {
+        val key = v.replace("_", "")
+        return entries.firstOrNull { it.name.replace("_", "").equals(key, ignoreCase = true) }
+    }
+    /** A constant's name as the TypeScript types spell it: RASM_IMLAI is rasmImlai. */
+    fun jsName(e: Enum<*>): String {
+        val parts = e.name.lowercase().split('_')
+        return parts[0] + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
+    }
+
     fun form(v: Any?, d: Form = Form.RASM_UTHMANI): Form = when (v) {
         is Number -> Form.entries.getOrElse(v.toInt()) { d }
-        is String -> Form.entries.firstOrNull { it.name.equals(v, true) } ?: d
+        is String -> named(Form.entries, v) ?: d
         else -> d
     }
     fun searchMode(v: Any?): SearchMode = when (v) {
         is Number -> SearchMode.entries.getOrElse(v.toInt()) { SearchMode.INCLUDES }
-        is String -> SearchMode.entries.firstOrNull { it.name.equals(v, true) } ?: SearchMode.INCLUDES
+        is String -> named(SearchMode.entries, v) ?: SearchMode.INCLUDES
         else -> SearchMode.INCLUDES
     }
     fun maskMode(v: Any?): MaskMode = when (v) {
         is Number -> MaskMode.entries.getOrElse(v.toInt()) { MaskMode.HIDE }
-        is String -> MaskMode.entries.firstOrNull { it.name.equals(v, true) } ?: MaskMode.HIDE
+        is String -> named(MaskMode.entries, v) ?: MaskMode.HIDE
         else -> MaskMode.HIDE
     }
     fun division(v: Any?): Division = when (v) {
         is Number -> Division.entries.getOrElse(v.toInt()) { Division.JUZ }
-        is String -> Division.entries.firstOrNull { it.name.equals(v, true) } ?: Division.JUZ
+        is String -> named(Division.entries, v) ?: Division.JUZ
         else -> Division.JUZ
     }
 
@@ -117,8 +129,8 @@ object Marshal {
     fun highlightStyle(v: Any?): QvpHighlightStyle {
         val m = v as? Map<*, *> ?: return QvpHighlightStyle()
         val d = QvpHighlightStyle()
-        val mode = when (val x = m["mode"]) { is Number -> HighlightMode.entries.getOrElse(x.toInt()) { d.mode }; is String -> HighlightMode.entries.firstOrNull { it.name.equals(x, true) } ?: d.mode; else -> d.mode }
-        val height = when (val x = m["height"]) { is Number -> BandHeight.entries.getOrElse(x.toInt()) { d.height }; is String -> BandHeight.entries.firstOrNull { it.name.equals(x, true) } ?: d.height; else -> d.height }
+        val mode = when (val x = m["mode"]) { is Number -> HighlightMode.entries.getOrElse(x.toInt()) { d.mode }; is String -> named(HighlightMode.entries, x) ?: d.mode; else -> d.mode }
+        val height = when (val x = m["height"]) { is Number -> BandHeight.entries.getOrElse(x.toInt()) { d.height }; is String -> named(BandHeight.entries, x) ?: d.height; else -> d.height }
         return QvpHighlightStyle(mode = mode, ink = color(m["ink"], d.ink), band = color(m["band"], d.band), height = height, padX = flt(m["padX"], d.padX), padY = flt(m["padY"], d.padY),
             radius = flt(m["radius"], d.radius), seam = flt(m["seam"], d.seam), transitionMs = num(m["ms"] ?: m["transitionMs"]) ?: d.transitionMs, layer = num(m["layer"]) ?: d.layer)
     }
@@ -196,7 +208,7 @@ object Marshal {
     fun word(p: QvpPage, w: QvpWord, forms: List<Form>): Map<String, Any?> {
         val n = names
         val text = LinkedHashMap<String, String>()
-        for (f in forms) text[f.name.lowercase()] = p.wordForm(w.index, f)
+        for (f in forms) text[jsName(f)] = p.wordForm(w.index, f)
         val paths = (w.firstPath until w.firstPath + w.nPaths).map { i ->
             val kind = p.pathKind(i); val mark = p.pathMark(i); val cat = p.pathCategory(i); val fam = p.pathFamily(i)
             mapOf("index" to i, "kind" to kind, "kindName" to n.kind[kind], "mark" to mark, "markName" to n.mark[mark], "nthMark" to p.pathNthMark(i),
@@ -237,7 +249,7 @@ object Marshal {
     fun layout(l: QvpLayout): Map<String, Any?> = mapOf("scale" to l.scale, "offsetX" to l.offsetX, "offsetY" to l.offsetY, "contentW" to l.contentW, "contentH" to l.contentH, "lineSpacing" to l.lineSpacing, "fitScale" to l.fitScale, "fitX" to l.fitX, "fitY" to l.fitY, "lineDy" to l.lineDy.toList(),
         "slots" to l.slotTop.indices.map { listOf(l.slotTop[it], l.slotBottom[it]) })
     fun pageInfo(p: QvpPage, forms: List<Form>): Map<String, Any?> = mapOf("page" to p.pageNo, "width" to p.width, "height" to p.height, "nLines" to p.nLines, "nAyahs" to p.nAyahs, "nWords" to p.nWords, "nPaths" to p.nPaths, "nDecorations" to p.nDecorations,
-        "lineSpacing" to p.lineSpacing, "forms" to forms.map { it.name.lowercase() })
+        "lineSpacing" to p.lineSpacing, "forms" to forms.map { jsName(it) })
     fun selection(p: QvpPage): Map<String, Any?> {
         val ws = p.selection()
         return mapOf("words" to ws.toList(), "text" to (if (ws.isEmpty()) "" else p.text(Target.words(ws))), "citation" to (if (ws.isEmpty()) "" else p.citation(ws)),

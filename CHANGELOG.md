@@ -223,6 +223,11 @@ All notable changes to the engine and its packages. The format follows
   outside its ink, reports `is_exact` 0. It reported 1. `conformance/scenarios/hit.json`
   holds one point of each kind, and the web, Swift, Dart and Android tests replay it. The C
   ABI is unchanged.
+- React Native: the Android module reads the camelCase names of the TypeScript types, so
+  `wordForm`, `text`, `search` and `selectionText` with `'rasmImlai'` use that form, not the
+  default. `rubuAlHizb` and the highlight height `'lineSpacing'` now resolve too. The snake
+  and upper spellings still work. A word's `forms` and the page's `forms` use the same
+  camelCase names as the `Form` type.
 - Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
   steps, as the Swift, Dart and web wrappers do. They truncated, so alpha 0.5 gave `0x7f` on
   Android and `0x80` everywhere else. A NaN alpha clamps to 0 in every wrapper, where

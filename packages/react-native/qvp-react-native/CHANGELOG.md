@@ -32,6 +32,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   outside its ink, reports `is_exact` 0. It reported 1. `conformance/scenarios/hit.json`
   holds one point of each kind, and the web, Swift, Dart and Android tests replay it. The C
   ABI is unchanged.
+- React Native: the Android module reads the camelCase names of the TypeScript types, so
+  `wordForm`, `text`, `search` and `selectionText` with `'rasmImlai'` use that form, not the
+  default. `rubuAlHizb` and the highlight height `'lineSpacing'` now resolve too. The snake
+  and upper spellings still work. A word's `forms` and the page's `forms` use the same
+  camelCase names as the `Form` type.
 - Every wrapper handles a freed object, a second free and a large array result the same way
   (`docs/API.md`, conventions). A call on a freed page, atlas, ornament set or passage throws
   an error with the object's name: a `StateError` in Dart in every build mode, where a debug
