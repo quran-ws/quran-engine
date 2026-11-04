@@ -40,7 +40,7 @@ export function css(c: Color | null | undefined): string | undefined {
 /** Colour with a replaced alpha (0..1). */
 export function rgba(c: Color, alpha: number): string {
   const h = css(c)!;
-  return h.slice(0, 7) + Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, '0');
+  return h.slice(0, 7) + Math.round((Number.isNaN(alpha) ? 0 : Math.max(0, Math.min(1, alpha))) * 255).toString(16).padStart(2, '0');
 }
 
 // ── targets and selectors (same shapes as web/qvp.js T / Sel) ────────────────────────────────

@@ -23,6 +23,7 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 - React Native: the package checks that the native module is linked before it reads the
   module's constants. Without the module, the error now says `QvpModule not linked` instead
   of a `TypeError`.
+- React Native: `rgba` clamps a NaN alpha to 0, where it returned a malformed colour.
 
 ## [0.7.0] - 2026-10-14
 

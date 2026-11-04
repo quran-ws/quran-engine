@@ -5,6 +5,8 @@
   Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
   from the table and the reflow specs take their defaults from it, so no wrapper copies the
   numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
+- Dart: `rgba` and `QvpColor.withAlpha` clamp a NaN or out-of-range alpha to 0 or 255, where
+  they threw.
 - The web engine in the package, `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`, is
   built from the release tag, so it matches the native libraries and the crates of the same
   version. The repository no longer tracks the two files. The pubspec declares their
