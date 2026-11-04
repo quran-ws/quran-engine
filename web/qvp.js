@@ -591,9 +591,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     // ── hit testing ──
     hitTestExact(x, y) { return this.e.ex.qvp_hit_test_exact(this.h, x, y, this.e.scratch) ? this._hit(this.e.scratch) : null; }
     hitTestExactView(viewX, viewY) { return this.e.ex.qvp_hit_test_exact_view(this.h, viewX, viewY, this.e.scratch) ? this._hit(this.e.scratch) : null; }
-    // No options: a NULL pointer, and the engine applies its own defaults. With options, maxDistance 0 is the
-    // engine's sentinel for unlimited; gap bias has no sentinel, so DEFAULTS.GAP_BIAS (the engine's own number) fills it.
-    _hitOpt(o) { if (!o || Object.keys(o).length === 0) return 0; const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o.maxDistance ?? 0, true); d.setFloat32(at + 4, o.gapBias ?? DEFAULTS.GAP_BIAS, true); d.setUint8(at + 8, o.preferExact === false ? 0 : 1); return at; }
+    // The engine owns maxDistance through its sentinel: 0 is unlimited. Gap bias has no sentinel, so DEFAULTS.GAP_BIAS (the engine's own number) fills it.
+    _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o?.maxDistance ?? 0, true); d.setFloat32(at + 4, o?.gapBias ?? DEFAULTS.GAP_BIAS, true); d.setUint8(at + 8, o?.preferExact === false ? 0 : 1); return at; }
     /** the one hit shape for every hit test; the exact variants report distance 0 and isExact */
     _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), decoration: f(d.getUint32(s + 8, true)), line: f(d.getUint32(s + 12, true)), distance: d.getFloat32(s + 16, true), isExact: !!d.getUint8(s + 20) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
     /** gap-aware: every point on a printed line resolves to the word the user meant */

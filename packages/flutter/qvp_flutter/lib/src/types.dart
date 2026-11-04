@@ -176,12 +176,11 @@ abstract final class QvpOp {
 
 // ───────────── colours ─────────────
 
-/// 0xRRGGBBAA from an int (passed through), a `#rgb` / `#rrggbb` / `#rrggbbaa` string, or a Flutter [Color].
-/// 0..1 → 0..255, rounded to the nearest step, as in every wrapper. NaN and out-of-range
-/// values clamp first, so a bad alpha is 0 or 255, never a thrown error.
+/// An alpha of 0..1 as 0..255, rounded to the nearest step; NaN and out-of-range values clamp first.
 int _alpha8(double alpha) =>
     ((alpha.isNaN ? 0.0 : alpha.clamp(0.0, 1.0)) * 255).round();
 
+/// 0xRRGGBBAA from an int (passed through), a `#rgb` / `#rrggbb` / `#rrggbbaa` string, or a Flutter [Color].
 /// [alpha] (0..1) replaces the alpha of 6-digit strings and Colors.
 int rgba(Object c, [double? alpha]) {
   if (c is int) return c & 0xffffffff;
