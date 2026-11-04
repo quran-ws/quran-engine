@@ -1226,7 +1226,7 @@ class QvpNativeBackend implements QvpBackend {
   @override
   int hide(PageHandle handle, QvpSelector sel) {
     _writeSelector(_sel, sel);
-    return b.hide(_page(handle), _sel);
+    return b.styleHide(_page(handle), _sel);
   }
 
   @override
@@ -1276,7 +1276,7 @@ class QvpNativeBackend implements QvpBackend {
   int highlight(PageHandle handle, QvpTarget target, QvpHighlightStyle style) =>
       _withTarget(handle, target, (t) {
         _writeHighlight(_hl, style);
-        return b.highlight(_page(handle), t, _hl);
+        return b.highlightAdd(_page(handle), t, _hl);
       });
 
   @override
@@ -1287,7 +1287,7 @@ class QvpNativeBackend implements QvpBackend {
   ) => _withTarget(
     handle,
     target,
-    (t) => b.moveHighlight(_page(handle), highlightHandle, t) != 0,
+    (t) => b.highlightMove(_page(handle), highlightHandle, t) != 0,
   );
 
   @override
@@ -1297,15 +1297,15 @@ class QvpNativeBackend implements QvpBackend {
     QvpHighlightStyle style,
   ) {
     _writeHighlight(_hl, style);
-    return b.restyleHighlight(_page(handle), highlightHandle, _hl) != 0;
+    return b.highlightRestyle(_page(handle), highlightHandle, _hl) != 0;
   }
 
   @override
   bool removeHighlight(PageHandle handle, int highlightHandle) =>
-      b.removeHighlight(_page(handle), highlightHandle) != 0;
+      b.highlightRemove(_page(handle), highlightHandle) != 0;
 
   @override
-  void clearHighlights(PageHandle handle) => b.clearHighlights(_page(handle));
+  void clearHighlights(PageHandle handle) => b.highlightClear(_page(handle));
 
   @override
   List<int> highlightHandles(PageHandle handle) =>
@@ -1660,7 +1660,7 @@ class QvpNativeBackend implements QvpBackend {
   @override
   List<QvpAtlasSurah> atlasSurahs(AtlasHandle handle) {
     final a = _atlas(handle);
-    final n = b.atlasSurahs(a);
+    final n = b.atlasSurahCount(a);
     final p = _scratch.cast<QvpAtlasSurahC>();
     final places = QvpNames.of(QvpNames.place);
     return List<QvpAtlasSurah>.generate(n, (i) {

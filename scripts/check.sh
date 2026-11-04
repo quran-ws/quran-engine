@@ -61,6 +61,14 @@ for check in "$@"; do
       # --check compares docs/API-PARITY.md with the sources and writes nothing. After an
       # API change, regenerate the table with `python3 scripts/check-parity.py`.
       python3 scripts/check-parity.py --check
+      # The Flutter bindings are generated from the header. Generating them needs Flutter
+      # and libclang, which the standards job does not install; the Flutter workflow runs
+      # this check on every change to the header or the package.
+      if command -v flutter >/dev/null; then
+        scripts/check-flutter-bindings.sh
+      else
+        echo "skip Flutter bindings: Flutter not installed; the Flutter workflow runs it"
+      fi
       ;;
     versions)
       step "one version everywhere"

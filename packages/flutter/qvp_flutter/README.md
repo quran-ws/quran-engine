@@ -147,6 +147,20 @@ set.dispose();                                            // after the pages dre
 
 Each ornament carries its `licence`. Read it before you publish a dressed page.
 
+## Bindings
+
+`package:ffigen` generates `lib/src/bindings.dart` from `crates/qvp-ffi/include/qvp.h`.
+Do not edit it. After a header change, regenerate it and commit the
+result:
+
+```sh
+cd packages/flutter/qvp_flutter && dart run tool/ffigen.dart
+```
+
+ffigen needs libclang: Xcode or the Command Line Tools on macOS, `libclang-dev` on Linux.
+`scripts/check-flutter-bindings.sh` generates a fresh copy and fails when it differs from
+the committed file. The Flutter workflow runs it.
+
 ## Tests
 
 ```sh

@@ -13,6 +13,7 @@ on:
       - "packages/flutter/**"
       - "web/qvp.js"
       - "scripts/sync-flutter-web-engine.sh"
+      - "scripts/check-flutter-bindings.sh"
       - "scripts/build-engine-android.sh"
       - "scripts/sync-example-data.sh"
       - "scripts/sync-test-data.sh"
@@ -63,6 +64,13 @@ jobs:
       - name: Get packages
         working-directory: packages/flutter/qvp_flutter
         run: flutter pub get
+      # lib/src/bindings.dart is generated from crates/qvp-ffi/include/qvp.h. ffigen loads
+      # libclang; the step installs it when the runner image has none.
+      - name: Bindings match the header
+        run: |
+          ls /usr/lib/llvm-*/lib/libclang.so >/dev/null 2>&1 ||
+            (sudo apt-get update && sudo apt-get install -y libclang-dev)
+          scripts/check-flutter-bindings.sh
       # dart format is the house style for this package. It runs before the analyzer so a
       # formatting failure is not buried under analyzer output. The Dart that checks here is
       # the one the pinned Flutter brings, so a Flutter upgrade may ask for a reformat commit.

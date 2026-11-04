@@ -78,7 +78,9 @@ Bind every engine function in every wrapper, in this order, in one pull request:
 3. `crates/qvp-ffi/tests/abi.rs`: a call on a real page.
 4. `web/qvp.js`: the reference binding. Its name is the name.
 5. Kotlin: `packages/android/qvp/src/main/cpp/qvp_jni.c`, `QvpNative.kt`, `QvpPage.kt`.
-6. Dart: `packages/flutter/qvp_flutter/lib/src/bindings.dart` and `engine.dart`.
+6. Dart: regenerate `packages/flutter/qvp_flutter/lib/src/bindings.dart` with
+   `dart run tool/ffigen.dart` in the package, then call it from the backends in
+   `lib/src/backend/` and expose it in `engine.dart`.
 7. Swift: `packages/ios/QvpKit/Sources/QvpKit/QvpPage.swift`, then
    `scripts/build-engine-ios.sh`.
 8. React Native: the Kotlin bridge and `src/index.tsx`.
