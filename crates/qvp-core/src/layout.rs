@@ -258,14 +258,6 @@ impl Page {
         self.line_centre[li]
     }
 
-    /// Compute and store a layout. Horizontal placement is as printed (scaled to
-    /// the padded viewport width); vertical placement moves whole lines by `line_dy`.
-    ///
-    /// Printed lines are neither equally tall nor equally pitched, and ink often
-    /// reaches into the neighbouring line, so lines are never re-spread onto a
-    /// grid. Instead every line keeps its printed position and the *same* delta
-    /// is inserted between each pair of consecutive lines: line `k` (0-based on
-    /// the nominal grid) moves by `k·delta`. `delta = 0` reproduces the print.
     /// The `line_spacing` multiplier that makes this page fill the padded viewport of `spec`
     /// when fitted to width; `max` bounds the multiplier (`INFINITY` for none). 1 when the
     /// page already fills it.
@@ -295,18 +287,22 @@ impl Page {
             ((m.avail_h / m.scale - self.height()) / (m.nominal - 1.0)).max(0.0)
         }
     }
+    /// The width the page is fitted into, in viewport px: the viewport, bounded by the page's
+    /// aspect ratio when the host asks for it, so a wide screen does not stretch the lines.
+    fn content_width(&self, spec: &LayoutSpec) -> f32 {
+        let (pw, ph) = (self.width(), self.height());
+        if spec.max_aspect_slack > 0.0 {
+            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
+        } else {
+            spec.viewport_w
+        }
+    }
     /// What a PRINTED layout of `spec` is measured against: the content width the page is fitted
     /// into, the scale that fits it once the printed side margins are cropped, the grid it sits
     /// on, and the padded height there is to fill.
     fn printed_metrics(&self, spec: &LayoutSpec) -> PrintedMetrics {
-        let (pw, ph) = (self.width(), self.height());
-        // The content width: the viewport, bounded by the page's aspect ratio when the
-        // host asks for it, so a wide screen does not stretch the lines.
-        let content_w = if spec.max_aspect_slack > 0.0 {
-            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
-        } else {
-            spec.viewport_w
-        };
+        let pw = self.width();
+        let content_w = self.content_width(spec);
         let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
         PrintedMetrics {
             content_w,
@@ -340,6 +336,14 @@ impl Page {
         spec.pad_top + block_h * m.scale + spec.pad_bottom
     }
 
+    /// Compute and store a layout. Horizontal placement is as printed (scaled to
+    /// the padded viewport width); vertical placement moves whole lines by `line_dy`.
+    ///
+    /// Printed lines are neither equally tall nor equally pitched, and ink often
+    /// reaches into the neighbouring line, so lines are never re-spread onto a
+    /// grid. Instead every line keeps its printed position and the *same* delta
+    /// is inserted between each pair of consecutive lines: line `k` (0-based on
+    /// the nominal grid) moves by `k·delta`. `delta = 0` reproduces the print.
     pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
         // At the printed size the page is the printed page: the words are where the print has
         // them, and every layout knob — leading, fill height, the grid a short page sits on —
@@ -451,11 +455,7 @@ impl Page {
     fn layout_reflow(&mut self, spec: &LayoutSpec, r: &ReflowSpec) -> Layout {
         let pw = self.width();
         let ph = self.height();
-        let content_w = if spec.max_aspect_slack > 0.0 {
-            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
-        } else {
-            spec.viewport_w
-        };
+        let content_w = self.content_width(spec);
         let crop = (spec.crop_left.max(0.0), spec.crop_right.max(0.0));
         let page_w = (pw - crop.0 - crop.1).max(1.0);
         let zoom = if r.breaks == crate::Breaks::Printed {
@@ -483,9 +483,6 @@ impl Page {
         // the reader asked for no more leading than the print has, so a page whose rows come
         // out as the printed lines can keep the printed line positions too
         let printed_spacing = spec.line_spacing <= 1.0 + 1e-6 && !spec.fill_height;
-        // the rows a reader sees at once, which is what the evening out is measured against
-        let rows_per_view =
-            (((spec.viewport_h - spec.pad_top - spec.pad_bottom) / (pitch * scale)).floor() as i32).max(1) as usize;
         let flow = self.reflow(
             r,
             &crate::reflow::RowSpec {
@@ -495,7 +492,6 @@ impl Page {
                 pitch,
                 top,
                 printed_spacing,
-                rows_per_view,
                 // A banner is drawn at `header_scale · layout scale`, and the layout scale
                 // carries the reader's zoom — so a banner left at scale 1 grows with it. Its
                 // size against the print is `header_scale · zoom`, and this holds that to what
@@ -696,7 +692,6 @@ impl Page {
         }
     }
 
-    /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).
     /// The zoom each step of a reader's zoom control lands on for this page.
     ///
     /// Zoom is continuous, but the rows are not: a word stops fitting and the page rearranges,
@@ -811,6 +806,7 @@ impl Page {
         3.0 * short + steps + 0.10 * height + 0.8 * near * near
     }
 
+    /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).
     pub fn word_bounds_view(&self, wi: u32) -> (f32, f32, f32, f32) {
         let q = self.quant();
         let w = &self.data.words[wi as usize];

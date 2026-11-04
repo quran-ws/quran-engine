@@ -9,10 +9,22 @@
 //! split an ayah from its medallion, move a word to another page, or leave a sajdah line
 //! or header title behind. A surah name or basmalah keeps a row of its own, and text never
 //! flows across it. The printed frame around a surah name belongs to the printed layout only.
-use crate::defaults;
 use crate::Page;
-use qvp_format::{DecoKind, IBox, Mark, PathKind, NONE_U16};
+use qvp_format::{DecoKind, Mark};
+use std::collections::HashMap;
 use std::sync::Arc;
+
+mod atoms;
+mod banner;
+mod breaks;
+mod horizontal;
+mod sajdah;
+mod vertical;
+
+use atoms::{Atom, Neighbour};
+use sajdah::SajdahLine;
+
+pub(crate) use sajdah::line_under_stroke;
 
 const NONE: u32 = u32::MAX;
 
@@ -166,12 +178,12 @@ pub struct Reflowed {
     pub sajdah_line_place: Vec<Placement>,
     /// Extra drawings of a decoration, one per further row its words occupy.
     pub repeats: Vec<Repeat>,
-    /// Width of a row in page units.
     /// True when the rows came out as the printed lines, so the page was laid out as printed.
     pub as_printed: bool,
     /// Decorations this layout does not draw: the sheet's own furniture, printed outside the
     /// page box (running head, page number).
     pub omitted: Vec<u32>,
+    /// Width of a row in page units.
     pub row_w: f32,
     /// The floor on the distance between two baselines, in page units: the printed line
     /// spacing. A row whose ink needs more room gets more.
@@ -193,55 +205,12 @@ pub(crate) struct RowSpec {
     pub pitch: f32,
     pub top: f32,
     pub printed_spacing: bool,
-    /// How many rows the reader sees at once. Rows are evened out against the others of their
-    /// own screenful, because that is what a reader can compare. 0 weighs the whole page.
-    pub rows_per_view: usize,
     /// The most a banner may be drawn at, as a share of its printed drawing — the layout's
     /// own [`crate::LayoutSpec::banner_zoom`] against the zoom it is reflowing at, worked out
     /// once. Infinite leaves the banner growing with the page.
     pub banner_k: f32,
     /// Whether a row that still reproduces the printed page keeps a native surah frame.
     pub surah_frames: bool,
-}
-
-/// One unit that a row holds whole: a word, the ink printed with it (the medallion that
-/// closes its ayah, the sajdah line drawn over it) and the marks the print puts in the
-/// margin, which a reflowed row has no margin for.
-struct Atom {
-    word: u32,
-    /// decorations that keep their printed offset from the word
-    inline_decos: Vec<u32>,
-    /// margin marks, placed after the word in reading order: (decoration, ink width)
-    margin_decos: Vec<(u32, f32)>,
-    /// printed extent of the word and its inline ink, in page units
-    x0: f32,
-    x1: f32,
-    /// the atom's letters and inline marks sliced into bands: what the air is measured on
-    slices: Vec<(i16, f32, f32)>,
-    /// what the atom takes off a row: its printed extent plus room for the margin marks
-    width: f32,
-}
-
-/// A sajdah line stroke the reflow draws over its words: the decoration that holds it, the
-/// stroke's own paths, its printed horizontal extent in page units, and the words under it.
-struct SajdahLine {
-    deco: u32,
-    paths: Vec<u32>,
-    x0: f32,
-    x1: f32,
-    words: Vec<u32>,
-}
-
-/// A word measured against the word before it in reading order: how deeply the print
-/// interlocks the two ([`Page::words_interlock`]) and the air between their row units'
-/// strokes ([`Page::slice_clearance`]). Every gap a reflow sets is between two such
-/// neighbours, so both are measured once.
-#[derive(Clone, Copy)]
-struct Neighbour {
-    /// The word before, or `NONE` for the first word of the page.
-    prev: u32,
-    interlock: Option<f32>,
-    clearance: Option<f32>,
 }
 
 /// What a reflow reads off the page alone, measured once per page. A continuous pinch lays
@@ -326,18 +295,7 @@ pub(crate) fn prepare(page: &Page) -> Prepared {
             let paths: Vec<u32> = (deco.first_path..deco.first_path + deco.n_paths as u32)
                 .filter(|&pi| d.paths[pi as usize].mark == Mark::SajdahLine)
                 .collect();
-            let mut stroke: Option<IBox> = None;
-            for &pi in &paths {
-                let b = d.paths[pi as usize].bbox;
-                stroke = Some(match stroke {
-                    None => b,
-                    Some(mut acc) => {
-                        acc.union(&b);
-                        acc
-                    }
-                });
-            }
-            let b = stroke?;
+            let b = page.paths_bbox(paths.iter().copied())?;
             let q = page.quant();
             let (x0, x1) = (b.x0 as f32 / q, b.x1 as f32 / q);
             (x1 > x0).then(|| SajdahLine { deco: di as u32, paths, x0, x1, words: page.words_under_stroke(&b) })
@@ -384,176 +342,6 @@ pub(crate) fn prepare(page: &Page) -> Prepared {
 }
 
 impl Page {
-    /// The air the print keeps between the letters of two neighbouring words, taken over the
-    /// whole page: what a reflowed row leaves between any two words.
-    ///
-    /// Measured as the narrowest distance between the two words' strokes
-    /// ([`Page::words_clearance`]), not between their boxes. The calligraphy interlocks a
-    /// word's opening stroke with the one before it — the boxes of `سَاحِرٌ` and `كَذَّابٌ` overlap
-    /// by 12 page units while their strokes stay 5 apart — so a box measure would pull such a
-    /// pair apart and leave a hole where the strokes used to interleave.
-    pub(crate) fn median_word_gap(&self) -> f32 {
-        let mut gaps: Vec<f32> = Vec::new();
-        let d = self.data();
-        for ws in self.line_words.iter() {
-            for pair in ws.windows(2) {
-                // line_words runs left to right, so the second of the pair is the earlier word
-                let (a, b) = (pair[1].1, pair[0].1);
-                // a pair with a medallion standing between them is not a word gap
-                if d.words[a as usize].ayah_index != d.words[b as usize].ayah_index {
-                    continue;
-                }
-                if let Some(g) = self.words_clearance(a, b, 0.0) {
-                    if g > 0.0 {
-                        gaps.push(g);
-                    }
-                }
-            }
-        }
-        if gaps.is_empty() {
-            return self.line_spacing() * 0.25;
-        }
-        gaps.sort_by(f32::total_cmp);
-        gaps[gaps.len() / 2]
-    }
-
-    /// The decoration that closes each ayah, resolved to the word it must travel with.
-    /// `NONE` for a decoration that belongs to no single word: a surah banner, a basmalah,
-    /// the page number, the running head, or a sajdah line, which spans several words.
-    /// `median` is the page's [`Page::median_word_gap`], the tolerance a mark is matched
-    /// to its word with.
-    pub(crate) fn deco_anchor_words(&self, median: f32) -> Vec<u32> {
-        let d = self.data();
-        let mut out = vec![NONE; d.decorations.len()];
-        // the medallion an ayah record names closes that record's last word, which is the
-        // one the reflow must keep it with (an ayah split across lines has one record a line)
-        for a in d.ayahs.iter() {
-            if a.ayah_mark_decoration != NONE_U16 && a.n_words > 0 {
-                let di = a.ayah_mark_decoration as usize;
-                if di < out.len() {
-                    out[di] = (a.first_word + a.n_words - 1) as u32;
-                }
-            }
-        }
-        for (di, deco) in d.decorations.iter().enumerate() {
-            if out[di] == NONE {
-                out[di] = match deco.kind {
-                    // a sajdah mark closes the word it is printed after, so it travels with
-                    // that word and no row can open with it
-                    DecoKind::SajdahMark => self
-                        .deco_other_paths(di)
-                        .first()
-                        .and_then(|&pi| self.word_before_path(pi, median))
-                        .unwrap_or(NONE),
-                    // a rubu_al_hizb opens a division, so it travels with the word it opens
-                    // and no row can close with it
-                    DecoKind::DivisionMark => self
-                        .deco_other_paths(di)
-                        .first()
-                        .and_then(|&pi| self.word_after_path(pi, median))
-                        .unwrap_or(NONE),
-                    // a medallion closes its ayah, so it travels with that ayah's last word on
-                    // the page; the record usually names it, and this is the fallback
-                    DecoKind::AyahMark => d
-                        .ayahs
-                        .iter()
-                        .filter(|a| a.surah == deco.surah && a.ayah == deco.ayah && a.n_words > 0)
-                        .map(|a| (a.first_word + a.n_words - 1) as u32)
-                        .next_back()
-                        .unwrap_or(NONE),
-                    _ => NONE,
-                };
-            }
-        }
-        // A sajdah mark is followed by the medallion that closes its ayah, and the two are read
-        // as one sign. Whatever the geometry says, they travel with the same word.
-        for di in 0..d.decorations.len() {
-            if d.decorations[di].kind != DecoKind::SajdahMark {
-                continue;
-            }
-            let (surah, ayah) = (d.decorations[di].surah, d.decorations[di].ayah);
-            let medallion =
-                d.decorations.iter().position(|x| x.kind == DecoKind::AyahMark && x.surah == surah && x.ayah == ayah);
-            if let Some(m) = medallion {
-                if out[m] != NONE {
-                    out[di] = out[m];
-                }
-            }
-        }
-        out
-    }
-
-    /// The word that follows a mark in reading order: the one to its left on the line the mark
-    /// was resolved to. A rubu_al_hizb stands where its division starts, so it travels with the
-    /// word it opens and can never be left at the end of a row.
-    pub(crate) fn word_after_path(&self, pi: u32, tolerance: f32) -> Option<u32> {
-        let d = self.data();
-        let q = self.quant();
-        let li = self.geometry().table.get(pi as usize)?.line as usize;
-        let b = &d.paths[pi as usize].bbox;
-        let reach = b.x0 + (tolerance * q) as i32;
-        let ws = self.line_words.get(li)?;
-        ws.iter()
-            .filter(|&&(_, wi)| d.words[wi as usize].bbox.x1 <= reach)
-            .min_by_key(|&&(_, wi)| reach - d.words[wi as usize].bbox.x1)
-            .or_else(|| {
-                let centre = (b.x0 + b.x1) / 2;
-                ws.iter().min_by_key(|(_, wi)| {
-                    let w = &d.words[*wi as usize];
-                    (w.bbox.x0 - centre).abs().min((w.bbox.x1 - centre).abs())
-                })
-            })
-            .map(|&(_, wi)| wi)
-    }
-
-    /// The word a mark belongs with: the one before it in reading order on the line the mark
-    /// was resolved to, which is the word to its right. A mark with nothing to its right takes
-    /// the nearest word on that line instead.
-    pub(crate) fn word_before_path(&self, pi: u32, tolerance: f32) -> Option<u32> {
-        let d = self.data();
-        let q = self.quant();
-        let li = self.geometry().table.get(pi as usize)?.line as usize;
-        let b = &d.paths[pi as usize].bbox;
-        // the print sets a mark tight against the word it follows, and sometimes a hair into
-        // it, so a word that overlaps the mark by less than a word gap still counts as before it
-        let reach = b.x1 - (tolerance * q) as i32;
-        let ws = self.line_words.get(li)?;
-        ws.iter()
-            .filter(|(x0, _)| *x0 >= reach)
-            .min_by_key(|(x0, _)| x0 - reach)
-            .or_else(|| {
-                let centre = (b.x0 + b.x1) / 2;
-                ws.iter().min_by_key(|(_, wi)| {
-                    let w = &d.words[*wi as usize];
-                    (w.bbox.x0 - centre).abs().min((w.bbox.x1 - centre).abs())
-                })
-            })
-            .map(|&(_, wi)| wi)
-    }
-
-    /// The words a sajdah line stroke is drawn over: the ones it spans horizontally on the
-    /// line directly below it. `b` is the box of the stroke's own ink, not the decoration's,
-    /// which can also hold the sign printed in the margin.
-    pub(crate) fn words_under_stroke(&self, b: &IBox) -> Vec<u32> {
-        let q = self.quant();
-        let d = self.data();
-        let tol = (2.0 * q) as i32;
-        // the line under the stroke: the nearest words below it that it overlaps
-        let under = d
-            .words
-            .iter()
-            .filter(|w| w.bbox.x0 < b.x1 && w.bbox.x1 > b.x0 && w.bbox.y0 >= b.y0 - tol)
-            .min_by_key(|w| w.bbox.y0 - b.y1)
-            .map(|w| w.line_index);
-        let Some(li) = under else { return vec![] };
-        d.words
-            .iter()
-            .enumerate()
-            .filter(|(_, w)| w.line_index == li && w.bbox.x0 < b.x1 && w.bbox.x1 > b.x0)
-            .map(|(i, _)| i as u32)
-            .collect()
-    }
-
     /// The largest `zoom` at which every word of this page still fits a row, so the reflow
     /// never has to place ink wider than the row it sits on. A host clamps its pinch to this.
     ///
@@ -588,86 +376,6 @@ impl Page {
         }
     }
 
-    /// Which decorations hold a sajdah line, the stroke drawn over a span of words.
-    ///
-    /// A decoration can hold more than one job: the sajdah of 16:50 is one decoration holding
-    /// the stroke over its words *and* the sign printed in the margin. They are placed apart,
-    /// so the flags are read per path, not per decoration.
-    pub(crate) fn sajdah_line_decos(&self) -> Vec<bool> {
-        let d = self.data();
-        d.decorations
-            .iter()
-            .map(|deco| {
-                (deco.first_path..deco.first_path + deco.n_paths as u32)
-                    .any(|pi| d.paths[pi as usize].mark == Mark::SajdahLine)
-            })
-            .collect()
-    }
-    /// Native frame paths of a surah name. The printed page draws them; a reflowed page omits
-    /// them so the title can grow with the reader instead of being fitted inside the frame.
-    pub(crate) fn surah_name_ornament_paths(&self) -> Vec<u32> {
-        let d = self.data();
-        let mut paths: Vec<u32> = d
-            .decorations
-            .iter()
-            .filter(|deco| deco.kind == DecoKind::SurahName)
-            .flat_map(|deco| deco.first_path..deco.first_path + deco.n_paths as u32)
-            .filter(|&pi| d.paths[pi as usize].kind == PathKind::Ornament)
-            .collect();
-        paths.sort_unstable();
-        paths.dedup();
-        paths
-    }
-
-    /// A decoration's box after paths this layout does not draw are removed.
-    pub(crate) fn decoration_bbox_without(&self, di: usize, omitted: &[u32]) -> IBox {
-        let d = self.data();
-        let deco = &d.decorations[di];
-        if omitted.is_empty() {
-            return deco.bbox;
-        }
-        let mut bbox = IBox::EMPTY;
-        for pi in deco.first_path..deco.first_path + deco.n_paths as u32 {
-            if omitted.binary_search(&pi).is_err() {
-                bbox.union(&d.paths[pi as usize].bbox);
-            }
-        }
-        bbox
-    }
-    /// The ink of a decoration apart from its sajdah line: the sign in the margin, and
-    /// anything else drawn with it. The decoration's own box holds both and is no use for
-    /// placing either.
-    pub(crate) fn deco_mark_bbox(&self, di: usize) -> qvp_format::IBox {
-        let d = self.data();
-        let mut acc: Option<qvp_format::IBox> = None;
-        for pi in self.deco_other_paths(di) {
-            let b = d.paths[pi as usize].bbox;
-            acc = Some(match acc {
-                None => b,
-                Some(mut a) => {
-                    a.union(&b);
-                    a
-                }
-            });
-        }
-        acc.unwrap_or(d.decorations[di].bbox)
-    }
-
-    /// The paths of a decoration that are not its sajdah line: the sign in the margin, and
-    /// anything else drawn with it.
-    pub(crate) fn deco_other_paths(&self, di: usize) -> Vec<u32> {
-        let d = self.data();
-        let deco = &d.decorations[di];
-        (deco.first_path..deco.first_path + deco.n_paths as u32)
-            .filter(|&pi| d.paths[pi as usize].mark != Mark::SajdahLine)
-            .collect()
-    }
-
-    /// Break the page's words into rows `row_w` page units wide and place them.
-    ///
-    /// `pitch` is the distance between row centres and `top` the centre of the first row,
-    /// both in page units. Rows are filled right to left in reading order; a banner line
-    /// (surah name, basmalah) keeps a row to itself and text never flows across it.
     /// The printed text block: the leftmost and rightmost ink of the page's lines, in page
     /// units. The sheet's side margins are what is left over.
     pub(crate) fn text_block(&self) -> (f32, f32) {
@@ -685,214 +393,18 @@ impl Page {
         }
     }
 
-    pub(crate) fn reflow(&self, spec: &ReflowSpec, rows: &RowSpec) -> Reflowed {
-        let RowSpec { block, margins, row_w, pitch, top, printed_spacing, rows_per_view, banner_k, surah_frames } =
-            *rows;
-        let q = self.quant();
+    /// Break the page's words into rows `row_w` page units wide and place them.
+    ///
+    /// `pitch` is the distance between row centres and `top` the centre of the first row,
+    /// both in page units. Rows are filled right to left in reading order; a banner line
+    /// (surah name, basmalah) keeps a row to itself and text never flows across it.
+    pub(crate) fn reflow(&self, spec: &ReflowSpec, shape: &RowSpec) -> Reflowed {
+        let RowSpec { block, row_w, pitch, printed_spacing, surah_frames, .. } = *shape;
         let d = self.data();
         let prep = self.reflow_prepared();
-        let median = prep.median;
-
-        // atoms in reading order, and the banner lines that interrupt them
-        let mut rows: Vec<Vec<&Atom>> = Vec::new();
-        let mut header_rows: Vec<(usize, u32)> = Vec::new(); // (row index, printed line)
-        let mut cur: Vec<&Atom> = Vec::new();
-        // between two atoms, not two words: an atom's printed extent already holds the
-        // medallion that closes its ayah, so the print's word-to-word distance would count
-        // that medallion twice and tear the row open
-        let interlocked = |prev: &Atom, next: &Atom| self.neighbour(prev, next).0.is_some();
-        let gap_of = |prev: &Atom, next: &Atom| self.atom_gap(prev, next, spec, median);
-        // Text flows from one printed line into the next only when the reader has zoomed in and
-        // the rows are narrower than the printed lines. At the printed size the page is the
-        // printed page: every line keeps its own row, including the short ones a surah ends on.
-        let flows_on = spec.breaks != Breaks::Printed && row_w + 0.01 < block.1 - block.0;
-        // The atoms of the page in reading order, cut into blocks by the banners that text
-        // never flows across.
-        enum Block<'a> {
-            Banner(u32),
-            Text(Vec<&'a Atom>),
-        }
-        let mut blocks: Vec<Block> = Vec::new();
-        for li in 0..d.lines.len() {
-            if !flows_on && !cur.is_empty() {
-                blocks.push(Block::Text(std::mem::take(&mut cur)));
-            }
-            if self.line_is_header(li) {
-                if !cur.is_empty() {
-                    blocks.push(Block::Text(std::mem::take(&mut cur)));
-                }
-                blocks.push(Block::Banner(li as u32));
-                continue;
-            }
-            // words of the line right to left
-            for &(_, wi) in self.line_words[li].iter().rev() {
-                cur.push(&prep.atoms[wi as usize]);
-            }
-        }
-        if !cur.is_empty() {
-            blocks.push(Block::Text(cur));
-        }
-
-        // Where to break a block into rows. `width(i..j)` is a run of atoms with the gaps that
-        // fall between them, so both strategies read it off two prefix sums.
-        let cut_points = |atoms: &[&Atom]| -> Vec<usize> {
-            let n = atoms.len();
-            if n == 0 {
-                return vec![];
-            }
-            let (mut w, mut g) = (vec![0.0f32; n + 1], vec![0.0f32; n + 1]);
-            for i in 0..n {
-                w[i + 1] = w[i] + atoms[i].width;
-                g[i + 1] = g[i] + if i > 0 { gap_of(atoms[i - 1], atoms[i]) } else { 0.0 };
-            }
-            let width = |i: usize, j: usize| (w[j] - w[i]) + (g[j] - g[i + 1]);
-            match spec.breaks {
-                Breaks::Printed => vec![],
-                Breaks::Greedy => {
-                    let (mut cuts, mut start) = (vec![], 0usize);
-                    for j in 1..n {
-                        if width(start, j + 1) > row_w + 0.01 {
-                            cuts.push(j);
-                            start = j;
-                        }
-                    }
-                    cuts
-                }
-                // the breaks that leave the block's rows as even as they can be: the cost of a
-                // row is the square of what it is left short, so one row far shorter than the
-                // rest costs more than several a little short. The block's last row is free,
-                // because a block ends where its text ends.
-                Breaks::Even => {
-                    let (mut best, mut from) = (vec![f32::INFINITY; n + 1], vec![0usize; n + 1]);
-                    best[0] = 0.0;
-                    for j in 1..=n {
-                        for i in (0..j).rev() {
-                            let used = width(i, j);
-                            // a row must hold at least one atom, however wide that atom is
-                            if used > row_w + 0.01 && i + 1 < j {
-                                break;
-                            }
-                            let slack = (row_w - used).max(0.0);
-                            let cost = if j == n { 0.0 } else { slack * slack };
-                            if best[i] + cost < best[j] {
-                                best[j] = best[i] + cost;
-                                from[j] = i;
-                            }
-                        }
-                    }
-                    let (mut cuts, mut j) = (vec![], n);
-                    while j > 0 {
-                        let i = from[j];
-                        if i > 0 {
-                            cuts.push(i);
-                        }
-                        j = i;
-                    }
-                    cuts.reverse();
-                    cuts
-                }
-                // Rows weighed by the width they can reach, against one another. A row's
-                // shortfall is measured after its own gaps have opened as far as the cap
-                // allows, so a shortfall the spacing can absorb costs little and one it cannot
-                // moves the break. Two further terms keep the page steady: the step between a
-                // row and the row above it, and the spacing actually spent to get there, which
-                // makes a better break worth more than a wider gap.
-                Breaks::Fitted => {
-                    // the gaps free to stretch in a run, and how far each may go
-                    let mut o = vec![0u32; n + 1];
-                    for i in 1..n {
-                        o[i + 1] = o[i] + u32::from(!interlocked(atoms[i - 1], atoms[i]));
-                    }
-                    let per_gap = (median * spec.word_gap.max(0.0) * (spec.max_stretch - 1.0)).max(0.0);
-                    let per_gap = if spec.max_stretch > 0.0 { per_gap } else { row_w };
-                    // fill from 0 to 1, natural and after opening
-                    let reach = |i: usize, j: usize| -> (f32, f32) {
-                        let used = width(i, j);
-                        let room = (o[j] - o[i + 1]) as f32 * per_gap;
-                        (used / row_w, (used + room).min(row_w) / row_w)
-                    };
-                    // The cost of a row against the row before it. The state has to carry that
-                    // row, so the table is over pairs: `best[at(i, j)]` is the block broken up
-                    // to `j` with its last row running from `i`. One flat vector a side, not a
-                    // vector of vectors, so a block costs two allocations and not `2n`.
-                    const SHORT: f32 = 1.0;
-                    const STEP: f32 = 0.6;
-                    const SPEND: f32 = 0.25;
-                    let fits = |i: usize, j: usize| width(i, j) <= row_w + 0.01 || i + 1 == j;
-                    let at = |i: usize, j: usize| i * (n + 1) + j;
-                    let mut best: Vec<f32> = vec![f32::INFINITY; (n + 1) * (n + 1)];
-                    let mut from: Vec<u32> = vec![0; (n + 1) * (n + 1)];
-                    for j in 1..=n {
-                        for i in (0..j).rev() {
-                            if !fits(i, j) {
-                                break;
-                            }
-                            let (natural, reached) = reach(i, j);
-                            // a block ends where its text ends, so its last row is not short
-                            let short = if j == n { 0.0 } else { (1.0 - reached).max(0.0) };
-                            let own = SHORT * short * short + SPEND * (reached - natural) * (reached - natural);
-                            if i == 0 {
-                                best[at(i, j)] = own;
-                                continue;
-                            }
-                            for h in (0..i).rev() {
-                                if !fits(h, i) {
-                                    break;
-                                }
-                                if best[at(h, i)].is_infinite() {
-                                    continue;
-                                }
-                                let step = reach(h, i).1 - reached;
-                                let cost = best[at(h, i)] + own + STEP * step * step;
-                                if cost < best[at(i, j)] {
-                                    best[at(i, j)] = cost;
-                                    from[at(i, j)] = h as u32;
-                                }
-                            }
-                        }
-                    }
-                    let mut i = (0..n).rev().filter(|&i| best[at(i, n)].is_finite()).min_by(|&a, &b| {
-                        best[at(a, n)].partial_cmp(&best[at(b, n)]).unwrap_or(std::cmp::Ordering::Equal)
-                    });
-                    let (mut cuts, mut j) = (vec![], n);
-                    while let Some(start) = i {
-                        if start == 0 {
-                            break;
-                        }
-                        cuts.push(start);
-                        let h = from[at(start, j)] as usize;
-                        j = start;
-                        i = Some(h);
-                    }
-                    cuts.reverse();
-                    cuts
-                }
-            }
-        };
-        for item in blocks {
-            match item {
-                Block::Banner(li) => {
-                    header_rows.push((rows.len(), li));
-                    rows.push(Vec::new());
-                }
-                Block::Text(atoms) => {
-                    let cuts: std::collections::HashSet<usize> = cut_points(&atoms).into_iter().collect();
-                    let mut row: Vec<&Atom> = Vec::new();
-                    for (i, a) in atoms.into_iter().enumerate() {
-                        if i > 0 && cuts.contains(&i) {
-                            rows.push(std::mem::take(&mut row));
-                        }
-                        row.push(a);
-                    }
-                    if !row.is_empty() {
-                        rows.push(row);
-                    }
-                }
-            }
-        }
+        let (rows, headers) = self.break_rows(spec, row_w, block);
 
         // place every row right to left
-        let headers: std::collections::HashMap<usize, u32> = header_rows.into_iter().collect();
         let mut out = Reflowed {
             row_words: Vec::with_capacity(rows.len()),
             row_baseline: Vec::with_capacity(rows.len()),
@@ -909,35 +421,7 @@ impl Page {
             y0: 0.0,
             y1: 0.0,
         };
-        // When a row holds exactly the words of one printed line, and every row does, the
-        // reflow has reproduced the print: the page then goes back to its printed line
-        // positions, irregular spacing and all, instead of the even rhythm the rows would
-        // otherwise take. This is what returning to zoom 1 gives back.
-        let as_printed: Option<Vec<usize>> = {
-            let mut lines: Vec<usize> = Vec::with_capacity(rows.len());
-            let mut ok = true;
-            for (r, atoms) in rows.iter().enumerate() {
-                match headers.get(&r) {
-                    Some(&li) => lines.push(li as usize),
-                    None => {
-                        let li = atoms.first().map(|a| d.words[a.word as usize].line_index as usize);
-                        match li {
-                            Some(li)
-                                if atoms.len() == self.line_words[li].len()
-                                    && atoms.iter().all(|a| d.words[a.word as usize].line_index as usize == li) =>
-                            {
-                                lines.push(li)
-                            }
-                            _ => {
-                                ok = false;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            (spec.breaks != Breaks::Printed && ok && lines.len() == rows.len()).then_some(lines)
-        };
+        let as_printed = self.rows_as_printed(&rows, &headers, spec);
         // The printed line positions come back only when the reader asked for no more leading
         // than the print has. A reader opening the lines up wants that on a reproduced page
         // too, so the rows then take the even rhythm with the spacing asked for.
@@ -948,253 +432,20 @@ impl Page {
             if printed_y.is_some() && surah_frames { &[] } else { &prep.surah_frame_paths };
         // Horizontal placement first: it does not depend on the heights, and the heights need
         // to know which ink of two rows ends up over which.
-        let last_row = rows.len().saturating_sub(1);
-        // What each row holds before anything is opened up: its ink, the gaps the print or the
-        // page's own spacing give it, and which of those gaps may stretch.
-        struct Measured {
-            ink: f32,
-            gaps: Vec<f32>,
-            open: Vec<bool>,
-        }
-        let measured: Vec<Measured> = rows
-            .iter()
-            .map(|atoms| Measured {
-                ink: atoms.iter().map(|a| a.width).sum(),
-                gaps: atoms.windows(2).map(|p| gap_of(p[0], p[1])).collect(),
-                open: atoms.windows(2).map(|p| !interlocked(p[0], p[1])).collect(),
-            })
-            .collect();
-        let used = |r: usize| measured[r].ink + measured[r].gaps.iter().sum::<f32>();
-        // What a row is evened against: the widest row near it. The window slides, so a row is
-        // measured against its own neighbours rather than against whichever group of rows it
-        // happened to fall in, and it holds a fixed number of rows, so a taller screen does not
-        // change how a page is set.
-        let reach = defaults::RELAX_NEIGHBOURS;
-        let _ = rows_per_view;
-        let widest: Vec<f32> = (0..rows.len())
-            .map(|r| {
-                let (lo, hi) = (r.saturating_sub(reach), (r + reach).min(rows.len().saturating_sub(1)));
-                (lo..=hi)
-                    .filter(|&k| !headers.contains_key(&k) && !rows[k].is_empty())
-                    .fold(0.0f32, |w, k| w.max(used(k)))
-            })
-            .collect();
-        let mut row_dx: Vec<Vec<f32>> = Vec::with_capacity(rows.len());
-        for (r, atoms) in rows.iter().enumerate() {
-            let mut dxs = Vec::with_capacity(atoms.len());
-            if headers.contains_key(&r) {
-                row_dx.push(dxs);
-                continue;
-            }
-            let Measured { ink, ref gaps, ref open } = measured[r];
-            let mut gaps = gaps.clone();
-            let natural: f32 = gaps.iter().sum();
-            let n_open = open.iter().filter(|o| **o).count();
-            // A row that ends a block — the page's last row, or the row before a banner — is
-            // short because the text ran out, so it is left as it is.
-            let ends_block = r == last_row || headers.contains_key(&(r + 1));
-            // How much a row may be opened up, over the gaps that are free to stretch: never
-            // past the cap, because gapped-out words read worse than a short row.
-            let widen = |gaps: &mut Vec<f32>, extra: f32| {
-                // measured on the air a gap holds, not on the distance between the two boxes:
-                // a box gap goes negative wherever a word's stroke reaches over its neighbour,
-                // and a cap read off that would pin every such row shut
-                let room = if spec.max_stretch > 0.0 {
-                    (n_open as f32 * median * spec.word_gap.max(0.0) * (spec.max_stretch - 1.0)).max(0.0)
-                } else {
-                    f32::MAX
-                };
-                let extra = extra.min(room);
-                if extra <= 0.0 || n_open == 0 {
-                    return;
-                }
-                let share = extra / n_open as f32;
-                for (g, o) in gaps.iter_mut().zip(open) {
-                    if *o {
-                        *g += share;
-                    }
-                }
-            };
-            if !ends_block {
-                match spec.fill {
-                    Fill::Justified => widen(&mut gaps, row_w - ink - natural),
-                    // A row is opened towards the widest row near it, because those are the
-                    // rows a reader sees beside it and compares it with. It is a share of the
-                    // way and not the whole of it: the row is never justified, and
-                    // `max_stretch` still caps how far its gaps may go.
-                    _ if spec.relax > 0.0 => {
-                        let target = widest.get(r).copied().unwrap_or(row_w).min(row_w);
-                        let mine = ink + natural;
-                        if target > mine {
-                            widen(&mut gaps, (target - mine) * spec.relax.min(1.0));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if as_printed.is_some() {
-                // the print reproduced: the words stay exactly where the page has them
-                dxs.extend(atoms.iter().map(|_| -block.0));
-                row_dx.push(dxs);
-                continue;
-            }
-            // A centred row starts half its leftover space in from the right margin, and so does
-            // a justified row that could not reach both: the last of a block, a single word, or
-            // one its gaps could not fill. Hung off the right margin, it reads as a ragged column
-            // under a justified block.
-            let mut cursor = row_w;
-            if matches!(spec.fill, Fill::Centred | Fill::Justified) {
-                let slack = row_w - ink - gaps.iter().sum::<f32>();
-                if slack > 0.0 {
-                    cursor -= slack / 2.0;
-                }
-            }
-            for (i, a) in atoms.iter().enumerate() {
-                if i > 0 {
-                    cursor -= gaps[i - 1];
-                }
-                dxs.push(cursor - a.x1);
-                cursor -= a.x1 - a.x0;
-            }
-            row_dx.push(dxs);
-        }
-
-        // Every word sits on its line's baseline, so a row places its words on one baseline of
-        // its own, the printed line spacing apart. Two rows are pushed further apart only where
-        // their ink would actually meet: a deep descender over a tall mark in the same column.
-        // The print allows ink to cross into a neighbouring line, and so does this.
-        let baselines = &self.line_baseline;
-        let ink_of = |a: &Atom, dx: f32| -> (f32, f32, f32, f32) {
-            let w = &d.words[a.word as usize];
-            let b = baselines[w.line_index as usize];
-            (
-                w.bbox.x0 as f32 / q + dx,
-                w.bbox.x1 as f32 / q + dx,
-                b - w.bbox.y0 as f32 / q, // ascent
-                w.bbox.y1 as f32 / q - b, // descent
-            )
-        };
-        let mut row_y: Vec<f32> = Vec::with_capacity(rows.len());
-        let (mut ascents, mut descents) = (Vec::with_capacity(rows.len()), Vec::with_capacity(rows.len()));
-        for (r, atoms) in rows.iter().enumerate() {
-            let (mut asc, mut desc) = (0.0f32, 0.0f32);
-            for (i, a) in atoms.iter().enumerate() {
-                let (_, _, aa, dd) = ink_of(a, row_dx[r].get(i).copied().unwrap_or(0.0));
-                asc = asc.max(aa);
-                desc = desc.max(dd);
-            }
-            // A banner row is as tall as its own ink, which is the decorations drawn on it: a
-            // banner line holds no words, so its line box is empty and says nothing about how
-            // much room the surah name or the basmalah needs. The ink is measured at the size
-            // the banner is drawn at, which is the size `place_header` fits to the row.
-            if let Some(&li) = headers.get(&r) {
-                let c = self.line_centre(li as usize);
-                let k = self.header_scale(li as usize, row_w, banner_k, omitted_header_paths);
-                let bbox = self.header_bbox(li as usize, omitted_header_paths);
-                if !bbox.is_empty() {
-                    asc = asc.max(k * (c - bbox.y0 as f32 / q));
-                    desc = desc.max(k * (bbox.y1 as f32 / q - c));
-                }
-            }
-            ascents.push(asc.max(0.0));
-            descents.push(desc.max(0.0));
-            // the printed page reproduced: keep the printed line positions
-            if let Some(lines) = &printed_y {
-                let li = lines[r];
-                let y = if headers.contains_key(&r) { self.line_centre(li) } else { baselines[li] };
-                row_y.push(y);
-                continue;
-            }
-            let y = match r.checked_sub(1) {
-                None => top + ascents[r],
-                Some(prev) => {
-                    // the room the two rows' ink needs where it shares a column
-                    let mut need: f32 = 0.0;
-                    for (i, a) in rows[prev].iter().enumerate() {
-                        let (ax0, ax1, _, adesc) = ink_of(a, row_dx[prev].get(i).copied().unwrap_or(0.0));
-                        for (j, b) in atoms.iter().enumerate() {
-                            let (bx0, bx1, basc, _) = ink_of(b, row_dx[r].get(j).copied().unwrap_or(0.0));
-                            if ax0 < bx1 && bx0 < ax1 {
-                                need = need.max(adesc + basc);
-                            }
-                        }
-                    }
-                    // A banner keeps the print's air only within a normal line pitch. Its
-                    // row holds its own ink, not the blank slot the print set it inside.
-                    if headers.contains_key(&prev) || headers.contains_key(&r) {
-                        let air = headers
-                            .get(&prev)
-                            .map(|&li| {
-                                self.header_scale(li as usize, row_w, banner_k, omitted_header_paths)
-                                    * self.header_air(li as usize, omitted_header_paths).1
-                            })
-                            .or_else(|| {
-                                headers.get(&r).map(|&li| {
-                                    self.header_scale(li as usize, row_w, banner_k, omitted_header_paths)
-                                        * self.header_air(li as usize, omitted_header_paths).0
-                                })
-                            })
-                            .unwrap_or(0.0);
-                        let beside = if headers.contains_key(&prev) { ascents[r] } else { descents[prev] };
-                        let air = air.min((pitch - beside).max(0.0));
-                        need = need.max(descents[prev] + ascents[r] + air);
-                    }
-                    row_y[prev] + pitch.max(need)
-                }
-            };
-            row_y.push(y);
-        }
-        // Bands meet halfway between neighbouring rows, as the printed slots do — measured
-        // between the rows' ink, not their baselines. A baseline sits low in its row (the
-        // ascenders and marks are all above it), so a band built around one would hang below
-        // the words it belongs to.
-        // the row's ink centre; a page that came out as printed uses the printed line's own
-        // centre, so its slots are the printed slots
-        let centres: Vec<f32> = (0..rows.len())
-            .map(|r| match &printed_y {
-                Some(lines) => self.line_centre(lines[r]),
-                None => row_y[r] - (ascents[r] - descents[r]) / 2.0,
-            })
-            .collect();
-        let half = pitch / 2.0;
-        for r in 0..rows.len() {
-            // beside a banner the printed gap is wide (the opening pages set the banner pitches
-            // above the text) and it is not the text row's to claim, so the boundary stops half
-            // a line spacing out. The printed slots do the same.
-            let banner = |i: usize| headers.contains_key(&i);
-            let top_b = match r.checked_sub(1) {
-                Some(prev) => {
-                    let mid = (centres[prev] + centres[r]) / 2.0;
-                    if banner(r) || banner(prev) {
-                        mid.max(centres[r] - half)
-                    } else {
-                        mid
-                    }
-                }
-                None => centres[r] - half,
-            };
-            let bottom_b = match centres.get(r + 1) {
-                Some(&next) => {
-                    let mid = (centres[r] + next) / 2.0;
-                    if banner(r) || banner(r + 1) {
-                        mid.min(centres[r] + half)
-                    } else {
-                        mid
-                    }
-                }
-                None => centres[r] + half,
-            };
-            out.row_band.push((top_b, bottom_b));
-        }
+        let row_dx = self.place_across(&rows, &headers, spec, shape, as_printed.is_some());
+        let heights = self.place_down(&rows, &headers, &row_dx, shape, printed_y.as_deref(), omitted_header_paths);
+        let (centres, bands) = self.row_bands(&headers, &heights, pitch, printed_y.as_deref());
+        out.row_band = bands;
         out.as_printed = printed_y.is_some();
-        out.row_baseline = row_y.clone();
+        out.row_baseline = heights.baseline.clone();
+        let baselines = &self.line_baseline;
         for (r, atoms) in rows.iter().enumerate() {
-            let base = row_y[r];
+            let base = heights.baseline[r];
             out.row_words.push(atoms.iter().map(|a| a.word).collect());
             if let Some(&li) = headers.get(&r) {
                 // on its own ink centre: a band beside a banner stops half a line spacing out,
                 // so it is narrower than the banner and its middle is not where the ink goes
-                self.place_header(&mut out, li, centres[r], row_w, banner_k, omitted_header_paths);
+                self.place_header(&mut out, li, centres[r], row_w, shape.banner_k, omitted_header_paths);
                 continue;
             }
             for (i, a) in atoms.iter().enumerate() {
@@ -1208,106 +459,67 @@ impl Page {
                 for &di in &a.inline_decos {
                     out.deco_place[di as usize] = p;
                 }
-                // a margin mark keeps the side of the sheet the print puts it on and the
-                // height it was printed at; it only follows its word down to the new row. The
-                // margin narrows as the reader zooms in, so the mark is held inside it.
                 for &(di, w) in &a.margin_decos {
-                    let b = self.deco_mark_bbox(di as usize);
-                    let (bx0, bx1) = (b.x0 as f32 / q, b.x1 as f32 / q);
-                    let left = (bx0 + bx1) / 2.0 < (block.0 + block.1) / 2.0;
-                    let x1 = if left {
-                        // outside the row's left edge, and never past the margin the page has
-                        (bx1 - block.0).min(0.0).max(w - margins.0)
-                    } else {
-                        (bx0 - block.0).max(row_w).min(row_w + margins.1 - w) + w
-                    };
-                    out.deco_place[di as usize] = Placement::moved(x1 - bx1, dy);
+                    out.deco_place[di as usize] = self.margin_mark_place(di, w, dy, shape);
                 }
             }
         }
-        // A medallion stands between the ayah it closes and the one that follows. Where both
-        // words share a row it is set midway between them, rather than at the distance the
-        // print happened to give it on a line it is no longer on. Moving it changes nothing
-        // else: the words either side stay where the row put them.
-        //
-        // Each side is the whole unit the row placed, the word and the signs that travel with
-        // it, such as the quarter star (۞) that opens the next ayah. Measured on the letters
-        // alone, the medallion was centred on a space the star half filled, and sat against it.
-        for atoms in rows.iter() {
-            for pair in atoms.windows(2) {
-                let (left_word, right_word) = (&pair[1], &pair[0]);
-                if out.word_row[right_word.word as usize] != out.word_row[left_word.word as usize] {
-                    continue;
-                }
-                for &di in &right_word.inline_decos {
-                    if d.decorations[di as usize].kind != DecoKind::AyahMark {
-                        continue;
-                    }
-                    let (dx_a, dx_b) =
-                        (out.word_place[right_word.word as usize].dx, out.word_place[left_word.word as usize].dx);
-                    let dx_m = out.deco_place[di as usize].dx;
-                    let others: Vec<u32> = right_word.inline_decos.iter().copied().filter(|&o| o != di).collect();
-                    let right_ink = self.slices_with(right_word.word, &others);
-                    let before = Page::slice_clearance(&right_ink, self.deco_slices(di), dx_m - dx_a);
-                    let after = Page::slice_clearance(self.deco_slices(di), &left_word.slices, dx_b - dx_m);
-                    if let (Some(before), Some(after)) = (before, after) {
-                        out.deco_place[di as usize].dx += (before - after) / 2.0;
-                    }
-                }
-            }
-        }
-
-        // the sajdah line: drawn over the words it marks, wherever they now are. The span can
-        // break across rows, so the stroke is drawn once per row, stretched along x to cover
-        // that row's part of it. Only this stroke is stretched; the words are not.
-        for line in &prep.sajdah_lines {
-            let (di, words) = (line.deco as usize, &line.words);
-            let (bx0, bx1) = (line.x0, line.x1);
-            let mut by_row: Vec<(u32, f32, f32)> = Vec::new(); // (row, x0, x1) of the placed span
-            for &wi in words {
-                let r = out.word_row[wi as usize];
-                if r == NONE {
-                    continue;
-                }
-                let p = out.word_place[wi as usize];
-                let w = &d.words[wi as usize];
-                let (x0, x1) = (p.apply(w.bbox.x0 as f32 / q, 0.0).0, p.apply(w.bbox.x1 as f32 / q, 0.0).0);
-                match by_row.iter_mut().find(|(rr, _, _)| *rr == r) {
-                    Some(e) => {
-                        e.1 = e.1.min(x0);
-                        e.2 = e.2.max(x1);
-                    }
-                    None => by_row.push((r, x0, x1)),
-                }
-            }
-            for (n, &(r, sx0, sx1)) in by_row.iter().enumerate() {
-                let kx = if sx1 > sx0 { (sx1 - sx0) / (bx1 - bx0) } else { 1.0 };
-                // the stroke takes the same shift as the words it is drawn over, so it keeps
-                // the height above them the print gave it. They all came from one printed line,
-                // so they all carry the same shift.
-                let dy = words
-                    .iter()
-                    .find(|&&wi| out.word_row[wi as usize] == r)
-                    .map(|&wi| out.word_place[wi as usize].dy)
-                    .unwrap_or(0.0);
-                let p = Placement { dx: sx0 - kx * bx0, dy, kx, ky: 1.0 };
-                if n == 0 {
-                    out.sajdah_line_place[di] = p;
-                } else {
-                    // only the stroke is drawn again; the sign beside it is printed once
-                    for &pi in &line.paths {
-                        out.repeats.push(Repeat { decoration: di as u32, first_path: pi, n_paths: 1, placement: p });
-                    }
-                }
-            }
-        }
+        self.centre_medallions(&mut out, &rows);
+        self.place_sajdah_lines(&mut out);
         // The running head (surah name and juz) and the page number are printed outside the
         // page's own box: they belong to the sheet, not to the text, and a reflowed page has no
         // sheet. They are left out of the layout and listed in `omitted` so a renderer skips
         // them; a host that wants them draws its own, from `page_number` and the atlas.
         out.omitted.clone_from(&prep.omitted);
-        // everything is placed: measure what was laid out, and move it so the topmost ink
-        // sits where the caller asked the first row to start
+        self.fit_extent(&mut out, shape, printed_y.is_some(), omitted_header_paths);
+        out
+    }
+
+    /// The printed line each row holds, when every row holds exactly the words of one printed
+    /// line; `None` otherwise.
+    ///
+    /// The reflow has then reproduced the print: the page goes back to its printed line
+    /// positions, irregular spacing and all, instead of the even rhythm the rows would
+    /// otherwise take. This is what returning to zoom 1 gives back.
+    fn rows_as_printed(
+        &self,
+        rows: &[Vec<&Atom>],
+        headers: &HashMap<usize, u32>,
+        spec: &ReflowSpec,
+    ) -> Option<Vec<usize>> {
+        let d = self.data();
+        let mut lines: Vec<usize> = Vec::with_capacity(rows.len());
+        let mut ok = true;
+        for (r, atoms) in rows.iter().enumerate() {
+            match headers.get(&r) {
+                Some(&li) => lines.push(li as usize),
+                None => {
+                    let li = atoms.first().map(|a| d.words[a.word as usize].line_index as usize);
+                    match li {
+                        Some(li)
+                            if atoms.len() == self.line_words[li].len()
+                                && atoms.iter().all(|a| d.words[a.word as usize].line_index as usize == li) =>
+                        {
+                            lines.push(li)
+                        }
+                        _ => {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        (spec.breaks != Breaks::Printed && ok && lines.len() == rows.len()).then_some(lines)
+    }
+
+    /// Measure what was laid out, and move it so the topmost ink sits where the caller asked
+    /// the first row to start. `printed_lines` is true when the rows keep the printed line
+    /// positions.
+    fn fit_extent(&self, out: &mut Reflowed, shape: &RowSpec, printed_lines: bool, omitted_header_paths: &[u32]) {
+        let (top, pitch) = (shape.top, shape.pitch);
+        let q = self.quant();
+        let d = self.data();
         let (mut y0, mut y1) = (f32::INFINITY, f32::NEG_INFINITY);
         let mut grow = |p: &Placement, a: f32, b: f32| {
             y0 = y0.min(p.ky * a + p.dy);
@@ -1329,7 +541,7 @@ impl Page {
         }
         if y0.is_finite() {
             // the print reproduced: the page keeps its own origin, so its top margin survives
-            let shift = if printed_y.is_some() { top - pitch / 2.0 } else { top - pitch / 2.0 - y0 };
+            let shift = if printed_lines { top - pitch / 2.0 } else { top - pitch / 2.0 - y0 };
             for p in out.word_place.iter_mut().chain(out.deco_place.iter_mut()).chain(out.sajdah_line_place.iter_mut())
             {
                 p.dy += shift;
@@ -1346,176 +558,6 @@ impl Page {
             }
             out.y0 = y0 + shift;
             out.y1 = y1 + shift;
-        }
-        out
-    }
-
-    /// How two row units meet: the depth the print interlocks them to, and the air between
-    /// their strokes. Read off the page's measure when `next` follows `prev` in reading order,
-    /// which is every pair a reflow sets a gap between, and measured on the spot otherwise.
-    fn neighbour(&self, prev: &Atom, next: &Atom) -> (Option<f32>, Option<f32>) {
-        let n = &self.reflow_prepared().before[next.word as usize];
-        debug_assert_eq!(n.prev, prev.word, "a gap between two words that are not reading-order neighbours");
-        if n.prev == prev.word {
-            (n.interlock, n.clearance)
-        } else {
-            (self.words_interlock(prev.word, next.word), Page::slice_clearance(&prev.slices, &next.slices, 0.0))
-        }
-    }
-
-    fn atom_gap(&self, prev: &Atom, next: &Atom, spec: &ReflowSpec, median: f32) -> f32 {
-        let d = self.data();
-        let (interlock, clearance) = self.neighbour(prev, next);
-        // A word the print carries under the one before it keeps the distance the print
-        // gave it, whatever the rest of the row is set at: the pair is one piece of
-        // calligraphy. Only a row break between them sets them as two ordinary words.
-        if interlock.is_some() {
-            return prev.x0 - next.x1;
-        }
-        let air = median * spec.word_gap.max(0.0);
-        match spec.gaps {
-            // Leave the same air between the strokes of every pair. Shifting the second
-            // word by `t` changes the air and the box gap alike, so the box gap that
-            // leaves the wanted air is the printed one moved by the difference.
-            GapMode::Uniform => match clearance {
-                Some(now) => (prev.x0 - next.x1) + (air - now),
-                // no band in common: neither word has ink at any height the other does, so
-                // nothing can meet and the boxes may sit the wanted air apart
-                None => air,
-            },
-            GapMode::Printed => {
-                let (a, b) = (&d.words[prev.word as usize], &d.words[next.word as usize]);
-                // the print's own distance, where the print set the two together
-                if a.line_index == b.line_index {
-                    prev.x0 - next.x1
-                } else {
-                    match clearance {
-                        Some(now) => (prev.x0 - next.x1) + (air - now),
-                        None => air,
-                    }
-                }
-            }
-        }
-    }
-
-    /// Build the row unit for a word: the ink printed with it keeps its printed offset, and
-    /// a mark the print puts in the margin is re-placed beside the word, where a reflowed
-    /// row has room for it.
-    fn atom(&self, wi: u32, decos: &[u32], median: f32, block: (f32, f32)) -> Atom {
-        let (x0, x1, inline_decos, margin_decos) = self.atom_extent(wi, decos, median, block);
-        let slices = self.slices_with(wi, &inline_decos);
-        Atom { word: wi, inline_decos, margin_decos, x0, x1, width: x1 - x0, slices }
-    }
-
-    /// The extent of a row unit and how its decorations travel, without its bands: the
-    /// printed extent of the word and its inline ink, the decorations that run inline and the
-    /// marks placed in the margin with their ink width.
-    #[allow(clippy::type_complexity)]
-    fn atom_extent(
-        &self,
-        wi: u32,
-        decos: &[u32],
-        median: f32,
-        block: (f32, f32),
-    ) -> (f32, f32, Vec<u32>, Vec<(u32, f32)>) {
-        let q = self.quant();
-        let d = self.data();
-        let w = &d.words[wi as usize];
-        let (mut x0, mut x1) = (w.bbox.x0 as f32 / q, w.bbox.x1 as f32 / q);
-        let (wy0, wy1) = (w.bbox.y0 as f32 / q, w.bbox.y1 as f32 / q);
-        let (mut inline_decos, mut margin_decos) = (Vec::new(), Vec::new());
-        for &di in decos {
-            let deco = &d.decorations[di as usize];
-            let b = self.deco_mark_bbox(di as usize);
-            let (bx0, bx1) = (b.x0 as f32 / q, b.x1 as f32 / q);
-            let (by0, by1) = (b.y0 as f32 / q, b.y1 as f32 / q);
-            // Where the print puts a mark decides how it travels. A mark printed inside the
-            // text block runs with the words and keeps its place among them; one printed out
-            // in the sheet's margin, where a reflowed row has no room, is placed in the margin
-            // beside its word. A medallion always runs with the words that it closes.
-            let in_block = bx0 >= block.0 - median && bx1 <= block.1 + median;
-            let beside = (x0 - bx1).max(bx0 - x1) <= 2.0 * median && by0 < wy1 + median && by1 > wy0 - median;
-            let inline = deco.kind == DecoKind::AyahMark || in_block || beside;
-            if inline {
-                x0 = x0.min(bx0);
-                x1 = x1.max(bx1);
-                inline_decos.push(di);
-            } else {
-                margin_decos.push((di, bx1 - bx0));
-            }
-        }
-        (x0, x1, inline_decos, margin_decos)
-    }
-
-    /// A banner line keeps its printed drawing, shrunk to the row width and centred on it.
-    /// The air the print keeps above and below a banner line, in page units: from its own ink
-    /// to the nearest ink on the line above and the line below. A banner line holds no words,
-    /// so its ink is the decorations drawn on it.
-    /// The horizontal extent of a banner line's own ink, in page units: a banner line holds
-    /// no words, so its ink is the decorations drawn on it.
-    fn header_bbox(&self, li: usize, omitted: &[u32]) -> IBox {
-        let mut bbox = IBox::EMPTY;
-        for (di, _) in self
-            .data()
-            .decorations
-            .iter()
-            .enumerate()
-            .filter(|(_, deco)| deco.line != NONE_U16 && deco.line as usize == li)
-        {
-            bbox.union(&self.decoration_bbox_without(di, omitted));
-        }
-        bbox
-    }
-
-    fn header_ink(&self, li: usize, omitted: &[u32]) -> (f32, f32) {
-        let bbox = self.header_bbox(li, omitted);
-        let q = self.quant();
-        if bbox.is_empty() {
-            (0.0, 0.0)
-        } else {
-            (bbox.x0 as f32 / q, bbox.x1 as f32 / q)
-        }
-    }
-
-    /// How far a banner is shrunk to sit on a row: its own ink against the row, never enlarged.
-    /// A title or basmalah stays whole: it is fitted, not broken.
-    ///
-    /// The ink is what is measured, not the text block the banner sits in. A surah name is a
-    /// fifth of the block wide and a basmalah about half, so both keep their printed size as
-    /// the reader zooms in — growing with the words around them, which is what the reader
-    /// asked for — and start to shrink only once the row itself is narrower than they are.
-    ///
-    /// `max_k` is [`ReflowSpec::banner_zoom`] against the zoom, already worked out; it is
-    /// infinite when the host left the growth uncapped.
-    fn header_scale(&self, li: usize, row_w: f32, max_k: f32, omitted: &[u32]) -> f32 {
-        let ink = self.header_ink(li, omitted);
-        (row_w / (ink.1 - ink.0).max(1.0)).min(1.0).min(max_k)
-    }
-
-    fn header_air(&self, li: usize, omitted: &[u32]) -> (f32, f32) {
-        let d = self.data();
-        let q = self.quant();
-        let ink = |line: usize| -> Option<(f32, f32)> {
-            let mut bbox = if d.lines[line].n_words > 0 { d.lines[line].bbox } else { IBox::EMPTY };
-            bbox.union(&self.header_bbox(line, omitted));
-            (!bbox.is_empty()).then_some((bbox.y0 as f32 / q, bbox.y1 as f32 / q))
-        };
-        let Some(mine) = ink(li) else { return (0.0, 0.0) };
-        let above = li.checked_sub(1).and_then(ink).map(|(_, y1)| (mine.0 - y1).max(0.0)).unwrap_or(0.0);
-        let below = ink(li + 1).map(|(y0, _)| (y0 - mine.1).max(0.0)).unwrap_or(0.0);
-        (above, below)
-    }
-
-    fn place_header(&self, out: &mut Reflowed, li: u32, centre: f32, row_w: f32, max_k: f32, omitted: &[u32]) {
-        let d = self.data();
-        let k = self.header_scale(li as usize, row_w, max_k, omitted);
-        let ink = self.header_ink(li as usize, omitted);
-        let cx = (ink.0 + ink.1) / 2.0;
-        for (di, deco) in d.decorations.iter().enumerate() {
-            if deco.line != NONE_U16 && deco.line as u32 == li {
-                let c = self.line_centre(li as usize);
-                out.deco_place[di] = Placement::scaled(row_w / 2.0 - k * cx, centre - k * c, k);
-            }
         }
     }
 }

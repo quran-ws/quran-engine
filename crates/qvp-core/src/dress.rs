@@ -775,38 +775,18 @@ impl Page {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fixtures::{add_path, page_with_surah_frame, square};
     use crate::style::LAYER_TOP;
-    use crate::tests::{page_with_surah_frame, square};
     use crate::{LayoutSpec, ReflowSpec};
-    use qvp_format::{
-        cmds_bbox, encode_cmds, DecoKind, DecoRec, Family, Mark, PathKind, PathRec, NONE_U16, PF_EVENODD,
-    };
+    use qvp_format::{DecoKind, DecoRec, PathKind, NONE_U16};
 
     /// The synthetic page with a surah frame on line 0, plus one real ayah medallion on
     /// line 1: a 6 unit ring at (45, 13) with a numeral inside it.
     fn page() -> (Page, u32, u32) {
         let (page, _, _, _) = page_with_surah_frame(true);
         let mut data = page.data().clone();
-        let add = |data: &mut qvp_format::PageData, cmds: &[Cmd], kind: PathKind| {
-            let bbox = cmds_bbox(cmds);
-            let op_off = data.ops.len() as u32;
-            encode_cmds(cmds, bbox.x0, bbox.y0, &mut data.ops);
-            let pi = data.paths.len() as u32;
-            data.paths.push(PathRec {
-                kind,
-                mark: Mark::None,
-                family: Family::None,
-                flags: PF_EVENODD,
-                ox: bbox.x0,
-                oy: bbox.y0,
-                op_off,
-                op_len: data.ops.len() as u32 - op_off,
-                bbox,
-            });
-            pi
-        };
-        let ring = add(&mut data, &square(4200, 1000, 4800, 1600), PathKind::AyahMarkOrnament);
-        let numeral = add(&mut data, &square(4400, 1200, 4600, 1400), PathKind::AyahNumber);
+        let ring = add_path(&mut data, &square(4200, 1000, 4800, 1600), PathKind::AyahMarkOrnament).0;
+        let numeral = add_path(&mut data, &square(4400, 1200, 4600, 1400), PathKind::AyahNumber).0;
         let mut bbox = data.paths[ring as usize].bbox;
         bbox.union(&data.paths[numeral as usize].bbox);
         let decoration = data.decorations.len() as u32;

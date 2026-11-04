@@ -109,19 +109,19 @@ pub unsafe extern "C" fn qvp_word_bands_view(
 pub unsafe extern "C" fn qvp_select(page: *mut Page, anchor: u32, focus: u32) {
     guard(|| {
         let p = &mut *page;
-        p.selection.anchor = (anchor != NONE).then_some(anchor);
-        p.selection.focus = (focus != NONE).then_some(focus);
+        p.selection_mut().anchor = (anchor != NONE).then_some(anchor);
+        p.selection_mut().focus = (focus != NONE).then_some(focus);
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_selection(page: *const Page, out: *mut u32, cap: u32) -> u32 {
-    guard(|| fill(out, cap, &(*page).selection.words()))
+    guard(|| fill(out, cap, &(*page).selection().words()))
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_selection_text(page: *const Page, form: u8, include_citation: u8, out: *mut QvpStr) {
     guard(|| {
         let p = &*page;
-        let ws = p.selection.words();
+        let ws = p.selection().words();
         let mut s = p.text_of(&ws, Form::from_u8(form), " ", "\n");
         if include_citation != 0 && !ws.is_empty() {
             s = format!("{s} ({})", p.citation(&ws));

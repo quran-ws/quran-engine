@@ -8,28 +8,19 @@
 //! sign's line and dropped into the diacritics of the sajdah word.
 //! Needs dist/pages from scripts/sync-test-data.sh. Skipped when the data is missing
 //! unless QVP_REQUIRE_DATA is set.
+mod common;
+
 use qvp_core::Page;
 use qvp_format::{IBox, Mark, PathKind};
-use std::path::{Path, PathBuf};
-
-fn pages_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../dist/pages")
-}
 
 #[test]
 fn ayah_marks_and_line_centres_follow_the_text() {
-    if !pages_dir().join("001.qvp").exists() {
-        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
-            panic!("dist/pages is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
-        }
-        eprintln!("skip: dist/pages is missing; run scripts/sync-test-data.sh to enable this gate");
-        return;
-    }
+    let Some(dir) = common::pages_dir() else { return };
     let mut failures = Vec::new();
     let mut marks = 0;
     let mut sajdah_lines = 0;
     for n in 1..=604u32 {
-        let Ok(bytes) = std::fs::read(pages_dir().join(format!("{n:03}.qvp"))) else { continue };
+        let Ok(bytes) = std::fs::read(dir.join(format!("{n:03}.qvp"))) else { continue };
         let p = Page::load(&bytes).expect("decode page");
         let d = p.data();
         let q = p.quant();

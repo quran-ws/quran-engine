@@ -8,24 +8,10 @@
 //!
 //! Needs dist/pages from scripts/sync-test-data.sh. Skipped when the data is missing unless
 //! QVP_REQUIRE_DATA is set.
+mod common;
+
 use qvp_core::qvp_format::{DecoKind, Mark};
-use qvp_core::{Align, Page, Passage, PassageError, PassageLayout, PassageSpec};
-use std::path::{Path, PathBuf};
-
-fn page_path(n: u32) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../dist/pages/{n:03}.qvp"))
-}
-
-fn load(n: u32) -> Option<Page> {
-    if !page_path(n).exists() {
-        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
-            panic!("dist/pages is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
-        }
-        eprintln!("skip: dist/pages is missing; run scripts/sync-test-data.sh to enable this test");
-        return None;
-    }
-    Some(Page::load(&std::fs::read(page_path(n)).unwrap()).unwrap())
-}
+use qvp_core::{Align, Passage, PassageError, PassageLayout, PassageSpec};
 
 fn bounded(l: &PassageLayout, at: &str) {
     let inside = |[x0, y0, x1, y1]: [f32; 4]| {
@@ -48,9 +34,9 @@ fn bounded(l: &PassageLayout, at: &str) {
 
 #[test]
 fn every_ayah_of_every_page_lays_out_whole() {
-    let Some(_) = load(1) else { return };
+    let Some(_) = common::page(1) else { return };
     for n in 1..=604 {
-        let page = load(n).unwrap();
+        let page = common::page(n).unwrap();
         let data = page.data();
         let mut surahs: Vec<u16> = data.words.iter().map(|w| w.surah).collect();
         surahs.dedup();
@@ -104,7 +90,7 @@ fn every_ayah_of_every_page_lays_out_whole() {
 
 #[test]
 fn a_range_across_two_pages_is_one_passage() {
-    let (Some(two), Some(three)) = (load(2), load(3)) else { return };
+    let (Some(two), Some(three)) = (common::page(2), common::page(3)) else { return };
     let mut passage = Passage::load(&[&three, &two], 2, 5, 6).unwrap();
     let l = passage.layout(&PassageSpec { width: 366.0, scale: 0.9, ..Default::default() }).unwrap().clone();
     assert_eq!(l.words.len(), 19);
@@ -118,7 +104,7 @@ fn a_passage_draws_every_word_at_one_size() {
     // Page 2 prints its words about 20% smaller than page 3. A passage that runs from one into
     // the other draws all its words at the size of its first word, and keeps the line spacing of
     // that size however many ayahs it holds.
-    let (Some(two), Some(three)) = (load(2), load(3)) else { return };
+    let (Some(two), Some(three)) = (common::page(2), common::page(3)) else { return };
     let spacing = |page: u16| if page == 2 { two.line_spacing() } else { three.line_spacing() };
     // Each word's height, in pixels, when a host sizes the passage by its printed line.
     let heights = |from: u16, to: u16| -> Vec<((u16, u16), f32)> {
@@ -150,7 +136,7 @@ fn a_passage_draws_every_word_at_one_size() {
 
 #[test]
 fn the_longest_ayah_fits_any_width() {
-    let Some(page) = load(48) else { return };
+    let Some(page) = common::page(48) else { return };
     let mut passage = Passage::load(&[&page], 2, 282, 282).unwrap();
     assert!(passage.word_count() > 100);
     for width in [120.0, 375.0, 1024.0] {
@@ -172,7 +158,7 @@ fn margins(l: &PassageLayout, row: usize, padding: f32) -> (f32, f32) {
 
 #[test]
 fn a_justified_passage_reaches_both_edges_and_centres_its_last_row() {
-    let Some(page) = load(48) else { return };
+    let Some(page) = common::page(48) else { return };
     let mut passage = Passage::load(&[&page], 2, 282, 282).unwrap();
     // No cap: every row but the last opens until it reaches both edges.
     let spec =
@@ -192,7 +178,7 @@ fn a_justified_passage_reaches_both_edges_and_centres_its_last_row() {
 
 #[test]
 fn a_low_cap_leaves_a_justified_row_short_and_centred() {
-    let Some(page) = load(48) else { return };
+    let Some(page) = common::page(48) else { return };
     let mut passage = Passage::load(&[&page], 2, 282, 282).unwrap();
     let spec =
         PassageSpec { width: 375.0, scale: 1.0, align: Align::Justified, max_stretch: 1.2, ..Default::default() };
@@ -210,7 +196,7 @@ fn a_low_cap_leaves_a_justified_row_short_and_centred() {
 
 #[test]
 fn a_cut_justified_passage_keeps_its_ellipsis_after_its_last_word() {
-    let Some(page) = load(48) else { return };
+    let Some(page) = common::page(48) else { return };
     let mut passage = Passage::load(&[&page], 2, 282, 282).unwrap();
     let spec = PassageSpec {
         width: 375.0,
@@ -235,7 +221,7 @@ fn a_cut_justified_passage_keeps_its_ellipsis_after_its_last_word() {
 #[test]
 fn a_sajdah_line_covers_its_words_on_a_justified_row() {
     for (n, surah, from, to) in [(272, 16, 49, 50), (598, 96, 19, 19)] {
-        let Some(page) = load(n) else { return };
+        let Some(page) = common::page(n) else { return };
         let data = page.data();
         let q = page.quant();
         let mut passage = Passage::load(&[&page], surah, from, to).unwrap();
@@ -286,7 +272,7 @@ fn a_sajdah_line_covers_its_words_on_a_justified_row() {
 #[test]
 fn a_surahs_basmalah_is_a_passage_of_its_own() {
     for (n, surah) in [(2, 2), (604, 114)] {
-        let Some(page) = load(n) else { return };
+        let Some(page) = common::page(n) else { return };
         let deco = page.data().decorations.iter().find(|d| d.kind == DecoKind::Basmalah && d.surah == surah).unwrap();
         let paths: Vec<u32> = (deco.first_path..deco.first_path + deco.n_paths as u32).collect();
         let mut basmalah = Passage::load_basmalah(&[&page], surah).unwrap();
@@ -330,7 +316,7 @@ fn a_surahs_basmalah_is_a_passage_of_its_own() {
 
 #[test]
 fn a_surah_without_a_basmalah_of_its_own_fails() {
-    let (Some(one), Some(two), Some(tawbah)) = (load(1), load(2), load(187)) else { return };
+    let (Some(one), Some(two), Some(tawbah)) = (common::page(1), common::page(2), common::page(187)) else { return };
     assert_eq!(Passage::load_basmalah(&[&one], 1).err(), Some(PassageError::NoBasmalah { surah: 1 }));
     assert_eq!(Passage::load_basmalah(&[&tawbah], 9).err(), Some(PassageError::NoBasmalah { surah: 9 }));
     assert_eq!(Passage::load_basmalah(&[&two], 3).err(), Some(PassageError::NoBasmalah { surah: 3 }));
@@ -340,7 +326,7 @@ fn a_surah_without_a_basmalah_of_its_own_fails() {
 
 #[test]
 fn a_cut_row_too_narrow_for_its_word_and_the_ellipsis_shrinks_rather_than_overflows() {
-    let Some(page) = load(48) else { return };
+    let Some(page) = common::page(48) else { return };
     let mut passage = Passage::load(&[&page], 2, 282, 282).unwrap();
     // A width the widest word only just fits, so the scale has already shrunk for it; the cut
     // then has to find room for the ellipsis and the medallion beside one word.
