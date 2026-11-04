@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# CocoaPods writes these on a pod install. The repository does not track them.
+/ios/Podfile.lock
+/macos/Podfile.lock
