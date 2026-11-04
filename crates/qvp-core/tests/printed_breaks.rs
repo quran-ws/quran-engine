@@ -1,19 +1,13 @@
 //! Printed breaks keep each line whole while the ink grows to fill the page width.
 //! Needs dist/pages from scripts/sync-test-data.sh.
+mod common;
+
 use qvp_core::qvp_format::DecoKind;
 use qvp_core::{Breaks, Fill, GapMode, LayoutSpec, Page, ReflowSpec};
-use std::path::Path;
 
 #[test]
 fn printed_rows_keep_their_words_and_fit_at_max_zoom() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../dist/pages");
-    if !dir.join("001.qvp").exists() {
-        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
-            panic!("dist/pages is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
-        }
-        eprintln!("skip: dist/pages is missing; run scripts/sync-test-data.sh to enable this test");
-        return;
-    }
+    let Some(dir) = common::pages_dir() else { return };
     for n in [1, 2] {
         let mut page = Page::load(&std::fs::read(dir.join(format!("{n:03}.qvp"))).unwrap()).unwrap();
         let base = LayoutSpec { viewport_w: 390.0, viewport_h: 844.0, ..Default::default() };

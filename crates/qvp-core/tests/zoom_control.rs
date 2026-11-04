@@ -2,23 +2,9 @@
 //!
 //! Needs dist/pages from scripts/sync-test-data.sh. Skipped when the data is missing unless
 //! QVP_REQUIRE_DATA is set.
-use qvp_core::{LayoutSpec, Page, Sideways, View, Zoom, ZoomMode};
-use std::path::{Path, PathBuf};
+mod common;
 
-fn page_path(n: u32) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../dist/pages/{n:03}.qvp"))
-}
-
-fn page(n: u32) -> Option<Page> {
-    if !page_path(n).exists() {
-        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
-            panic!("dist/pages is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
-        }
-        eprintln!("skip: dist/pages is missing; run scripts/sync-test-data.sh to enable this test");
-        return None;
-    }
-    Some(Page::load(&std::fs::read(page_path(n)).unwrap()).unwrap())
-}
+use qvp_core::{LayoutSpec, Sideways, View, Zoom, ZoomMode};
 
 fn spec() -> LayoutSpec {
     LayoutSpec { viewport_w: 390.0, viewport_h: 844.0, ..Default::default() }
@@ -31,7 +17,7 @@ fn middle(s: &LayoutSpec) -> (f32, f32) {
 
 #[test]
 fn a_control_opens_on_the_printed_page() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     let z = Zoom::default();
     assert_eq!(z.mode, ZoomMode::Stepped, "stepped is what a host gets without asking");
@@ -49,7 +35,7 @@ fn leaves_at(from: f32, to: f32) -> f32 {
 
 #[test]
 fn a_pinch_short_of_the_reach_moves_nothing() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let first = p.zoom_steps(&s)[0];
@@ -64,7 +50,7 @@ fn a_pinch_short_of_the_reach_moves_nothing() {
 /// than its neighbours, so leaving it took a much bigger squeeze.
 #[test]
 fn every_step_takes_the_same_reach_to_leave() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let n = p.zoom_steps(&s).len() as u32;
@@ -80,7 +66,7 @@ fn every_step_takes_the_same_reach_to_leave() {
 
 #[test]
 fn a_pinch_past_the_reach_lands_on_the_step_exactly() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let first = p.zoom_steps(&s)[0];
@@ -94,7 +80,7 @@ fn a_pinch_past_the_reach_lands_on_the_step_exactly() {
 
 #[test]
 fn the_hysteresis_does_not_oscillate_at_a_boundary() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let steps = p.zoom_steps(&s);
@@ -113,7 +99,7 @@ fn the_hysteresis_does_not_oscillate_at_a_boundary() {
 
 #[test]
 fn a_pinch_up_then_down_returns_to_the_step_it_left() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let steps = p.zoom_steps(&s);
@@ -126,7 +112,7 @@ fn a_pinch_up_then_down_returns_to_the_step_it_left() {
 
 #[test]
 fn a_free_pinch_stays_inside_the_page_s_own_limit() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let cap = p.reflow_max_zoom(&Default::default());
@@ -139,7 +125,7 @@ fn a_free_pinch_stays_inside_the_page_s_own_limit() {
 
 #[test]
 fn a_free_pinch_inside_one_quantum_lays_nothing_out() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     let z = Zoom { mode: ZoomMode::Continuous, step: 0, zoom: 1.5 };
     let at = p.zoom_spec(&s, z);
@@ -151,7 +137,7 @@ fn a_free_pinch_inside_one_quantum_lays_nothing_out() {
 
 #[test]
 fn a_magnifying_pinch_leaves_the_rows_alone() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let z = Zoom { mode: ZoomMode::Magnify, step: 0, zoom: 1.0 };
@@ -164,7 +150,7 @@ fn a_magnifying_pinch_leaves_the_rows_alone() {
 
 #[test]
 fn a_size_button_reaches_every_step_and_comes_back() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let steps = p.zoom_steps(&s);
@@ -182,7 +168,7 @@ fn a_size_button_reaches_every_step_and_comes_back() {
 
 #[test]
 fn a_commit_holds_the_word_under_the_fingers() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     let focal = middle(&s);
     let mut held_exactly = 0;
@@ -212,7 +198,7 @@ fn a_commit_holds_the_word_under_the_fingers() {
 
 #[test]
 fn changing_mode_keeps_the_size_the_reader_is_at() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let steps = p.zoom_steps(&s);
@@ -230,7 +216,7 @@ fn changing_mode_keeps_the_size_the_reader_is_at() {
 /// frame before had committed to.
 #[test]
 fn a_slow_pinch_does_not_run_away_through_the_steps() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let steps = p.zoom_steps(&s);
@@ -248,7 +234,7 @@ fn a_slow_pinch_does_not_run_away_through_the_steps() {
 /// The fingers lead the way through every step and back, inside one gesture.
 #[test]
 fn one_gesture_walks_up_the_steps_and_back_down() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let steps = p.zoom_steps(&s);
@@ -269,14 +255,14 @@ fn one_gesture_walks_up_the_steps_and_back_down() {
 /// little higher, and ten turns walked a reader from the largest step back to the printed page.
 #[test]
 fn the_size_survives_a_run_of_page_turns() {
-    let Some(mut first) = page(420) else { return };
+    let Some(mut first) = common::page(420) else { return };
     let s = spec();
     first.layout(&s);
     let top = first.zoom_steps(&s).len() as u32;
     let mut z = Zoom { mode: ZoomMode::Stepped, step: top, zoom: first.zoom_at_step(&s, top) };
     let mut seen = Vec::new();
     for n in 421..=430 {
-        let Some(mut p) = page(n) else { return };
+        let Some(mut p) = common::page(n) else { return };
         p.layout(&s);
         z = p.zoom_carried(&s, z);
         seen.push(z.step);
@@ -290,7 +276,7 @@ fn the_size_survives_a_run_of_page_turns() {
 /// A free zoom carries as a size, and no further than the page it lands on can reach.
 #[test]
 fn a_free_zoom_carries_inside_the_new_page_s_limit() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let cap = p.reflow_max_zoom(&Default::default());
@@ -302,7 +288,7 @@ fn a_free_zoom_carries_inside_the_new_page_s_limit() {
 /// A sideways drag turns the page wherever there is no sideways travel to spend.
 #[test]
 fn a_sideways_drag_turns_the_page_unless_there_is_room_to_pan() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     p.layout(&s);
     let settled = View::default();
@@ -343,7 +329,7 @@ fn a_flick_to_the_right_turns_to_the_next_page() {
 /// the same pinch from a step above walks all the way down.
 #[test]
 fn a_pinch_out_leaves_every_step() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     let f = middle(&s);
     let n = p.zoom_steps(&s).len() as u32;
@@ -373,7 +359,7 @@ fn a_pinch_out_leaves_every_step() {
 
 #[test]
 fn a_magnifying_pinch_never_shrinks_the_page_inside_the_screen() {
-    let Some(mut p) = page(428) else { return };
+    let Some(mut p) = common::page(428) else { return };
     let s = spec();
     let fit = p.layout(&s).fit_scale;
     let z = Zoom { mode: ZoomMode::Magnify, step: 0, zoom: 1.0 };

@@ -7,24 +7,14 @@
 //!
 //! Needs dist/pages from scripts/sync-test-data.sh. Skipped when the data is missing unless
 //! QVP_REQUIRE_DATA is set.
+mod common;
+
 use qvp_core::qvp_format::DecoKind;
 use qvp_core::{LayoutSpec, Page, ReflowSpec};
-use std::path::{Path, PathBuf};
-
-fn page_path(n: u32) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../dist/pages/{n:03}.qvp"))
-}
 
 /// 582 opens سورة النبأ, so it carries a surah name to measure.
 fn page() -> Option<Page> {
-    if !page_path(582).exists() {
-        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
-            panic!("dist/pages is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
-        }
-        eprintln!("skip: dist/pages is missing; run scripts/sync-test-data.sh to enable this test");
-        return None;
-    }
-    Some(Page::load(&std::fs::read(page_path(582)).unwrap()).unwrap())
+    common::page(582)
 }
 
 /// What a banner is drawn at, against its printed size: the scale the reflow placed it under,

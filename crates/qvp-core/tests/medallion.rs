@@ -4,30 +4,16 @@
 //!
 //! Needs dist/pages from scripts/sync-test-data.sh. Skipped when the data is missing unless
 //! QVP_REQUIRE_DATA is set.
+mod common;
+
 use qvp_core::qvp_format::DecoKind;
-use qvp_core::{Fill, LayoutSpec, Page, ReflowSpec};
-use std::path::{Path, PathBuf};
-
-fn page_path(n: u32) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../dist/pages/{n:03}.qvp"))
-}
-
-fn page(n: u32) -> Option<Page> {
-    if !page_path(n).exists() {
-        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
-            panic!("dist/pages is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
-        }
-        eprintln!("skip: dist/pages is missing; run scripts/sync-test-data.sh to enable this test");
-        return None;
-    }
-    Some(Page::load(&std::fs::read(page_path(n)).unwrap()).unwrap())
-}
+use qvp_core::{Fill, LayoutSpec, ReflowSpec};
 
 /// Page 014: 2:91 ends on مُّؤْمِنِينَ and 2:92 opens a quarter, so its quarter star (۞) travels
 /// with وَلَقَدْ. The medallion of 2:91 stands between them, the star on its far side.
 #[test]
 fn a_medallion_is_centred_between_its_word_and_the_quarter_star_after_it() {
-    let Some(mut p) = page(14) else { return };
+    let Some(mut p) = common::page(14) else { return };
     let q = p.quant();
     let d = p.data().clone();
     let closing = d.words.iter().rposition(|w| w.surah == 2 && w.ayah == 91).expect("2:91 is on page 14");
