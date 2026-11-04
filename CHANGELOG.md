@@ -316,6 +316,10 @@ All notable changes to the engine and its packages. The format follows
 - Flutter: after a zoom step lays the page out again, `QvpPageView` draws the highlight
   bands and the dress overflow of the new layout. It kept those of the old layout until the
   next call on the page.
+- `scripts/check-flutter-bindings.sh` runs `flutter pub get` before it generates the
+  bindings, so it no longer fails on a checkout whose `.dart_tool` predates the ffigen
+  dependency. It restores `example/pubspec.lock` afterwards, and its failure message says
+  what to run by hand.
 
 ## [0.7.0] - 2026-10-14
 
