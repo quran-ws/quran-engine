@@ -804,4 +804,6 @@ pub trait Renderer {
 }
 
 #[cfg(test)]
+mod fixtures;
+#[cfg(test)]
 mod tests;

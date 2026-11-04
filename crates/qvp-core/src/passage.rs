@@ -1339,17 +1339,8 @@ fn moved(r: Rect, dx: f64, dy: f64) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fixtures::{push_path, square};
     use qvp_format::*;
-
-    fn rect_cmds(b: [i32; 4]) -> Vec<Cmd> {
-        vec![
-            Cmd::MoveTo(b[0], b[1]),
-            Cmd::LineTo(b[2], b[1]),
-            Cmd::LineTo(b[2], b[3]),
-            Cmd::LineTo(b[0], b[3]),
-            Cmd::Close,
-        ]
-    }
 
     /// Three words of one ayah on one line, its medallion and a sajdah line over the middle
     /// word: the lite module's synthetic page, in hundredths of a page unit.
@@ -1364,21 +1355,7 @@ mod tests {
             ([4200, 200, 6300, 300], PathKind::Mark, Mark::SajdahLine),
         ];
         for (b, kind, mark) in boxes {
-            let cmds = rect_cmds(b);
-            let bb = cmds_bbox(&cmds);
-            let off = ops.len() as u32;
-            encode_cmds(&cmds, bb.x0, bb.y0, &mut ops);
-            paths.push(PathRec {
-                kind,
-                mark,
-                family: Family::None,
-                flags: 0,
-                ox: bb.x0,
-                oy: bb.y0,
-                op_off: off,
-                op_len: ops.len() as u32 - off,
-                bbox: bb,
-            });
+            push_path(&mut ops, &mut paths, &square(b[0], b[1], b[2], b[3]), kind, mark, Family::None, 0);
         }
         let bbox = |i: usize| paths[i].bbox;
         let word = |i: usize| WordRec {
