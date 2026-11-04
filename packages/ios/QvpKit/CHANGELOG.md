@@ -12,8 +12,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
 
 ### Fixed
-- Swift: `QvpColor.parse` and `QvpColor.withAlpha` clamp a NaN or out-of-range alpha to 0 or
-  255, where they trapped.
+- Swift: `QvpColor.parse` and `QvpColor.withAlpha` clamp a NaN alpha to 0, where they
+  trapped.
 
 ## [0.7.0] - 2026-10-14
 

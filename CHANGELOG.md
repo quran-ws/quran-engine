@@ -138,8 +138,8 @@ All notable changes to the engine and its packages. The format follows
 ### Fixed
 - Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
   steps, as the Swift, Dart and web wrappers do. They truncated, so alpha 0.5 gave `0x7f` on
-  Android and `0x80` everywhere else. A NaN or out-of-range alpha clamps to 0 or 255 in every wrapper, where Swift trapped
-  and Dart threw.
+  Android and `0x80` everywhere else. A NaN alpha clamps to 0 in every wrapper, where
+  Swift trapped, Dart threw and React Native returned a malformed colour.
 - `scripts/check-parity.py` reads a hex colour whole. It stripped every trailing `f` as a
   suffix, so `0x231f20ffu` compared as `0x231f20` and a wrapper colour without its alpha
   byte passed. A failed default now also stops the summary from reporting agreement.
