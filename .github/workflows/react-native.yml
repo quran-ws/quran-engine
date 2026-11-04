@@ -6,6 +6,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/react-native.yml"
+      - ".github/actions/android-toolchain/**"
+      - "scripts/build-engine-android.sh"
       - "packages/react-native/**"
       # The Android module compiles against the Kotlin library, so a change to the library's
       # sources or its build file can break the module.
@@ -18,10 +20,6 @@ on:
 concurrency:
   group: react-native-${{ github.ref }}
   cancel-in-progress: true
-
-# The Kotlin library pins this version. The Android SDK workflow installs the same one.
-env:
-  NDK_VERSION: 27.2.12479018
 
 jobs:
   typecheck:
@@ -36,22 +34,13 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-      - uses: android-actions/setup-android@v4
-        with:
-          packages: platform-tools
       # The Kotlin library declares a CMake build and an NDK version, so the Android Gradle
       # plugin reads the NDK when it configures the project, even though this job builds
       # nothing native. Install the tools here. Left to Gradle, the NDK download sits in the
       # middle of the build, where it once ran past the job's timeout.
-      - name: Install Android build tools
-        run: >-
-          sdkmanager "platforms;android-35" "platforms;android-36"
-          "build-tools;36.0.0" "ndk;$NDK_VERSION" "cmake;3.22.1"
+      - uses: ./.github/actions/android-toolchain
+        with:
+          packages: platforms;android-35 platforms;android-36 build-tools;36.0.0
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build

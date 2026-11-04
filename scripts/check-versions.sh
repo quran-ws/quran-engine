@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Every version string in the repository must equal the workspace version in Cargo.toml.
+# Every version string in the repository must equal the workspace version in Cargo.toml, and
+# every NDK version must equal QVP_NDK_VERSION in scripts/build-engine-android.sh.
 # Input: the manifests listed below. Output: one line per manifest; exit 1 on any mismatch.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -36,6 +37,26 @@ if grep -nE '^qvp-[a-z]+ = .*version = "' crates/*/Cargo.toml; then
   echo "MISMATCH a crate manifest declares an internal dependency version; use workspace = true" ; status=1
 fi
 check Package.swift/XCFramework "$(sed -n 's|.*releases/download/v\([^/]*\)/QvpEngine\.xcframework\.zip.*|\1|p' Package.swift)"
+
+# The NDK version is defined once, as QVP_NDK_VERSION in scripts/build-engine-android.sh. Every
+# other mention must equal it. Files read, all of them tracked:
+#   - every build.gradle and build.gradle.kts under packages/ (the ndkVersion pins)
+#   - every README.md under packages/
+#   - packages/android/AGENTS.md, docs/MACOS.md and scripts/check-android-page-size.sh
+# A full version (27.2.12479018) must match exactly. A bare major ("NDK 27") must match the major.
+ndk="$(sed -n 's/^QVP_NDK_VERSION=//p' scripts/build-engine-android.sh)"
+[ -n "$ndk" ] || { echo "error: no QVP_NDK_VERSION in scripts/build-engine-android.sh" >&2; exit 1; }
+while IFS= read -r f; do
+  found="$(grep -iE 'ndk' "$f" | grep -oE '[0-9]+\.[0-9]+\.[0-9]{5,}' | sort -u | tr '\n' ' ' || true)"
+  majors="$(grep -oE 'NDK [0-9]+([^.0-9]|$)' "$f" | grep -oE '[0-9]+' | sort -u | tr '\n' ' ' || true)"
+  [ -n "$found$majors" ] || continue
+  bad=""
+  for v in $found; do [ "$v" = "$ndk" ] || bad="$bad $v"; done
+  for m in $majors; do [ "$m" = "${ndk%%.*}" ] || bad="$bad $m"; done
+  if [ -z "$bad" ]; then printf 'ok       %-52s NDK %s\n' "$f" "$ndk"
+  else printf 'MISMATCH %-52s NDK%s (want %s)\n' "$f" "$bad" "$ndk"; status=1; fi
+done < <(git ls-files -- 'packages/*build.gradle' 'packages/*build.gradle.kts' 'packages/*README.md' \
+  packages/android/AGENTS.md docs/MACOS.md scripts/check-android-page-size.sh)
 
 echo "workspace version: $want"
 exit $status

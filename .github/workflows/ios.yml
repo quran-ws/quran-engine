@@ -47,7 +47,13 @@ jobs:
       - name: Swift tests (macOS slice)
         working-directory: packages/ios/QvpKit
         run: swift test
-      - name: Generate and build the example for the simulator
+      # `xcodebuild test` builds the Demo app and DemoUITests, then runs the six UI smoke
+      # tests (open a page, tap a word, highlight, pinch, swipe) on a simulator. A test needs
+      # a named device, where a build takes the generic destination, so the step picks the
+      # first iPhone of the newest iOS runtime on the runner image. The list comes as JSON, so
+      # the pick does not depend on how `simctl` prints its text. The destination also names
+      # `OS=latest`, so xcodebuild runs that device on the same runtime.
+      - name: Generate the example, build it, and run its UI smoke test on the simulator
         working-directory: packages/ios/example
         run: |
           # Without pipefail the step takes tail's exit status, so a failed build reads as a pass.
@@ -55,5 +61,20 @@ jobs:
           brew install xcodegen >/dev/null
           ./sync-pages.sh            # example/pages from the cached dist/pages; xcodegen needs the directory
           xcodegen generate
-          xcodebuild -scheme Demo -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath ../../../target/ios-build CODE_SIGNING_ALLOWED=NO build | tail -20
+          device=$(xcrun simctl list devices available -j | jq -r '
+            [.devices | to_entries[] | select(.key | test("SimRuntime.iOS-"))
+             | {runtime: .key, name: ([.value[] | select(.name | startswith("iPhone")) | .name] | first)}
+             | select(.name != null)]
+            | sort_by(.runtime | capture("iOS-(?<v>.*)").v | split("-") | map(tonumber))
+            | last | .name')
+          [ -n "$device" ] && [ "$device" != null ] || { echo "::error::no iPhone simulator on this runner image"; exit 1; }
+          echo "simulator: $device"
+          xcodebuild -scheme Demo -destination "platform=iOS Simulator,name=$device,OS=latest" \
+            -derivedDataPath ../../../target/ios-build \
+            -resultBundlePath ../../../target/ios-build/Demo.xcresult \
+            CODE_SIGNING_ALLOWED=NO test | tail -40
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ios-ui-test-${{ github.sha }}
+          path: target/ios-build/Demo.xcresult
