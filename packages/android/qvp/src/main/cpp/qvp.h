@@ -105,8 +105,8 @@ typedef struct { uint16_t surah, ayah; uint8_t fragment, fragments, flags, _pad;
 typedef struct { uint8_t line_number, is_header; uint32_t first_word, n_words; float x0, y0, x1, y1, band_y0, band_y1, centre; } QvpLineInfo;
 typedef struct { uint8_t decoration /* QVP_DECORATION_* */, _pad; uint16_t surah, ayah, _pad2; uint32_t line; float x0, y0, x1, y1; QvpStr text; uint32_t first_path, n_paths; } QvpDecorationInfo;
 /* one hit result for every hit test. Every hit has a line: the word's line, or the line of the
-   decoration's first path. is_exact is 1 when the point is inside an outline, and 0 when it is
-   inside a word's or a decoration's box but outside its ink. The exact variants report
+   decoration's first path. is_exact is 1 only when the point is inside an outline. A hit on
+   a word's or a decoration's box, outside its ink, has is_exact 0. The exact variants report
    distance 0. */
 typedef struct { uint32_t word, path, decoration, line; float distance; uint8_t is_exact; } QvpHit;
 /* max_distance <= 0 means unlimited; gap_bias < 0 means the engine default, QVP_DEFAULT_GAP_BIAS */

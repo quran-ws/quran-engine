@@ -136,7 +136,7 @@ data class QvpLine(val index: Int, val lineNumber: Int, val isHeader: Boolean, v
 data class QvpDecoration(val index: Int, val decoration: Int, val surah: Int, val ayah: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
                          val text: String, val firstPath: Int, val nPaths: Int)
 /** Indices are -1 when absent. */
-/** The one hit shape for every hit test; the exact variants report distance 0. `isExact` is true when the point is inside an outline. Indices are -1 when absent. */
+/** The one hit shape for every hit test; the exact variants report distance 0. `isExact` is true only when the point is inside an outline. Indices are -1 when absent. */
 data class QvpHit(val word: Int, val path: Int, val decoration: Int, val line: Int, val distance: Float, val isExact: Boolean)
 data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = QvpDefaults.GAP_BIAS, val preferExact: Boolean = true)
 data class QvpBox(val id: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val color: Int, val radius: Float)

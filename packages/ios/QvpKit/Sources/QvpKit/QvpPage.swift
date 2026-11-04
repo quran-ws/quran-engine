@@ -170,9 +170,9 @@ public final class QvpPage {
 
     // ── hit testing ──
     private func hit(_ ok: Int32, _ v: QvpFFI.QvpHit) -> QvpHit? { ok != 0 ? QvpHit(word: index(v.word), path: index(v.path), decoration: index(v.decoration), line: index(v.line), distance: v.distance, isExact: v.is_exact != 0) : nil }
-    /// Exact outline only, page units.
+    /// Exact hit, page units: the outline under the point, else the box of a word or a decoration.
     public func hitTestExact(_ x: Float, _ y: Float) -> QvpHit? { var v = QvpFFI.QvpHit(); return hit(qvp_hit_test_exact(p, x, y, &v), v) }
-    /// Exact outline only, viewport px through the current layout.
+    /// Exact hit, viewport px through the current layout.
     public func hitTestExactView(_ viewX: Float, _ viewY: Float) -> QvpHit? { var v = QvpFFI.QvpHit(); return hit(qvp_hit_test_exact_view(p, viewX, viewY, &v), v) }
     /// Gap-aware: every point on a printed line resolves to the word the reader meant.
     public func hitTest(_ x: Float, _ y: Float, _ o: QvpHitOptions = QvpHitOptions()) -> QvpHit? {

@@ -608,7 +608,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     hitTestExactView(viewX, viewY) { return this.e.ex.qvp_hit_test_exact_view(this.h, viewX, viewY, this.e.scratch) ? this._hit(this.e.scratch) : null; }
     // The engine owns maxDistance through its sentinel: 0 is unlimited. Gap bias has no sentinel, so DEFAULTS.GAP_BIAS (the engine's own number) fills it.
     _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o?.maxDistance ?? 0, true); d.setFloat32(at + 4, o?.gapBias ?? DEFAULTS.GAP_BIAS, true); d.setUint8(at + 8, o?.preferExact === false ? 0 : 1); return at; }
-    /** the one hit shape for every hit test; the exact variants report distance 0, and isExact is true when the point is inside an outline */
+    /** the one hit shape for every hit test; the exact variants report distance 0, and isExact is true only when the point is inside an outline */
     _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), decoration: f(d.getUint32(s + 8, true)), line: f(d.getUint32(s + 12, true)), distance: d.getFloat32(s + 16, true), isExact: !!d.getUint8(s + 20) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
     /** gap-aware: every point on a printed line resolves to the word the user meant */
     hitTest(x, y, opt = {}) { return this.e.ex.qvp_hit_test(this.h, x, y, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }

@@ -90,7 +90,7 @@ export interface Word {
   wordKey: string; ayahKey: string; forms: Partial<Record<Form, string>>; label: string; paths: WordPath[];
 }
 export interface Deco { index: number; decoration: number; decorationName: string; surah: number; ayah: number; line: number; x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number }
-/** The one hit shape for every hit test; the exact variants report distance 0. `isExact` is true when the point is inside an outline. */
+/** The one hit shape for every hit test; the exact variants report distance 0. `isExact` is true only when the point is inside an outline. */
 export interface Hit { word: number; path: number; decoration: number; line: number; distance: number; isExact: boolean; wordKey: string | null; ayahKey: string | null }
 export interface Ayah { index: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDecoration: number; bbox: number[] }
 export interface Line { index: number; lineNumber: number; isHeader: boolean; firstWord: number; nWords: number; bbox: number[]; bandY0: number; bandY1: number; centre: number }

@@ -455,7 +455,7 @@ final class QvpDecorationInfo {
 }
 
 /// The one hit shape for every hit test (`QvpHit`); the exact variants report distance 0.
-/// `isExact` is true when the point is inside an outline. Indices are -1 when absent.
+/// `isExact` is true only when the point is inside an outline. Indices are -1 when absent.
 @immutable
 final class QvpHit {
   const QvpHit({
