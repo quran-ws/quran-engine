@@ -28,14 +28,19 @@ git fetch -q origin "$branch"
   exit 1
 }
 
-before="$(gh run list --workflow prepare-ios-release.yml --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+# The newest run of this workflow on this branch. Run IDs only grow, so the run this script
+# starts is the first one with a larger ID.
+newest() {
+  gh run list --workflow prepare-ios-release.yml --branch "$branch" --event workflow_dispatch \
+    --limit 1 --json databaseId --jq '.[0].databaseId // 0'
+}
+before="$(newest)"
 gh workflow run prepare-ios-release.yml --ref "$branch" -f version="$version"
 run=""
 for _ in $(seq 30); do
   sleep 2
-  run="$(gh run list --workflow prepare-ios-release.yml --branch "$branch" --event workflow_dispatch \
-    --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-  [ "$run" != "$before" ] && [ "$run" != 0 ] && break
+  run="$(newest)"
+  [ "$run" -gt "$before" ] && break
   run=""
 done
 [ -n "$run" ] || { echo "error: the workflow run did not start; see gh run list" >&2; exit 1; }

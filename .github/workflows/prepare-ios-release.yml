@@ -1,12 +1,13 @@
 # The first step of a code release. SwiftPM reads the XCFramework URL and checksum from the
 # commit that the tag points at, so the XCFramework is built before the tag. This workflow
-# builds it from the release branch with the commands ios.yml runs, attaches the zip and its
-# checksum to the draft release vX.Y.Z, and pushes one commit to the release branch that sets
-# the URL, the checksum and the build commit in the root Package.swift. release.yml then
-# checks that the tagged commit, the draft and the engine sources agree.
+# builds it from the release branch with the commands ios.yml runs, pushes one commit to the
+# release branch that sets the URL, the checksum and the build commit in the root
+# Package.swift, and attaches the zip and its checksum to the draft release vX.Y.Z. release.yml
+# then checks that the tagged commit, the draft and the engine sources agree.
 #
-# Start it with scripts/prepare-ios-release.sh X.Y.Z from the release branch. A rerun from
-# the same branch replaces the draft's assets and pushes a new commit.
+# Start it with scripts/prepare-ios-release.sh X.Y.Z from the release branch. To run it again,
+# run that script again: it starts a new run from the current branch head. "Re-run jobs" in
+# the Actions page builds the old head, and the workflow refuses it.
 name: Prepare iOS release
 
 on:
@@ -22,7 +23,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # the draft release and the commit to the release branch
+  contents: write # the commit to the release branch and the draft release
   actions: write # start ci.yml for that commit
 
 jobs:
@@ -44,6 +45,9 @@ jobs:
           tag="v$VERSION"
           [ "$REF_TYPE" = branch ] && [ "$GITHUB_REF_NAME" != main ] || {
             echo "::error::start this workflow on the release branch, not on $GITHUB_REF_NAME"; exit 1; }
+          head="$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)"
+          [ "$head" = "$GITHUB_SHA" ] || {
+            echo "::error::$GITHUB_REF_NAME is at $head, not $GITHUB_SHA; run scripts/prepare-ios-release.sh again"; exit 1; }
           have="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
           [ "$VERSION" = "$have" ] || {
             echo "::error::version $VERSION does not match Cargo.toml version $have; run scripts/set-version.sh first"; exit 1; }
@@ -83,6 +87,31 @@ jobs:
       - name: Package
         run: scripts/package-ios.sh
 
+      # The push comes before the upload. When the branch moved during the build, the push
+      # fails and the draft keeps the assets that match the Package.swift on the branch.
+      - name: Set the URL, the checksum and the build commit in Package.swift
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          checksum="$(cat dist/ios/QvpEngine.xcframework.zip.checksum)"
+          scripts/set-xcframework.sh "$TAG" "$checksum" "$GITHUB_SHA"
+          git diff -- Package.swift
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Package.swift
+          git commit -q -F - <<EOF
+          build(ios): set the $TAG XCFramework URL and checksum
+
+          $RUN_URL built the XCFramework from $GITHUB_SHA
+          with $(rustc --version) and $(xcodebuild -version | head -1).
+          SwiftPM checksum: $checksum
+          EOF
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME" || {
+            echo "::error::$GITHUB_REF_NAME moved during the build; run scripts/prepare-ios-release.sh again"
+            exit 1
+          }
+
       - name: Attach the zip and its checksum to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -107,26 +136,8 @@ jobs:
           done
 
       # A push made with the workflow token starts no workflow, so the pull request's
-      # required checks would not report on the new commit. The last step starts ci.yml
-      # for it.
-      - name: Set the URL, the checksum and the build commit in Package.swift
+      # required checks would not report on the new commit. This step starts ci.yml for it.
+      - name: Run CI on the new commit
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          checksum="$(cat dist/ios/QvpEngine.xcframework.zip.checksum)"
-          scripts/set-xcframework.sh "$TAG" "$checksum" "$GITHUB_SHA"
-          git diff -- Package.swift
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Package.swift
-          git commit -q -F - <<EOF
-          build(ios): set the $TAG XCFramework URL and checksum
-
-          $RUN_URL built the XCFramework from $GITHUB_SHA
-          with $(rustc --version) and $(xcodebuild -version | head -1).
-          SwiftPM checksum: $checksum
-          EOF
-          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
-          gh workflow run ci.yml --ref "$GITHUB_REF_NAME"
+        run: gh workflow run ci.yml --ref "$GITHUB_REF_NAME"
