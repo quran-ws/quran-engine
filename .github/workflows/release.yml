@@ -1,6 +1,7 @@
-# A code release: prepare the iOS artifact, then tag vX.Y.Z. Runs the full check, verifies the
-# prepared XCFramework, builds the Android AAR and wasm engine, completes the GitHub release,
-# and publishes to every registry. Missing required credentials fail the release.
+# A code release: prepare-ios-release.yml builds the XCFramework, then a maintainer tags vX.Y.Z.
+# Runs the full check, verifies the prepared XCFramework, builds the Android AAR and wasm
+# engine, completes the GitHub release, and publishes to every registry. Missing required
+# credentials fail the release.
 name: Release
 
 on:
@@ -81,6 +82,25 @@ jobs:
             exit 1
           }
           unzip -tq QvpEngine.xcframework.zip
+      # Package.swift records the commit that prepare-ios-release.yml built the XCFramework
+      # from. A change to the engine sources after that commit would ship a binary that
+      # does not match the tag.
+      - name: Check the engine sources match the build commit
+        run: |
+          built="$(sed -n 's|.*// Built by \.github/workflows/prepare-ios-release\.yml from commit \([0-9a-f]\{40\}\)\..*|\1|p' Package.swift)"
+          [ -n "$built" ] || {
+            echo "error: Package.swift does not record the commit the XCFramework was built from" >&2
+            exit 1
+          }
+          git fetch -q --no-tags --depth=1 origin "$built"
+          sources=(crates Cargo.toml Cargo.lock rust-toolchain.toml scripts/build-engine-ios.sh scripts/package-ios.sh)
+          git diff --quiet "$built" HEAD -- "${sources[@]}" || {
+            echo "error: the engine sources changed after the XCFramework was built from $built:" >&2
+            git diff --stat "$built" HEAD -- "${sources[@]}" >&2
+            echo "rerun scripts/prepare-ios-release.sh on the release branch, then tag the new commit" >&2
+            exit 1
+          }
+          echo "the XCFramework was built from $built, with the engine sources of $GITHUB_SHA"
       - uses: actions/upload-artifact@v7
         with:
           name: xcframework
