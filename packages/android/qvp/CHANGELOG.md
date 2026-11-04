@@ -14,6 +14,13 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ### Changed
 - The build file's default `qvpVersion` is the workspace version, 0.7.0, where it was
   `0.1.0-SNAPSHOT`. `publishToMavenLocal` needs no `-PqvpVersion` flag.
+- Android and Flutter: a page view frame where nothing changed asks the engine for the clock
+  and nothing else. The views keep the styled paths, the highlight and mask boxes with their
+  paths, and the dress readout until a call on the page, a new layout or the clock changes
+  them. Small value keys replace the string keys of the base ink, the ornament layer and the
+  draw list. On Android such a frame allocates nothing: on page 042 in the API 35 emulator it
+  allocated 19 objects, or 1,071 with a highlight and a mask (`docs/MEASURED.md`). The
+  numbers the views draw do not change.
 
 ### Removed
 - **Breaking.** `QvpPageView.MIN_ZOOM` is gone, because the engine applies the pinch limits.

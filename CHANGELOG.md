@@ -184,6 +184,13 @@ All notable changes to the engine and its packages. The format follows
 - **Breaking.** Rust: the `qvp-core` fields `Page.styles` and `Page.selection` are
   crate-private. Read them with `styles()` and `selection()`, and change them with
   `styles_mut()` and `selection_mut()`.
+- Android and Flutter: a page view frame where nothing changed asks the engine for the clock
+  and nothing else. The views keep the styled paths, the highlight and mask boxes with their
+  paths, and the dress readout until a call on the page, a new layout or the clock changes
+  them. Small value keys replace the string keys of the base ink, the ornament layer and the
+  draw list. On Android such a frame allocates nothing: on page 042 in the API 35 emulator it
+  allocated 19 objects, or 1,071 with a highlight and a mask (`docs/MEASURED.md`). The
+  numbers the views draw do not change.
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and
@@ -306,6 +313,9 @@ All notable changes to the engine and its packages. The format follows
 - React Native: the package checks that the native module is linked before it reads the
   module's constants. Without the module, the error now says `QvpModule not linked` instead
   of a `TypeError`.
+- Flutter: after a zoom step lays the page out again, `QvpPageView` draws the highlight
+  bands and the dress overflow of the new layout. It kept those of the old layout until the
+  next call on the page.
 
 ## [0.7.0] - 2026-10-14
 

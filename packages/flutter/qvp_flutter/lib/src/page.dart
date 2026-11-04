@@ -540,7 +540,18 @@ class QvpPage extends ChangeNotifier {
   // ── Clock & Display list ──
 
   /// Advances animations; true while something is still moving (keep drawing frames).
-  bool tick(double nowMs) => _backend.tick(handle, nowMs);
+  bool tick(double nowMs) {
+    final moving = _backend.tick(handle, nowMs);
+    // the tick that ends an animation puts the colours and bands at their end, so it counts too
+    if (moving || _clockMoving) _clock++;
+    _clockMoving = moving;
+    return moving;
+  }
+
+  /// Counts the ticks that moved a colour or a band, and the tick after them that settles the
+  /// last of it. Read through [pageClock].
+  int _clock = 0;
+  bool _clockMoving = false;
 
   /// Full display list: one 0xRRGGBBAA per path (copy).
   Uint32List colors() => _backend.colors(handle, nPaths);
@@ -829,3 +840,8 @@ class QvpPage extends ChangeNotifier {
     background: background == null ? null : rgba(background),
   );
 }
+
+/// How many ticks of [page] moved a colour or a band, the tick that settles them included.
+/// The page view keys what it read from the engine on it, so a tick from any caller reaches
+/// every view. The package does not export it.
+int pageClock(QvpPage page) => page._clock;

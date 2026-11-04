@@ -59,6 +59,15 @@ Android wrapper baseline for page 042 on the API 35 arm64 Android emulator
 | Android `Path` construction | 2.62–3.71 ms median |
 | first 1080 × 1920 software Canvas draw | 14.37–17.29 ms median |
 | cached Canvas draw | 0.57–0.59 ms median |
+| cached Canvas draw, one ayah highlighted and three words blocked | 4.25–5.14 ms median |
+| objects allocated per cached draw, with or without the highlight | 0 |
+
+A cached draw is a frame where nothing changed. Before the views kept what they read from
+the engine, the same frame allocated 19 objects, or 1,071 with the highlight and the blocks.
+Three runs each on one emulator, while other work shared the machine, gave a highlighted
+frame 5.09–8.72 ms before and 4.25–5.14 ms after. The bitmap blit and the highlighted ink
+take most of a frame, so the plain cached draw moved less than the runs varied
+(0.92–1.17 ms before, 0.82–1.15 ms after).
 
 Run `scripts/sync-android-test-data.sh`, then
 `./gradlew :qvp:connectedDebugAndroidTest` from `packages/android` to reproduce it.
