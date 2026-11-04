@@ -3,27 +3,71 @@ package ws.quran.qvp.rn
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.uimanager.UIManagerHelper
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import ws.quran.qvp.*
 import ws.quran.qvp.Target
 
 /**
  * Promise-based queries on the page behind a `<QvpPageView />` (looked up by react tag) plus engine-wide
- * helpers and the atlas. Everything runs on the UI thread, where the view draws, so the engine is never
- * touched from two threads. Names follow docs/API.md.
+ * helpers and the atlas. Names follow docs/API.md.
+ *
+ * Two threads run the calls. The query thread, which this module owns, runs every call that reads
+ * only what a page fixed when it loaded: its words, ayahs, lines, text, search, metadata and crop
+ * box. It also runs the engine-wide helpers and owns the atlases. A long query on it does not hold
+ * up a frame. The view keeps the page open while a query reads it ([QvpRnPageView.read]). Every
+ * call that reads or changes the layout, the view, styles, colours, the selection, the mask, the
+ * reveal or the dress runs on the UI thread, where the view draws.
  */
 @ReactModule(name = QvpModule.NAME)
 class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
     override fun getName() = NAME
+    /** The query thread. The atlases below are touched only on it. */
+    private val queries: ExecutorService = Executors.newSingleThreadExecutor { r -> Thread(r, "qvp-rn-query").apply { isDaemon = true } }
     private val atlases = HashMap<Int, QvpAtlas>()
     private val atlasByUri = HashMap<String, Int>()
     private var nextAtlas = 1
 
     private fun view(tag: Int): QvpRnPageView? = QvpRegistry.get(tag) ?: runCatching { UIManagerHelper.getUIManagerForReactTag(ctx, tag)?.resolveView(tag) as? QvpRnPageView }.getOrNull()
     // Every @ReactMethod must be `void` for the TurboModule interop layer: these helpers return Unit on purpose.
-    private fun ui(promise: Promise, block: () -> Any?) {
+    private fun settle(promise: Promise, block: () -> Any?) {
+        try { promise.resolve(Marshal.toJs(block())) } catch (e: Throwable) { promise.reject("qvp", e.message ?: e.toString(), e) }
+    }
+    private fun ui(promise: Promise, block: () -> Any?) { UiThreadUtil.runOnUiThread { settle(promise, block) } }
+    /** Run [task] on the query thread, or reject when the module is gone. */
+    private fun queue(promise: Promise, task: () -> Unit) {
+        try { queries.execute(task) } catch (e: RejectedExecutionException) { promise.reject("qvp", "QvpModule was invalidated", e) }
+    }
+    /** An engine-wide call, or an atlas call, on the query thread. */
+    private fun off(promise: Promise, block: () -> Any?) = queue(promise) { settle(promise, block) }
+    /**
+     * A read-only page query on the query thread, with the page held open until it returns. A view
+     * the registry does not hold (not attached yet, or detached) is found through the UIManager,
+     * which only the UI thread may call, so that query runs there as before.
+     */
+    private fun readPage(tag: Int, promise: Promise, block: (QvpRnPageView, QvpPage) -> Any?) = queue(promise) {
+        val v = QvpRegistry.get(tag)
+        if (v == null) withPage(tag, promise, block)
+        else settle(promise) { v.read { p -> block(v, p ?: throw IllegalStateException("QvpPageView $tag has no page loaded")) } }
+    }
+    /**
+     * A page call on the UI thread that the queries queued before it see done, and that is done
+     * before the queries queued after it start: the query thread waits for it. It holds no page
+     * open while it waits, so the UI thread never waits for it in turn.
+     */
+    private fun inOrder(tag: Int, promise: Promise, block: (QvpRnPageView, QvpPage) -> Any?) = queue(promise) {
+        val done = CountDownLatch(1)
         UiThreadUtil.runOnUiThread {
-            try { promise.resolve(Marshal.toJs(block())) } catch (e: Throwable) { promise.reject("qvp", e.message ?: e.toString(), e) }
+            try {
+                settle(promise) {
+                    val v = view(tag) ?: throw IllegalStateException("no QvpPageView with tag $tag")
+                    block(v, v.page ?: throw IllegalStateException("QvpPageView $tag has no page loaded"))
+                }
+            } finally { done.countDown() }
         }
+        try { done.await() } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
     }
     private fun withPage(tag: Int, promise: Promise, block: (QvpRnPageView, QvpPage) -> Any?) {
         ui(promise) {
@@ -32,47 +76,49 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
             block(v, p)
         }
     }
-    private fun withAtlas(id: Int, promise: Promise, block: (QvpAtlas) -> Any?) { ui(promise) { block(atlases[id] ?: throw IllegalStateException("no atlas $id")) } }
+    private fun withAtlas(id: Int, promise: Promise, block: (QvpAtlas) -> Any?) = off(promise) { block(atlases[id] ?: throw IllegalStateException("no atlas $id")) }
     private fun opt(m: ReadableMap?): Map<String, Any?> = m?.toHashMap() ?: emptyMap()
-    private fun tgt(d: Dynamic, p: QvpPage): Target = Marshal.target(when (d.type) {
-        ReadableType.String -> d.asString(); ReadableType.Number -> d.asDouble(); ReadableType.Array -> d.asArray()?.toArrayList(); ReadableType.Map -> d.asMap()?.toHashMap(); else -> null }, p)
+    /** A target argument as plain values. A query reads its arguments this way on the calling
+     * thread, before it is queued, since the bridge's argument objects belong to the call. */
+    private fun plain(d: Dynamic): Any? = when (d.type) {
+        ReadableType.String -> d.asString(); ReadableType.Number -> d.asDouble(); ReadableType.Array -> d.asArray()?.toArrayList(); ReadableType.Map -> d.asMap()?.toHashMap(); else -> null }
+    private fun tgt(d: Dynamic, p: QvpPage): Target = Marshal.target(plain(d), p)
     private fun ints(a: ReadableArray?): IntArray = a?.toArrayList()?.mapNotNull { (it as? Number)?.toInt() }?.toIntArray() ?: IntArray(0)
 
     // ── page facts ──
-    @ReactMethod fun info(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> Marshal.pageInfo(p) + mapOf("loadMs" to v.loadMs, "bytes" to v.pageBytes) }
-    @ReactMethod fun words(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.words.map { Marshal.word(p, it) } }
-    @ReactMethod fun word(tag: Int, index: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.words.getOrNull(index)?.let { Marshal.word(p, it) } }
-    @ReactMethod fun ayahs(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahs.map { Marshal.ayah(it) } }
-    @ReactMethod fun lines(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.lines.map { Marshal.line(it) } }
-    @ReactMethod fun decorations(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.decorations.map { Marshal.decoration(it) } }
-    @ReactMethod fun findWord(tag: Int, s: Int, a: Int, w: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.findWord(s, a, w) }
-    @ReactMethod fun targetWords(tag: Int, target: Dynamic, promise: Promise) = withPage(tag, promise) { _, p -> p.targetWords(tgt(target, p)).toList() }
-    @ReactMethod fun wordForm(tag: Int, index: Int, form: String?, promise: Promise) = withPage(tag, promise) { _, p -> p.wordForm(index, Marshal.form(form)) }
-    @ReactMethod fun hasForm(tag: Int, form: String?, promise: Promise) = withPage(tag, promise) { _, p -> p.hasForm(Marshal.form(form)) }
-    @ReactMethod fun attachWords(tag: Int, json: String, promise: Promise) = withPage(tag, promise) { _, p -> p.attachWords(json) }
+    @ReactMethod fun info(tag: Int, promise: Promise) = readPage(tag, promise) { v, p -> Marshal.pageInfo(p, v.words(p).forms) + mapOf("loadMs" to v.loadMs, "bytes" to v.pageBytes) }
+    @ReactMethod fun words(tag: Int, promise: Promise) = readPage(tag, promise) { v, p -> v.words(p).all() }
+    @ReactMethod fun word(tag: Int, index: Int, promise: Promise) = readPage(tag, promise) { v, p -> v.words(p).word(index) }
+    @ReactMethod fun ayahs(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.ayahs.map { Marshal.ayah(it) } }
+    @ReactMethod fun lines(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.lines.map { Marshal.line(it) } }
+    @ReactMethod fun decorations(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.decorations.map { Marshal.decoration(it) } }
+    @ReactMethod fun findWord(tag: Int, s: Int, a: Int, w: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.findWord(s, a, w) }
+    @ReactMethod fun targetWords(tag: Int, target: Dynamic, promise: Promise) { val t = plain(target); readPage(tag, promise) { _, p -> p.targetWords(Marshal.target(t, p)).toList() } }
+    @ReactMethod fun wordForm(tag: Int, index: Int, form: String?, promise: Promise) = readPage(tag, promise) { _, p -> p.wordForm(index, Marshal.form(form)) }
+    @ReactMethod fun hasForm(tag: Int, form: String?, promise: Promise) = readPage(tag, promise) { _, p -> p.hasForm(Marshal.form(form)) }
+    @ReactMethod fun attachWords(tag: Int, json: String, promise: Promise) = inOrder(tag, promise) { v, p -> v.attachWords(p, json) }
 
     // ── metadata ──
-    @ReactMethod fun surahs(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.surahs().map { Marshal.surah(it) } }
-    @ReactMethod fun divisions(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.divisions().map { Marshal.division(it) } }
+    @ReactMethod fun surahs(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.surahs().map { Marshal.surah(it) } }
+    @ReactMethod fun divisions(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.divisions().map { Marshal.division(it) } }
     @ReactMethod fun surahHeaders(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.surahHeaders().map { Marshal.surahHeader(it) } }
     @ReactMethod fun surahHeadersView(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.surahHeadersView().map { Marshal.surahHeader(it) } }
-    @ReactMethod fun ayahMarks(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahMarks().map { Marshal.ayahMark(it) } }
-    @ReactMethod fun rosettes(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.rosettes().map { Marshal.rosette(it) } }
-    @ReactMethod fun sajdahs(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.sajdahs().map { Marshal.sajdah(it) } }
-    @ReactMethod fun ayahKeys(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahKeys().map { mapOf("surah" to it.first, "ayah" to it.second, "ayahKey" to "${it.first}:${it.second}") } }
-    @ReactMethod fun ayahWordCount(tag: Int, s: Int, a: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahWordCount(s, a).let { mapOf("count" to it.first, "isComplete" to it.second) } }
-    @ReactMethod fun reciteMap(tag: Int, s: Int, a: Int, n: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.reciteMap(s, a, n)?.toList() }
-    @ReactMethod fun wordLabel(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.wordLabel(i) }
-    @ReactMethod fun ayahLabel(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahLabel(i) }
+    @ReactMethod fun ayahMarks(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.ayahMarks().map { Marshal.ayahMark(it) } }
+    @ReactMethod fun rosettes(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.rosettes().map { Marshal.rosette(it) } }
+    @ReactMethod fun sajdahs(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.sajdahs().map { Marshal.sajdah(it) } }
+    @ReactMethod fun ayahKeys(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.ayahKeys().map { mapOf("surah" to it.first, "ayah" to it.second, "ayahKey" to "${it.first}:${it.second}") } }
+    @ReactMethod fun ayahWordCount(tag: Int, s: Int, a: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.ayahWordCount(s, a).let { mapOf("count" to it.first, "isComplete" to it.second) } }
+    @ReactMethod fun reciteMap(tag: Int, s: Int, a: Int, n: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.reciteMap(s, a, n)?.toList() }
+    @ReactMethod fun wordLabel(tag: Int, i: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.wordLabel(i) }
+    @ReactMethod fun ayahLabel(tag: Int, i: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.ayahLabel(i) }
 
     // ── text & search ──
-    @ReactMethod fun text(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
-        val o = opt(opts); p.text(tgt(target, p), Marshal.form(o["form"]), (o["wordSep"] as? String) ?: " ", (o["lineSep"] as? String) ?: "\n") }
-    @ReactMethod fun search(tag: Int, query: String, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
-        val o = opt(opts)
-        p.search(query, Marshal.form(o["form"], Form.SEARCH), Marshal.searchMode(o["mode"]), o["normalize"] != false, o["looseMatch"] != false, (o["limit"] as? Number)?.toInt() ?: 0).map { Marshal.match(it) } }
-    @ReactMethod fun citation(tag: Int, words: ReadableArray, promise: Promise) = withPage(tag, promise) { _, p -> p.citation(ints(words)) }
-    @ReactMethod fun arabic(op: String, s: String, promise: Promise) = ui(promise) { when (op) { "strip" -> QvpEngine.strip(s); "fold" -> QvpEngine.fold(s); "normalize" -> QvpEngine.normalize(s); "loose", "looseKey" -> QvpEngine.looseKey(s); else -> s } }
+    @ReactMethod fun text(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) { val t = plain(target); val o = opt(opts)
+        readPage(tag, promise) { _, p -> p.text(Marshal.target(t, p), Marshal.form(o["form"]), (o["wordSep"] as? String) ?: " ", (o["lineSep"] as? String) ?: "\n") } }
+    @ReactMethod fun search(tag: Int, query: String, opts: ReadableMap?, promise: Promise) { val o = opt(opts)
+        readPage(tag, promise) { _, p -> p.search(query, Marshal.form(o["form"], Form.SEARCH), Marshal.searchMode(o["mode"]), o["normalize"] != false, o["looseMatch"] != false, (o["limit"] as? Number)?.toInt() ?: 0).map { Marshal.match(it) } } }
+    @ReactMethod fun citation(tag: Int, words: ReadableArray, promise: Promise) { val ws = ints(words); readPage(tag, promise) { _, p -> p.citation(ws) } }
+    @ReactMethod fun arabic(op: String, s: String, promise: Promise) = off(promise) { when (op) { "strip" -> QvpEngine.strip(s); "fold" -> QvpEngine.fold(s); "normalize" -> QvpEngine.normalize(s); "loose", "looseKey" -> QvpEngine.looseKey(s); else -> s } }
 
     // ── hit testing / layout (the view already does gestures; these are for scroll-into-view etc.) ──
     private fun hitOptions(o: Map<String, Any?>) = QvpHitOptions((o["maxDistance"] as? Number)?.toFloat() ?: QvpDefaults.TAP_DISTANCE, (o["gapBias"] as? Number)?.toFloat() ?: QvpDefaults.GAP_BIAS, o["preferExact"] != false)
@@ -98,7 +144,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun layoutWastedFraction(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.layoutWastedFraction(v.inner.layoutSpec()) }
     /** The page's height at the printed pitch for the spec this view lays out with. */
     @ReactMethod fun layoutPrintedHeight(tag: Int, promise: Promise) = withPage(tag, promise) { v, p -> p.layoutPrintedHeight(v.inner.layoutSpec()) }
-    @ReactMethod fun grid(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> mapOf("lines" to p.grid.lines, "lineSpacing" to p.grid.lineSpacing) }
+    @ReactMethod fun grid(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> mapOf("lines" to p.grid.lines, "lineSpacing" to p.grid.lineSpacing) }
     @ReactMethod fun stats(tag: Int, promise: Promise) = ui(promise) { view(tag)?.stats() }
     @ReactMethod fun invalidate(tag: Int, promise: Promise) = ui(promise) { view(tag)?.inner?.invalidate(); null }
 
@@ -122,13 +168,13 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun revealStepOf(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.revealStepOf(i).toDouble() }
 
     // ── crop ──
-    @ReactMethod fun cropBounds(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
-        val o = opt(opts); p.cropBounds(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: QvpDefaults.CROP_PAD, o["keepAyahMarks"] != false)?.let { Marshal.cropBounds(it) } }
+    @ReactMethod fun cropBounds(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) { val t = plain(target); val o = opt(opts)
+        readPage(tag, promise) { _, p -> p.cropBounds(Marshal.target(t, p), (o["pad"] as? Number)?.toFloat() ?: QvpDefaults.CROP_PAD, o["keepAyahMarks"] != false)?.let { Marshal.cropBounds(it) } } }
     @ReactMethod fun cropSvg(tag: Int, target: Dynamic, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p ->
         val o = opt(opts); p.cropSvg(tgt(target, p), (o["pad"] as? Number)?.toFloat() ?: QvpDefaults.CROP_PAD, o["keepAyahMarks"] != false, Marshal.color(o["background"], 0)) }
 
     // ── atlas ──
-    @ReactMethod fun loadAtlas(uri: String, promise: Promise) = ui(promise) {
+    @ReactMethod fun loadAtlas(uri: String, promise: Promise) = off(promise) {
         atlasByUri[uri] ?: run {
             val bytes = when {
                 uri.startsWith("asset://") -> ctx.assets.open(uri.removePrefix("asset://")).use { it.readBytes() }
@@ -141,7 +187,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
             val id = nextAtlas++; atlases[id] = QvpAtlas(bytes); atlasByUri[uri] = id; id
         }
     }
-    @ReactMethod fun freeAtlas(id: Int, promise: Promise) = ui(promise) { atlases.remove(id)?.close(); atlasByUri.entries.removeAll { it.value == id }; null }
+    @ReactMethod fun freeAtlas(id: Int, promise: Promise) = off(promise) { atlases.remove(id)?.close(); atlasByUri.entries.removeAll { it.value == id }; null }
     @ReactMethod fun atlasPageOf(id: Int, s: Int, a: Int, promise: Promise) = withAtlas(id, promise) { it.pageOf(s, a) }
     @ReactMethod fun atlasPageRange(id: Int, page: Int, promise: Promise) = withAtlas(id, promise) { it.pageRange(page)?.let { r -> mapOf("first" to mapOf("surah" to r.first.first, "ayah" to r.first.second), "last" to mapOf("surah" to r.second.first, "ayah" to r.second.second)) } }
     @ReactMethod fun atlasPageCount(id: Int, promise: Promise) = withAtlas(id, promise) { it.pageCount() }
@@ -188,10 +234,10 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun dressRevision(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.dressRevision() }
 
     // ── names ──
-    @ReactMethod fun markName(m: Int, promise: Promise) = ui(promise) { QvpEngine.markName(m) }
-    @ReactMethod fun markFromName(s: String, promise: Promise) = ui(promise) { QvpEngine.markFromName(s) }
-    @ReactMethod fun markCategory(m: Int, promise: Promise) = ui(promise) { QvpEngine.markCategory(m) }
-    @ReactMethod fun engineName(promise: Promise) = ui(promise) { QvpEngine.engineName() }
+    @ReactMethod fun markName(m: Int, promise: Promise) = off(promise) { QvpEngine.markName(m) }
+    @ReactMethod fun markFromName(s: String, promise: Promise) = off(promise) { QvpEngine.markFromName(s) }
+    @ReactMethod fun markCategory(m: Int, promise: Promise) = off(promise) { QvpEngine.markCategory(m) }
+    @ReactMethod fun engineName(promise: Promise) = off(promise) { QvpEngine.engineName() }
     /** Every name table, read from the engine; the JavaScript side resolves names with these. */
     override fun getConstants(): Map<String, Any> = mapOf("version" to QvpEngine.version(), "formatVersion" to QvpEngine.formatVersion(),
         "marks" to QvpEngine.names(QvpEngine.Names.MARK), "kinds" to QvpEngine.names(QvpEngine.Names.KIND),
@@ -201,7 +247,12 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
         // the whole defaults table by camelCase name, as the decimals the header states
         "defaults" to QvpDefaults.decimal)
 
-    override fun invalidate() { atlases.values.forEach { it.close() }; atlases.clear(); atlasByUri.clear(); QvpOrnamentSets.clear(); super.invalidate() }
+    override fun invalidate() {
+        // The atlases belong to the query thread: free them there, after the queries already queued.
+        runCatching { queries.execute { atlases.values.forEach { it.close() }; atlases.clear(); atlasByUri.clear() } }
+        queries.shutdown()
+        QvpOrnamentSets.clear(); super.invalidate()
+    }
     companion object { const val NAME = "QvpModule" }
 }
 

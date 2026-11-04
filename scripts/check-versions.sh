@@ -16,6 +16,7 @@ check() { # label, found
 
 check package.json "$(python3 -c 'import json;print(json.load(open("package.json"))["version"])')"
 check packages/react-native/qvp-react-native/package.json "$(python3 -c 'import json;print(json.load(open("packages/react-native/qvp-react-native/package.json"))["version"])')"
+check packages/react-native/example/package-lock.json "$(python3 -c 'import json;print(json.load(open("packages/react-native/example/package-lock.json"))["packages"]["../qvp-react-native"]["version"])')"
 check packages/flutter/qvp_flutter/pubspec.yaml "$(sed -n 's/^version: //p' packages/flutter/qvp_flutter/pubspec.yaml)"
 check packages/flutter/qvp_flutter/android/build.gradle "$(sed -n 's/^version = "\(.*\)"$/\1/p' packages/flutter/qvp_flutter/android/build.gradle)"
 check packages/flutter/qvp_flutter/ios/qvp_flutter.podspec "$(sed -n 's/.*s\.version *= *'"'"'\([^'"'"']*\)'"'"'.*/\1/p' packages/flutter/qvp_flutter/ios/qvp_flutter.podspec)"

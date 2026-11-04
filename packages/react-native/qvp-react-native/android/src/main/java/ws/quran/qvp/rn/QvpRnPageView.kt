@@ -5,6 +5,10 @@ import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.uimanager.ThemedReactContext
 import android.widget.FrameLayout
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 import ws.quran.qvp.*
 import ws.quran.qvp.Target
 
@@ -13,6 +17,11 @@ import ws.quran.qvp.Target
  * URI, and reconciles the declarative props (theme / styles / highlights / mask / reveal) against engine
  * handles so JS never sees a handle. Every decision (hit-test, layout, style resolution, bands, masks)
  * is the engine's; this class only marshals and forwards.
+ *
+ * The module reads the page from its query thread while this view draws on the UI thread (see
+ * [read]). Those reads touch only what the page fixed when it loaded, so the two do not meet,
+ * except where the page is closed, replaced, or given a words sidecar: each of these holds
+ * [lock] for writing, and waits for a query in progress to finish.
  */
 class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     private val density = ctx.resources.displayMetrics.density
@@ -20,7 +29,22 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     val inner = QvpPageView(ctx).also { addView(it, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)) }
     var page: QvpPage?
         get() = inner.page
-        set(v) { inner.page = v }
+        private set(v) { inner.page = v }
+
+    /** Read by the module's queries, written where the page closes, changes, or takes a sidecar. */
+    private val lock = ReentrantReadWriteLock()
+    /** Run [block] on the page in view, held open until the block returns: null when no page is loaded.
+     * The block must not wait for the UI thread, which can be waiting for this lock. */
+    fun <T> read(block: (QvpPage?) -> T): T = lock.read { block(page) }
+    /** Attach a words sidecar. Queries in progress finish first, and the word records built
+     * before it are dropped, since the forms they hold have changed. */
+    fun attachWords(p: QvpPage, json: String): Int = lock.write { p.attachWords(json).also { dropWords() } }
+
+    private val wordsLock = Any()
+    private var words: QvpRnWords? = null
+    /** The word records of [p], built on first use and kept until the page changes or takes a sidecar. */
+    fun words(p: QvpPage): QvpRnWords = synchronized(wordsLock) { words?.takeIf { it.page === p } ?: QvpRnWords(p).also { words = it } }
+    private fun dropWords() = synchronized(wordsLock) { words = null }
     var paperColor: Int get() = inner.paperColor; set(v) { inner.paperColor = v; inner.invalidate() }
     var selectionBand: Int get() = inner.selectionBand; set(v) { inner.selectionBand = v }
     var selectionEnabled: Boolean get() = inner.selectionEnabled; set(v) { inner.selectionEnabled = v }
@@ -68,7 +92,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     var pageBytes = 0; private set
 
     init {
-        inner.onWordTap = { w, h -> page?.let { p -> emit("onWordTap", mapOf("word" to Marshal.word(p, w), "hit" to Marshal.hit(p, h))) } }
+        inner.onWordTap = { w, h -> page?.let { p -> emit("onWordTap", mapOf("word" to words(p).word(w.index), "hit" to Marshal.hit(p, h))) } }
         inner.onDecorationTap = { d, h -> page?.let { p -> emit("onDecorationTap", mapOf("decoration" to Marshal.decoration(d), "hit" to Marshal.hit(p, h))) } }
         inner.onEmptyTap = { emit("onEmptyTap", emptyMap()) }
         // The engine says a flick turns the page and by how many, in reading order. Which page
@@ -81,7 +105,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     override fun onAttachedToWindow() { super.onAttachedToWindow(); QvpRegistry.register(this) }
     override fun onDetachedFromWindow() { QvpRegistry.unregister(this); super.onDetachedFromWindow() }
 
-    fun destroy() { QvpRegistry.unregister(this); page?.close(); page = null; loadedKey = null }
+    fun destroy() { QvpRegistry.unregister(this); lock.write { page?.close(); page = null; dropWords() }; loadedKey = null }
 
     /** Padding props arrive in dp. */
     fun setPadTopDp(v: Float) { inner.padTop = v * density; layoutDirty = true }
@@ -146,15 +170,27 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         if (key == loadedKey) return
         // drop everything bound to the old page: handles die with it
         themeHandle = 0; appliedTheme = null; styleHandles.clear(); highlightHandles.clear(); appliedMask = null; appliedReveal = null; appliedRevealAt = null; appliedInk = null; appliedDress = null; revealStepCount = 0
-        page?.close(); page = null; loadedKey = key
-        if (key == null) return
-        val bytes = pageBase64?.let { Base64.decode(it, Base64.DEFAULT) } ?: readUri(pageUri!!)
-        val t0 = System.nanoTime()
-        val p = QvpPage(bytes); p.buildPaths()
-        loadMs = (System.nanoTime() - t0) / 1e6; pageBytes = bytes.size
-        wordsUri?.let { runCatching { p.attachWords(readUri(it)) }.onFailure { e -> Log.w("QvpRn", "words sidecar: $e") } }
-        page = p; layoutDirty = true
-        emit("onPageLoad", Marshal.pageInfo(p) + mapOf("loadMs" to loadMs, "bytes" to pageBytes, "uri" to pageUri))
+        loadedKey = key
+        if (key == null) { lock.write { page?.close(); page = null; dropWords() }; return }
+        // Load the new page before the swap, so a query sees the old page or the new one and
+        // never a view with no page. A load that fails leaves no page, as before.
+        val p: QvpPage
+        val bytes: ByteArray
+        val ms: Double
+        try {
+            bytes = pageBase64?.let { Base64.decode(it, Base64.DEFAULT) } ?: readUri(pageUri!!)
+            val t0 = System.nanoTime()
+            p = QvpPage(bytes); p.buildPaths()
+            ms = (System.nanoTime() - t0) / 1e6
+            // No query sees the page before the swap below, so the sidecar needs no lock.
+            wordsUri?.let { runCatching { p.attachWords(readUri(it)) }.onFailure { e -> Log.w("QvpRn", "words sidecar: $e") } }
+        } catch (e: Exception) {
+            lock.write { page?.close(); page = null; dropWords() }
+            throw e
+        }
+        lock.write { val old = page; page = p; dropWords(); loadMs = ms; pageBytes = bytes.size; old?.close() }
+        layoutDirty = true
+        emit("onPageLoad", Marshal.pageInfo(p, words(p).forms) + mapOf("loadMs" to loadMs, "bytes" to pageBytes, "uri" to pageUri))
     }
 
     private fun applyInk(p: QvpPage) {
@@ -261,9 +297,10 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         "engineVersion" to QvpEngine.version(), "viewScale" to inner.viewScale, "layout" to page?.currentLayout?.let { Marshal.layout(it) })
 }
 
-/** Views by react tag, so the module can find the page behind a `viewTag` without going through the UIManager. */
+/** Views by react tag, so the module can find the page behind a `viewTag` without going through the
+ * UIManager. The UI thread registers views and the module's query thread looks them up. */
 object QvpRegistry {
-    private val views = HashMap<Int, QvpRnPageView>()
+    private val views = ConcurrentHashMap<Int, QvpRnPageView>()
     fun register(v: QvpRnPageView) { if (v.id > 0) views[v.id] = v }
     fun unregister(v: QvpRnPageView) { views.entries.removeAll { it.value === v } }
     fun get(tag: Int): QvpRnPageView? = views[tag]

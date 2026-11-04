@@ -14,6 +14,15 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   native module, which sends the whole `QvpDefaults` table. A key the native module lacks is
   an error that names the key and says the native module is older than the package.
 
+### Changed
+- React Native: the Android module runs the page queries that read only the loaded page
+  (`words`, `text`, `search`, the metadata calls and others), the engine-wide helpers and the
+  atlas on a thread of its own, so a long query does not hold up a frame. `words` builds each
+  word's record once per page and reads path names from tables it fills once. `T`, `Sel` and
+  the module take the target and selector codes from one table that `scripts/gen-rn-enums.py`
+  writes from `qvp.h`, and `scripts/check-parity.py` fails when the table is out of date. The
+  example's lock file records the package version, and `scripts/set-version.sh` sets it.
+
 ### Fixed
 - The exact hit tests fill their hit with the core's conversion, as the gap-aware hit
   tests do. They are `qvp_hit_test_exact` and `qvp_hit_test_exact_view`, and `hitTestExact`
@@ -23,6 +32,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   outside its ink, reports `is_exact` 0. It reported 1. `conformance/scenarios/hit.json`
   holds one point of each kind, and the web, Swift, Dart and Android tests replay it. The C
   ABI is unchanged.
+- React Native: the Android module reads the camelCase names of the TypeScript types, so
+  `wordForm`, `text`, `search` and `selectionText` with `'rasmImlai'` use that form, not the
+  default. `rubuAlHizb` and the highlight height `'lineSpacing'` now resolve too. The snake
+  and upper spellings still work. A word's `forms` and the page's `forms` use the same
+  camelCase names as the `Form` type.
 - Every wrapper handles a freed object, a second free and a large array result the same way
   (`docs/API.md`, conventions). A call on a freed page, atlas, ornament set or passage throws
   an error with the object's name: a `StateError` in Dart in every build mode, where a debug

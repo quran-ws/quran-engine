@@ -13,8 +13,8 @@ import ws.quran.qvp.Target
  * styling decisions live here — every call goes to [QvpPage] / [QvpAtlas], which go to the engine.
  *
  * Targets from JS: "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | word index |
- * [word indices] | {target, a, b, c, words} (target = QVP_TARGET_* or its name).
- * Selectors from JS: {selector, a, b, c} (selector = QVP_SELECTOR_* or its name). Colours: '#rgb' | '#rrggbb' | '#rrggbbaa'.
+ * [word indices] | {target, a, b, c, words} (target = QVP_TARGET_* or its name in [Codes]).
+ * Selectors from JS: {selector, a, b, c} (selector = QVP_SELECTOR_* or its name in [Codes]). Colours: '#rgb' | '#rrggbb' | '#rrggbbaa'.
  */
 object Marshal {
     // ── colours ──
@@ -36,11 +36,10 @@ object Marshal {
         else -> IntArray(0)
     }
 
-    private val TARGET_KINDS = listOf("page", "word", "words", "ayah", "ayahRange", "line", "surah", "range")
-    private val SEL_KINDS = listOf("page", "path", "wordPath", "wordMark", "wordMarkNamed", "wordBody", "wordMarks", "word", "ayah", "line", "mark", "category", "family", "kind", "decoration", "decorationIndex")
-    private fun kindOf(v: Any?, names: List<String>): Int = when (v) {
+    /** A code given as a number, or by its name in [names] (or as a numeral); -1 when neither. */
+    private fun codeOf(v: Any?, names: Map<String, Int>): Int = when (v) {
         is Number -> v.toInt()
-        is String -> names.indexOf(v).let { if (it >= 0) it else v.toIntOrNull() ?: -1 }
+        is String -> names[v] ?: v.toIntOrNull() ?: -1
         else -> -1
     }
 
@@ -53,9 +52,15 @@ object Marshal {
         is IntArray -> Target.words(v)
         is Map<*, *> -> {
             val a = num(v["a"]) ?: 0; val b = num(v["b"]) ?: 0; val c = num(v["c"]) ?: 0
-            when (kindOf(v["target"], TARGET_KINDS)) {
-                0 -> Target.page(); 1 -> Target.word(a); 2 -> Target.words(ints(v["words"] ?: v["a"]))
-                3 -> Target.ayah(a, b); 4 -> Target.ayahRange(a, b, c); 5 -> Target.line(a); 6 -> Target.surah(a); 7 -> Target.range(a, b)
+            when (codeOf(v["target"], Codes.TARGETS)) {
+                Codes.TARGET_PAGE -> Target.page()
+                Codes.TARGET_WORD -> Target.word(a)
+                Codes.TARGET_WORDS -> Target.words(ints(v["words"] ?: v["a"]))
+                Codes.TARGET_AYAH -> Target.ayah(a, b)
+                Codes.TARGET_AYAH_RANGE -> Target.ayahRange(a, b, c)
+                Codes.TARGET_LINE -> Target.line(a)
+                Codes.TARGET_SURAH -> Target.surah(a)
+                Codes.TARGET_RANGE -> Target.range(a, b)
                 else -> Target.words(IntArray(0))
             }
         }
@@ -66,34 +71,57 @@ object Marshal {
     fun selector(v: Any?): Selector? {
         val m = v as? Map<*, *> ?: return null
         val a = num(m["a"]) ?: 0; val b = num(m["b"]) ?: 0; val c = num(m["c"]) ?: 0
-        return when (kindOf(m["selector"], SEL_KINDS)) {
-            0 -> Selector.page(); 1 -> Selector.path(a); 2 -> Selector.wordPath(a, b); 3 -> Selector.wordMark(a, b)
-            4 -> Selector.wordMarkNamed(a, (m["mark"] as? String) ?: QvpEngine.markName(b), c)
-            5 -> Selector.wordBody(a); 6 -> Selector.wordMarks(a); 7 -> Selector.word(a); 8 -> Selector.ayah(a, b); 9 -> Selector.line(a)
-            10 -> (m["mark"] as? String)?.let { Selector.mark(it) } ?: Selector.mark(a)
-            11 -> Selector.category(a); 12 -> Selector.family(a); 13 -> Selector.kind(a); 14 -> Selector.decoration(a); 15 -> Selector.decorationIndex(a)
+        return when (codeOf(m["selector"], Codes.SELECTORS)) {
+            Codes.SELECTOR_PAGE -> Selector.page()
+            Codes.SELECTOR_PATH -> Selector.path(a)
+            Codes.SELECTOR_WORD_PATH -> Selector.wordPath(a, b)
+            Codes.SELECTOR_WORD_MARK -> Selector.wordMark(a, b)
+            Codes.SELECTOR_WORD_MARK_NAMED -> Selector.wordMarkNamed(a, (m["mark"] as? String) ?: QvpEngine.markName(b), c)
+            Codes.SELECTOR_WORD_BODY -> Selector.wordBody(a)
+            Codes.SELECTOR_WORD_MARKS -> Selector.wordMarks(a)
+            Codes.SELECTOR_WORD -> Selector.word(a)
+            Codes.SELECTOR_AYAH -> Selector.ayah(a, b)
+            Codes.SELECTOR_LINE -> Selector.line(a)
+            Codes.SELECTOR_MARK -> (m["mark"] as? String)?.let { Selector.mark(it) } ?: Selector.mark(a)
+            Codes.SELECTOR_CATEGORY -> Selector.category(a)
+            Codes.SELECTOR_FAMILY -> Selector.family(a)
+            Codes.SELECTOR_KIND -> Selector.kind(a)
+            Codes.SELECTOR_DECORATION -> Selector.decoration(a)
+            Codes.SELECTOR_DECORATION_INDEX -> Selector.decorationIndex(a)
             else -> null
         }
     }
 
+    /** The constant of [entries] that [v] names, in any of its spellings: the constant's own
+     * (RASM_IMLAI), snake case (rasm_imlai) or the camelCase of the TypeScript types (rasmImlai). */
+    private fun <E : Enum<E>> named(entries: List<E>, v: String): E? {
+        val key = v.replace("_", "")
+        return entries.firstOrNull { it.name.replace("_", "").equals(key, ignoreCase = true) }
+    }
+    /** A constant's name as the TypeScript types spell it: RASM_IMLAI is rasmImlai. */
+    fun jsName(e: Enum<*>): String {
+        val parts = e.name.lowercase().split('_')
+        return parts[0] + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
+    }
+
     fun form(v: Any?, d: Form = Form.RASM_UTHMANI): Form = when (v) {
         is Number -> Form.entries.getOrElse(v.toInt()) { d }
-        is String -> Form.entries.firstOrNull { it.name.equals(v, true) } ?: d
+        is String -> named(Form.entries, v) ?: d
         else -> d
     }
     fun searchMode(v: Any?): SearchMode = when (v) {
         is Number -> SearchMode.entries.getOrElse(v.toInt()) { SearchMode.INCLUDES }
-        is String -> SearchMode.entries.firstOrNull { it.name.equals(v, true) } ?: SearchMode.INCLUDES
+        is String -> named(SearchMode.entries, v) ?: SearchMode.INCLUDES
         else -> SearchMode.INCLUDES
     }
     fun maskMode(v: Any?): MaskMode = when (v) {
         is Number -> MaskMode.entries.getOrElse(v.toInt()) { MaskMode.HIDE }
-        is String -> MaskMode.entries.firstOrNull { it.name.equals(v, true) } ?: MaskMode.HIDE
+        is String -> named(MaskMode.entries, v) ?: MaskMode.HIDE
         else -> MaskMode.HIDE
     }
     fun division(v: Any?): Division = when (v) {
         is Number -> Division.entries.getOrElse(v.toInt()) { Division.JUZ }
-        is String -> Division.entries.firstOrNull { it.name.equals(v, true) } ?: Division.JUZ
+        is String -> named(Division.entries, v) ?: Division.JUZ
         else -> Division.JUZ
     }
 
@@ -101,8 +129,8 @@ object Marshal {
     fun highlightStyle(v: Any?): QvpHighlightStyle {
         val m = v as? Map<*, *> ?: return QvpHighlightStyle()
         val d = QvpHighlightStyle()
-        val mode = when (val x = m["mode"]) { is Number -> HighlightMode.entries.getOrElse(x.toInt()) { d.mode }; is String -> HighlightMode.entries.firstOrNull { it.name.equals(x, true) } ?: d.mode; else -> d.mode }
-        val height = when (val x = m["height"]) { is Number -> BandHeight.entries.getOrElse(x.toInt()) { d.height }; is String -> BandHeight.entries.firstOrNull { it.name.equals(x, true) } ?: d.height; else -> d.height }
+        val mode = when (val x = m["mode"]) { is Number -> HighlightMode.entries.getOrElse(x.toInt()) { d.mode }; is String -> named(HighlightMode.entries, x) ?: d.mode; else -> d.mode }
+        val height = when (val x = m["height"]) { is Number -> BandHeight.entries.getOrElse(x.toInt()) { d.height }; is String -> named(BandHeight.entries, x) ?: d.height; else -> d.height }
         return QvpHighlightStyle(mode = mode, ink = color(m["ink"], d.ink), band = color(m["band"], d.band), height = height, padX = flt(m["padX"], d.padX), padY = flt(m["padY"], d.padY),
             radius = flt(m["radius"], d.radius), seam = flt(m["seam"], d.seam), transitionMs = num(m["ms"] ?: m["transitionMs"]) ?: d.transitionMs, layer = num(m["layer"]) ?: d.layer)
     }
@@ -158,19 +186,39 @@ object Marshal {
         "overflow" to listOf(i.overflow.left, i.overflow.top, i.overflow.right, i.overflow.bottom))
 
     // ── Kotlin → JS ──
-    fun word(p: QvpPage, w: QvpWord): Map<String, Any?> {
-        val forms = LinkedHashMap<String, String>()
-        for (f in Form.entries) if (f == Form.RASM_UTHMANI || p.hasForm(f)) forms[f.name.lowercase()] = p.wordForm(w.index, f)
+    /**
+     * The engine's name of every id of the path and decoration tables, read once. A page has
+     * hundreds of paths, and each names its kind, mark, category and family: a lookup here is
+     * an array read, not four calls into the engine. Ids run 0..255, so the table covers every
+     * id a path can hold, and an id the engine does not know gets the engine's own answer.
+     */
+    private class Names {
+        val kind = Array(256) { QvpEngine.kindName(it) }
+        val mark = Array(256) { QvpEngine.markName(it) }
+        val category = Array(256) { QvpEngine.categoryName(it) }
+        val family = Array(256) { QvpEngine.familyName(it) }
+        val decoration = Array(256) { QvpEngine.decorationName(it).ifEmpty { "other" } }
+    }
+    private val names by lazy { Names() }
+
+    /** The forms a page has: [Form.RASM_UTHMANI] always, and each other form the words sidecar gave. */
+    fun forms(p: QvpPage): List<Form> = Form.entries.filter { it == Form.RASM_UTHMANI || p.hasForm(it) }
+
+    /** One word and its paths. [forms] is [forms] of the page, read once by the caller. */
+    fun word(p: QvpPage, w: QvpWord, forms: List<Form>): Map<String, Any?> {
+        val n = names
+        val text = LinkedHashMap<String, String>()
+        for (f in forms) text[jsName(f)] = p.wordForm(w.index, f)
         val paths = (w.firstPath until w.firstPath + w.nPaths).map { i ->
             val kind = p.pathKind(i); val mark = p.pathMark(i); val cat = p.pathCategory(i); val fam = p.pathFamily(i)
-            mapOf("index" to i, "kind" to kind, "kindName" to QvpEngine.kindName(kind), "mark" to mark, "markName" to QvpEngine.markName(mark), "nthMark" to p.pathNthMark(i),
-                "nthInWord" to p.pathNthInWord(i), "category" to cat, "categoryName" to QvpEngine.categoryName(cat), "family" to fam, "familyName" to QvpEngine.familyName(fam), "line" to p.pathLine(i))
+            mapOf("index" to i, "kind" to kind, "kindName" to n.kind[kind], "mark" to mark, "markName" to n.mark[mark], "nthMark" to p.pathNthMark(i),
+                "nthInWord" to p.pathNthInWord(i), "category" to cat, "categoryName" to n.category[cat], "family" to fam, "familyName" to n.family[fam], "line" to p.pathLine(i))
         }
         return mapOf("index" to w.index, "surah" to w.surah, "ayah" to w.ayah, "word" to w.word, "line" to w.line, "lineIndex" to w.lineIndex, "ayahIndex" to w.ayahIndex,
             "x0" to w.x0, "y0" to w.y0, "x1" to w.x1, "y1" to w.y1, "text" to w.text, "firstPath" to w.firstPath, "nPaths" to w.nPaths,
-            "wordKey" to w.wordKey, "ayahKey" to w.ayahKey, "forms" to forms, "label" to p.wordLabel(w.index), "paths" to paths)
+            "wordKey" to w.wordKey, "ayahKey" to w.ayahKey, "forms" to text, "label" to p.wordLabel(w.index), "paths" to paths)
     }
-    fun decoration(d: QvpDecoration): Map<String, Any?> = mapOf("index" to d.index, "decoration" to d.decoration, "decorationName" to QvpEngine.decorationName(d.decoration).ifEmpty { "other" },
+    fun decoration(d: QvpDecoration): Map<String, Any?> = mapOf("index" to d.index, "decoration" to d.decoration, "decorationName" to names.decoration[d.decoration and 0xff],
         "surah" to d.surah, "ayah" to d.ayah, "line" to d.line, "x0" to d.x0, "y0" to d.y0, "x1" to d.x1, "y1" to d.y1, "text" to d.text, "firstPath" to d.firstPath, "nPaths" to d.nPaths)
     fun hit(p: QvpPage, h: QvpHit): Map<String, Any?> {
         val w = if (h.word >= 0) p.words[h.word] else null
@@ -200,8 +248,8 @@ object Marshal {
     fun atlasRubuAlHizb(r: QvpAtlasRubuAlHizb): Map<String, Any?> = mapOf("rubuAlHizb" to r.rubuAlHizb, "surah" to r.surah, "ayah" to r.ayah, "page" to r.page, "ayahKey" to r.ayahKey)
     fun layout(l: QvpLayout): Map<String, Any?> = mapOf("scale" to l.scale, "offsetX" to l.offsetX, "offsetY" to l.offsetY, "contentW" to l.contentW, "contentH" to l.contentH, "lineSpacing" to l.lineSpacing, "fitScale" to l.fitScale, "fitX" to l.fitX, "fitY" to l.fitY, "lineDy" to l.lineDy.toList(),
         "slots" to l.slotTop.indices.map { listOf(l.slotTop[it], l.slotBottom[it]) })
-    fun pageInfo(p: QvpPage): Map<String, Any?> = mapOf("page" to p.pageNo, "width" to p.width, "height" to p.height, "nLines" to p.nLines, "nAyahs" to p.nAyahs, "nWords" to p.nWords, "nPaths" to p.nPaths, "nDecorations" to p.nDecorations,
-        "lineSpacing" to p.lineSpacing, "forms" to Form.entries.filter { it == Form.RASM_UTHMANI || p.hasForm(it) }.map { it.name.lowercase() })
+    fun pageInfo(p: QvpPage, forms: List<Form>): Map<String, Any?> = mapOf("page" to p.pageNo, "width" to p.width, "height" to p.height, "nLines" to p.nLines, "nAyahs" to p.nAyahs, "nWords" to p.nWords, "nPaths" to p.nPaths, "nDecorations" to p.nDecorations,
+        "lineSpacing" to p.lineSpacing, "forms" to forms.map { jsName(it) })
     fun selection(p: QvpPage): Map<String, Any?> {
         val ws = p.selection()
         return mapOf("words" to ws.toList(), "text" to (if (ws.isEmpty()) "" else p.text(Target.words(ws))), "citation" to (if (ws.isEmpty()) "" else p.citation(ws)),

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Set one version everywhere: Cargo.toml (the source of truth), every package manifest, the
-# Android library's default qvpVersion and the iOS example's CFBundleShortVersionString in
-# project.yml (xcodegen writes Info.plist from it).
+# Android library's default qvpVersion, the iOS example's CFBundleShortVersionString in
+# project.yml (xcodegen writes Info.plist from it) and the React Native example's lock file
+# record of the package it links.
 #
 # Usage: scripts/set-version.sh X.Y.Z
 # Output: the edited files; scripts/check-versions.sh confirms they agree.
@@ -52,6 +53,18 @@ spec, replacements = re.subn(
 if replacements != 1:
     raise SystemExit("error: packages/ios/example/project.yml does not contain one CFBundleShortVersionString")
 open("packages/ios/example/project.yml", "w").write(spec)
+# The React Native example links the package from ../qvp-react-native, and its lock file
+# records the version it linked.
+lock_path = "packages/react-native/example/package-lock.json"
+lock = open(lock_path).read()
+lock, replacements = re.subn(
+    r'("\.\./qvp-react-native": \{\s*"name": "@quran\.ws/qvp-react-native",\s*"version": ")[^"]*(")',
+    lambda m: m.group(1) + v + m.group(2),
+    lock,
+)
+if replacements != 1:
+    raise SystemExit(f"error: {lock_path} does not record one linked qvp-react-native version")
+open(lock_path, "w").write(lock)
 PY
 sed -i.bak -E "s/^version: .*/version: $v/" packages/flutter/qvp_flutter/pubspec.yaml && rm packages/flutter/qvp_flutter/pubspec.yaml.bak
 sed -i.bak -E "s/^version = \".*\"$/version = \"$v\"/" packages/flutter/qvp_flutter/android/build.gradle && rm packages/flutter/qvp_flutter/android/build.gradle.bak
