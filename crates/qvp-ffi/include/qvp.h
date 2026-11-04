@@ -104,7 +104,10 @@ typedef struct { uint16_t surah, ayah, word, line_number; uint32_t ayah_index, l
 typedef struct { uint16_t surah, ayah; uint8_t fragment, fragments, flags, _pad; uint16_t rubu_al_hizb; uint32_t first_word, n_words, ayah_mark_decoration; float x0, y0, x1, y1; } QvpAyahInfo;
 typedef struct { uint8_t line_number, is_header; uint32_t first_word, n_words; float x0, y0, x1, y1, band_y0, band_y1, centre; } QvpLineInfo;
 typedef struct { uint8_t decoration /* QVP_DECORATION_* */, _pad; uint16_t surah, ayah, _pad2; uint32_t line; float x0, y0, x1, y1; QvpStr text; uint32_t first_path, n_paths; } QvpDecorationInfo;
-/* one hit result for every hit test: the exact variants set line, distance 0 and is_exact 1 */
+/* one hit result for every hit test. Every hit has a line: the word's line, or the line of the
+   decoration's first path. is_exact is 1 when the point is inside an outline, and 0 when it is
+   inside a word's or a decoration's box but outside its ink. The exact variants report
+   distance 0. */
 typedef struct { uint32_t word, path, decoration, line; float distance; uint8_t is_exact; } QvpHit;
 /* max_distance <= 0 means unlimited; gap_bias < 0 means the engine default, QVP_DEFAULT_GAP_BIAS */
 typedef struct { float max_distance /* <=0: unlimited */, gap_bias /* <0: default, 0.6 */; uint8_t prefer_exact; } QvpHitOptions;
@@ -204,8 +207,8 @@ uint8_t  qvp_has_form(const QvpPage*, uint8_t form);
 /* hit testing --------------------------------------------------------------------------- */
 int      qvp_hit_test(const QvpPage*, float x, float y, const QvpHitOptions* opt /* NULL ok */, QvpHit* out);       /* gap-aware, page units */
 int      qvp_hit_test_view(const QvpPage*, float view_x, float view_y, const QvpHitOptions* opt, QvpHit* out);       /* gap-aware, viewport px */
-int      qvp_hit_test_exact(const QvpPage*, float x, float y, QvpHit* out);                                /* exact outline only, page units */
-int      qvp_hit_test_exact_view(const QvpPage*, float view_x, float view_y, QvpHit* out);                         /* exact outline only, viewport px */
+int      qvp_hit_test_exact(const QvpPage*, float x, float y, QvpHit* out);                                /* outline, else box; no gap; page units */
+int      qvp_hit_test_exact_view(const QvpPage*, float view_x, float view_y, QvpHit* out);                         /* outline, else box; no gap; viewport px */
 uint32_t qvp_line_bands(const QvpPage*, QvpLineBand* out, uint32_t cap);
 uint32_t qvp_hit_areas(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);
 uint32_t qvp_hit_areas_view(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);   /* the same, in viewport px; a reflowed page's rows */

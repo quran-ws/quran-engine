@@ -1,0 +1,31 @@
+{
+  "page": "042.qvp",
+  "tolerance": 0.001,
+  "spec": {"viewportW": 390, "viewportH": 844, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16},
+  "cases": [
+    {"name": "word outline", "units": "page", "x": 42.5, "y": 7.5,
+     "exact": {"word": 8, "path": 63, "decoration": -1, "line": 0, "distance": 0, "isExact": true},
+     "hit": {"word": 8, "path": 63, "decoration": -1, "line": 0, "distance": 0, "isExact": true}},
+    {"name": "word box", "units": "page", "x": 7.5, "y": 6.5,
+     "exact": {"word": 9, "path": -1, "decoration": -1, "line": 0, "distance": 0, "isExact": false},
+     "hit": {"word": 9, "path": -1, "decoration": -1, "line": 0, "distance": 0, "isExact": false}},
+    {"name": "decoration outline", "units": "page", "x": 329.5, "y": 25,
+     "exact": {"word": -1, "path": 8, "decoration": 4, "line": 0, "distance": 0, "isExact": true},
+     "hit": {"word": -1, "path": 8, "decoration": 4, "line": 0, "distance": 0, "isExact": true}},
+    {"name": "decoration box", "units": "page", "x": 327.5, "y": 24.5,
+     "exact": {"word": -1, "path": -1, "decoration": 4, "line": 0, "distance": 0, "isExact": false},
+     "hit": {"word": -1, "path": -1, "decoration": 4, "line": 0, "distance": 0, "isExact": false}},
+    {"name": "word outline", "units": "view", "x": 59.5, "y": 32,
+     "exact": {"word": 8, "path": 63, "decoration": -1, "line": 0, "distance": 0, "isExact": true},
+     "hit": {"word": 8, "path": 63, "decoration": -1, "line": 0, "distance": 0, "isExact": true}},
+    {"name": "word box", "units": "view", "x": 24, "y": 33,
+     "exact": {"word": 9, "path": -1, "decoration": -1, "line": 0, "distance": 0, "isExact": false},
+     "hit": {"word": 9, "path": -1, "decoration": -1, "line": 0, "distance": 0, "isExact": false}},
+    {"name": "decoration outline", "units": "view", "x": 358, "y": 49.5,
+     "exact": {"word": -1, "path": 8, "decoration": 4, "line": 0, "distance": 0, "isExact": true},
+     "hit": {"word": -1, "path": 8, "decoration": 4, "line": 0, "distance": 0, "isExact": true}},
+    {"name": "decoration box", "units": "view", "x": 356, "y": 49.5,
+     "exact": {"word": -1, "path": -1, "decoration": 4, "line": 0, "distance": 0, "isExact": false},
+     "hit": {"word": -1, "path": -1, "decoration": 4, "line": 0, "distance": 0, "isExact": false}}
+  ]
+}

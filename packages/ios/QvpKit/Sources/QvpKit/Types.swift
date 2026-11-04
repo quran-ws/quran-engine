@@ -172,7 +172,7 @@ public struct QvpDecoration: Equatable {
     public let x0: Float, y0: Float, x1: Float, y1: Float
     public let text: String, firstPath: Int, nPaths: Int
 }
-/// The one hit shape for every hit test; the exact variants report distance 0 and `isExact`. Indices are -1 when absent.
+/// The one hit shape for every hit test; the exact variants report distance 0. `isExact` is true when the point is inside an outline. Indices are -1 when absent.
 public struct QvpHit: Equatable { public let word: Int, path: Int, decoration: Int, line: Int, distance: Float, isExact: Bool }
 public struct QvpHitOptions: Equatable {
     public var maxDistance: Float, gapBias: Float, preferExact: Bool

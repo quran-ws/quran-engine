@@ -1,5 +1,6 @@
-// Replay conformance/scenarios/layout.json and dress.json through the reference wrapper and
-// compare every number with the engine's recorded answer. Needs web/qvp_ffi.wasm and dist/pages/042.qvp.
+// Replay conformance/scenarios/layout.json, dress.json, zoom.json and hit.json through the
+// reference wrapper and compare every number with the engine's recorded answer. Needs
+// web/qvp_ffi.wasm and dist/pages/042.qvp.
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { QvpEngine, wasmUrl } from './index.mjs'
@@ -138,3 +139,24 @@ for (const g of zoomed.drifts) {
 page.free()
 const driftFrames = zoomed.drifts.reduce((n, g) => n + g.frames.length, 0)
 console.log(`ok  ${zoomed.zoomAbout.length + zoomed.clamp.length + zoomed.isZoomed.length + zoomed.pinches.length + 3 + driftFrames} zoom scenarios match the engine`)
+
+// conformance/scenarios/hit.json: the exact and the gap-aware hit tests at a point on a word's
+// outline, on a word's box alone, on a decoration's outline and on a decoration's box alone,
+// in page units and in viewport px.
+const hits = JSON.parse(readFileSync(new URL('conformance/scenarios/hit.json', root), 'utf8'))
+const hitPage = engine.loadPage(readFileSync(pagePath))
+hitPage.layout(hits.spec)
+const sameHit = (got, want, what) => {
+  if (want === null) return assert.equal(got, null, `${what}: got a hit, engine says none`)
+  assert.ok(got, `${what}: got no hit`)
+  for (const k of ['word', 'path', 'decoration', 'line', 'isExact']) assert.equal(got[k], want[k], `${what} ${k}`)
+  assert.ok(Math.abs(got.distance - want.distance) <= hits.tolerance, `${what} distance: got ${got.distance}, engine says ${want.distance}`)
+}
+for (const c of hits.cases) {
+  const tag = `hit ${c.name} (${c.units} ${c.x}, ${c.y})`
+  const view = c.units === 'view'
+  sameHit(view ? hitPage.hitTestExactView(c.x, c.y) : hitPage.hitTestExact(c.x, c.y), c.exact, `${tag} exact`)
+  sameHit(view ? hitPage.hitTestView(c.x, c.y) : hitPage.hitTest(c.x, c.y), c.hit, `${tag} gap-aware`)
+}
+hitPage.free()
+console.log(`ok  ${hits.cases.length} hit scenarios match the engine`)

@@ -122,6 +122,9 @@ by its line spacing band, then to a word, with a gap between two words split 60/
 preceding (right-hand) word — trailing ink is drawn *into* the following gap in this
 print. `hitAreas()` returns the same partition as boxes (no dead zones on a line);
 `lineBands()` the line spacing bands. `hitTestExact`/`hitTestExactView` are the exact-only variants.
+They find the outline under the point, else the box of a word or a decoration, and do not use
+the gaps. Every hit has a `line`: the word's line, or the line of a decoration. `isExact` is true
+only when the point is inside an outline, so a hit on a box alone has `isExact` false.
 A negative `gapBias` means the engine default, 0.6, in the hit tests and in `hitAreas()`, as a
 `maxDistance` of 0 or less means no limit.
 

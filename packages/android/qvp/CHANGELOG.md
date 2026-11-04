@@ -20,6 +20,13 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   The floor is the fitted page. `QvpPageView.MAX_ZOOM` stays and is `QvpDefaults.MAX_ZOOM`.
 
 ### Fixed
+- The exact hit tests fill their hit with the core's conversion, as the gap-aware hit
+  tests do. They are `qvp_hit_test_exact` and `qvp_hit_test_exact_view`, and `hitTestExact`
+  and `hitTestExactView` in every wrapper. A hit on a decoration reports the line of the
+  decoration's first path. It reported `QVP_NONE`, which is -1 in the wrappers and
+  `Int.MAX_VALUE` in Kotlin. A hit on the box of a word or a decoration, outside its ink,
+  reports `is_exact` 0. It reported 1. `conformance/scenarios/hit.json` holds one point of
+  each kind, and the web, Swift, Dart and Android tests replay it. The C ABI is unchanged.
 - Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
   steps, as the Swift, Dart and web wrappers do. They truncated, so alpha 0.5 gave `0x7f` on
   Android and `0x80` everywhere else. A NaN alpha clamps to 0 in every wrapper, where

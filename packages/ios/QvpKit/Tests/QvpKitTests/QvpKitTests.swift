@@ -1072,6 +1072,36 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(cases.count, 40)
     }
 
+    /// Every wrapper replays conformance/scenarios/hit.json: the exact and the gap-aware hit
+    /// tests on a word's outline, a word's box alone, a decoration's outline and a decoration's
+    /// box alone, in page units and in viewport px.
+    func testHitScenariosMatchTheEngine() throws {
+        let url = Self.repo.appendingPathComponent("conformance/scenarios/hit.json")
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let tolerance = json["tolerance"] as! Double
+        let cases = json["cases"] as! [[String: Any]]
+        let s = json["spec"] as! [String: Any]
+        let f: (String) -> Float = { Float((s[$0] as! NSNumber).doubleValue) }
+        let p = try Self.loadPage(); defer { p.close() }
+        _ = p.layout(QvpLayoutSpec(viewportW: f("viewportW"), viewportH: f("viewportH"), padTop: f("padTop"), padBottom: f("padBottom"), padLeft: f("padLeft"), padRight: f("padRight")))
+        func same(_ got: QvpHit?, _ want: Any?, _ what: String) {
+            guard let want = want as? [String: Any] else { return XCTAssertNil(got, "\(what): got a hit, engine says none") }
+            guard let got else { return XCTFail("\(what): got no hit") }
+            let i: (String) -> Int = { (want[$0] as! NSNumber).intValue }
+            XCTAssertEqual([got.word, got.path, got.decoration, got.line], [i("word"), i("path"), i("decoration"), i("line")], what)
+            XCTAssertEqual(got.isExact, want["isExact"] as! Bool, "\(what) isExact")
+            XCTAssertLessThanOrEqual(abs(Double(got.distance) - (want["distance"] as! NSNumber).doubleValue), tolerance, "\(what) distance")
+        }
+        for c in cases {
+            let x = Float((c["x"] as! NSNumber).doubleValue), y = Float((c["y"] as! NSNumber).doubleValue)
+            let view = c["units"] as! String == "view"
+            let tag = "hit \(c["name"]!) (\(c["units"]!) \(x), \(y))"
+            same(view ? p.hitTestExactView(x, y) : p.hitTestExact(x, y), c["exact"], "\(tag) exact")
+            same(view ? p.hitTestView(x, y) : p.hitTest(x, y), c["hit"], "\(tag) gap-aware")
+        }
+        XCTAssertEqual(cases.count, 8)
+    }
+
     // ── passage ──
 
     func testPassageLaysOutAyah2255AndCutsIt() throws {

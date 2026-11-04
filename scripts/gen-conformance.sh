@@ -13,7 +13,8 @@ cargo run -q -p qvp-core --release --example passage_scenarios -- dist/pages "$t
 cargo run -q -p qvp-core --release --example lite_passage_metrics -- dist/pages > "$tmp/lite-passage-metrics.json"
 cargo run -q -p qvp-core --release --example dress_scenarios -- dist/pages/042.qvp "$tmp/scenarios/dress.json" "$tmp/qvo1-dress.hex"
 cargo run -q -p qvp-core --release --example zoom_scenarios -- dist/pages/042.qvp "$tmp/scenarios/zoom.json"
-for file in scenarios/layout.json scenarios/passage.json lite-passage-metrics.json scenarios/dress.json qvo1-dress.hex scenarios/zoom.json; do
+cargo run -q -p qvp-core --release --example hit_scenarios -- dist/pages/042.qvp "$tmp/scenarios/hit.json"
+for file in scenarios/layout.json scenarios/passage.json lite-passage-metrics.json scenarios/dress.json qvo1-dress.hex scenarios/zoom.json scenarios/hit.json; do
   if [ "${1:-}" = "--check" ]; then
     if cmp -s "$tmp/$file" "conformance/$file"; then
       echo "ok   conformance/$file matches the engine"

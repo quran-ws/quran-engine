@@ -45,7 +45,7 @@ impl Default for HitOptions {
     }
 }
 
-/// Gap-aware hit result. `exact` is true when the point is inside the word's ink outline.
+/// Gap-aware hit result. `is_exact` is true when the point is inside an outline.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Hit {
     pub word: u32,
@@ -135,8 +135,10 @@ impl Page {
     }
 
     /// An exact hit as a gap-aware one: the line of its word, or of its decoration's first
-    /// path, at distance 0. `is_exact` is true when the point is inside an outline.
-    fn exact_to_hit(&self, h: HitExact) -> Hit {
+    /// path, at distance 0. `is_exact` is true when the point is inside an outline, and false
+    /// when the point is inside a word's or a decoration's box but outside its ink. The C
+    /// API's exact hit tests use this conversion too, so all hit tests fill a hit the same way.
+    pub fn exact_to_hit(&self, h: HitExact) -> Hit {
         let line = if h.word != NONE {
             self.data().words[h.word as usize].line_index as u32
         } else {
