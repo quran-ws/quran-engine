@@ -126,8 +126,12 @@ DEFAULT_SITES = {
 
 
 def number(text: str) -> float:
-    text = text.rstrip("uUfF").rstrip("L")
-    return float(int(text, 16)) if text.lower().startswith("0x") else float(text)
+    """A header or wrapper literal as a number. A suffix is stripped by literal form: `u`/`L`
+    after a hex colour, `f`/`u`/`L` after a decimal. A hex digit f is part of the number, so
+    `0x231f20ffu` is 0x231f20ff, not 0x231f20."""
+    if text.lower().startswith("0x"):
+        return float(int(text[2:].rstrip("uUlL"), 16))
+    return float(text.rstrip("uUfFlL"))
 
 
 def header_defaults() -> dict[str, float]:
@@ -162,7 +166,7 @@ def check_defaults(problems: list[str]) -> None:
             if got[name] is None:
                 problems.append(f"{site} ({path}) has no default named {name}")
             elif abs(got[name] - value) > 1e-9:
-                problems.append(f"{site} ({path}) has {name} = {got[name]}, the header says {value}")
+                problems.append(f"{site} ({path}) has default {name} = {got[name]}, the header says {value}")
 
 
 def main(argv: list[str]) -> int:

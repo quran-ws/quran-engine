@@ -7,6 +7,10 @@
 # Needs: rustup targets (aarch64/x86_64/armv7 android), cargo-ndk, ANDROID_NDK_HOME.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The Android library compiles its JNI shim against a copy of the header. The copy is
+# generated here, never edited, before any toolchain check, so syncing the header needs no
+# Android toolchain. scripts/check-parity.py fails when the copy drifts from the source.
+cp crates/qvp-ffi/include/qvp.h packages/android/qvp/src/main/cpp/qvp.h
 # shellcheck disable=SC1091
 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 if [ -z "${ANDROID_NDK_HOME:-}" ] && [ -n "${ANDROID_HOME:-}" ]; then
@@ -24,7 +28,4 @@ for pair in arm64-v8a:aarch64-linux-android x86_64:x86_64-linux-android armeabi-
   cp "target/$triple/$profile/libqvp_ffi.a" "packages/android/qvp/prebuilt/$abi/"
   cp "dist/android/jniLibs/$abi/libqvp_ffi.so" "packages/flutter/qvp_flutter/android/src/main/jniLibs/$abi/"
 done
-# The Android library compiles its JNI shim against a copy of the header. The copy is
-# generated here, never edited; scripts/check-parity.py fails when it drifts.
-cp crates/qvp-ffi/include/qvp.h packages/android/qvp/src/main/cpp/qvp.h
 echo "engine built for android ($profile profile): $(ls packages/android/qvp/prebuilt)"

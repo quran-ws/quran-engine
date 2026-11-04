@@ -12,7 +12,42 @@ class TypesTest {
         assertEquals(rgba, QvpColor.rgba(QvpColor.argb(rgba)))
         assertEquals(0x1a73e8ff, QvpColor.parse("#1a73e8"))
         assertEquals(0xaabbccff.toInt(), QvpColor.parse("#abc"))
-        assertEquals(0x1a73e87f, QvpColor.withAlpha(0x1a73e8ff, 0.5f))
+        // alpha rounds to the nearest step: 0.5 is 0x80 in every wrapper, not 0x7f
+        assertEquals(0x1a73e880, QvpColor.withAlpha(0x1a73e8ff, 0.5f))
+        assertEquals(0x1a73e880, QvpColor.parse("#1a73e8", 0.5f))
+        assertEquals(0xd6a3264d.toInt(), QvpColor.parse("#d6a326", 0.3f))
+        // a NaN alpha is 0 and an out-of-range one clamps, in every wrapper
+        assertEquals(0x1a73e800, QvpColor.parse("#1a73e8", Float.NaN))
+        assertEquals(0x1a73e8ff, QvpColor.withAlpha(0x1a73e800, 2f))
+    }
+
+    /** `QvpDefaults.all` names every constant of the object, so a host that reads the table whole misses none. */
+    @Test
+    fun defaultsTableListsEveryConstant() {
+        val camel = { name: String -> name.lowercase().split('_').let { it[0] + it.drop(1).joinToString("") { p -> p.replaceFirstChar(Char::uppercase) } } }
+        val constants = QvpDefaults::class.java.declaredFields
+            .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type.isPrimitive }
+            .map { camel(it.name) }.toSet()
+        assertEquals(constants, QvpDefaults.all.keys)
+        assertEquals(QvpDefaults.SELECTION_PAD_X, QvpDefaults.all["selectionPadX"])
+    }
+
+    /** What the React Native bridge exports equals the decimals in qvp.h, not a widened float
+     * (0.6f widened is 0.6000000238418579). The header copy is read from the module's sources. */
+    @Test
+    fun exportedDefaultsEqualTheHeaderDecimals() {
+        val header = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .flatMap { sequenceOf(java.io.File(it, "src/main/cpp/qvp.h"), java.io.File(it, "packages/android/qvp/src/main/cpp/qvp.h")) }
+            .firstOrNull { it.isFile } ?: error("qvp.h not found above " + System.getProperty("user.dir"))
+        val camel = { name: String -> name.lowercase().split('_').let { it[0] + it.drop(1).joinToString("") { p -> p.replaceFirstChar(Char::uppercase) } } }
+        val fromHeader = Regex("""#define QVP_DEFAULT_([A-Z_]+)\s+(0x[0-9a-fA-F]+u?|[0-9.]+f?)""").findAll(header.readText()).associate { m ->
+            val raw = m.groupValues[2]
+            // `u` closes a hex colour and `f` a decimal; a hex digit f is part of the number
+            camel(m.groupValues[1]) to (if (raw.startsWith("0x")) raw.removePrefix("0x").removeSuffix("u").toLong(16).toDouble() else raw.removeSuffix("f").toDouble())
+        }
+        assertEquals(fromHeader, QvpDefaults.decimal)
+        assertEquals(0.6, QvpDefaults.decimal["selectionPadX"])
+        assertEquals(1.2, QvpDefaults.decimal["highlightPadX"])
     }
 
     @Test

@@ -22,3 +22,13 @@ test('the linked module loads the package', () => {
     expect(() => require('@quran.ws/qvp-react-native')).not.toThrow();
   });
 });
+
+test('rgba rounds alpha to the nearest step, and a NaN or out-of-range alpha clamps', () => {
+  jest.isolateModules(() => {
+    const { rgba } = require('@quran.ws/qvp-react-native');
+    expect(rgba('#1a73e8', 0.5)).toBe('#1a73e880');
+    expect(rgba('#1a73e8', NaN)).toBe('#1a73e800');
+    expect(rgba('#1a73e8', -1)).toBe('#1a73e800');
+    expect(rgba('#1a73e8', 2)).toBe('#1a73e8ff');
+  });
+});

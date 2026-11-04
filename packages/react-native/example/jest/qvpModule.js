@@ -5,13 +5,29 @@
  * reads the answers back.
  */
 const { NativeModules } = require('react-native');
+const { readFileSync } = require('fs');
+const { join } = require('path');
+
+// The defaults as the real module sends them: every QVP_DEFAULT_* in qvp.h, by camelCase name,
+// as the decimal the header states. Read from the header, so no number is copied here.
+function headerDefaults() {
+  const header = readFileSync(join(__dirname, '..', '..', '..', '..', 'crates', 'qvp-ffi', 'include', 'qvp.h'), 'utf8');
+  const out = {};
+  for (const m of header.matchAll(/#define QVP_DEFAULT_([A-Z_]+)\s+(0x[0-9a-fA-F]+u?|[0-9.]+f?)/g)) {
+    const name = m[1].toLowerCase().replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    // `u` closes a hex colour and `f` a decimal; a hex digit f is part of the number
+    out[name] = m[2].startsWith('0x') ? parseInt(m[2].replace(/u$/, ''), 16) : Number(m[2].replace(/f$/, ''));
+  }
+  if (!('ink' in out)) throw new Error('qvpModule mock: no QVP_DEFAULT_* found in qvp.h');
+  return out;
+}
 
 const calls = [];
 const answers = {};
 const constants = {
   version: 'test', formatVersion: 0,
   marks: [], kinds: [], families: [], categories: [], decorations: [], divisions: [], places: [],
-  defaults: { ayahMarkScaleScan: 1.5 },
+  defaults: headerDefaults(),
 };
 const module = new Proxy({}, {
   get(_, name) {

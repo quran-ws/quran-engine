@@ -196,7 +196,8 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
         "families" to QvpEngine.names(QvpEngine.Names.FAMILY), "categories" to QvpEngine.names(QvpEngine.Names.CATEGORY),
         "decorations" to QvpEngine.names(QvpEngine.Names.DECORATION), "divisions" to QvpEngine.names(QvpEngine.Names.DIVISION),
         "places" to QvpEngine.names(QvpEngine.Names.PLACE),
-        "defaults" to mapOf("ayahMarkScaleScan" to QvpDefaults.AYAH_MARK_SCALE_SCAN.toDouble()))
+        // the whole defaults table by camelCase name, as the decimals the header states
+        "defaults" to QvpDefaults.decimal)
 
     override fun invalidate() { atlases.values.forEach { it.close() }; atlases.clear(); atlasByUri.clear(); QvpOrnamentSets.clear(); super.invalidate() }
     companion object { const val NAME = "QvpModule" }

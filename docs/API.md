@@ -13,7 +13,9 @@ and `qvp_hit_test(...)` in C.
 - **Page units** are the printed page's viewBox space (345 × 550 for this mushaf, y down).
   Anything named `…View` is in *viewport pixels through the current layout*.
 - **Defaults.** Every default a wrapper applies (ink, highlight colours and padding, gap bias,
-  tap distance, mask and reveal colours, crop padding) is a `QVP_DEFAULT_*` value in `qvp.h`,
+  tap distance, mask and reveal colours, crop padding, the reflow defaults
+  `QVP_DEFAULT_REFLOW_RELAX` and `QVP_DEFAULT_REFLOW_MAX_STRETCH`, the selection band's side
+  padding `QVP_DEFAULT_SELECTION_PAD_X`) is a `QVP_DEFAULT_*` value in `qvp.h`,
   defined once in the engine (`crates/qvp-core/src/defaults.rs`) and mirrored as `QvpDefaults`
   in each wrapper; the parity check keeps every copy equal.
 - **Handles.** Every mutating style/highlight call returns a handle; removing the handle

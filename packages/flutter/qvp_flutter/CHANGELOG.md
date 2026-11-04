@@ -1,5 +1,11 @@
 ## Unreleased
 
+- `QVP_DEFAULT_REFLOW_RELAX`, `QVP_DEFAULT_REFLOW_MAX_STRETCH` and `QVP_DEFAULT_SELECTION_PAD_X`
+  in `qvp.h`, mirrored in every wrapper's defaults table (`QvpDefaults` in Kotlin, Swift and
+  Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
+  from the table and the reflow specs take their defaults from it, so no wrapper copies the
+  numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
+- Dart: `rgba` and `QvpColor.withAlpha` clamp a NaN alpha to 0, where they threw.
 - The web engine in the package, `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`, is
   built from the release tag, so it matches the native libraries and the crates of the same
   version. The repository no longer tracks the two files. The pubspec declares their

@@ -7,6 +7,14 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- `QVP_DEFAULT_REFLOW_RELAX`, `QVP_DEFAULT_REFLOW_MAX_STRETCH` and `QVP_DEFAULT_SELECTION_PAD_X`
+  in `qvp.h`, mirrored in every wrapper's defaults table (`QvpDefaults` in Kotlin, Swift and
+  Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
+  from the table and the reflow specs take their defaults from it, so no wrapper copies the
+  numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
+- React Native: `DEFAULTS` holds every engine default under its header name, read from the
+  native module, which sends the whole `QvpDefaults` table. A key the native module lacks is
+  an error that names the key and says the native module is older than the package.
 - Reflow can keep the print's line breaks with `breaks: 'printed'` (`QvpBreaks.printed`
   in Swift). Each line stays whole while its ink grows to fill the page width.
   `reflowMaxZoom` measures the widest row in this mode, and larger zooms clamp to it.
@@ -128,6 +136,13 @@ All notable changes to the engine and its packages. The format follows
   removal takes a minor bump (`docs/standards/VERSIONING.md`), so the next release is 0.8.0.
 
 ### Fixed
+- Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
+  steps, as the Swift, Dart and web wrappers do. They truncated, so alpha 0.5 gave `0x7f` on
+  Android and `0x80` everywhere else. A NaN alpha clamps to 0 in every wrapper, where
+  Swift trapped, Dart threw and React Native returned a malformed colour.
+- `scripts/check-parity.py` reads a hex colour whole. It stripped every trailing `f` as a
+  suffix, so `0x231f20ffu` compared as `0x231f20` and a wrapper colour without its alpha
+  byte passed. A failed default now also stops the summary from reporting agreement.
 - A malformed page, atlas or ornament file is an error from the decoder, not a panic or
   an abort. On wasm32 a panic is a trap, so a damaged download could take a host app down.
   The page decoder checks the magic, the version, `quant`, every count against its

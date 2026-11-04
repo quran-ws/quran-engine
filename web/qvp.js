@@ -15,10 +15,10 @@ const ZOOM_MODE = { stepped: 0, continuous: 1, magnify: 2 };
 const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   /** The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). */
   const DEFAULTS = { INK: 0x231f20ff, HIGHLIGHT_INK: 0x1a73e8ff, HIGHLIGHT_BAND: 0xd6a3264d, HIGHLIGHT_PAD_X: 1.2, HIGHLIGHT_PAD_Y: 0, HIGHLIGHT_SEAM: 0.25,
-    SELECTION_BAND: 0x2d6fd640, GAP_BIAS: 0.6, TAP_DISTANCE: 6, GRID_LINES: 15, ASPECT_SLACK: 1.15, MASK_BLOCK: 0xd9d4c8ff, MASK_PAD: 0.6, MASK_RADIUS: 0.8,
+    SELECTION_BAND: 0x2d6fd640, SELECTION_PAD_X: 0.6, GAP_BIAS: 0.6, TAP_DISTANCE: 6, GRID_LINES: 15, ASPECT_SLACK: 1.15, MASK_BLOCK: 0xd9d4c8ff, MASK_PAD: 0.6, MASK_RADIUS: 0.8,
     REVEAL_LIT: 1, REVEAL_GREY: 0xc9c4b8ff, CROP_PAD: 2, AYAH_MARK_SCALE_SCAN: 1.5,
     MIN_ZOOM: 0.5, MAX_ZOOM: 12, ZOOMED_THRESHOLD: 1.02, SWIPE_AXIS_RATIO: 1.5, SWIPE_DISTANCE: 40, SWIPE_VELOCITY: 500,
-    ZOOM_SNAP_HYSTERESIS: 0.03, ZOOM_QUANTUM: 0.01 };
+    ZOOM_SNAP_HYSTERESIS: 0.03, ZOOM_QUANTUM: 0.01, REFLOW_RELAX: 0.5, REFLOW_MAX_STRETCH: 2 };
   const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, ORNAMENT: 5, PAGE_NUMBER: 6, RUNNING_HEAD: 7, OTHER: 255 };
   const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 };
   const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGRAPHIC: 4, DABT: 5, WAQF: 6, READING_SIGN: 7, STANDALONE: 8 };
@@ -31,13 +31,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   const names = table => { if (!NAMES) throw new Error('QvpEngine.init() first: names come from the engine'); return NAMES[table]; };
   const idOf = (table, v) => { if (typeof v !== 'string') return v; const i = names(table).indexOf(v); return i < 0 ? 255 : i; };
 
+  // 0..1 → 0..255, rounded to the nearest step, as in every wrapper. NaN and out-of-range values
+  // clamp first, so a bad alpha is 0 or 255.
+  const alpha8 = a => Math.round((Number.isNaN(a) ? 0 : Math.min(Math.max(a, 0), 1)) * 255);
   // colours: numbers are 0xRRGGBBAA; strings '#rgb', '#rrggbb', '#rrggbbaa'
   function rgba(c, alpha) {
     if (typeof c === 'number') return c >>> 0;
     if (typeof c !== 'string') return 0;
     let h = c.trim().replace('#', '');
     if (h.length === 3 || h.length === 4) h = [...h].map(x => x + x).join('');
-    if (h.length === 6) h += alpha !== undefined ? Math.round(alpha * 255).toString(16).padStart(2, '0') : 'ff';
+    if (h.length === 6) h += alpha !== undefined ? alpha8(alpha).toString(16).padStart(2, '0') : 'ff';
     return parseInt(h, 16) >>> 0;
   }
   const css = c => `rgba(${(c >>> 24) & 255},${(c >>> 16) & 255},${(c >>> 8) & 255},${(c & 255) / 255})`;
@@ -588,7 +591,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     // ── hit testing ──
     hitTestExact(x, y) { return this.e.ex.qvp_hit_test_exact(this.h, x, y, this.e.scratch) ? this._hit(this.e.scratch) : null; }
     hitTestExactView(viewX, viewY) { return this.e.ex.qvp_hit_test_exact_view(this.h, viewX, viewY, this.e.scratch) ? this._hit(this.e.scratch) : null; }
-    _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o.maxDistance ?? 0, true); d.setFloat32(at + 4, o.gapBias ?? 0.6, true); d.setUint8(at + 8, o.preferExact === false ? 0 : 1); return at; }
+    // The engine owns maxDistance through its sentinel: 0 is unlimited. Gap bias has no sentinel, so DEFAULTS.GAP_BIAS (the engine's own number) fills it.
+    _hitOpt(o) { const d = this.e.dv(), at = this.e.scratch2 + 8192; d.setFloat32(at, o?.maxDistance ?? 0, true); d.setFloat32(at + 4, o?.gapBias ?? DEFAULTS.GAP_BIAS, true); d.setUint8(at + 8, o?.preferExact === false ? 0 : 1); return at; }
     /** the one hit shape for every hit test; the exact variants report distance 0 and isExact */
     _hit(s) { const d = this.e.dv(); const f = v => (v === NONE ? -1 : v); const h = { word: f(d.getUint32(s, true)), path: f(d.getUint32(s + 4, true)), decoration: f(d.getUint32(s + 8, true)), line: f(d.getUint32(s + 12, true)), distance: d.getFloat32(s + 16, true), isExact: !!d.getUint8(s + 20) }; if (h.word >= 0) { h.wordKey = this.wordKey(h.word); const w = this.words[h.word]; h.ayahKey = `${w.surah}:${w.ayah}`; } return h; }
     /** gap-aware: every point on a printed line resolves to the word the user meant */

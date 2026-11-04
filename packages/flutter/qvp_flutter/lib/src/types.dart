@@ -94,6 +94,7 @@ abstract final class QvpDefaults {
   static const double highlightPadX = 1.2,
       highlightPadY = 0,
       highlightSeam = 0.25,
+      selectionPadX = 0.6,
       gapBias = 0.6,
       tapDistance = 6,
       aspectSlack = 1.15,
@@ -113,6 +114,10 @@ abstract final class QvpDefaults {
   /// How far a justified row's gaps may open, as a multiple of the usual air between two
   /// words: what a reflowed page and a passage stretch to unless the host says otherwise.
   static const double reflowMaxStretch = 2;
+
+  /// How far a reflowed row much shorter than its neighbours opens towards them, as a share
+  /// of the difference.
+  static const double reflowRelax = 0.5;
 }
 
 /// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
@@ -171,6 +176,10 @@ abstract final class QvpOp {
 
 // ───────────── colours ─────────────
 
+/// An alpha of 0..1 as 0..255, rounded to the nearest step; NaN and out-of-range values clamp first.
+int _alpha8(double alpha) =>
+    ((alpha.isNaN ? 0.0 : alpha.clamp(0.0, 1.0)) * 255).round();
+
 /// 0xRRGGBBAA from an int (passed through), a `#rgb` / `#rrggbb` / `#rrggbbaa` string, or a Flutter [Color].
 /// [alpha] (0..1) replaces the alpha of 6-digit strings and Colors.
 int rgba(Object c, [double? alpha]) {
@@ -181,7 +190,7 @@ int rgba(Object c, [double? alpha]) {
   if (h.length == 3 || h.length == 4) h = h.split('').map((x) => x + x).join();
   if (h.length == 6) {
     h += alpha != null
-        ? (alpha * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0')
+        ? _alpha8(alpha).toRadixString(16).padLeft(2, '0')
         : 'ff';
   }
   return int.parse(h, radix: 16) & 0xffffffff;
@@ -196,9 +205,7 @@ abstract final class QvpColor {
     (rgba >> 8) & 0xff,
   );
   static int fromColor(Color c, [double? alpha]) {
-    final a = alpha != null
-        ? (alpha * 255).round().clamp(0, 255)
-        : (c.a * 255).round();
+    final a = alpha != null ? _alpha8(alpha) : (c.a * 255).round();
     return (((c.r * 255).round() << 24) |
             ((c.g * 255).round() << 16) |
             ((c.b * 255).round() << 8) |
@@ -209,7 +216,7 @@ abstract final class QvpColor {
   /// CSS-style string `#rrggbbaa`.
   static String hex(int rgba) => '#${rgba.toRadixString(16).padLeft(8, '0')}';
   static int withAlpha(int rgba, double alpha) =>
-      (rgba & 0xffffff00) | (alpha * 255).round().clamp(0, 255);
+      (rgba & 0xffffff00) | _alpha8(alpha);
 }
 
 // ───────────── selectors & targets ─────────────
@@ -550,7 +557,7 @@ final class QvpReflowSpec {
     this.gaps = 'uniform',
     this.wordGap = 1,
     this.maxStretch = QvpDefaults.reflowMaxStretch,
-    this.relax = 0.5,
+    this.relax = QvpDefaults.reflowRelax,
   });
 
   /// 1 or less is the printed page; [QvpPage.zoomSpec] hands back 0 there, as the C header

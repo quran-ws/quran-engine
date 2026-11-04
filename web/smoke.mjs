@@ -1,7 +1,7 @@
 // Smoke test: every public entry point loads and the engine answers.
 // Drawing is not exercised — buildPaths() and drawBoxes() need a DOM Path2D.
 import { readFileSync, existsSync } from 'node:fs';
-import { QvpEngine, wasmUrl } from './index.mjs';
+import { DEFAULTS, QvpEngine, rgba, wasmUrl } from './index.mjs';
 
 const engine = await QvpEngine.init(readFileSync(wasmUrl));
 const strip = engine.strip('الْحَمْدُ');
@@ -11,6 +11,12 @@ console.log('ok  wasm instantiated, engine.strip() ->', strip);
 if (engine.engineName() !== 'qvp' || !/^\d+\.\d+\.\d+$/.test(engine.version()) || !(engine.formatVersion() > 0)) throw new Error('engine name or version wrong');
 if (engine.markFromName(engine.markName(1)) !== 1) throw new Error('markFromName does not invert markName');
 console.log('ok  engine name, version and mark names round-trip');
+// alpha rounds to the nearest step: 0.5 is 0x80 in every wrapper
+if (rgba('#1a73e8', 0.5) !== 0x1a73e880 || rgba('#d6a326', 0.3) !== 0xd6a3264d) throw new Error('rgba() alpha does not round');
+// a NaN alpha is 0 and an out-of-range one clamps, in every wrapper
+if (rgba('#1a73e8', NaN) !== 0x1a73e800 || rgba('#1a73e8', 2) !== 0x1a73e8ff) throw new Error('rgba() alpha does not clamp');
+if (DEFAULTS.REFLOW_RELAX !== 0.5 || DEFAULTS.REFLOW_MAX_STRETCH !== 2 || DEFAULTS.SELECTION_PAD_X !== 0.6) throw new Error('DEFAULTS is missing a header default');
+console.log('ok  colour alpha rounds, DEFAULTS has the header defaults');
 
 // The sections that need page data skip with a hint, or fail when QVP_REQUIRE_DATA is set
 // (scripts/check.sh gates sets it after scripts/sync-test-data.sh).

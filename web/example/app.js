@@ -38,7 +38,7 @@
     playing: false, playIdx: 0, lastHitUs: 0, animating: false,
     dress: { ayahMark: null, surahHeader: null, pageFrame: null, gap: 5, bandGap: 5, ayahMarkScale: 0, pageFrameScale: 1, lineArt: [], colors: [] },
     layout: { lineSpacing: 1, fillHeight: false, padTop: 24, padBottom: 24, padSide: 16, surahFrames: true },
-    reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: 0.5, maxStretch: 2 },
+    reflow: { on: false, zoom: 1.6, fill: 'centred', breaks: 'fitted', gaps: 'uniform', wordGap: 1, relax: QVP.DEFAULTS.REFLOW_RELAX, maxStretch: QVP.DEFAULTS.REFLOW_MAX_STRETCH },
     hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
     // the reader's zoom control, which the engine owns: mode, step and the size in force
     zoom: { mode: 'stepped', step: 0, zoom: 1 },
@@ -268,7 +268,7 @@
         if (h && h.word >= 0) {
           S.page.select(selecting.anchor, h.word);
           const ws = S.page.selection();
-          if (S.hlSel) S.page.moveHighlight(S.hlSel, T.words(ws)); else S.hlSel = S.page.highlight(T.words(ws), { mode: 'band', band: rgba('#2d6fd6', 0.25), padX: 0.6, ms: 0, layer: LAYER.SELECTION });
+          if (S.hlSel) S.page.moveHighlight(S.hlSel, T.words(ws)); else S.hlSel = S.page.highlight(T.words(ws), { mode: 'band', band: QVP.DEFAULTS.SELECTION_BAND, padX: QVP.DEFAULTS.SELECTION_PAD_X, ms: 0, layer: LAYER.SELECTION });
           moved = true; draw();
         }
         return;
@@ -464,6 +464,8 @@
   $('rFill').onchange = e => { S.reflow.fill = e.target.value; S.reflow.on = true; reflowUI(); };
   $('rGaps').onchange = e => { S.reflow.gaps = e.target.value; S.reflow.on = true; reflowUI(); };
   $('rBreaks').onchange = e => { S.reflow.breaks = e.target.value; S.reflow.on = true; reflowUI(); };
+  // the sliders start at the engine's defaults, from the state, so no number lives in the HTML
+  $('rRelax').value = S.reflow.relax; $('rStretch').value = S.reflow.maxStretch;
   $('rRelax').oninput = e => { S.reflow.relax = +e.target.value; S.reflow.on = true; reflowUI(); };
   $('rStretch').oninput = e => { S.reflow.maxStretch = +e.target.value; S.reflow.on = true; reflowUI(); };
 

@@ -61,6 +61,12 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(QvpColor.parse("#d6a326", alpha: 0.3), 0xd6a3264d)
         XCTAssertEqual(QvpColor.rgba(QvpColor.cgColor(0x1a73e8cc)), 0x1a73e8cc)
         XCTAssertEqual(QvpColor.withAlpha(0x1a73e8ff, 0.18), 0x1a73e82e)
+        // alpha rounds to the nearest step: 0.5 is 0x80 in every wrapper
+        XCTAssertEqual(QvpColor.withAlpha(0x1a73e8ff, 0.5), 0x1a73e880)
+        XCTAssertEqual(QvpColor.parse("#1a73e8", alpha: 0.5), 0x1a73e880)
+        // a NaN alpha is 0 and an out-of-range one clamps, in every wrapper
+        XCTAssertEqual(QvpColor.parse("#1a73e8", alpha: .nan), 0x1a73e800)
+        XCTAssertEqual(QvpColor.withAlpha(0x1a73e800, 2), 0x1a73e8ff)
     }
 
     func testPage042Counts() {

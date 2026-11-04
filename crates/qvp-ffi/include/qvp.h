@@ -32,10 +32,13 @@ extern "C" {
 #define QVP_DEFAULT_ZOOMED_THRESHOLD 1.02f
 #define QVP_DEFAULT_ZOOM_SNAP_HYSTERESIS 0.03f
 #define QVP_DEFAULT_ZOOM_QUANTUM   0.01f
+#define QVP_DEFAULT_REFLOW_RELAX   0.5f    /* how far a short reflowed row opens towards its neighbours */
+#define QVP_DEFAULT_REFLOW_MAX_STRETCH 2.0f /* how far a reflowed row's gaps may open, in word gaps */
 #define QVP_DEFAULT_SWIPE_AXIS_RATIO 1.5f
 #define QVP_DEFAULT_SWIPE_DISTANCE 40.0f
 #define QVP_DEFAULT_SWIPE_VELOCITY 500.0f
 #define QVP_DEFAULT_SELECTION_BAND 0x2d6fd640u
+#define QVP_DEFAULT_SELECTION_PAD_X 0.6f   /* side padding a view passes for the selection band */
 #define QVP_DEFAULT_GAP_BIAS       0.6f
 #define QVP_DEFAULT_TAP_DISTANCE   6.0f
 #define QVP_DEFAULT_GRID_LINES     15u

@@ -653,7 +653,7 @@ public final class QvpCanvasController {
         let ws = p.selection()
         let t = Target.words(ws)
         if selectionHandle != 0 { p.moveHighlight(selectionHandle, t) }
-        else { selectionHandle = p.highlight(t, QvpHighlightStyle(mode: .band, band: selectionBand, padX: 0.6, layer: QvpLayer.SELECTION)) }
+        else { selectionHandle = p.highlight(t, QvpHighlightStyle(mode: .band, band: selectionBand, padX: QvpDefaults.SELECTION_PAD_X, layer: QvpLayer.SELECTION)) }
         onSelectionChanged?(ws); invalidate()
     }
 

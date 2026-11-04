@@ -86,6 +86,12 @@ void main() {
     expect(engine.looseKey('الله'), isNotEmpty);
     expect(rgba('#1a73e8'), 0x1a73e8ff);
     expect(rgba('#d6a326', 0.3), 0xd6a3264d);
+    // alpha rounds to the nearest step: 0.5 is 0x80 in every wrapper
+    expect(rgba('#1a73e8', 0.5), 0x1a73e880);
+    expect(QvpColor.withAlpha(0x1a73e8ff, 0.5), 0x1a73e880);
+    // a NaN alpha is 0 and an out-of-range one clamps, in every wrapper
+    expect(rgba('#1a73e8', double.nan), 0x1a73e800);
+    expect(QvpColor.withAlpha(0x1a73e800, 2), 0x1a73e8ff);
     expect(QvpColor.fromColor(QvpColor.toColor(0x1a73e8cc)), 0x1a73e8cc);
   });
 

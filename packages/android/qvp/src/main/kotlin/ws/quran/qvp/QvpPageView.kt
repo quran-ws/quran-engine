@@ -271,7 +271,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val ws = p.selection()
         val t = Target.words(ws)
         if (selectionHandle != 0) p.moveHighlight(selectionHandle, t)
-        else selectionHandle = p.highlight(t, QvpHighlightStyle(mode = HighlightMode.BAND, band = selectionBand, padX = 0.6f, layer = QvpLayer.SELECTION))
+        else selectionHandle = p.highlight(t, QvpHighlightStyle(mode = HighlightMode.BAND, band = selectionBand, padX = QvpDefaults.SELECTION_PAD_X, layer = QvpLayer.SELECTION))
         onSelectionChanged?.invoke(ws); invalidate()
     }
     /** Clear the selection band and the engine selection. */

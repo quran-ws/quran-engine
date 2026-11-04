@@ -4,6 +4,16 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+### Added
+- `QVP_DEFAULT_REFLOW_RELAX`, `QVP_DEFAULT_REFLOW_MAX_STRETCH` and `QVP_DEFAULT_SELECTION_PAD_X`
+  in `qvp.h`, mirrored in every wrapper's defaults table (`QvpDefaults` in Kotlin, Swift and
+  Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
+  from the table and the reflow specs take their defaults from it, so no wrapper copies the
+  numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
+- React Native: `DEFAULTS` holds every engine default under its header name, read from the
+  native module, which sends the whole `QvpDefaults` table. A key the native module lacks is
+  an error that names the key and says the native module is older than the package.
+
 ### Fixed
 - The example builds from a fresh clone. The root `.gitignore` ignored every PNG, so git
   never tracked the launcher icons that the Android manifest names. The rule now covers
@@ -13,6 +23,7 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 - React Native: the package checks that the native module is linked before it reads the
   module's constants. Without the module, the error now says `QvpModule not linked` instead
   of a `TypeError`.
+- React Native: `rgba` clamps a NaN alpha to 0, where it returned a malformed colour.
 
 ## [0.7.0] - 2026-10-14
 
