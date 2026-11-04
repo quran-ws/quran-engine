@@ -16,7 +16,7 @@ project(":qvp") {
     // once the module has applied the Android plugin, which the publishing plugin reads
     plugins.withId("com.android.library") {
         apply(plugin = "com.vanniktech.maven.publish")
-        val qvpVersion = providers.gradleProperty("qvpVersion").getOrElse("0.7.0")
+        val qvpVersion = providers.gradleProperty("qvpVersion").getOrElse("0.8.0")
         configure<MavenPublishBaseExtension> {
             configure(AndroidSingleVariantLibrary(variant = "release", sourcesJar = true, publishJavadocJar = true))
             coordinates("ws.quran", "qvp-android", qvpVersion)
