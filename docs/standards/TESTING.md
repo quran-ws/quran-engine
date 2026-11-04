@@ -49,7 +49,7 @@ only documents skips `engine`, `gates` and `web`, and a skipped job counts as pa
 | `gates (identity, ABI, conformance)` | PRs that change code | identity gate (8 pages), line shift, zoom control, passage and ABI tests, conformance fixtures, zoom table, then the web tests that read pages with `QVP_REQUIRE_DATA=1`: `smoke.mjs`, `lite-passage.test.mjs`, `scenarios.test.mjs`, `passage.test.mjs` | `gates` |
 | `standards (parity, versions, terminology, structure)` | every PR | parity (`--check`), versions, structure, terminology (zero findings), shellcheck over every shell script | `parity versions structure terminology shell` |
 | `web (wasm, smoke, lite)` | PRs that change code | wasm build, then without data: `smoke.mjs`, `lite.test.mjs`, `lite-passage.test.mjs`, and a parse of the web example | `web` |
-| `android`, `ios`, `flutter`, `react-native` | PRs that touch that package or its workflow. `android`, `ios` and `flutter` also run for `crates/` and the Cargo manifests; `react-native` also runs for the Kotlin library | build and the package's tests | none; each workflow lists its commands |
+| `android`, `ios`, `flutter`, `react-native` | PRs that touch that package or its workflow. `android`, `ios` and `flutter` also run for `crates/` and the Cargo manifests; `android`, `flutter` and `react-native` also run for the shared Android toolchain action; `react-native` also runs for the Kotlin library | build and the package's tests | none; each workflow lists its commands |
 | `nightly` | schedule | identity gate over all 604 pages, and the benchmark on page 042 uploaded as an artifact for comparison with `docs/MEASURED.md` | none |
 
 Locally, `scripts/check.sh` with no argument runs every command above once. `web` then

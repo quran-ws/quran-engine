@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/react-native.yml"
       - ".github/actions/android-toolchain/**"
+      - "scripts/build-engine-android.sh"
       - "packages/react-native/**"
       # The Android module compiles against the Kotlin library, so a change to the library's
       # sources or its build file can break the module.
