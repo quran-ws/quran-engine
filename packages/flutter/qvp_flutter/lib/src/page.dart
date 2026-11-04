@@ -299,11 +299,12 @@ class QvpPage extends ChangeNotifier {
 
   // ── Hit Testing ──
 
-  /// Exact outline hit, page units.
+  /// Exact hit, page units: the outline under the point, else the box of a word
+  /// or a decoration.
   QvpHit? hitTestExact(double x, double y) =>
       _enrichHit(_backend.hitTestExact(handle, x, y));
 
-  /// Exact outline hit, viewport px through current layout.
+  /// Exact hit, viewport px through current layout.
   QvpHit? hitTestExactView(double viewX, double viewY) =>
       _enrichHit(_backend.hitTestExactView(handle, viewX, viewY));
 

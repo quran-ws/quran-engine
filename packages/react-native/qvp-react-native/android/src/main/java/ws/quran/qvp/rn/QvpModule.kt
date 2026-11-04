@@ -76,11 +76,11 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
 
     // ── hit testing / layout (the view already does gestures; these are for scroll-into-view etc.) ──
     private fun hitOptions(o: Map<String, Any?>) = QvpHitOptions((o["maxDistance"] as? Number)?.toFloat() ?: QvpDefaults.TAP_DISTANCE, (o["gapBias"] as? Number)?.toFloat() ?: QvpDefaults.GAP_BIAS, o["preferExact"] != false)
-    /** Exact outline hit at a point in page units. */
+    /** Exact hit at a point in page units: the outline under the point, else the box of a word or a decoration. */
     @ReactMethod fun hitTestExact(tag: Int, x: Double, y: Double, promise: Promise) = withPage(tag, promise) { _, p -> p.hitTestExact(x.toFloat(), y.toFloat())?.let { Marshal.hit(p, it) } }
     /** Gap-aware hit at a point in page units. */
     @ReactMethod fun hitTest(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p -> p.hitTest(x.toFloat(), y.toFloat(), hitOptions(opt(opts)))?.let { Marshal.hit(p, it) } }
-    /** Exact outline hit at a point in view dp (density and pan/zoom removed here, the layout in the engine). */
+    /** Exact hit at a point in view dp (density and pan/zoom removed here, the layout in the engine). */
     @ReactMethod fun hitTestExactView(tag: Int, x: Double, y: Double, promise: Promise) = withPage(tag, promise) { v, p -> val d = v.resources.displayMetrics.density
         val (lx, ly) = p.viewToLayout(QvpView(v.inner.viewScale, v.inner.viewOx, v.inner.viewOy), (x * d).toFloat(), (y * d).toFloat())
         p.hitTestExactView(lx, ly)?.let { Marshal.hit(p, it) } }

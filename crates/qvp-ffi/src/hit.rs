@@ -5,16 +5,13 @@ use crate::convert::hit_area;
 use crate::types::*;
 use qvp_core::*;
 
-/// An exact hit in the one hit struct: the word's line, distance 0, `is_exact` 1.
-unsafe fn exact_hit(page: *const Page, h: HitExact) -> QvpHit {
-    let line = if h.word == u32::MAX { u32::MAX } else { (*page).data().words[h.word as usize].line_index as u32 };
-    QvpHit { word: h.word, path: h.path, decoration: h.decoration, line, distance: 0.0, is_exact: 1 }
-}
+/// The exact hit tests fill the one hit struct through the core's conversion, as the
+/// gap-aware ones do when they find an outline.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_hit_test_exact(page: *const Page, x: f32, y: f32, out: *mut QvpHit) -> i32 {
     guard(|| match (*page).hit_test_exact(x, y) {
         Some(h) => {
-            *out = exact_hit(page, h);
+            *out = hx((*page).exact_to_hit(h));
             1
         }
         None => 0,
@@ -24,7 +21,7 @@ pub unsafe extern "C" fn qvp_hit_test_exact(page: *const Page, x: f32, y: f32, o
 pub unsafe extern "C" fn qvp_hit_test_exact_view(page: *const Page, view_x: f32, view_y: f32, out: *mut QvpHit) -> i32 {
     guard(|| match (*page).hit_test_exact_view(view_x, view_y) {
         Some(h) => {
-            *out = exact_hit(page, h);
+            *out = hx((*page).exact_to_hit(h));
             1
         }
         None => 0,

@@ -655,6 +655,67 @@ void main() {
     page.layout(spec);
   });
 
+  // The exact and the gap-aware hit tests on a word's outline, a word's box
+  // alone, a decoration's outline and a decoration's box alone, in page units
+  // and in viewport px.
+  test('hit scenarios match the engine (conformance/scenarios/hit.json)', () {
+    final json = jsonDecode(
+      File('$repo/conformance/scenarios/hit.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
+    final tolerance = (json['tolerance'] as num).toDouble();
+    final cases = json['cases'] as List<dynamic>;
+    final s = json['spec'] as Map<String, dynamic>;
+    double f(String k) => (s[k] as num).toDouble();
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    p.layout(
+      QvpLayoutSpec(
+        viewportW: f('viewportW'),
+        viewportH: f('viewportH'),
+        padTop: f('padTop'),
+        padBottom: f('padBottom'),
+        padLeft: f('padLeft'),
+        padRight: f('padRight'),
+      ),
+    );
+    void same(QvpHit? got, Object? want, String what) {
+      if (want == null) {
+        expect(got, isNull, reason: '$what: got a hit, engine says none');
+        return;
+      }
+      expect(got, isNotNull, reason: '$what: got no hit');
+      final w = want as Map<String, dynamic>;
+      expect(
+        [got!.word, got.path, got.decoration, got.line, got.isExact],
+        [w['word'], w['path'], w['decoration'], w['line'], w['isExact']],
+        reason: what,
+      );
+      expect(
+        (got.distance - (w['distance'] as num)).abs() <= tolerance,
+        isTrue,
+        reason:
+            '$what distance: got ${got.distance}, engine says ${w['distance']}',
+      );
+    }
+
+    for (final c in cases) {
+      final x = (c['x'] as num).toDouble(), y = (c['y'] as num).toDouble();
+      final view = c['units'] == 'view';
+      final tag = 'hit ${c['name']} (${c['units']} $x, $y)';
+      same(
+        view ? p.hitTestExactView(x, y) : p.hitTestExact(x, y),
+        c['exact'],
+        '$tag exact',
+      );
+      same(
+        view ? p.hitTestView(x, y) : p.hitTest(x, y),
+        c['hit'],
+        '$tag gap-aware',
+      );
+    }
+    expect(cases.length, 8);
+    p.dispose();
+  });
+
   test('the reader\'s zoom control reflows the page and one loop draws it', () {
     const spec = QvpLayoutSpec(
       viewportW: 390,

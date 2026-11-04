@@ -35,3 +35,20 @@ fn gap_aware_hit_and_hit_boxes() {
     assert_eq!(bands.len(), 2);
     assert!(bands[0].y1 <= bands[1].y0 + 1e-3);
 }
+
+/// The C API's exact hit tests fill their hit with `exact_to_hit`, so its answers are the
+/// contract: a line for every hit, and `is_exact` only inside an outline.
+#[test]
+fn an_exact_hit_carries_its_line_and_is_exact_only_inside_an_outline() {
+    let p = page();
+    let on_ink = p.exact_to_hit(p.hit_test_exact(35.0, 15.0).unwrap());
+    assert_eq!((on_ink.word, on_ink.path, on_ink.line, on_ink.distance, on_ink.is_exact), (1, 1, 0, 0.0, true));
+    // inside word 1's box, between its two paths
+    let on_box = p.exact_to_hit(p.hit_test_exact(33.0, 8.5).unwrap());
+    assert_eq!((on_box.word, on_box.path, on_box.line, on_box.distance, on_box.is_exact), (1, NONE, 0, 0.0, false));
+
+    let (framed, _, title_path, decoration) = page_with_surah_frame(true);
+    let title = framed.exact_to_hit(framed.hit_test_exact(25.0, 5.0).unwrap());
+    assert_eq!((title.word, title.path, title.decoration), (NONE, title_path, decoration));
+    assert_eq!((title.line, title.is_exact), (0, true), "a decoration hit has the line of its first path");
+}
