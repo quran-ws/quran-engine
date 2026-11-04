@@ -70,10 +70,13 @@ static jintArray boxes_out(JNIEnv* env, const QvpBox* b, uint32_t n) {
 }
 /* An `(out, cap) → total` getter, complete: EXPR runs over `out` and `cap`, first into CAP0
  * records on the stack, then again into a block of the total's size when that was short.
- * `n` ends as the count in `out`. COLLECT_END frees the block. */
+ * `n` ends as the count in `out`. COLLECT_END frees the block. When the block cannot be had,
+ * the engine is out of memory and the call aborts with a message, never reading through NULL. */
 #define COLLECT(T, CAP0, out, n, EXPR) \
     T out##_first[CAP0]; T* out = out##_first; uint32_t cap = (CAP0); uint32_t n = (EXPR); \
-    if (n > cap) { out = (T*)malloc((size_t)n * sizeof(T)); cap = n; uint32_t got_ = (EXPR); if (got_ < n) n = got_; }
+    if (n > cap) { out = (T*)malloc((size_t)n * sizeof(T)); \
+        if (!out) (*env)->FatalError(env, "qvp: out of memory for an array result"); \
+        cap = n; uint32_t got_ = (EXPR); if (got_ < n) n = got_; }
 #define COLLECT_END(out) do { if (out != out##_first) free(out); } while (0)
 
 /* ───────── page ───────── */

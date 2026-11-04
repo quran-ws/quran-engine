@@ -18,13 +18,13 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 - Every wrapper handles a freed object, a second free and a large array result the same way
   (`docs/API.md`, conventions). A call on a freed page, atlas, ornament set or passage throws
   an error with the object's name: a `StateError` in Dart in every build mode, where a debug
-  assert stood before, a fatal error in Swift, where a closed ornament set returned nil, and a
-  rejection in React Native. The Flutter native backend no longer passes a freed handle's null
-  pointer to the engine. A second `free`, `close` or `dispose` does nothing, Flutter's
-  `QvpPage.dispose` included, and the Kotlin handle is atomic, where `close` held a lock that
-  the calls reading the handle did not. Every array getter grows its buffer to the total the
-  engine reports, where the Android bridge, the web wrapper and the Flutter backend stopped at
-  fixed caps such as 64 line bands, 1,024 highlight handles and a 256 KB scratch.
+  assert stood before, a fatal error in Swift and a rejection in React Native. The Flutter
+  native backend no longer passes a freed handle's null pointer to the engine. A second
+  `free`, `close` or `dispose` does nothing, Flutter's `QvpPage.dispose` included, and the
+  Kotlin handle is atomic, so two threads that close the same object free it once. Every
+  array getter grows its buffer to the total the engine reports, where the Android bridge,
+  the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
+  highlight handles and a 256 KB scratch.
 - The example builds from a fresh clone. The root `.gitignore` ignored every PNG, so git
   never tracked the launcher icons that the Android manifest names. The rule now covers
   the repository root only, and the React Native template's icons are tracked. The example

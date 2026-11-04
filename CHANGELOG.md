@@ -134,6 +134,10 @@ All notable changes to the engine and its packages. The format follows
   line shifts or the boxes of a highlight that is not moving. A `gap_bias` below 0 in
   `QvpHitOptions` and in `qvp_hit_areas` and `qvp_hit_areas_view` now means the engine
   default, 0.6, as a `max_distance` of 0 or less already means no limit.
+- **Breaking.** Swift: `QvpOrnaments.find`, `QvpPage.dress` with a closed set and
+  `QvpPassage.layout` on a closed passage stop the program with a fatal error that names the
+  object, such as `QvpOrnaments is closed`. They returned nil, the same answer as a refused
+  spec or no match. Check `isOpen` first where an object can close before its last call.
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and
@@ -153,13 +157,13 @@ All notable changes to the engine and its packages. The format follows
 - Every wrapper handles a freed object, a second free and a large array result the same way
   (`docs/API.md`, conventions). A call on a freed page, atlas, ornament set or passage throws
   an error with the object's name: a `StateError` in Dart in every build mode, where a debug
-  assert stood before, a fatal error in Swift, where a closed ornament set returned nil, and a
-  rejection in React Native. The Flutter native backend no longer passes a freed handle's null
-  pointer to the engine. A second `free`, `close` or `dispose` does nothing, Flutter's
-  `QvpPage.dispose` included, and the Kotlin handle is atomic, where `close` held a lock that
-  the calls reading the handle did not. Every array getter grows its buffer to the total the
-  engine reports, where the Android bridge, the web wrapper and the Flutter backend stopped at
-  fixed caps such as 64 line bands, 1,024 highlight handles and a 256 KB scratch.
+  assert stood before, a fatal error in Swift and a rejection in React Native. The Flutter
+  native backend no longer passes a freed handle's null pointer to the engine. A second
+  `free`, `close` or `dispose` does nothing, Flutter's `QvpPage.dispose` included, and the
+  Kotlin handle is atomic, so two threads that close the same object free it once. Every
+  array getter grows its buffer to the total the engine reports, where the Android bridge,
+  the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
+  highlight handles and a 256 KB scratch.
 - A malformed page, atlas or ornament file is an error from the decoder, not a panic or
   an abort. On wasm32 a panic is a trap, so a damaged download could take a host app down.
   The page decoder checks the magic, the version, `quant`, every count against its

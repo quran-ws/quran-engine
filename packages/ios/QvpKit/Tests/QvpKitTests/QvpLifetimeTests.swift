@@ -74,5 +74,15 @@ struct QvpClosedObjectTests {
         }
         #expect(says(result, "QvpOrnaments is closed"))
     }
+
+    @Test func aDressWithAClosedOrnamentSetIsAFatalError() async {
+        let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
+            let page = try QvpPage(bytes: try page042())
+            let set = try QvpOrnaments(bytes: QvpDressTests.ornamentBytes)
+            set.close()
+            _ = page.dress(set, DressSpec(ayahMark: .index(0)))
+        }
+        #expect(says(result, "QvpOrnaments is closed"))
+    }
 }
 #endif
