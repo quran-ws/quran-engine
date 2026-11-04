@@ -185,6 +185,8 @@ All notable changes to the engine and its packages. The format follows
   `QvpView.zoomAbout`.
 
 ### Fixed
+- `scripts/sync-android-test-data.sh` runs under the bash 3.2 that macOS ships. It used
+  `mapfile`, which that bash lacks, so the script failed on a Mac.
 - Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
   steps, as the Swift, Dart and web wrappers do. They truncated, so alpha 0.5 gave `0x7f` on
   Android and `0x80` everywhere else. A NaN alpha clamps to 0 in every wrapper, where
