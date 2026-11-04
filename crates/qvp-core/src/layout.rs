@@ -295,18 +295,22 @@ impl Page {
             ((m.avail_h / m.scale - self.height()) / (m.nominal - 1.0)).max(0.0)
         }
     }
+    /// The width the page is fitted into, in viewport px: the viewport, bounded by the page's
+    /// aspect ratio when the host asks for it, so a wide screen does not stretch the lines.
+    fn content_width(&self, spec: &LayoutSpec) -> f32 {
+        let (pw, ph) = (self.width(), self.height());
+        if spec.max_aspect_slack > 0.0 {
+            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
+        } else {
+            spec.viewport_w
+        }
+    }
     /// What a PRINTED layout of `spec` is measured against: the content width the page is fitted
     /// into, the scale that fits it once the printed side margins are cropped, the grid it sits
     /// on, and the padded height there is to fill.
     fn printed_metrics(&self, spec: &LayoutSpec) -> PrintedMetrics {
-        let (pw, ph) = (self.width(), self.height());
-        // The content width: the viewport, bounded by the page's aspect ratio when the
-        // host asks for it, so a wide screen does not stretch the lines.
-        let content_w = if spec.max_aspect_slack > 0.0 {
-            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
-        } else {
-            spec.viewport_w
-        };
+        let pw = self.width();
+        let content_w = self.content_width(spec);
         let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
         PrintedMetrics {
             content_w,
@@ -451,11 +455,7 @@ impl Page {
     fn layout_reflow(&mut self, spec: &LayoutSpec, r: &ReflowSpec) -> Layout {
         let pw = self.width();
         let ph = self.height();
-        let content_w = if spec.max_aspect_slack > 0.0 {
-            spec.viewport_w.min(spec.viewport_h * pw / ph * spec.max_aspect_slack)
-        } else {
-            spec.viewport_w
-        };
+        let content_w = self.content_width(spec);
         let crop = (spec.crop_left.max(0.0), spec.crop_right.max(0.0));
         let page_w = (pw - crop.0 - crop.1).max(1.0);
         let zoom = if r.breaks == crate::Breaks::Printed {

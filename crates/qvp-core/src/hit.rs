@@ -1,5 +1,5 @@
 //! Line bands, hit boxes and gap-aware hit testing.
-use crate::{Page, NONE};
+use crate::{HitExact, Page, NONE};
 
 /// Vertical band of a printed line (page units): line-spacing-derived, plus the ink extent.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -134,24 +134,23 @@ impl Page {
         out
     }
 
+    /// An exact hit as a gap-aware one: the line of its word, or of its decoration's first
+    /// path, at distance 0. `is_exact` is true when the point is inside an outline.
+    fn exact_to_hit(&self, h: HitExact) -> Hit {
+        let line = if h.word != NONE {
+            self.data().words[h.word as usize].line_index as u32
+        } else {
+            self.geometry().table[self.data().decorations[h.decoration as usize].first_path as usize].line
+        };
+        Hit { word: h.word, path: h.path, decoration: h.decoration, line, distance: 0.0, is_exact: h.path != NONE }
+    }
+
     /// Nearest-with-direction hit test in page units (no dead zones on a printed line).
     pub fn hit_test(&self, x: f32, y: f32, opt: &HitOptions) -> Option<Hit> {
         if opt.prefer_exact {
             if let Some(h) = self.hit_test_exact(x, y) {
                 if h.path != NONE || h.decoration != NONE {
-                    let line = if h.word != NONE {
-                        self.data().words[h.word as usize].line_index as u32
-                    } else {
-                        self.geometry().table[self.data().decorations[h.decoration as usize].first_path as usize].line
-                    };
-                    return Some(Hit {
-                        word: h.word,
-                        path: h.path,
-                        decoration: h.decoration,
-                        line,
-                        distance: 0.0,
-                        is_exact: h.path != NONE,
-                    });
+                    return Some(self.exact_to_hit(h));
                 }
             }
         }
@@ -308,19 +307,7 @@ impl Page {
         if opt.prefer_exact {
             if let Some(h) = self.hit_test_exact_view(vx, vy) {
                 if h.path != NONE || h.decoration != NONE {
-                    let line = if h.word != NONE {
-                        self.data().words[h.word as usize].line_index as u32
-                    } else {
-                        self.geometry().table[self.data().decorations[h.decoration as usize].first_path as usize].line
-                    };
-                    return Some(Hit {
-                        word: h.word,
-                        path: h.path,
-                        decoration: h.decoration,
-                        line,
-                        distance: 0.0,
-                        is_exact: h.path != NONE,
-                    });
+                    return Some(self.exact_to_hit(h));
                 }
             }
         }

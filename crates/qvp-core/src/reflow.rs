@@ -10,7 +10,7 @@
 //! or header title behind. A surah name or basmalah keeps a row of its own, and text never
 //! flows across it. The printed frame around a surah name belongs to the printed layout only.
 use crate::Page;
-use qvp_format::{DecoKind, IBox, Mark};
+use qvp_format::{DecoKind, Mark};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -23,6 +23,8 @@ mod vertical;
 
 use atoms::{Atom, Neighbour};
 use sajdah::SajdahLine;
+
+pub(crate) use sajdah::line_under_stroke;
 
 const NONE: u32 = u32::MAX;
 
@@ -296,18 +298,7 @@ pub(crate) fn prepare(page: &Page) -> Prepared {
             let paths: Vec<u32> = (deco.first_path..deco.first_path + deco.n_paths as u32)
                 .filter(|&pi| d.paths[pi as usize].mark == Mark::SajdahLine)
                 .collect();
-            let mut stroke: Option<IBox> = None;
-            for &pi in &paths {
-                let b = d.paths[pi as usize].bbox;
-                stroke = Some(match stroke {
-                    None => b,
-                    Some(mut acc) => {
-                        acc.union(&b);
-                        acc
-                    }
-                });
-            }
-            let b = stroke?;
+            let b = page.paths_bbox(paths.iter().copied())?;
             let q = page.quant();
             let (x0, x1) = (b.x0 as f32 / q, b.x1 as f32 / q);
             (x1 > x0).then(|| SajdahLine { deco: di as u32, paths, x0, x1, words: page.words_under_stroke(&b) })

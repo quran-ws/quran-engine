@@ -1,7 +1,7 @@
 //! The sajdah line: the stroke the print draws over the words of a sajdah, and the sign beside it.
 use super::{Placement, Reflowed, Repeat, NONE};
 use crate::Page;
-use qvp_format::{IBox, Mark};
+use qvp_format::{IBox, Mark, PageData};
 
 /// A sajdah line stroke the reflow draws over its words: the decoration that holds it, the
 /// stroke's own paths, its printed horizontal extent in page units, and the words under it.
@@ -13,22 +13,24 @@ pub(super) struct SajdahLine {
     pub(super) words: Vec<u32>,
 }
 
+/// The line a sajdah line stroke is drawn over: the line of the nearest words below it that it
+/// overlaps. `b` is the box of the stroke's own ink. `None` when no word sits under it.
+pub(crate) fn line_under_stroke(d: &PageData, b: &IBox) -> Option<u16> {
+    let tol = (2.0 * d.header.quant as f32) as i32;
+    d.words
+        .iter()
+        .filter(|w| w.bbox.x0 < b.x1 && w.bbox.x1 > b.x0 && w.bbox.y0 >= b.y0 - tol)
+        .min_by_key(|w| w.bbox.y0 - b.y1)
+        .map(|w| w.line_index)
+}
+
 impl Page {
     /// The words a sajdah line stroke is drawn over: the ones it spans horizontally on the
     /// line directly below it. `b` is the box of the stroke's own ink, not the decoration's,
     /// which can also hold the sign printed in the margin.
     pub(crate) fn words_under_stroke(&self, b: &IBox) -> Vec<u32> {
-        let q = self.quant();
         let d = self.data();
-        let tol = (2.0 * q) as i32;
-        // the line under the stroke: the nearest words below it that it overlaps
-        let under = d
-            .words
-            .iter()
-            .filter(|w| w.bbox.x0 < b.x1 && w.bbox.x1 > b.x0 && w.bbox.y0 >= b.y0 - tol)
-            .min_by_key(|w| w.bbox.y0 - b.y1)
-            .map(|w| w.line_index);
-        let Some(li) = under else { return vec![] };
+        let Some(li) = line_under_stroke(d, b) else { return vec![] };
         d.words
             .iter()
             .enumerate()
@@ -56,20 +58,20 @@ impl Page {
     /// The ink of a decoration apart from its sajdah line: the sign in the margin, and
     /// anything else drawn with it. The decoration's own box holds both and is no use for
     /// placing either.
-    pub(crate) fn deco_mark_bbox(&self, di: usize) -> qvp_format::IBox {
+    pub(crate) fn deco_mark_bbox(&self, di: usize) -> IBox {
+        self.paths_bbox(self.deco_other_paths(di)).unwrap_or(self.data().decorations[di].bbox)
+    }
+
+    /// The box around the ink of a set of paths, or `None` for no paths.
+    pub(super) fn paths_bbox(&self, paths: impl IntoIterator<Item = u32>) -> Option<IBox> {
         let d = self.data();
-        let mut acc: Option<qvp_format::IBox> = None;
-        for pi in self.deco_other_paths(di) {
-            let b = d.paths[pi as usize].bbox;
-            acc = Some(match acc {
-                None => b,
-                Some(mut a) => {
-                    a.union(&b);
-                    a
-                }
-            });
+        let mut paths = paths.into_iter().peekable();
+        paths.peek()?;
+        let mut bbox = IBox::EMPTY;
+        for pi in paths {
+            bbox.union(&d.paths[pi as usize].bbox);
         }
-        acc.unwrap_or(d.decorations[di].bbox)
+        Some(bbox)
     }
 
     /// The paths of a decoration that are not its sajdah line: the sign in the margin, and

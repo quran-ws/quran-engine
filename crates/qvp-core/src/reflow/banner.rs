@@ -27,13 +27,9 @@ impl Page {
         if omitted.is_empty() {
             return deco.bbox;
         }
-        let mut bbox = IBox::EMPTY;
-        for pi in deco.first_path..deco.first_path + deco.n_paths as u32 {
-            if omitted.binary_search(&pi).is_err() {
-                bbox.union(&d.paths[pi as usize].bbox);
-            }
-        }
-        bbox
+        let kept =
+            (deco.first_path..deco.first_path + deco.n_paths as u32).filter(|pi| omitted.binary_search(pi).is_err());
+        self.paths_bbox(kept).unwrap_or(IBox::EMPTY)
     }
 
     /// A banner line keeps its printed drawing, shrunk to the row width and centred on it.
