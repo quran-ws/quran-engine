@@ -9,6 +9,7 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import '../types.dart';
 import 'qvp_backend.dart';
+import 'spec_zoom.dart';
 
 QvpWebBackend? _defaultWebBackend;
 Future<QvpWebBackend>? _initWebFuture;
@@ -541,6 +542,28 @@ class QvpWebBackend implements QvpBackend {
   }
 
   @override
+  QvpView viewPan(QvpView view, double dx, double dy) => _jsToView(
+    js.callMethod<JSObject>('viewPan'.toJS, _viewToJs(view), dx.toJS, dy.toJS),
+  );
+
+  @override
+  QvpView viewClamp(
+    QvpView view,
+    double contentW,
+    double contentH,
+    double viewportW,
+    double viewportH,
+  ) => _jsToView(
+    js.callMethodVarArgs<JSObject>('viewClamp'.toJS, [
+      _viewToJs(view),
+      contentW.toJS,
+      contentH.toJS,
+      viewportW.toJS,
+      viewportH.toJS,
+    ]),
+  );
+
+  @override
   void dispose() {}
 
   // ── Page Lifecycle ──
@@ -1060,16 +1083,8 @@ class QvpWebBackend implements QvpBackend {
       handle,
     ).callMethod<JSObject>('zoomSpec'.toJS, _specToJs(spec), _zoomToJs(zoom));
     final r = s['reflow'] as JSObject?;
-    final knobs = spec.reflow ?? const QvpReflowSpec();
-    final zNum = r != null
-        ? (r['zoom'] as JSNumber?)?.toDartDouble ?? 0.0
-        : 0.0;
-    final zoomed = zNum > 1.0001;
-    return spec.copyWith(
-      reflow: zoomed || spec.reflow != null
-          ? knobs.copyWith(zoom: zoomed ? zNum : 0)
-          : null,
-    );
+    final z = r == null ? 0.0 : (r['zoom'] as JSNumber?)?.toDartDouble ?? 0.0;
+    return withReflowZoom(spec, z);
   }
 
   @override
@@ -1217,6 +1232,25 @@ class QvpWebBackend implements QvpBackend {
     _specToJs(spec),
     max.toJS,
   )).toDartDouble;
+
+  @override
+  ({double x, double y}) viewToLayout(
+    PageHandle handle,
+    QvpView view,
+    double viewX,
+    double viewY,
+  ) {
+    final res = _page(handle).callMethod<JSObject>(
+      'viewToLayout'.toJS,
+      _viewToJs(view),
+      viewX.toJS,
+      viewY.toJS,
+    );
+    return (
+      x: (res['x'] as JSNumber).toDartDouble,
+      y: (res['y'] as JSNumber).toDartDouble,
+    );
+  }
 
   @override
   ({double x0, double y0, double x1, double y1}) wordBoundsView(

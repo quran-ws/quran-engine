@@ -369,3 +369,24 @@ fn a_magnifying_pinch_never_shrinks_the_page_inside_the_screen() {
         assert!(c.view.scale >= fit - 1e-4, "a pinch out took the page to {} below its settled {fit}", c.view.scale);
     }
 }
+
+#[test]
+fn a_pinch_that_comes_back_lays_out_the_step_it_began_on() {
+    let Some(mut p) = common::page(428) else { return };
+    let s = spec();
+    p.layout(&s);
+    let start = Zoom::default();
+    let first = p.zoom_steps(&s)[0];
+    // out past the first step, as one gesture measured from where it began
+    let out = p.zoom_pinch(&s, start, View::default(), first * 1.05, middle(&s));
+    assert!(out.relaid && out.zoom.step >= 1, "the pinch out did not leave the printed page");
+    assert!(p.current_layout().unwrap().is_reflowed());
+    // the same gesture, the fingers back where they went down
+    let back = p.zoom_pinch(&s, start, out.view, 1.0, middle(&s));
+    assert_eq!(back.zoom.step, 0, "the fingers came back to the printed page");
+    assert!(back.relaid, "the page stayed laid out at the step the pinch passed through");
+    assert!(!p.current_layout().unwrap().is_reflowed(), "the control says printed, the layout says reflowed");
+    // and a frame that changes nothing lays out nothing
+    let still = p.zoom_pinch(&s, start, back.view, 1.0, middle(&s));
+    assert!(!still.relaid);
+}

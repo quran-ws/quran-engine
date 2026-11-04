@@ -15,6 +15,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 - The build file's default `qvpVersion` is the workspace version, 0.7.0, where it was
   `0.1.0-SNAPSHOT`. `publishToMavenLocal` needs no `-PqvpVersion` flag.
 
+### Removed
+- **Breaking.** `QvpPageView.MIN_ZOOM` is gone, because the engine applies the pinch limits.
+  The floor is the fitted page. `QvpPageView.MAX_ZOOM` stays and is `QvpDefaults.MAX_ZOOM`.
+
 ### Fixed
 - Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
   steps, as the Swift, Dart and web wrappers do. They truncated, so alpha 0.5 gave `0x7f` on
@@ -30,6 +34,15 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   array getter grows its buffer to the total the engine reports, where the Android bridge,
   the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
   highlight handles and a 256 KB scratch.
+- Every pan, zoom and view computation in `QvpPageView` goes through the engine: a tap is
+  inverted with `QvpPage.viewToLayout`, a magnifying pinch is placed by
+  `QvpEngine.viewZoomAbout` with the fitted page as the floor and `maxZoom` as the ceiling, a
+  drag by `QvpEngine.viewPan`, and the view a drag or a pinch produces is held with
+  `dressClamp`. A pinch follows the rule in `docs/API.md`: the engine zooms about the focal
+  point the gesture began on, by the factor of the whole gesture, and the view pans the
+  answer by the drift of the focal point, so two fingers drag the page. `zoomSpec` keeps the
+  host's reflow knobs on the printed page. The instrumented tests replay
+  `conformance/scenarios/zoom.json`.
 
 ## [0.7.0] - 2026-10-14
 

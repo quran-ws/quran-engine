@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Fetch the pages and the scenario file the Android instrumentation tests read. Page data is
+# Fetch the pages and the scenario files the Android instrumentation tests read. Page data is
 # not part of the SDK. Input: QVP_PAGES, dist/pages or the data release named by QVP_DATA_TAG.
-# Output: packages/android/qvp/src/androidTest/assets/{NNN.qvp, passage.json}.
+# Output: packages/android/qvp/src/androidTest/assets/{NNN.qvp, passage.json, zoom.json}.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -40,6 +40,7 @@ else
   done
 fi
 cp conformance/scenarios/passage.json "$destination/passage.json"
+cp conformance/scenarios/zoom.json "$destination/zoom.json"
 
 python3 - "$destination" "$tag" <<'PY'
 import hashlib

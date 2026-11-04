@@ -61,6 +61,22 @@ public struct QvpView: Equatable {
     public init(scale: Float = 1, offsetX: Float = 0, offsetY: Float = 0) { self.scale = scale; self.offsetX = offsetX; self.offsetY = offsetY }
     var c: QvpFFI.QvpView { QvpFFI.QvpView(scale: scale, offset_x: offsetX, offset_y: offsetY) }
     init(_ v: QvpFFI.QvpView) { self.scale = v.scale; self.offsetX = v.offset_x; self.offsetY = v.offset_y }
+
+    /// This view zoomed by `factor` about a point of the viewport, with the scale held between
+    /// `min` and `max`: the point under the fingers stays under them. A limit of 0 is the
+    /// engine's own, and a ceiling under the floor is the floor. A host hands this the view and
+    /// the focal point the pinch began on and the factor of the whole gesture.
+    public func zoomAbout(focalX: Float, focalY: Float, factor: Float, min: Float = 0, max: Float = 0) -> QvpView {
+        var v = c, out = QvpFFI.QvpView()
+        qvp_view_zoom_about(&v, focalX, focalY, factor, min, max, &out)
+        return QvpView(out)
+    }
+    /// This view moved by a drag, in view points.
+    public func pan(dx: Float, dy: Float) -> QvpView {
+        var v = c, out = QvpFFI.QvpView()
+        qvp_view_pan(&v, dx, dy, &out)
+        return QvpView(out)
+    }
 }
 
 extension QvpPage {
@@ -112,8 +128,10 @@ extension QvpPage {
     public func zoomSpec(_ spec: QvpLayoutSpec, _ zoom: QvpZoom) -> QvpLayoutSpec {
         var s = spec.c, z = zoom.c, out = QvpFFI.QvpLayoutSpec()
         qvp_zoom_spec(p, &s, &z, &out)
-        // The control owns the zoom alone. Dropping the host's knobs at the printed size would
-        // leave the pinch that leaves it to lay the page out with the engine's defaults.
+        // The control owns the reflow zoom alone, and the engine hands every other field back as
+        // the host set it. So the host's own spec carries every knob, and only the zoom is read
+        // back. On the printed page the zoom is 0 and the knobs stay: dropping them there would
+        // leave the pinch that leaves the printed page to lay it out with the engine's defaults.
         var spec = spec
         if out.reflow_zoom > 0 || spec.reflow != nil {
             var reflow = spec.reflow ?? QvpReflowSpec(zoom: 0)
@@ -121,6 +139,14 @@ extension QvpPage {
             spec.reflow = reflow
         }
         return spec
+    }
+    /// Where a point of the viewport lands in the laid-out page: how a host turns a touch into
+    /// a `hitTestView`. The inverse of `offset + scale·p`.
+    public func viewToLayout(_ view: QvpView, _ viewX: Float, _ viewY: Float) -> (x: Float, y: Float) {
+        var v = view.c
+        var out = [Float](repeating: 0, count: 2)
+        qvp_view_to_layout(p, &v, viewX, viewY, &out)
+        return (out[0], out[1])
     }
     /// Hold the content against the viewport: centre an axis it does not fill, cover the
     /// viewport on an axis it overflows, so no drag opens a blank strip beside the page.

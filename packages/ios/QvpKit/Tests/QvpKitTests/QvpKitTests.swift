@@ -352,8 +352,9 @@ final class QvpKitTests: XCTestCase {
         // …and a ceiling of 0 or less is the engine's own.
         XCTAssertEqual(QvpViewPolicy.clampZoom(20, fit: 1, ceiling: 0), QvpViewPolicy.maxZoom)
         XCTAssertEqual(QvpViewPolicy.clampZoom(20, fit: 2, ceiling: 1.5), 2)
-        // …and under BOTH floors it is the larger of them.
-        XCTAssertEqual(QvpViewPolicy.clampZoom(0.1, fit: 0.2, ceiling: 0.1), QvpViewPolicy.minZoom)
+        // …and the settled page is the floor even when it is small: a wide screen fits the
+        // page below the engine's default floor, and a pinch must not jump up to that floor.
+        XCTAssertEqual(QvpViewPolicy.clampZoom(0.1, fit: 0.2, ceiling: 0.1), 0.2, accuracy: 1e-6)
         c.pinchEnded()
         c.resetView()
         // line spacing only opens up: the engine clamps values below 1 to the printed lineSpacing
@@ -1098,6 +1099,116 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(passage.currentLayout, cut)
         XCTAssertThrowsError(try QvpPassage(pages: [page], surah: 2, from: 1))
         XCTAssertThrowsError(try QvpPassage(pages: [page, page], surah: 2, from: 255))
+    }
+
+    /// Every wrapper replays conformance/scenarios/zoom.json: the reader's pan and zoom, from the
+    /// fit through a pinch under each reflowing control, and must match the engine's numbers.
+    func testZoomScenariosMatchTheEngine() throws {
+        let url = Self.repo.appendingPathComponent("conformance/scenarios/zoom.json")
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let tolerance = json["tolerance"] as! Double
+        func close(_ a: Float, _ b: Double, _ what: String) {
+            XCTAssertLessThanOrEqual(abs(Double(a) - b), tolerance * max(1, abs(b)), "\(what): got \(a), engine says \(b)")
+        }
+        func number(_ o: [String: Any], _ k: String) -> Float { Float((o[k] as! NSNumber).doubleValue) }
+        func view(_ o: [String: Any]) -> QvpView { QvpView(scale: number(o, "scale"), offsetX: number(o, "offsetX"), offsetY: number(o, "offsetY")) }
+        func same(_ v: QvpView, _ o: [String: Any], _ what: String) {
+            close(v.scale, (o["scale"] as! NSNumber).doubleValue, "\(what) scale")
+            close(v.offsetX, (o["offsetX"] as! NSNumber).doubleValue, "\(what) offsetX")
+            close(v.offsetY, (o["offsetY"] as! NSNumber).doubleValue, "\(what) offsetY")
+        }
+        let modes: [String: QvpZoomMode] = ["stepped": .stepped, "continuous": .continuous, "magnify": .magnify]
+        func zoom(_ o: [String: Any]) -> QvpZoom { QvpZoom(mode: modes[o["mode"] as! String]!, step: (o["step"] as! NSNumber).intValue, zoom: number(o, "zoom")) }
+        let s = json["spec"] as! [String: Any], r = s["reflow"] as! [String: Any]
+        let fills: [String: QvpFill] = ["ragged": .ragged, "justified": .justified, "centred": .centred]
+        let spec = QvpLayoutSpec(viewportW: number(s, "viewportW"), viewportH: number(s, "viewportH"), padTop: number(s, "padTop"), padBottom: number(s, "padBottom"),
+                                 padLeft: number(s, "padLeft"), padRight: number(s, "padRight"), lineSpacing: number(s, "lineSpacing"), fillHeight: s["fillHeight"] as! Bool,
+                                 gridLines: (s["gridLines"] as! NSNumber).intValue, cropLeft: number(s, "cropLeft"), cropRight: number(s, "cropRight"),
+                                 maxAspectSlack: number(s, "maxAspectSlack"),
+                                 reflow: QvpReflowSpec(zoom: number(r, "zoom"), fill: fills[r["fill"] as! String]!, wordGap: number(r, "wordGap"), maxStretch: number(r, "maxStretch")),
+                                 surahFrames: s["surahFrames"] as! Bool)
+        let page = try Self.loadPage(); defer { page.close() }
+        let l = page.layout(spec)
+        let fit = json["fit"] as! [String: Any]
+        for (k, got) in [("fitScale", l.fitScale), ("fitX", l.fitX), ("fitY", l.fitY), ("contentW", l.contentW), ("contentH", l.contentH)] {
+            close(got, (fit[k] as! NSNumber).doubleValue, "fit \(k)")
+        }
+        for c in json["zoomAbout"] as! [[String: Any]] {
+            let got = view(c["view"] as! [String: Any]).zoomAbout(focalX: number(c, "focalX"), focalY: number(c, "focalY"), factor: number(c, "factor"), min: number(c, "min"), max: number(c, "max"))
+            same(got, c["result"] as! [String: Any], "zoomAbout ×\(number(c, "factor")) max \(number(c, "max"))")
+        }
+        let pan = json["pan"] as! [String: Any]
+        same(view(pan["view"] as! [String: Any]).pan(dx: number(pan, "dx"), dy: number(pan, "dy")), pan["result"] as! [String: Any], "pan")
+        for c in json["clamp"] as! [[String: Any]] {
+            let v = view(c["view"] as! [String: Any])
+            same(page.viewClamp(v, contentW: l.contentW, contentH: l.contentH, viewportW: spec.viewportW, viewportH: spec.viewportH), c["result"] as! [String: Any], "clamp of \(v.offsetX), \(v.offsetY)")
+        }
+        let toLayout = json["viewToLayout"] as! [String: Any]
+        let held = view(toLayout["view"] as! [String: Any])
+        for p in toLayout["points"] as! [[NSNumber]] {
+            let got = page.viewToLayout(held, p[0].floatValue, p[1].floatValue)
+            close(got.x, p[2].doubleValue, "viewToLayout(\(p[0]), \(p[1])) x"); close(got.y, p[3].doubleValue, "viewToLayout(\(p[0]), \(p[1])) y")
+        }
+        for c in json["isZoomed"] as! [[String: Any]] {
+            let v = view(c["view"] as! [String: Any])
+            XCTAssertEqual(zoom(c["zoom"] as! [String: Any]).isZoomed(v, fitScale: number(c, "fitScale")), c["result"] as! Bool, "isZoomed at scale \(v.scale)")
+        }
+        let fitted = QvpView(scale: l.fitScale, offsetX: l.fitX, offsetY: l.fitY)
+        for c in json["pinches"] as! [[String: Any]] {
+            let tag = "\(c["mode"] as! String) pinch"
+            // each pinch starts from the printed layout, as the generator did
+            page.layout(spec)
+            let got = page.zoomPinch(spec, zoom(c["start"] as! [String: Any]), fitted, factor: number(c, "factor"), focalX: number(c, "focalX"), focalY: number(c, "focalY"))
+            let want = zoom(c["zoom"] as! [String: Any])
+            XCTAssertEqual(got.zoom.mode, want.mode, tag); XCTAssertEqual(got.zoom.step, want.step, tag)
+            close(got.zoom.zoom, Double(want.zoom), "\(tag) zoom")
+            same(got.view, c["view"] as! [String: Any], tag)
+            XCTAssertEqual(got.relaid, c["relaid"] as! Bool, tag)
+            XCTAssertEqual(got.zoom.isZoomed(got.view, fitScale: l.fitScale), c["zoomedAfter"] as! Bool, "\(tag) zoomed after")
+            // the spec the control asks for comes back whole: the zoom in force and the host's knobs
+            let w = c["spec"] as! [String: Any]
+            let asks = page.zoomSpec(spec, got.zoom)
+            let reflow = try XCTUnwrap(asks.reflow, "\(tag) reflows")
+            close(asks.viewportW, (w["viewportW"] as! NSNumber).doubleValue, "\(tag) spec viewportW")
+            close(asks.padTop, (w["padTop"] as! NSNumber).doubleValue, "\(tag) spec padTop")
+            XCTAssertEqual(asks.surahFrames, w["surahFrames"] as! Bool, "\(tag) spec surahFrames")
+            close(reflow.zoom, (w["reflowZoom"] as! NSNumber).doubleValue, "\(tag) spec reflow zoom")
+            XCTAssertEqual(reflow.fill, fills[w["fill"] as! String]!, "\(tag) spec fill")
+            close(reflow.wordGap, (w["wordGap"] as! NSNumber).doubleValue, "\(tag) spec wordGap")
+            close(reflow.maxStretch, (w["maxStretch"] as! NSNumber).doubleValue, "\(tag) spec maxStretch")
+        }
+        // On the printed page the control reflows nothing, and the host's knobs come back as it set them.
+        let printed = json["printedSpec"] as! [String: Any], pw = printed["spec"] as! [String: Any]
+        let asks = page.zoomSpec(spec, zoom(printed["zoom"] as! [String: Any]))
+        let kept = try XCTUnwrap(asks.reflow, "printed spec keeps the reflow knobs")
+        close(asks.viewportW, (pw["viewportW"] as! NSNumber).doubleValue, "printed spec viewportW")
+        close(asks.padTop, (pw["padTop"] as! NSNumber).doubleValue, "printed spec padTop")
+        XCTAssertEqual(asks.surahFrames, pw["surahFrames"] as! Bool, "printed spec surahFrames")
+        close(kept.zoom, (pw["reflowZoom"] as! NSNumber).doubleValue, "printed spec reflow zoom")
+        XCTAssertEqual(kept.fill, fills[pw["fill"] as! String]!, "printed spec fill")
+        close(kept.wordGap, (pw["wordGap"] as! NSNumber).doubleValue, "printed spec wordGap")
+        close(kept.maxStretch, (pw["maxStretch"] as! NSNumber).doubleValue, "printed spec maxStretch")
+        // A pinch whose fingers drift, replayed as a page view runs it: the engine works from the
+        // control and the focal point the gesture began on, with the factor of the whole gesture;
+        // the magnifying glass zooms the view the pinch began on, and the reflowing controls take
+        // the view the last frame returned. The host pans the answer by the drift and holds it.
+        for g in json["drifts"] as! [[String: Any]] {
+            page.layout(spec)
+            let start = zoom(g["start"] as! [String: Any]), began = view(g["view"] as! [String: Any])
+            let fx = number(g, "focalX"), fy = number(g, "focalY")
+            var base = began
+            for (i, f) in (g["frames"] as! [[String: Any]]).enumerated() {
+                let tag = "\(g["mode"] as! String) drifting pinch, frame \(i)"
+                let c = page.zoomPinch(spec, start, start.mode == .magnify ? began : base, factor: number(f, "factor"), focalX: fx, focalY: fy)
+                base = c.view
+                let drawn = page.dressClamp(c.view.pan(dx: number(f, "focalX") - fx, dy: number(f, "focalY") - fy), viewportW: spec.viewportW, viewportH: spec.viewportH)
+                let want = zoom(f["zoom"] as! [String: Any])
+                XCTAssertEqual(c.zoom.mode, want.mode, tag); XCTAssertEqual(c.zoom.step, want.step, tag)
+                close(c.zoom.zoom, Double(want.zoom), "\(tag) zoom")
+                XCTAssertEqual(c.relaid, f["relaid"] as! Bool, "\(tag) relaid")
+                same(drawn, f["view"] as! [String: Any], tag)
+            }
+        }
     }
 
     func testPassageScenariosMatchTheEngine() throws {

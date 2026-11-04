@@ -733,11 +733,11 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const s = this.e.scratch2 + 40960; this._writeLayoutSpec(spec, s);
       const z = this._putZoom(zoom, this.e.scratch2 + 41984);
       this.e.ex.qvp_zoom_spec(this.h, s, z, this.e.scratch);
-      const at = this.e.scratch + 48;
-      const v = this.e.dv().getFloat32(at, true);
-      // The control owns the zoom alone. The host's other reflow knobs come back as it set
-      // them, on the printed page too, where the zoom is 0: dropping them there would leave the
-      // pinch that leaves the printed page to lay it out with the engine's defaults.
+      const v = this.e.dv().getFloat32(this.e.scratch + 48, true);
+      // The control owns the reflow zoom alone, and the engine hands every other field back as
+      // the host set it. So the host's own spec carries every knob, and only the zoom is read
+      // back. On the printed page the zoom is 0 and the knobs stay: dropping them there would
+      // leave the pinch that leaves the printed page to lay it out with the engine's defaults.
       if (v > 0 || spec.reflow) return { ...spec, reflow: { ...(spec.reflow || {}), zoom: v } };
       return { ...spec, reflow: null };
     }

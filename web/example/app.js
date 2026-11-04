@@ -108,7 +108,11 @@
     canvas.style.width = r.width + 'px'; canvas.style.height = r.height + 'px';
     fit();
   }
-  const toView = (cx, cy) => [(cx - S.view.offsetX) / S.view.scale, (cy - S.view.offsetY) / S.view.scale];
+  // a touch on the stage as a point of the laid-out page: the engine inverts the view
+  const toView = (cx, cy) => { const q = S.page.viewToLayout(S.view, cx, cy); return [q.x, q.y]; };
+  // the control has left the printed page: the engine's spec for it carries a reflow zoom. Not
+  // `zoomIsZoomed`, which asks whether the reader has zoomed and so ignores a zoom of 1.02
+  const reflowing = () => (S.page.zoomSpec(layoutSpec(), S.zoom).reflow?.zoom ?? 0) > 0;
 
   // ── page loading ──
   // A page turn keeps the size the reader chose: the engine carries the control onto the page
@@ -118,7 +122,7 @@
     S.zoom = S.page.zoomCarried(layoutSpec(), S.zoom);
     S.levels = null;
     S.level = S.zoom.step + 1;
-    S.reflow.on = S.zoom.zoom > 1.0001;
+    S.reflow.on = reflowing();
     if (S.reflow.on) { S.reflow.zoom = S.zoom.zoom; $('rZoom').value = S.zoom.zoom; }
   }
   async function loadPage(n) {
@@ -242,7 +246,14 @@
       drag = { x: e.clientX, y: e.clientY, offsetX: S.view.offsetX, offsetY: S.view.offsetY };
       selecting = h && h.word >= 0 && (e.shiftKey || e.pointerType !== 'touch') ? { anchor: h.word, active: false } : null;
     }
-    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { zoom: S.zoom, d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: S.view.scale, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, offsetX: S.view.offsetX, offsetY: S.view.offsetY }; drag = null; selecting = null; }
+    // The pinch is measured from where it began: the control, the view and the focal point then,
+    // and the fingers' distance. `base` is the view the engine works from under the reflowing
+    // controls: the view the last frame returned, before the drift.
+    if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      pinch = { zoom: S.zoom, d: Math.hypot(a[0] - b[0], a[1] - b[1]), view: S.view, base: S.view, fx: (a[0] + b[0]) / 2 - r.left, fy: (a[1] + b[1]) / 2 - r.top };
+      drag = null; selecting = null;
+    }
   });
   stage.addEventListener('pointermove', e => {
     const r = stage.getBoundingClientRect();
@@ -251,11 +262,18 @@
       // the engine owns the whole pinch: which step it lands on, when it commits, and what
       // holds the reader's place when the page reflows under the fingers
       const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      const from = { scale: pinch.scale, offsetX: pinch.offsetX, offsetY: pinch.offsetY };
-      // `pinch.zoom` stays where the gesture began: the engine measures the fingers against
-      // that, so a slow pinch walks the steps one at a time instead of running away
-      const c = S.page.zoomPinch(layoutSpec(), pinch.zoom, from, d / pinch.d, pinch.cx - r.left, pinch.cy - r.top);
-      S.view = c.view;
+      // `pinch.zoom` and the focal point stay where the gesture began, and the factor is the
+      // whole gesture's: a slow pinch walks the steps one at a time instead of running away.
+      // The magnifying glass zooms the view the pinch began on. The reflowing controls take the
+      // view the last frame returned, since a step committed earlier in this gesture moved the
+      // page and the engine finds the word under the fingers on the layout it has now.
+      const from = pinch.zoom.mode === 'magnify' ? pinch.view : pinch.base;
+      const c = S.page.zoomPinch(layoutSpec(), pinch.zoom, from, d / pinch.d, pinch.fx, pinch.fy);
+      pinch.base = c.view;
+      // the fingers' drift since the pinch began pans the page, and the engine holds it
+      // against the viewport
+      const v = engine.viewPan(c.view, (a[0] + b[0]) / 2 - r.left - pinch.fx, (a[1] + b[1]) / 2 - r.top - pinch.fy);
+      S.view = S.page.currentLayout ? S.page.dressClamp(v, stage.clientWidth, stage.clientHeight) : v;
       if (c.relaid) { S.zoom = c.zoom; syncZoomUI(); }
       moved = true; draw(); return;
     }
@@ -283,7 +301,8 @@
         const L = S.page.currentLayout;
         const turns = S.page.sidewaysDrag(S.zoom, S.view, L ? L.fitScale : 0) === 'turnPage';
         const v = engine.viewPan({ ...S.view, offsetX: drag.offsetX, offsetY: drag.offsetY }, turns ? 0 : dx, dy);
-        S.view = turns && L ? S.page.dressClamp(v, stage.clientWidth, stage.clientHeight) : v;
+        // the engine holds the page against the viewport, so no drag opens a blank strip beside it
+        S.view = L ? S.page.dressClamp(v, stage.clientWidth, stage.clientHeight) : v;
         draw();
       }
       return;
@@ -454,7 +473,7 @@
   // keeps the two in step, so the readout and the zoom slider follow a pinch.
   function syncZoomUI() {
     S.level = S.zoom.step + 1;
-    S.reflow.on = S.zoom.zoom > 1.0001;
+    S.reflow.on = reflowing();
     if (S.reflow.on) { S.reflow.zoom = S.zoom.zoom; $('rZoom').value = S.zoom.zoom; }
     reflowReadout(false);
     draw();

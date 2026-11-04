@@ -82,10 +82,12 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun hitTest(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { _, p -> p.hitTest(x.toFloat(), y.toFloat(), hitOptions(opt(opts)))?.let { Marshal.hit(p, it) } }
     /** Exact outline hit at a point in view dp (density and pan/zoom removed here, the layout in the engine). */
     @ReactMethod fun hitTestExactView(tag: Int, x: Double, y: Double, promise: Promise) = withPage(tag, promise) { v, p -> val d = v.resources.displayMetrics.density
-        p.hitTestExactView(((x * d).toFloat() - v.inner.viewOx) / v.inner.viewScale, ((y * d).toFloat() - v.inner.viewOy) / v.inner.viewScale)?.let { Marshal.hit(p, it) } }
+        val (lx, ly) = p.viewToLayout(QvpView(v.inner.viewScale, v.inner.viewOx, v.inner.viewOy), (x * d).toFloat(), (y * d).toFloat())
+        p.hitTestExactView(lx, ly)?.let { Marshal.hit(p, it) } }
     @ReactMethod fun hitTestView(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) = withPage(tag, promise) { v, p ->
         val o = opt(opts); val d = v.resources.displayMetrics.density
-        p.hitTestView(((x * d).toFloat() - v.inner.viewOx) / v.inner.viewScale, ((y * d).toFloat() - v.inner.viewOy) / v.inner.viewScale, hitOptions(o))?.let { Marshal.hit(p, it) } }
+        val (lx, ly) = p.viewToLayout(QvpView(v.inner.viewScale, v.inner.viewOx, v.inner.viewOy), (x * d).toFloat(), (y * d).toFloat())
+        p.hitTestView(lx, ly, hitOptions(o))?.let { Marshal.hit(p, it) } }
     @ReactMethod fun wordBoundsView(tag: Int, i: Int, promise: Promise) = withPage(tag, promise) { v, p -> val d = v.resources.displayMetrics.density
         p.wordBoundsView(i)?.let { b -> mapOf("x0" to (v.inner.viewOx + b[0] * v.inner.viewScale) / d, "y0" to (v.inner.viewOy + b[1] * v.inner.viewScale) / d, "x1" to (v.inner.viewOx + b[2] * v.inner.viewScale) / d, "y1" to (v.inner.viewOy + b[3] * v.inner.viewScale) / d) } }
     @ReactMethod fun currentLayout(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.currentLayout?.let { Marshal.layout(it) } }
