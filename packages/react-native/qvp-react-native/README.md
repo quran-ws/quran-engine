@@ -169,9 +169,17 @@ await atlas.pagesOfJuz(30); atlas.searchSurahs('cow' | 'البقرة' | '2'); at
 // tag-level equivalents: Qvp.atlasPageOf(id, s, a), Qvp.atlasSearchSurahs(id, text), Qvp.atlasPagesOfJuz(id, n), Qvp.atlasJuzOf(id, s, a), …
 ```
 
-All page calls run on the UI thread (where the view draws), so the engine is never touched from two
-threads. Only `maskHidden`, `unmask` (via the `mask` prop), `unmaskNext` etc. mutate state; queries are
-microseconds.
+The module runs a call on one of two threads. Its own query thread runs each call that reads only
+what a page fixed when it loaded: `info`, `words`, `word`, `ayahs`, `lines`, `decorations`, `findWord`,
+`targetWords`, `wordForm`, `hasForm`, the metadata calls except `surahHeaders` and `surahHeadersView`,
+`text`, `search`, `citation`, `cropBounds`, `grid`, the engine-wide helpers and the atlas. A long call
+there does not hold up a frame. The view keeps its page open until such a call returns. Every other
+call reads or changes the layout, the view, the styles or the page state, and runs on the UI thread,
+where the view draws. `attachWords` runs on the UI thread after the queries queued before it, and the
+queries queued after it wait for it.
+
+`words` builds each word's record once per page: its forms, its label and the names of its paths.
+A later call sends the same records again, and `attachWords` drops them.
 
 ## Layout of this package
 
@@ -185,8 +193,11 @@ android/src/main/java/ws/quran/qvp/rn/
   QvpRnBytes.kt         the bytes a URI names (asset, file, path, base64)
   QvpModule.kt          ReactContextBaseJavaModule: page queries by react tag, engine helpers, atlas, ornament sets
   Marshal.kt            JS shapes ↔ Kotlin types (targets, selectors, styles, records)
+  QvpRnWords.kt         each word's record, built once per page
+  Codes.kt              QVP_TARGET_* and QVP_SELECTOR_* by name (scripts/gen-rn-enums.py writes it)
   QvpPackage.kt
 src/index.tsx                              typed API: <QvpPageView/>, <QvpPassageView/>, useQvp(), Qvp, QvpAtlas, QvpOrnaments, Sel, T, constants
+src/codes.ts                               the same codes for T and Sel (scripts/gen-rn-enums.py writes it)
 ```
 
 ## iOS — TODO

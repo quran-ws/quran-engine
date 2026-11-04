@@ -47,6 +47,13 @@ All notable changes to the engine and its packages. The format follows
   `highlight`, `moveHighlight`, `restyleHighlight`, `removeHighlight`, `clearHighlights`
   and `atlasSurahs` are now `styleHide`, `highlightAdd`, `highlightMove`,
   `highlightRestyle`, `highlightRemove`, `highlightClear` and `atlasSurahCount`.
+- React Native: the Android module runs the page queries that read only the loaded page
+  (`words`, `text`, `search`, the metadata calls and others), the engine-wide helpers and the
+  atlas on a thread of its own, so a long query does not hold up a frame. `words` builds each
+  word's record once per page and reads path names from tables it fills once. `T`, `Sel` and
+  the module take the target and selector codes from one table that `scripts/gen-rn-enums.py`
+  writes from `qvp.h`, and `scripts/check-parity.py` fails when the table is out of date. The
+  example's lock file records the package version, and `scripts/set-version.sh` sets it.
 - One composite action, `.github/actions/android-toolchain`, installs Java 17, the Android
   SDK, the pinned NDK and cmake, and cargo-ndk on request. The Android, Flutter, React
   Native and release workflows use it.
