@@ -11,7 +11,7 @@ apply one to one. The package ships **no page data**.
 
 ```yaml
 dependencies:
-  qvp_flutter: ^0.7.0
+  qvp_flutter: ^0.8.0
 ```
 
 The pub.dev package supports Android, iOS, macOS, Windows, Linux, and Web.

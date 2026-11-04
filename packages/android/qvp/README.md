@@ -11,7 +11,7 @@ Releases are available from Maven Central:
 
 ```kotlin
 dependencies {
-    implementation("ws.quran:qvp-android:0.7.0")
+    implementation("ws.quran:qvp-android:0.8.0")
 }
 ```
 
@@ -21,7 +21,7 @@ directory, and add it as a file dependency:
 
 ```kotlin
 dependencies {
-    implementation(files("libs/qvp-android-0.7.0.aar"))
+    implementation(files("libs/qvp-android-0.8.0.aar"))
 }
 ```
 
@@ -30,7 +30,7 @@ dependencies {
 Install JDK 17, Android SDK 35, NDK 27.2.12479018, Rust, and `cargo-ndk`, then run:
 
 ```sh
-scripts/package-android.sh 0.7.0
+scripts/package-android.sh 0.8.0
 ```
 
 The versioned AAR and its checksum are written to `dist/android/`. To publish the same component
@@ -49,7 +49,7 @@ Or consume a Maven-local build:
 
 ```kotlin
 repositories { mavenLocal(); google(); mavenCentral() }
-dependencies { implementation("ws.quran:qvp-android:0.7.0") }
+dependencies { implementation("ws.quran:qvp-android:0.8.0") }
 ```
 
 The AAR's consumer rules preserve the name-based JNI bridge when the application enables R8.

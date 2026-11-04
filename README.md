@@ -17,7 +17,7 @@ Use it when building Quran applications for mobile or desktop and you need fast,
 
 | | |
 |---|---|
-| **Package** | `@quran.ws/engine` · `0.7.0` |
+| **Package** | `@quran.ws/engine` · `0.8.0` |
 | **Whole mushaf** | 26 MB as one bundle · 41.8 MB page by page · 92.6 MB raw |
 | **Wasm engine** | 530 KB in the 0.7.0 release |
 | **Licence** | MIT (the code) · source bundle terms (the data) |
@@ -95,7 +95,7 @@ masks and animation.
 On iOS and macOS, add the repository as a Swift package and use its `QvpKit` product:
 
 ```swift
-.package(url: "https://github.com/quran-ws/quran-engine.git", from: "0.7.0")
+.package(url: "https://github.com/quran-ws/quran-engine.git", from: "0.8.0")
 ```
 
 SwiftPM downloads the release XCFramework and verifies its checksum. Page data remains a
