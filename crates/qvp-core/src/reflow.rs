@@ -205,9 +205,6 @@ pub(crate) struct RowSpec {
     pub pitch: f32,
     pub top: f32,
     pub printed_spacing: bool,
-    /// How many rows the reader sees at once. Rows are evened out against the others of their
-    /// own screenful, because that is what a reader can compare. 0 weighs the whole page.
-    pub rows_per_view: usize,
     /// The most a banner may be drawn at, as a share of its printed drawing — the layout's
     /// own [`crate::LayoutSpec::banner_zoom`] against the zoom it is reflowing at, worked out
     /// once. Infinite leaves the banner growing with the page.
@@ -402,7 +399,7 @@ impl Page {
     }
 
     pub(crate) fn reflow(&self, spec: &ReflowSpec, shape: &RowSpec) -> Reflowed {
-        let RowSpec { block, row_w, pitch, printed_spacing, rows_per_view, surah_frames, .. } = *shape;
+        let RowSpec { block, row_w, pitch, printed_spacing, surah_frames, .. } = *shape;
         let d = self.data();
         let prep = self.reflow_prepared();
         let (rows, headers) = self.break_rows(spec, row_w, block);
@@ -433,7 +430,6 @@ impl Page {
         // the title grows with the reader on its own; the frame neither draws nor constrains it.
         let omitted_header_paths: &[u32] =
             if printed_y.is_some() && surah_frames { &[] } else { &prep.surah_frame_paths };
-        let _ = rows_per_view;
         // Horizontal placement first: it does not depend on the heights, and the heights need
         // to know which ink of two rows ends up over which.
         let row_dx = self.place_across(&rows, &headers, spec, shape, as_printed.is_some());
