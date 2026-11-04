@@ -11,7 +11,7 @@ until it passes.
 | `qvp-convert` | the identity gate: SVG → QVP → SVG, rasterised at 4×, pixel-diffed. 8 pages on every PR, all 604 nightly | the `quran-svg-elements` bundle (`pages/`, `index/`) |
 | `qvp-ffi` | one ABI test per function family on a real page | the data release (`dist/pages/`) |
 | each wrapper | one binding test per C symbol on a known page, plus the shared scenarios | the data release |
-| each example | one UI smoke test: open a page, tap a word, highlight. Today the iOS Demo has it (`DemoUITests`, run by the iOS workflow on the simulator); the Android `device` job runs the Kotlin library's instrumentation tests, not an example test; the Flutter, React Native and web examples have none yet (#154) | the example's page set |
+| each example | one UI smoke test: open a page, tap a word, highlight. The iOS Demo has it, as `DemoUITests`, and the iOS workflow runs it on the simulator. The Android `device` job runs the Kotlin library's tests, not an example test. The Flutter, React Native and web examples have none yet (#154) | the example's page set |
 | `web/lite.mjs` | the conformance fixtures | `conformance/` |
 | `web/lite-passage.mjs` | synthetic ranges, unchanged paths, markers, bounds, cross-page ranges, Rust ink metrics and the core's passage scenarios | synthetic tests need no data; the 604-page sweep and the scenarios require `dist/pages/` in `gates` |
 

@@ -33,13 +33,18 @@ All notable changes to the engine and its packages. The format follows
 
 ### Changed
 - One composite action, `.github/actions/android-toolchain`, installs Java 17, the Android
-  SDK, the pinned NDK and cmake, and cargo-ndk on request, for the Android, Flutter, React
-  Native and release workflows. It reads the NDK version from
-  `scripts/build-engine-android.sh`, and retries `sdkmanager` three times. The iOS workflow
-  runs the Demo's UI smoke test on the simulator, and `docs/standards/TESTING.md` says
-  which examples have one. The Flutter example's tool-written files are committed, so a
-  clone stays clean after one build, and the Flutter workflow runs `pub get` before
-  `dart format`.
+  SDK, the pinned NDK and cmake, and cargo-ndk on request. The Android, Flutter, React
+  Native and release workflows use it.
+- The action reads the NDK version from `scripts/build-engine-android.sh`, and it retries
+  `sdkmanager` three times.
+- `scripts/check-versions.sh` fails when an `ndkVersion` pin or an NDK mention in the Android
+  docs and READMEs differs from `QVP_NDK_VERSION`.
+- The iOS workflow runs the Demo's UI smoke test on the simulator. `docs/standards/TESTING.md`
+  says which examples have one.
+- The Flutter example's tool-written files are committed, so a clone stays clean after one
+  build.
+- The Flutter workflow runs `flutter pub get` once, before `dart format`. The format step
+  passes `--language-version=latest`, so the style does not depend on the package's Dart floor.
 - `scripts/sync-test-data.sh` takes `QVP_SYNC=pages` to fetch the data release and leave
   the SVG bundle alone. The Flutter and iOS jobs use it and cache `dist/pages` only.
   `scripts/build-engine-android.sh` and `scripts/sync-flutter-web-engine.sh` take
