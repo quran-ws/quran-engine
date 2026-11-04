@@ -54,8 +54,17 @@ final class NativeOrnamentsHandle implements OrnamentsHandle {
 
 /// Native backend implementation of [QvpBackend] over `dart:ffi`.
 class QvpNativeBackend implements QvpBackend {
-  QvpNativeBackend({ffi.DynamicLibrary? library, String? path})
-    : b = QvpBindings(library ?? resolveLibrary(path: path)) {
+  /// [scratchBytes] sizes the buffer every array result is read into first. A result
+  /// larger than it is read again into a block of its own size, so the default suits every
+  /// page; a test makes it small to take that path.
+  QvpNativeBackend({
+    ffi.DynamicLibrary? library,
+    String? path,
+    @visibleForTesting int scratchBytes = 1 << 18, // 256 KB
+  }) : b = QvpBindings(library ?? resolveLibrary(path: path)),
+       _scratchBytes = scratchBytes < _minScratchBytes
+           ? _minScratchBytes
+           : scratchBytes {
     _scratch = pffi.calloc<ffi.Uint8>(_scratchBytes);
     _scratchIn = pffi.calloc<ffi.Uint8>(_scratchBytes);
     _str = pffi.calloc<QvpStrC>();
@@ -128,7 +137,9 @@ class QvpNativeBackend implements QvpBackend {
     return ffi.DynamicLibrary.open('libqvp_ffi.so');
   }
 
-  static const int _scratchBytes = 1 << 18; // 256 KB
+  /// The smallest scratch: it must still hold the largest single record a call writes.
+  static const int _minScratchBytes = 4096;
+  final int _scratchBytes;
 
   final QvpBindings b;
   late final ffi.Pointer<ffi.Uint8> _scratch, _scratchIn;
@@ -158,13 +169,20 @@ class QvpNativeBackend implements QvpBackend {
   late final ffi.Pointer<ffi.Uint32> _dressColors;
   bool _disposed = false;
 
-  ffi.Pointer<QvpPageC> _page(PageHandle h) => (h as NativePageHandle).pointer;
+  // A freed handle holds a null pointer. The engine must never see one, so each accessor
+  // throws instead, naming the object, in every build mode.
+  ffi.Pointer<QvpPageC> _page(PageHandle h) =>
+      _open((h as NativePageHandle).pointer, 'QvpPage');
   ffi.Pointer<QvpAtlasC> _atlas(AtlasHandle h) =>
-      (h as NativeAtlasHandle).pointer;
+      _open((h as NativeAtlasHandle).pointer, 'QvpAtlas');
   ffi.Pointer<QvpPassageC> _passage(PassageHandle h) =>
-      (h as NativePassageHandle).pointer;
+      _open((h as NativePassageHandle).pointer, 'QvpPassage');
   ffi.Pointer<QvpOrnamentsC> _ornaments(OrnamentsHandle h) =>
-      (h as NativeOrnamentsHandle).pointer;
+      _open((h as NativeOrnamentsHandle).pointer, 'QvpOrnaments');
+  static ffi.Pointer<N> _open<N extends ffi.NativeType>(
+    ffi.Pointer<N> p,
+    String what,
+  ) => p == ffi.nullptr ? throw StateError('$what is disposed') : p;
 
   static String str(QvpStrC s) => s.len == 0 || s.ptr == ffi.nullptr
       ? ''
@@ -218,22 +236,69 @@ class QvpNativeBackend implements QvpBackend {
         return f(q, v.length);
       });
 
+  /// Calls an `(out, cap) → total` getter into the scratch, and once more into a block of
+  /// the total's size when the scratch was too small, so no array is ever cut short.
+  /// [recordBytes] is the size of one record; [decode] reads `n` records at `p`, and must
+  /// copy what it keeps, as the block is freed after it returns.
+  R _collect<R>(
+    int recordBytes,
+    int Function(ffi.Pointer<ffi.Uint8> out, int cap) fn,
+    R Function(ffi.Pointer<ffi.Uint8> p, int n) decode,
+  ) {
+    final cap = _scratchBytes ~/ recordBytes;
+    final n = fn(_scratch, cap);
+    if (n <= cap) return decode(_scratch, n < 0 ? 0 : n);
+    final block = pffi.malloc<ffi.Uint8>(n * recordBytes);
+    try {
+      final got = fn(block, n);
+      return decode(block, got < n ? got : n);
+    } finally {
+      pffi.malloc.free(block);
+    }
+  }
+
   List<R> _readArray<C extends ffi.Struct, R>(
     int elemSize,
     int Function(ffi.Pointer<C> out, int cap) fn,
     R Function(ffi.Pointer<C> ptr, int index) decode,
+  ) => _collect(elemSize, (out, cap) => fn(out.cast<C>(), cap), (p, n) {
+    final q = p.cast<C>();
+    return List<R>.generate(n, (i) => decode(q, i), growable: false);
+  });
+
+  Uint32List _readU32(int Function(ffi.Pointer<ffi.Uint32> p, int cap) fn) =>
+      _collect(
+        4,
+        (out, cap) => fn(out.cast<ffi.Uint32>(), cap),
+        (p, n) => Uint32List.fromList(p.cast<ffi.Uint32>().asTypedList(n)),
+      );
+
+  /// [_readU32] for a getter whose records are [perRecord] values each.
+  List<R> _readU32Records<R>(
+    int perRecord,
+    int Function(ffi.Pointer<ffi.Uint32> p, int cap) fn,
+    R Function(ffi.Pointer<ffi.Uint32> p, int index) decode,
   ) {
-    final p = _scratch.cast<C>();
-    final cap = _scratchBytes ~/ elemSize;
-    final n = fn(p, cap).clamp(0, cap);
-    return List<R>.generate(n, (i) => decode(p, i), growable: false);
+    List<R> read(ffi.Pointer<ffi.Uint8> p, int n) {
+      final q = p.cast<ffi.Uint32>();
+      return List<R>.generate(n, (i) => decode(q, i), growable: false);
+    }
+
+    return _collect(4 * perRecord, (o, cap) => fn(o.cast(), cap), read);
   }
 
-  List<int> _readU32(int Function(ffi.Pointer<ffi.Uint32> p, int cap) fn) {
-    final p = _scratch.cast<ffi.Uint32>();
-    final cap = _scratchBytes ~/ 4;
-    final n = fn(p, cap).clamp(0, cap);
-    return Uint32List.fromList(p.asTypedList(n));
+  /// [_readU32Records] over floats.
+  List<R> _readF32Records<R>(
+    int perRecord,
+    int Function(ffi.Pointer<ffi.Float> p, int cap) fn,
+    R Function(ffi.Pointer<ffi.Float> p, int index) decode,
+  ) {
+    List<R> read(ffi.Pointer<ffi.Uint8> p, int n) {
+      final q = p.cast<ffi.Float>();
+      return List<R>.generate(n, (i) => decode(q, i), growable: false);
+    }
+
+    return _collect(4 * perRecord, (o, cap) => fn(o.cast(), cap), read);
   }
 
   List<QvpBox> _readBoxes(int Function(ffi.Pointer<QvpBoxC> out, int cap) fn) =>
@@ -418,10 +483,11 @@ class QvpNativeBackend implements QvpBackend {
 
   @override
   void pageFree(PageHandle handle) {
-    final p = _page(handle);
-    if (p != ffi.nullptr) {
-      b.pageFree(p);
-      (handle as NativePageHandle).pointer = ffi.nullptr;
+    // the raw pointer, not _page(): a second free finds null and does nothing
+    final h = handle as NativePageHandle;
+    if (h.pointer != ffi.nullptr) {
+      b.pageFree(h.pointer);
+      h.pointer = ffi.nullptr;
     }
   }
 
@@ -655,14 +721,8 @@ class QvpNativeBackend implements QvpBackend {
 
   @override
   List<(int, int)> ayahKeys(PageHandle handle) {
-    final p = _scratch.cast<ffi.Uint32>();
-    final cap = _scratchBytes ~/ 4;
-    final n = b.ayahKeys(_page(handle), p, cap).clamp(0, cap);
-    return List<(int, int)>.generate(
-      n,
-      (i) => (p[i] >> 16, p[i] & 0xffff),
-      growable: false,
-    );
+    final keys = _readU32((p, cap) => b.ayahKeys(_page(handle), p, cap));
+    return [for (final k in keys) (k >> 16, k & 0xffff)];
   }
 
   @override
@@ -678,11 +738,10 @@ class QvpNativeBackend implements QvpBackend {
 
   @override
   List<int>? reciteMap(PageHandle handle, int surah, int ayah, int nSegments) {
-    final p = _scratch.cast<ffi.Uint32>();
-    final cap = _scratchBytes ~/ 4;
-    final res = b.reciteMap(_page(handle), surah, ayah, nSegments, p, cap);
-    if (res < 0) return null;
-    return Uint32List.fromList(p.asTypedList(nSegments));
+    final h = _page(handle);
+    // -1 is a mismatch; any other answer is the total, read in full
+    if (b.reciteMap(h, surah, ayah, nSegments, ffi.nullptr, 0) < 0) return null;
+    return _readU32((p, cap) => b.reciteMap(h, surah, ayah, nSegments, p, cap));
   }
 
   @override
@@ -731,33 +790,29 @@ class QvpNativeBackend implements QvpBackend {
       'prefix' => 2,
       _ => 0,
     };
-    return _withString(query, (qPtr, qLen) {
-      final p = _scratch.cast<QvpMatchC>();
-      final cap = _scratchBytes ~/ ffi.sizeOf<QvpMatchC>();
-      final n = b
-          .search(
-            _page(handle),
-            qPtr,
-            qLen,
-            form,
-            modeCode,
-            normalize ? 1 : 0,
-            looseMatch ? 1 : 0,
-            limit,
-            p,
-            cap,
-          )
-          .clamp(0, cap);
-      return List<QvpMatch>.generate(
-        n,
-        (i) => QvpMatch(
+    return _withString(
+      query,
+      (qPtr, qLen) => _readArray<QvpMatchC, QvpMatch>(
+        ffi.sizeOf<QvpMatchC>(),
+        (out, cap) => b.search(
+          _page(handle),
+          qPtr,
+          qLen,
+          form,
+          modeCode,
+          normalize ? 1 : 0,
+          looseMatch ? 1 : 0,
+          limit,
+          out,
+          cap,
+        ),
+        (p, i) => QvpMatch(
           word: p[i].word,
           index: p[i].index,
           isLooseMatch: p[i].isLooseMatch != 0,
         ),
-        growable: false,
-      );
-    });
+      ),
+    );
   }
 
   @override
@@ -990,27 +1045,20 @@ class QvpNativeBackend implements QvpBackend {
     double bandTop = 0,
     double bandBottom = 0,
   }) {
-    final p = _scratch.cast<ffi.Uint32>();
-    final cap = _scratchBytes ~/ 4;
-    final n = b
-        .layoutDrawList(_page(handle), bandTop, bandBottom, p, cap)
-        .clamp(0, cap ~/ 2);
-    return List<QvpDraw>.generate(
-      n,
-      (i) => QvpDraw(p[i * 2], p[i * 2 + 1]),
-      growable: false,
+    return _readU32Records(
+      2,
+      (p, cap) => b.layoutDrawList(_page(handle), bandTop, bandBottom, p, cap),
+      (p, i) => QvpDraw(p[i * 2], p[i * 2 + 1]),
     );
   }
 
   @override
   List<QvpPlacement> layoutPlacements(PageHandle handle) {
-    final p = _scratch.cast<ffi.Float>();
-    final cap = _scratchBytes ~/ 4;
-    final n = b.layoutPlacements(_page(handle), p, cap).clamp(0, cap ~/ 4);
-    return List<QvpPlacement>.generate(
-      n,
-      (i) => QvpPlacement(p[i * 4], p[i * 4 + 1], p[i * 4 + 2], p[i * 4 + 3]),
-      growable: false,
+    return _readF32Records(
+      4,
+      (p, cap) => b.layoutPlacements(_page(handle), p, cap),
+      (p, i) =>
+          QvpPlacement(p[i * 4], p[i * 4 + 1], p[i * 4 + 2], p[i * 4 + 3]),
     );
   }
 
@@ -1028,10 +1076,7 @@ class QvpNativeBackend implements QvpBackend {
 
   @override
   Uint32List layoutRowWords(PageHandle handle, int row) {
-    final p = _scratch.cast<ffi.Uint32>();
-    final cap = _scratchBytes ~/ 4;
-    final n = b.layoutRowWords(_page(handle), row, p, cap).clamp(0, cap);
-    return Uint32List.fromList(p.asTypedList(n));
+    return _readU32((p, cap) => b.layoutRowWords(_page(handle), row, p, cap));
   }
 
   @override
@@ -1145,13 +1190,10 @@ class QvpNativeBackend implements QvpBackend {
 
   @override
   List<QvpStyledPath> styledPaths(PageHandle handle) {
-    final p = _scratch.cast<ffi.Uint32>();
-    final cap = _scratchBytes ~/ 8;
-    final n = b.styledPaths(_page(handle), p, cap).clamp(0, cap);
-    return List<QvpStyledPath>.generate(
-      n,
-      (i) => (path: p[i * 2], color: p[i * 2 + 1]),
-      growable: false,
+    return _readU32Records(
+      2,
+      (p, cap) => b.styledPaths(_page(handle), p, cap),
+      (p, i) => (path: p[i * 2], color: p[i * 2 + 1]),
     );
   }
 
@@ -1504,10 +1546,11 @@ class QvpNativeBackend implements QvpBackend {
 
   @override
   void atlasFree(AtlasHandle handle) {
-    final a = _atlas(handle);
-    if (a != ffi.nullptr) {
-      b.atlasFree(a);
-      (handle as NativeAtlasHandle).pointer = ffi.nullptr;
+    // the raw pointer, not _atlas(): a second free finds null and does nothing
+    final h = handle as NativeAtlasHandle;
+    if (h.pointer != ffi.nullptr) {
+      b.atlasFree(h.pointer);
+      h.pointer = ffi.nullptr;
     }
   }
 
@@ -1591,15 +1634,20 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   @override
-  List<int> atlasSearchSurahs(AtlasHandle handle, String text) =>
-      _withString(text, (tPtr, len) {
-        final p = _scratch.cast<ffi.Uint16>();
-        final cap = _scratchBytes ~/ 2;
-        final n = b
-            .atlasSearchSurahs(_atlas(handle), tPtr, len, p, cap)
-            .clamp(0, cap);
-        return Uint16List.fromList(p.asTypedList(n));
-      });
+  List<int> atlasSearchSurahs(AtlasHandle handle, String text) => _withString(
+    text,
+    (tPtr, len) => _collect(
+      2,
+      (out, cap) => b.atlasSearchSurahs(
+        _atlas(handle),
+        tPtr,
+        len,
+        out.cast<ffi.Uint16>(),
+        cap,
+      ),
+      (p, n) => Uint16List.fromList(p.cast<ffi.Uint16>().asTypedList(n)),
+    ),
+  );
 
   @override
   String atlasJson(AtlasHandle handle) {
@@ -1654,10 +1702,11 @@ class QvpNativeBackend implements QvpBackend {
 
   @override
   void passageFree(PassageHandle handle) {
-    final p = _passage(handle);
-    if (p != ffi.nullptr) {
-      b.passageFree(p);
-      (handle as NativePassageHandle).pointer = ffi.nullptr;
+    // the raw pointer, not _passage(): a second free finds null and does nothing
+    final h = handle as NativePassageHandle;
+    if (h.pointer != ffi.nullptr) {
+      b.passageFree(h.pointer);
+      h.pointer = ffi.nullptr;
     }
   }
 
@@ -1718,28 +1767,16 @@ class QvpNativeBackend implements QvpBackend {
       ),
     );
 
-    final pDraws = _scratch.cast<ffi.Uint32>();
-    final capDraws = _scratchBytes ~/ 4;
-    final nDraws = b.passageDrawList(p, pDraws, capDraws);
-    final draws = List<QvpPassageDraw>.generate(
-      nDraws.clamp(0, capDraws ~/ 3),
-      (i) =>
-          QvpPassageDraw(pDraws[i * 3], pDraws[i * 3 + 1], pDraws[i * 3 + 2]),
-      growable: false,
+    final draws = _readU32Records(
+      3,
+      (out, cap) => b.passageDrawList(p, out, cap),
+      (q, i) => QvpPassageDraw(q[i * 3], q[i * 3 + 1], q[i * 3 + 2]),
     );
-
-    final pPlaces = _scratch.cast<ffi.Float>();
-    final capPlaces = _scratchBytes ~/ 4;
-    final nPlaces = b.passagePlacements(p, pPlaces, capPlaces);
-    final places = List<QvpPlacement>.generate(
-      nPlaces.clamp(0, capPlaces ~/ 4),
-      (i) => QvpPlacement(
-        pPlaces[i * 4],
-        pPlaces[i * 4 + 1],
-        pPlaces[i * 4 + 2],
-        pPlaces[i * 4 + 3],
-      ),
-      growable: false,
+    final places = _readF32Records(
+      4,
+      (out, cap) => b.passagePlacements(p, out, cap),
+      (q, i) =>
+          QvpPlacement(q[i * 4], q[i * 4 + 1], q[i * 4 + 2], q[i * 4 + 3]),
     );
 
     return QvpPassageLayout(
@@ -1811,10 +1848,11 @@ class QvpNativeBackend implements QvpBackend {
 
   @override
   void ornamentsFree(OrnamentsHandle handle) {
-    final o = _ornaments(handle);
-    if (o != ffi.nullptr) {
-      b.ornamentsFree(o);
-      (handle as NativeOrnamentsHandle).pointer = ffi.nullptr;
+    // the raw pointer, not _ornaments(): a second free finds null and does nothing
+    final h = handle as NativeOrnamentsHandle;
+    if (h.pointer != ffi.nullptr) {
+      b.ornamentsFree(h.pointer);
+      h.pointer = ffi.nullptr;
     }
   }
 

@@ -36,7 +36,7 @@ final class QvpDressTests: XCTestCase {
         XCTAssertEqual([styles[0].ayahMark?.index, styles[0].surahHeader?.index, styles[0].pageFrame?.index], [0, 1, 2])
         set.close(); set.close()
         XCTAssertFalse(set.isOpen)
-        XCTAssertNil(set.find(.pageFrame, "test"))
+        // a find on the closed set is a fatal error: QvpLifetimeTests runs it in a child process
     }
 
     func testDressPage604() throws {

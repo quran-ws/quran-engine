@@ -33,11 +33,9 @@ class QvpPage extends ChangeNotifier {
   final QvpBackend _backend;
   PageHandle? _handle;
 
-  /// Internal handle for passage / ornament dressing calls.
-  PageHandle get handle {
-    assert(_handle != null, 'QvpPage used after dispose()');
-    return _handle!;
-  }
+  /// Internal handle for passage / ornament dressing calls. Throws a [StateError] once the
+  /// page is disposed, in every build mode, so no call hands the engine a null handle.
+  PageHandle get handle => _handle ?? (throw StateError('QvpPage is disposed'));
 
   final double width;
   final double height;
@@ -126,19 +124,25 @@ class QvpPage extends ChangeNotifier {
   List<ui.Path> buildPaths() =>
       List<ui.Path>.generate(nPaths, path, growable: false);
 
-  /// Frees backend page memory. Geometry and info lists stay usable.
+  /// Frees backend page memory. Geometry and info lists stay usable. A second call does
+  /// nothing.
   void free() {
     _cachedAyahMarks = null;
     _lazyPaths = null;
-    if (_handle != null) {
-      _backend.pageFree(_handle!);
+    final h = _handle;
+    if (h != null) {
       _handle = null;
+      _backend.pageFree(h);
     }
   }
 
+  bool _disposed = false;
+
+  /// Frees the page and drops its listeners. A second call does nothing.
   @override
   void dispose() {
-    _lazyPaths = null;
+    if (_disposed) return;
+    _disposed = true;
     free();
     super.dispose();
   }

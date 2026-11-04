@@ -6,6 +6,16 @@
   from the table and the reflow specs take their defaults from it, so no wrapper copies the
   numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
 - Dart: `rgba` and `QvpColor.withAlpha` clamp a NaN alpha to 0, where they threw.
+- Every wrapper handles a freed object, a second free and a large array result the same way
+  (`docs/API.md`, conventions). A call on a freed page, atlas, ornament set or passage throws
+  an error with the object's name: a `StateError` in Dart in every build mode, where a debug
+  assert stood before, a fatal error in Swift and a rejection in React Native. The Flutter
+  native backend no longer passes a freed handle's null pointer to the engine. A second
+  `free`, `close` or `dispose` does nothing, Flutter's `QvpPage.dispose` included, and the
+  Kotlin handle is atomic, so two threads that close the same object free it once. Every
+  array getter grows its buffer to the total the engine reports, where the Android bridge,
+  the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
+  highlight handles and a 256 KB scratch.
 - The web engine in the package, `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`, is
   built from the release tag, so it matches the native libraries and the crates of the same
   version. The repository no longer tracks the two files. The pubspec declares their

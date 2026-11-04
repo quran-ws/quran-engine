@@ -158,6 +158,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /** a scratch buffer of at least `len` bytes, kept between calls; a bigger ask replaces it,
      * so read one ask out before the next */
     buf(len) { if (len > this._bufLen) { if (this._buf) this.ex.qvp_dealloc(this._buf, this._bufLen); this._buf = this.ex.qvp_alloc(len); this._bufLen = len; } return this._buf; }
+    /** Call an `(out, cap) → total` getter, `call(out, cap)`, into the scratch first and again
+     * into a buffer of the total's size when the scratch was too small, so no array is ever
+     * cut short. `size` is one record's bytes. Returns [at, n]: where the records are and how
+     * many; read them out before the next engine call. */
+    collect(size, call) {
+      const cap = Math.floor(SCRATCH / size), n = call(this.scratch, cap);
+      if (n <= cap) return [this.scratch, n];
+      const at = this.buf(n * size);
+      return [at, Math.min(call(at, n), n)];
+    }
     /** `len` bytes for an input: its region of scratch2 when it fits, else a block from the
      * engine's allocator that lives until the `_withInputs` around the call returns. A new
      * block can grow the memory, so take a DataView after this call, never before it. */
@@ -514,7 +524,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       if (t instanceof Array) t = T.words(t);
       return writeTarget(this.e, this.e.scratch2 + 4096, t);
     }
-    targetWords(t) { const n = this.e._withInputs(() => this.e.ex.qvp_target_words(this.h, this._target(t), this.e.scratch, 16384)); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 16384))); }
+    targetWords(t) { const [at, n] = this.e._withInputs(() => { const tp = this._target(t); return this.e.collect(4, (o, c) => this.e.ex.qvp_target_words(this.h, tp, o, c)); }); return Array.from(new Uint32Array(this.e.mem.buffer, at, n)); }
 
     // ── metadata ──
     surahs() {
@@ -524,47 +534,52 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       return out;
     }
     divisions() {
-      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_divisions(this.h, s, 64), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 64); i++) { const o = s + i * 12; out.push({ division: names('division')[d.getUint8(o)], line: d.getUint8(o + 1), number: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIndex: d.getUint32(o + 8, true) }); }
+      const ex = this.e.ex, [s, n] = this.e.collect(12, (o, c) => ex.qvp_divisions(this.h, o, c)), d = this.e.dv(), out = [];
+      for (let i = 0; i < n; i++) { const o = s + i * 12; out.push({ division: names('division')[d.getUint8(o)], line: d.getUint8(o + 1), number: d.getUint16(o + 2, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), ayahIndex: d.getUint32(o + 8, true) }); }
       return out;
     }
     /** the surah headings in page units: the box a frame fills, and the title ink in it */
     surahHeaders() {
-      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surah_headers(this.h, s, 32), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 44; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), line: d.getUint32(o + 8, true), x0: d.getFloat32(o + 12, true), y0: d.getFloat32(o + 16, true), x1: d.getFloat32(o + 20, true), y1: d.getFloat32(o + 24, true), titleX0: d.getFloat32(o + 28, true), titleY0: d.getFloat32(o + 32, true), titleX1: d.getFloat32(o + 36, true), titleY1: d.getFloat32(o + 40, true) }); }
+      const ex = this.e.ex, [s, n] = this.e.collect(44, (o, c) => ex.qvp_surah_headers(this.h, o, c)), d = this.e.dv(), out = [];
+      for (let i = 0; i < n; i++) { const o = s + i * 44; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), line: d.getUint32(o + 8, true), x0: d.getFloat32(o + 12, true), y0: d.getFloat32(o + 16, true), x1: d.getFloat32(o + 20, true), y1: d.getFloat32(o + 24, true), titleX0: d.getFloat32(o + 28, true), titleY0: d.getFloat32(o + 32, true), titleX1: d.getFloat32(o + 36, true), titleY1: d.getFloat32(o + 40, true) }); }
       return out;
     }
     /** the same, in viewport px through the current layout: what a host draws its own frame around */
     surahHeadersView() {
-      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_surah_headers_view(this.h, s, 32), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 44; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), line: d.getUint32(o + 8, true), x0: d.getFloat32(o + 12, true), y0: d.getFloat32(o + 16, true), x1: d.getFloat32(o + 20, true), y1: d.getFloat32(o + 24, true), titleX0: d.getFloat32(o + 28, true), titleY0: d.getFloat32(o + 32, true), titleX1: d.getFloat32(o + 36, true), titleY1: d.getFloat32(o + 40, true) }); }
+      const ex = this.e.ex, [s, n] = this.e.collect(44, (o, c) => ex.qvp_surah_headers_view(this.h, o, c)), d = this.e.dv(), out = [];
+      for (let i = 0; i < n; i++) { const o = s + i * 44; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), line: d.getUint32(o + 8, true), x0: d.getFloat32(o + 12, true), y0: d.getFloat32(o + 16, true), x1: d.getFloat32(o + 20, true), y1: d.getFloat32(o + 24, true), titleX0: d.getFloat32(o + 28, true), titleY0: d.getFloat32(o + 32, true), titleX1: d.getFloat32(o + 36, true), titleY1: d.getFloat32(o + 40, true) }); }
       return out;
     }
     ayahMarks() {
-      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_ayah_marks(this.h, s, 128), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
+      const ex = this.e.ex, [s, n] = this.e.collect(32, (o, c) => ex.qvp_ayah_marks(this.h, o, c)), d = this.e.dv(), out = [];
+      for (let i = 0; i < n; i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
       return out;
     }
     /** the ayah medallions in viewport px through the current layout: where each is drawn */
     ayahMarksView() {
-      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_ayah_marks_view(this.h, s, 128), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 128); i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
+      const ex = this.e.ex, [s, n] = this.e.collect(32, (o, c) => ex.qvp_ayah_marks_view(this.h, o, c)), d = this.e.dv(), out = [];
+      for (let i = 0; i < n; i++) { const o = s + i * 32; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), line: d.getUint32(o + 8, true), cx: d.getFloat32(o + 12, true), cy: d.getFloat32(o + 16, true), r: d.getFloat32(o + 20, true), ornamentPath: d.getUint32(o + 24, true), numeralPath: d.getUint32(o + 28, true) }); }
       return out;
     }
     rosettes() {
-      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_rosettes(this.h, s, 32), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 32); i++) { const o = s + i * 20; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), juz: d.getUint16(o + 8, true), hizb: d.getUint16(o + 10, true), nisf: d.getUint16(o + 12, true), rubuAlHizb: d.getUint16(o + 14, true), rubuAlHizbInHizb: d.getUint16(o + 16, true) }); }
+      const ex = this.e.ex, [s, n] = this.e.collect(20, (o, c) => ex.qvp_rosettes(this.h, o, c)), d = this.e.dv(), out = [];
+      for (let i = 0; i < n; i++) { const o = s + i * 20; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), juz: d.getUint16(o + 8, true), hizb: d.getUint16(o + 10, true), nisf: d.getUint16(o + 12, true), rubuAlHizb: d.getUint16(o + 14, true), rubuAlHizbInHizb: d.getUint16(o + 16, true) }); }
       return out;
     }
     sajdahs() {
-      const ex = this.e.ex, s = this.e.scratch, n = ex.qvp_sajdahs(this.h, s, 16), d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 16); i++) { const o = s + i * 12; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), signPath: d.getUint32(o + 8, true) }); }
+      const ex = this.e.ex, [s, n] = this.e.collect(12, (o, c) => ex.qvp_sajdahs(this.h, o, c)), d = this.e.dv(), out = [];
+      for (let i = 0; i < n; i++) { const o = s + i * 12; out.push({ decoration: d.getUint32(o, true), surah: d.getUint16(o + 4, true), ayah: d.getUint16(o + 6, true), signPath: d.getUint32(o + 8, true) }); }
       return out;
     }
-    ayahKeys() { const n = this.e.ex.qvp_ayah_keys(this.h, this.e.scratch, 256); const v = new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 256)); return Array.from(v, k => [k >>> 16, k & 0xffff]); }
+    ayahKeys() { const [at, n] = this.e.collect(4, (o, c) => this.e.ex.qvp_ayah_keys(this.h, o, c)); const v = new Uint32Array(this.e.mem.buffer, at, n); return Array.from(v, k => [k >>> 16, k & 0xffff]); }
     ayahWordCount(surah, ayah) { const n = this.e.ex.qvp_ayah_word_count(this.h, surah, ayah, this.e.scratch); return { count: n, isComplete: !!this.e.dv().getUint8(this.e.scratch) }; }
     /** words for n recitation segments, or null when the counts disagree (follow the ayah whole) */
-    reciteMap(surah, ayah, nSegments) { const n = this.e.ex.qvp_recite_map(this.h, surah, ayah, nSegments, this.e.scratch, 4096); return n < 0 ? null : Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, n)); }
+    reciteMap(surah, ayah, nSegments) {
+      // -1 is a mismatch; any other answer is the total, read in full
+      if (this.e.ex.qvp_recite_map(this.h, surah, ayah, nSegments, 0, 0) < 0) return null;
+      const [at, n] = this.e.collect(4, (o, c) => this.e.ex.qvp_recite_map(this.h, surah, ayah, nSegments, o, c));
+      return Array.from(new Uint32Array(this.e.mem.buffer, at, n));
+    }
     wordLabel(i) { this.e.ex.qvp_word_label(this.h, i, this.e.scratch); return this.e.qstr(this.e.scratch); }
     ayahLabel(i) { this.e.ex.qvp_ayah_label(this.h, i, this.e.scratch); return this.e.qstr(this.e.scratch); }
 
@@ -577,9 +592,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       return this.e.qstr(this.e.scratch);
     }
     search(query, { form = 'search', mode = 'includes', normalize = true, looseMatch = true, limit = 0 } = {}) {
-      const n = this.e._withInputs(() => { const [qp, qn] = this.e.putStr(query); return this.e.ex.qvp_search(this.h, qp, qn, FORM[form] ?? 4, { includes: 0, exact: 1, prefix: 2 }[mode] ?? 0, normalize ? 1 : 0, looseMatch ? 1 : 0, limit, this.e.scratch, 1024); });
+      const [at, n] = this.e._withInputs(() => { const [qp, qn] = this.e.putStr(query); return this.e.collect(12, (o, c) => this.e.ex.qvp_search(this.h, qp, qn, FORM[form] ?? 4, { includes: 0, exact: 1, prefix: 2 }[mode] ?? 0, normalize ? 1 : 0, looseMatch ? 1 : 0, limit, o, c)); });
       const d = this.e.dv(), out = [];
-      for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 12; const w = d.getUint32(o, true); out.push({ word: w, index: d.getUint32(o + 4, true), isLooseMatch: !!d.getUint8(o + 8), wordKey: this.wordKey(w), text: this.words[w].text }); }
+      for (let i = 0; i < n; i++) { const o = at + i * 12; const w = d.getUint32(o, true); out.push({ word: w, index: d.getUint32(o + 4, true), isLooseMatch: !!d.getUint8(o + 8), wordKey: this.wordKey(w), text: this.words[w].text }); }
       return out;
     }
     wordKey(i) { const w = this.words[i]; return `${w.surah}:${w.ayah}:${w.word}`; }
@@ -599,9 +614,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     hitTest(x, y, opt = {}) { return this.e.ex.qvp_hit_test(this.h, x, y, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
     hitTestView(viewX, viewY, opt = {}) { return this.e.ex.qvp_hit_test_view(this.h, viewX, viewY, this._hitOpt(opt), this.e.scratch) ? this._hit(this.e.scratch) : null; }
     /** the hit boxes in viewport px through the current layout: what a tap is resolved with */
-    hitAreasView(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas_view(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
-    lineBands() { const n = this.e.ex.qvp_line_bands(this.h, this.e.scratch, 64), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 64); i++) { const o = this.e.scratch + i * 28; out.push({ line: d.getUint32(o, true), lineNumber: d.getUint32(o + 4, true), y0: d.getFloat32(o + 8, true), y1: d.getFloat32(o + 12, true), mid: d.getFloat32(o + 16, true), inkY0: d.getFloat32(o + 20, true), inkY1: d.getFloat32(o + 24, true) }); } return out; }
-    hitAreas(gapBias = DEFAULTS.GAP_BIAS) { const n = this.e.ex.qvp_hit_areas(this.h, gapBias, this.e.scratch, 1024), d = this.e.dv(), out = []; for (let i = 0; i < Math.min(n, 1024); i++) { const o = this.e.scratch + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
+    hitAreasView(gapBias = DEFAULTS.GAP_BIAS) { const [at, n] = this.e.collect(40, (o, c) => this.e.ex.qvp_hit_areas_view(this.h, gapBias, o, c)), d = this.e.dv(), out = []; for (let i = 0; i < n; i++) { const o = at + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
+    lineBands() { const [at, n] = this.e.collect(28, (o, c) => this.e.ex.qvp_line_bands(this.h, o, c)), d = this.e.dv(), out = []; for (let i = 0; i < n; i++) { const o = at + i * 28; out.push({ line: d.getUint32(o, true), lineNumber: d.getUint32(o + 4, true), y0: d.getFloat32(o + 8, true), y1: d.getFloat32(o + 12, true), mid: d.getFloat32(o + 16, true), inkY0: d.getFloat32(o + 20, true), inkY1: d.getFloat32(o + 24, true) }); } return out; }
+    hitAreas(gapBias = DEFAULTS.GAP_BIAS) { const [at, n] = this.e.collect(40, (o, c) => this.e.ex.qvp_hit_areas(this.h, gapBias, o, c)), d = this.e.dv(), out = []; for (let i = 0; i < n; i++) { const o = at + i * 40; out.push({ word: d.getUint32(o, true), line: d.getUint32(o + 4, true), x0: d.getFloat32(o + 8, true), y0: d.getFloat32(o + 12, true), x1: d.getFloat32(o + 16, true), y1: d.getFloat32(o + 20, true), inkX0: d.getFloat32(o + 24, true), inkY0: d.getFloat32(o + 28, true), inkX1: d.getFloat32(o + 32, true), inkY1: d.getFloat32(o + 36, true) }); } return out; }
 
     // ── layout ──
     /** Write a layout spec (QvpLayoutSpec, 76 bytes) at scratch offset `s`. */
@@ -850,7 +865,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
         return this.e.ex.qvp_theme(this.h, at);
       });
     }
-    styleHandles() { const n = this.e.ex.qvp_style_handles(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
+    styleHandles() { return this._u32s((o, c) => this.e.ex.qvp_style_handles(this.h, o, c)); }
+    /** every value of a `uint32_t` array getter, however many */
+    _u32s(call) { const [at, n] = this.e.collect(4, call); return Array.from(new Uint32Array(this.e.mem.buffer, at, n)); }
 
     // ── clock & display list ──
     /** advance animations; returns true while something is still moving */
@@ -871,16 +888,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     restyleHighlight(handle, style) { return !!this.e.ex.qvp_highlight_restyle(this.h, handle, writeHl(this.e, this.e.scratch2 + 24576, style)); }
     removeHighlight(handle) { return !!this.e.ex.qvp_highlight_remove(this.h, handle); }
     clearHighlights() { this.e.ex.qvp_highlight_clear(this.h); }
-    highlightHandles() { const n = this.e.ex.qvp_highlight_handles(this.h, this.e.scratch, 1024); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 1024))); }
-    highlightWords(h) { const n = this.e.ex.qvp_highlight_words(this.h, h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
+    highlightHandles() { return this._u32s((o, c) => this.e.ex.qvp_highlight_handles(this.h, o, c)); }
+    highlightWords(h) { return this._u32s((o, c) => this.e.ex.qvp_highlight_words(this.h, h, o, c)); }
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
-    highlightBoxesView() { const n = this.e.ex.qvp_highlight_boxes_view(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
-    wordBands(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const n = this.e._withInputs(() => this.e.ex.qvp_word_bands(this.h, this.e.putU32(Uint32Array.from(words)), words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64)); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
+    highlightBoxesView() { const [at, n] = this.e.collect(32, (o, c) => this.e.ex.qvp_highlight_boxes_view(this.h, o, c)); return readBoxes(this.e, at, n); }
+    wordBands(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const [at, n] = this.e._withInputs(() => { const wp = this.e.putU32(Uint32Array.from(words)); return this.e.collect(32, (o, c) => this.e.ex.qvp_word_bands(this.h, wp, words.length, height === 'ink' ? 1 : 0, padX, padY, o, c)); }); return readBoxes(this.e, at, n); }
 
     // ── selection ──
     select(anchor, focus = anchor) { this.e.ex.qvp_select(this.h, anchor < 0 ? NONE : anchor, focus < 0 ? NONE : focus); }
     clearSelection() { this.e.ex.qvp_select(this.h, NONE, NONE); }
-    selection() { const n = this.e.ex.qvp_selection(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
+    selection() { return this._u32s((o, c) => this.e.ex.qvp_selection(this.h, o, c)); }
     selectionText(form = 'rasm_uthmani', includeCitation = false) { this.e.ex.qvp_selection_text(this.h, FORM[form] ?? 0, includeCitation ? 1 : 0, this.e.scratch); return this.e.qstr(this.e.scratch); }
 
     // ── memorisation ──
@@ -894,11 +911,11 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     unmaskAll() { this.e.ex.qvp_unmask_all(this.h); }
     maskAll() { this.e.ex.qvp_mask_all(this.h); }
     unmask() { this.e.ex.qvp_unmask(this.h); }
-    maskHidden() { const n = this.e.ex.qvp_mask_hidden(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
-    maskWords() { const n = this.e.ex.qvp_mask_words(this.h, this.e.scratch, 4096); return Array.from(new Uint32Array(this.e.mem.buffer, this.e.scratch, Math.min(n, 4096))); }
+    maskHidden() { return this._u32s((o, c) => this.e.ex.qvp_mask_hidden(this.h, o, c)); }
+    maskWords() { return this._u32s((o, c) => this.e.ex.qvp_mask_words(this.h, o, c)); }
     /** band boxes for a word list in viewport px through the current layout */
-    wordBandsView(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const n = this.e._withInputs(() => this.e.ex.qvp_word_bands_view(this.h, this.e.putU32(Uint32Array.from(words)), words.length, height === 'ink' ? 1 : 0, padX, padY, this.e.scratch, 64)); return readBoxes(this.e, this.e.scratch, Math.min(n, 64)); }
-    maskBoxesView() { const n = this.e.ex.qvp_mask_boxes_view(this.h, this.e.scratch, 1024); return readBoxes(this.e, this.e.scratch, Math.min(n, 1024)); }
+    wordBandsView(words, { height = 'lineSpacing', padX = DEFAULTS.HIGHLIGHT_PAD_X, padY = DEFAULTS.HIGHLIGHT_PAD_Y } = {}) { const [at, n] = this.e._withInputs(() => { const wp = this.e.putU32(Uint32Array.from(words)); return this.e.collect(32, (o, c) => this.e.ex.qvp_word_bands_view(this.h, wp, words.length, height === 'ink' ? 1 : 0, padX, padY, o, c)); }); return readBoxes(this.e, at, n); }
+    maskBoxesView() { const [at, n] = this.e.collect(32, (o, c) => this.e.ex.qvp_mask_boxes_view(this.h, o, c)); return readBoxes(this.e, at, n); }
     /** greyed page with a lit window: {lit, byAyah, grey, ink, ayahMarks, ms} → steps */
     revealStart({ lit = DEFAULTS.REVEAL_LIT, byAyah = false, grey = DEFAULTS.REVEAL_GREY, ink = DEFAULTS.INK, ayahMarks = true, ms = 0 } = {}) { return this.e.ex.qvp_reveal_start(this.h, lit, byAyah ? 1 : 0, rgba(grey), rgba(ink), ayahMarks ? 1 : 0, ms); }
     revealGoto(at) { return !!this.e.ex.qvp_reveal_goto(this.h, BigInt(at)); }
@@ -936,7 +953,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     divisionOf(kind, surah, ayah) { const v = this.e.ex.qvp_atlas_division_of(this.h, { juz: 0, hizb: 1, nisf: 2, rubu_al_hizb: 3 }[kind], surah, ayah); return v < 0 ? null : v; }
     juzOf(surah, ayah) { return this.divisionOf('juz', surah, ayah); }
     pagesOfJuz(n) { if (!this.e.ex.qvp_atlas_pages_of_juz(this.h, n, this.e.scratch)) return null; const v = new Uint16Array(this.e.mem.buffer, this.e.scratch, 2); return [v[0], v[1]]; }
-    searchSurahs(text) { const c = this.e._withInputs(() => { const [p, n] = this.e.putStr(text); return this.e.ex.qvp_atlas_search_surahs(this.h, p, n, this.e.scratch, 128); }); return Array.from(new Uint16Array(this.e.mem.buffer, this.e.scratch, Math.min(c, 128))).map(k => this.surah(k)); }
+    searchSurahs(text) { const [at, c] = this.e._withInputs(() => { const [p, n] = this.e.putStr(text); return this.e.collect(2, (o, cap) => this.e.ex.qvp_atlas_search_surahs(this.h, p, n, o, cap)); }); return Array.from(new Uint16Array(this.e.mem.buffer, at, c)).map(k => this.surah(k)); }
   }
 
   // where the rows of a passage start (QVP_ALIGN_*)

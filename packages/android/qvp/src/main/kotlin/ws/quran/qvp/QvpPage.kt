@@ -38,15 +38,15 @@ object QvpEngine {
  * Mirrors web/qvp.js — see docs/API.md. Call [close] when done.
  */
 class QvpPage(bytes: ByteArray) : AutoCloseable {
-    private var nativeHandle: Long = QvpNative.pageLoad(bytes)
-    private val h: Long get() = nativeHandle.takeIf { it != 0L } ?: error("QvpPage is closed")
+    private val nativeHandle = NativeHandle("QvpPage", QvpNative.pageLoad(bytes), QvpNative::pageFree)
+    private val h: Long get() = nativeHandle.get()
     /** The engine's handle, for a passage that loads from this page. Throws once the page is closed. */
     internal val handle: Long get() = h
     /** False once [close] has been called. Every call into the engine needs an open page. */
-    val isOpen: Boolean get() = nativeHandle != 0L
-    init { require(nativeHandle != 0L) { "qvp_page_load failed (not a QVP1 file?)" } }
+    val isOpen: Boolean get() = nativeHandle.isOpen
+    init { require(isOpen) { "qvp_page_load failed (not a QVP1 file?)" } }
 
-    val isClosed: Boolean get() = nativeHandle == 0L
+    val isClosed: Boolean get() = !isOpen
 
     val width: Float; val height: Float; val pageNo: Int
     val nLines: Int; val nAyahs: Int; val nWords: Int; val nPaths: Int; val nDecorations: Int
@@ -395,22 +395,16 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** standalone SVG with the current colours; background alpha 0 = transparent */
     fun cropSvg(t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Boolean = true, background: Int = 0): String? = QvpNative.cropSvg(h, t.arr, pad, keepAyahMarks, background)
 
-    @Synchronized
-    override fun close() {
-        val handle = nativeHandle
-        if (handle != 0L) {
-            nativeHandle = 0L
-            QvpNative.pageFree(handle)
-        }
-    }
+    /** Free the native page. A second call does nothing. */
+    override fun close() = nativeHandle.close()
 }
 
 /** Cross-page lookup from atlas.qva. */
 class QvpAtlas(bytes: ByteArray) : AutoCloseable {
-    private var nativeHandle: Long = QvpNative.atlasLoad(bytes)
-    private val h: Long get() = nativeHandle.takeIf { it != 0L } ?: error("QvpAtlas is closed")
-    init { require(nativeHandle != 0L) { "qvp_atlas_load failed" } }
-    val isClosed: Boolean get() = nativeHandle == 0L
+    private val nativeHandle = NativeHandle("QvpAtlas", QvpNative.atlasLoad(bytes), QvpNative::atlasFree)
+    private val h: Long get() = nativeHandle.get()
+    init { require(nativeHandle.isOpen) { "qvp_atlas_load failed" } }
+    val isClosed: Boolean get() = !nativeHandle.isOpen
     private fun surah(v: Array<String>?) = v?.let { QvpAtlasSurah(it[0].toInt(), it[1].toInt(), it[2].toInt(), QvpEngine.placeName(it[3].toIntOrNull() ?: 255), it[4], it[5], it[6]) }
     fun pageOf(surah: Int, ayah: Int): Int? = QvpNative.atlasPageOf(h, surah, ayah).let { if (it < 0) null else it }
     fun pageRange(page: Int): Pair<Pair<Int, Int>, Pair<Int, Int>>? = QvpNative.atlasPageRange(h, page)?.let { (it[0] to it[1]) to (it[2] to it[3]) }
@@ -426,12 +420,6 @@ class QvpAtlas(bytes: ByteArray) : AutoCloseable {
     fun juzOf(surah: Int, ayah: Int) = divisionOf(Division.JUZ, surah, ayah)
     fun pagesOfJuz(n: Int): Pair<Int, Int>? = QvpNative.atlasPagesOfJuz(h, n)?.let { it[0] to it[1] }
     fun searchSurahs(text: String): List<QvpAtlasSurah> = QvpNative.atlasSearchSurahs(h, text).toList().mapNotNull { n -> surah(n) }
-    @Synchronized
-    override fun close() {
-        val handle = nativeHandle
-        if (handle != 0L) {
-            nativeHandle = 0L
-            QvpNative.atlasFree(handle)
-        }
-    }
+    /** Free the native atlas. A second call does nothing. */
+    override fun close() = nativeHandle.close()
 }

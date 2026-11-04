@@ -11,15 +11,25 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   from the table and the reflow specs take their defaults from it, so no wrapper copies the
   numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
 
+### Changed
+- The build file's default `qvpVersion` is the workspace version, 0.7.0, where it was
+  `0.1.0-SNAPSHOT`. `publishToMavenLocal` needs no `-PqvpVersion` flag.
+
 ### Fixed
 - Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
   steps, as the Swift, Dart and web wrappers do. They truncated, so alpha 0.5 gave `0x7f` on
   Android and `0x80` everywhere else. A NaN alpha clamps to 0 in every wrapper, where
   Swift trapped, Dart threw and React Native returned a malformed colour.
-
-### Changed
-- The build file's default `qvpVersion` is the workspace version, 0.7.0, where it was
-  `0.1.0-SNAPSHOT`. `publishToMavenLocal` needs no `-PqvpVersion` flag.
+- Every wrapper handles a freed object, a second free and a large array result the same way
+  (`docs/API.md`, conventions). A call on a freed page, atlas, ornament set or passage throws
+  an error with the object's name: a `StateError` in Dart in every build mode, where a debug
+  assert stood before, a fatal error in Swift and a rejection in React Native. The Flutter
+  native backend no longer passes a freed handle's null pointer to the engine. A second
+  `free`, `close` or `dispose` does nothing, Flutter's `QvpPage.dispose` included, and the
+  Kotlin handle is atomic, so two threads that close the same object free it once. Every
+  array getter grows its buffer to the total the engine reports, where the Android bridge,
+  the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
+  highlight handles and a 256 KB scratch.
 
 ## [0.7.0] - 2026-10-14
 

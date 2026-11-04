@@ -81,15 +81,16 @@ public final class QvpOrnaments {
     /// Load an ornament set from a file.
     public convenience init(path: String) throws { try self.init(bytes: try Data(contentsOf: URL(fileURLWithPath: path))) }
     deinit { close() }
-    /// Free the native set. Safe to call more than once. A page dressed from it keeps its dress.
+    /// Free the native set. A second call does nothing. A page dressed from it keeps its dress.
     public func close() { if let s = h { qvp_ornaments_free(s); h = nil } }
     public var isOpen: Bool { h != nil }
     /// The engine handle. Internal: the wrapper marshals through it, no app ever sees it.
-    var p: OpaquePointer { h! }
+    /// A call on a closed set stops the program with the fatal error `QvpOrnaments is closed`.
+    var p: OpaquePointer { guard let h else { fatalError("QvpOrnaments is closed") }; return h }
 
     /// The ornament of `kind` in `style`, or nil.
     public func find(_ kind: OrnamentKind, _ style: String) -> Ornament? {
-        guard let s = h else { return nil }
+        let s = p
         let i = withBytes(style) { sp, sn in qvp_ornament_find(s, UInt32(kind.rawValue), sp, sn) }
         return i < 0 ? nil : list.first { $0.index == Int(i) }
     }
@@ -188,10 +189,11 @@ public struct OrnamentDraw {
 extension QvpPage {
     /// Put other ornaments on the page: up to one per kind. Returns the readout, or nil when
     /// the engine refused the spec (an index out of range, an ornament of another kind, or
-    /// nothing to dress). Replaces any previous dress.
+    /// nothing to dress). Replaces any previous dress. A closed set is a fatal error,
+    /// `QvpOrnaments is closed`.
     @discardableResult
     public func dress(_ set: QvpOrnaments, _ spec: DressSpec = DressSpec()) -> DressInfo? {
-        guard set.isOpen else { return nil }
+        let ornaments = set.p
         // Resolve every name before the C spec is filled.
         func index(_ c: OrnamentChoice?, _ kind: OrnamentKind) -> UInt32 {
             let choice = c ?? spec.style.map { OrnamentChoice.style($0) } ?? .absent
@@ -211,7 +213,7 @@ extension QvpPage {
             var s = QvpDressSpec(ayah_mark: ayah, surah_header: header, page_frame: frame, gap: spec.gap, band_gap: spec.bandGap,
                                  ayah_mark_scale: spec.ayahMarkScale, page_frame_scale: spec.pageFrameScale, line_art: lineArt,
                                  colors: triples.isEmpty ? nil : tp.baseAddress, n_colors: UInt32(triples.count / 3))
-            return qvp_dress(p, set.p, &s)
+            return qvp_dress(p, ornaments, &s)
         }
         // the dress changed the layout's fit: read it again
         readLayout()

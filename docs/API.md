@@ -28,6 +28,14 @@ and `qvp_hit_test(...)` in C.
   `Sel.wordBody(i)`, `Sel.wordMarks(i)`, `Sel.wordMark(i, nth)`, `Sel.wordMarkNamed(i, 'fathah', nth)`,
   `Sel.wordPath(i, nth)`, `Sel.path(p)`, `Sel.mark('shaddah')`, `Sel.category('harakah')`,
   `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.decoration('ayah-mark')`, `Sel.decorationIndex(d)`.
+- **Freed objects.** A call on a freed page, atlas, ornament set or passage throws the
+  platform's ordinary error with the object's name (`Error` in JavaScript, a rejected promise in
+  React Native, `IllegalStateException` in Kotlin, `StateError` in Dart in every build mode, a
+  fatal error in Swift, whose calls do not throw), and no wrapper passes a null handle to the engine.
+- **Free twice.** A second `free`, `close` or `dispose` does nothing, and the Kotlin handle is
+  atomic, so two threads that close the same object free it once.
+- **Array results.** Every array getter reads the total count the engine returns and asks again
+  with a larger buffer when the first one was too small, so no wrapper cuts a result short.
 - **The engine computes, the host renders.** Hit-testing, layout, styling, highlight bands,
   masks and search are engine calls. A wrapper marshals the calls and renders the results.
 - **Data is separate from code.** Pages (`NNN.qvp`), the atlas (`atlas.qva`), optional text
