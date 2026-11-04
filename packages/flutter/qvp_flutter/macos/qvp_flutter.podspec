@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'qvp_flutter'
-  s.version          = '0.7.0'
+  s.version          = '0.8.0'
   s.summary          = 'Flutter wrapper for the QVP vector mushaf engine'
   s.description      = <<-DESC
 Flutter wrapper for the QVP vector mushaf engine (dart:ffi over libqvp_ffi).

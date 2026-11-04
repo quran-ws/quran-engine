@@ -5,21 +5,34 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.8.0] - 2026-11-04
+
+### Added
 - `QVP_DEFAULT_REFLOW_RELAX`, `QVP_DEFAULT_REFLOW_MAX_STRETCH` and `QVP_DEFAULT_SELECTION_PAD_X`
   in `qvp.h`, mirrored in every wrapper's defaults table (`QvpDefaults` in Kotlin, Swift and
   Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
   from the table and the reflow specs take their defaults from it, so no wrapper copies the
   numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
+- Reflow can keep the print's line breaks with `QvpBreaks.printed`. Each line stays whole
+  while its ink grows to fill the page width. `reflowMaxZoom` measures the widest row in this
+  mode, and larger zooms clamp to it.
 
 ### Changed
-- CI builds the release XCFramework. `scripts/prepare-ios-release.sh` starts
-  `prepare-ios-release.yml`, which builds it on macOS, attaches it to the draft release and
-  pushes the commit that sets its URL, checksum and build commit in `Package.swift`.
-  `release.yml` refuses a tag whose engine sources differ from that build commit.
 - **Breaking.** Swift: `QvpOrnaments.find`, `QvpPage.dress` with a closed set and
   `QvpPassage.layout` on a closed passage stop the program with a fatal error that names the
   object, such as `QvpOrnaments is closed`. They returned nil, the same answer as a refused
   spec or no match. Check `isOpen` first where an object can close before its last call.
+- CI builds the release XCFramework. `scripts/prepare-ios-release.sh` starts
+  `prepare-ios-release.yml`, which builds it on macOS, attaches it to the draft release and
+  pushes the commit that sets its URL, checksum and build commit in `Package.swift`.
+  `release.yml` refuses a tag whose engine sources differ from that build commit.
 
 ### Removed
 - **Breaking.** `QvpViewPolicy.minZoom`, `zoomedThreshold`, `swipeAxisRatio`,

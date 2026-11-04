@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/qvp-format", "crates/qvp-convert", "crates/qvp-core", "crates/qvp-ffi"]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/quran-ws/quran-engine"
@@ -13,8 +13,8 @@ homepage = "https://quran.ws/blocks/quran-engine"
 # equal `[workspace.package] version`: `scripts/set-version.sh` rewrites it and
 # `scripts/check-versions.sh` checks it.
 [workspace.dependencies]
-qvp-format = { path = "crates/qvp-format", version = "0.7.0" }
-qvp-core = { path = "crates/qvp-core", version = "0.7.0" }
+qvp-format = { path = "crates/qvp-format", version = "0.8.0" }
+qvp-core = { path = "crates/qvp-core", version = "0.8.0" }
 
 # `release` is what tests, clippy and local builds use. It stays at the default
 # codegen so an incremental rebuild takes seconds.

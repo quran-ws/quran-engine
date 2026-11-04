@@ -5,6 +5,16 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.8.0] - 2026-11-04
+
+### Added
 - `QVP_DEFAULT_REFLOW_RELAX`, `QVP_DEFAULT_REFLOW_MAX_STRETCH` and `QVP_DEFAULT_SELECTION_PAD_X`
   in `qvp.h`, mirrored in every wrapper's defaults table (`QvpDefaults` in Kotlin, Swift and
   Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad
@@ -13,6 +23,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 - React Native: `DEFAULTS` holds every engine default under its header name, read from the
   native module, which sends the whole `QvpDefaults` table. A key the native module lacks is
   an error that names the key and says the native module is older than the package.
+- Reflow can keep the print's line breaks: the `reflowBreaks` prop takes `'printed'`, and the
+  `Breaks` type names the four modes. Each line stays whole while its ink grows to fill the
+  page width. `reflowMaxZoom` measures the widest row in this mode, and larger zooms clamp to
+  it.
 
 ### Changed
 - React Native: the Android module runs the page queries that read only the loaded page
