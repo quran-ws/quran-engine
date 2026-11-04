@@ -1298,6 +1298,41 @@ void main() {
     },
   );
 
+  test(
+    'a call after engine.dispose throws a StateError, and a free still works',
+    () {
+      final own = QvpEngine.open(path: libPath);
+      final p = own.loadPage(File(pagePath).readAsBytesSync());
+      own.dispose();
+      own.dispose();
+      final disposed = throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          'QvpEngine was disposed',
+        ),
+      );
+      expect(() => p.hitAreas(), disposed);
+      // calls that fill a struct before they reach the engine are refused first
+      expect(
+        () => p.hitTest(10, 10, const QvpHitOptions(maxDistance: 6)),
+        disposed,
+      );
+      expect(
+        () => p.layout(const QvpLayoutSpec(viewportW: 690, viewportH: 1100)),
+        disposed,
+      );
+      expect(() => p.style(Sel.mark('shaddah'), 0xff0000ff), disposed);
+      expect(() => p.text('2:255'), disposed);
+      expect(() => p.theme(const QvpTheme()), disposed);
+      expect(() => own.version, disposed);
+      expect(() => own.name(QvpNames.mark, 1), disposed);
+      expect(() => own.loadPage(File(pagePath).readAsBytesSync()), disposed);
+      p.dispose();
+      expect(p.isDisposed, isTrue);
+    },
+  );
+
   test('a second free, close or dispose does nothing', () {
     final p = engine.loadPage(File(pagePath).readAsBytesSync());
     final passage = QvpPassage.load([p], 2, 255);

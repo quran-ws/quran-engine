@@ -148,6 +148,10 @@ class QvpEngine {
   ) => backend.viewClamp(view, contentW, contentH, viewportW, viewportH);
 
   /// Releases backend resources. Free pages and atlases first.
+  ///
+  /// The engine is closed after this. On a native build, any later call on the engine or on
+  /// a page, atlas, passage or ornament set it made throws `StateError('QvpEngine was
+  /// disposed')`, and freeing an object still works. A second `dispose` does nothing.
   void dispose() {
     if (_disposed) return;
     _disposed = true;

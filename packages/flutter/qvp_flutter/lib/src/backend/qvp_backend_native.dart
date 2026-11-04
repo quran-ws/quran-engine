@@ -170,16 +170,35 @@ class QvpNativeBackend implements QvpBackend {
   late final ffi.Pointer<ffi.Uint32> _dressColors;
   bool _disposed = false;
 
+  /// Throws once [dispose] has run. [dispose] frees the scratch buffers and the out structs
+  /// that every call reads and writes, so a call after it would reach freed memory.
+  void _live() {
+    if (_disposed) throw StateError('QvpEngine was disposed');
+  }
+
   // A freed handle holds a null pointer. The engine must never see one, so each accessor
-  // throws instead, naming the object, in every build mode.
-  ffi.Pointer<QvpPageC> _page(PageHandle h) =>
-      _open((h as NativePageHandle).pointer, 'QvpPage');
-  ffi.Pointer<QvpAtlasC> _atlas(AtlasHandle h) =>
-      _open((h as NativeAtlasHandle).pointer, 'QvpAtlas');
-  ffi.Pointer<QvpPassageC> _passage(PassageHandle h) =>
-      _open((h as NativePassageHandle).pointer, 'QvpPassage');
-  ffi.Pointer<QvpOrnamentsC> _ornaments(OrnamentsHandle h) =>
-      _open((h as NativeOrnamentsHandle).pointer, 'QvpOrnaments');
+  // throws instead, naming the object, in every build mode. Each accessor also checks that
+  // the engine is open, which covers every call that takes a handle.
+  ffi.Pointer<QvpPageC> _page(PageHandle h) {
+    _live();
+    return _open((h as NativePageHandle).pointer, 'QvpPage');
+  }
+
+  ffi.Pointer<QvpAtlasC> _atlas(AtlasHandle h) {
+    _live();
+    return _open((h as NativeAtlasHandle).pointer, 'QvpAtlas');
+  }
+
+  ffi.Pointer<QvpPassageC> _passage(PassageHandle h) {
+    _live();
+    return _open((h as NativePassageHandle).pointer, 'QvpPassage');
+  }
+
+  ffi.Pointer<QvpOrnamentsC> _ornaments(OrnamentsHandle h) {
+    _live();
+    return _open((h as NativeOrnamentsHandle).pointer, 'QvpOrnaments');
+  }
+
   static ffi.Pointer<N> _open<N extends ffi.NativeType>(
     ffi.Pointer<N> p,
     String what,
@@ -198,6 +217,7 @@ class QvpNativeBackend implements QvpBackend {
   /// Runs [f] over [bytes] bytes of the input scratch, or over a fresh allocation when the
   /// scratch is full. Offsets stay 8-byte aligned, so a [ffi.Uint32] view of a slice is valid.
   R _reserve<R>(int bytes, R Function(ffi.Pointer<ffi.Uint8> p) f) {
+    _live();
     final saved = _inUsed;
     final base = (saved + 7) & ~7;
     if (base + bytes > _scratchBytes) {
@@ -340,24 +360,35 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   String _name(void Function(int, ffi.Pointer<QvpStrC>) fn, int v) {
+    _live();
     fn(v, _str);
     return _s();
   }
 
   @override
   String get version {
+    _live();
     b.version(_str);
     return _s();
   }
 
   @override
-  int get formatVersion => b.formatVersion();
+  int get formatVersion {
+    _live();
+    return b.formatVersion();
+  }
 
   @override
-  String get engineName => b.engineName().cast<pffi.Utf8>().toDartString();
+  String get engineName {
+    _live();
+    return b.engineName().cast<pffi.Utf8>().toDartString();
+  }
 
   @override
-  int nameCount(int table) => b.nameCount(table);
+  int nameCount(int table) {
+    _live();
+    return b.nameCount(table);
+  }
 
   @override
   String name(int table, int id) =>
@@ -380,7 +411,10 @@ class QvpNativeBackend implements QvpBackend {
   String categoryName(int c) => _name(b.categoryName, c);
 
   @override
-  int markCategory(int m) => b.markCategory(m);
+  int markCategory(int m) {
+    _live();
+    return b.markCategory(m);
+  }
 
   @override
   int markFromName(String s) => _withString(s, (p, n) => b.markFromName(p, n));
@@ -400,6 +434,7 @@ class QvpNativeBackend implements QvpBackend {
     double min = 0,
     double max = 0,
   }) {
+    _live();
     _writeView(_view, view);
     b.viewZoomAbout(_view, focalX, focalY, factor, min, max, _viewOut);
     return _readView(_viewOut.ref);
@@ -1041,6 +1076,7 @@ class QvpNativeBackend implements QvpBackend {
 
   @override
   bool isZoomed(QvpZoom zoom, QvpView view, double fitScale) {
+    _live();
     _writeZoom(_zoom, zoom);
     _writeView(_view, view);
     return b.zoomIsZoomed(_zoom, _view, fitScale) != 0;
@@ -1904,6 +1940,7 @@ class QvpNativeBackend implements QvpBackend {
     QvpTarget t, [
     PageHandle? handle,
   ]) {
+    _live();
     final r = p.ref;
     r.target = t.code;
     if (t.wordKey != null && handle != null) {
@@ -1936,6 +1973,7 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   void _writeSelector(ffi.Pointer<QvpSelectorC> p, QvpSelector s) {
+    _live();
     final r = p.ref;
     r.selector = s.code;
     r.a = s.argA;
@@ -1944,6 +1982,7 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   void _writeHighlight(ffi.Pointer<QvpHighlightStyleC> p, QvpHighlightStyle s) {
+    _live();
     final r = p.ref;
     r.mode = s.modeCode;
     r.height = s.heightCode;
@@ -1958,6 +1997,7 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   void _writeTheme(ffi.Pointer<QvpThemeC> p, QvpTheme t) {
+    _live();
     final r = p.ref;
     r.ink = t.ink != null ? rgba(t.ink!) : 0;
     r.diacritics = t.diacritics != null ? rgba(t.diacritics!) : 0;
@@ -1993,6 +2033,7 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   void _writeSpec(ffi.Pointer<QvpLayoutSpecC> p, QvpLayoutSpec s) {
+    _live();
     final r = p.ref;
     r.viewportW = s.viewportW;
     r.viewportH = s.viewportH;
@@ -2018,18 +2059,21 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   void _writeHitOptions(ffi.Pointer<QvpHitOptionsC> p, QvpHitOptions opt) {
+    _live();
     p.ref.maxDistance = opt.maxDistance;
     p.ref.gapBias = opt.gapBias;
     p.ref.preferExact = opt.preferExact ? 1 : 0;
   }
 
   void _writeView(ffi.Pointer<QvpViewC> p, QvpView v) {
+    _live();
     p.ref.scale = v.scale;
     p.ref.offsetX = v.offsetX;
     p.ref.offsetY = v.offsetY;
   }
 
   void _writeZoom(ffi.Pointer<QvpZoomC> p, QvpZoom z) {
+    _live();
     p.ref.step = z.step;
     p.ref.zoom = z.zoom;
     p.ref.mode = z.mode.index;
@@ -2040,6 +2084,7 @@ class QvpNativeBackend implements QvpBackend {
     QvpDressSpec s,
     OrnamentsHandle set,
   ) {
+    _live();
     final r = p.ref;
     int resolve(Object? ref, int kind) {
       if (ref == null) return qvpNone;
@@ -2073,6 +2118,7 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   void _writePassageSpec(ffi.Pointer<QvpPassageSpecC> p, QvpPassageSpec s) {
+    _live();
     final r = p.ref;
     r.width = s.width;
     r.scale = s.scale;

@@ -185,6 +185,9 @@ All notable changes to the engine and its packages. The format follows
   `QvpView.zoomAbout`.
 
 ### Fixed
+- Flutter: a call on a disposed `QvpEngine` throws `StateError('QvpEngine was disposed')` on a
+  native build. A page, atlas or name call after `engine.dispose()` reached freed scratch
+  memory. Freeing a page, atlas, passage or ornament set still works afterwards.
 - `docs/API.md`: the "Every symbol" table has a row for each of the 173 header functions, in
   the header's order. It had 139 rows and left out the view, zoom and reflow functions and
   five layout getters. `scripts/check-parity.py` fails when a header function has no row.
