@@ -85,6 +85,14 @@ abstract interface class QvpBackend {
     double min = 0,
     double max = 0,
   });
+  QvpView viewPan(QvpView view, double dx, double dy);
+  QvpView viewClamp(
+    QvpView view,
+    double contentW,
+    double contentH,
+    double viewportW,
+    double viewportH,
+  );
   void dispose();
 
   // ── Page lifecycle & data ──
@@ -195,6 +203,12 @@ abstract interface class QvpBackend {
     PageHandle handle,
     QvpLayoutSpec spec,
     double max,
+  );
+  ({double x, double y}) viewToLayout(
+    PageHandle handle,
+    QvpView view,
+    double viewX,
+    double viewY,
   );
   ({double x0, double y0, double x1, double y1}) wordBoundsView(
     PageHandle handle,

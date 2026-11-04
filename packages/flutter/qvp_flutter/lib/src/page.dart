@@ -452,6 +452,14 @@ class QvpPage extends ChangeNotifier {
   ({double x0, double y0, double x1, double y1}) wordBoundsView(int i) =>
       _backend.wordBoundsView(handle, i);
 
+  /// Where a point of the viewport lands in the laid-out page: how a host turns a touch into a
+  /// [hitTestView]. The inverse of `offset + scale·p`.
+  ({double x, double y}) viewToLayout(
+    QvpView view,
+    double viewX,
+    double viewY,
+  ) => _backend.viewToLayout(handle, view, viewX, viewY);
+
   // ── Styles ──
 
   /// Adds a style rule → handle (0 = bad selector).

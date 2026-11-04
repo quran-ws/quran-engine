@@ -16,6 +16,19 @@
   array getter grows its buffer to the total the engine reports, where the Android bridge,
   the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
   highlight handles and a 256 KB scratch.
+- **Breaking.** `kMinZoom` and `kMaxZoom` are gone, because the engine applies the pinch
+  limits. Use `QvpDefaults.maxZoom` and `QvpPageView.maxZoom`. The floor is the fitted page.
+  `QvpPageView.minScale` and `maxScale`, which did nothing, are gone.
+  `QvpViewController.zoomBy` takes `min` and `max` in place of `minScale` and `maxScale`.
+- Every pan, zoom and view computation in `QvpPageView` goes through the engine: a tap is
+  inverted with `QvpPage.viewToLayout`, a magnifying pinch is placed by
+  `QvpEngine.viewZoomAbout` with the fitted page as the floor and `maxZoom` as the ceiling, a
+  one-finger drag by `QvpEngine.viewPan` (the view did not drag before), and the view a
+  drag or a pinch produces is held with `dressClamp`. A pinch follows the rule in
+  `docs/API.md`, and two fingers drag the page. `QvpViewController.zoomBy`, `panBy` and
+  `toView` call the engine. `zoomBy` stops at the fitted page, and a controller that a host
+  hands to a new view keeps working. `zoomSpec` keeps the host's reflow knobs on the printed
+  page. The tests replay `conformance/scenarios/zoom.json`.
 - The web engine in the package, `assets/wasm/qvp_ffi.wasm` and `assets/js/qvp.js`, is
   built from the release tag, so it matches the native libraries and the crates of the same
   version. The repository no longer tracks the two files. The pubspec declares their

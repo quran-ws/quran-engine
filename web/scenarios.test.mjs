@@ -69,5 +69,72 @@ for (const c of dressed.cases) {
 }
 page.undress()
 set.free()
-page.free()
 console.log(`ok  ${m} dress scenarios match the engine`)
+
+// conformance/scenarios/zoom.json: the reader's pan and zoom, from the fit through a pinch
+// under each reflowing control, and the spec each pinch asks for.
+const zoomed = JSON.parse(readFileSync(new URL('conformance/scenarios/zoom.json', root), 'utf8'))
+const about = (a, b, what) => assert.ok(Math.abs(a - b) <= zoomed.tolerance * Math.max(1, Math.abs(b)), `${what}: got ${a}, engine says ${b}`)
+const sameView = (v, want, what) => { for (const k of ['scale', 'offsetX', 'offsetY']) about(v[k], want[k], `${what} ${k}`) }
+const zspec = zoomed.spec
+const ZL = page.layout(zspec)
+for (const k of ['fitScale', 'fitX', 'fitY', 'contentW', 'contentH']) about(ZL[k], zoomed.fit[k], `fit ${k}`)
+for (const c of zoomed.zoomAbout) sameView(engine.viewZoomAbout(c.view, c.focalX, c.focalY, c.factor, { min: c.min, max: c.max }), c.result, `zoomAbout ×${c.factor} max ${c.max}`)
+sameView(engine.viewPan(zoomed.pan.view, zoomed.pan.dx, zoomed.pan.dy), zoomed.pan.result, 'pan')
+for (const c of zoomed.clamp) sameView(engine.viewClamp(c.view, ZL.contentW, ZL.contentH, zspec.viewportW, zspec.viewportH), c.result, `clamp of ${c.view.offsetX}, ${c.view.offsetY}`)
+for (const [vx, vy, x, y] of zoomed.viewToLayout.points) {
+  const q = page.viewToLayout(zoomed.viewToLayout.view, vx, vy)
+  about(q.x, x, `viewToLayout(${vx}, ${vy}) x`); about(q.y, y, `viewToLayout(${vx}, ${vy}) y`)
+}
+for (const c of zoomed.isZoomed) assert.equal(page.zoomIsZoomed(c.zoom, c.view, c.fitScale), c.result, `isZoomed at scale ${c.view.scale}`)
+const fitted = { scale: ZL.fitScale, offsetX: ZL.fitX, offsetY: ZL.fitY }
+for (const c of zoomed.pinches) {
+  const tag = `${c.mode} pinch`
+  // each pinch starts from the printed layout, as the generator did
+  page.layout(zspec)
+  const got = page.zoomPinch(zspec, c.start, fitted, c.factor, c.focalX, c.focalY)
+  assert.equal(got.zoom.mode, c.zoom.mode, tag); assert.equal(got.zoom.step, c.zoom.step, tag); about(got.zoom.zoom, c.zoom.zoom, `${tag} zoom`)
+  sameView(got.view, c.view, tag)
+  assert.equal(got.relaid, c.relaid, tag)
+  assert.equal(page.zoomIsZoomed(got.zoom, got.view, ZL.fitScale), c.zoomedAfter, `${tag} zoomed after`)
+  // the spec the control asks for comes back whole: the zoom in force and the host's knobs
+  const asks = page.zoomSpec(zspec, got.zoom)
+  about(asks.viewportW, c.spec.viewportW, `${tag} spec viewportW`); about(asks.padTop, c.spec.padTop, `${tag} spec padTop`)
+  assert.equal(asks.surahFrames, c.spec.surahFrames, `${tag} spec surahFrames`)
+  about(asks.reflow.zoom, c.spec.reflowZoom, `${tag} spec reflow zoom`)
+  assert.equal(asks.reflow.fill, c.spec.fill, `${tag} spec fill`)
+  about(asks.reflow.wordGap, c.spec.wordGap, `${tag} spec wordGap`); about(asks.reflow.maxStretch, c.spec.maxStretch, `${tag} spec maxStretch`)
+}
+
+// On the printed page the control reflows nothing, and the host's knobs come back as it set them
+{
+  const want = zoomed.printedSpec.spec
+  const asks = page.zoomSpec(zspec, zoomed.printedSpec.zoom)
+  assert.ok(asks.reflow, 'printed spec keeps the reflow knobs')
+  about(asks.viewportW, want.viewportW, 'printed spec viewportW'); about(asks.padTop, want.padTop, 'printed spec padTop')
+  assert.equal(asks.surahFrames, want.surahFrames, 'printed spec surahFrames')
+  about(asks.reflow.zoom, want.reflowZoom, 'printed spec reflow zoom')
+  assert.equal(asks.reflow.fill, want.fill, 'printed spec fill')
+  about(asks.reflow.wordGap, want.wordGap, 'printed spec wordGap'); about(asks.reflow.maxStretch, want.maxStretch, 'printed spec maxStretch')
+}
+
+// A pinch whose fingers drift, replayed as a page view runs it: the engine works from the
+// control and the focal point the gesture began on, with the factor of the whole gesture; the
+// magnifying glass zooms the view the pinch began on, and the reflowing controls take the view
+// the last frame returned. The host pans the answer by the drift and holds it.
+for (const g of zoomed.drifts) {
+  page.layout(zspec)
+  let base = g.view
+  g.frames.forEach((f, i) => {
+    const tag = `${g.mode} drifting pinch, frame ${i}`
+    const c = page.zoomPinch(zspec, g.start, g.start.mode === 'magnify' ? g.view : base, f.factor, g.focalX, g.focalY)
+    base = c.view
+    const drawn = page.dressClamp(engine.viewPan(c.view, f.focalX - g.focalX, f.focalY - g.focalY), zspec.viewportW, zspec.viewportH)
+    assert.equal(c.zoom.mode, f.zoom.mode, tag); assert.equal(c.zoom.step, f.zoom.step, tag); about(c.zoom.zoom, f.zoom.zoom, `${tag} zoom`)
+    assert.equal(c.relaid, f.relaid, `${tag} relaid`)
+    sameView(drawn, f.view, tag)
+  })
+}
+page.free()
+const driftFrames = zoomed.drifts.reduce((n, g) => n + g.frames.length, 0)
+console.log(`ok  ${zoomed.zoomAbout.length + zoomed.clamp.length + zoomed.isZoomed.length + zoomed.pinches.length + 3 + driftFrames} zoom scenarios match the engine`)

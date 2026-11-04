@@ -119,7 +119,10 @@ class QvpEngine {
     return QvpOrnaments.fromHandle(this, backend, handle, list);
   }
 
-  /// Scales [view] by [factor] about a focal point in viewport px.
+  /// [view] zoomed by [factor] about a point of the viewport, with the scale held between [min]
+  /// and [max]: the point under the fingers stays under them. A limit of 0 is the engine's own,
+  /// and a ceiling under the floor is the floor. A host hands this the view and the focal point
+  /// the pinch began on and the factor of the whole gesture.
   QvpView viewZoomAbout(
     QvpView view,
     double focalX,
@@ -128,6 +131,21 @@ class QvpEngine {
     double min = 0,
     double max = 0,
   }) => backend.viewZoomAbout(view, focalX, focalY, factor, min: min, max: max);
+
+  /// [view] moved by a drag, in viewport px.
+  QvpView viewPan(QvpView view, double dx, double dy) =>
+      backend.viewPan(view, dx, dy);
+
+  /// [view] held against the viewport: an axis the content does not fill is centred, and on an
+  /// axis it overflows the content keeps the viewport covered. [QvpPage.dressClamp] is the same
+  /// over the content plus a dress's border.
+  QvpView viewClamp(
+    QvpView view,
+    double contentW,
+    double contentH,
+    double viewportW,
+    double viewportH,
+  ) => backend.viewClamp(view, contentW, contentH, viewportW, viewportH);
 
   /// Releases backend resources. Free pages and atlases first.
   void dispose() {

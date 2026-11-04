@@ -17,6 +17,13 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   object, such as `QvpOrnaments is closed`. They returned nil, the same answer as a refused
   spec or no match. Check `isOpen` first where an object can close before its last call.
 
+### Removed
+- **Breaking.** `QvpViewPolicy.minZoom`, `zoomedThreshold`, `swipeAxisRatio`,
+  `swipeDistance`, `swipeVelocity`, `clampZoom(_:)` and `clampZoom(_:fit:)` are gone, because
+  the engine decides each of them. Use `QvpZoom.isZoomed(_:fitScale:)`,
+  `QvpViewPolicy.swipeDirection(translation:velocity:)`, and `clampZoom(_:fit:ceiling:)` or
+  `QvpView.zoomAbout`. The floor of a pinch is the fitted page.
+
 ### Fixed
 - Swift: `QvpColor.parse` and `QvpColor.withAlpha` clamp a NaN alpha to 0, where they
   trapped.
@@ -30,6 +37,14 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   array getter grows its buffer to the total the engine reports, where the Android bridge,
   the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
   highlight handles and a 256 KB scratch.
+- Every pan, zoom and view computation in `QvpPageView` and `QvpPageCanvas` goes through the
+  engine: a tap is inverted with `viewToLayout`, a magnifying pinch is placed by
+  `QvpView.zoomAbout` with the fitted page as the floor and `maxZoom` as the ceiling, a drag
+  by `QvpView.pan`, the zoomed line by `qvp_zoom_is_zoomed`, and the view a drag or a pinch
+  produces is held with `dressClamp`. A pinch follows the rule in `docs/API.md`, and in
+  `QvpPageView` two fingers drag the page. A pinch that ends while the reader selects no
+  longer leaves the one-finger drag switched off. `zoomSpec` keeps the host's reflow knobs on
+  the printed page. The tests replay `conformance/scenarios/zoom.json`.
 
 ## [0.7.0] - 2026-10-14
 

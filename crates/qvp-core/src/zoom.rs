@@ -290,7 +290,16 @@ impl Page {
         // `zoom` always reads as the size in force, whichever field the mode steers by, so a
         // host can put it on screen without asking what a step means.
         let next = Zoom { zoom: self.zoom_of(spec, next), ..next };
-        if (next.zoom - self.zoom_of(spec, from)).abs() < 1e-4 {
+        // Nothing to lay out when the control stays where it was and the layout in force is at
+        // that size. A pinch measures from the control it began on, but a step it committed
+        // earlier has laid the page out again since: when the fingers come back to the step
+        // they began on, the page is still at the other step and is laid out again here.
+        let laid = match self.current_layout() {
+            Some(l) if l.is_reflowed() => l.spec.reflow.map(|r| r.zoom).unwrap_or(1.0),
+            Some(_) => 1.0,
+            None => next.zoom,
+        };
+        if (next.zoom - self.zoom_of(spec, from)).abs() < 1e-4 && (next.zoom - laid).abs() < 1e-4 {
             return ZoomChange { zoom: next, view, relaid: false };
         }
         let (lx, ly) = self.view_to_layout(view, focal.0, focal.1);

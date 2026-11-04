@@ -473,6 +473,21 @@ and asks for the view it produces. `viewZoomAbout` keeps the point under two fin
 them, `viewClamp` centres an axis the content does not fill and covers the viewport on one it
 overflows.
 
+Every page view follows one rule for a pinch. On each frame the engine zooms about the focal
+point the gesture began on, by the factor of the whole gesture. The host then pans the answer
+by the drift of the focal point since the gesture began (`viewPan`), so two fingers also drag
+the page, and holds the result with `dressClamp` (`viewClamp` over the dressed box). The view
+that the engine zooms is different for each control:
+
+- Under `magnify`, `viewZoomAbout` or `zoomPinch` takes the view the gesture began on, because
+  the factor already covers the whole gesture.
+- Under `stepped` and `continuous`, `zoomPinch` takes the control the gesture began on and the
+  view that its previous frame returned, before the drift. A step committed earlier in the
+  gesture moved the page, and the engine finds the word under the fingers on the current layout.
+
+`conformance/scenarios/zoom.json` holds the engine's answers for a drifting pinch under each
+of the two kinds of control, and every wrapper's test suite replays them.
+
 `viewAnchor` is the one reflow needs. A relayout moves a word to another row, so a host cannot
 hold the page still by remembering pixels: it remembers the word under the fingers and the
 point inside it (`nx`, `ny` from 0 to 1) and asks for the view that brings that point back to a

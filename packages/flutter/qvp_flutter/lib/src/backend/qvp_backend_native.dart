@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import '../bindings.dart';
 import '../types.dart';
 import 'qvp_backend.dart';
+import 'spec_zoom.dart';
 
 /// Creates the default native backend over dart:ffi.
 QvpBackend createDefaultBackend({String? path, dynamic library}) =>
@@ -401,6 +402,26 @@ class QvpNativeBackend implements QvpBackend {
   }) {
     _writeView(_view, view);
     b.viewZoomAbout(_view, focalX, focalY, factor, min, max, _viewOut);
+    return _readView(_viewOut.ref);
+  }
+
+  @override
+  QvpView viewPan(QvpView view, double dx, double dy) {
+    _writeView(_view, view);
+    b.viewPan(_view, dx, dy, _viewOut);
+    return _readView(_viewOut.ref);
+  }
+
+  @override
+  QvpView viewClamp(
+    QvpView view,
+    double contentW,
+    double contentH,
+    double viewportW,
+    double viewportH,
+  ) {
+    _writeView(_view, view);
+    b.viewClamp(_view, contentW, contentH, viewportW, viewportH, _viewOut);
     return _readView(_viewOut.ref);
   }
 
@@ -986,7 +1007,7 @@ class QvpNativeBackend implements QvpBackend {
     _writeZoom(_zoom, zoom);
     final p = _scratch.cast<QvpLayoutSpecC>();
     b.zoomSpec(_page(handle), _spec, _zoom, p);
-    return _readSpec(p.ref);
+    return withReflowZoom(spec, p.ref.reflowZoom);
   }
 
   @override
@@ -1106,6 +1127,19 @@ class QvpNativeBackend implements QvpBackend {
   ) {
     _writeSpec(_spec, spec);
     return b.layoutLineSpacingToFill(_page(handle), _spec, max);
+  }
+
+  @override
+  ({double x, double y}) viewToLayout(
+    PageHandle handle,
+    QvpView view,
+    double viewX,
+    double viewY,
+  ) {
+    _writeView(_view, view);
+    final p = _scratch.cast<ffi.Float>();
+    b.viewToLayout(_page(handle), _view, viewX, viewY, p);
+    return (x: p[0], y: p[1]);
   }
 
   @override
@@ -2096,41 +2130,4 @@ class QvpNativeBackend implements QvpBackend {
       rows: l.nRows,
     );
   }
-
-  QvpLayoutSpec _readSpec(QvpLayoutSpecC s) => QvpLayoutSpec(
-    viewportW: s.viewportW,
-    viewportH: s.viewportH,
-    padTop: s.padTop,
-    padBottom: s.padBottom,
-    padLeft: s.padLeft,
-    padRight: s.padRight,
-    lineSpacing: s.lineSpacing,
-    fillHeight: s.fillHeight != 0,
-    gridLines: s.gridLines,
-    cropLeft: s.cropLeft,
-    cropRight: s.cropRight,
-    maxAspectSlack: s.maxAspectSlack,
-    bannerZoom: s.bannerZoom,
-    surahFrames: s.surahFrames != 0,
-    reflow: s.reflowZoom > 0 || s.reflowFill != 255 || s.reflowBreaks != 255
-        ? QvpReflowSpec(
-            zoom: s.reflowZoom,
-            fill: switch (s.reflowFill) {
-              0 => 'ragged',
-              1 => 'justified',
-              _ => 'centred',
-            },
-            breaks: switch (s.reflowBreaks) {
-              0 => 'greedy',
-              1 => 'even',
-              3 => 'printed',
-              _ => 'fitted',
-            },
-            gaps: s.reflowGaps == 0 ? 'printed' : 'uniform',
-            wordGap: s.reflowWordGap,
-            maxStretch: s.reflowMaxStretch,
-            relax: s.reflowRelax,
-          )
-        : null,
-  );
 }

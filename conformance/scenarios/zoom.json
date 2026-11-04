@@ -1,0 +1,55 @@
+{
+  "page": "042.qvp",
+  "tolerance": 0.001,
+  "spec": {"viewportW": 390, "viewportH": 844, "padTop": 24, "padBottom": 24, "padLeft": 16, "padRight": 16, "lineSpacing": 1, "fillHeight": false, "gridLines": 0, "cropLeft": 0, "cropRight": 0, "maxAspectSlack": 0, "surahFrames": true, "reflow": {"zoom": 0, "fill": "justified", "wordGap": 1.5, "maxStretch": 3}},
+  "fit": {"fitScale": 1, "fitX": 0, "fitY": 112.637695, "contentW": 390, "contentH": 618.7246},
+  "zoomAbout": [
+    {"view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}, "focalX": 195, "focalY": 300, "factor": 2.5, "min": 1, "max": 0, "result": {"scale": 2.5, "offsetX": -292.5, "offsetY": -168.40576}},
+    {"view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}, "focalX": 120, "focalY": 700, "factor": 40, "min": 1, "max": 3, "result": {"scale": 3, "offsetX": -240, "offsetY": -1062.0869}},
+    {"view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}, "focalX": 195, "focalY": 422, "factor": 0.3, "min": 1, "max": 0, "result": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}},
+    {"view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}, "focalX": 195, "focalY": 422, "factor": 4, "min": 1, "max": 0.1, "result": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}}
+  ],
+  "pan": {"view": {"scale": 2.5, "offsetX": -292.5, "offsetY": -168.40576}, "dx": -80, "dy": -120, "result": {"scale": 2.5, "offsetX": -372.5, "offsetY": -288.40576}},
+  "clamp": [
+    {"view": {"scale": 2.5, "offsetX": -372.5, "offsetY": -288.40576}, "result": {"scale": 2.5, "offsetX": -372.5, "offsetY": -288.40576}},
+    {"view": {"scale": 2.5, "offsetX": 100000, "offsetY": -100000}, "result": {"scale": 2.5, "offsetX": 0, "offsetY": -702.8115}},
+    {"view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}, "result": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}}
+  ],
+  "viewToLayout": {"view": {"scale": 2.5, "offsetX": -372.5, "offsetY": -288.40576}, "points": [[0, 0, 149, 115.362305], [195, 422, 227, 284.1623], [390, 844, 305, 452.9623]]},
+  "isZoomed": [
+    {"zoom": {"mode": "stepped", "step": 0, "zoom": 1}, "view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}, "fitScale": 1, "result": false},
+    {"zoom": {"mode": "stepped", "step": 0, "zoom": 1}, "view": {"scale": 2.5, "offsetX": -372.5, "offsetY": -288.40576}, "fitScale": 1, "result": true}
+  ],
+  "pinches": [
+    {"mode": "stepped", "start": {"mode": "stepped", "step": 0, "zoom": 1}, "factor": 1.6, "focalX": 195, "focalY": 422,
+     "zoom": {"mode": "stepped", "step": 2, "zoom": 1.8269998}, "view": {"scale": 1, "offsetX": 0, "offsetY": -757.45056}, "relaid": true, "zoomedAfter": true,
+     "spec": {"viewportW": 390, "padTop": 24, "surahFrames": true, "reflowZoom": 1.8269998, "fill": "justified", "wordGap": 1.5, "maxStretch": 3}},
+    {"mode": "continuous", "start": {"mode": "continuous", "step": 0, "zoom": 1}, "factor": 1.37, "focalX": 195, "focalY": 422,
+     "zoom": {"mode": "continuous", "step": 0, "zoom": 1.37}, "view": {"scale": 1, "offsetX": 0, "offsetY": -258.84705}, "relaid": true, "zoomedAfter": true,
+     "spec": {"viewportW": 390, "padTop": 24, "surahFrames": true, "reflowZoom": 1.37, "fill": "justified", "wordGap": 1.5, "maxStretch": 3}}
+  ],
+  "printedSpec": {"zoom": {"mode": "stepped", "step": 0, "zoom": 1}, "spec": {"viewportW": 390, "padTop": 24, "surahFrames": true, "reflowZoom": 0, "fill": "justified", "wordGap": 1.5, "maxStretch": 3}},
+  "drifts": [
+    {"mode": "stepped", "start": {"mode": "stepped", "step": 0, "zoom": 1}, "view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}, "focalX": 195, "focalY": 422, "frames": [
+      {"factor": 1.1, "focalX": 200, "focalY": 410, "zoom": {"mode": "stepped", "step": 0, "zoom": 1}, "relaid": false, "view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}},
+      {"factor": 1.4, "focalX": 210, "focalY": 380, "zoom": {"mode": "stepped", "step": 1, "zoom": 1.3759999}, "relaid": true, "view": {"scale": 1, "offsetX": 0, "offsetY": -303.72363}},
+      {"factor": 1.7, "focalX": 225, "focalY": 350, "zoom": {"mode": "stepped", "step": 2, "zoom": 1.8269998}, "relaid": true, "view": {"scale": 1, "offsetX": 0, "offsetY": -829.45044}},
+      {"factor": 2.2, "focalX": 240, "focalY": 320, "zoom": {"mode": "stepped", "step": 3, "zoom": 2.1580007}, "relaid": true, "view": {"scale": 1, "offsetX": 0, "offsetY": -1315.1218}},
+      {"factor": 2.6, "focalX": 250, "focalY": 300, "zoom": {"mode": "stepped", "step": 3, "zoom": 2.1580007}, "relaid": true, "view": {"scale": 1, "offsetX": 0, "offsetY": -1335.1218}}
+    ]},
+    {"mode": "magnify", "start": {"mode": "magnify", "step": 0, "zoom": 1}, "view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}, "focalX": 195, "focalY": 422, "frames": [
+      {"factor": 1.1, "focalX": 200, "focalY": 410, "zoom": {"mode": "magnify", "step": 0, "zoom": 1}, "relaid": false, "view": {"scale": 1.1, "offsetX": -14.5, "offsetY": 81.70145}},
+      {"factor": 1.4, "focalX": 210, "focalY": 380, "zoom": {"mode": "magnify", "step": 0, "zoom": 1}, "relaid": false, "view": {"scale": 1.4, "offsetX": -63, "offsetY": -22.214417}},
+      {"factor": 1.7, "focalX": 225, "focalY": 350, "zoom": {"mode": "magnify", "step": 0, "zoom": 1}, "relaid": false, "view": {"scale": 1.7, "offsetX": -106.5, "offsetY": -175.91595}},
+      {"factor": 2.2, "focalX": 240, "focalY": 320, "zoom": {"mode": "magnify", "step": 0, "zoom": 1}, "relaid": false, "view": {"scale": 2.2, "offsetX": -189, "offsetY": -360.5971}},
+      {"factor": 2.6, "focalX": 250, "focalY": 300, "zoom": {"mode": "magnify", "step": 0, "zoom": 1}, "relaid": false, "view": {"scale": 2.6, "offsetX": -256.99997, "offsetY": -504.34198}}
+    ]},
+    {"mode": "stepped", "start": {"mode": "stepped", "step": 0, "zoom": 1}, "view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}, "focalX": 195, "focalY": 422, "frames": [
+      {"factor": 1.2, "focalX": 200, "focalY": 410, "zoom": {"mode": "stepped", "step": 1, "zoom": 1.3759999}, "relaid": true, "view": {"scale": 1, "offsetX": 0, "offsetY": -273.72363}},
+      {"factor": 1.5, "focalX": 205, "focalY": 400, "zoom": {"mode": "stepped", "step": 1, "zoom": 1.3759999}, "relaid": true, "view": {"scale": 1, "offsetX": 0, "offsetY": -283.72363}},
+      {"factor": 1.3, "focalX": 210, "focalY": 390, "zoom": {"mode": "stepped", "step": 1, "zoom": 1.3759999}, "relaid": true, "view": {"scale": 1, "offsetX": 0, "offsetY": -293.72363}},
+      {"factor": 1.1, "focalX": 215, "focalY": 380, "zoom": {"mode": "stepped", "step": 0, "zoom": 1}, "relaid": true, "view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}},
+      {"factor": 1, "focalX": 220, "focalY": 370, "zoom": {"mode": "stepped", "step": 0, "zoom": 1}, "relaid": false, "view": {"scale": 1, "offsetX": 0, "offsetY": 112.637695}}
+    ]}
+  ]
+}

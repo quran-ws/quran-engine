@@ -1,39 +1,20 @@
-// The view-state constants both iOS renderers share: zoom limits, the zoomed threshold and
-// the swipe classifier. They are platform conveniences (docs/API-PARITY.md) and decide nothing
-// the engine could decide.
+// The view-state helpers both iOS renderers share. They are platform conveniences
+// (docs/API-PARITY.md) and decide nothing the engine could decide: every number comes from the
+// engine's view and zoom calls.
 import CoreGraphics
 import QvpFFI
 
 public enum QvpViewPolicy {
-    /// Pinch limits as multiples of the fitted scale; the same pair on every platform.
-    public static let minZoom: CGFloat = 0.5
-    public static let maxZoom: CGFloat = 12
-    /// A page counts as zoomed once it is 2% above the fitted scale, so a settled pinch is not a zoom.
-    public static let zoomedThreshold: CGFloat = 1.02
-    /// A drag is a page swipe when it is mostly horizontal and either long or fast enough.
-    public static let swipeAxisRatio: CGFloat = 1.5
-    public static let swipeDistance: CGFloat = 40
-    public static let swipeVelocity: CGFloat = 500
+    /// The engine's own ceiling on the magnifying glass, `QVP_DEFAULT_MAX_ZOOM`: what
+    /// `QvpPageView.maxZoom` and `QvpCanvasController.maxZoom` start at.
+    public static let maxZoom: CGFloat = CGFloat(QvpDefaults.MAX_ZOOM)
 
-    /// The pinch clamp every renderer applies.
-    public static func clampZoom(_ scale: CGFloat) -> CGFloat { min(max(scale, minZoom), maxZoom) }
-
-    /// The same clamp with the page's settled size as the floor: a pinch magnifies the print and
-    /// never shrinks the page inside the screen. `fit` is `QvpLayout.scale` for the page in hand.
-    public static func clampZoom(_ scale: CGFloat, fit: CGFloat) -> CGFloat {
-        min(max(scale, max(fit, minZoom)), maxZoom)
-    }
-    /// The same clamp under a ceiling of the host's own (`QvpCanvasController.maxZoom`): a
-    /// host whose overlays scale with the glass says how far it may go. The engine applies it,
-    /// in `qvp_view_zoom_about`, so no platform clamps a pinch its own way. A ceiling under the
-    /// floor is the floor: the settled page, which a pinch never shrinks inside the screen. A
-    /// host that lowers the ceiling below the size its own page is fitted at is saying it wants
-    /// no glass at all, and gets the fitted page rather than a page shrunk to a ceiling it can
-    /// then neither leave nor pinch back out of. A ceiling of 0 or less is the engine's own.
+    /// The scale a magnifying pinch lands on, from the engine (`qvp_view_zoom_about`): held
+    /// between `fit`, the page's settled size, and `ceiling`, the host's own. A pinch magnifies
+    /// the print and never shrinks the page inside the screen, so a ceiling under the floor is
+    /// the floor. A ceiling of 0 or less is the engine's own.
     public static func clampZoom(_ scale: CGFloat, fit: CGFloat, ceiling: CGFloat) -> CGFloat {
-        var v = QvpFFI.QvpView(scale: Float(scale), offset_x: 0, offset_y: 0), out = QvpFFI.QvpView()
-        qvp_view_zoom_about(&v, 0, 0, 1, Float(max(fit, minZoom)), Float(ceiling), &out)
-        return CGFloat(out.scale)
+        CGFloat(QvpView(scale: Float(scale)).zoomAbout(focalX: 0, focalY: 0, factor: 1, min: Float(fit), max: Float(ceiling)).scale)
     }
     /// How many pages a released drag turns, in the muṣḥaf's own order: +1 the page after this
     /// one, -1 the page before it, nil when it is not a swipe. The engine decides, so no platform

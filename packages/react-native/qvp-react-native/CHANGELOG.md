@@ -25,6 +25,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   array getter grows its buffer to the total the engine reports, where the Android bridge,
   the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
   highlight handles and a 256 KB scratch.
+- `hitTestView` and `hitTestExactView` invert the Android view's pan and zoom with the
+  engine's `viewToLayout` rather than their own arithmetic.
 - The example builds from a fresh clone. The root `.gitignore` ignored every PNG, so git
   never tracked the launcher icons that the Android manifest names. The rule now covers
   the repository root only, and the React Native template's icons are tracked. The example

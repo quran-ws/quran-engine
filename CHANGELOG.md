@@ -169,6 +169,16 @@ All notable changes to the engine and its packages. The format follows
   cannot sit on a platform-neutral class. `QvpNativeBackend` holds them now. Pass a library
   to `QvpEngine(library)` or a path to `QvpEngine.open(path:)` as before. Before 1.0 a
   removal takes a minor bump (`docs/standards/VERSIONING.md`), so the next release is 0.8.0.
+- **Breaking.** The pinch limits that each page view kept for itself are gone, because the
+  engine applies them. The floor is the fitted page. Flutter: `kMinZoom` and `kMaxZoom` are
+  gone. Use `QvpDefaults.maxZoom` and `QvpPageView.maxZoom`. `QvpPageView.minScale` and
+  `maxScale`, which did nothing, are gone. `QvpViewController.zoomBy` takes `min` and `max`
+  in place of `minScale` and `maxScale`. Android: `QvpPageView.MIN_ZOOM` is gone.
+  `QvpPageView.MAX_ZOOM` stays and is `QvpDefaults.MAX_ZOOM`. iOS: `QvpViewPolicy.minZoom`,
+  `zoomedThreshold`, `swipeAxisRatio`, `swipeDistance`, `swipeVelocity`, `clampZoom(_:)` and
+  `clampZoom(_:fit:)` are gone. Use `QvpZoom.isZoomed(_:fitScale:)`,
+  `QvpViewPolicy.swipeDirection(translation:velocity:)`, and `clampZoom(_:fit:ceiling:)` or
+  `QvpView.zoomAbout`.
 
 ### Fixed
 - Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
@@ -188,6 +198,22 @@ All notable changes to the engine and its packages. The format follows
   array getter grows its buffer to the total the engine reports, where the Android bridge,
   the web wrapper and the Flutter backend stopped at fixed caps such as 64 line bands, 1,024
   highlight handles and a 256 KB scratch.
+- Every pan, zoom and view computation in the page views goes through the engine. The views
+  on iOS, Android and Flutter no longer invert the view transform for a tap, place a
+  magnifying pinch or draw the zoomed line themselves: they call `viewToLayout`,
+  `viewZoomAbout` (the fitted page as the floor, the host's `maxZoom` as the ceiling) and
+  `zoomIsZoomed`, and each holds the view a drag or a pinch produces with `dressClamp`.
+  When the fingers of a stepped pinch come back to the step it began on, the engine lays the
+  page out at that step again. Before, it kept the step the pinch passed through. Every page
+  view and the web example follow one pinch rule, stated in `docs/API.md`: the engine zooms
+  about the focal point the gesture began on, by the factor of the whole gesture, and the
+  host pans the answer by the drift of the focal point. Two fingers drag the page on every platform again,
+  and a step committed in the middle of a gesture anchors on the view the last frame
+  returned. The Flutter view drags with one finger. `zoomSpec` keeps the host's reflow knobs
+  on the printed page on every wrapper. Flutter's `QvpViewController.zoomBy` stops at the
+  fitted page, and a controller that a host hands to a new view keeps working.
+  `conformance/scenarios/zoom.json` holds the engine's answers, and every wrapper test
+  replays them.
 - A malformed page, atlas or ornament file is an error from the decoder, not a panic or
   an abort. On wasm32 a panic is a trap, so a damaged download could take a host app down.
   The page decoder checks the magic, the version, `quant`, every count against its

@@ -30,6 +30,24 @@ object QvpEngine {
     fun fold(s: String) = QvpNative.arabic(1, s)
     fun normalize(s: String) = QvpNative.arabic(2, s)
     fun looseKey(s: String) = QvpNative.arabic(3, s)
+
+    // ── the reader's pan and zoom: the engine owns the arithmetic, the host owns the gesture ──
+    /** [view] zoomed by [factor] about a point of the viewport, with the scale held between [min]
+     * and [max]: the point under the fingers stays under them. A limit of 0 is the engine's own,
+     * and a ceiling under the floor is the floor. A host hands this the view and the focal point
+     * the pinch began on and the factor of the whole gesture. */
+    fun viewZoomAbout(view: QvpView, focalX: Float, focalY: Float, factor: Float, min: Float = 0f, max: Float = 0f): QvpView =
+        QvpView.of(QvpNative.viewZoomAbout(view.floats(), focalX, focalY, factor, min, max))
+    /** [view] moved by a drag, in viewport px. */
+    fun viewPan(view: QvpView, dx: Float, dy: Float): QvpView = QvpView.of(QvpNative.viewPan(view.floats(), dx, dy))
+    /** [view] held against the viewport: an axis the content does not fill is centred, and on an
+     * axis it overflows the content keeps the viewport covered. */
+    fun viewClamp(view: QvpView, contentW: Float, contentH: Float, viewportW: Float, viewportH: Float): QvpView =
+        QvpView.of(QvpNative.viewClamp(view.floats(), contentW, contentH, viewportW, viewportH))
+    /** True once the reader has zoomed in, by either road: the view magnified past [fitScale], or
+     * the page reflowed above the printed size. 0 means the view is in fitted units already. */
+    fun zoomIsZoomed(zoom: QvpZoom, view: QvpView, fitScale: Float = 0f): Boolean =
+        QvpNative.zoomIsZoomed(zoom.floats(), view.floats(), fitScale)
 }
 
 /**
@@ -275,8 +293,10 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** `spec` with this control's zoom in it: what the host lays out and draws with. */
     fun zoomSpec(spec: QvpLayoutSpec, zoom: QvpZoom): QvpLayoutSpec {
         val v = QvpNative.zoomSpec(h, spec.floats(), zoom.floats())
-        // The control owns the zoom alone. Dropping the host's knobs at the printed size would
-        // leave the pinch that leaves it to lay the page out with the engine's defaults.
+        // The control owns the reflow zoom alone, and the engine hands every other field back as
+        // the host set it. So the host's own spec carries every knob, and only the zoom is read
+        // back. On the printed page the zoom is 0 and the knobs stay: dropping them there would
+        // leave the pinch that leaves the printed page to lay it out with the engine's defaults.
         val given = spec.reflow
         val r = when {
             given != null -> given.copy(zoom = v[12])
@@ -285,6 +305,10 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
         }
         return spec.copy(reflow = r)
     }
+    /** Where a point of the viewport lands in the laid-out page: how a host turns a touch into a
+     * [hitTestView]. The inverse of `offset + scale·p`. */
+    fun viewToLayout(view: QvpView, viewX: Float, viewY: Float): Pair<Float, Float> =
+        QvpNative.viewToLayout(h, view.floats(), viewX, viewY).let { it[0] to it[1] }
     /** The reflow zoom one step of this page's control means; step 0 is the printed page. */
     fun zoomAtStep(spec: QvpLayoutSpec, step: Int): Float = QvpNative.zoomAtStep(h, spec.floats(), step)
     /** The zoom steps this page ships with, lowest first. Zoom 1, the printed page, is the step before them. */

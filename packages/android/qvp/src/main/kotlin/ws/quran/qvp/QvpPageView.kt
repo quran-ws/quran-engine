@@ -118,8 +118,12 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private var selAnchor = -1
     private var selecting = false
     private var pinchZoom = QvpZoom()
+    /** The view the engine works from in a pinch: the one the pinch began on, and under the
+     * reflowing controls the one the last frame returned, before the drift. */
     private var pinchView = QvpView()
+    /** The whole gesture against where the fingers went down, and where they went down. */
     private var pinchFactor = 1f
+    private var pinchFocalX = 0f; private var pinchFocalY = 0f
     var lastBaseMs = 0.0; var lastOverlayMs = 0.0; var lastBasePaths = 0; var lastOverlayPaths = 0; var lastBands = 0; var lastHitUs = 0.0
         private set
     var animating = false; private set
@@ -170,10 +174,12 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         return info
     }
 
-    /** Scroll the page by [dy] points, held against the viewport. */
+    /** Scroll the page by [by] points, held against the viewport. */
     fun scrollPage(by: Float) {
         if (page?.currentLayout == null) return
-        viewOy += by; clampView(); invalidate()
+        val v = QvpEngine.viewPan(currentView, 0f, by)
+        viewOx = v.offsetX; viewOy = v.offsetY
+        clampView(); invalidate()
     }
 
     /** Let go of the ink in hand. The cache owns what it holds, so nothing is recycled here: a
@@ -187,22 +193,35 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             // the gesture is measured from where it began, so a slow pinch walks the steps one at
             // a time instead of running away to the last of them
             pinchZoom = zoom; pinchView = currentView; pinchFactor = 1f
+            pinchFocalX = d.focusX; pinchFocalY = d.focusY
             return zoomEnabled && !selecting
         }
         override fun onScale(d: ScaleGestureDetector): Boolean {
             if (!zoomEnabled || selecting) return false
             val p = page
             pinchFactor *= d.scaleFactor
+            // the fingers' drift since the pinch began: it pans the page, so two fingers drag it
+            val driftX = d.focusX - pinchFocalX; val driftY = d.focusY - pinchFocalY
             if (p == null || !p.isOpen || zoomMode == QvpZoomMode.MAGNIFY) {
-                // never below the settled page: a pinch magnifies the print, it does not shrink
-                // the page inside the screen, not even for a host ceiling set under it. The
-                // engine clamps and moves the view; this only hands it the floor and the ceiling.
-                val floor = fitScale.coerceAtLeast(MIN_ZOOM)
-                val v = QvpView.of(QvpNative.viewZoomAbout(currentView.floats(), d.focusX, d.focusY, d.scaleFactor, floor, maxZoom))
+                // The printed page under a magnifying glass: the rows never move. The engine zooms
+                // the view the pinch began on about the point it began at, by the whole gesture,
+                // with the settled page as the floor and the host's ceiling above, then pans it by
+                // the drift and holds it against the viewport. A pinch never shrinks the page
+                // inside the screen, not even for a host ceiling set under the fitted page.
+                val zoomed = QvpEngine.viewZoomAbout(pinchView, pinchFocalX, pinchFocalY, pinchFactor, fitScale, maxZoom)
+                val v = QvpEngine.viewPan(zoomed, driftX, driftY)
                 viewScale = v.scale; viewOx = v.offsetX; viewOy = v.offsetY
+                if (p != null && p.isOpen && p.currentLayout != null) clampView()
                 invalidate(); return true
             }
-            apply(p.zoomPinch(layoutSpecInForce(), pinchZoom, pinchView, pinchFactor, d.focusX, d.focusY))
+            // `pinchZoom` and the focal point stay where the gesture began. The view is the one
+            // the last frame returned, before the drift: a step committed earlier in this gesture
+            // moved the page, and the engine finds the word under the fingers on the layout it
+            // has now.
+            val c = p.zoomPinch(layoutSpecInForce(), pinchZoom, pinchView, pinchFactor, pinchFocalX, pinchFocalY)
+            pinchView = c.view
+            apply(c.copy(view = QvpEngine.viewPan(c.view, driftX, driftY)))
+            clampView()
             return true
         }
     })
@@ -210,10 +229,13 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
             if (selecting) { extendSelection(e2.x, e2.y); return true }
             if (!zoomEnabled) return false
+            // A pinch pans the page by its own drift, measured from where it began, so a drag
+            // inside one would move the page twice: the drag stands aside until the fingers lift.
+            if (scaleDetector.isInProgress) return false
             // a page with no sideways travel scrolls up and down only, and its sideways drag is
             // a page turn, which the fling below answers
-            if (sideways == QvpSideways.PAN) viewOx -= dx
-            viewOy -= dy
+            val v = QvpEngine.viewPan(currentView, if (sideways == QvpSideways.PAN) -dx else 0f, -dy)
+            viewOx = v.offsetX; viewOy = v.offsetY
             clampView()
             // ask for the next frame rather than a redraw per touch event: the scroll then moves
             // on the display's own clock, which is what makes it read as smooth
@@ -256,13 +278,15 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private fun hitAt(x: Float, y: Float): QvpHit? {
         val p = page ?: return null
         val t0 = System.nanoTime()
-        val h = p.hitTestView((x - viewOx) / viewScale, (y - viewOy) / viewScale, hitOptions)
+        val (lx, ly) = p.viewToLayout(currentView, x, y)
+        val h = p.hitTestView(lx, ly, hitOptions)
         lastHitUs = (System.nanoTime() - t0) / 1000.0
         return h
     }
     private fun extendSelection(x: Float, y: Float) {
         val p = page ?: return
-        val h = p.hitTestView((x - viewOx) / viewScale, (y - viewOy) / viewScale, QvpHitOptions()) ?: return
+        val (lx, ly) = p.viewToLayout(currentView, x, y)
+        val h = p.hitTestView(lx, ly, QvpHitOptions()) ?: return
         if (h.word < 0) return
         p.select(selAnchor, h.word); paintSelection()
     }
@@ -332,7 +356,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         gestureSideways = page?.sidewaysDrag(zoom, currentView, fitScale) ?: QvpSideways.TURN_PAGE
     }
     /** True once the reader has zoomed in, by either road. The engine draws the line. */
-    val isZoomed: Boolean get() = QvpNative.zoomIsZoomed(zoom.floats(), currentView.floats(), fitScale)
+    val isZoomed: Boolean get() = QvpEngine.zoomIsZoomed(zoom, currentView, fitScale)
     private var fitScale = 1f
 
     /** Take what a gesture produced: the page is already laid out at the new size, and the view
@@ -582,11 +606,11 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     }
 
     companion object {
-        /** Pinch limits as multiples of the fitted scale; the same pair on every platform. */
-        const val MIN_ZOOM = 0.5f
         /** An offset far past any page, to ask the clamp for the end of a scroll. */
         private const val FAR = 1e7f
-        const val MAX_ZOOM = 12f
+        /** The engine's own ceiling on the magnifying glass: what [maxZoom] starts at. The floor
+         * is the fitted page, which the engine applies. */
+        const val MAX_ZOOM = QvpDefaults.MAX_ZOOM
         /** A bitmap taller than this cannot be drawn on every device, so the ink keeps a band. */
         private const val MAX_INK_PX = 4096f
         /** The height of the ornament layer for [wanted] px of band plus border, at [width] px wide:

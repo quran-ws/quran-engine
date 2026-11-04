@@ -49,12 +49,9 @@ is owed.
 | `qvp_swipe_pages` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_view_anchor` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_view_clamp` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
-| `qvp_view_pan` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
 | `qvp_view_pan` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_view_swipe` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
 | `qvp_view_swipe` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
-| `qvp_view_to_layout` | ios | native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control |
-| `qvp_view_to_layout` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_view_zoom_about` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_word_bands_view` | android | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
 | `qvp_word_bands_view` | ios | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
@@ -267,8 +264,8 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 
 | convenience | where | note |
 |---|---|---|
-| pan and pinch transform | every page view | zoom limits 0.5 to 12 times the fitted scale on every platform: `QvpViewPolicy` (iOS), `QvpPageView.MIN_ZOOM` (Android), `kMinZoom` (Flutter), `clampZoom` in the web example; a page view or controller may lower the ceiling (`maxZoom`) and reports the glass factor (`peekScale`), on iOS, Android and Flutter, for host overlays that scale with it |
-| zoomed threshold and swipe classifier | iOS, `QvpViewPolicy` | a pinch settled within 2% of the fitted scale is not a zoom; a mostly horizontal drag longer than 40 pt or faster than 500 pt/s is a page swipe |
+| pan and pinch transform | every page view | the engine's view calls on every platform (`viewZoomAbout`, `viewPan`, `dressClamp`, `viewToLayout`), with the fitted page as the floor of a magnifying pinch and the engine's `MAX_ZOOM` as its ceiling; a page view or controller may lower the ceiling (`maxZoom`) and reports the glass factor (`peekScale`), on iOS, Android and Flutter, for host overlays that scale with it. `conformance/scenarios/zoom.json` holds the engine's answers that every wrapper test replays |
+| view policy helpers | iOS, `QvpViewPolicy` | `maxZoom`, `clampZoom(_:fit:ceiling:)` and `swipeDirection` hand the engine's answers on: `QVP_DEFAULT_MAX_ZOOM`, `qvp_view_zoom_about` and `qvp_swipe_pages`. The zoomed threshold is the engine's `zoomIsZoomed` |
 | zoom spring | iOS, `QvpZoomSpring` | eases a released pinch back to the fitted transform on a display link of its own |
 | page cache | iOS, `QvpPageCache` | the policy in `docs/EXAMPLE-APP.md`; the other platforms follow it in their examples |
 | long press, double tap, tap callbacks | every page view | gesture recognition only. The hit comes from `qvp_hit_test`. `onWordTap` passes the word and the hit, and `onDecorationTap` the decoration and the hit, on Android, iOS and Flutter. React Native carries the same pair in one event |
@@ -276,7 +273,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-173 symbols in the header, 173 Rust exports. web: 172 bound, android: 167 bound, flutter: 172 bound, ios: 165 bound, react-native: 95 bound.
+173 symbols in the header, 173 Rust exports. web: 172 bound, android: 167 bound, flutter: 172 bound, ios: 167 bound, react-native: 96 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -433,9 +430,9 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_version` | yes | yes | yes | yes | yes |
 | `qvp_view_anchor` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_clamp` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_view_pan` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_pan` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_swipe` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_view_to_layout` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_to_layout` | yes | yes | yes | yes | yes |
 | `qvp_view_zoom_about` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bands_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |

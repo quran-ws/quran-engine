@@ -252,7 +252,6 @@ public final class QvpCanvasController {
     /// at the gesture's own frame rate, and following every move has every other page it
     /// holds lay itself out again inside the gesture.
     public private(set) var isPinching = false
-    @ObservationIgnored var pinchStart: CGFloat = 1
     @ObservationIgnored var pinchZoom = QvpZoom()
     @ObservationIgnored var pinchView = QvpView()
     /// Where the fingers went down, in view points — the band a pinch paints is built around
@@ -266,11 +265,10 @@ public final class QvpCanvasController {
     private var hostBoxHeight: CGFloat { hostViewportHeight > 0 ? hostViewportHeight : derivedBoxHeight }
     @ObservationIgnored var lastDrag = CGSize.zero
     @ObservationIgnored private var springTask: Task<Void, Never>?
-    /// True once the reader pinched in beyond the fitted size (panning then moves the page, not the book).
     /// True once the reader has zoomed in, by either road: the view magnified past the fitted
     /// size, or the page reflowed to a size above the printed one. Panning then moves the page
-    /// rather than the book.
-    public var isZoomed: Bool { viewScale > fitScale * QvpViewPolicy.zoomedThreshold || zoom.zoom > Float(QvpViewPolicy.zoomedThreshold) }
+    /// rather than the book. The engine decides, so every platform draws the line in the same place.
+    public var isZoomed: Bool { zoom.isZoomed(currentView, fitScale: Float(fitScale)) }
 
     /// The cached ink, one image per canvas the page is drawn as (`QvpPageCanvas.slices`), each
     /// REPLACED when its own key moves on. Kept by key alone, every frame of a peek, of its
@@ -550,7 +548,8 @@ public final class QvpCanvasController {
     func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHit? {
         guard let p = page, p.isOpen else { return nil }
         let t0 = now()
-        let h = p.hitTestView(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
+        let at = p.viewToLayout(currentView, Float(pt.x), Float(pt.y))
+        let h = p.hitTestView(at.x, at.y, o ?? hitOptions)
         lastHitUs = (now() - t0) * 1e6
         return h
     }
@@ -576,21 +575,36 @@ public final class QvpCanvasController {
         if c.relaid { placements.removeAll(); cache.clear(); layoutRevision &+= 1 }
         invalidate()
     }
+    /// One frame of a pinch. `magnification` is the whole gesture against where the fingers
+    /// went down, and `focus` the point they went down at. The engine measures the gesture from
+    /// its start: the control and the focal point the pinch began on, and the factor of the
+    /// whole gesture. SwiftUI's `MagnifyGesture` reports no later focal point, so the fingers'
+    /// drift, which the other page views pan the page by, is zero here.
     func pinch(_ magnification: CGFloat, at focus: CGPoint) {
         guard zoomEnabled, !selecting else { return }
         if !isPinching {
             springTask?.cancel(); springTask = nil; isPinching = true
-            pinchStart = viewScale; pinchZoom = zoom; pinchView = currentView; pinchFocalY = focus.y
+            pinchZoom = zoom; pinchView = currentView; pinchFocalY = focus.y
         }
         guard let p = page, p.isOpen, zoomMode != .magnify else {
-            // the printed page under a magnifying glass: the rows never move
-            let ns = QvpViewPolicy.clampZoom(pinchStart * magnification, fit: fitScale, ceiling: maxZoom); let k = ns / viewScale
-            viewOx = focus.x - (focus.x - viewOx) * k; viewOy = focus.y - (focus.y - viewOy) * k; viewScale = ns
+            // The printed page under a magnifying glass: the rows never move. The engine zooms
+            // the view the pinch began on about the point it began at, with the settled page as
+            // the floor and the host's ceiling above, and holds the result against the viewport.
+            var v = pinchView.zoomAbout(focalX: Float(focus.x), focalY: Float(focus.y), factor: Float(magnification), min: Float(fitScale), max: Float(maxZoom))
+            if let p = page, p.isOpen { v = p.dressClamp(v, viewportW: Float(bounds.width), viewportH: Float(bounds.height)) }
+            viewScale = CGFloat(v.scale); viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
             return
         }
         // `pinchZoom` stays where the gesture began: the engine measures the fingers against
-        // that, so a slow pinch walks the steps one at a time instead of running away.
-        apply(p.zoomPinch(layoutSpec, pinchZoom, pinchView, factor: Float(magnification), focalX: Float(focus.x), focalY: Float(focus.y)))
+        // that, so a slow pinch walks the steps one at a time instead of running away. The view
+        // is the one the last frame returned: a step committed earlier in this gesture moved the
+        // page, and the engine finds the word under the fingers on the layout it has now.
+        let c = p.zoomPinch(layoutSpec, pinchZoom, pinchView, factor: Float(magnification), focalX: Float(focus.x), focalY: Float(focus.y))
+        pinchView = c.view
+        // held against the viewport, a dressed page with its border, as every pinch frame is
+        var v = c.view
+        if p.currentLayout != nil { v = p.dressClamp(v, viewportW: Float(bounds.width), viewportH: Float(bounds.height)) }
+        apply(QvpZoomChange(zoom: c.zoom, view: v, relaid: c.relaid))
     }
     func pinchEnded() {
         isPinching = false
@@ -620,14 +634,14 @@ public final class QvpCanvasController {
     private var isReflowed: Bool { page?.currentLayout?.reflowed ?? false }
     func pan(_ translation: CGSize) {
         guard zoomEnabled, !hostScrolls, !selecting, isZoomed || isReflowed, springTask == nil else { return }
-        if !isReflowed { viewOx += translation.width - lastDrag.width }
-        viewOy += translation.height - lastDrag.height
+        // a reflowed page is the screen's own width, so it is dragged up and down only
+        let dx = isReflowed ? 0 : translation.width - lastDrag.width
+        var v = currentView.pan(dx: Float(dx), dy: Float(translation.height - lastDrag.height))
         lastDrag = translation
-        if isReflowed, let p = page {
-            // a dressed page holds its border on the screen too, not only its text
-            let v = p.dressClamp(currentView, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
-            viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
-        }
+        // The engine holds the page against the viewport, so no drag opens a blank strip beside
+        // it; a dressed page holds its border on the screen too, not only its text.
+        if let p = page, p.isOpen { v = p.dressClamp(v, viewportW: Float(bounds.width), viewportH: Float(bounds.height)) }
+        viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
         invalidate()
     }
     /// A sideways drag turns the page whether or not the reader has zoomed in: a reflowed page

@@ -19,10 +19,6 @@ import 'engine.dart';
 
 /// Layout parameters of [QvpPageView] (viewport size is taken from the widget's constraints).
 /// Spacing only opens up: `lineSpacing` < 1 is clamped by the engine.
-/// Pinch limits as multiples of the fitted scale; the same pair on every platform.
-const double kMinZoom = 0.5;
-const double kMaxZoom = 12;
-
 @immutable
 class QvpViewLayout {
   const QvpViewLayout({
@@ -93,7 +89,11 @@ class QvpViewLayout {
   );
 }
 
-/// Pan / zoom on top of the engine layout. `view px = offsetX + layout px * scale`.
+/// Pan / zoom on top of the engine layout. `view px = offsetX + layout px * scale`. The
+/// arithmetic is the engine's: [zoomBy], [panBy] and [toView] call it through the view that
+/// holds the controller. [zoomBy] and [panBy] keep working with the engine of the last view
+/// after that view is gone. [toView] needs a view that holds the controller now, and throws a
+/// [StateError] without one. Before any [QvpPageView] has taken the controller, all three throw.
 class QvpViewController extends ChangeNotifier {
   double scale = 1, offsetX = 0, offsetY = 0;
   bool _fitRequested = true;
@@ -101,12 +101,41 @@ class QvpViewController extends ChangeNotifier {
   /// Size of the last laid-out viewport (logical px).
   Size viewport = Size.zero;
 
+  /// The view that holds this controller now. A host may hand one controller to a new view
+  /// before the old one is disposed, so only the view that holds it can let it go.
+  QvpPageViewState? _holder;
+
+  /// The engine of the last view that held this controller. It outlives the view, so
+  /// [zoomBy] and [panBy] keep working after the view is gone.
+  QvpEngine? _engine;
+
+  void _attach(QvpPageViewState view) {
+    _holder = view;
+    _engine = view.page.engine;
+  }
+
+  void _detach(QvpPageViewState view) {
+    if (identical(_holder, view)) _holder = null;
+  }
+
+  QvpEngine get _attachedEngine =>
+      _engine ??
+      (throw StateError(
+        'QvpViewController: give it to a QvpPageView before zooming or panning',
+      ));
+
+  /// The reader's pan and zoom as the engine has it.
+  QvpView get view => QvpView(scale: scale, offsetX: offsetX, offsetY: offsetY);
+
   void set({double? scale, double? offsetX, double? offsetY}) {
     this.scale = scale ?? this.scale;
     this.offsetX = offsetX ?? this.offsetX;
     this.offsetY = offsetY ?? this.offsetY;
     notifyListeners();
   }
+
+  void _setView(QvpView v) =>
+      set(scale: v.scale, offsetX: v.offsetX, offsetY: v.offsetY);
 
   /// Repaints views using this controller.
   void refresh() => notifyListeners();
@@ -117,26 +146,28 @@ class QvpViewController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Zooms by [factor] around a point in widget coordinates (default: centre).
-  void zoomBy(
-    double factor, {
-    Offset? around,
-    double minScale = kMinZoom,
-    double maxScale = kMaxZoom,
-  }) {
+  /// Zooms by [factor] around a point in widget coordinates (default: centre), with the scale
+  /// held between [min] and [max]. The engine computes the view. [min] defaults to the scale
+  /// the page is fitted at and [max] to [QvpPageView.maxZoom], as a magnifying pinch has them.
+  /// Without a view that holds the controller, both default to 0, the engine's own limits.
+  void zoomBy(double factor, {Offset? around, double? min, double? max}) {
     final c = around ?? Offset(viewport.width / 2, viewport.height / 2);
-    final ns = (scale * factor).clamp(minScale, maxScale);
-    final k = ns / scale;
-    set(
-      scale: ns,
-      offsetX: c.dx - (c.dx - offsetX) * k,
-      offsetY: c.dy - (c.dy - offsetY) * k,
+    final holder = _holder;
+    _setView(
+      _attachedEngine.viewZoomAbout(
+        view,
+        c.dx,
+        c.dy,
+        factor,
+        min: min ?? holder?._fitScale ?? 0,
+        max: max ?? holder?.widget.maxZoom ?? 0,
+      ),
     );
   }
 
   /// Pans the view by [delta] in widget coordinates.
   void panBy(Offset delta) =>
-      set(offsetX: offsetX + delta.dx, offsetY: offsetY + delta.dy);
+      _setView(_attachedEngine.viewPan(view, delta.dx, delta.dy));
 
   /// Resets scale and offset to identity and requests fit.
   void reset() {
@@ -146,9 +177,18 @@ class QvpViewController extends ChangeNotifier {
     fit();
   }
 
-  /// Widget coordinates → layout viewport px (what the engine's `*View` calls take).
-  Offset toView(Offset local) =>
-      Offset((local.dx - offsetX) / scale, (local.dy - offsetY) / scale);
+  /// Widget coordinates → layout viewport px (what the engine's `*View` calls take). Throws a
+  /// [StateError] when no view holds the controller.
+  Offset toView(Offset local) {
+    final page = _holder?.page;
+    if (page == null || page.isDisposed) {
+      throw StateError(
+        'QvpViewController: toView needs a QvpPageView that holds the controller',
+      );
+    }
+    final q = page.viewToLayout(view, local.dx, local.dy);
+    return Offset(q.x, q.y);
+  }
 }
 
 /// A tap on a word: the word itself, as on Android and iOS, and the gap-aware
@@ -181,9 +221,7 @@ class QvpPageView extends StatefulWidget {
     this.panZoomEnabled = true,
     this.selectionBand = QvpDefaults.selectionBand,
     this.paperShadow = true,
-    this.minScale = kMinZoom,
-    this.maxScale = kMaxZoom,
-    this.maxZoom = kMaxZoom,
+    this.maxZoom = QvpDefaults.maxZoom,
     this.onZoomChanged,
   });
 
@@ -217,13 +255,12 @@ class QvpPageView extends StatefulWidget {
 
   /// Band colour of the drag selection (0xRRGGBBAA), drawn in [QvpLayer.selection].
   final int selectionBand;
-  final double minScale, maxScale;
 
   /// How far the magnifying glass may go: the ceiling the pinch is clamped to under
-  /// [QvpZoomMode.magnify], [kMaxZoom] unless the host lowers it. A host that draws its own
-  /// furniture beside the ink and scales it with the glass says here what that furniture can
-  /// survive. A ceiling under the fitted page is the fitted page, since a pinch never shrinks
-  /// the page inside the screen. 0 or below is the engine's own ceiling.
+  /// [QvpZoomMode.magnify], [QvpDefaults.maxZoom] unless the host lowers it. A host that draws
+  /// its own furniture beside the ink and scales it with the glass says here what that
+  /// furniture can survive. A ceiling under the fitted page is the fitted page, since a pinch
+  /// never shrinks the page inside the screen. 0 or below is the engine's own ceiling.
   final double maxZoom;
 
   /// Pre-records base ink into the global picture cache so page turns are instant.
@@ -257,8 +294,11 @@ class QvpPageViewState extends State<QvpPageView>
   QvpDressSpec? _fittedDress;
   List<double>? _fittedBox;
 
-  // scale gesture
-  double _gScale = 1, _gOx = 0, _gOy = 0;
+  /// The view the engine works from in a pinch, and where the fingers went down. The view is
+  /// the one the pinch began on, and under the reflowing controls the one the last frame
+  /// returned, before the drift.
+  QvpView _gView = const QvpView();
+  Offset _gFocal = Offset.zero;
 
   /// Where the reader's zoom control stands, and where it stood when a pinch began.
   QvpZoom _zoom = const QvpZoom();
@@ -289,6 +329,7 @@ class QvpPageViewState extends State<QvpPageView>
 
   void _attachPage() {
     widget.page.addListener(_onPageChanged);
+    _ctl._attach(this);
     _cache.attach(widget.page);
     _selHandle = 0;
     _selAnchor = -1;
@@ -316,9 +357,11 @@ class QvpPageViewState extends State<QvpPageView>
   void didUpdateWidget(QvpPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
+      _ctl._detach(this);
       _ctl =
           widget.controller ??
           (oldWidget.controller == null ? _ctl : QvpViewController());
+      _ctl._attach(this);
     }
     if (oldWidget.page != widget.page) {
       oldWidget.page.removeListener(_onPageChanged);
@@ -334,6 +377,9 @@ class QvpPageViewState extends State<QvpPageView>
     _ticker.dispose();
     _cache.dispose();
     _frame.dispose();
+    // A host may have handed the controller to a new view already: let it go only if it is
+    // still this view's.
+    _ctl._detach(this);
     if (widget.controller == null) _ctl.dispose();
     super.dispose();
   }
@@ -469,45 +515,72 @@ class QvpPageViewState extends State<QvpPageView>
     }
   }
 
+  /// The fingers went down, or their number changed: Flutter starts the scale gesture again
+  /// then, with `scale` back at 1, so this is where every pinch is measured from.
   void _onScaleStart(ScaleStartDetails d) {
-    _gScale = _ctl.scale;
-    _gOx = _ctl.offsetX;
-    _gOy = _ctl.offsetY;
+    _gView = _ctl.view;
+    _gFocal = d.localFocalPoint;
     // where the control stood when the fingers went down: the engine measures them against this,
     // so a slow pinch walks the steps one at a time instead of running away through them
     _gZoom = _zoom;
   }
 
+  /// The view the engine handed back, held against the viewport. A dressed page holds its
+  /// border on the screen too, not only its text.
+  void _hold(QvpView v) {
+    final h = page.dressClamp(v, _size.width, _size.height);
+    _ctl.set(scale: h.scale, offsetX: h.offsetX, offsetY: h.offsetY);
+  }
+
   void _onScaleUpdate(ScaleUpdateDetails d) {
     if (!widget.panZoomEnabled || _size == Size.zero) return;
-    final f = d.localFocalPoint;
+    if (d.pointerCount < 2) {
+      // One finger: a drag. A page with no sideways travel to spend scrolls up and down only;
+      // the engine says which, and holds the page against the viewport either way.
+      final sideways =
+          page.sidewaysDrag(_zoom, _ctl.view, _fitScale) == QvpSideways.pan;
+      _hold(
+        page.engine.viewPan(
+          _ctl.view,
+          sideways ? d.focalPointDelta.dx : 0,
+          d.focalPointDelta.dy,
+        ),
+      );
+      return;
+    }
+    // the fingers' drift since the pinch began: it pans the page, so two fingers drag it
+    final drift = d.localFocalPoint - _gFocal;
     if (_gZoom.mode == QvpZoomMode.magnify) {
-      // The printed page under a magnifying glass: the rows never move. The floor is the
-      // settled page, and a host ceiling set under it does not lower it: a pinch magnifies the
-      // print, it does not shrink the page inside the screen. The engine applies the clamp.
-      final floor = math.max(_fitScale, kMinZoom);
-      final v = page.engine.viewZoomAbout(
-        QvpView(scale: _gScale, offsetX: _gOx, offsetY: _gOy),
-        f.dx,
-        f.dy,
+      // The printed page under a magnifying glass: the rows never move. The engine zooms the
+      // view the pinch began on about the point it began at, by the whole gesture, with the
+      // settled page as the floor and the host's ceiling above, then pans it by the drift: a
+      // pinch magnifies the print, it does not shrink the page inside the screen, not even for
+      // a ceiling set under it.
+      final zoomed = page.engine.viewZoomAbout(
+        _gView,
+        _gFocal.dx,
+        _gFocal.dy,
         d.scale,
-        min: floor,
+        min: _fitScale,
         max: widget.maxZoom,
       );
-      final h = page.dressClamp(v, _size.width, _size.height);
-      _ctl.set(scale: h.scale, offsetX: h.offsetX, offsetY: h.offsetY);
+      _hold(page.engine.viewPan(zoomed, drift.dx, drift.dy));
       return;
     }
     // The engine owns the whole pinch: which step it lands on, when it commits, and what holds
-    // the reader's place when the page reflows under the fingers.
+    // the reader's place when the page reflows under the fingers. The control and the focal
+    // point stay where the gesture began. The view is the one the last frame returned, before
+    // the drift: a step committed earlier in this gesture moved the page, and the engine finds
+    // the word under the fingers on the layout it has now.
     final c = page.zoomPinch(
       widget.layout.toSpec(_size.width, _size.height),
       _gZoom,
-      QvpView(scale: _gScale, offsetX: _gOx, offsetY: _gOy),
+      _gView,
       d.scale,
-      f.dx,
-      f.dy,
+      _gFocal.dx,
+      _gFocal.dy,
     );
+    _gView = c.view;
     if (c.relaid) {
       _zoom = c.zoom;
       page.readLayout();
@@ -515,8 +588,7 @@ class QvpPageViewState extends State<QvpPageView>
           _dressBox(); // a new layout moves the overflow, not the dress
       widget.onZoomChanged?.call(c.zoom);
     }
-    final h = page.dressClamp(c.view, _size.width, _size.height);
-    _ctl.set(scale: h.scale, offsetX: h.offsetX, offsetY: h.offsetY);
+    _hold(page.engine.viewPan(c.view, drift.dx, drift.dy));
   }
 
   /// Move the control to one of the page's steps: 0 is the printed page.

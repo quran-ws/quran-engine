@@ -438,6 +438,223 @@ void main() {
     expect(cases.length, 40);
   });
 
+  test('zoom scenarios match the engine (conformance/scenarios/zoom.json)', () {
+    final json = jsonDecode(
+      File('$repo/conformance/scenarios/zoom.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
+    final tolerance = (json['tolerance'] as num).toDouble();
+    void close(double a, num b, String what) => expect(
+      (a - b).abs() <= tolerance * (b.abs() < 1 ? 1 : b.abs()),
+      isTrue,
+      reason: '$what: got $a, engine says $b',
+    );
+    double f(Map<String, dynamic> o, String k) => (o[k] as num).toDouble();
+    QvpView view(Map<String, dynamic> o) => QvpView(
+      scale: f(o, 'scale'),
+      offsetX: f(o, 'offsetX'),
+      offsetY: f(o, 'offsetY'),
+    );
+    void same(QvpView v, Map<String, dynamic> want, String what) {
+      close(v.scale, want['scale'] as num, '$what scale');
+      close(v.offsetX, want['offsetX'] as num, '$what offsetX');
+      close(v.offsetY, want['offsetY'] as num, '$what offsetY');
+    }
+
+    QvpZoom zoom(Map<String, dynamic> o) => QvpZoom(
+      mode: QvpZoomMode.values.byName(o['mode'] as String),
+      step: o['step'] as int,
+      zoom: f(o, 'zoom'),
+    );
+    final s = json['spec'] as Map<String, dynamic>;
+    final r = s['reflow'] as Map<String, dynamic>;
+    final spec = QvpLayoutSpec(
+      viewportW: f(s, 'viewportW'),
+      viewportH: f(s, 'viewportH'),
+      padTop: f(s, 'padTop'),
+      padBottom: f(s, 'padBottom'),
+      padLeft: f(s, 'padLeft'),
+      padRight: f(s, 'padRight'),
+      lineSpacing: f(s, 'lineSpacing'),
+      fillHeight: s['fillHeight'] as bool,
+      gridLines: s['gridLines'] as int,
+      cropLeft: f(s, 'cropLeft'),
+      cropRight: f(s, 'cropRight'),
+      maxAspectSlack: f(s, 'maxAspectSlack'),
+      surahFrames: s['surahFrames'] as bool,
+      reflow: QvpReflowSpec(
+        zoom: f(r, 'zoom'),
+        fill: r['fill'] as String,
+        wordGap: f(r, 'wordGap'),
+        maxStretch: f(r, 'maxStretch'),
+      ),
+    );
+    final l = page.layout(spec);
+    final fit = json['fit'] as Map<String, dynamic>;
+    close(l.fitScale, fit['fitScale'] as num, 'fit fitScale');
+    close(l.fitX, fit['fitX'] as num, 'fit fitX');
+    close(l.fitY, fit['fitY'] as num, 'fit fitY');
+    close(l.contentW, fit['contentW'] as num, 'fit contentW');
+    close(l.contentH, fit['contentH'] as num, 'fit contentH');
+
+    for (final c in (json['zoomAbout'] as List).cast<Map<String, dynamic>>()) {
+      final got = engine.viewZoomAbout(
+        view(c['view'] as Map<String, dynamic>),
+        f(c, 'focalX'),
+        f(c, 'focalY'),
+        f(c, 'factor'),
+        min: f(c, 'min'),
+        max: f(c, 'max'),
+      );
+      same(
+        got,
+        c['result'] as Map<String, dynamic>,
+        'zoomAbout x${c['factor']} max ${c['max']}',
+      );
+    }
+    final pan = json['pan'] as Map<String, dynamic>;
+    same(
+      engine.viewPan(
+        view(pan['view'] as Map<String, dynamic>),
+        f(pan, 'dx'),
+        f(pan, 'dy'),
+      ),
+      pan['result'] as Map<String, dynamic>,
+      'pan',
+    );
+    for (final c in (json['clamp'] as List).cast<Map<String, dynamic>>()) {
+      final v = view(c['view'] as Map<String, dynamic>);
+      same(
+        engine.viewClamp(
+          v,
+          l.contentW,
+          l.contentH,
+          spec.viewportW,
+          spec.viewportH,
+        ),
+        c['result'] as Map<String, dynamic>,
+        'clamp of ${v.offsetX}, ${v.offsetY}',
+      );
+    }
+    final toLayout = json['viewToLayout'] as Map<String, dynamic>;
+    final held = view(toLayout['view'] as Map<String, dynamic>);
+    for (final p in (toLayout['points'] as List).cast<List>()) {
+      final got = page.viewToLayout(
+        held,
+        (p[0] as num).toDouble(),
+        (p[1] as num).toDouble(),
+      );
+      close(got.x, p[2] as num, 'viewToLayout(${p[0]}, ${p[1]}) x');
+      close(got.y, p[3] as num, 'viewToLayout(${p[0]}, ${p[1]}) y');
+    }
+    for (final c in (json['isZoomed'] as List).cast<Map<String, dynamic>>()) {
+      final v = view(c['view'] as Map<String, dynamic>);
+      expect(
+        page.isZoomed(
+          zoom(c['zoom'] as Map<String, dynamic>),
+          v,
+          f(c, 'fitScale'),
+        ),
+        c['result'] as bool,
+        reason: 'isZoomed at scale ${v.scale}',
+      );
+    }
+    final fitted = QvpView(scale: l.fitScale, offsetX: l.fitX, offsetY: l.fitY);
+    for (final c in (json['pinches'] as List).cast<Map<String, dynamic>>()) {
+      final tag = '${c['mode']} pinch';
+      // each pinch starts from the printed layout, as the generator did
+      page.layout(spec);
+      final got = page.zoomPinch(
+        spec,
+        zoom(c['start'] as Map<String, dynamic>),
+        fitted,
+        f(c, 'factor'),
+        f(c, 'focalX'),
+        f(c, 'focalY'),
+      );
+      final want = zoom(c['zoom'] as Map<String, dynamic>);
+      expect(got.zoom.mode, want.mode, reason: tag);
+      expect(got.zoom.step, want.step, reason: tag);
+      close(got.zoom.zoom, want.zoom, '$tag zoom');
+      same(got.view, c['view'] as Map<String, dynamic>, tag);
+      expect(got.relaid, c['relaid'] as bool, reason: tag);
+      expect(
+        page.isZoomed(got.zoom, got.view, l.fitScale),
+        c['zoomedAfter'] as bool,
+        reason: '$tag zoomed after',
+      );
+      // the spec the control asks for comes back whole: the zoom in force and the host's knobs
+      final w = c['spec'] as Map<String, dynamic>;
+      final asks = page.zoomSpec(spec, got.zoom);
+      final reflow = asks.reflow;
+      expect(reflow, isNotNull, reason: '$tag reflows');
+      close(asks.viewportW, w['viewportW'] as num, '$tag spec viewportW');
+      close(asks.padTop, w['padTop'] as num, '$tag spec padTop');
+      expect(
+        asks.surahFrames,
+        w['surahFrames'] as bool,
+        reason: '$tag spec surahFrames',
+      );
+      close(reflow!.zoom, w['reflowZoom'] as num, '$tag spec reflow zoom');
+      expect(reflow.fill, w['fill'] as String, reason: '$tag spec fill');
+      close(reflow.wordGap, w['wordGap'] as num, '$tag spec wordGap');
+      close(reflow.maxStretch, w['maxStretch'] as num, '$tag spec maxStretch');
+    }
+    // On the printed page the control reflows nothing, and the host's knobs come back as it
+    // set them.
+    final printed = json['printedSpec'] as Map<String, dynamic>;
+    final pw = printed['spec'] as Map<String, dynamic>;
+    final asks = page.zoomSpec(
+      spec,
+      zoom(printed['zoom'] as Map<String, dynamic>),
+    );
+    final kept = asks.reflow;
+    expect(kept, isNotNull, reason: 'printed spec keeps the reflow knobs');
+    close(asks.viewportW, pw['viewportW'] as num, 'printed spec viewportW');
+    close(asks.padTop, pw['padTop'] as num, 'printed spec padTop');
+    expect(asks.surahFrames, pw['surahFrames'] as bool);
+    close(kept!.zoom, pw['reflowZoom'] as num, 'printed spec reflow zoom');
+    expect(kept.fill, pw['fill'] as String, reason: 'printed spec fill');
+    close(kept.wordGap, pw['wordGap'] as num, 'printed spec wordGap');
+    close(kept.maxStretch, pw['maxStretch'] as num, 'printed spec maxStretch');
+    // A pinch whose fingers drift, replayed as a page view runs it: the engine works from the
+    // control and the focal point the gesture began on, with the factor of the whole gesture;
+    // the magnifying glass zooms the view the pinch began on, and the reflowing controls take
+    // the view the last frame returned. The host pans the answer by the drift and holds it.
+    for (final g in (json['drifts'] as List).cast<Map<String, dynamic>>()) {
+      page.layout(spec);
+      final start = zoom(g['start'] as Map<String, dynamic>);
+      final began = view(g['view'] as Map<String, dynamic>);
+      final fx = f(g, 'focalX'), fy = f(g, 'focalY');
+      var base = began;
+      final frames = (g['frames'] as List).cast<Map<String, dynamic>>();
+      for (var i = 0; i < frames.length; i++) {
+        final fr = frames[i];
+        final tag = '${g['mode']} drifting pinch, frame $i';
+        final c = page.zoomPinch(
+          spec,
+          start,
+          start.mode == QvpZoomMode.magnify ? began : base,
+          f(fr, 'factor'),
+          fx,
+          fy,
+        );
+        base = c.view;
+        final drawn = page.dressClamp(
+          engine.viewPan(c.view, f(fr, 'focalX') - fx, f(fr, 'focalY') - fy),
+          spec.viewportW,
+          spec.viewportH,
+        );
+        final want = zoom(fr['zoom'] as Map<String, dynamic>);
+        expect(c.zoom.mode, want.mode, reason: tag);
+        expect(c.zoom.step, want.step, reason: tag);
+        close(c.zoom.zoom, want.zoom, '$tag zoom');
+        expect(c.relaid, fr['relaid'] as bool, reason: '$tag relaid');
+        same(drawn, fr['view'] as Map<String, dynamic>, tag);
+      }
+    }
+    page.layout(spec);
+  });
+
   test('the reader\'s zoom control reflows the page and one loop draws it', () {
     const spec = QvpLayoutSpec(
       viewportW: 390,
@@ -508,7 +725,9 @@ void main() {
       expect(d.placement, lessThan(places.length));
     }
 
-    // a pinch that has not reached the next step commits nothing
+    // a pinch that has not reached the next step commits nothing. The page is on the printed
+    // layout first: the engine lays out a page that is at another step than its control.
+    page.layout(spec);
     final held = page.zoomPinch(spec, printed, const QvpView(), 1.0, 195, 422);
     expect(held.relaid, isFalse);
     expect(held.zoom.step, 0);
@@ -1117,5 +1336,39 @@ void main() {
     expect(p.highlightHandles(), added);
     p.dispose();
     small.dispose();
+  });
+
+  testWidgets('a host controller handed to a new view keeps working', (
+    tester,
+  ) async {
+    final p = engine.loadPage(
+      File('$repo/dist/pages/042.qvp').readAsBytesSync(),
+    );
+    final ctl = QvpViewController();
+    Widget view(int key) => Directionality(
+      textDirection: TextDirection.ltr,
+      child: QvpPageView(key: ValueKey(key), page: p, controller: ctl),
+    );
+    await tester.pumpWidget(view(1));
+    // The new view takes the controller in its initState, before the old view's dispose: the
+    // old view must not let go of a controller that is no longer its own.
+    await tester.pumpWidget(view(2));
+    expect(() => ctl.toView(const Offset(10, 10)), returnsNormally);
+
+    // zoomBy floors at the scale the page is fitted at, as a magnifying pinch does
+    final fitted = ctl.scale;
+    ctl.zoomBy(0.1);
+    expect(ctl.scale, closeTo(fitted, 1e-6));
+    ctl.zoomBy(2);
+    expect(ctl.scale, closeTo(fitted * 2, 1e-4));
+
+    // With no view, zoomBy and panBy keep the engine of the last one; toView needs a view.
+    await tester.pumpWidget(const SizedBox());
+    final x = ctl.offsetX;
+    ctl.panBy(const Offset(5, 0));
+    expect(ctl.offsetX, closeTo(x + 5, 1e-4));
+    expect(() => ctl.toView(Offset.zero), throwsStateError);
+    ctl.dispose();
+    p.dispose();
   });
 }

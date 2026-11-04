@@ -82,9 +82,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// is taller than the screen, is read with.
     public func scroll(by dy: CGFloat) {
         guard let p = page, p.isOpen, p.currentLayout != nil else { return }
-        viewOy += dy
         // a dressed page holds its border on the screen too, not only its text
-        let v = p.dressClamp(currentView, viewportW: Float(bounds.width), viewportH: Float(bounds.height))
+        let v = p.dressClamp(currentView.pan(dx: 0, dy: Float(dy)), viewportW: Float(bounds.width), viewportH: Float(bounds.height))
         viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
         refresh()
     }
@@ -127,9 +126,16 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     private var link: CADisplayLink?
     private var spring: QvpZoomSpring?
     private var springLink: CADisplayLink?
-    private var pinchStart: CGFloat = 1
     private var pinchZoom = QvpZoom()
+    /// The view the engine works from in a pinch: the one the pinch began on, and under the
+    /// reflowing controls the one the last frame returned, before the drift.
     private var pinchView = QvpView()
+    /// Where the fingers went down: the point every pinch frame zooms about.
+    private var pinchFocal = CGPoint.zero
+    /// True while a pinch drives the page. The pan recognizer runs beside the pinch, and the
+    /// pinch pans the page by its own drift, so a drag inside it would move the page twice; the
+    /// drag stands aside until the fingers lift.
+    private var pinching = false
     private var fitScale: CGFloat = 1
     /// True once the reader has zoomed in, by either road: the view magnified past the fitted
     /// size, or the page reflowed to a size above the printed one. The engine decides, so every
@@ -202,7 +208,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     private func hitAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpHit? {
         guard let p = page, p.isOpen else { return nil }
         let t0 = CACurrentMediaTime()
-        let h = p.hitTestView(Float((pt.x - viewOx) / viewScale), Float((pt.y - viewOy) / viewScale), o ?? hitOptions)
+        let at = p.viewToLayout(currentView, Float(pt.x), Float(pt.y))
+        let h = p.hitTestView(at.x, at.y, o ?? hitOptions)
         lastHitUs = (CACurrentMediaTime() - t0) * 1e6
         return h
     }
@@ -215,22 +222,48 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     }
     @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) { if let cb = onDoubleTap { cb(hitAt(g.location(in: self))) } else { resetView() } }
     @objc private func onPinch(_ g: UIPinchGestureRecognizer) {
+        // Set before any early return: a pinch that ends while the reader selects, or with zoom
+        // off, must not leave the one-finger drag switched off.
+        pinching = zoomEnabled && !selecting && [.began, .changed].contains(g.state)
+        // The pinch pans the page by its own drift, so the scroll view's drag stands aside too
+        // until the fingers lift. Two drags would move a reflowed page twice.
+        if scroller.panGestureRecognizer.isEnabled == pinching { scroller.panGestureRecognizer.isEnabled = !pinching }
         guard zoomEnabled, !selecting else { return }
-        if g.state == .began { stopSpring(); pinchStart = viewScale; pinchZoom = zoom; pinchView = currentView }
+        if g.state == .began { stopSpring(); pinchZoom = zoom; pinchView = currentView; pinchFocal = g.location(in: self) }
         // A reflowed page is a size the reader chose, not a peek: only a magnifying pinch springs back.
         if zoomSpringsBack, zoomMode == .magnify, [.ended, .cancelled, .failed].contains(g.state) { springBack(); return }
+        // A frame needs both fingers: the point between them is what the drift is measured by.
+        guard pinching, g.numberOfTouches >= 2 else { return }
+        // the fingers' drift since the pinch began: it pans the page, so two fingers drag it
         let f = g.location(in: self)
+        let driftX = Float(f.x - pinchFocal.x), driftY = Float(f.y - pinchFocal.y)
         guard let p = page, p.isOpen, zoomMode != .magnify else {
-            let ns = QvpViewPolicy.clampZoom(pinchStart * g.scale, fit: fitScale, ceiling: maxZoom); let k = ns / viewScale
-            viewOx = f.x - (f.x - viewOx) * k; viewOy = f.y - (f.y - viewOy) * k; viewScale = ns
+            // The printed page under a magnifying glass: the rows never move. The engine zooms
+            // the view the pinch began on about the point it began at, by the whole gesture,
+            // with the settled page as the floor and the host's ceiling above, then pans it by
+            // the drift and holds it against the viewport.
+            var v = pinchView.zoomAbout(focalX: Float(pinchFocal.x), focalY: Float(pinchFocal.y), factor: Float(g.scale), min: Float(fitScale), max: Float(maxZoom))
+                .pan(dx: driftX, dy: driftY)
+            if let p = page, p.isOpen, p.currentLayout != nil { v = p.dressClamp(v, viewportW: Float(bounds.width), viewportH: Float(bounds.height)) }
+            viewScale = CGFloat(v.scale); viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
             invalidateContent()
             return
         }
-        // `pinchZoom` stays where the gesture began: the engine measures the fingers against
-        // that, so a slow pinch walks the steps one at a time instead of running away.
-        apply(p.zoomPinch(layoutSpec, pinchZoom, pinchView, factor: Float(g.scale), focalX: Float(f.x), focalY: Float(f.y)))
+        // `pinchZoom` and the focal point stay where the gesture began: the engine measures the
+        // fingers against them, so a slow pinch walks the steps one at a time instead of running
+        // away. The view is the one the last frame returned, before the drift: a step committed
+        // earlier in this gesture moved the page, and the engine finds the word under the
+        // fingers on the layout it has now.
+        let c = p.zoomPinch(layoutSpec, pinchZoom, pinchView, factor: Float(g.scale), focalX: Float(pinchFocal.x), focalY: Float(pinchFocal.y))
+        pinchView = c.view
+        var v = c.view.pan(dx: driftX, dy: driftY)
+        if p.currentLayout != nil { v = p.dressClamp(v, viewportW: Float(bounds.width), viewportH: Float(bounds.height)) }
+        apply(QvpZoomChange(zoom: c.zoom, view: v, relaid: c.relaid))
     }
     @objc private func onPan(_ g: UIPanGestureRecognizer) {
+        // The pinch moves the page by its own drift. The drag drops what it counted meanwhile,
+        // or the first frame after the pinch would move the page by all of it at once.
+        if pinching { g.setTranslation(.zero, in: self); return }
         guard zoomEnabled, !selecting, spring == nil else { return }
         // A reflowed page is the screen's own width and the scroll view owns the one axis it
         // has. A printed page nobody has zoomed is not dragged either: a sideways flick on it
@@ -238,9 +271,12 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         // answering it turned two pages at a time.
         guard sideways == .pan else { return }
         let d = g.translation(in: self)
-        viewOx += d.x
-        viewOy += d.y
         g.setTranslation(.zero, in: self)
+        // The engine moves the view and holds it against the viewport, so no drag opens a blank
+        // strip beside the page.
+        var v = currentView.pan(dx: Float(d.x), dy: Float(d.y))
+        if let p = page, p.isOpen, p.currentLayout != nil { v = p.dressClamp(v, viewportW: Float(bounds.width), viewportH: Float(bounds.height)) }
+        viewOx = CGFloat(v.offsetX); viewOy = CGFloat(v.offsetY)
         refresh()
     }
     @objc private func handleLongPress(_ g: UILongPressGestureRecognizer) {
