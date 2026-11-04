@@ -178,12 +178,12 @@ pub struct Reflowed {
     pub sajdah_line_place: Vec<Placement>,
     /// Extra drawings of a decoration, one per further row its words occupy.
     pub repeats: Vec<Repeat>,
-    /// Width of a row in page units.
     /// True when the rows came out as the printed lines, so the page was laid out as printed.
     pub as_printed: bool,
     /// Decorations this layout does not draw: the sheet's own furniture, printed outside the
     /// page box (running head, page number).
     pub omitted: Vec<u32>,
+    /// Width of a row in page units.
     pub row_w: f32,
     /// The floor on the distance between two baselines, in page units: the printed line
     /// spacing. A row whose ink needs more room gets more.
@@ -376,11 +376,6 @@ impl Page {
         }
     }
 
-    /// Break the page's words into rows `row_w` page units wide and place them.
-    ///
-    /// `pitch` is the distance between row centres and `top` the centre of the first row,
-    /// both in page units. Rows are filled right to left in reading order; a banner line
-    /// (surah name, basmalah) keeps a row to itself and text never flows across it.
     /// The printed text block: the leftmost and rightmost ink of the page's lines, in page
     /// units. The sheet's side margins are what is left over.
     pub(crate) fn text_block(&self) -> (f32, f32) {
@@ -398,6 +393,11 @@ impl Page {
         }
     }
 
+    /// Break the page's words into rows `row_w` page units wide and place them.
+    ///
+    /// `pitch` is the distance between row centres and `top` the centre of the first row,
+    /// both in page units. Rows are filled right to left in reading order; a banner line
+    /// (surah name, basmalah) keeps a row to itself and text never flows across it.
     pub(crate) fn reflow(&self, spec: &ReflowSpec, shape: &RowSpec) -> Reflowed {
         let RowSpec { block, row_w, pitch, printed_spacing, surah_frames, .. } = *shape;
         let d = self.data();

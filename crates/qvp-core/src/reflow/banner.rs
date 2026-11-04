@@ -32,12 +32,8 @@ impl Page {
         self.paths_bbox(kept).unwrap_or(IBox::EMPTY)
     }
 
-    /// A banner line keeps its printed drawing, shrunk to the row width and centred on it.
-    /// The air the print keeps above and below a banner line, in page units: from its own ink
-    /// to the nearest ink on the line above and the line below. A banner line holds no words,
-    /// so its ink is the decorations drawn on it.
-    /// The horizontal extent of a banner line's own ink, in page units: a banner line holds
-    /// no words, so its ink is the decorations drawn on it.
+    /// The box of a banner line's own ink: a banner line holds no words, so its ink is the
+    /// decorations drawn on it.
     pub(super) fn header_bbox(&self, li: usize, omitted: &[u32]) -> IBox {
         let mut bbox = IBox::EMPTY;
         for (di, _) in self
@@ -52,6 +48,7 @@ impl Page {
         bbox
     }
 
+    /// The horizontal extent of a banner line's own ink, in page units.
     pub(super) fn header_ink(&self, li: usize, omitted: &[u32]) -> (f32, f32) {
         let bbox = self.header_bbox(li, omitted);
         let q = self.quant();
@@ -70,13 +67,16 @@ impl Page {
     /// the reader zooms in — growing with the words around them, which is what the reader
     /// asked for — and start to shrink only once the row itself is narrower than they are.
     ///
-    /// `max_k` is [`ReflowSpec::banner_zoom`] against the zoom, already worked out; it is
+    /// `max_k` is [`crate::LayoutSpec::banner_zoom`] against the zoom, already worked out; it is
     /// infinite when the host left the growth uncapped.
     pub(super) fn header_scale(&self, li: usize, row_w: f32, max_k: f32, omitted: &[u32]) -> f32 {
         let ink = self.header_ink(li, omitted);
         (row_w / (ink.1 - ink.0).max(1.0)).min(1.0).min(max_k)
     }
 
+    /// The air the print keeps above and below a banner line, in page units: from its own ink
+    /// to the nearest ink on the line above and the line below. A banner line holds no words,
+    /// so its ink is the decorations drawn on it.
     pub(super) fn header_air(&self, li: usize, omitted: &[u32]) -> (f32, f32) {
         let d = self.data();
         let q = self.quant();
@@ -91,6 +91,7 @@ impl Page {
         (above, below)
     }
 
+    /// A banner line keeps its printed drawing, shrunk to the row width and centred on it.
     pub(super) fn place_header(
         &self,
         out: &mut Reflowed,

@@ -175,10 +175,6 @@ impl Page {
         let line_words = load::line_words(&data);
         let word_body = load::word_bodies(&data);
         let line_baseline = load::line_baselines(&data, &line_words, &line_centre);
-        // Two words are spaced by the air between their letters, not by the distance between
-        // their boxes: the calligraphy interlocks one word's stroke with the next one's without
-        // the ink ever meeting. Slicing each word into bands and recording where its ink starts
-        // and ends in each is what makes that air measurable.
         let word_index = data.words.iter().enumerate().map(|(i, w)| ((w.surah, w.ayah, w.word), i as u32)).collect();
         let n = data.paths.len();
         Ok(Page {
@@ -368,6 +364,11 @@ impl Page {
 
     /// The page's traced outlines, built the first time something measures the air between two
     /// words and kept from then on.
+    ///
+    /// Two words are spaced by the air between their letters, not by the distance between
+    /// their boxes: the calligraphy interlocks one word's stroke with the next one's without
+    /// the ink ever meeting. Slicing each word into bands and recording where its ink starts
+    /// and ends in each is what makes that air measurable.
     fn silhouettes(&self) -> &Silhouettes {
         self.silhouettes.get_or_init(|| Silhouettes {
             words: self

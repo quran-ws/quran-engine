@@ -258,14 +258,6 @@ impl Page {
         self.line_centre[li]
     }
 
-    /// Compute and store a layout. Horizontal placement is as printed (scaled to
-    /// the padded viewport width); vertical placement moves whole lines by `line_dy`.
-    ///
-    /// Printed lines are neither equally tall nor equally pitched, and ink often
-    /// reaches into the neighbouring line, so lines are never re-spread onto a
-    /// grid. Instead every line keeps its printed position and the *same* delta
-    /// is inserted between each pair of consecutive lines: line `k` (0-based on
-    /// the nominal grid) moves by `k·delta`. `delta = 0` reproduces the print.
     /// The `line_spacing` multiplier that makes this page fill the padded viewport of `spec`
     /// when fitted to width; `max` bounds the multiplier (`INFINITY` for none). 1 when the
     /// page already fills it.
@@ -344,6 +336,14 @@ impl Page {
         spec.pad_top + block_h * m.scale + spec.pad_bottom
     }
 
+    /// Compute and store a layout. Horizontal placement is as printed (scaled to
+    /// the padded viewport width); vertical placement moves whole lines by `line_dy`.
+    ///
+    /// Printed lines are neither equally tall nor equally pitched, and ink often
+    /// reaches into the neighbouring line, so lines are never re-spread onto a
+    /// grid. Instead every line keeps its printed position and the *same* delta
+    /// is inserted between each pair of consecutive lines: line `k` (0-based on
+    /// the nominal grid) moves by `k·delta`. `delta = 0` reproduces the print.
     pub fn layout(&mut self, spec: &LayoutSpec) -> &Layout {
         // At the printed size the page is the printed page: the words are where the print has
         // them, and every layout knob — leading, fill height, the grid a short page sits on —
@@ -692,7 +692,6 @@ impl Page {
         }
     }
 
-    /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).
     /// The zoom each step of a reader's zoom control lands on for this page.
     ///
     /// Zoom is continuous, but the rows are not: a word stops fitting and the page rearranges,
@@ -807,6 +806,7 @@ impl Page {
         3.0 * short + steps + 0.10 * height + 0.8 * near * near
     }
 
+    /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).
     pub fn word_bounds_view(&self, wi: u32) -> (f32, f32, f32, f32) {
         let q = self.quant();
         let w = &self.data.words[wi as usize];
