@@ -40,13 +40,13 @@ pub unsafe extern "C" fn qvp_style_recolor(page: *mut Page, handle: u32, rgba: u
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_clear(page: *mut Page) {
     guard(|| {
-        (*page).styles.clear();
+        (*page).styles_mut().clear();
     })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_clear_layer(page: *mut Page, layer: i32) {
     guard(|| {
-        (*page).styles.clear_layer(layer);
+        (*page).styles_mut().clear_layer(layer);
     })
 }
 #[no_mangle]
@@ -92,7 +92,7 @@ pub unsafe extern "C" fn qvp_theme(page: *mut Page, t: *const QvpTheme) -> u32 {
 /// Handles currently holding rules.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_handles(page: *const Page, out: *mut u32, cap: u32) -> u32 {
-    guard(|| fill(out, cap, &(*page).styles.handles()))
+    guard(|| fill(out, cap, &(*page).styles().handles()))
 }
 
 // ───────────── clock & display list ─────────────

@@ -137,11 +137,11 @@ pub struct Page {
     path_deco: Vec<u32>,
     pub(crate) path_ctx: Vec<PathCtx>,
     word_index: HashMap<(u16, u16, u16), u32>,
-    pub styles: StyleEngine,
+    pub(crate) styles: StyleEngine,
     pub(crate) mask: MaskState,
     pub(crate) reveal: Option<Reveal>,
     pub(crate) highlights: Vec<highlight::Highlight>,
-    pub selection: Selection,
+    pub(crate) selection: Selection,
     pub(crate) dress: Option<dress::Dress>,
     /// Counts up across every rebuild of the ornament layer of this page, so a host's
     /// raster cache of that layer knows when it went stale.
@@ -215,6 +215,22 @@ impl Page {
 
     pub fn data(&self) -> &PageData {
         &self.data
+    }
+    /// The page's style rules.
+    pub fn styles(&self) -> &StyleEngine {
+        &self.styles
+    }
+    /// The page's style rules, to change.
+    pub fn styles_mut(&mut self) -> &mut StyleEngine {
+        &mut self.styles
+    }
+    /// The words the reader has selected.
+    pub fn selection(&self) -> &Selection {
+        &self.selection
+    }
+    /// The selection, to change.
+    pub fn selection_mut(&mut self) -> &mut Selection {
+        &mut self.selection
     }
     pub(crate) fn data_mut(&mut self) -> &mut PageData {
         &mut self.data
