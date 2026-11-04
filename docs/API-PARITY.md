@@ -121,9 +121,9 @@ is owed.
 | `qvp_layout_repeats` | flutter | other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits |
 | `qvp_layout_path_groups` | flutter | other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits |
 | `qvp_layout_omitted_paths` | flutter | other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits |
-| `qvp_view_anchor` | flutter | issue (to open): a binding is owed; the generated bindings declare it, but no Dart call reaches it |
-| `qvp_view_swipe` | flutter | issue (to open): a binding is owed; the generated bindings declare it, but no Dart call reaches it |
-| `qvp_swipe_pages` | flutter | issue (to open): a binding is owed; the generated bindings declare it, but no Dart call reaches it |
+| `qvp_view_anchor` | flutter | issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it |
+| `qvp_view_swipe` | flutter | issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it |
+| `qvp_swipe_pages` | flutter | issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it |
 | `qvp_mask_transition` | react-native | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_passage_load` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 | `qvp_passage_load_basmalah` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
@@ -431,7 +431,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_surah_count` | yes | yes | yes | yes | gap (list form: bound as `surahs().length`) |
 | `qvp_surah_headers` | yes | yes | yes | yes | yes |
 | `qvp_surah_headers_view` | yes | yes | yes | yes | yes |
-| `qvp_swipe_pages` | yes | yes | gap (issue (to open): a binding is owed; the generated bindings declare it, but no Dart call reaches it) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_swipe_pages` | yes | yes | gap (issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_target_words` | yes | yes | yes | yes | yes |
 | `qvp_text` | yes | yes | yes | yes | yes |
 | `qvp_theme` | yes | yes | yes | yes | yes |
@@ -442,10 +442,10 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_unmask_next` | yes | yes | yes | yes | yes |
 | `qvp_unmask_word` | yes | yes | yes | yes | yes |
 | `qvp_version` | yes | yes | yes | yes | yes |
-| `qvp_view_anchor` | yes | yes | gap (issue (to open): a binding is owed; the generated bindings declare it, but no Dart call reaches it) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_anchor` | yes | yes | gap (issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_clamp` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_pan` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_view_swipe` | yes | yes | gap (issue (to open): a binding is owed; the generated bindings declare it, but no Dart call reaches it) | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_swipe` | yes | yes | gap (issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it) | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_to_layout` | yes | yes | yes | yes | yes |
 | `qvp_view_zoom_about` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
