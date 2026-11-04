@@ -66,7 +66,7 @@ def kotlin(tables: dict[str, list[tuple[str, int]]]) -> str:
         "package ws.quran.qvp.rn",
         "",
         "/** The QVP_TARGET_* and QVP_SELECTOR_* codes, and each code by its JavaScript name. */",
-        "internal object Codes {",
+        "object Codes {",
     ]
     for prefix, codes in tables.items():
         lines += [f"    const val {prefix}_{s} = {v}" for s, v in codes]

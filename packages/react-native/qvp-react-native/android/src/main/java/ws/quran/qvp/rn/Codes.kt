@@ -2,7 +2,7 @@
 package ws.quran.qvp.rn
 
 /** The QVP_TARGET_* and QVP_SELECTOR_* codes, and each code by its JavaScript name. */
-internal object Codes {
+object Codes {
     const val TARGET_PAGE = 0
     const val TARGET_WORD = 1
     const val TARGET_WORDS = 2
