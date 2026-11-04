@@ -178,8 +178,8 @@ public final class QvpPassage {
     /// Lay the passage out. `nil` when the spec is out of range; the last layout then stays.
     @discardableResult
     public func layout(_ spec: QvpPassageSpec) -> QvpPassageLayout? {
-        guard spec.maxRows >= 0 else { return nil }
         let p = self.p
+        guard spec.maxRows >= 0 else { return nil }
         var s = QvpFFI.QvpPassageSpec(width: spec.width, scale: spec.scale, line_spacing: spec.lineSpacing, padding: spec.padding,
                                        align: spec.align.rawValue, keep_ayah_mark: spec.keepAyahMark ? 1 : 0, _pad: (0, 0),
                                        max_rows: UInt32(spec.maxRows), ellipsis_width: spec.ellipsisWidth, max_stretch: spec.maxStretch)
