@@ -194,6 +194,12 @@ impl Page {
         }
     }
 
+    /// Whether the print draws two row units as one piece of calligraphy, so the gap between
+    /// them keeps its printed width and never stretches.
+    pub(super) fn interlocked(&self, prev: &Atom, next: &Atom) -> bool {
+        self.neighbour(prev, next).0.is_some()
+    }
+
     pub(super) fn atom_gap(&self, prev: &Atom, next: &Atom, spec: &ReflowSpec, median: f32) -> f32 {
         let d = self.data();
         let (interlock, clearance) = self.neighbour(prev, next);

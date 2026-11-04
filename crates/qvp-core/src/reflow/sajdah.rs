@@ -1,4 +1,5 @@
 //! The sajdah line: the stroke the print draws over the words of a sajdah, and the sign beside it.
+use super::{Placement, Reflowed, Repeat, NONE};
 use crate::Page;
 use qvp_format::{IBox, Mark};
 
@@ -79,5 +80,54 @@ impl Page {
         (deco.first_path..deco.first_path + deco.n_paths as u32)
             .filter(|&pi| d.paths[pi as usize].mark != Mark::SajdahLine)
             .collect()
+    }
+
+    /// Place every sajdah line over the words it marks, wherever the rows put them. The span
+    /// can break across rows, so the stroke is drawn once per row, stretched along x to cover
+    /// that row's part of it. Only this stroke is stretched; the words are not.
+    pub(super) fn place_sajdah_lines(&self, out: &mut Reflowed) {
+        let q = self.quant();
+        let d = self.data();
+        for line in &self.reflow_prepared().sajdah_lines {
+            let (di, words) = (line.deco as usize, &line.words);
+            let (bx0, bx1) = (line.x0, line.x1);
+            let mut by_row: Vec<(u32, f32, f32)> = Vec::new(); // (row, x0, x1) of the placed span
+            for &wi in words {
+                let r = out.word_row[wi as usize];
+                if r == NONE {
+                    continue;
+                }
+                let p = out.word_place[wi as usize];
+                let w = &d.words[wi as usize];
+                let (x0, x1) = (p.apply(w.bbox.x0 as f32 / q, 0.0).0, p.apply(w.bbox.x1 as f32 / q, 0.0).0);
+                match by_row.iter_mut().find(|(rr, _, _)| *rr == r) {
+                    Some(e) => {
+                        e.1 = e.1.min(x0);
+                        e.2 = e.2.max(x1);
+                    }
+                    None => by_row.push((r, x0, x1)),
+                }
+            }
+            for (n, &(r, sx0, sx1)) in by_row.iter().enumerate() {
+                let kx = if sx1 > sx0 { (sx1 - sx0) / (bx1 - bx0) } else { 1.0 };
+                // the stroke takes the same shift as the words it is drawn over, so it keeps
+                // the height above them the print gave it. They all came from one printed line,
+                // so they all carry the same shift.
+                let dy = words
+                    .iter()
+                    .find(|&&wi| out.word_row[wi as usize] == r)
+                    .map(|&wi| out.word_place[wi as usize].dy)
+                    .unwrap_or(0.0);
+                let p = Placement { dx: sx0 - kx * bx0, dy, kx, ky: 1.0 };
+                if n == 0 {
+                    out.sajdah_line_place[di] = p;
+                } else {
+                    // only the stroke is drawn again; the sign beside it is printed once
+                    for &pi in &line.paths {
+                        out.repeats.push(Repeat { decoration: di as u32, first_path: pi, n_paths: 1, placement: p });
+                    }
+                }
+            }
+        }
     }
 }
