@@ -80,6 +80,9 @@
   are gone. All three named `dart:ffi` types or the native scratch, which cannot sit on a
   platform-neutral class. `QvpNativeBackend` holds them now. Pass a library to
   `QvpEngine(library)` or a path to `QvpEngine.open(path:)` as before.
+- Fixed: a call on a disposed `QvpEngine` throws `StateError('QvpEngine was disposed')` on a
+  native build, where a page, atlas or name call after `engine.dispose()` reached freed
+  scratch memory. Freeing a page, atlas, passage or ornament set still works afterwards.
 
 ## 0.7.0
 

@@ -185,6 +185,18 @@ All notable changes to the engine and its packages. The format follows
   `QvpView.zoomAbout`.
 
 ### Fixed
+- Flutter: `flutter analyze` no longer warns on a fresh clone that the example's
+  `assets/pages/` directory is missing. The directory holds a tracked `README.md`, and
+  `.gitignore` keeps that file while it ignores the page data. The rule `pages/` now matches
+  only the root `pages/`.
+- Flutter: a call on a disposed `QvpEngine` throws `StateError('QvpEngine was disposed')` on a
+  native build. A page, atlas or name call after `engine.dispose()` reached freed scratch
+  memory. Freeing a page, atlas, passage or ornament set still works afterwards.
+- `docs/API.md`: the "Every symbol" table has a row for each of the 173 header functions, in
+  the header's order. It had 139 rows and left out the view, zoom and reflow functions and
+  five layout getters. `scripts/check-parity.py` fails when a header function has no row.
+- `scripts/sync-android-test-data.sh` runs under the bash 3.2 that macOS ships. It used
+  `mapfile`, which that bash lacks, so the script failed on a Mac.
 - Android: `QvpColor.parse` and `QvpColor.withAlpha` round alpha to the nearest of 255
   steps, as the Swift, Dart and web wrappers do. They truncated, so alpha 0.5 gave `0x7f` on
   Android and `0x80` everywhere else. A NaN alpha clamps to 0 in every wrapper, where

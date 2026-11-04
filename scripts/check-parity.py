@@ -12,8 +12,9 @@ Inputs
 Output
   docs/API-PARITY.md, regenerated between the parity markers (default), or checked
   against the current sources (--check). Exit 1 on: a header/Rust mismatch, a stale
-  Android header copy, a symbol that a wrapper neither binds nor declares as a gap, or an
-  abbreviated field name in a published JavaScript entry point.
+  Android header copy, a symbol that a wrapper neither binds nor declares as a gap, a
+  header function without a row in the "Every symbol" table of docs/API.md (or a row
+  without a function), or an abbreviated field name in a published JavaScript entry point.
 
 A symbol counts as bound in a wrapper when the C name or its camelCase form (with or
 without the object-model noun) appears in that wrapper's sources.
@@ -29,6 +30,7 @@ HEADER = ROOT / "crates/qvp-ffi/include/qvp.h"
 WEB_QVP_JS = ROOT / "web/qvp.js"
 RUST_SRC = ROOT / "crates/qvp-ffi/src"
 ANDROID_HEADER = ROOT / "packages/android/qvp/src/main/cpp/qvp.h"
+API_DOC = ROOT / "docs/API.md"
 PARITY = ROOT / "docs/API-PARITY.md"
 BEGIN, END = "<!-- parity:begin -->", "<!-- parity:end -->"
 
@@ -49,6 +51,24 @@ def header_symbols() -> list[str]:
 def rust_exports() -> list[str]:
     text = "\n".join(f.read_text() for f in sorted(RUST_SRC.glob("*.rs")))
     return sorted(set(re.findall(r'#\[no_mangle\]\s*pub\s+(?:unsafe\s+)?extern\s+"C"\s+fn\s+(qvp_[a-z0-9_]+)', text)))
+
+
+def check_api_table(symbols: list[str], problems: list[str]) -> None:
+    """docs/API.md, "Every symbol": one row per header function, none for a function the header lacks."""
+    text = API_DOC.read_text()
+    start = text.find("## Every symbol")
+    if start < 0:
+        problems.append("docs/API.md has no 'Every symbol' section")
+        return
+    end = text.find("\n## ", start + 1)
+    table = text[start:end if end >= 0 else len(text)]
+    rows = re.findall(r"^\|[^|]+\|\s*`(qvp_[a-z0-9_]+)`\s*\|", table, re.M)
+    for s in sorted(set(symbols) - set(rows)):
+        problems.append(f"docs/API.md 'Every symbol' has no row for `{s}`")
+    for s in sorted(set(rows) - set(symbols)):
+        problems.append(f"docs/API.md 'Every symbol' has a row for `{s}`, which the header lacks")
+    for s in sorted({r for r in rows if rows.count(r) > 1}):
+        problems.append(f"docs/API.md 'Every symbol' has more than one row for `{s}`")
 
 
 def camel(symbol: str, drop_noun: bool) -> str:
@@ -181,6 +201,8 @@ def main(argv: list[str]) -> int:
         only_h = sorted(set(symbols) - set(exports))
         only_rs = sorted(set(exports) - set(symbols))
         problems.append(f"header and Rust exports differ: only in header {only_h}, only in Rust {only_rs}")
+
+    check_api_table(symbols, problems)
 
     if ANDROID_HEADER.read_bytes() != HEADER.read_bytes():
         problems.append(f"{ANDROID_HEADER.relative_to(ROOT)} differs from {HEADER.relative_to(ROOT)}; run scripts/build-engine-android.sh")

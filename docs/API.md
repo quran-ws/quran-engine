@@ -845,9 +845,10 @@ carries no table of its own; a name the engine does not have resolves to 255, ne
 
 ## Every symbol
 
-One row per C function, with its spelling in the reference wrapper (`web/qvp.js`; the other
-wrappers use the same names in their own casing) and what it does. `docs/API-PARITY.md`
-says which wrapper binds which.
+One row per C function, in the order of `qvp.h`, with its spelling in the reference wrapper
+(`web/qvp.js`; the other wrappers use the same names in their own casing) and what it does.
+`docs/API-PARITY.md` says which wrapper binds which. `scripts/check-parity.py` fails when a
+function in the header has no row here, or a row names a function the header lacks.
 
 | section | C | reference wrapper | what it does |
 |---|---|---|---|
@@ -869,7 +870,10 @@ says which wrapper binds which.
 | metadata | `qvp_surah_count` | `page.surahs().length` | Return how many surahs have text on this page. |
 | metadata | `qvp_surah_at` | `page.surahs()[i]` | Return the i-th surah on the page: number, ayah count, banner and basmalah flags, place, names. |
 | metadata | `qvp_divisions` | `page.divisions()` | Return the juz, hizb, nisf and rubu_al_hizb divisions that start on this page. |
+| metadata | `qvp_surah_headers` | `page.surahHeaders()` | Return the box each surah frame on the page fills and the title ink inside it, in page units. |
+| metadata | `qvp_surah_headers_view` | `page.surahHeadersView()` | The same in viewport pixels through the current layout. |
 | metadata | `qvp_ayah_marks` | `page.ayahMarks()` | Return the ayah-mark medallions on the page with their centres and radii. |
+| metadata | `qvp_ayah_marks_view` | `page.ayahMarksView()` | The same for the ayah-mark medallions, in viewport pixels through the current layout. |
 | metadata | `qvp_rosettes` | `page.rosettes()` | Return the drawn hizb rosettes with the division numbers they mark. |
 | metadata | `qvp_sajdahs` | `page.sajdahs()` | Return the sajdah signs on the page. |
 | metadata | `qvp_ayah_keys` | `page.ayahKeys()` | Return the ayah keys on the page in reading order, packed as surah in the high 16 bits and ayah in the low 16. |
@@ -879,17 +883,46 @@ says which wrapper binds which.
 | metadata | `qvp_ayah_label` | `page.ayahLabel(i)` | Return an accessibility label for an ayah fragment. |
 | text and search | `qvp_text` | `page.text(target, form, wordSep, lineSep)` | Return the text of a target (the page by default) in one form, with the given separators. |
 | text and search | `qvp_search` | `page.search(query, …)` | Search the page's words in one text form with Arabic normalisation; returns matches with their word index. |
-| text and search | `qvp_arabic` | `engine.strip()`, `.fold()`, `.normalize()`, `.looseKey()`, `.searchKey()` | Apply one of the Arabic text transforms of the search fold to a string. |
+| text and search | `qvp_arabic` | `engine.strip()`, `.fold()`, `.normalize()`, `.looseKey()` | Apply one of the Arabic text transforms of the search fold to a string. |
 | text and search | `qvp_citation` | `page.citation(words)` | Return a citation such as `2:255-257, 3:1` for a word list. |
 | text and search | `qvp_attach_words` | `page.attachWords(json)` | Attach the words sidecar's text forms; returns the number of words updated, −1 on bad JSON. |
 | text and search | `qvp_has_form` | `page.hasForm(form)` | Return whether a text form is available (the derived forms need the sidecar). |
-| hit testing | `qvp_hit_test_exact` | `page.hitTestExact(x, y)` | Return the word, path or decoration whose exact outline contains a point in page units. |
-| hit testing | `qvp_hit_test_exact_view` | `page.hitTestExactView(viewX, viewY)` | The same for a point in viewport pixels through the current layout. |
 | hit testing | `qvp_hit_test` | `page.hitTest(x, y, options)` | Gap-aware: resolve a point to the nearest word by line band and gap bias, with the distance and whether the hit was exact. |
 | hit testing | `qvp_hit_test_view` | `page.hitTestView(viewX, viewY, options)` | The same for viewport pixels. |
+| hit testing | `qvp_hit_test_exact` | `page.hitTestExact(x, y)` | Return the word, path or decoration whose exact outline contains a point in page units. |
+| hit testing | `qvp_hit_test_exact_view` | `page.hitTestExactView(viewX, viewY)` | The same for a point in viewport pixels through the current layout. |
 | hit testing | `qvp_line_bands` | `page.lineBands()` | Return every line's vertical band in page units. |
 | hit testing | `qvp_hit_areas` | `page.hitAreas(gapBias)` | Return the gap-aware rectangle of every word, a partition of each line with no dead zone. |
+| hit testing | `qvp_hit_areas_view` | `page.hitAreasView(gapBias)` | The same for the gap-aware word rectangles, in viewport pixels; a reflowed page gives its rows. |
+| layout | `qvp_view_zoom_about` | `engine.viewZoomAbout(view, focalX, focalY, factor, {min, max})` | Zoom a view about a point of the viewport, such as the point between two fingers; clamps the scale. |
+| layout | `qvp_view_pan` | `engine.viewPan(view, dx, dy)` | Move a view by a drag, in viewport pixels. |
+| layout | `qvp_view_clamp` | `engine.viewClamp(view, contentW, contentH, viewportW, viewportH)` | Hold the content against the viewport: centre what does not fill it, cover what does. |
+| layout | `qvp_view_anchor` | `page.viewAnchor(view, word, nx, ny, toX, toY, viewportW, viewportH)` | Return the view that keeps one point of a word at a place on screen across a new layout. |
+| layout | `qvp_view_to_layout` | `page.viewToLayout(view, vx, vy)` | Map a viewport point to layout pixels through a view. |
+| layout | `qvp_view_swipe` | `engine.viewSwipe(dx, dy, vx, vy)` | Return +1 or −1 when a released drag is a page swipe, 0 when it is not. |
+| layout | `qvp_swipe_pages` | `engine.swipePages(dx, dy, vx, vy)` | Return how many pages a released drag turns, in reading order; a mushaf runs right to left. |
+| layout | `qvp_zoom_mode` | `page.zoomMode(spec, zoom, mode)` | Switch the zoom control to another policy (stepped, continuous or magnify), keeping the size the reader is at. |
+| layout | `qvp_zoom_pinch` | `page.zoomPinch(spec, zoom, view, factor, x, y)` | Apply a pinch: pick the zoom, lay the page out again and hold the word under the fingers. |
+| layout | `qvp_zoom_to_step` | `page.zoomToStep(spec, zoom, step, view)` | Zoom to a named step; step 0 is the printed page. |
+| layout | `qvp_zoom_spec` | `page.zoomSpec(spec, zoom)` | Return the layout spec that a zoom control asks for. |
+| layout | `qvp_zoom_carried` | `page.zoomCarried(spec, zoom)` | Return the same zoom control on this page, which is what a page turn keeps. |
+| layout | `qvp_zoom_at_step` | `page.zoomAtStep(spec, step)` | Return the reflow zoom that a step means; 0 is the printed page. |
+| layout | `qvp_zoom_is_zoomed` | `engine.zoomIsZoomed(zoom, view, fitScale)` | Return whether the reader has zoomed in, by either road: a magnified view or a reflow above the printed size. |
+| layout | `qvp_sideways_drag` | `page.sidewaysDrag(zoom, view, fitScale)` | Return what a sideways drag means: pan or turn the page. |
 | layout | `qvp_layout` | `page.layout(spec)` | Lay the page out for a viewport: scale, per-line shifts, slots, content size and the fit transform. |
+| layout | `qvp_layout_current` | `page.layoutCurrent()` | Return the layout the page already has without computing one; 0 when it has none. |
+| layout | `qvp_layout_groups` | `layout.groups` | Return where each group of paths is placed, as dx, dy, kx, ky per group. |
+| layout | `qvp_layout_repeats` | `layout.repeats` | Return the paths drawn again elsewhere, such as a sajdah line over two rows, with their placements. |
+| layout | `qvp_layout_path_groups` | `layout.pathGroup` | Return the group of every path; empty unless the page is reflowed. |
+| layout | `qvp_layout_omitted_paths` | `layout.omitted` | Return the paths this layout does not draw: sheet furniture, and a native surah frame when reflowed. |
+| layout | `qvp_layout_draw_list` | `page.layoutDrawList(bandTop, bandBottom)` | Return every path that the layout draws inside a band, with its placement, in drawing order. |
+| layout | `qvp_layout_placements` | `page.layoutPlacements()` | Return what a draw list's placement indexes: the groups, then the repeats. |
+| layout | `qvp_layout_row_words` | `page.rowWords(row)` | Return the words of a reflowed row, in reading order. |
+| layout | `qvp_layout_word_row` | `page.wordRow(word)` | Return the row a word landed on, or null when it is on none. |
+| layout | `qvp_reflow_max_zoom` | `page.reflowMaxZoom(spec)` | Return the largest reflow zoom whose rows still hold every word. |
+| layout | `qvp_zoom_levels` | `page.zoomLevels(spec, nominals, band)` | Return the zoom that each step of a zoom control lands on. |
+| layout | `qvp_zoom_steps` | `page.zoomSteps(spec)` | Return the zoom steps that this page ships with. |
+| layout | `qvp_zoom_level_candidates` | `page.zoomLevelCandidates(spec, nominal, band, floor)` | Return every zoom that the search weighs for one step, with its cost. |
 | layout | `qvp_layout_line_spacing_to_fill` | `page.layoutLineSpacingToFill(spec, max)` | Return the `lineSpacing` multiplier that fills the padded viewport of a spec when fitted to width. |
 | layout | `qvp_layout_wasted_fraction` | `page.layoutWastedFraction(spec)` | Return the share of the padded viewport of a spec left empty when the page is fitted to width. |
 | layout | `qvp_layout_printed_height` | `page.layoutPrintedHeight(spec)` | Return the page's height laid out for a spec at the printed pitch, in viewport px: `contentH` before fill-height adds any leading. |
@@ -917,12 +950,14 @@ says which wrapper binds which.
 | highlights | `qvp_highlight_words` | `page.highlightWords(handle)` | Return the words a highlight covers. |
 | highlights | `qvp_highlight_boxes_view` | `page.highlightBoxesView()` | Return every highlight's band rectangles in viewport pixels; draw each id as one nonzero path behind the ink. |
 | highlights | `qvp_word_bands` | `page.wordBands(words, options)` | Return band rectangles for an arbitrary word list, in page units. |
+| highlights | `qvp_word_bands_view` | `page.wordBandsView(words, options)` | The same band rectangles, in viewport pixels through the current layout. |
 | selection | `qvp_select` | `page.select(anchor, focus)` | Select the whole words between two word indices; `QVP_NONE` clears. |
 | selection | `qvp_selection` | `page.selection()` | Return the selected word indices. |
 | selection | `qvp_selection_text` | `page.selectionText(form, citation)` | Return the selected text, with its citation when asked. |
 | memorisation | `qvp_mask` | `page.mask(target, mode)` | Mask a target's words: hide, block or blur. |
 | memorisation | `qvp_mask_from` | `page.maskFrom(word, mode)` | Mask every word from a word index to the end of the page. |
 | memorisation | `qvp_mask_options` | `page.maskOptions(options)` | Set the block colour, padding, radius and direction of the mask. |
+| memorisation | `qvp_mask_transition` | none yet (a declared gap); `page.maskTransition(ms)` in Swift | Set the fade time of a hide in milliseconds; 0 is instant, and unmask resets it. |
 | memorisation | `qvp_unmask_next` | `page.unmaskNext(n)` | Unhide the next `n` masked words; returns how many are still hidden. |
 | memorisation | `qvp_mask_back` | `page.maskBack(n)` | Re-hide the last `n` revealed words. |
 | memorisation | `qvp_unmask_word` | `page.unmaskWord(i)` | Unhide one word. |
@@ -941,6 +976,18 @@ says which wrapper binds which.
 | memorisation | `qvp_reveal_stop` | `page.revealStop()` | End the reveal and restore the page. |
 | crop | `qvp_crop_bounds` | `page.cropBounds(target, options)` | Return the crop rectangle of a target with padding, and whether the ayah mark is inside it. |
 | crop | `qvp_crop_svg` | `page.cropSvg(target, options)` | Return a standalone SVG of a target with the current colours applied. |
+| dress | `qvp_ornaments_load` | `engine.loadOrnaments(bytes)` | Decode an ornament set; null on a malformed file; the bytes are copied. |
+| dress | `qvp_ornaments_free` | `set.free()` | Free the ornament set. |
+| dress | `qvp_ornament_count` | `set.count` | Return how many ornaments the set holds. |
+| dress | `qvp_ornament_info` | `set.list[i]` | Return one ornament: kind, lineage, style, riwayah, licence and part count. |
+| dress | `qvp_ornament_find` | `set.find(kind, style)` | Return the ornament of one kind in one style, or null. The C call returns its index, or −1. |
+| dress | `qvp_ornament_part` | `set.list[i].parts[k]` | Return one printed colour of an ornament: colour, stroke flag and name. |
+| dress | `qvp_dress` | `page.dress(set, spec)` | Place the chosen ornaments on the page from its measurements. |
+| dress | `qvp_undress` | `page.undress()` | Take the ornaments off; the printed rings and bands come back. |
+| dress | `qvp_dress_info` | `page.dressInfo()` | Return the readout: chosen ornaments, counts, revision, grown page box and overflow. |
+| dress | `qvp_dress_geometry` | `page.dressGeometry()` | Return the ornament display list, with a layout placement on each draw. |
+| dress | `qvp_dress_clamp` | `page.dressClamp(view, viewportW, viewportH)` | Clamp a view to the content plus the dress overflow, so a drag reaches the border and stops there. |
+| dress | `qvp_dress_view` | `page.dressView(scale, viewportW)` | Return `{view, width, height}` for a host that scrolls the page: the dressed box at `scale`, centred, with its top at 0, and its size. A `scale` of 0 fits the box to `viewportW`, never above 1. |
 | atlas | `qvp_atlas_load` | `engine.loadAtlas(bytes)` | Decode the atlas file; null on a malformed file. |
 | atlas | `qvp_atlas_free` | `atlas.free()` | Free the atlas. |
 | atlas | `qvp_atlas_page_of` | `atlas.pageOf(surah, ayah)` | Return the page an ayah is on. |
@@ -955,8 +1002,8 @@ says which wrapper binds which.
 | atlas | `qvp_atlas_search_surahs` | `atlas.searchSurahs(text)` | Search the surah names in Arabic, Latin or English, or by number. |
 | atlas | `qvp_atlas_json` | `atlas.json()` | Return the atlas as JSON. |
 | passage | `qvp_passage_load` | `engine.loadPassage(pages, surah, from, to)` | Load a range of complete ayahs from the pages that print them; null when an ayah is missing or incomplete. |
-| passage | `qvp_passage_free` | `passage.free()` | Free the passage. |
 | passage | `qvp_passage_load_basmalah` | `engine.loadBasmalah(pages, surah)` | Load the basmalah printed above a surah, from whichever of the pages prints it; null for surahs 1 and 9, and when no page prints it. |
+| passage | `qvp_passage_free` | `passage.free()` | Free the passage. |
 | passage | `qvp_passage_ayah_count` | `passage.ayahs.length` | Return how many ayahs the passage has. |
 | passage | `qvp_passage_ayah_text` | `passage.ayahs[i].text` | Return an ayah's text, from the page's own word records. |
 | passage | `qvp_passage_line_spacing` | `passage.lineSpacing` | Return the printed line spacing of the passage's first word, in page units. Every word of the passage has that size. |
@@ -975,18 +1022,6 @@ says which wrapper binds which.
 | names | `qvp_category_name` | `engine.categoryName(id)` | Return a mark category's name. |
 | names | `qvp_mark_from_name` | `engine.markFromName(name)` | Return a mark's id by name; 255 when unknown. |
 | names | `qvp_mark_category` | `engine.markCategory(id)` | Return the category a mark belongs to. |
-| dress | `qvp_ornaments_load` | `engine.loadOrnaments(bytes)` | Decode an ornament set; null on a malformed file; the bytes are copied. |
-| dress | `qvp_ornaments_free` | `set.free()` | Free the ornament set. |
-| dress | `qvp_ornament_count` | `set.count` | Return how many ornaments the set holds. |
-| dress | `qvp_ornament_info` | `set.list[i]` | Return one ornament: kind, lineage, style, riwayah, licence and part count. |
-| dress | `qvp_ornament_find` | `set.find(kind, style)` | Return the ornament of one kind in one style, or null. The C call returns its index, or −1. |
-| dress | `qvp_ornament_part` | `set.list[i].parts[k]` | Return one printed colour of an ornament: colour, stroke flag and name. |
-| dress | `qvp_dress` | `page.dress(set, spec)` | Place the chosen ornaments on the page from its measurements. |
-| dress | `qvp_undress` | `page.undress()` | Take the ornaments off; the printed rings and bands come back. |
-| dress | `qvp_dress_info` | `page.dressInfo()` | Return the readout: chosen ornaments, counts, revision, grown page box and overflow. |
-| dress | `qvp_dress_geometry` | `page.dressGeometry()` | Return the ornament display list, with a layout placement on each draw. |
-| dress | `qvp_dress_clamp` | `page.dressClamp(view, viewportW, viewportH)` | Clamp a view to the content plus the dress overflow, so a drag reaches the border and stops there. |
-| dress | `qvp_dress_view` | `page.dressView(scale, viewportW)` | Return `{view, width, height}` for a host that scrolls the page: the dressed box at `scale`, centred, with its top at 0, and its size. A `scale` of 0 fits the box to `viewportW`, never above 1. |
 | names | `qvp_version` | `engine.version()` | Return the engine version as a string, `0.2.0`. |
 | names | `qvp_format_version` | `engine.formatVersion()` | Return the page format version the engine reads. |
 | names | `qvp_engine_name` | `engine.engineName()` | Return the engine's name, `qvp`. |

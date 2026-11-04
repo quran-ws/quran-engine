@@ -11,7 +11,9 @@ mkdir -p "$destination"
 
 # 001 and 042 carry the page tests. The rest are what conformance/scenarios/passage.json loads,
 # read from the file so a new scenario on a new page is picked up here.
-mapfile -t pages < <(python3 - <<'PY'
+# Not mapfile: the bash 3.2 that macOS ships has no mapfile. The list goes through a variable
+# because bash 3.2 rejects a here-document inside a process substitution.
+page_list="$(python3 - <<'PY'
 import json
 pages = {1, 42}
 for case in json.load(open("conformance/scenarios/passage.json"))["cases"]:
@@ -19,7 +21,11 @@ for case in json.load(open("conformance/scenarios/passage.json"))["cases"]:
 for p in sorted(pages):
     print(f"{p:03d}")
 PY
-)
+)"
+pages=()
+while IFS= read -r page; do
+  pages+=("$page")
+done <<< "$page_list"
 
 have_all() {
   for p in "${pages[@]}"; do [ -f "$1/$p.qvp" ] || return 1; done
