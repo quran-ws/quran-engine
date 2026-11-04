@@ -138,6 +138,12 @@ All notable changes to the engine and its packages. The format follows
   `QvpPassage.layout` on a closed passage stop the program with a fatal error that names the
   object, such as `QvpOrnaments is closed`. They returned nil, the same answer as a refused
   spec or no match. Check `isOpen` first where an object can close before its last call.
+- The core crate's reflow is a `reflow/` module with one file per step: row units, breaks,
+  horizontal and vertical placement, banners and the sajdah line. `Page::from_data` runs
+  named load steps in `load.rs`, and the words sidecar parser is in `sidecar.rs`. The unit
+  tests share one fixtures module and sit in one file per area. `Page.styles` and
+  `Page.selection` are crate-private, and `styles()`, `styles_mut()`, `selection()` and
+  `selection_mut()` read them. Layouts, hits and the C ABI do not change.
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and
