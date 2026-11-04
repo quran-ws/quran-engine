@@ -8,7 +8,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvp_flutter/qvp_flutter.dart';
@@ -1465,6 +1467,103 @@ void main() {
     expect(ctl.offsetX, closeTo(x + 5, 1e-4));
     expect(() => ctl.toView(Offset.zero), throwsStateError);
     ctl.dispose();
+    p.dispose();
+  });
+
+  /// The painter of the one view on screen, and the size it paints at.
+  (CustomPainter, Size) painterOf(WidgetTester tester) {
+    final box = tester.renderObject<RenderCustomPaint>(
+      find
+          .descendant(
+            of: find.byType(QvpPageView),
+            matching: find.byType(CustomPaint),
+          )
+          .first,
+    );
+    return (box.painter!, box.size);
+  }
+
+  testWidgets('a frame reads the engine again after a change, and only then', (
+    tester,
+  ) async {
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(width: 400, height: 640, child: QvpPageView(page: p)),
+      ),
+    );
+    final state = tester.state<QvpPageViewState>(find.byType(QvpPageView));
+    expect(state.stats.bands, 0);
+    expect(state.stats.overlayPaths, 0);
+
+    // a highlight is a change: the next frame draws its bands and its ink
+    final h = p.highlight('2:255', const QvpHighlightStyle(mode: 'both'));
+    await tester.pump();
+    expect(state.stats.bands, p.highlightBoxesView().length);
+    expect(state.stats.bands, greaterThan(0));
+    expect(state.stats.overlayPaths, p.styledPaths().length);
+    expect(state.stats.overlayPaths, greaterThan(0));
+
+    // a new layout moves the bands, though nothing on the page changed
+    state.zoomToStep(1);
+    await tester.pump();
+    expect(state.stats.bands, p.highlightBoxesView().length);
+
+    // and taking the highlight away takes its bands and its ink with it
+    p.removeHighlight(h);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(state.stats.bands, 0);
+    expect(state.stats.overlayPaths, 0);
+
+    await tester.pumpWidget(const SizedBox());
+    p.dispose();
+  });
+
+  testWidgets('benchmark: 200 frames of a page where nothing moves', (
+    tester,
+  ) async {
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(width: 400, height: 640, child: QvpPageView(page: p)),
+      ),
+    );
+    double medianUs(int frames) {
+      final (painter, size) = painterOf(tester);
+      final times = <int>[];
+      final sw = Stopwatch();
+      for (var i = 0; i < frames; i++) {
+        final rec = ui.PictureRecorder();
+        final canvas = ui.Canvas(rec);
+        sw
+          ..reset()
+          ..start();
+        painter.paint(canvas, size);
+        sw.stop();
+        times.add(sw.elapsedMicroseconds);
+        rec.endRecording().dispose();
+      }
+      times.sort();
+      return times[times.length ~/ 2].toDouble();
+    }
+
+    medianUs(20); // warm up
+    final plain = medianUs(200);
+    // what a reader following a recitation sees between two steps
+    p.highlight('2:255', const QvpHighlightStyle(mode: 'both'));
+    p.mask(T.words([0, 1, 2]), 'block');
+    await tester.pump();
+    medianUs(20);
+    final styled = medianUs(200);
+    debugPrint(
+      'QvpBenchmark {"page":42,"staticFrameMedianUs":$plain,'
+      '"staticStyledFrameMedianUs":$styled}',
+    );
+    expect(plain.isFinite && styled.isFinite, isTrue);
+
+    await tester.pumpWidget(const SizedBox());
     p.dispose();
   });
 }

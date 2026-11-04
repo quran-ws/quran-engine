@@ -15,7 +15,12 @@ internal class NativeHandle(private val name: String, handle: Long, private val 
     /** False once [close] has been called, or when the engine refused to load the object. */
     val isOpen: Boolean get() = value.get() != 0L
 
-    fun get(): Long = value.get().takeIf { it != 0L } ?: throw IllegalStateException("$name is closed")
+    /** The handle, unboxed: every call into the engine reads it, a frame's tick among them. */
+    fun get(): Long {
+        val h = value.get()
+        if (h == 0L) throw IllegalStateException("$name is closed")
+        return h
+    }
 
     fun close() {
         val handle = value.getAndSet(0L)

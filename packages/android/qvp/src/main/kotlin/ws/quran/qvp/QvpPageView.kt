@@ -32,8 +32,9 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             animating = false
             field = v
             releaseBase()
-            baseKey = ""
-            ornamentLayer = null; ornamentKey = ""
+            baseKey = null
+            readPage = null
+            ornamentLayer = null; ornamentKey = null
             readOverflow()
             selectionHandle = 0
             // A step means the same size to the reader on any page: the engine chose every page's
@@ -104,16 +105,35 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
      * churns native memory until the collector catches up, which a reader feels as a scroll that
      * stutters for a while and then settles. */
     var inkCacheBudget = 48 shl 20
-    private val inkCache = ArrayList<Triple<String, Bitmap, Int>>()
+    private val inkCache = ArrayList<Triple<InkKey, Bitmap, Int>>()
     var hitOptions = QvpHitOptions(maxDistance = QvpDefaults.TAP_DISTANCE)
 
     var viewScale = 1f; var viewOx = 0f; var viewOy = 0f
     private var base: Bitmap? = null
-    private var baseKey = ""
+    private var baseKey: InkKey? = null
+    /** The key of the frame in hand, filled in place every frame and copied only when it misses. */
+    private val probe = InkKey()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val m = Matrix()
     private val rect = RectF()
-    private val styledPaths = HashSet<Int>()
+
+    // What the last frame read from the engine, kept until the page says it changed.
+    private var readPage: QvpPage? = null
+    private var readRevision = 0
+    private var readClock = 0
+    /** (path, colour) pairs off the default ink, and one flag a path for the base ink to skip them. */
+    private var styled = IntArray(0)
+    private var styledOn = BooleanArray(0)
+    private var styledKey = 1
+    private var dressNow: QvpDressInfo? = null
+    private val highlightLayer = BoxLayer()
+    private val maskLayer = BoxLayer()
+    /** The line shifts of the layout in hand, hashed once per layout rather than once a frame. */
+    private var hashedLayout: QvpLayout? = null
+    private var lineDyHash = 0
+    /** The band of ink in hand: where it starts down the page and how tall it is. */
+    private var bandTop = 0f
+    private var bandHeight = 0f
     private var selectionHandle = 0
     private var selAnchor = -1
     private var selecting = false
@@ -326,7 +346,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         Choreographer.getInstance().removeFrameCallback(frameCb)
         animating = false
         releaseBase()
-        ornamentLayer = null; ornamentKey = ""
+        ornamentLayer = null; ornamentKey = null
         super.onDetachedFromWindow()
     }
 
@@ -366,7 +386,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         zoom = c.zoom
         if (moved) onZoomChanged?.invoke(c.zoom)
         viewScale = c.view.scale; viewOx = c.view.offsetX; viewOy = c.view.offsetY
-        if (c.relaid) { baseKey = "" }
+        if (c.relaid) { baseKey = null }
         invalidate()
     }
 
@@ -375,7 +395,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         if (width == 0 || height == 0) return
         p.layout(layoutSpecInForce())
         readOverflow()
-        baseKey = ""; invalidate()
+        baseKey = null; invalidate()
     }
     fun resetView() {
         val l = page?.currentLayout
@@ -393,17 +413,75 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         out.reset(); out.setScale(viewScale * ls, viewScale * ls); out.postTranslate(viewOx + viewScale * lox, viewOy + viewScale * loy)
         return out
     }
-    private fun drawBoxes(canvas: Canvas, boxes: List<QvpBox>) {
-        if (boxes.isEmpty()) return
-        canvas.save(); canvas.translate(viewOx, viewOy); canvas.scale(viewScale, viewScale)
-        var curId = Int.MIN_VALUE; var curColor = 0; var path: Path? = null
-        fun flush() { path?.let { paint.color = QvpColor.argb(curColor); canvas.drawPath(it, paint) }; path = null }
-        for (b in boxes) {
-            if (path == null || b.id != curId || b.color != curColor) { flush(); path = Path().apply { fillType = Path.FillType.WINDING }; curId = b.id; curColor = b.color }
-            rect.set(b.x0, b.y0, b.x1, b.y1)
-            if (b.radius > 0f) path!!.addRoundRect(rect, b.radius, b.radius, Path.Direction.CW) else path!!.addRect(rect, Path.Direction.CW)
+    /**
+     * Boxes the engine placed in viewport px, highlight bands or mask blocks, as one nonzero path
+     * for each run of boxes that share a highlight and a colour. The layer builds the paths when
+     * the boxes change, and every frame after that draws them as they are.
+     */
+    private class BoxLayer {
+        private val paths = ArrayList<Path>()
+        private var colors = IntArray(4)
+        private var groups = 0
+        /** How many boxes the paths hold. */
+        var boxes = 0; private set
+
+        /** Build the paths from the engine's records, eight ints a box: id, line, x0, y0, x1, y1
+         * (float bits), colour, radius (float bits). */
+        fun set(v: IntArray, rect: RectF) {
+            groups = 0; boxes = v.size / 8
+            var curId = 0; var curColor = 0; var path: Path? = null
+            for (k in 0 until boxes) {
+                val o = k * 8
+                val id = v[o]; val color = v[o + 6]
+                if (path == null || id != curId || color != curColor) {
+                    path = take(groups)
+                    if (groups == colors.size) colors = colors.copyOf(groups * 2)
+                    colors[groups] = color; groups++
+                    curId = id; curColor = color
+                }
+                rect.set(Float.fromBits(v[o + 2]), Float.fromBits(v[o + 3]), Float.fromBits(v[o + 4]), Float.fromBits(v[o + 5]))
+                val radius = Float.fromBits(v[o + 7])
+                if (radius > 0f) path.addRoundRect(rect, radius, radius, Path.Direction.CW) else path.addRect(rect, Path.Direction.CW)
+            }
         }
-        flush(); canvas.restore()
+
+        private fun take(i: Int): Path {
+            if (i == paths.size) paths.add(Path())
+            return paths[i].apply { reset(); fillType = Path.FillType.WINDING }
+        }
+
+        fun draw(canvas: Canvas, paint: Paint, scale: Float, ox: Float, oy: Float) {
+            if (groups == 0) return
+            canvas.save(); canvas.translate(ox, oy); canvas.scale(scale, scale)
+            for (i in 0 until groups) { paint.color = QvpColor.argb(colors[i]); canvas.drawPath(paths[i], paint) }
+            canvas.restore()
+        }
+    }
+
+    /**
+     * Ask the engine again for what is drawn over and under the base ink, if the page says that
+     * any of it changed. The styled paths and the bands follow the clock as well. The masks and
+     * the dress follow only the page's own calls. A frame where nothing changed asks the engine
+     * for nothing.
+     */
+    private fun readFrame(p: QvpPage) {
+        val fresh = p !== readPage
+        if (fresh) { readPage = p; styled = IntArray(0); styledOn = BooleanArray(p.nPaths) }
+        val changed = fresh || p.revision != readRevision
+        if (changed || p.clockRevision != readClock) {
+            var i = 0
+            while (i < styled.size) { styledOn[styled[i]] = false; i += 2 }
+            styled = p.styledPaths()
+            var key = 1; i = 0
+            while (i < styled.size) { styledOn[styled[i]] = true; key = 31 * key + styled[i]; i += 2 }
+            styledKey = key
+            highlightLayer.set(p.highlightBoxRecords(), rect)
+        }
+        if (changed) {
+            maskLayer.set(p.maskBoxRecords(), rect)
+            dressNow = p.dressInfo()
+        }
+        readRevision = p.revision; readClock = p.clockRevision
     }
 
     /** Page units → view px under one placement (engine layout + pan/zoom). */
@@ -423,21 +501,22 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     /** What the layout in hand draws and where, read once per band rather than once a frame.
      * Asking the engine on every frame — and once per styled path — was most of what a scroll
      * was spending its time on. */
-    private class DrawList(val draws: List<QvpDraw>, val places: List<QvpPlacement>, val key: String) {
-        /** The placement of one path, for the styled pass: a lookup, not a scan of the page. */
-        val ofPath = HashMap<Int, Int>(draws.size * 2).apply { for (d in draws) putIfAbsent(d.path, d.placement) }
+    private class DrawList(val draws: List<QvpDraw>, val places: List<QvpPlacement>, val key: InkKey, nPaths: Int) {
+        /** The placement of one path, for the styled pass: that of its first draw, or [NO_PLACEMENT]. */
+        val ofPath = IntArray(nPaths) { NO_PLACEMENT }.apply { for (d in draws) if (this[d.path] == NO_PLACEMENT) this[d.path] = d.placement }
     }
     private var drawList: DrawList? = null
-    private fun drawListNow(key: String, top: Float, bandH: Float): DrawList {
+    private fun drawListNow(key: InkKey, top: Float, bandH: Float): DrawList {
         drawList?.let { if (it.key == key) return it }
         val p = page!!
         val s = kotlin.math.max(viewScale, 0.001f)
-        val q = DrawList(p.layoutDrawList((top / s) to ((top + bandH) / s)), p.layoutPlacements(), key)
+        val q = DrawList(p.layoutDrawList((top / s) to ((top + bandH) / s)), p.layoutPlacements(), key.copy(), p.nPaths)
         drawList = q
         return q
     }
 
-    private fun band(): Pair<Float, Float> {
+    /** Set [bandTop] and [bandHeight] for the page and the place in hand. */
+    private fun measureBand() {
         val screen = kotlin.math.max(height.toFloat(), 1f)
         val l = page?.currentLayout
         if (l != null && l.reflowed) {
@@ -445,7 +524,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             // The whole page at once, when it fits: scrolling then draws nothing at all. A bitmap
             // taller than the GPU will take is not drawn either, so that bounds it as well.
             val fits = contentH <= MAX_INK_PX && width.toLong() * contentH.toLong() * 4 <= inkBudget
-            if (fits) return 0f to kotlin.math.max(contentH, 1f)
+            if (fits) { bandTop = 0f; bandHeight = kotlin.math.max(contentH, 1f); return }
         }
         // Otherwise a band around the reader, measured down the page — the screen starts at
         // -viewOy in the page's own space. Its top moves in steps rather than following the
@@ -453,7 +532,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         // tracked the finger exactly drew the whole page on every frame of a magnified drag.
         val tall = kotlin.math.min(screen * 2f, MAX_INK_PX)
         val step = kotlin.math.max((tall - screen) / 2f, 1f)
-        return kotlin.math.floor((-viewOy - step) / step) * step to tall
+        bandTop = kotlin.math.floor((-viewOy - step) / step) * step; bandHeight = tall
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -461,21 +540,18 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         if (p.currentLayout == null) relayout()
         val l = p.currentLayout ?: return
         val moving = p.tick(System.nanoTime() / 1e6)
-        val styled = p.styledPaths()
-        styledPaths.clear(); var i = 0; var styledKey = 1
-        while (i < styled.size) {
-            val pi = styled[i]
-            styledPaths.add(pi)
-            styledKey = 31 * styledKey + pi
-            i += 2
-        }
+        readFrame(p)
+        val styled = styled
         val ink = p.defaultInk
-        val dressed = readOverflow()
-        val (top, bandH) = band()
+        val dressed = dressNow
+        overflowNow = dressed?.overflow ?: QvpInsets.ZERO
+        measureBand()
+        val top = bandTop; val bandH = bandHeight
         val bandPx = kotlin.math.ceil(bandH).toInt().coerceAtLeast(1)
+        if (l !== hashedLayout) { hashedLayout = l; lineDyHash = l.lineDy.contentHashCode() }
         // The key holds where the band starts, never where the reader has scrolled to, so a drag
         // inside the band is one blit and nothing is drawn again.
-        val key = "${p.pageNo}|$viewScale|$viewOx|$top|$ink|${l.lineSpacing}|${l.lineDy.contentHashCode()}|$styledKey|$width|$bandPx|${zoom.zoom}|${l.rows}|${dressed?.revision ?: 0}"
+        probe.set(p.pageNo, viewScale, viewOx, top, ink, l.lineSpacing, lineDyHash, styledKey, width, bandPx, zoom.zoom, l.rows, dressed?.revision ?: 0)
         if (TRACE) android.util.Log.i("QVPTRACE", "band top=$top h=$bandH px=$bandPx contentH=${l.contentH * viewScale} viewOy=$viewOy viewScale=$viewScale height=$height rows=${l.rows}")
         if (paperColor != Color.TRANSPARENT) {
             // the paper runs under the border of a dressed page too
@@ -484,11 +560,11 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             canvas.drawRect(viewOx - o.left * viewScale, viewOy - o.top * viewScale,
                             viewOx + (l.contentW + o.right) * viewScale, viewOy + (l.contentH + o.bottom) * viewScale, paint)
         }
-        if (dressed != null) drawOrnaments(canvas, p, dressed, top, bandH) else if (ornamentLayer != null) { ornamentLayer = null; ornamentKey = "" }
-        val bands = p.highlightBoxesView()
-        drawBoxes(canvas, bands)
+        if (dressed != null) drawOrnaments(canvas, p, dressed, top, bandH) else if (ornamentLayer != null) { ornamentLayer = null; ornamentKey = null }
+        highlightLayer.draw(canvas, paint, viewScale, viewOx, viewOy)
         var b = base
-        if (b == null || key != baseKey || b.width != width || b.height != bandPx) {
+        if (b == null || probe != baseKey || b.width != width || b.height != bandPx) {
+            val key = probe.copy()
             val t0 = System.nanoTime()
             val kept = inkCache.firstOrNull { it.first == key }?.second
             if (kept != null) { base = kept; b = kept; baseKey = key }
@@ -508,7 +584,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
                 val places = q.places
                 var cur = -1; var n = 0
                 for (d in q.draws) {
-                    if (d.path in styledPaths) continue
+                    if (styledOn[d.path]) continue
                     if (d.placement != cur) { bc.setMatrix(placementMatrix(places.getOrElse(d.placement) { QvpPlacement.IDENTITY }, -top)); cur = d.placement }
                     bc.drawPath(p.path(d.path), paint); n++
                 }
@@ -519,25 +595,26 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         // the ink sits at `viewOy + top` on screen; scrolling inside the band only moves it
         canvas.drawBitmap(b!!, 0f, viewOy + top, null)
         val t1 = System.nanoTime()
-        val q = drawListNow(key, top, bandH)
+        val q = drawListNow(probe, top, bandH)
         val places = q.places
-        var cur = -1; i = 0
+        var cur = -1; var i = 0
         canvas.save()
         while (i < styled.size) {
             val pi = styled[i]; val col = styled[i + 1]; i += 2
             if (col and 0xff == 0) continue
-            val g = q.ofPath[pi] ?: p.pathLine(pi)
+            val g = q.ofPath[pi].let { if (it != NO_PLACEMENT) it else p.pathLine(pi) }
             if (g != cur) { canvas.restore(); canvas.save(); canvas.concat(placementMatrix(places.getOrElse(g) { QvpPlacement.IDENTITY })); cur = g }
             paint.color = QvpColor.argb(col); canvas.drawPath(p.path(pi), paint)
         }
         canvas.restore()
-        drawBoxes(canvas, p.maskBoxesView())
-        lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = styled.size / 2; lastBands = bands.size
+        maskLayer.draw(canvas, paint, viewScale, viewOx, viewOy)
+        lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = styled.size / 2; lastBands = highlightLayer.boxes
         if (moving) { animating = true; Choreographer.getInstance().postFrameCallback(frameCb) }
     }
 
     private var ornamentLayer: Bitmap? = null
-    private var ornamentKey = ""
+    private var ornamentKey: OrnamentKey? = null
+    private val ornamentProbe = OrnamentKey()
     private val ornamentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
     var lastOrnamentMs = 0.0; var lastOrnamentDraws = 0
         private set
@@ -556,8 +633,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         // One layer never passes what a bitmap may be or what the base ink may take; the top of the
         // band stays where it is and the layer is cut at the bottom.
         val layerH = ornamentLayerHeight(bandH + padTop + padBottom, width, inkBudget)
-        if (layerH == 0) { ornamentLayer = null; ornamentKey = ""; return }
-        val key = "${System.identityHashCode(p)}|${info.revision}|$viewScale|$viewOx|$top|$width|$layerH"
+        if (layerH == 0) { ornamentLayer = null; ornamentKey = null; return }
+        val key = ornamentProbe.also { it.set(p, info.revision, viewScale, viewOx, top, width, layerH) }
         var b = ornamentLayer
         if (b == null || key != ornamentKey) {
             val t0 = System.nanoTime()
@@ -581,19 +658,19 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
                 else ornamentPaint.style = Paint.Style.FILL
                 bc.drawPath(o.path, ornamentPaint); n++
             }
-            ornamentKey = key; lastOrnamentMs = (System.nanoTime() - t0) / 1e6; lastOrnamentDraws = n
+            ornamentKey = key.copy(); lastOrnamentMs = (System.nanoTime() - t0) / 1e6; lastOrnamentDraws = n
         }
         canvas.drawBitmap(b!!, 0f, viewOy + top - padTop, null)
     }
 
     /** Keep ink already drawn, by page and size, so a page the reader turns back to is ready. */
-    private fun keepInk(key: String, bmp: Bitmap) {
+    private fun keepInk(key: InkKey, bmp: Bitmap) {
         inkCache.removeAll { it.first == key }
         inkCache.add(0, Triple(key, bmp, bmp.byteCount))
         // Dropped ink is freed when nothing holds it. Recycling it here would pull the pixels out
         // from under a draw that is still using them.
         var total = 0
-        val keep = ArrayList<Triple<String, Bitmap, Int>>()
+        val keep = ArrayList<Triple<InkKey, Bitmap, Int>>()
         for (e in inkCache) { total += e.third; if (total <= inkCacheBudget) keep.add(e) }
         inkCache.clear(); inkCache.addAll(keep)
     }
@@ -605,7 +682,30 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         other.layout(other.zoomSpec(baseSpec(), z))
     }
 
+    /** What the view drew the cached ink for. A frame fills [probe] in place and compares, and
+     * the view keeps a copy only when it draws the ink again. Floats compare as `Float.compare`
+     * does, so -0 and 0 differ, as their text did in the string key before. */
+    private data class InkKey(var page: Int = 0, var scale: Float = 0f, var offsetX: Float = 0f, var top: Float = 0f, var ink: Int = 0,
+                              var lineSpacing: Float = 0f, var lineDy: Int = 0, var styled: Int = 0, var width: Int = 0, var bandPx: Int = 0,
+                              var zoom: Float = 0f, var rows: Int = 0, var dress: Int = 0) {
+        fun set(page: Int, scale: Float, offsetX: Float, top: Float, ink: Int, lineSpacing: Float, lineDy: Int, styled: Int, width: Int,
+                bandPx: Int, zoom: Float, rows: Int, dress: Int) {
+            this.page = page; this.scale = scale; this.offsetX = offsetX; this.top = top; this.ink = ink; this.lineSpacing = lineSpacing
+            this.lineDy = lineDy; this.styled = styled; this.width = width; this.bandPx = bandPx; this.zoom = zoom; this.rows = rows; this.dress = dress
+        }
+    }
+
+    /** What the ornament layer was drawn for, kept the same way as [InkKey]. */
+    private data class OrnamentKey(var page: QvpPage? = null, var revision: Int = 0, var scale: Float = 0f, var offsetX: Float = 0f,
+                                   var top: Float = 0f, var width: Int = 0, var height: Int = 0) {
+        fun set(page: QvpPage, revision: Int, scale: Float, offsetX: Float, top: Float, width: Int, height: Int) {
+            this.page = page; this.revision = revision; this.scale = scale; this.offsetX = offsetX; this.top = top; this.width = width; this.height = height
+        }
+    }
+
     companion object {
+        /** No draw of this path in the band: the styled pass places it by its printed line. */
+        private const val NO_PLACEMENT = Int.MIN_VALUE
         /** An offset far past any page, to ask the clamp for the end of a scroll. */
         private const val FAR = 1e7f
         /** The engine's own ceiling on the magnifying glass: what [maxZoom] starts at. The floor

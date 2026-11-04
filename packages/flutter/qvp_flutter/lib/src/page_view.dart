@@ -426,7 +426,7 @@ class QvpPageViewState extends State<QvpPageView>
     if (!_ticker.isActive && mounted && !page.isDisposed) {
       final more = page.tick(nowMs);
       if (more) {
-        _cache._bands = null;
+        _cache.clockMoved();
         _ticker.start();
       }
     }
@@ -440,7 +440,7 @@ class QvpPageViewState extends State<QvpPageView>
       return;
     }
     final more = page.tick(nowMs);
-    _cache._bands = null;
+    _cache.clockMoved();
     _frame.value++;
     if (!more) _ticker.stop();
   }
@@ -741,8 +741,80 @@ class QvpPageViewState extends State<QvpPageView>
   }
 }
 
+/// What a recording of the base ink was made for. A frame compares its own values with
+/// [matches] first and builds a key only when they differ, so a frame that keeps its ink
+/// allocates nothing for the key.
+@immutable
+class _InkKey {
+  const _InkKey(
+    this.page,
+    this.ink,
+    this.scale,
+    this.offsetX,
+    this.offsetY,
+    this.top,
+    this.bandH,
+    this.styled,
+    this.surahFrames,
+  );
+
+  final int page, ink, bandH, styled;
+  final double? scale, offsetX, offsetY;
+  final double top;
+  final bool surahFrames;
+
+  bool matches(
+    int page,
+    int ink,
+    double? scale,
+    double? offsetX,
+    double? offsetY,
+    double top,
+    int bandH,
+    int styled,
+    bool surahFrames,
+  ) =>
+      page == this.page &&
+      ink == this.ink &&
+      scale == this.scale &&
+      offsetX == this.offsetX &&
+      offsetY == this.offsetY &&
+      top == this.top &&
+      bandH == this.bandH &&
+      styled == this.styled &&
+      surahFrames == this.surahFrames;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _InkKey &&
+      other.matches(
+        page,
+        ink,
+        scale,
+        offsetX,
+        offsetY,
+        top,
+        bandH,
+        styled,
+        surahFrames,
+      );
+
+  @override
+  int get hashCode => Object.hash(
+    page,
+    ink,
+    scale,
+    offsetX,
+    offsetY,
+    top,
+    bandH,
+    styled,
+    surahFrames,
+  );
+}
+
 class _PictureCacheEntry {
-  final String key;
+  final _InkKey key;
   final ui.Picture picture;
   _PictureCacheEntry(this.key, this.picture, this.paths);
 
@@ -750,7 +822,11 @@ class _PictureCacheEntry {
   /// the last frame need this on a cache hit as much as on a fresh recording.
   final int paths;
 
+  /// True once the cache has let the picture go. A view that holds the entry records again.
+  bool disposed = false;
+
   void dispose() {
+    disposed = true;
     try {
       picture.dispose();
     } on Object catch (_) {}
@@ -761,9 +837,9 @@ class _LruCache {
   /// How many page pictures to keep. A picture holds every glyph outline on its page, so
   /// this is the memory ceiling of the cache. Raise it against a measurement, not a guess.
   static const int maxEntries = 32;
-  final LinkedHashMap<String, _PictureCacheEntry> _entries = LinkedHashMap();
+  final LinkedHashMap<_InkKey, _PictureCacheEntry> _entries = LinkedHashMap();
 
-  _PictureCacheEntry? get(String key) {
+  _PictureCacheEntry? get(_InkKey key) {
     final entry = _entries.remove(key);
     if (entry != null) {
       _entries[key] = entry;
@@ -772,16 +848,17 @@ class _LruCache {
     return null;
   }
 
-  void put(String key, ui.Picture pic, int paths) {
+  _PictureCacheEntry put(_InkKey key, ui.Picture pic, int paths) {
     final old = _entries.remove(key);
     if (old != null && old.picture != pic) {
       old.dispose();
     }
-    _entries[key] = _PictureCacheEntry(key, pic, paths);
+    final entry = _entries[key] = _PictureCacheEntry(key, pic, paths);
     while (_entries.length > maxEntries) {
       final firstKey = _entries.keys.first;
       _entries.remove(firstKey)?.dispose();
     }
+    return entry;
   }
 
   bool containsPicture(ui.Picture p) {
@@ -797,23 +874,108 @@ class _DrawList {
     required this.draws,
     required this.places,
     required this.ofPath,
-    required this.key,
+    required this.page,
+    required this.top,
+    required this.bandH,
+    required this.contentH,
+    required this.scale,
+    required this.offsetX,
+    required this.offsetY,
   });
 
   final List<QvpDraw> draws;
   final List<QvpPlacement> places;
   final Map<int, int> ofPath;
-  final String key;
+
+  /// What the list was read for: the page, the band and the layout's place.
+  final int page;
+  final double top, bandH, contentH;
+  final double? scale, offsetX, offsetY;
+
+  bool matches(
+    int page,
+    double top,
+    double bandH,
+    double contentH,
+    QvpLayout? l,
+  ) =>
+      page == this.page &&
+      top == this.top &&
+      bandH == this.bandH &&
+      contentH == this.contentH &&
+      l?.scale == scale &&
+      l?.offsetX == offsetX &&
+      l?.offsetY == offsetY;
+}
+
+/// Boxes the engine placed in viewport px, highlight bands or mask blocks, as one nonzero path
+/// for each run of boxes that share a highlight and a colour. The layer builds the paths when
+/// the boxes change, and every frame after that draws them as they are.
+class _BoxLayer {
+  final List<ui.Path> _paths = [];
+  final List<Color> _colors = [];
+  int _groups = 0;
+
+  /// How many boxes the paths hold.
+  int boxes = 0;
+
+  void set(List<QvpBox> list) {
+    _groups = 0;
+    boxes = list.length;
+    var id = -1, col = 0;
+    ui.Path? path;
+    for (var i = 0; i < list.length; i++) {
+      final b = list[i];
+      if (path == null || b.id != id || b.color != col) {
+        path = _take(_groups, b.color);
+        _groups++;
+        id = b.id;
+        col = b.color;
+      }
+      final r = Rect.fromLTRB(b.x0, b.y0, b.x1, b.y1);
+      if (b.radius > 0) {
+        path.addRRect(RRect.fromRectAndRadius(r, Radius.circular(b.radius)));
+      } else {
+        path.addRect(r);
+      }
+    }
+  }
+
+  ui.Path _take(int i, int color) {
+    if (i == _paths.length) {
+      _paths.add(ui.Path());
+      _colors.add(QvpColor.toColor(color));
+    } else {
+      _paths[i].reset();
+      _colors[i] = QvpColor.toColor(color);
+    }
+    return _paths[i];
+  }
+
+  void draw(ui.Canvas c, ui.Paint paint, QvpViewController view) {
+    if (_groups == 0) return;
+    c.save();
+    c.translate(view.offsetX, view.offsetY);
+    c.scale(view.scale);
+    for (var i = 0; i < _groups; i++) {
+      paint.color = _colors[i];
+      c.drawPath(_paths[i], paint);
+    }
+    c.restore();
+  }
 }
 
 /// Per-page render cache: base ink picture and layout draws.
 class _InkCache {
   static final _LruCache _globalInkCache = _LruCache();
 
-  static _PictureCacheEntry? getGlobalInk(String key) =>
+  static _PictureCacheEntry? getGlobalInk(_InkKey key) =>
       _globalInkCache.get(key);
-  static void keepGlobalInk(String key, ui.Picture pic, int paths) =>
-      _globalInkCache.put(key, pic, paths);
+  static _PictureCacheEntry keepGlobalInk(
+    _InkKey key,
+    ui.Picture pic,
+    int paths,
+  ) => _globalInkCache.put(key, pic, paths);
 
   static void prepare(
     QvpPage page, {
@@ -824,8 +986,17 @@ class _InkCache {
     final l = page.currentLayout;
     if (l == null) return;
     final ink = inkColor != null ? rgba(inkColor) : page.defaultInk;
-    final key =
-        '${page.page}|$ink|${l.scale}|${l.offsetX}|${l.offsetY}|0.0|${math.max(l.contentH, 1.0).toInt()}|1|${surahFrames ? 1 : 0}';
+    final key = _InkKey(
+      page.page,
+      ink,
+      l.scale,
+      l.offsetX,
+      l.offsetY,
+      0.0,
+      math.max(l.contentH, 1.0).toInt(),
+      1,
+      surahFrames,
+    );
     if (getGlobalInk(key) != null) return;
 
     final rec = ui.PictureRecorder();
@@ -859,11 +1030,15 @@ class _InkCache {
 
   QvpPage? page;
   ui.Picture? picture;
-  String key = '';
 
-  /// The ornament layer: picture in layout px.
+  /// The global cache's entry for [picture], or null when this cache recorded nothing yet.
+  _PictureCacheEntry? entry;
+
+  /// The ornament layer: picture in layout px, and the dress revision and layout it was
+  /// recorded for.
   ui.Picture? ornaments;
-  String ornamentKey = '';
+  int ornamentRevision = -1;
+  double? ornamentScale, ornamentOffsetX, ornamentOffsetY;
 
   _DrawList? _drawList;
 
@@ -874,9 +1049,10 @@ class _InkCache {
     double bandH,
     double contentH,
   ) {
-    final key =
-        '${page.page}|$top|$bandH|$contentH|${l?.scale}|${l?.offsetX}|${l?.offsetY}';
-    if (_drawList != null && _drawList!.key == key) return _drawList!;
+    final kept = _drawList;
+    if (kept != null && kept.matches(page.page, top, bandH, contentH, l)) {
+      return kept;
+    }
     final draws = top == 0.0 && bandH >= contentH
         ? page.layoutDrawList()
         : page.layoutDrawList(bandTop: top, bandBottom: top + bandH);
@@ -889,44 +1065,83 @@ class _InkCache {
       draws: draws,
       places: places,
       ofPath: ofPath,
-      key: key,
+      page: page.page,
+      top: top,
+      bandH: bandH,
+      contentH: contentH,
+      scale: l?.scale,
+      offsetX: l?.offsetX,
+      offsetY: l?.offsetY,
     );
   }
 
-  QvpDressInfo? _dress;
-  int? _dressRevision;
+  // What the last frame read from the engine, kept until the page or the clock moves.
+  QvpPage? _readPage;
+  QvpLayout? _readLayout;
+  int _readRevision = 0, _readClock = 0, _clock = 0;
 
-  QvpDressInfo? getDress(QvpPage page) {
-    if (_dress != null && _dressRevision == page.revision) return _dress;
-    _dressRevision = page.revision;
-    return _dress = page.dressInfo();
+  /// Paths off the default ink, their colours, and a hash of which paths they are: the
+  /// base ink leaves them out, so the key of its recording holds the hash.
+  List<QvpStyledPath> styled = const [];
+  List<Color> styledColors = const [];
+  int styledKey = 1;
+  QvpDressInfo? dress;
+  final _BoxLayer bands = _BoxLayer(), masks = _BoxLayer();
+
+  /// The engine clock moved a colour or a band: the next frame reads them again.
+  void clockMoved() => _clock++;
+
+  /// Asks the engine again for what is drawn over and under the base ink, if any of it can
+  /// have changed: a call on the page moves its revision, a zoom lays it out again, and the
+  /// ticker reports the clock. The styled paths and the bands follow the clock as well. The
+  /// masks and the dress follow the page alone. A frame where nothing changed asks for nothing.
+  void read(QvpPage page) {
+    final l = page.currentLayout;
+    final changed =
+        !identical(page, _readPage) ||
+        page.revision != _readRevision ||
+        !identical(l, _readLayout);
+    if (changed || _clock != _readClock) {
+      styled = page.styledPaths();
+      var key = 1;
+      for (var i = 0; i < styled.length; i++) {
+        key = 31 * key + styled[i].path;
+      }
+      styledKey = key;
+      styledColors = [for (final s in styled) QvpColor.toColor(s.color)];
+      bands.set(page.highlightBoxesView());
+    }
+    if (changed) {
+      masks.set(page.maskBoxesView());
+      dress = page.dressInfo();
+    }
+    _readPage = page;
+    _readLayout = l;
+    _readRevision = page.revision;
+    _readClock = _clock;
   }
 
-  List<QvpBox>? _bands;
-  int? _bandsRevision;
+  /// The paper of the last frame, kept while the view and the dress leave it where it is.
+  Rect paper = Rect.zero;
 
-  List<QvpBox> getBands(QvpPage page) {
-    if (_bands != null && _bandsRevision == page.revision) return _bands!;
-    _bandsRevision = page.revision;
-    return _bands = page.highlightBoxesView();
-  }
+  /// Times the overlay of each frame.
+  final Stopwatch overlayClock = Stopwatch();
 
   /// Stats of the last frame (for HUDs).
-  int basePaths = 0, overlayPaths = 0, bands = 0;
+  int basePaths = 0, overlayPaths = 0, bandCount = 0;
   double baseMs = 0, overlayMs = 0;
 
   void attach(QvpPage p) {
     if (page == p) return;
     page = p;
-    key = '';
     _dropPicture();
     dropOrnaments();
     _drawList = null;
-    _dress = null;
-    _bands = null;
+    _readPage = null;
   }
 
   void _dropPicture() {
+    entry = null;
     if (picture != null) {
       if (!_globalInkCache.containsPicture(picture!)) {
         try {
@@ -945,7 +1160,7 @@ class _InkCache {
         ornaments!.dispose();
       } on Object catch (_) {}
       ornaments = null;
-      ornamentKey = '';
+      ornamentRevision = -1;
     }
   }
 
@@ -954,8 +1169,8 @@ class _InkCache {
     dropOrnaments();
     page = null;
     _drawList = null;
-    _dress = null;
-    _bands = null;
+    _readPage = null;
+    _readLayout = null;
   }
 }
 
@@ -1066,8 +1281,11 @@ class _QvpPainter extends CustomPainter {
     // QvpDressSpec.colors, lineArt, ayahMarkScale and pageFrameScale each change them without
     // moving the page number or the layout. The counter restarts per QvpPage, so this key is
     // only sound in the per-instance cache, never in a static one shared across pages.
-    final key = '${info.revision}|${l?.scale}|${l?.offsetX}|${l?.offsetY}';
-    if (cache.ornaments != null && cache.ornamentKey == key) {
+    if (cache.ornaments != null &&
+        cache.ornamentRevision == info.revision &&
+        cache.ornamentScale == l?.scale &&
+        cache.ornamentOffsetX == l?.offsetX &&
+        cache.ornamentOffsetY == l?.offsetY) {
       // already recorded for this dress and layout
     } else {
       cache.dropOrnaments();
@@ -1103,7 +1321,10 @@ class _QvpPainter extends CustomPainter {
       }
       if (open) c.restore();
       cache.ornaments = rec.endRecording();
-      cache.ornamentKey = key;
+      cache.ornamentRevision = info.revision;
+      cache.ornamentScale = l?.scale;
+      cache.ornamentOffsetX = l?.offsetX;
+      cache.ornamentOffsetY = l?.offsetY;
     }
     if (cache.ornaments != null) {
       canvas.save();
@@ -1114,61 +1335,34 @@ class _QvpPainter extends CustomPainter {
     }
   }
 
-  void _drawBoxes(ui.Canvas c, List<QvpBox> boxes) {
-    if (boxes.isEmpty) return;
-    c.save();
-    c.translate(view.offsetX, view.offsetY);
-    c.scale(view.scale);
-    var id = -1, col = 0, hasPath = false;
-
-    for (var i = 0; i < boxes.length; i++) {
-      final b = boxes[i];
-      if (!hasPath || b.id != id || b.color != col) {
-        if (hasPath) {
-          _boxPaint.color = QvpColor.toColor(col);
-          c.drawPath(_boxPath, _boxPaint);
-          _boxPath.reset();
-        }
-        hasPath = true;
-        id = b.id;
-        col = b.color;
-      }
-      final r = Rect.fromLTRB(b.x0, b.y0, b.x1, b.y1);
-      if (b.radius > 0) {
-        _boxPath.addRRect(
-          RRect.fromRectAndRadius(r, Radius.circular(b.radius)),
-        );
-      } else {
-        _boxPath.addRect(r);
-      }
-    }
-    if (hasPath) {
-      _boxPaint.color = QvpColor.toColor(col);
-      c.drawPath(_boxPath, _boxPaint);
-      _boxPath.reset();
-    }
-    c.restore();
-  }
-
   @override
   void paint(ui.Canvas canvas, Size size) {
     if (page.isDisposed) return;
     final l = page.currentLayout;
-    final styled = page.styledPaths();
+    // what the engine draws over and under the ink, read again only when something changed
+    cache.read(page);
+    final styled = cache.styled;
     final ink = page.defaultInk;
     // read once per frame: the paper and the ornament layer both use it
-    final dress = cache.getDress(page);
+    final dress = cache.dress;
 
     // paper, grown by the dress overflow so a border sits on it
     final paperColor = paper;
     if (paperColor != null) {
       final o = dress?.overflow ?? const [0.0, 0.0, 0.0, 0.0];
-      final rect = Rect.fromLTRB(
-        view.offsetX - o[0] * view.scale,
-        view.offsetY - o[1] * view.scale,
-        view.offsetX + ((l?.contentW ?? page.width) + o[2]) * view.scale,
-        view.offsetY + ((l?.contentH ?? page.height) + o[3]) * view.scale,
-      );
+      final left = view.offsetX - o[0] * view.scale;
+      final top = view.offsetY - o[1] * view.scale;
+      final right =
+          view.offsetX + ((l?.contentW ?? page.width) + o[2]) * view.scale;
+      final bottom =
+          view.offsetY + ((l?.contentH ?? page.height) + o[3]) * view.scale;
+      var rect = cache.paper;
+      if (rect.left != left ||
+          rect.top != top ||
+          rect.right != right ||
+          rect.bottom != bottom) {
+        rect = cache.paper = Rect.fromLTRB(left, top, right, bottom);
+      }
       if (paperShadow) {
         _boxPath.reset();
         _boxPath.addRect(rect);
@@ -1204,71 +1398,95 @@ class _QvpPainter extends CustomPainter {
 
     // Base ink cache. The picture is recorded in layout px through _placeInLayout, so the
     // reader's pan and zoom never invalidate it. The engine layout's own offsets do, and they
-    // are in the key: a relayout moves them and must redraw.
-    int styledKey = 1;
-    for (var i = 0; i < styled.length; i++) {
-      styledKey = 31 * styledKey + styled[i].path;
-    }
+    // are in the key: a relayout moves them and must redraw. A frame whose key matches the
+    // picture in hand keeps it without asking the global cache.
+    final styledKey = cache.styledKey;
     final q = cache.getDrawList(page, l, top, bandH, contentH);
-    final key =
-        '${page.page}|$ink|${l?.scale}|${l?.offsetX}|${l?.offsetY}|$top|${bandH.toInt()}|$styledKey|${surahFrames ? 1 : 0}';
-    final kept = _InkCache.getGlobalInk(key);
-    if (kept != null) {
-      cache.picture = kept.picture;
-      cache.key = key;
-      // the replay draws every path the recording holds, so the HUD reads the real number
-      cache.basePaths = kept.paths;
+    final held = cache.entry;
+    if (held != null &&
+        !held.disposed &&
+        held.key.matches(
+          page.page,
+          ink,
+          l?.scale,
+          l?.offsetX,
+          l?.offsetY,
+          top,
+          bandH.toInt(),
+          styledKey,
+          surahFrames,
+        )) {
+      cache.basePaths = held.paths;
     } else {
-      final sw = Stopwatch()..start();
-      final rec = ui.PictureRecorder();
-      final c = ui.Canvas(rec);
-      if (top != 0.0) {
-        c.translate(0, -top);
-      }
-      final paint = ui.Paint()
-        ..color = QvpColor.toColor(ink)
-        ..isAntiAlias = true;
-
-      final omitted = styled.isEmpty
-          ? null
-          : {for (var i = 0; i < styled.length; i++) styled[i].path};
-
-      var cur = -1, n = 0, open = false;
-      for (final d in q.draws) {
-        if (omitted != null && omitted.contains(d.path)) continue;
-        if (d.placement != cur) {
-          if (open) c.restore();
-          c.save();
-          _placeInLayout(
-            c,
-            l,
-            d.placement < q.places.length
-                ? q.places[d.placement]
-                : QvpPlacement.identity,
-          );
-          open = true;
-          cur = d.placement;
+      final key = _InkKey(
+        page.page,
+        ink,
+        l?.scale,
+        l?.offsetX,
+        l?.offsetY,
+        top,
+        bandH.toInt(),
+        styledKey,
+        surahFrames,
+      );
+      final kept = _InkCache.getGlobalInk(key);
+      if (kept != null) {
+        cache.picture = kept.picture;
+        cache.entry = kept;
+        // the replay draws every path the recording holds, so the HUD reads the real number
+        cache.basePaths = kept.paths;
+      } else {
+        final sw = Stopwatch()..start();
+        final rec = ui.PictureRecorder();
+        final c = ui.Canvas(rec);
+        if (top != 0.0) {
+          c.translate(0, -top);
         }
-        c.drawPath(page.path(d.path), paint);
-        n++;
+        final paint = ui.Paint()
+          ..color = QvpColor.toColor(ink)
+          ..isAntiAlias = true;
+
+        final omitted = styled.isEmpty
+            ? null
+            : {for (var i = 0; i < styled.length; i++) styled[i].path};
+
+        var cur = -1, n = 0, open = false;
+        for (final d in q.draws) {
+          if (omitted != null && omitted.contains(d.path)) continue;
+          if (d.placement != cur) {
+            if (open) c.restore();
+            c.save();
+            _placeInLayout(
+              c,
+              l,
+              d.placement < q.places.length
+                  ? q.places[d.placement]
+                  : QvpPlacement.identity,
+            );
+            open = true;
+            cur = d.placement;
+          }
+          c.drawPath(page.path(d.path), paint);
+          n++;
+        }
+        if (open) c.restore();
+        cache._dropPicture();
+        final pic = rec.endRecording();
+        cache.picture = pic;
+        cache.basePaths = n;
+        cache.baseMs = sw.elapsedMicroseconds / 1000;
+        cache.entry = _InkCache.keepGlobalInk(key, pic, n);
       }
-      if (open) c.restore();
-      cache._dropPicture();
-      final pic = rec.endRecording();
-      cache.picture = pic;
-      cache.key = key;
-      cache.basePaths = n;
-      cache.baseMs = sw.elapsedMicroseconds / 1000;
-      _InkCache.keepGlobalInk(key, pic, n);
     }
 
-    final sw = Stopwatch()..start();
+    final sw = cache.overlayClock
+      ..reset()
+      ..start();
     // 0. the ornament layer of a dressed page, behind everything else
     _drawOrnaments(canvas, l, dress);
 
     // 1. highlight bands (behind the ink)
-    final bands = cache.getBands(page);
-    _drawBoxes(canvas, bands);
+    cache.bands.draw(canvas, _boxPaint, view);
 
     // 2. base ink: direct vector picture playback
     if (cache.picture != null) {
@@ -1283,6 +1501,7 @@ class _QvpPainter extends CustomPainter {
     // 3. styled paths, placed the same way the ink under them was: by the group the engine put
     // the path in, which is the only answer that holds once a page has reflowed.
     if (styled.isNotEmpty) {
+      final colors = cache.styledColors;
       var cur = -1, open = false;
       for (var i = 0; i < styled.length; i++) {
         final s = styled[i];
@@ -1300,17 +1519,18 @@ class _QvpPainter extends CustomPainter {
           open = true;
           cur = pi;
         }
-        _styledPaint.color = QvpColor.toColor(s.color);
+        _styledPaint.color = colors[i];
         canvas.drawPath(page.path(s.path), _styledPaint);
       }
       if (open) canvas.restore();
     }
 
     // 4. mask boxes (block / blur) on top
-    _drawBoxes(canvas, page.maskBoxesView());
+    cache.masks.draw(canvas, _boxPaint, view);
+    sw.stop();
     cache.overlayMs = sw.elapsedMicroseconds / 1000;
     cache.overlayPaths = styled.length;
-    cache.bands = bands.length;
+    cache.bandCount = cache.bands.boxes;
   }
 
   @override
@@ -1338,6 +1558,6 @@ extension QvpPageViewStats on QvpPageViewState {
     baseMs: _cache.baseMs,
     overlayPaths: _cache.overlayPaths,
     overlayMs: _cache.overlayMs,
-    bands: _cache.bands,
+    bands: _cache.bandCount,
   );
 }

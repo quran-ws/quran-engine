@@ -76,6 +76,15 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     var currentLayout: QvpLayout? = null; private set
     var defaultInk: Int = QvpDefaults.INK; private set
 
+    /** Counts the calls that can change what the page draws: a style, a highlight, a mask, a
+     * reveal, a dress or a layout. A renderer asks the engine again only when this moved. */
+    internal var revision = 0; private set
+    /** Counts the ticks that moved a colour or a band, and the tick after them that settles
+     * the last of it. */
+    internal var clockRevision = 0; private set
+    private var clockMoving = false
+    private fun touch() { revision++ }
+
     init {
         val i = QvpNative.pageInfo(h)
         width = i[0]; height = i[1]; pageNo = i[2].toInt(); nLines = i[3].toInt(); nAyahs = i[4].toInt(); nWords = i[5].toInt(); nPaths = i[6].toInt(); nDecorations = i[7].toInt()
@@ -111,10 +120,11 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
                                  spec.ayahMarkScale, spec.pageFrameScale, spec.lineArtBits(), spec.colorTriples())
         // the dress refits the page, so the layout the wrapper holds is stale now
         readLayout()
+        touch()
         return if (ok) dressInfo() else null
     }
     /** Take the ornaments off: the printed rings and bands come back. */
-    fun undress() { QvpNative.undress(h); dressDraws = null; readLayout() }
+    fun undress() { QvpNative.undress(h); dressDraws = null; readLayout(); touch() }
     /** The view clamp over the content plus the dress overflow: a drag reaches the border, never past it.
      * An undressed page gets the plain clamp. */
     fun dressClamp(view: QvpView, viewportW: Float, viewportH: Float): QvpView =
@@ -258,7 +268,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun layout(spec: QvpLayoutSpec): QvpLayout {
         val v = QvpNative.layout(h, spec.floats())
         val n = v[6].toInt()
-        return QvpLayout(v[0], v[1], v[2], v[3], v[4], v[5], FloatArray(n) { v[10 + it * 3] }, FloatArray(n) { v[11 + it * 3] }, FloatArray(n) { v[12 + it * 3] }, v[7], v[8], v[9]).also { currentLayout = it }
+        return QvpLayout(v[0], v[1], v[2], v[3], v[4], v[5], FloatArray(n) { v[10 + it * 3] }, FloatArray(n) { v[11 + it * 3] }, FloatArray(n) { v[12 + it * 3] }, v[7], v[8], v[9]).also { currentLayout = it; touch() }
     }
     /** Leading (page units) that makes this page fill the padded viewport of [spec]; max 0 = unlimited. */
     fun layoutLineSpacingToFill(spec: QvpLayoutSpec, max: Float = 0f): Float = QvpNative.layoutLineSpacingToFill(h, spec.floats(), max)
@@ -273,7 +283,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
         val v = QvpNative.layoutCurrent(h) ?: return null
         val n = v[6].toInt()
         return QvpLayout(v[0], v[1], v[2], v[3], v[4], v[5], FloatArray(n) { v[12 + it * 3] }, FloatArray(n) { v[13 + it * 3] }, FloatArray(n) { v[14 + it * 3] },
-                         v[7], v[8], v[9], v[10] != 0f, v[11].toInt()).also { currentLayout = it }
+                         v[7], v[8], v[9], v[10] != 0f, v[11].toInt()).also { currentLayout = it; touch() }
     }
 
     // ── the reader's zoom control ──
@@ -348,37 +358,43 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun wordBoundsView(i: Int): FloatArray? = QvpNative.wordBoundsView(h, i)
 
     // ── styles (handles undo exactly) ──
-    fun style(sel: Selector, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAdd(h, layer, sel.arr, rgba, transitionMs)
-    fun styleTarget(t: Target, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAddTarget(h, layer, t.arr, rgba, transitionMs)
-    fun removeStyle(handle: Int) = QvpNative.styleRemove(h, handle)
-    fun recolorStyle(handle: Int, rgba: Int, transitionMs: Int = 0) = QvpNative.styleRecolor(h, handle, rgba, transitionMs)
-    fun hide(sel: Selector): Int = QvpNative.hide(h, sel.arr)
-    fun clearStyles() = QvpNative.styleClear(h)
-    fun clearLayer(layer: Int) = QvpNative.styleClearLayer(h, layer)
-    fun setDefaultColor(rgba: Int) { defaultInk = rgba; QvpNative.styleDefaultColor(h, rgba) }
+    fun style(sel: Selector, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAdd(h, layer, sel.arr, rgba, transitionMs).also { touch() }
+    fun styleTarget(t: Target, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAddTarget(h, layer, t.arr, rgba, transitionMs).also { touch() }
+    fun removeStyle(handle: Int) = QvpNative.styleRemove(h, handle).also { touch() }
+    fun recolorStyle(handle: Int, rgba: Int, transitionMs: Int = 0) = QvpNative.styleRecolor(h, handle, rgba, transitionMs).also { touch() }
+    fun hide(sel: Selector): Int = QvpNative.hide(h, sel.arr).also { touch() }
+    fun clearStyles() = QvpNative.styleClear(h).also { touch() }
+    fun clearLayer(layer: Int) = QvpNative.styleClearLayer(h, layer).also { touch() }
+    fun setDefaultColor(rgba: Int) { defaultInk = rgba; QvpNative.styleDefaultColor(h, rgba); touch() }
     fun theme(t: QvpTheme): Int {
         val z = { c: Int? -> c ?: 0 }
         val base = intArrayOf(z(t.ink), z(t.diacritics), z(t.dots), z(t.waqf), z(t.sifr), z(t.ayahMark), z(t.numeral), z(t.headers), t.transitionMs)
         val marks = t.marks.flatMap { (m, c) -> listOf(markId(m), c) }.toIntArray()
-        return QvpNative.theme(h, base + marks)
+        return QvpNative.theme(h, base + marks).also { touch() }
     }
     fun styleHandles(): IntArray = QvpNative.styleHandles(h)
 
     // ── clock & display list ──
     /** advance animations; true while something is still moving */
-    fun tick(nowMs: Double): Boolean = QvpNative.tick(h, nowMs)
+    fun tick(nowMs: Double): Boolean {
+        val moving = QvpNative.tick(h, nowMs)
+        // the tick that ends an animation puts the colours and bands at their end, so it counts too
+        if (moving || clockMoving) clockRevision++
+        clockMoving = moving
+        return moving
+    }
     fun colors(): IntArray = QvpNative.colors(h)
     /** flat pairs [pathIdx, rgba, ...] for paths ≠ default ink */
     fun styledPaths(): IntArray = QvpNative.styledPaths(h)
     fun colorOf(path: Int) = QvpNative.colorOf(h, path)
 
     // ── highlights ──
-    fun highlight(t: Target, style: QvpHighlightStyle = QvpHighlightStyle()): Int = QvpNative.highlight(h, t.arr, style.ints(), style.floats())
+    fun highlight(t: Target, style: QvpHighlightStyle = QvpHighlightStyle()): Int = QvpNative.highlight(h, t.arr, style.ints(), style.floats()).also { touch() }
     fun highlight(s: String, style: QvpHighlightStyle = QvpHighlightStyle()) = highlight(target(s), style)
-    fun moveHighlight(handle: Int, t: Target) = QvpNative.moveHighlight(h, handle, t.arr)
-    fun restyleHighlight(handle: Int, style: QvpHighlightStyle) = QvpNative.restyleHighlight(h, handle, style.ints(), style.floats())
-    fun removeHighlight(handle: Int) = QvpNative.removeHighlight(h, handle)
-    fun clearHighlights() = QvpNative.clearHighlights(h)
+    fun moveHighlight(handle: Int, t: Target) = QvpNative.moveHighlight(h, handle, t.arr).also { touch() }
+    fun restyleHighlight(handle: Int, style: QvpHighlightStyle) = QvpNative.restyleHighlight(h, handle, style.ints(), style.floats()).also { touch() }
+    fun removeHighlight(handle: Int) = QvpNative.removeHighlight(h, handle).also { touch() }
+    fun clearHighlights() = QvpNative.clearHighlights(h).also { touch() }
     fun highlightHandles(): IntArray = QvpNative.highlightHandles(h)
     fun highlightWords(handle: Int): IntArray = QvpNative.highlightWords(h, handle)
     private fun boxes(v: IntArray): List<QvpBox> = List(v.size / 8) { k -> val o = k * 8; QvpBox(v[o], v[o + 1], Float.fromBits(v[o + 2]), Float.fromBits(v[o + 3]), Float.fromBits(v[o + 4]), Float.fromBits(v[o + 5]), v[o + 6], Float.fromBits(v[o + 7])) }
@@ -387,32 +403,36 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun wordBands(ws: IntArray, height: BandHeight = BandHeight.LINE_SPACING, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) = boxes(QvpNative.wordBands(h, ws, height.id, padX, padY))
 
     // ── selection ──
-    fun select(anchor: Int, focus: Int = anchor) = QvpNative.select(h, anchor, focus)
-    fun clearSelection() = QvpNative.select(h, -1, -1)
+    fun select(anchor: Int, focus: Int = anchor) = QvpNative.select(h, anchor, focus).also { touch() }
+    fun clearSelection() = QvpNative.select(h, -1, -1).also { touch() }
     fun selection(): IntArray = QvpNative.selection(h)
     fun selectionText(form: Form = Form.RASM_UTHMANI, includeCitation: Boolean = false) = QvpNative.selectionText(h, form.id, includeCitation)
 
     // ── memorisation ──
-    fun mask(t: Target, mode: MaskMode = MaskMode.HIDE) = QvpNative.mask(h, t.arr, mode.id)
-    fun maskFrom(wordIndex: Int, mode: MaskMode = MaskMode.HIDE) = QvpNative.maskFrom(h, wordIndex, mode.id)
-    fun maskOptions(blockColor: Int = QvpDefaults.MASK_BLOCK, padX: Float = QvpDefaults.MASK_PAD, padY: Float = QvpDefaults.MASK_PAD, radius: Float = QvpDefaults.MASK_RADIUS, reverse: Boolean = false) = QvpNative.maskOptions(h, blockColor, padX, padY, radius, reverse)
-    fun unmaskNext(n: Int = 1) = QvpNative.unmaskNext(h, n)
-    fun maskBack(n: Int = 1) = QvpNative.maskBack(h, n)
-    fun unmaskWord(wordIndex: Int) = QvpNative.unmaskWord(h, wordIndex)
-    fun maskWord(wordIndex: Int) = QvpNative.maskWord(h, wordIndex)
-    fun unmaskAll() = QvpNative.unmaskAll(h)
-    fun maskAll() = QvpNative.maskAll(h)
-    fun unmask() = QvpNative.unmask(h)
+    fun mask(t: Target, mode: MaskMode = MaskMode.HIDE) = QvpNative.mask(h, t.arr, mode.id).also { touch() }
+    fun maskFrom(wordIndex: Int, mode: MaskMode = MaskMode.HIDE) = QvpNative.maskFrom(h, wordIndex, mode.id).also { touch() }
+    fun maskOptions(blockColor: Int = QvpDefaults.MASK_BLOCK, padX: Float = QvpDefaults.MASK_PAD, padY: Float = QvpDefaults.MASK_PAD, radius: Float = QvpDefaults.MASK_RADIUS, reverse: Boolean = false) = QvpNative.maskOptions(h, blockColor, padX, padY, radius, reverse).also { touch() }
+    fun unmaskNext(n: Int = 1) = QvpNative.unmaskNext(h, n).also { touch() }
+    fun maskBack(n: Int = 1) = QvpNative.maskBack(h, n).also { touch() }
+    fun unmaskWord(wordIndex: Int) = QvpNative.unmaskWord(h, wordIndex).also { touch() }
+    fun maskWord(wordIndex: Int) = QvpNative.maskWord(h, wordIndex).also { touch() }
+    fun unmaskAll() = QvpNative.unmaskAll(h).also { touch() }
+    fun maskAll() = QvpNative.maskAll(h).also { touch() }
+    fun unmask() = QvpNative.unmask(h).also { touch() }
     fun maskHidden(): IntArray = QvpNative.maskHidden(h)
     fun maskWords(): IntArray = QvpNative.maskWords(h)
     fun maskBoxesView(): List<QvpBox> = boxes(QvpNative.maskBoxesView(h))
+    /** The records behind [highlightBoxesView] and [maskBoxesView], eight ints a box, for a
+     * renderer that builds its paths from them without a [QvpBox] for each. */
+    internal fun highlightBoxRecords(): IntArray = QvpNative.highlightBoxesView(h)
+    internal fun maskBoxRecords(): IntArray = QvpNative.maskBoxesView(h)
     /** greyed page with a lit window; returns steps */
-    fun revealStart(lit: Int = QvpDefaults.REVEAL_LIT, byAyah: Boolean = false, grey: Int = QvpDefaults.REVEAL_GREY, ink: Int = QvpDefaults.INK, ayahMarks: Boolean = true, transitionMs: Int = 0) = QvpNative.revealStart(h, lit, byAyah, grey, ink, ayahMarks, transitionMs)
-    fun revealGoto(at: Long) = QvpNative.revealGoto(h, at)
+    fun revealStart(lit: Int = QvpDefaults.REVEAL_LIT, byAyah: Boolean = false, grey: Int = QvpDefaults.REVEAL_GREY, ink: Int = QvpDefaults.INK, ayahMarks: Boolean = true, transitionMs: Int = 0) = QvpNative.revealStart(h, lit, byAyah, grey, ink, ayahMarks, transitionMs).also { touch() }
+    fun revealGoto(at: Long) = QvpNative.revealGoto(h, at).also { touch() }
     fun revealPosition(): Long? = QvpNative.revealPosition(h).let { if (it == -2L) null else it }
     fun revealStepCount() = QvpNative.revealStepCount(h)
     fun revealStepOf(wordIndex: Int) = QvpNative.revealStepOf(h, wordIndex)
-    fun revealStop() = QvpNative.revealStop(h)
+    fun revealStop() = QvpNative.revealStop(h).also { touch() }
 
     // ── crop ──
     fun cropBounds(t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Boolean = true): QvpCropBounds? = QvpNative.cropBounds(h, t.arr, pad, keepAyahMarks)?.let { QvpCropBounds(it[0], it[1], it[2], it[3], it[4].toInt(), it[5].toInt()) }
