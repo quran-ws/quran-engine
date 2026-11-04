@@ -51,8 +51,9 @@ Reviews do not discuss whitespace. CI runs the formatters in check mode.
 
 ## How it is checked
 
-CI runs the tools the table names: `check-parity.py` in the `standards` job, `cargo doc` with
-missing docs as errors in the `engine` job (`scripts/check.sh docs`), and `dart format --language-version=latest` in the
-Flutter workflow. The flag keeps the style the same after a `pub get`, which would
-otherwise read the package's Dart floor. Where the table says review, no tool runs: the JavaScript, Kotlin and Swift
+CI runs the tools the table names. `check-parity.py` runs in the `standards` job. `cargo doc`
+runs with missing docs as errors in the `engine` job (`scripts/check.sh docs`). The Flutter
+workflow runs `dart format --language-version=latest`. After a `pub get`, plain `dart format`
+reads the package's minimum Dart version (3.6) and gives an older style. The flag keeps the
+newest style. Where the table says review, no tool runs: the JavaScript, Kotlin and Swift
 linters are owed (issue #141), and the Dart doc lint is not on (issue #135).

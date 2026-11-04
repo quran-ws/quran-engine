@@ -37,6 +37,8 @@ All notable changes to the engine and its packages. The format follows
   Native and release workflows use it.
 - The action reads the NDK version from `scripts/build-engine-android.sh`.
 - The action retries `sdkmanager` three times.
+- Dependabot also updates the actions that `.github/actions/*` uses.
+- The React Native workflow runs when the Android toolchain action or the NDK pin changes.
 - `scripts/check-versions.sh` fails when an `ndkVersion` pin or an NDK mention in the Android
   docs and READMEs differs from `QVP_NDK_VERSION`.
 - The iOS workflow runs the Demo's UI smoke test on the simulator. `docs/standards/TESTING.md`
