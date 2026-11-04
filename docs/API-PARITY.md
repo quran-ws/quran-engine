@@ -110,6 +110,20 @@ is owed.
 | `qvp_mask_transition` | web | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_mask_transition` | android | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_mask_transition` | flutter | issue (to open): a binding is owed; the fade landed on iOS first |
+| `qvp_alloc` | flutter | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
+| `qvp_dealloc` | flutter | not applicable: the host allocates; `qvp_alloc` serves the wasm host |
+| `qvp_ayah_marks_view` | flutter | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_hit_areas_view` | flutter | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_word_bands_view` | flutter | issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page |
+| `qvp_zoom_level_candidates` | flutter | not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives |
+| `qvp_zoom_levels` | flutter | not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives |
+| `qvp_layout_groups` | flutter | other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits |
+| `qvp_layout_repeats` | flutter | other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits |
+| `qvp_layout_path_groups` | flutter | other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits |
+| `qvp_layout_omitted_paths` | flutter | other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits |
+| `qvp_view_anchor` | flutter | issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it |
+| `qvp_view_swipe` | flutter | issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it |
+| `qvp_swipe_pages` | flutter | issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it |
 | `qvp_mask_transition` | react-native | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_passage_load` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 | `qvp_passage_load_basmalah` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
@@ -273,11 +287,11 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-173 symbols in the header, 173 Rust exports. web: 172 bound, android: 167 bound, flutter: 172 bound, ios: 167 bound, react-native: 96 bound.
+173 symbols in the header, 173 Rust exports. web: 172 bound, android: 167 bound, flutter: 158 bound, ios: 167 bound, react-native: 96 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
-| `qvp_alloc` | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) |
+| `qvp_alloc` | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) |
 | `qvp_arabic` | yes | yes | yes | yes | yes |
 | `qvp_atlas_division` | yes | yes | yes | yes | yes |
 | `qvp_atlas_division_of` | yes | yes | yes | yes | yes |
@@ -297,7 +311,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_ayah_keys` | yes | yes | yes | yes | yes |
 | `qvp_ayah_label` | yes | yes | yes | yes | yes |
 | `qvp_ayah_marks` | yes | yes | yes | yes | yes |
-| `qvp_ayah_marks_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
+| `qvp_ayah_marks_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_ayah_word_count` | yes | yes | yes | yes | yes |
 | `qvp_category_name` | yes | yes | yes | yes | yes |
 | `qvp_citation` | yes | yes | yes | yes | yes |
@@ -305,7 +319,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_colors` | yes | yes | yes | yes | yes |
 | `qvp_crop_bounds` | yes | yes | yes | yes | yes |
 | `qvp_crop_svg` | yes | yes | yes | yes | yes |
-| `qvp_dealloc` | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) |
+| `qvp_dealloc` | yes | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) | gap (not applicable: the host allocates; `qvp_alloc` serves the wasm host) |
 | `qvp_decoration_info` | yes | yes | yes | yes | gap (list form: bound as `decorations()`) |
 | `qvp_divisions` | yes | yes | yes | yes | yes |
 | `qvp_dress` | yes | yes | yes | yes | yes |
@@ -328,7 +342,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_highlight_restyle` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_highlight_words` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_hit_areas` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_hit_areas_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
+| `qvp_hit_areas_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_hit_test` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_exact` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_exact_view` | yes | yes | yes | yes | yes |
@@ -337,13 +351,13 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_layout` | yes | yes | yes | yes | yes |
 | `qvp_layout_current` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_draw_list` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_layout_groups` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_groups` | yes | yes | gap (other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_line_spacing_to_fill` | yes | yes | yes | yes | yes |
-| `qvp_layout_omitted_paths` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_layout_path_groups` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_omitted_paths` | yes | yes | gap (other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_path_groups` | yes | yes | gap (other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_placements` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_printed_height` | yes | yes | yes | yes | yes |
-| `qvp_layout_repeats` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_repeats` | yes | yes | gap (other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_row_words` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_wasted_fraction` | yes | yes | yes | yes | yes |
 | `qvp_layout_word_row` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
@@ -417,7 +431,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_surah_count` | yes | yes | yes | yes | gap (list form: bound as `surahs().length`) |
 | `qvp_surah_headers` | yes | yes | yes | yes | yes |
 | `qvp_surah_headers_view` | yes | yes | yes | yes | yes |
-| `qvp_swipe_pages` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_swipe_pages` | yes | yes | gap (issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_target_words` | yes | yes | yes | yes | yes |
 | `qvp_text` | yes | yes | yes | yes | yes |
 | `qvp_theme` | yes | yes | yes | yes | yes |
@@ -428,14 +442,14 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_unmask_next` | yes | yes | yes | yes | yes |
 | `qvp_unmask_word` | yes | yes | yes | yes | yes |
 | `qvp_version` | yes | yes | yes | yes | yes |
-| `qvp_view_anchor` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_anchor` | yes | yes | gap (issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_clamp` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_pan` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_view_swipe` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_view_swipe` | yes | yes | gap (issue #165: a binding is owed; the generated bindings declare it, but no Dart call reaches it) | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_view_to_layout` | yes | yes | yes | yes | yes |
 | `qvp_view_zoom_about` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_word_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_word_bands_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
+| `qvp_word_bands_view` | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) | yes | gap (issue #82: the viewport-px twin an app needs to paint its own overlay on a reflowed page) |
 | `qvp_word_bounds_view` | yes | yes | yes | yes | yes |
 | `qvp_word_form` | yes | yes | yes | yes | yes |
 | `qvp_word_info` | yes | yes | yes | yes | gap (list form: bound as `word(i)` and `words()`) |
@@ -443,8 +457,8 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_zoom_at_step` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_zoom_carried` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_zoom_is_zoomed` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_zoom_level_candidates` | yes | yes | yes | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) |
-| `qvp_zoom_levels` | yes | yes | yes | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) |
+| `qvp_zoom_level_candidates` | yes | yes | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) |
+| `qvp_zoom_levels` | yes | yes | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) | gap (not applicable: the steps a page ships with are `qvp_zoom_steps`; these two are the search behind them, which the lab drives) |
 | `qvp_zoom_mode` | yes | yes | yes | yes | yes |
 | `qvp_zoom_pinch` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_zoom_spec` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |

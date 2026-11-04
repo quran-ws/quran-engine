@@ -20,6 +20,10 @@ Cover the Kotlin SDK, and the Flutter and React Native packages, which build on 
   && flutter test`. Example with `cd example && flutter run`.
 - React Native: `cd packages/react-native/example && npm install && npx react-native
   run-android`.
-- The JNI bridge (`qvp_jni.c`) and the Dart bindings (`bindings.dart`) mirror the header's
-  `#[repr(C)]` structs by hand. A struct change in the header means both files change in
-  the same PR.
+- The JNI bridge (`qvp_jni.c`) mirrors the header's `#[repr(C)]` structs by hand. A struct
+  change in the header means it changes in the same PR.
+- `package:ffigen` generates the Dart bindings (`lib/src/bindings.dart`) from the
+  header. After a header change, run `dart run tool/ffigen.dart` in
+  `packages/flutter/qvp_flutter` and commit the result. ffigen needs libclang: Xcode or the
+  Command Line Tools on macOS, `libclang-dev` on Linux. `scripts/check-flutter-bindings.sh`
+  fails when the committed file and the header differ.

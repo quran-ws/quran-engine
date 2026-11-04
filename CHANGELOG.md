@@ -36,6 +36,17 @@ All notable changes to the engine and its packages. The format follows
   `prepare-ios-release.yml`, which builds it on macOS, attaches it to the draft release and
   pushes the commit that sets its URL, checksum and build commit in `Package.swift`.
   `release.yml` refuses a tag whose engine sources differ from that build commit.
+- Flutter: `package:ffigen` generates `lib/src/bindings.dart` from `qvp.h`
+  (`dart run tool/ffigen.dart`). Before, the file was written by hand.
+  `scripts/check-flutter-bindings.sh` fails when the file and the header differ. The Flutter
+  workflow runs it, and `scripts/check.sh parity` runs it when Flutter and libclang are
+  installed. `scripts/check-parity.py` skips the generated file, so a symbol counts as bound
+  in Flutter only when the package's own code names it. `docs/API-PARITY.md` lists as gaps
+  the 14 symbols that the old file bound and no backend called.
+  The binding object behind `QvpNativeBackend.b` follows the C names everywhere: `hide`,
+  `highlight`, `moveHighlight`, `restyleHighlight`, `removeHighlight`, `clearHighlights`
+  and `atlasSurahs` are now `styleHide`, `highlightAdd`, `highlightMove`,
+  `highlightRestyle`, `highlightRemove`, `highlightClear` and `atlasSurahCount`.
 - One composite action, `.github/actions/android-toolchain`, installs Java 17, the Android
   SDK, the pinned NDK and cmake, and cargo-ndk on request. The Android, Flutter, React
   Native and release workflows use it.

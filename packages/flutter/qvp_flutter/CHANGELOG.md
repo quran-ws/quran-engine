@@ -8,6 +8,17 @@
   outside its ink, reports `is_exact` 0. It reported 1. `conformance/scenarios/hit.json`
   holds one point of each kind, and the web, Swift, Dart and Android tests replay it. The C
   ABI is unchanged.
+- Flutter: `package:ffigen` generates `lib/src/bindings.dart` from `qvp.h`
+  (`dart run tool/ffigen.dart`). Before, the file was written by hand.
+  `scripts/check-flutter-bindings.sh` fails when the file and the header differ. The Flutter
+  workflow runs it, and `scripts/check.sh parity` runs it when Flutter and libclang are
+  installed. `scripts/check-parity.py` skips the generated file, so a symbol counts as bound
+  in Flutter only when the package's own code names it. `docs/API-PARITY.md` lists as gaps
+  the 14 symbols that the old file bound and no backend called.
+  The binding object behind `QvpNativeBackend.b` follows the C names everywhere: `hide`,
+  `highlight`, `moveHighlight`, `restyleHighlight`, `removeHighlight`, `clearHighlights`
+  and `atlasSurahs` are now `styleHide`, `highlightAdd`, `highlightMove`,
+  `highlightRestyle`, `highlightRemove`, `highlightClear` and `atlasSurahCount`.
 - `QVP_DEFAULT_REFLOW_RELAX`, `QVP_DEFAULT_REFLOW_MAX_STRETCH` and `QVP_DEFAULT_SELECTION_PAD_X`
   in `qvp.h`, mirrored in every wrapper's defaults table (`QvpDefaults` in Kotlin, Swift and
   Dart, `DEFAULTS` in JavaScript and React Native). The page views pass the selection pad

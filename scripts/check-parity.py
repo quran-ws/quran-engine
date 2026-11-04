@@ -17,7 +17,8 @@ Output
   without a function), or an abbreviated field name in a published JavaScript entry point.
 
 A symbol counts as bound in a wrapper when the C name or its camelCase form (with or
-without the object-model noun) appears in that wrapper's sources.
+without the object-model noun) appears in that wrapper's sources. A file generated from
+the header (GENERATED) names every symbol, so it does not count: the wrapper must call it.
 """
 from __future__ import annotations
 
@@ -41,6 +42,9 @@ WRAPPERS = {
     "ios": ["packages/ios/QvpKit/Sources"],
     "react-native": ["packages/react-native/qvp-react-native/src", "packages/react-native/qvp-react-native/android/src"],
 }
+# Bindings generated from the header. scripts/check-flutter-bindings.sh keeps the Flutter
+# file in step with the header; this script skips it.
+GENERATED = {"packages/flutter/qvp_flutter/lib/src/bindings.dart"}
 
 
 def header_symbols() -> list[str]:
@@ -85,6 +89,8 @@ def source_text(paths: list[str]) -> str:
         p = ROOT / rel
         files = [p] if p.is_file() else sorted(q for q in p.rglob("*") if q.is_file())
         for f in files:
+            if f.relative_to(ROOT).as_posix() in GENERATED:
+                continue
             try:
                 chunks.append(f.read_text())
             except UnicodeDecodeError:
