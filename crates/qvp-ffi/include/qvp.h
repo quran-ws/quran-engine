@@ -106,7 +106,8 @@ typedef struct { uint8_t line_number, is_header; uint32_t first_word, n_words; f
 typedef struct { uint8_t decoration /* QVP_DECORATION_* */, _pad; uint16_t surah, ayah, _pad2; uint32_t line; float x0, y0, x1, y1; QvpStr text; uint32_t first_path, n_paths; } QvpDecorationInfo;
 /* one hit result for every hit test: the exact variants set line, distance 0 and is_exact 1 */
 typedef struct { uint32_t word, path, decoration, line; float distance; uint8_t is_exact; } QvpHit;
-typedef struct { float max_distance /* <=0: unlimited */, gap_bias /* 0.6 */; uint8_t prefer_exact; } QvpHitOptions;
+/* max_distance <= 0 means unlimited; gap_bias < 0 means the engine default, QVP_DEFAULT_GAP_BIAS */
+typedef struct { float max_distance /* <=0: unlimited */, gap_bias /* <0: default, 0.6 */; uint8_t prefer_exact; } QvpHitOptions;
 typedef struct { uint32_t id, line; float x0, y0, x1, y1; uint32_t color; float radius; } QvpBox;
 typedef struct { uint32_t word, line; float x0, y0, x1, y1, ink_x0, ink_y0, ink_x1, ink_y1; } QvpHitArea;
 typedef struct { uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; } QvpLineBand;

@@ -61,6 +61,9 @@ impl<T> FfiDefault for *const T {
 thread_local! {
     pub(crate) static STR_BUF: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     pub(crate) static LAYOUT_BUF: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    /// The boxes a per-frame getter builds before it copies them out: kept, so a frame
+    /// allocates nothing.
+    pub(crate) static BOX_BUF: RefCell<Vec<qvp_core::ViewBox>> = const { RefCell::new(Vec::new()) };
 }
 
 #[repr(C)]

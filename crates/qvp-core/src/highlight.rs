@@ -3,6 +3,7 @@
 //! transitions (colour fades, band boxes slide between positions).
 use crate::style::{ease_out, lerp_rgba, Handle, Paint, Selector, LAYER_HIGHLIGHT};
 use crate::{Page, Rgba, Target};
+use std::borrow::Cow;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -216,7 +217,7 @@ impl Page {
             let new_boxes = self.word_bands(&words, style.height, style.pad_x, style.pad_y);
             let hl = &mut self.highlights[i];
             // snapshot the current interpolated boxes as the new "prev"
-            hl.prev_boxes = current_boxes(hl, self.clock_ms);
+            hl.prev_boxes = current_boxes(hl, self.clock_ms).into_owned();
             hl.boxes = new_boxes;
             hl.t0 = self.clock_ms;
             hl.color_from = hl.color_to;
@@ -249,7 +250,7 @@ impl Page {
             vec![]
         };
         let hl = &mut self.highlights[i];
-        hl.prev_boxes = current_boxes(hl, now);
+        hl.prev_boxes = current_boxes(hl, now).into_owned();
         hl.color_from = current_color(hl, now);
         hl.style = style;
         hl.color_to = style.band;
@@ -268,7 +269,7 @@ impl Page {
             self.highlights.remove(i);
             return true;
         }
-        hl.prev_boxes = current_boxes(hl, now);
+        hl.prev_boxes = current_boxes(hl, now).into_owned();
         hl.color_from = current_color(hl, now);
         hl.color_to = hl.style.band & !0xff;
         hl.t0 = now;
@@ -308,18 +309,27 @@ impl Page {
     /// with seams applied between vertically adjacent boxes and animated colours.
     /// Draw each highlight as ONE path (nonzero fill) of these boxes, behind the ink.
     pub fn highlight_boxes_view(&self) -> Vec<ViewBox> {
-        let now = self.clock_ms;
         let mut out = Vec::new();
+        self.highlight_boxes_view_into(&mut out);
+        out
+    }
+
+    /// Write the same boxes into `out`, after clearing it. A host that asks every frame keeps
+    /// one list and the engine allocates nothing once it is large enough.
+    pub fn highlight_boxes_view_into(&self, out: &mut Vec<ViewBox>) {
+        out.clear();
+        let now = self.clock_ms;
         let reflowed = self.current_layout().map(|l| l.is_reflowed()).unwrap_or(false);
-        let (scale, ox, oy, dy): (f32, f32, f32, Vec<f32>) = match self.current_layout() {
-            Some(l) => (l.scale, l.offset_x, l.offset_y, l.line_dy.clone()),
-            None => (1.0, 0.0, 0.0, vec![0.0; self.data().lines.len()]),
+        // Without a layout no line is shifted: an empty table reads as 0 for every line.
+        let (scale, ox, oy, dy): (f32, f32, f32, &[f32]) = match self.current_layout() {
+            Some(l) => (l.scale, l.offset_x, l.offset_y, &l.line_dy),
+            None => (1.0, 0.0, 0.0, &[]),
         };
         for h in &self.highlights {
             // a reflowed page has rows, not printed lines: rebuild the bands from where the
             // words actually landed (they slide with the reflow, not between it and the print)
             let boxes = match self.current_layout().and_then(|l| l.reflow.as_ref()) {
-                Some(_) => self.reflow_bands(&h.words, h.style.height, h.style.pad_x, h.style.pad_y),
+                Some(_) => Cow::Owned(self.reflow_bands(&h.words, h.style.height, h.style.pad_x, h.style.pad_y)),
                 None => current_boxes(h, now),
             };
             let color = current_color(h, now);
@@ -327,24 +337,24 @@ impl Page {
                 continue;
             }
             let seam = h.style.seam * scale;
-            let mut view: Vec<ViewBox> = boxes
-                .iter()
-                .map(|b| {
-                    let li = b.line as usize;
-                    // reflow bands are already placed; printed bands still take their line's shift
-                    let d = if reflowed { 0.0 } else { dy.get(li).copied().unwrap_or(0.0) };
-                    ViewBox {
-                        highlight: h.handle,
-                        line: b.line,
-                        x0: ox + b.x0 * scale,
-                        y0: oy + (b.y0 + d) * scale,
-                        x1: ox + b.x1 * scale,
-                        y1: oy + (b.y1 + d) * scale,
-                        color,
-                        radius: clamp_radius(h.style.radius * scale, b.x1 - b.x0, b.y1 - b.y0, scale),
-                    }
-                })
-                .collect();
+            // Each highlight's boxes go straight into `out` and are sorted and seamed there.
+            let start = out.len();
+            out.extend(boxes.iter().map(|b| {
+                let li = b.line as usize;
+                // reflow bands are already placed; printed bands still take their line's shift
+                let d = if reflowed { 0.0 } else { dy.get(li).copied().unwrap_or(0.0) };
+                ViewBox {
+                    highlight: h.handle,
+                    line: b.line,
+                    x0: ox + b.x0 * scale,
+                    y0: oy + (b.y0 + d) * scale,
+                    x1: ox + b.x1 * scale,
+                    y1: oy + (b.y1 + d) * scale,
+                    color,
+                    radius: clamp_radius(h.style.radius * scale, b.x1 - b.x0, b.y1 - b.y0, scale),
+                }
+            }));
+            let view = &mut out[start..];
             view.sort_by(|a, b| a.y0.total_cmp(&b.y0));
             // seam only where two boxes actually meet
             for i in 0..view.len() {
@@ -353,9 +363,7 @@ impl Page {
                     view[i + 1].y0 -= seam / 2.0;
                 }
             }
-            out.extend(view);
         }
-        out
     }
 }
 
@@ -367,20 +375,19 @@ fn current_color(h: &Highlight, now: f64) -> Rgba {
     lerp_rgba(h.color_from, h.color_to, ease_out((now - h.t0) / dur))
 }
 
-fn current_boxes(h: &Highlight, now: f64) -> Vec<BandBox> {
+/// The boxes a highlight shows at `now`: its own when it is still, lent rather than copied,
+/// and a new list only while it moves.
+fn current_boxes(h: &Highlight, now: f64) -> Cow<'_, [BandBox]> {
     let dur = h.style.transition_ms as f64;
     if dur <= 0.0 || h.prev_boxes.is_empty() || now - h.t0 >= dur {
-        return if h.removing {
-            h.prev_boxes
-                .clone()
-                .into_iter()
-                .chain(h.boxes.clone())
-                .collect::<Vec<_>>()
-                .into_iter()
-                .take(h.prev_boxes.len().max(h.boxes.len()))
-                .collect()
+        // A removed highlight holds where it was, topped up from its target when that had
+        // more boxes.
+        return if !h.removing {
+            Cow::Borrowed(&h.boxes)
+        } else if h.prev_boxes.len() >= h.boxes.len() {
+            Cow::Borrowed(&h.prev_boxes)
         } else {
-            h.boxes.clone()
+            Cow::Owned(h.prev_boxes.iter().chain(&h.boxes).take(h.boxes.len()).copied().collect())
         };
     }
     let t = ease_out((now - h.t0) / dur) as f32;
@@ -399,5 +406,5 @@ fn current_boxes(h: &Highlight, now: f64) -> Vec<BandBox> {
             y1: l(a.y1, b.y1),
         });
     }
-    out
+    Cow::Owned(out)
 }

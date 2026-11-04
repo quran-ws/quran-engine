@@ -37,7 +37,8 @@ unsafe fn hopt(o: *const QvpHitOptions) -> HitOptions {
     let o = &*o;
     HitOptions {
         max_distance: if o.max_distance <= 0.0 { f32::INFINITY } else { o.max_distance },
-        gap_bias: o.gap_bias,
+        // A negative bias is the engine's default, so a wrapper never has to carry the number.
+        gap_bias: if o.gap_bias < 0.0 { HitOptions::default().gap_bias } else { o.gap_bias },
         prefer_exact: o.prefer_exact != 0,
     }
 }

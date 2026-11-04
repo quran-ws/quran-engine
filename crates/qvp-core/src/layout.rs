@@ -153,6 +153,41 @@ pub struct Layout {
     pub omitted_paths: Vec<u32>,
     /// The rows the words were broken onto, when this layout reflowed the page.
     pub reflow: Option<Reflowed>,
+    /// The draw list this layout built last, and the band it was for.
+    pub(crate) draw_list: DrawListCache,
+}
+
+/// The last draw list a layout built and the band it was asked for. A host asks twice each
+/// frame, once for the count with no buffer and once to fill one, so the second answer is a
+/// copy. A new layout starts with an empty one, so a relayout never reads a stale list.
+///
+/// It is not part of what the layout is: a clone starts empty, and two layouts compare equal
+/// whatever their caches hold.
+#[derive(Default)]
+pub(crate) struct DrawListCache(std::cell::RefCell<CachedDrawList>);
+
+#[derive(Default)]
+struct CachedDrawList {
+    /// The band `list` was built for, as bits, so a band compares exactly. `None` while
+    /// nothing is built.
+    band: Option<Option<(u32, u32)>>,
+    list: Vec<Draw>,
+}
+
+impl Clone for DrawListCache {
+    fn clone(&self) -> Self {
+        DrawListCache::default()
+    }
+}
+impl PartialEq for DrawListCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+impl std::fmt::Debug for DrawListCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("DrawListCache")
+    }
 }
 
 /// One drawing of one path: the path, and which of [`Layout::placements`] it is drawn under.
@@ -179,11 +214,13 @@ impl Layout {
     /// Every placement this layout draws under: one per group, then one for each repeat, so a
     /// `Draw` indexes this one array and a renderer needs no second list.
     pub fn placements(&self) -> Vec<Placement> {
-        let mut out = self.groups.clone();
-        if let Some(r) = &self.reflow {
-            out.extend(r.repeats.iter().map(|x| x.placement));
-        }
-        out
+        self.placements_iter().collect()
+    }
+    /// The same placements, read in place: what a getter copies straight into a host's buffer.
+    pub fn placements_iter(&self) -> impl ExactSizeIterator<Item = Placement> + '_ {
+        let repeats = self.reflow.as_ref().map_or(&[][..], |r| &r.repeats[..]);
+        let n = self.groups.len();
+        (0..n + repeats.len()).map(move |i| if i < n { self.groups[i] } else { repeats[i - n].placement })
     }
 
     /// True when this layout broke the words onto rows of its own.
@@ -394,6 +431,7 @@ impl Page {
             path_group: std::sync::Arc::from(Vec::new()),
             omitted_paths: if spec.surah_frames { vec![] } else { self.surah_name_ornament_paths() },
             reflow: None,
+            draw_list: DrawListCache::default(),
         };
         layout.groups = layout.line_dy.iter().map(|&d| Placement::shifted(d)).collect();
         self.layout = Some(layout);
@@ -524,6 +562,7 @@ impl Page {
             path_group,
             omitted_paths,
             reflow: Some(flow),
+            draw_list: DrawListCache::default(),
         }
     }
 
@@ -601,7 +640,27 @@ impl Page {
     /// host asks for is its viewport, usually with a screen of slack either side so a fast drag
     /// has somewhere to go.
     pub fn layout_draw_list_in(&self, band: Option<(f32, f32)>) -> Vec<Draw> {
-        let Some(l) = self.current_layout() else { return Vec::new() };
+        self.with_layout_draw_list(band, <[Draw]>::to_vec)
+    }
+
+    /// Lend the same list to `f` instead of copying it. The current layout keeps the last list
+    /// it built and the band it was for, so a host that asks for the count and then for the
+    /// list in one frame builds it once, and a band that moves every frame reuses the memory.
+    pub fn with_layout_draw_list<R>(&self, band: Option<(f32, f32)>, f: impl FnOnce(&[Draw]) -> R) -> R {
+        let Some(l) = self.current_layout() else { return f(&[]) };
+        let key = Some(band.map(|(top, bottom)| (top.to_bits(), bottom.to_bits())));
+        let mut cache = l.draw_list.0.borrow_mut();
+        if cache.band != key {
+            // Marked empty first, so a list left half built is never read as complete.
+            cache.band = None;
+            cache.list.clear();
+            self.build_draw_list(l, band, &mut cache.list);
+            cache.band = key;
+        }
+        f(&cache.list)
+    }
+
+    fn build_draw_list(&self, l: &Layout, band: Option<(f32, f32)>, out: &mut Vec<Draw>) {
         let q = self.quant();
         // A path is kept when its ink reaches into the band. Its box is in page units, so it
         // goes through the placement it is drawn under and then the layout's own scale.
@@ -614,7 +673,7 @@ impl Page {
         };
         let group = |i: usize| l.groups.get(i).copied().unwrap_or(Placement::IDENTITY);
         let n = self.geom.table.len();
-        let mut out = Vec::with_capacity(n);
+        out.reserve(n);
         for path in 0..n as u32 {
             if l.omitted_paths.binary_search(&path).is_ok() {
                 continue;
@@ -635,7 +694,6 @@ impl Page {
                 }
             }
         }
-        out
     }
 
     /// Word ink box in viewport px through the current layout (for scroll-into-view etc.).

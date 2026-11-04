@@ -243,6 +243,115 @@ fn a_truncated_page_loads_as_null() {
     }
 }
 
+/// The spec a phone in portrait asks for, at a reflow zoom (1 is the printed page).
+fn phone_spec(reflow_zoom: f32) -> QvpLayoutSpec {
+    QvpLayoutSpec {
+        viewport_w: 390.0,
+        viewport_h: 844.0,
+        pad_top: 20.0,
+        pad_bottom: 20.0,
+        pad_left: 12.0,
+        pad_right: 12.0,
+        line_spacing: 1.0,
+        fill_height: 1,
+        grid_lines: 0,
+        crop_left: 0.0,
+        crop_right: 0.0,
+        max_aspect_slack: 0.0,
+        reflow_zoom,
+        reflow_fill: 255,
+        reflow_breaks: 255,
+        reflow_gaps: 0,
+        reflow_word_gap: 0.0,
+        reflow_max_stretch: 0.0,
+        reflow_relax: -1.0,
+        banner_zoom: 0.0,
+        surah_frames: 1,
+    }
+}
+
+/// What a wrapper does every frame, the count with no buffer and then the fill, hands back
+/// the list a page laid out fresh gives in one call: for the whole page and for bands, across
+/// relayouts, printed and reflowed.
+#[test]
+fn draw_list_count_then_fill_matches_a_fresh_layout() {
+    let Some(bytes) = page_bytes("036.qvp") else {
+        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
+            panic!("dist/pages/036.qvp is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
+        }
+        eprintln!("skip: dist/pages/036.qvp is missing; run scripts/sync-test-data.sh to enable this test");
+        return;
+    };
+    unsafe {
+        let page = qvp_page_load(bytes.as_ptr(), bytes.len());
+        let fresh = qvp_page_load(bytes.as_ptr(), bytes.len());
+        let mut info = std::mem::zeroed::<QvpPageInfo>();
+        qvp_page_info(page, &mut info);
+        let mut lay = std::mem::zeroed::<QvpLayout>();
+        let bands = [(0.0, 0.0), (0.0, 400.0), (300.0, 900.0), (0.0, 400.0), (2000.0, 2600.0)];
+        // 1 is the printed page; the repeat of 2 lays the page out again after a reflow
+        for zoom in [1.0, 2.0, 3.0, 2.0, 1.0] {
+            let spec = phone_spec(zoom);
+            qvp_layout(page, &spec, &mut lay);
+            for &(top, bottom) in &bands {
+                let n = qvp_layout_draw_list(page, top, bottom, std::ptr::null_mut(), 0);
+                let mut got = vec![0u32; n as usize * 2];
+                assert_eq!(qvp_layout_draw_list(page, top, bottom, got.as_mut_ptr(), n), n);
+
+                qvp_layout(fresh, &spec, &mut lay);
+                let mut want = vec![0u32; info.n_paths as usize * 4];
+                let m = qvp_layout_draw_list(fresh, top, bottom, want.as_mut_ptr(), info.n_paths * 2);
+                want.truncate(m as usize * 2);
+                assert_eq!(got, want, "zoom {zoom}, band {top}..{bottom}");
+                assert!(n > 0 || top >= 2000.0, "zoom {zoom}, band {top}..{bottom} drew nothing");
+            }
+            let n = qvp_layout_placements(page, std::ptr::null_mut(), 0);
+            let mut got = vec![0f32; n as usize * 4];
+            assert_eq!(qvp_layout_placements(page, got.as_mut_ptr(), n), n);
+            let mut want = vec![0f32; n as usize * 4];
+            assert_eq!(qvp_layout_placements(fresh, want.as_mut_ptr(), n), n);
+            assert_eq!(got, want, "zoom {zoom}");
+        }
+        qvp_page_free(fresh);
+        qvp_page_free(page);
+    }
+}
+
+/// A negative `gap_bias` is the engine's default, as a `max_distance` of 0 is, so a wrapper
+/// that leaves both to the engine taps the same word as one that passes no options.
+#[test]
+fn a_negative_gap_bias_is_the_default() {
+    let Some(bytes) = page_bytes("036.qvp") else {
+        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
+            panic!("dist/pages/036.qvp is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
+        }
+        eprintln!("skip: dist/pages/036.qvp is missing; run scripts/sync-test-data.sh to enable this test");
+        return;
+    };
+    unsafe {
+        let page = qvp_page_load(bytes.as_ptr(), bytes.len());
+        let mut line = std::mem::zeroed::<QvpLineInfo>();
+        assert_eq!(qvp_line_info(page, 3, &mut line), 1);
+        let y = (line.y0 + line.y1) / 2.0;
+        let hit = |opt: *const QvpHitOptions, x: f32| {
+            let mut h = std::mem::zeroed::<QvpHit>();
+            assert_eq!(qvp_hit_test(page, x, y, opt, &mut h), 1);
+            h.word
+        };
+        let default = QvpHitOptions { max_distance: 0.0, gap_bias: -1.0, prefer_exact: 1 };
+        let none = QvpHitOptions { max_distance: 0.0, gap_bias: 0.0, prefer_exact: 1 };
+        let mut moved = 0;
+        for i in 0..=400 {
+            let x = line.x0 + (line.x1 - line.x0) * i as f32 / 400.0;
+            assert_eq!(hit(&default, x), hit(std::ptr::null(), x), "x {x}");
+            moved += (hit(&none, x) != hit(std::ptr::null(), x)) as u32;
+        }
+        // the bias decides some taps on this line, so the comparison above is not empty
+        assert!(moved > 0);
+        qvp_page_free(page);
+    }
+}
+
 /// A passage through the C ABI: 2:255 from page 42, laid out, cut to two rows, and the
 /// error returns.
 #[test]
