@@ -207,8 +207,8 @@ int      qvp_hit_test_view(const QvpPage*, float view_x, float view_y, const Qvp
 int      qvp_hit_test_exact(const QvpPage*, float x, float y, QvpHit* out);                                /* exact outline only, page units */
 int      qvp_hit_test_exact_view(const QvpPage*, float view_x, float view_y, QvpHit* out);                         /* exact outline only, viewport px */
 uint32_t qvp_line_bands(const QvpPage*, QvpLineBand* out, uint32_t cap);
-uint32_t qvp_hit_areas(const QvpPage*, float gap_bias, QvpHitArea* out, uint32_t cap);
-uint32_t qvp_hit_areas_view(const QvpPage*, float gap_bias, QvpHitArea* out, uint32_t cap);   /* the same, in viewport px; a reflowed page's rows */
+uint32_t qvp_hit_areas(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);
+uint32_t qvp_hit_areas_view(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);   /* the same, in viewport px; a reflowed page's rows */
 
 /* layout -------------------------------------------------------------------------------- */
 /* The reader's pan and zoom on top of a layout: a point p in layout px draws at offset + scale·p. The engine owns this

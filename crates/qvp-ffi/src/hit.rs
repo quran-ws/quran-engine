@@ -30,6 +30,15 @@ pub unsafe extern "C" fn qvp_hit_test_exact_view(page: *const Page, view_x: f32,
         None => 0,
     })
 }
+/// A negative bias is the engine's default, so a wrapper never has to carry the number. The
+/// hit tests and the hit areas read it the same way, so a tap and an overlay agree.
+fn gap_bias_or_default(bias: f32) -> f32 {
+    if bias < 0.0 {
+        HitOptions::default().gap_bias
+    } else {
+        bias
+    }
+}
 unsafe fn hopt(o: *const QvpHitOptions) -> HitOptions {
     if o.is_null() {
         return HitOptions::default();
@@ -37,8 +46,7 @@ unsafe fn hopt(o: *const QvpHitOptions) -> HitOptions {
     let o = &*o;
     HitOptions {
         max_distance: if o.max_distance <= 0.0 { f32::INFINITY } else { o.max_distance },
-        // A negative bias is the engine's default, so a wrapper never has to carry the number.
-        gap_bias: if o.gap_bias < 0.0 { HitOptions::default().gap_bias } else { o.gap_bias },
+        gap_bias: gap_bias_or_default(o.gap_bias),
         prefer_exact: o.prefer_exact != 0,
     }
 }
@@ -106,11 +114,11 @@ pub unsafe extern "C" fn qvp_line_bands(page: *const Page, out: *mut QvpLineBand
 /// The hit boxes in page units: the partition a tap is resolved with.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_hit_areas(page: *const Page, gap_bias: f32, out: *mut QvpHitArea, cap: u32) -> u32 {
-    guard(|| fill_with(out, cap, (*page).hit_areas(gap_bias).iter().map(hit_area)))
+    guard(|| fill_with(out, cap, (*page).hit_areas(gap_bias_or_default(gap_bias)).iter().map(hit_area)))
 }
 /// The hit boxes in viewport px through the current layout: the partition a tap is resolved
 /// with, so an overlay and a tap agree. On a reflowed page these are the rows' own boxes.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_hit_areas_view(page: *const Page, gap_bias: f32, out: *mut QvpHitArea, cap: u32) -> u32 {
-    guard(|| fill_with(out, cap, (*page).hit_areas_view(gap_bias).iter().map(hit_area)))
+    guard(|| fill_with(out, cap, (*page).hit_areas_view(gap_bias_or_default(gap_bias)).iter().map(hit_area)))
 }

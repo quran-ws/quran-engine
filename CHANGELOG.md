@@ -132,8 +132,8 @@ All notable changes to the engine and its packages. The format follows
   call copies that list. `qvp_layout_placements` reads the groups in place.
   `qvp_highlight_boxes_view` and `qvp_mask_boxes_view` reuse one buffer and no longer copy the
   line shifts or the boxes of a highlight that is not moving. A `gap_bias` below 0 in
-  `QvpHitOptions` now means the engine default, 0.6, as a `max_distance` of 0 or less already
-  means no limit.
+  `QvpHitOptions` and in `qvp_hit_areas` and `qvp_hit_areas_view` now means the engine
+  default, 0.6, as a `max_distance` of 0 or less already means no limit.
 
 ### Removed
 - **Breaking.** Flutter: `QvpEngine.resolveLibrary`, `QvpEngine.scratchBytes` and

@@ -348,6 +348,18 @@ fn a_negative_gap_bias_is_the_default() {
         }
         // the bias decides some taps on this line, so the comparison above is not empty
         assert!(moved > 0);
+        // the hit areas read a negative bias the same way, so an overlay still matches the taps
+        type Areas = unsafe extern "C" fn(*const qvp_core::Page, f32, *mut QvpHitArea, u32) -> u32;
+        let areas = |f: Areas, bias: f32| {
+            let n = f(page, bias, std::ptr::null_mut(), 0);
+            let mut out = vec![std::mem::zeroed::<QvpHitArea>(); n as usize];
+            assert_eq!(f(page, bias, out.as_mut_ptr(), n), n);
+            out.iter().map(|a| (a.word, a.line, a.x0, a.y0, a.x1, a.y1, a.ink_x0, a.ink_x1)).collect::<Vec<_>>()
+        };
+        for f in [qvp_hit_areas as Areas, qvp_hit_areas_view] {
+            assert_eq!(areas(f, -1.0), areas(f, 0.6));
+            assert_ne!(areas(f, 0.0), areas(f, 0.6));
+        }
         qvp_page_free(page);
     }
 }
