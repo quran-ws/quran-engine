@@ -12,6 +12,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   numbers by hand. `scripts/check-parity.py` compares 29 defaults where it compared 26.
 
 ### Changed
+- CI builds the release XCFramework. `scripts/prepare-ios-release.sh` starts
+  `prepare-ios-release.yml`, which builds it on macOS, attaches it to the draft release and
+  pushes the commit that sets its URL, checksum and build commit in `Package.swift`.
+  `release.yml` refuses a tag whose engine sources differ from that build commit.
 - **Breaking.** Swift: `QvpOrnaments.find`, `QvpPage.dress` with a closed set and
   `QvpPassage.layout` on a closed passage stop the program with a fatal error that names the
   object, such as `QvpOrnaments is closed`. They returned nil, the same answer as a refused

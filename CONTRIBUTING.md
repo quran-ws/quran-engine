@@ -112,6 +112,13 @@ Packages ship code only. Apps load page data (`NNN.qvp`, `atlas.qva`,
 The built data is published as a GitHub release with a CDN mirror and is not committed.
 Examples bundle a sample as gitignored assets.
 
+## Releases
+
+CI builds every release artifact. Nobody builds or uploads one from a local machine. A
+release PR gets one commit from `prepare-ios-release.yml` that sets the XCFramework URL and
+checksum in the root `Package.swift`. Start that workflow with
+`scripts/prepare-ios-release.sh X.Y.Z`. `docs/standards/RELEASING.md` has the steps.
+
 ## Pull requests
 
 - One topic per PR. Mechanical moves and renames in their own commits.

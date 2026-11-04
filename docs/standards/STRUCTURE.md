@@ -12,7 +12,7 @@ The layout is part of the public interface. A consumer reads paths. A contributo
 | converter and identity gate | `crates/qvp-convert` | the pipeline. Never consumed by an app |
 | the C ABI | `crates/qvp-ffi`, header at `include/qvp.h` | the single contract. The header is canonical and CI checks every copy against it |
 | reference wrapper | `web/qvp.js` with `index.mjs`, `lite.mjs` | published as `@quran.ws/engine` from the root `package.json` |
-| remote Swift package | root `Package.swift` | exposes `QvpKit` and pins the prepared release XCFramework by URL and checksum |
+| remote Swift package | root `Package.swift` | exposes `QvpKit` and pins the release XCFramework that `prepare-ios-release.yml` built, by URL and checksum |
 | web demo | `web/example/` | build output goes to `dist/web/`, never into the source tree |
 | a platform SDK | `packages/<platform>/<package-name>/` | manifest, README, CHANGELOG and LICENSE inside the package directory |
 | a platform demo | `packages/<platform>/example/` (Flutter: inside the package, the pub.dev layout) | page data gitignored and provisioned by `scripts/sync-example-data.sh`. Every demo implements `docs/EXAMPLE-APP.md` |

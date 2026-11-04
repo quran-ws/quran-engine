@@ -32,6 +32,10 @@ All notable changes to the engine and its packages. The format follows
   returns the whole list as before.
 
 ### Changed
+- CI builds the release XCFramework. `scripts/prepare-ios-release.sh` starts
+  `prepare-ios-release.yml`, which builds it on macOS, attaches it to the draft release and
+  pushes the commit that sets its URL, checksum and build commit in `Package.swift`.
+  `release.yml` refuses a tag whose engine sources differ from that build commit.
 - One composite action, `.github/actions/android-toolchain`, installs Java 17, the Android
   SDK, the pinned NDK and cmake, and cargo-ndk on request. The Android, Flutter, React
   Native and release workflows use it.

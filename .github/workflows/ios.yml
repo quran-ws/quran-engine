@@ -10,7 +10,10 @@ on:
       - "Cargo.toml"
       - "crates/**"
       - "packages/ios/**"
+      - ".github/workflows/prepare-ios-release.yml"
       - "scripts/build-engine-ios.sh"
+      - "scripts/package-ios.sh"
+      - "scripts/set-xcframework.sh"
       - "scripts/sync-test-data.sh"
   push:
     branches: [main]
@@ -47,6 +50,15 @@ jobs:
       - name: Swift tests (macOS slice)
         working-directory: packages/ios/QvpKit
         run: swift test
+      # The packaging and manifest steps of prepare-ios-release.yml, on a copy of the
+      # manifest. Nothing is uploaded or pushed.
+      - name: Package, and set a copy of Package.swift
+        run: |
+          scripts/package-ios.sh
+          cp Package.swift "$RUNNER_TEMP/Package.swift"
+          scripts/set-xcframework.sh v0.0.0 "$(cat dist/ios/QvpEngine.xcframework.zip.checksum)" \
+            "$GITHUB_SHA" "$RUNNER_TEMP/Package.swift"
+          diff Package.swift "$RUNNER_TEMP/Package.swift" || true
       # `xcodebuild test` builds the Demo app and DemoUITests, then runs the six UI smoke
       # tests (open a page, tap a word, highlight, pinch, swipe) on a simulator. A test needs
       # a named device, where a build takes the generic destination, so the step picks the

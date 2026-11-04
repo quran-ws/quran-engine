@@ -1,0 +1,144 @@
+# The first step of a code release. SwiftPM reads the XCFramework URL and checksum from the
+# commit that the tag points at, so the XCFramework is built before the tag. This workflow
+# builds it from the release branch with the commands ios.yml runs, pushes one commit to the
+# release branch that sets the URL, the checksum and the build commit in the root
+# Package.swift, and attaches the zip and its checksum to the draft release vX.Y.Z. release.yml
+# then checks that the tagged commit, the draft and the engine sources agree.
+#
+# Start it with scripts/prepare-ios-release.sh X.Y.Z from the release branch. To run it again,
+# run that script again: it starts a new run from the current branch head. The workflow
+# refuses a run whose commit is no longer the branch head, so "Re-run jobs" in the Actions
+# page fails after this run pushed its commit or after any other push.
+name: Prepare iOS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The release version X.Y.Z, as in Cargo.toml"
+        required: true
+        type: string
+
+concurrency:
+  group: prepare-ios-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # the commit to the release branch and the draft release
+  actions: write # start ci.yml for that commit
+
+jobs:
+  xcframework:
+    name: build QvpEngine.xcframework and set Package.swift
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the version, the branch, the tag and the release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || {
+            echo "::error::'$VERSION' is not X.Y.Z"; exit 1; }
+          tag="v$VERSION"
+          [ "$REF_TYPE" = branch ] && [ "$GITHUB_REF_NAME" != main ] || {
+            echo "::error::start this workflow on the release branch, not on $GITHUB_REF_NAME"; exit 1; }
+          head="$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)"
+          [ "$head" = "$GITHUB_SHA" ] || {
+            echo "::error::$GITHUB_REF_NAME is at $head, not $GITHUB_SHA; run scripts/prepare-ios-release.sh again"; exit 1; }
+          have="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
+          [ "$VERSION" = "$have" ] || {
+            echo "::error::version $VERSION does not match Cargo.toml version $have; run scripts/set-version.sh first"; exit 1; }
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]; then
+            echo "::error::tag $tag already exists"; exit 1
+          fi
+          release="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$tag\") | \"\(.id) \(.draft)\"" | head -1)"
+          case "$release" in
+            "") id="" ;;
+            *" true") id="${release% true}"; echo "reusing draft release $id for $tag" ;;
+            *) echo "::error::a published release for $tag already exists"; exit 1 ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      # The same toolchain, page data and build steps as ios.yml. There is no rust-cache
+      # step: the shipped binary comes from a clean build.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim, x86_64-apple-ios, aarch64-apple-darwin
+      - name: Cache page data
+        uses: actions/cache@v4
+        with:
+          path: dist/pages
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      - name: Fetch page data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
+          QVP_SYNC: pages
+        run: scripts/sync-test-data.sh
+      - name: Build QvpEngine.xcframework
+        run: scripts/build-engine-ios.sh
+      - name: Swift tests (macOS slice)
+        working-directory: packages/ios/QvpKit
+        run: swift test
+      - name: Package
+        run: scripts/package-ios.sh
+
+      # The push comes before the upload. When the branch moved during the build, the push
+      # fails and the draft keeps the assets that match the Package.swift on the branch.
+      - name: Set the URL, the checksum and the build commit in Package.swift
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          checksum="$(cat dist/ios/QvpEngine.xcframework.zip.checksum)"
+          scripts/set-xcframework.sh "$TAG" "$checksum" "$GITHUB_SHA"
+          git diff -- Package.swift
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Package.swift
+          git commit -q -F - <<EOF
+          build(ios): set the $TAG XCFramework URL and checksum
+
+          $RUN_URL built the XCFramework from $GITHUB_SHA
+          with $(rustc --version) and $(xcodebuild -version | head -1).
+          SwiftPM checksum: $checksum
+          EOF
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME" || {
+            echo "::error::$GITHUB_REF_NAME moved during the build; run scripts/prepare-ios-release.sh again"
+            exit 1
+          }
+
+      - name: Attach the zip and its checksum to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          id="$RELEASE_ID"
+          if [ -z "$id" ]; then
+            id="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" -f name="$TAG" \
+              -f body="Prepared iOS artifact for $TAG. The tag workflow publishes this draft." \
+              -F draft=true --jq .id)"
+          fi
+          for path in dist/ios/QvpEngine.xcframework.zip dist/ios/QvpEngine.xcframework.zip.checksum; do
+            name="$(basename "$path")"
+            old="$(gh api "repos/$GITHUB_REPOSITORY/releases/$id/assets" \
+              --jq ".[] | select(.name == \"$name\") | .id")"
+            [ -z "$old" ] || gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"
+            gh api --method POST -H "Content-Type: application/octet-stream" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$id/assets?name=$name" \
+              --input "$path" >/dev/null
+          done
+
+      # A push made with the workflow token starts no workflow, so the pull request's
+      # required checks would not report on the new commit. This step starts ci.yml for it.
+      - name: Run CI on the new commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref "$GITHUB_REF_NAME"
