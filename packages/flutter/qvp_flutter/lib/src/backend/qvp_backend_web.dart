@@ -1283,6 +1283,31 @@ class QvpWebBackend implements QvpBackend {
   );
 
   @override
+  QvpInkBand layoutInkBand(
+    PageHandle handle,
+    QvpView view,
+    double viewportW,
+    double viewportH,
+    double maxHeight,
+    double maxPixels,
+  ) {
+    final options = JSObject()
+      ..['maxHeight'] = maxHeight.toJS
+      ..['maxPixels'] = maxPixels.toJS;
+    final res = _page(handle).callMethod<JSObject>(
+      'layoutInkBand'.toJS,
+      _viewToJs(view),
+      viewportW.toJS,
+      viewportH.toJS,
+      options,
+    );
+    return QvpInkBand(
+      top: (res['top'] as JSNumber).toDartDouble,
+      height: (res['height'] as JSNumber).toDartDouble,
+    );
+  }
+
+  @override
   ({double x, double y}) viewToLayout(
     PageHandle handle,
     QvpView view,

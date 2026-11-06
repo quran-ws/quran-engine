@@ -1368,28 +1368,12 @@ class _QvpPainter extends CustomPainter {
       canvas.drawRect(rect, _boxPaint);
     }
 
-    // The band of a tall page. A standard page fits one GPU texture, so top is 0. A reflowed
-    // page above 4096px is drawn in stepped bands, so a pan reuses the picture until it crosses
-    // a step.
-    //
-    // This arithmetic is the second copy: QvpPageView.kt holds the same formula with MAX_INK_PX.
-    // docs/standards/API-DESIGN.md calls box mathematics engine work and asks for it in the core
-    // behind one symbol, with a conformance scenario. The header has no symbol for it yet
-    // (qvp_layout_draw_list takes band_top and band_bottom and leaves the choice to the host),
-    // so this stays here until one exists. Tracked in the issue linked from the pull request.
+    // The band of the page to record, in layout px. The engine picks it: the whole page when
+    // it fits under the engine's ceiling, otherwise two screens around the reader, with a top
+    // that moves in steps, so a pan reuses the picture until it crosses a step.
     final contentH = (l?.contentH ?? page.height);
-    final double top, bandH;
-    if (contentH <= 4096.0 || size.height <= 0 || view.scale <= 0) {
-      top = 0.0;
-      bandH = math.max(contentH, 1.0);
-    } else {
-      final screenH = (size.height / view.scale).clamp(1.0, 4096.0);
-      final tall = math.min(screenH * 2.0, 4096.0);
-      final step = math.max((tall - screenH) / 2.0, 1.0);
-      top =
-          (((-view.offsetY / view.scale) - step) / step).floorToDouble() * step;
-      bandH = tall;
-    }
+    final band = page.layoutInkBand(view.view, size.width, size.height);
+    final top = band.top, bandH = math.max(band.height, 1.0);
 
     // Base ink cache. The picture is recorded in layout px through _placeInLayout, so the
     // reader's pan and zoom never invalidate it. The engine layout's own offsets do, and they

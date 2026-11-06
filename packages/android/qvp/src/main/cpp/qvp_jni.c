@@ -305,6 +305,10 @@ jfloatArray FN(viewAnchor)(JNIEnv* env, jclass c, jlong h, jfloatArray view, jin
 jfloatArray FN(viewToLayout)(JNIEnv* env, jclass c, jlong h, jfloatArray view, jfloat vx, jfloat vy) {
     QvpView in = view_of(env, view); float out[2]; qvp_view_to_layout(PG(h), &in, vx, vy, out); return floats(env, out, 2);
 }
+jfloatArray FN(layoutInkBand)(JNIEnv* env, jclass c, jlong h, jfloatArray view, jfloat vw, jfloat vh, jfloat max_height, jfloat max_pixels) {
+    QvpView in = view_of(env, view); QvpInkBand b; qvp_layout_ink_band(PG(h), &in, vw, vh, max_height, max_pixels, &b);
+    float out[2] = {b.top, b.height}; return floats(env, out, 2);
+}
 jint FN(viewSwipe)(JNIEnv* env, jclass c, jfloat dx, jfloat dy, jfloat vx, jfloat vy) { return qvp_view_swipe(dx, dy, vx, vy); }
 /* how many pages that drag turns, in the mushaf's own right-to-left order */
 jint FN(swipePages)(JNIEnv* env, jclass c, jfloat dx, jfloat dy, jfloat vx, jfloat vy) { return qvp_swipe_pages(dx, dy, vx, vy); }

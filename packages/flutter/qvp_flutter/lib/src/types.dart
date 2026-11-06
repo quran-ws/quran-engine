@@ -118,6 +118,10 @@ abstract final class QvpDefaults {
   /// How far a reflowed row much shorter than its neighbours opens towards them, as a share
   /// of the difference.
   static const double reflowRelax = 0.5;
+
+  /// The tallest band of ink a view draws at once, in viewport px: what
+  /// [QvpPage.layoutInkBand] holds a band to by default.
+  static const double maxInkHeight = 4096;
 }
 
 /// The engine's name tables (`QVP_NAMES_*`), loaded from the engine when a [QvpEngine] opens.
@@ -659,6 +663,24 @@ final class QvpZoom {
 
   @override
   int get hashCode => Object.hash(mode, step, zoom);
+}
+
+/// [QvpPage.layoutInkBand]: the band of the layout a host keeps drawn, in layout px. It sits
+/// on the screen at `view.offsetY + view.scale·y`.
+@immutable
+final class QvpInkBand {
+  const QvpInkBand({required this.top, required this.height});
+  final double top, height;
+
+  @override
+  bool operator ==(Object other) =>
+      other is QvpInkBand && other.top == top && other.height == height;
+
+  @override
+  int get hashCode => Object.hash(top, height);
+
+  @override
+  String toString() => 'QvpInkBand(top: $top, height: $height)';
 }
 
 /// A point `p` draws at `offset + scale · p`. The reader's pan and zoom, which the engine moves.

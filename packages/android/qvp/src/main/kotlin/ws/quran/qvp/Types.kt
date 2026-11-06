@@ -30,6 +30,8 @@ object QvpDefaults {
     const val SWIPE_AXIS_RATIO = 1.5f; const val SWIPE_DISTANCE = 40f; const val SWIPE_VELOCITY = 500f
     const val ZOOM_SNAP_HYSTERESIS = 0.03f; const val ZOOM_QUANTUM = 0.01f
     const val REFLOW_RELAX = 0.5f; const val REFLOW_MAX_STRETCH = 2f
+    /** The tallest band of ink a view draws at once, in viewport px: what [QvpPage.layoutInkBand] holds a band to by default. */
+    const val MAX_INK_HEIGHT = 4096f
 
     /** Every default by its camelCase name, for a host that reads the table whole (the React Native
      * module's constants). Member references only: the numbers live above, where the parity check
@@ -45,7 +47,7 @@ object QvpDefaults {
         "minZoom" to MIN_ZOOM, "maxZoom" to MAX_ZOOM, "zoomedThreshold" to ZOOMED_THRESHOLD,
         "swipeAxisRatio" to SWIPE_AXIS_RATIO, "swipeDistance" to SWIPE_DISTANCE, "swipeVelocity" to SWIPE_VELOCITY,
         "zoomSnapHysteresis" to ZOOM_SNAP_HYSTERESIS, "zoomQuantum" to ZOOM_QUANTUM,
-        "reflowRelax" to REFLOW_RELAX, "reflowMaxStretch" to REFLOW_MAX_STRETCH)
+        "reflowRelax" to REFLOW_RELAX, "reflowMaxStretch" to REFLOW_MAX_STRETCH, "maxInkHeight" to MAX_INK_HEIGHT)
 
     /** [all] as the decimals the header states, for a bridge that carries doubles. A `Float` widened
      * with `toDouble()` arrives as 0.6000000238418579, so it goes through its shortest decimal
@@ -194,6 +196,9 @@ data class QvpView(val scale: Float = 1f, val offsetX: Float = 0f, val offsetY: 
     internal fun floats() = floatArrayOf(scale, offsetX, offsetY)
     internal companion object { fun of(v: FloatArray) = QvpView(v[0], v[1], v[2]) }
 }
+/** [QvpPage.layoutInkBand]: the band of the layout a host keeps drawn, in layout px. It sits on the
+ * screen at `view.offsetY + view.scale·y`. */
+data class QvpInkBand(val top: Float, val height: Float)
 /** What a gesture produced: the control to keep, the view to draw with, and whether the page was
  * laid out again under it. */
 data class QvpZoomChange(val zoom: QvpZoom, val view: QvpView, val relaid: Boolean)

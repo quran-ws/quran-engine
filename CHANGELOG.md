@@ -16,6 +16,16 @@ All notable changes to the engine and its packages. The format follows
   `ayahMarksView` on React Native. Each answers its page-unit call through the current
   layout, so an app that draws its own overlay on a reflowed page reads where each word or
   mark is drawn (#82). iOS bound all three already.
+- `qvp_layout_ink_band` picks the band of a laid-out page that a host keeps drawn: the whole
+  page when it fits, otherwise two screens around the reader. The band's top moves in steps,
+  so a pan inside one step redraws nothing. The band is in layout px, ready for
+  `qvp_layout_draw_list`. Its two limits are in viewport px: `max_height` (0 takes the new
+  `QVP_DEFAULT_MAX_INK_HEIGHT`, 4096), which no band passes, and `max_pixels`, a pixel budget
+  (0 is no limit), which shrinks the band from two screens to no less than one. With no
+  screen (no scale, no viewport height, or a non-finite scale, height or offset) the band is
+  the whole page, however tall. Bound as `layoutInkBand` in JavaScript, Kotlin, Dart and
+  Swift. React Native calls it through the Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
+  Kotlin, Dart and Swift tests replay them (#134).
 
 ### Changed
 - `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and
@@ -33,6 +43,18 @@ All notable changes to the engine and its packages. The format follows
   native view's page-load and word-tap events, and checks that the app sends one highlight
   on the tapped word in the `highlights` prop and shows the word key. The workflow's
   `npm test` step runs it (#154).
+- The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
+  engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
+  not agree (#134):
+  - Android drew a printed page as a band. It now draws any page whole when the page fits the
+    ceiling and the ink budget, as it already did for a reflowed page. Its band no longer
+    passes the ceiling on a screen taller than 4096 px. The ink budget now limits the band as
+    well as the whole page, down to one screen and never below.
+  - Flutter measured the 4096 ceiling in layout px. It now measures it in viewport px, so a
+    magnified page bands once it is taller than 4096 px on the screen. At a view scale of 1
+    nothing changes.
+  - The web band now stays under the tallest canvas a browser makes, and under the ink budget
+    down to one screen.
 
 ### Removed
 

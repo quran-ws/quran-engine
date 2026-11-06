@@ -69,6 +69,8 @@ internal object QvpNative {
     @JvmStatic external fun dressView(h: Long, scale: Float, viewportW: Float): FloatArray
     @JvmStatic external fun viewAnchor(h: Long, view: FloatArray, word: Int, nx: Float, ny: Float, toX: Float, toY: Float, viewportW: Float, viewportH: Float): FloatArray
     @JvmStatic external fun viewToLayout(h: Long, view: FloatArray, vx: Float, vy: Float): FloatArray
+    // {top, height}
+    @JvmStatic external fun layoutInkBand(h: Long, view: FloatArray, viewportW: Float, viewportH: Float, maxHeight: Float, maxPixels: Float): FloatArray
     @JvmStatic external fun viewSwipe(dx: Float, dy: Float, vx: Float, vy: Float): Int
     @JvmStatic external fun swipePages(dx: Float, dy: Float, vx: Float, vy: Float): Int
     // the reader's zoom control: zoom FloatArray {mode, step, zoom}; a gesture answers

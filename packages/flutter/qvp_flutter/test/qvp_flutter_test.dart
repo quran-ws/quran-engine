@@ -6,6 +6,7 @@
 // Data: <repo>/dist/pages/042.qvp, 042.words.json, atlas.qva
 // (`cargo run -p qvp-convert --release -- batch pages dist/pages`).
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -717,6 +718,62 @@ void main() {
     expect(cases.length, 8);
     p.dispose();
   });
+
+  // The band of the page a host keeps drawn: a page that fits, a magnified page
+  // drawn a band at a time, pans inside one step and across it, the host's own
+  // limits, and no screen at all.
+  test(
+    'ink band scenarios match the engine (conformance/scenarios/ink-band.json)',
+    () {
+      final json = jsonDecode(
+        File('$repo/conformance/scenarios/ink-band.json').readAsStringSync(),
+      ) as Map<String, dynamic>;
+      final tolerance = (json['tolerance'] as num).toDouble();
+      final cases = json['cases'] as List<dynamic>;
+      final s = json['spec'] as Map<String, dynamic>;
+      double f(String k) => (s[k] as num).toDouble();
+      void close(double got, num want, String what) => expect(
+        (got - want).abs() <= tolerance * math.max(1, want.abs()),
+        isTrue,
+        reason: '$what: got $got, engine says $want',
+      );
+      final p = engine.loadPage(File(pagePath).readAsBytesSync());
+      final l = p.layout(
+        QvpLayoutSpec(
+          viewportW: f('viewportW'),
+          viewportH: f('viewportH'),
+          padTop: f('padTop'),
+          padBottom: f('padBottom'),
+          padLeft: f('padLeft'),
+          padRight: f('padRight'),
+        ),
+      );
+      close(l.contentH, json['contentH'] as num, 'contentH');
+      for (final c in cases) {
+        final v = c['view'] as Map<String, dynamic>;
+        final got = p.layoutInkBand(
+          QvpView(
+            scale: (v['scale'] as num).toDouble(),
+            offsetX: (v['offsetX'] as num).toDouble(),
+            offsetY: (v['offsetY'] as num).toDouble(),
+          ),
+          (c['viewportW'] as num).toDouble(),
+          (c['viewportH'] as num).toDouble(),
+          maxHeight: (c['maxHeight'] as num).toDouble(),
+          maxPixels: (c['maxPixels'] as num).toDouble(),
+        );
+        final want = c['band'] as Map<String, dynamic>;
+        close(got.top, want['top'] as num, 'ink band ${c['name']} top');
+        close(
+          got.height,
+          want['height'] as num,
+          'ink band ${c['name']} height',
+        );
+      }
+      expect(cases.length, 14);
+      p.dispose();
+    },
+  );
 
   test('the reader\'s zoom control reflows the page and one loop draws it', () {
     const spec = QvpLayoutSpec(
