@@ -313,6 +313,11 @@ jobs:
         run: |
           npm install -g npm@11.19.1
           [ "$(npm --version)" = 11.19.1 ]
+          have="$(node -p "require('./packages/react-native/qvp-react-native/package.json').version")"
+          [ "$have" = "$VERSION" ] || {
+            echo "::error::packages/react-native/qvp-react-native/package.json has version $have, not $VERSION"
+            exit 1
+          }
           if npm view "@quran.ws/qvp-react-native@$VERSION" version >/dev/null 2>&1; then
             echo "::notice::@quran.ws/qvp-react-native $VERSION already exists on npm"
             echo "published=true" >> "$GITHUB_OUTPUT"
@@ -329,7 +334,7 @@ jobs:
           pom="https://repo1.maven.org/maven2/ws/quran/qvp-android/$VERSION/qvp-android-$VERSION.pom"
           tries=60
           for i in $(seq 1 "$tries"); do
-            if curl -fsSI "$pom" >/dev/null 2>&1; then
+            if curl -fsSI --max-time 30 "$pom" >/dev/null 2>&1; then
               echo "Maven Central serves ws.quran:qvp-android:$VERSION (try $i of $tries)"
               exit 0
             fi
@@ -345,7 +350,8 @@ jobs:
       - name: Install the example
         if: steps.npm.outputs.published != 'true'
         working-directory: packages/react-native/example
-        run: npm install --no-audit --no-fund
+        # This job holds the npm publishing token, so no package install script runs.
+        run: npm ci --ignore-scripts --no-audit --no-fund
       # -PqvpFromMaven leaves the `:qvp` project out of the example's build, so the module
       # takes ws.quran:qvp-android from Maven Central at the version in its package.json, as
       # an app that installs the package from npm does. A module that calls library API the
@@ -356,11 +362,6 @@ jobs:
         env:
           VERSION: ${{ needs.verify.outputs.version }}
         run: |
-          have="$(node -p "require('../../qvp-react-native/package.json').version")"
-          [ "$have" = "$VERSION" ] || {
-            echo "::error::packages/react-native/qvp-react-native/package.json has version $have, not $VERSION"
-            exit 1
-          }
           ./gradlew --no-daemon -PqvpFromMaven :quran.ws_qvp-react-native:compileReleaseKotlin
       - name: npm
         if: steps.npm.outputs.published != 'true'
