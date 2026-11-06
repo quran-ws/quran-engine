@@ -125,7 +125,7 @@ impl Page {
         done
     }
     /// Hide again the last `n` shown words of the mask: walk back from its end (from its start
-    /// when `reverse`) and hide the first `n` shown words met. Returns how many changed.
+    /// when `reverse`) and hide the first `n` shown words it meets. Returns how many changed.
     pub fn mask_back(&mut self, n: usize) -> usize {
         let order: Vec<u32> =
             if self.mask.reverse { self.mask.words.clone() } else { self.mask.words.iter().rev().copied().collect() };
