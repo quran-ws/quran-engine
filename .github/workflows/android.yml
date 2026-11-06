@@ -32,6 +32,11 @@ jobs:
       - uses: ./.github/actions/android-toolchain
         with:
           cargo-ndk: "true"
+      # detekt-baseline.xml lists the items that had no doc block when the check went in, so
+      # only a new public item without one fails.
+      - name: Doc blocks (detekt)
+        working-directory: packages/android
+        run: ./gradlew --no-daemon :qvp:detekt
       - name: Unit tests
         working-directory: packages/android
         run: ./gradlew --no-daemon :qvp:testDebugUnitTest

@@ -1,11 +1,13 @@
 import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
+import io.gitlab.arturbosch.detekt.extensions.DetektExtension
 
 plugins {
     id("com.android.application") version "8.7.3" apply false
     id("com.android.library") version "8.7.3" apply false
     id("org.jetbrains.kotlin.android") version "2.0.21" apply false
     id("com.vanniktech.maven.publish") version "0.35.0" apply false
+    id("io.gitlab.arturbosch.detekt") version "1.23.8" apply false
 }
 
 // Publishing belongs to this build, not to the library module. `:qvp` is also included by
@@ -48,5 +50,17 @@ project(":qvp") {
                 }
             }
         }
+    }
+    // The doc-block check of docs/standards/CODE-STYLE.md, applied here for the same reason as
+    // publishing: a root that includes `:qvp` only to compile it needs no detekt. detekt.yml turns
+    // on the two doc rules and nothing else. detekt-baseline.xml lists the items that had no doc
+    // block when the check went in; a new item without one fails. `./gradlew :qvp:detekt` runs it,
+    // and `:qvp:detektBaseline` writes the list again after items are documented.
+    apply(plugin = "io.gitlab.arturbosch.detekt")
+    configure<DetektExtension> {
+        buildUponDefaultConfig = true
+        config.setFrom(rootProject.file("detekt.yml"))
+        baseline = rootProject.file("detekt-baseline.xml")
+        source.setFrom("src/main/kotlin")
     }
 }
