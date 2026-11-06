@@ -82,7 +82,9 @@ impl View {
     /// A host draws the band once into a picture or a bitmap and moves that picture as the
     /// reader pans. The band's top moves in steps of half its slack rather than with the
     /// finger, so a pan inside one step changes neither the band nor the picture, and a pan
-    /// across a step moves the band by exactly one step.
+    /// across a step moves the band by exactly one step. A band with less than 2 px of slack
+    /// has no step of a whole pixel, so it follows the reader, and its slack is shared above
+    /// and below the screen.
     ///
     /// Two limits bound the band, both in viewport pixels, because a texture is measured on
     /// the screen and not in the layout. `max_height` is the tallest band the host can draw:
@@ -122,10 +124,13 @@ impl View {
             return whole;
         }
         // A band two screens tall, or as tall as the ceiling allows, and a step of half the
-        // slack. The screen at the top of the band is `-offset_y` down the page.
+        // slack. The screen at the top of the band is `-offset_y` down the page. A step under
+        // one pixel would redraw on every frame of a pan anyway, so such a band follows the
+        // reader instead, with its slack shared either side: a step larger than half the slack
+        // would leave the edge of the screen with no ink.
         let tall = (screen * 2.0).min(ceiling);
-        let step = ((tall - screen) / 2.0).max(1.0);
-        let top = ((-self.offset_y - step) / step).floor() * step;
+        let half = (tall - screen) / 2.0;
+        let top = if half >= 1.0 { ((-self.offset_y - half) / half).floor() * half } else { -self.offset_y - half };
         InkBand { top: top / scale, height: tall / scale }
     }
 }

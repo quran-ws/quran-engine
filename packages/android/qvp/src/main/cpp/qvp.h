@@ -249,8 +249,8 @@ uint32_t qvp_layout_path_groups(const QvpPage*, uint32_t* out, uint32_t cap);   
 uint32_t qvp_layout_omitted_paths(const QvpPage*, uint32_t* out, uint32_t cap);  /* paths this layout does not draw (sheet furniture and a native surah frame when reflowed) */
 uint32_t qvp_layout_draw_list(const QvpPage*, float band_top, float band_bottom /* <= top = the whole page */, uint32_t* out /* n × {path, placement} */, uint32_t cap);   /* everything this layout draws inside a band of it, in drawing order: one loop draws any page */
 /* Which band of the current layout to keep drawn: the whole page when it fits, otherwise two screens around the reader. Its top
-   moves in steps, so a pan inside one step redraws nothing and a pan across one moves the band by one step. Pass top and
-   top + height to qvp_layout_draw_list.
+   moves in steps (with under 2 px of slack it follows the reader), so a pan inside one step redraws nothing and a pan across
+   one moves the band by one step. Pass top and top + height to qvp_layout_draw_list.
    The band is in layout px and sits on the screen at view.offset_y + view.scale·y. The limits are viewport px, since a texture is
    measured on the screen. max_height is the tallest band the host can draw (<= 0: QVP_DEFAULT_MAX_INK_HEIGHT), and no band passes
    it. max_pixels is the pixels the host keeps for one band, width × height (<= 0: no limit); it shrinks the band from two

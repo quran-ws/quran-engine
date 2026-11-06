@@ -450,7 +450,9 @@ const drawList = page.layoutDrawList(band.top, band.top + band.height)
 The band is the whole page when the page fits. Otherwise it is two screens tall around the
 reader, and its top moves in steps: half a screen while the limits leave room for two. A pan
 inside one step returns the same band, so the image in hand stays valid. A pan across a step
-moves the band by exactly one step. Put `band.top` in the image's cache key.
+moves the band by exactly one step. With less than 2 px between the band and the screen, no
+step of a whole pixel fits, so the top follows the reader. Put `band.top` in the image's cache
+key.
 
 The two limits are in viewport px, because a texture is measured on the screen, not in the
 layout:
@@ -463,6 +465,10 @@ layout:
   The budget can shrink the band from two screens down to one screen, but not below: a band
   shorter than the screen leaves part of the screen with no ink. So a band can hold more
   pixels than `maxPixels` when one screen does.
+
+The limits are in the unit of the viewport the host passes. A host that measures its view in
+points, as iOS does, divides a limit in device pixels by the screen scale: a bitmap of 16384
+rows at 3 pixels to the point is a `maxHeight` of 5461 points.
 
 The page is whole when it fits under both limits, read this way. One case ignores both limits:
 a view with no scale, a viewport with no height, or a scale, viewport height or `offsetY` that
