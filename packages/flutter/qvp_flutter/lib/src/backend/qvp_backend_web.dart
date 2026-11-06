@@ -1,4 +1,7 @@
 // dart:js_interop implementation of QvpBackend for Flutter Web.
+// crates/qvp-ffi/include/qvp.h documents every call and struct this file marshals, so its
+// members carry no doc block of their own.
+// ignore_for_file: public_member_api_docs
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';

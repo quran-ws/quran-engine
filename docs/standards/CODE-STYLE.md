@@ -40,7 +40,7 @@ One standard for Rust, C, JavaScript, Kotlin, Dart and Swift.
 | C header | block comment at top | `/** … */` above each declaration | `check-parity.py` requires a block per symbol |
 | JavaScript / TypeScript | `//` line | JSDoc `/** … */` | review; eslint `jsdoc/require-jsdoc` is not set up (issue #141) |
 | Kotlin | `//` line | KDoc `/** … */` | review; detekt `UndocumentedPublicFunction` is not set up (issue #141) |
-| Dart | `//` line | `///` | `dart format --language-version=latest` in CI; `public_member_api_docs` lint is not yet on (issue #135) |
+| Dart | `//` line | `///` | `flutter analyze` in `.github/workflows/flutter.yml` runs the `public_member_api_docs` lint that the package's `analysis_options.yaml` turns on; `dart format --language-version=latest` in CI. Exempt: the generated `lib/src/bindings.dart` and the backends in `lib/src/backend/`, because they only marshal C calls that `qvp.h` documents |
 | Swift | `//` line | `///` | review; swiftlint `missing_docs` is not set up (issue #141) |
 | shell / Python | purpose, inputs, outputs at the top | n/a | review |
 
@@ -53,7 +53,8 @@ Reviews do not discuss whitespace. CI runs the formatters in check mode.
 
 CI runs the tools the table names. `check-parity.py` runs in the `standards` job. `cargo doc`
 runs with missing docs as errors in the `engine` job (`scripts/check.sh docs`). The Flutter
-workflow runs `dart format --language-version=latest`. After a `pub get`, plain `dart format`
-reads the package's minimum Dart version (3.6) and gives an older style. The flag keeps the
-newest style. Where the table says review, no tool runs: the JavaScript, Kotlin and Swift
-linters are owed (issue #141), and the Dart doc lint is not on (issue #135).
+workflow runs `flutter analyze`, which fails on a public Dart item with no doc block, and
+`dart format --language-version=latest`. After a `pub get`, plain `dart format` reads the
+package's minimum Dart version (3.6) and gives an older style. The flag keeps the newest
+style. Where the table says review, no tool runs: the JavaScript, Kotlin and Swift
+linters are owed (issue #141).

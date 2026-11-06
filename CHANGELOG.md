@@ -55,6 +55,11 @@ All notable changes to the engine and its packages. The format follows
     nothing changes.
   - The web band now stays under the tallest canvas a browser makes, and under the ink budget
     down to one screen.
+- Flutter: `flutter analyze` fails on a public item with no doc block. The package turns on
+  the `public_member_api_docs` lint, and every public item of the API files has a block
+  that gives its units, its range and what an empty or null result means. The generated
+  `bindings.dart` and the three backend files are exempt, because `qvp.h` documents the
+  calls they marshal. `docs/standards/CODE-STYLE.md` names the lint and the exemption (#135).
 
 ### Removed
 

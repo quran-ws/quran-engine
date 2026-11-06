@@ -1,4 +1,7 @@
 // dart:ffi implementation of QvpBackend.
+// crates/qvp-ffi/include/qvp.h documents every call and struct this file marshals, so its
+// members carry no doc block of their own.
+// ignore_for_file: public_member_api_docs
 import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'dart:io';
