@@ -53,9 +53,8 @@ export function rgba(c: Color, alpha: number): string {
 
 // ── targets and selectors (same shapes as web/qvp.js T / Sel) ────────────────────────────────
 // The codes come from qvp.h through codes.ts, which scripts/gen-rn-enums.py writes; the Android
-// module reads them back with the same table.
-/** A target as `T` makes it: a QVP_TARGET_* code and its arguments. */
 // and iOS modules read them back with the same table.
+/** A target as `T` makes it: a QVP_TARGET_* code and its arguments. */
 export interface TargetObj { target: number; a?: number; b?: number; c?: number; words?: number[] }
 /** 'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | word index | [indices] | T.* */
 export type Target = string | number | number[] | TargetObj;
