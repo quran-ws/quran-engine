@@ -18,18 +18,23 @@ import {
 import { SELECTOR, TARGET } from './codes';
 
 // ── constants (mirror qvp.h) ─────────────────────────────────────────────────────────────────
-/** QVP_KIND_*: what a path is. ORNAMENT is a printed ornament, such as the frame around a surah name. */
+/** The path kinds (QVP_KIND_*): what a path draws. */
 export const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, ORNAMENT: 5, PAGE_NUMBER: 6, RUNNING_HEAD: 7, OTHER: 255 } as const;
+/** The mark families (QVP_FAMILY_*) that a theme colours as one. */
 export const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 } as const;
+/** The mark categories (QVP_CATEGORY_*). */
 export const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGRAPHIC: 4, DABT: 5, WAQF: 6, READING_SIGN: 7, STANDALONE: 8 } as const;
-/** QVP_DECORATION_*: the kind of a decoration, a group of paths that is not a word. */
+/** The decoration kinds (QVP_DECORATION_*): the page's ornaments and furniture. */
 export const DECORATION = { AYAH_MARK: 0, SURAH_NAME: 1, BASMALAH: 2, DIVISION_MARK: 3, SAJDAH_MARK: 4, PAGE_NUMBER: 5, RUNNING_HEAD: 6, OTHER: 255 } as const;
+/** The style layers (QVP_LAYER_*). A rule on a higher layer wins over one below it. */
 export const LAYER = { BASE: 0, THEME: 10, HIGHLIGHT: 50, SELECTION: 60, TOP: 100 } as const;
+/** The divisions of the mushaf (QVP_DIVISION_*). */
 export const DIVISION = { JUZ: 0, HIZB: 1, NISF: 2, RUBU_AL_HIZB: 3 } as const;
 /** The three kinds of ornament a page can be dressed in, in engine order. Pass one to `find` or `ofKind`. */
 export const ORNAMENT_KIND = ['ayah_mark', 'surah_header', 'page_frame'] as const;
 
 // ── colours ──────────────────────────────────────────────────────────────────────────────────
+/** A colour: '#rgb', '#rrggbb', '#rrggbbaa', or a 0xRRGGBBAA number. */
 export type Color = string | number;
 /** Any accepted colour ('#rgb' | '#rrggbb' | '#rrggbbaa' | 0xRRGGBBAA) → '#rrggbbaa'. */
 export function css(c: Color | null | undefined): string | undefined {
@@ -49,9 +54,11 @@ export function rgba(c: Color, alpha: number): string {
 // ── targets and selectors (same shapes as web/qvp.js T / Sel) ────────────────────────────────
 // The codes come from qvp.h through codes.ts, which scripts/gen-rn-enums.py writes; the Android
 // module reads them back with the same table.
+/** A target as `T` makes it: a QVP_TARGET_* code and its arguments. */
 export interface TargetObj { target: number; a?: number; b?: number; c?: number; words?: number[] }
 /** 'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | word index | [indices] | T.* */
 export type Target = string | number | number[] | TargetObj;
+/** Make a target: what resolves to a word list. A word is its index on the page, a line its printed number from 1. */
 export const T = {
   page: (): TargetObj => ({ target: TARGET.page }),
   word: (i: number): TargetObj => ({ target: TARGET.word, a: i }),
@@ -62,7 +69,9 @@ export const T = {
   surah: (s: number): TargetObj => ({ target: TARGET.surah, a: s }),
   range: (a: number, b: number): TargetObj => ({ target: TARGET.range, a, b }),
 };
+/** A selector as `Sel` makes it: a QVP_SELECTOR_* code and its arguments. */
 export interface Selector { selector: number; a?: number; b?: number; c?: number; mark?: string }
+/** Make a selector: what a style rule applies to. A mark, category, family or kind is an id or a name; a line is its printed number from 1. */
 export const Sel = {
   page: (): Selector => ({ selector: SELECTOR.page }),
   path: (p: number): Selector => ({ selector: SELECTOR.path, a: p }),
@@ -84,43 +93,73 @@ export const Sel = {
 };
 
 // ── records ──────────────────────────────────────────────────────────────────────────────────
+/** A text form. Every form but `rasmUthmani` needs the words sidecar (`wordsUri`). */
 export type Form = 'rasmUthmani' | 'rasmImlai' | 'qpc' | 'rasm' | 'search';
+/** What a highlight paints: the words' ink, a band behind them, or both. */
 export type HighlightMode = 'ink' | 'band' | 'both';
+/** How a mask covers a word: it hides the ink, or draws a block or a blur over it. */
 export type MaskMode = 'hide' | 'block' | 'blur';
+/** A division of the mushaf by name. */
 export type DivisionKind = 'juz' | 'hizb' | 'nisf' | 'rubuAlHizb';
+/** One path of a word: its kind, its mark, and the mark's category and family, by id and by name. */
 export interface WordPath { index: number; kind: number; kindName: string; mark: number; markName: string; nthMark: number; nthInWord: number; category: number; categoryName: string; family: number; familyName: string; line: number }
+/** One word of the page. The box is in page units; `forms` holds the text forms the page has. */
 export interface Word {
   index: number; surah: number; ayah: number; word: number; line: number; lineIndex: number; ayahIndex: number;
   x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number;
   wordKey: string; ayahKey: string; forms: Partial<Record<Form, string>>; label: string; paths: WordPath[];
 }
+/** One decoration of the page: an ayah mark, a surah name, a basmalah or other furniture. The box is in page units. */
 export interface Deco { index: number; decoration: number; decorationName: string; surah: number; ayah: number; line: number; x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number }
 /** The one hit shape for every hit test; the exact variants report distance 0. `isExact` is true only when the point is inside an outline. */
 export interface Hit { word: number; path: number; decoration: number; line: number; distance: number; isExact: boolean; wordKey: string | null; ayahKey: string | null }
+/** The part of one ayah that is on this page: `fragment` of `fragments`, with its words and its box in page units. */
 export interface Ayah { index: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDecoration: number; bbox: number[] }
+/** One printed line: its words, its box, and its band, in page units. */
 export interface Line { index: number; lineNumber: number; isHeader: boolean; firstWord: number; nWords: number; bbox: number[]; bandY0: number; bandY1: number; centre: number }
+/** The selected words, their text, and the citation of the selection. */
 export interface SelectionInfo { words: number[]; text: string; citation: string; textWithCitation: string }
+/** What a loaded page is: its number, its size in page units, its record counts, and the text forms it has. */
 export interface PageInfo { page: number; width: number; height: number; nLines: number; nAyahs: number; nWords: number; nPaths: number; nDecorations: number; lineSpacing: number; forms: Form[]; loadMs: number; bytes: number; uri?: string }
+/** One search match. `isLooseMatch` is true when only the loose pass found it, and a UI should say so. */
 export interface Match { word: number; index: number; isLooseMatch: boolean; wordKey: string; text: string }
+/** One surah with text on the page: its ayah count, its banner and basmalah flags, its place and its names. */
 export interface Surah { number: number; ayahCount: number; hasBanner: boolean; hasBasmalah: boolean; place: string; bannerDecoration: number; arabic: string; latin: string; english: string }
+/** A division that starts on this page, and the ayah and line it starts at. */
 export interface Division { division: DivisionKind; number: number; surah: number; ayah: number; line: number; ayahIndex: number }
+/** One ayah-mark medallion: its centre and radius, and its ornament and numeral paths. */
 export interface Marker { decoration: number; surah: number; ayah: number; line: number; cx: number; cy: number; r: number; ornamentPath: number; numeralPath: number }
+/** A surah heading: the box a frame fills, and the title ink inside it. */
 export interface SurahHeader { decoration: number; surah: number; line: number; x0: number; y0: number; x1: number; y1: number; titleX0: number; titleY0: number; titleX1: number; titleY1: number }
+/** One drawn hizb rosette, with the division numbers it marks. */
 export interface Rosette { decoration: number; surah: number; ayah: number; juz: number; hizb: number; nisf: number; rubuAlHizb: number; rubuAlHizbInHizb: number }
+/** One sajdah sign on the page, and the ayah it belongs to. */
 export interface Sajdah { decoration: number; surah: number; ayah: number; signPath: number }
+/** The crop rectangle of a target, and how many words it holds. */
 export interface CropBox { x0: number; y0: number; x1: number; y1: number; nWords: number; ayahMarkDecoration: number }
 /** A zoom and pan of the page: the scale and the offset of its origin. */
 export interface ViewState { scale: number; offsetX: number; offsetY: number }
+/**
+ * Page to viewport. On a printed page, viewX = offsetX + x · scale and viewY = offsetY + (y + lineDy[line]) · scale.
+ * A reflowed page, which the default stepped zoom gives once the reader zooms in, moves words, not lines, so `lineDy`
+ * places nothing there and `lineDy` and `slots` hold the rows: ask `wordBoundsView` where a word is, and `hitTestView`
+ * what is under a point. The fit fields show the whole content.
+ */
 export interface Layout { scale: number; offsetX: number; offsetY: number; contentW: number; contentH: number; lineSpacing: number; fitScale: number; fitX: number; fitY: number; lineDy: number[]; slots: number[][] }
+/** Timings and counts of the last frame and the page load, for a debug overlay. */
 export interface Stats { loadMs: number; bytes: number; baseMs: number; overlayMs: number; basePaths: number; overlayPaths: number; bands: number; hitUs: number; animating: boolean; styleHandles: number; highlightHandles: number; engineVersion: string; viewScale: number; layout: Layout | null }
+/** One surah of the atlas: the page it starts on, its ayah count, its place and its names. */
 export interface AtlasSurah { number: number; page: number; ayahCount: number; place: string; arabic: string; latin: string; english: string }
+/** Where a division starts: the ayah and the page. */
 export interface AtlasRubuAlHizb { rubuAlHizb: number; surah: number; ayah: number; page: number; ayahKey: string }
 
+/** How a highlight looks. The paddings and the radius are page units, and `ms` is the transition time. */
 export interface HighlightStyle { mode?: HighlightMode; ink?: Color; band?: Color; height?: 'lineSpacing' | 'ink'; padX?: number; padY?: number; radius?: number; seam?: number; ms?: number; layer?: number }
 /** One declarative highlight; the native side keeps id → handle and calls highlight / moveHighlight / restyleHighlight / removeHighlight on diff. */
 export interface Highlight { id: string; target: Target; style?: HighlightStyle }
 /** One declarative style rule: `selector` (→ page.style) or `target` (→ page.styleTarget); `hide` → page.hide(selector). */
 export interface StyleRule { id: string; selector?: Selector; target?: Target; color?: Color; ms?: number; layer?: number; hide?: boolean }
+/** Colours by mark family, and by mark name in `marks`. A colour left out keeps what the page has. */
 export interface Theme { ink?: Color; diacritics?: Color; dots?: Color; waqf?: Color; sifr?: Color; ayahMark?: Color; numeral?: Color; headers?: Color; marks?: Record<string, Color>; ms?: number }
 /** `from` masks every word from that index to the end of the page instead of `target`. */
 export interface Mask { target?: Target; from?: number; mode?: MaskMode; blockColor?: Color; padX?: number; padY?: number; radius?: number; reverse?: boolean }
@@ -136,6 +175,7 @@ export type Lineage = 'scan' | 'font';
 export interface OrnamentPart { index: number; color: number; stroke: boolean; name: string }
 /** What an ornament may be redistributed under. Read it before you publish a dressed page. */
 export interface Licence { id: string; status: string; redistributable: boolean; attribution: string }
+/** One ornament of a set: a medallion, a band or a border, from a mushaf or a font. */
 export interface Ornament { index: number; kind: OrnamentKind; lineage: Lineage; style: string; riwayah: string; hasSlices: boolean; licence: Licence; parts: OrnamentPart[] }
 /** One mushaf or font of a set, with the ornament it has of each kind or null. */
 export interface OrnamentStyle { style: string; riwayah: string; lineage: Lineage; ayahMark: Ornament | null; surahHeader: Ornament | null; pageFrame: Ornament | null }
@@ -166,13 +206,14 @@ export interface DressInfo {
 export interface Dress extends DressSpec { ornaments: QvpOrnaments | number }
 
 // ── the view ─────────────────────────────────────────────────────────────────────────────────
-/** What a pinch does to the page: the engine owns the policy, this names which one. */
 /** How the words are broken onto rows. */
 export type Breaks = 'greedy' | 'even' | 'fitted' | 'printed';
+/** What a pinch does to the page: the engine owns the policy, this names which one. */
 export type ZoomMode = 'stepped' | 'continuous' | 'magnify';
 /** Where the reader's zoom control stands: the mode, the step, and the size in force. */
 export interface Zoom { mode: ZoomMode; step: number; zoom: number }
 
+/** The props of `QvpPageView`. Lengths are dp; the declarative props are reconciled on the native side. */
 export interface QvpPageViewProps extends ViewProps {
   /** 'asset://pages/042.qvp' | 'file:///…' | '/abs/path' | 'base64:…' — the package ships no page data. */
   pageUri?: string;
@@ -251,6 +292,7 @@ function normColors<X>(o: X): X {
 /** Imperative handle: the page-bound module API plus the react tag. */
 export type QvpPageViewHandle = PageApi & { tag: () => number };
 
+/** One mushaf page, drawn natively. Give it a ref to call the page-bound API, or use `useQvp`. */
 export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(function QvpPageView(props, ref) {
   const native = useRef<any>(null);
   const { theme, styles, highlights, mask, reveal, dress, paperColor, defaultInk, selectionBand, onWordTap, onDecorationTap, onEmptyTap, onSelectionChanged, onPageLoad, onRevealChanged, onSwipe, onZoomChanged, onDressChanged, onError, ...rest } = props;
@@ -292,13 +334,16 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
 // ── the passage view ─────────────────────────────────────────────────────────────────────────
 /** Where the rows of a passage start: at the right edge, in the middle, or across the width. */
 export type PassageAlign = 'right' | 'center' | 'justified';
+/** One row of a laid-out passage, in dp: the box of its ink, and the height its words sit on. */
 export interface PassageRow { x0: number; y0: number; x1: number; y1: number; baseline: number }
 /** One word of a laid-out passage with its signs, in dp: its key, the page it is printed on and its row.
  * `x0`…`y1` is the word and its signs; `wordX0`…`wordY1` is the word alone, which leaves out the signs:
  * the word that closes an ayah leaves its medallion out. */
 export interface PassageWord { surah: number; ayah: number; word: number; wordKey: string; page: number; row: number; x0: number; y0: number; x1: number; y1: number;
   wordX0: number; wordY0: number; wordX1: number; wordY1: number }
+/** The box of the shown words of one ayah of a laid-out passage, in dp. */
 export interface PassageAyah { surah: number; ayah: number; x0: number; y0: number; x1: number; y1: number }
+/** One ayah of a passage, with its text from the page's own word records. */
 export interface PassageText { surah: number; ayah: number; text: string }
 /** A laid-out passage, in dp. `printedLineSpacing` is the passage's printed line, in page units: what
  * `lineHeight` divides by. `ellipsis` is where the view drew the ellipsis after a cut. */
@@ -307,6 +352,7 @@ export interface PassageLayout {
   isTruncated: boolean; ellipsis: number[] | null;
   rows: PassageRow[]; words: PassageWord[]; ayahs: PassageAyah[]; texts: PassageText[];
 }
+/** The props of `QvpPassageView`. Lengths are dp. */
 export interface QvpPassageViewProps extends ViewProps {
   /** The pages that print the range, in any order; the same URI schemes as `pageUri`. */
   pageUris: string[];
@@ -370,6 +416,7 @@ const KIND_NAMES: string[] = NAMES.kinds ?? [];
 const FAMILY_NAMES: string[] = NAMES.families ?? [];
 const CATEGORY_NAMES: string[] = NAMES.categories ?? [];
 const DECORATION_NAMES: string[] = NAMES.decorations ?? [];
+/** Every mark name, from the engine; the index is the mark's id. */
 export const MARKS: string[] = NAMES.marks ?? [];
 /** One default from the native module. No fallback: a missing key means the native module
  * predates this package, and the error says so. */
@@ -397,14 +444,19 @@ export const DEFAULTS: Readonly<Record<string, number>> & {
   REFLOW_MAX_STRETCH: nativeDefault('reflowMaxStretch'),
   SELECTION_PAD_X: nativeDefault('selectionPadX'),
 });
-/** A name's id in a table; 255 when the table has no such name. */
+/** A name table of the engine (QVP_NAMES_*). */
 export type NameTable = 'marks' | 'kinds' | 'families' | 'categories' | 'decorations' | 'divisions' | 'places';
 const named = (v: string | number, names: string[]) => { if (typeof v === 'number') return v; const i = names.indexOf(v); return i < 0 ? 255 : i; };
+/** Get a mark's id by its name; 255 when the engine has no such mark. A number passes through. */
 export function markId(name: string | number): number { return named(name, MARKS); }
 
+/** How `search` matches: the form, the mode, whether it normalises, whether it tries the loose pass, and the most matches (0 for all). */
 export interface SearchOptions { form?: Form; mode?: 'includes' | 'exact' | 'prefix'; normalize?: boolean; looseMatch?: boolean; limit?: number }
+/** How `text` joins the words: the form, and the separators between words and between lines. */
 export interface TextOptions { form?: Form; wordSep?: string; lineSep?: string }
+/** How a crop is cut: the padding in page units, whether the ayah marks stay, and the background. */
 export interface CropOptions { pad?: number; keepAyahMarks?: boolean; background?: Color }
+/** How a gap-aware hit test resolves a point: the farthest distance (0 for no bound), the gap bias, and whether an exact hit wins. */
 export interface HitOptions { maxDistance?: number; gapBias?: number; preferExact?: boolean }
 
 /** Page-bound queries; `tag` is the react tag of a mounted `<QvpPageView />` (`findNodeHandle`). */
@@ -530,22 +582,37 @@ export class QvpAtlas {
   private freed = false;
   /** The native id. Throws once the atlas is freed, so every call after `free()` rejects. */
   private get h(): number { if (this.freed) throw new Error('QvpAtlas was freed'); return this.id; }
+  /** Load the atlas from a URI (the same schemes as `pageUri`). */
   static async load(uri: string): Promise<QvpAtlas> { return new QvpAtlas(await Qvp.loadAtlas(uri)); }
   /** Free the native atlas. A second call does nothing. */
   async free(): Promise<void> { if (this.freed) return; this.freed = true; await Qvp.freeAtlas(this.id); }
+  /** Get the page an ayah is on, or null. */
   async pageOf(s: number, a: number) { return Qvp.atlasPageOf(this.h, s, a); }
+  /** Get the first and last ayah of a page, or null. */
   async pageRange(page: number) { return Qvp.atlasPageRange(this.h, page); }
+  /** Get how many pages the atlas covers. */
   async pageCount() { return Qvp.atlasPageCount(this.h); }
+  /** Get a surah by number, or null. */
   async surah(n: number) { return Qvp.atlasSurah(this.h, n); }
+  /** Get every surah, in order. */
   async surahs() { return Qvp.atlasSurahs(this.h); }
+  /** Get the page a surah starts on, or null. */
   async pageOfSurah(n: number) { return Qvp.atlasPageOfSurah(this.h, n); }
+  /** Get where a division starts, or null. */
   async division(division: DivisionKind, n: number) { return Qvp.atlasDivision(this.h, division, n); }
+  /** Get where a juz starts, or null. */
   async juz(n: number) { return Qvp.atlasDivision(this.h, 'juz', n); }
+  /** Get where a hizb starts, or null. */
   async hizb(n: number) { return Qvp.atlasDivision(this.h, 'hizb', n); }
+  /** Get where a rubu_al_hizb starts, or null. */
   async rubuAlHizb(n: number) { return Qvp.atlasDivision(this.h, 'rubuAlHizb', n); }
+  /** Get the number of the division that holds an ayah, or null. */
   async divisionOf(division: DivisionKind, s: number, a: number) { return Qvp.atlasDivisionOf(this.h, division, s, a); }
+  /** Get the number of the juz that holds an ayah, or null. */
   async juzOf(s: number, a: number) { return Qvp.atlasJuzOf(this.h, s, a); }
+  /** Get the first and last page of a juz, or null. */
   async pagesOfJuz(n: number) { return Qvp.atlasPagesOfJuz(this.h, n); }
+  /** Search the surah names in Arabic, Latin or English, or by number. */
   async searchSurahs(text: string) { return Qvp.atlasSearchSurahs(this.h, text); }
 }
 
@@ -610,6 +677,7 @@ function dressSpec(spec: DressSpec): object {
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
 const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'ayahMarksView', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg', 'dress', 'undress', 'dressClamp', 'dressView', 'dressInfo', 'dressRevision'] as const;
 type PageMethod = (typeof pageMethods)[number];
+/** The page-bound part of `Qvp`, with the tag already bound. */
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {
   const out: any = {};
