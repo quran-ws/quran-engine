@@ -339,14 +339,16 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         drawList = nil
         baseKey = ""; invalidateContent()
     }
-    /// Fit the content height and centre it.
+    /// Go back to the fitted view (`fittedView()`).
     public func resetView() {
         stopSpring()
         let f = fittedView()
         viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
         invalidateContent()
     }
-    /// The transform `resetView()` applies: content height fitted, centred.
+    /// The transform `resetView()` applies. A printed page takes the layout's fit: the content
+    /// plus any dress overflow, shrunk to fit the view and centred. A reflowed page takes scale 1,
+    /// centred across, its top at the top.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
         // The layout's fit already holds a dress's border: the engine fits content plus overflow.

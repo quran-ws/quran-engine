@@ -295,8 +295,12 @@ public struct QvpLayoutSpec: Equatable {
 public struct QvpGrid: Equatable { public let lines: Int, lineSpacing: Float }
 /// Page → viewport. On a printed page, viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. A reflowed
 /// page (`reflowed`) moves words, not lines, so `lineDy` places no path there: draw through `QvpPage.layoutDrawList` and
-/// `QvpPage.layoutPlacements`, and ask `QvpPage.wordBoundsView` where a word is. `fitScale`, `fitX`, `fitY` show the
-/// whole content in the viewport (shrink to height, never enlarge, centred); the host's pan and zoom go on top.
+/// `QvpPage.layoutPlacements`, and ask `QvpPage.wordBoundsView` where a word is. Draw at fitX + fitScale*viewX,
+/// fitY + fitScale*viewY, and put the host's pan and zoom on top. The fit shows a box: the content, plus the dress
+/// overflow on each side when the page is dressed (`QvpDressInfo.overflow`). On a printed page `fitScale` shrinks the
+/// box to fit both the viewport width and height (never above 1), and the box is centred. On a reflowed page
+/// `fitScale` is 1 and the host scrolls: the box is centred across the viewport, and its top is at the top of the
+/// viewport. `fitX` and `fitY` place the content's own origin, so the overflow sits to their left and above them.
 public final class QvpLayout {
     /// The page-to-viewport scale and offset, the content size in viewport points, and the line
     /// spacing in page units.
@@ -304,7 +308,9 @@ public final class QvpLayout {
     /// Per printed line, or per row when the page is reflowed: the shift down in page units, and the
     /// top and bottom of its slot.
     public let lineDy: [Float], slotTop: [Float], slotBottom: [Float]
-    /// The scale and offset that show the whole content in the viewport.
+    /// The view transform for the content plus any dress overflow: shrunk to fit and centred on
+    /// a printed page, scale 1 and scrolled on a reflowed one. `fitX` and `fitY` place the
+    /// content's own origin (see the type's doc).
     public let fitScale: Float, fitX: Float, fitY: Float
     /// True when this layout broke the words onto rows of its own, and how many rows it made.
     /// A reflowed page places paths by group (`QvpPage.layoutGroups`), not by printed line.

@@ -42,6 +42,17 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's
   edge (#134).
+- The docs of the layout's fit (`fit_scale`, `fit_x`, `fit_y`) say what a reflowed page
+  does. On a reflowed page `fit_scale` is 1 and the host scrolls the content. `fit_x`
+  centres it across the viewport, and `fit_y` puts the top of the box at the top of the viewport.
+  Before, `qvp.h`, the Rust docs, `docs/API.md` and the Kotlin, Swift, Dart and React Native docs
+  said that the fit shrinks every page into the viewport and centres it. `qvp.h`, the Rust docs,
+  `docs/API.md`, Kotlin and Swift also said that a printed page shrinks to the viewport
+  height. It shrinks to fit both the width and the height. The wrapper docs now also say
+  that on a dressed page the fit shows the content plus the dress overflow, and that
+  `fit_x`, `fit_y` place the content's own origin. The docs of the dress overflow in
+  Kotlin, Swift and Dart told a host to fit the overflow itself. The engine's fit holds it
+  already. The iOS `resetView()` docs said that the view fits the content height.
 
 ## [0.8.0] - 2026-11-04
 

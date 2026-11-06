@@ -210,8 +210,14 @@ pub struct QvpLayout {
     pub n_lines: u32,
     /// n_lines × {dy, slot_top, slot_bottom}; valid until the next qvp_layout call on this thread
     pub lines: *const f32,
-    /// The view transform that shows the whole content: draw at fit_x + fit_scale·view_x,
-    /// fit_y + fit_scale·view_y; the host's pan and zoom go on top.
+    /// The view transform for the content: draw at fit_x + fit_scale·view_x,
+    /// fit_y + fit_scale·view_y, and the host's pan and zoom go on top. The fit shows a box:
+    /// the content, plus the dress overflow on each side when the page is dressed. On a
+    /// printed page, fit_scale shrinks the box to fit both the viewport width and height and
+    /// is never more than 1, and the box is centred. On a reflowed page, fit_scale is 1 and
+    /// the host scrolls: the box is centred across the viewport, and its top is at the top
+    /// of the viewport. fit_x, fit_y place the content's own origin, so the overflow sits to
+    /// their left and above them.
     pub fit_scale: f32,
     pub fit_x: f32,
     pub fit_y: f32,

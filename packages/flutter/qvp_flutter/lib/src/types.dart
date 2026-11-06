@@ -1171,8 +1171,14 @@ final class QvpLayout {
   /// How many rows a reflowed page made; 0 when it was not reflowed.
   final int rows;
 
-  /// The view transform that shows the whole content in the viewport (shrink to fit both
-  /// width and height, never enlarge, centred). The host's pan and zoom go on top.
+  /// The view transform for the content: draw at `fitX + fitScale*viewX`,
+  /// `fitY + fitScale*viewY`, and put the host's pan and zoom on top. The fit shows a
+  /// box: the content, plus the dress overflow on each side when the page is dressed
+  /// ([QvpDressInfo.overflow]). On a printed page [fitScale] shrinks the box to fit both
+  /// the viewport width and height (never above 1), and the box is centred. On a reflowed
+  /// page [fitScale] is 1 and the host scrolls: the box is centred across the viewport,
+  /// and its top is at the top of the viewport. [fitX] and [fitY] place the content's own
+  /// origin, so the overflow sits to their left and above them.
   final double fitScale, fitX, fitY;
 
   /// Per-line vertical shift in page units (index = line record index).
@@ -1773,7 +1779,8 @@ final class QvpDressInfo {
   final List<double> viewBox;
 
   /// `left, top, right, bottom` in viewport px: how far the border reaches past the laid-out
-  /// content. Fit content plus overflow, or the border is cropped off.
+  /// content. The layout's fit ([QvpLayout.fitScale]) already holds it, so a host that
+  /// draws at the fit shows the whole border.
   final List<double> overflow;
 }
 

@@ -129,6 +129,23 @@ All notable changes to the engine and its packages. The format follows
   on page 42, named word 0. It now names no word, as `web/qvp.js` does.
 - The XCFramework's macOS slice holds arm64 and x86_64. A Flutter macOS release build is
   universal, and it failed to link against the arm64-only slice.
+- The docs of the layout's fit (`fit_scale`, `fit_x`, `fit_y`) say what a reflowed page
+  does. On a reflowed page `fit_scale` is 1 and the host scrolls the content. `fit_x`
+  centres it across the viewport, and `fit_y` puts the top of the box at the top of the viewport.
+  Before, `qvp.h`, the Rust docs, `docs/API.md` and the Kotlin, Swift, Dart and React Native docs
+  said that the fit shrinks every page into the viewport and centres it. `qvp.h`, the Rust docs,
+  `docs/API.md`, Kotlin and Swift also said that a printed page shrinks to the viewport
+  height. It shrinks to fit both the width and the height. The wrapper docs now also say
+  that on a dressed page the fit shows the content plus the dress overflow, and that
+  `fit_x`, `fit_y` place the content's own origin. The docs of the dress overflow in
+  Kotlin, Swift and Dart told a host to fit the overflow itself. The engine's fit holds it
+  already. The iOS `resetView()` docs said that the view fits the content height.
+- `scripts/check-parity.py` removes the comments from a wrapper's enum block before it
+  reads the codes, so a commented-out code no longer counts as named. It also fails when a
+  wrapper names a code that the header does not have. A string in the block, such as
+  `"https://…"`, is not read as a comment, and a `}` in a string or a comment does not end
+  the block. `scripts/test_check_parity.py` tests this, and `scripts/check.sh parity` runs
+  it.
 
 ## [0.8.0] - 2026-11-04
 
