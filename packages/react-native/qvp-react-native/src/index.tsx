@@ -423,6 +423,7 @@ export const Qvp = {
   surahHeaders: (tag: number): Promise<SurahHeader[]> => M.surahHeaders(tag),
   surahHeadersView: (tag: number): Promise<SurahHeader[]> => M.surahHeadersView(tag),
   ayahMarks: (tag: number): Promise<Marker[]> => M.ayahMarks(tag),
+  ayahMarksView: (tag: number): Promise<Marker[]> => M.ayahMarksView(tag),
   rosettes: (tag: number): Promise<Rosette[]> => M.rosettes(tag),
   sajdahs: (tag: number): Promise<Sajdah[]> => M.sajdahs(tag),
   ayahKeys: (tag: number): Promise<{ surah: number; ayah: number; ayahKey: string }[]> => M.ayahKeys(tag),
@@ -605,7 +606,7 @@ function dressSpec(spec: DressSpec): object {
 }
 
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg', 'dress', 'undress', 'dressClamp', 'dressView', 'dressInfo', 'dressRevision'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'ayahMarksView', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg', 'dress', 'undress', 'dressClamp', 'dressView', 'dressInfo', 'dressRevision'] as const;
 type PageMethod = (typeof pageMethods)[number];
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };
 function bindPage(tag: () => number): PageApi {
