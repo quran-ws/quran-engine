@@ -564,6 +564,24 @@ class QvpWebBackend implements QvpBackend {
   );
 
   @override
+  int viewSwipe(double dx, double dy, double vx, double vy) =>
+      (js.callMethodVarArgs<JSNumber>('viewSwipe'.toJS, [
+        dx.toJS,
+        dy.toJS,
+        vx.toJS,
+        vy.toJS,
+      ])).toDartInt;
+
+  @override
+  int swipePages(double dx, double dy, double vx, double vy) =>
+      (js.callMethodVarArgs<JSNumber>('swipePages'.toJS, [
+        dx.toJS,
+        dy.toJS,
+        vx.toJS,
+        vy.toJS,
+      ])).toDartInt;
+
+  @override
   void dispose() {}
 
   // ── Page Lifecycle ──
@@ -768,8 +786,9 @@ class QvpWebBackend implements QvpBackend {
   }
 
   @override
-  List<QvpAyahMark> ayahMarks(PageHandle handle) {
-    final arr = _page(handle).callMethod<JSArray>('ayahMarks'.toJS);
+  List<QvpAyahMark> ayahMarks(PageHandle handle, {required bool view}) {
+    final arr = _page(handle)
+        .callMethod<JSArray>(view ? 'ayahMarksView'.toJS : 'ayahMarks'.toJS);
     return List<QvpAyahMark>.generate(arr.length, (i) {
       final m = arr[i] as JSObject;
       return QvpAyahMark(
@@ -999,9 +1018,15 @@ class QvpWebBackend implements QvpBackend {
   }
 
   @override
-  List<QvpHitArea> hitAreas(PageHandle handle, double gapBias) {
-    final arr = _page(handle)
-        .callMethod<JSArray>('hitAreas'.toJS, gapBias.toJS);
+  List<QvpHitArea> hitAreas(
+    PageHandle handle,
+    double gapBias, {
+    required bool view,
+  }) {
+    final arr = _page(handle).callMethod<JSArray>(
+      view ? 'hitAreasView'.toJS : 'hitAreas'.toJS,
+      gapBias.toJS,
+    );
     return List<QvpHitArea>.generate(arr.length, (i) {
       final a = arr[i] as JSObject;
       return QvpHitArea(
@@ -1234,6 +1259,30 @@ class QvpWebBackend implements QvpBackend {
   )).toDartDouble;
 
   @override
+  QvpView viewAnchor(
+    PageHandle handle,
+    QvpView view,
+    int word,
+    double nx,
+    double ny,
+    double toX,
+    double toY,
+    double viewportW,
+    double viewportH,
+  ) => _jsToView(
+    _page(handle).callMethodVarArgs<JSObject>('viewAnchor'.toJS, [
+      _viewToJs(view),
+      word.toJS,
+      nx.toJS,
+      ny.toJS,
+      toX.toJS,
+      toY.toJS,
+      viewportW.toJS,
+      viewportH.toJS,
+    ]),
+  );
+
+  @override
   ({double x, double y}) viewToLayout(
     PageHandle handle,
     QvpView view,
@@ -1448,6 +1497,7 @@ class QvpWebBackend implements QvpBackend {
   List<QvpBox> wordBands(
     PageHandle handle,
     List<int> ws, {
+    required bool view,
     required bool inkHeight,
     required double padX,
     required double padY,
@@ -1458,7 +1508,7 @@ class QvpWebBackend implements QvpBackend {
       ..['padY'] = padY.toJS;
     return _readBoxes(
       _page(handle).callMethod<JSArray>(
-        'wordBands'.toJS,
+        view ? 'wordBandsView'.toJS : 'wordBands'.toJS,
         Uint32List.fromList(ws).toJS,
         opt,
       ),

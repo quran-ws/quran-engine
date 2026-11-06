@@ -207,7 +207,11 @@ class QvpPage extends ChangeNotifier {
   /// Ayah medallions on the page. Held until the next mutation, because a dressed page asks
   /// for them on every frame.
   List<QvpAyahMark> ayahMarks() =>
-      _cachedAyahMarks ??= _backend.ayahMarks(handle);
+      _cachedAyahMarks ??= _backend.ayahMarks(handle, view: false);
+
+  /// The same marks in viewport px through the current layout: where a reflowed page put
+  /// them.
+  List<QvpAyahMark> ayahMarksView() => _backend.ayahMarks(handle, view: true);
 
   /// Drawn hizb rosettes.
   List<QvpRosette> rosettes() => _backend.rosettes(handle);
@@ -339,7 +343,13 @@ class QvpPage extends ChangeNotifier {
 
   List<QvpLineBand> lineBands() => _backend.lineBands(handle);
   List<QvpHitArea> hitAreas([double gapBias = QvpDefaults.gapBias]) =>
-      _backend.hitAreas(handle, gapBias);
+      _backend.hitAreas(handle, gapBias, view: false);
+
+  /// The same partition in viewport px through the current layout. Not [hitAreas]
+  /// transformed: a reflowed row's words have other neighbours than a printed line's, so the
+  /// engine computes it again.
+  List<QvpHitArea> hitAreasView([double gapBias = QvpDefaults.gapBias]) =>
+      _backend.hitAreas(handle, gapBias, view: true);
 
   // ── Layout ──
 
@@ -452,6 +462,30 @@ class QvpPage extends ChangeNotifier {
       _backend.layoutLineSpacingToFill(handle, spec, max);
   ({double x0, double y0, double x1, double y1}) wordBoundsView(int i) =>
       _backend.wordBoundsView(handle, i);
+
+  /// The view that holds a point inside [word] ([nx], [ny] from 0 to 1 across its box) at
+  /// ([toX], [toY]) on the screen, then clamps it to the viewport: how a pinch keeps its place
+  /// when the layout reflows under it.
+  QvpView viewAnchor(
+    QvpView view,
+    int word,
+    double nx,
+    double ny,
+    double toX,
+    double toY,
+    double viewportW,
+    double viewportH,
+  ) => _backend.viewAnchor(
+    handle,
+    view,
+    word,
+    nx,
+    ny,
+    toX,
+    toY,
+    viewportW,
+    viewportH,
+  );
 
   /// Where a point of the viewport lands in the laid-out page: how a host turns a touch into a
   /// [hitTestView]. The inverse of `offset + scale·p`.
@@ -617,6 +651,24 @@ class QvpPage extends ChangeNotifier {
   }) => _backend.wordBands(
     handle,
     ws,
+    view: false,
+    inkHeight: height == 'ink',
+    padX: padX,
+    padY: padY,
+  );
+
+  /// The same bands in viewport px through the current layout: one box per row the words
+  /// occupy, where a reflowed page has moved them. A host that draws its own underlines or
+  /// ayah marks reads these, never the printed page's boxes.
+  List<QvpBox> wordBandsView(
+    List<int> ws, {
+    String height = 'lineSpacing',
+    double padX = QvpDefaults.highlightPadX,
+    double padY = QvpDefaults.highlightPadY,
+  }) => _backend.wordBands(
+    handle,
+    ws,
+    view: true,
     inkHeight: height == 'ink',
     padX: padX,
     padY: padY,
