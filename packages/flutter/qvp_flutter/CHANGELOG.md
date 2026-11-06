@@ -53,6 +53,10 @@
 ### Removed
 
 ### Fixed
+- A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
+  screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
+  of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's
+  edge (#134).
 - `QvpKind` and `QvpDecorationKind` name every code in `qvp.h`: `QvpKind.ornament`,
   `pageNumber` and `runningHead` (5 to 7), and `QvpDecorationKind.pageNumber`, `runningHead`
   and `other` (5, 6 and 255). Before, `QvpPage.pathKind` and a decoration's kind could

@@ -36,6 +36,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ### Removed
 
 ### Fixed
+- A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
+  screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
+  of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's
+  edge (#134).
 - React Native: the npm package builds in an app outside this repository. When the app's
   build has no `:qvp` project and no `qvpAndroidDir` property, the Android module depends
   on `ws.quran:qvp-android` from Maven Central, at the version in the package's

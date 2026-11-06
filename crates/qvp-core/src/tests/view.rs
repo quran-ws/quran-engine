@@ -175,7 +175,7 @@ fn a_pixel_budget_never_takes_the_band_below_one_screen() {
     // and the band still covers the screen, wherever the reader is
     for y in [0.0, -1000.0, -1000.5, -4321.25] {
         let b = at(y, 400.0 * 300.0);
-        assert!(b.top <= -y && b.top + b.height >= -y + 800.0 - 2.0, "offset {y}: {b:?}");
+        assert!(b.top <= -y && b.top + b.height >= -y + 800.0, "offset {y}: {b:?}");
     }
     // between one screen and two, the budget sets the height
     assert_eq!(at(0.0, 400.0 * 1200.0).height, 1200.0);
@@ -211,4 +211,34 @@ fn a_page_below_the_top_of_the_screen_bands_from_above_it() {
     let b = v.ink_band(9000.0, 400.0, 800.0, 0.0, 0.0);
     assert_eq!(b, InkBand { top: -800.0, height: 1600.0 });
     assert!(b.top <= -300.0 && b.top + b.height >= 500.0);
+}
+
+#[test]
+fn a_band_with_under_two_pixels_of_slack_covers_the_screen() {
+    // Slack of 0, 0.5, 1 and 1.5 px: a budget of about one screen, or a ceiling within 2 px of
+    // the screen. No step of a whole pixel fits, so the band follows the reader.
+    let cases = [
+        (0.0, 400.0 * 800.0),
+        (0.0, 400.0 * 800.5),
+        (0.0, 400.0 * 801.0),
+        (0.0, 400.0 * 801.5),
+        (800.0, 0.0),
+        (801.0, 0.0),
+        (801.5, 0.0),
+    ];
+    for (max_height, max_pixels) in cases {
+        let mut y = 0.0f32;
+        while y < 8000.0 {
+            let b =
+                View { scale: 1.0, offset_x: 0.0, offset_y: -y }.ink_band(9000.0, 400.0, 800.0, max_height, max_pixels);
+            assert!(
+                b.top <= y && b.top + b.height >= y + 800.0,
+                "ceiling {max_height}, budget {max_pixels}, offset {y}: {b:?}"
+            );
+            y += 0.37;
+        }
+    }
+    // two whole pixels of slack still step: a pan inside one step keeps the band
+    let at = |y: f32| View { scale: 1.0, offset_x: 0.0, offset_y: -y }.ink_band(9000.0, 400.0, 800.0, 802.0, 0.0);
+    assert_eq!(at(1000.0).top, at(1000.9).top);
 }

@@ -450,7 +450,9 @@ const drawList = page.layoutDrawList(band.top, band.top + band.height)
 The band is the whole page when the page fits. Otherwise it is two screens tall around the
 reader, and its top moves in steps: half a screen while the limits leave room for two. A pan
 inside one step returns the same band, so the image in hand stays valid. A pan across a step
-moves the band by exactly one step. Put `band.top` in the image's cache key.
+moves the band by exactly one step. With less than 2 px between the band and the screen, no
+step of a whole pixel fits, so the top follows the reader. Put `band.top` in the image's cache
+key.
 
 The two limits are in viewport px, because a texture is measured on the screen, not in the
 layout:
