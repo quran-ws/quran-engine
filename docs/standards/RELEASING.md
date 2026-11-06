@@ -27,8 +27,8 @@
    The release notes are the changelog section.
 
    The `react-native` job publishes `@quran.ws/qvp-react-native` alone, after the `maven`
-   and `publish` jobs. Its iOS pod downloads the XCFramework from the GitHub release, which
-   the `publish` job makes public. Its `prepack` script copies QvpKit's sources and the
+   job. Its iOS pod downloads the XCFramework from the GitHub release, so the job also waits
+   until the `publish` job has made the release public. Its `prepack` script copies QvpKit's sources and the
    XCFramework URL and checksum from `Package.swift` into the package. The package takes `ws.quran:qvp-android` from Maven Central at its own version, so
    npm must not hold the package before Maven Central serves the library. The job asks
    Maven Central for the version's POM every 60 seconds, for up to 60 minutes, because the

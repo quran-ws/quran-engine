@@ -150,7 +150,14 @@ jobs:
       # Only the example installs. A node_modules inside the library would hold a second React.
       - name: Install the example
         working-directory: packages/react-native/example
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
+      - name: Cache the pods
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/react-native/example/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: rn-ios-pods-${{ hashFiles('packages/react-native/example/package-lock.json', 'packages/react-native/example/ios/Podfile', 'packages/react-native/qvp-react-native/qvp-react-native.podspec') }}
       - name: Install the pods
         working-directory: packages/react-native/example/ios
         run: pod install

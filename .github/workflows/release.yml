@@ -290,11 +290,11 @@ jobs:
   # Central at the package version. So this job waits for the maven job and for Maven Central
   # to serve that version, then compiles the module against it, and only then publishes to
   # npm. The other registries do not wait for Maven Central, and a Maven failure does not
-  # stop them. The job also waits for the publish job: the package's iOS pod downloads the
-  # XCFramework from this release, which the publish job makes public.
+  # stop them. The package's iOS pod downloads the XCFramework from this GitHub release, so
+  # the job also waits until the release is public (the publish job's first step).
   react-native:
     name: React Native package on npm
-    needs: [verify, maven, publish]
+    needs: [verify, maven]
     runs-on: ubuntu-latest
     timeout-minutes: 100
     permissions:
@@ -343,6 +343,22 @@ jobs:
             [ "$i" -lt "$tries" ] && sleep 60
           done
           echo "::error::Maven Central did not serve $pom after $tries tries; rerun this job when it does"
+          exit 1
+      # The publish job makes the prepared release public. Until then its assets answer 404.
+      - name: Wait for the GitHub release to serve the XCFramework
+        if: steps.npm.outputs.published != 'true'
+        run: |
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/QvpEngine.xcframework.zip"
+          tries=60
+          for i in $(seq 1 "$tries"); do
+            if curl -fsSIL --max-time 30 "$url" >/dev/null 2>&1; then
+              echo "the release serves $url (try $i of $tries)"
+              exit 0
+            fi
+            echo "the release does not serve $url yet (try $i of $tries)"
+            [ "$i" -lt "$tries" ] && sleep 60
+          done
+          echo "::error::$url is not public after $tries tries; rerun this job when the publish job has made the release public"
           exit 1
       - uses: ./.github/actions/android-toolchain
         if: steps.npm.outputs.published != 'true'
