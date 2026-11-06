@@ -83,7 +83,9 @@ try {
   // A click on the same word clears the highlight, as on every platform.
   await stage.click({ position: at });
   await page.waitForFunction(() => window.__qvp.S.selWord === -1, null, { timeout: 5000 });
-  console.log('ok  a second click on the word clears the selection');
+  // The highlight fades out over the app's transition time, then the engine drops its boxes.
+  await page.waitForFunction(() => window.__qvp.S.page.highlightBoxesView().length === 0, null, { timeout: 5000 });
+  console.log('ok  a second click on the word clears the selection and its highlight');
 
   if (errors.length) throw new Error(`the page threw: ${errors.join('; ')}`);
 } finally {

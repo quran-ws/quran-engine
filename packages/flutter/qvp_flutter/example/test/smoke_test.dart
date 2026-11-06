@@ -31,7 +31,7 @@ void main() {
     await tester.pumpWidget(const MushafApp());
     // The engine and the first bundled page load from the asset bundle, outside the fake clock.
     QvpPage? page;
-    for (var i = 0; i < 50 && page == null; i++) {
+    for (var i = 0; i < 250 && page == null; i++) {
       await tester.runAsync(
         () => Future.delayed(const Duration(milliseconds: 20)),
       );
@@ -75,6 +75,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text(p.wordKey(w)), findsNothing);
+    expect(p.highlightHandles(), isEmpty);
 
     // Dispose the app, and with it the engine, inside the test.
     await tester.pumpWidget(const SizedBox());
