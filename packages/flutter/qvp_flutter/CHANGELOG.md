@@ -65,8 +65,11 @@
   its page-unit lengths.
 - On web, a `'surah:ayah:word'` target such as `'2:255:3'` named word 0 of the page.
   `targetWords`, `highlight`, `mask`, `text`, `cropSvg` and the other target calls took the
-  first word. The web backend now sends the word key to `qvp.js`, which finds the word as
-  the native backend does.
+  first word. The web backend now sends the word key to `qvp.js`, which finds the word on
+  the page.
+- On iOS, macOS, Android, Windows and Linux, a word key that is not on the page, such as
+  `'2:1:1'` on page 42, named word 0. It now names no word, as on web: `targetWords` is
+  empty and `text` is `''`. A shared test case holds both backends to this.
 
 ## 0.8.0
 

@@ -113,6 +113,10 @@ All notable changes to the engine and its packages. The format follows
   ratios apart from its page-unit lengths.
 - Flutter: on web, a `'surah:ayah:word'` target such as `'2:255:3'` named word 0 of the
   page. The web backend did not send the word key to `qvp.js`. The new web test found it.
+- Flutter: on the `dart:ffi` backend, a word key that is not on the page, such as `'2:1:1'`
+  on page 42, named word 0. It now names no word, as `web/qvp.js` does.
+- The XCFramework's macOS slice holds arm64 and x86_64. A Flutter macOS release build is
+  universal, and it failed to link against the arm64-only slice.
 
 ## [0.8.0] - 2026-11-04
 

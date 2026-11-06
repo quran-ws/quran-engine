@@ -135,6 +135,15 @@ void apiCases(FutureOr<ApiFixture> Function() load) {
     expect(page.text('2:255'), isNotEmpty);
   });
 
+  test('a word key that is not on the page names no word', () {
+    // 2:1:1 is on page 2, and ayah 2:255 has 50 words. Both backends used to differ here:
+    // the native one took word 0.
+    for (final key in ['2:1:1', '2:255:999']) {
+      expect(page.targetWords(key), isEmpty, reason: key);
+      expect(page.text(key), '', reason: key);
+    }
+  });
+
   test('attachWords sidecar adds forms', () {
     final words = fixture.words042;
     if (words == null) return;
