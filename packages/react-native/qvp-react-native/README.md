@@ -154,7 +154,7 @@ await qvp.search('الرحمان', { mode: 'includes' });     // [{word, wordKey
 await qvp.text('2:255', { form: 'search', wordSep: ' ' });
 await qvp.targetWords('line:7'); qvp.findWord(2, 255, 3); qvp.wordForm(i, 'rasm_imlai'); qvp.hasForm('qpc');
 await qvp.attachWords(jsonString);                      // when you do not use the wordsUri prop
-await qvp.surahs(); qvp.divisions(); qvp.ayahMarks(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
+await qvp.surahs(); qvp.divisions(); qvp.ayahMarks(); qvp.ayahMarksView(); qvp.rosettes(); qvp.sajdahs(); qvp.ayahKeys();
 await qvp.ayahWordCount(2, 255); qvp.reciteMap(2, 255, 4); qvp.wordLabel(i); qvp.ayahLabel(ayahIndex);
 await qvp.citation([12, 13, 14]);
 await qvp.cropSvg('2:255', { pad: 3, keepMarkers: true, background: '#fffdf7' }); qvp.cropBounds(target);
@@ -179,9 +179,9 @@ await atlas.pagesOfJuz(30); atlas.searchSurahs('cow' | 'البقرة' | '2'); at
 
 The module runs a call on one of two threads. Its own query thread runs each call that reads only
 what a page fixed when it loaded: `info`, `words`, `word`, `ayahs`, `lines`, `decorations`, `findWord`,
-`targetWords`, `wordForm`, `hasForm`, the metadata calls except `surahHeaders` and `surahHeadersView`,
-`text`, `search`, `citation`, `cropBounds`, `grid`, the engine-wide helpers and the atlas. A long call
-there does not hold up a frame. The view keeps its page open until such a call returns. Every other
+`targetWords`, `wordForm`, `hasForm`, the metadata calls except `surahHeaders`, `surahHeadersView`
+and `ayahMarksView`, `text`, `search`, `citation`, `cropBounds`, `grid`, the engine-wide helpers and
+the atlas. A long call there does not hold up a frame. The view keeps its page open until such a call returns. Every other
 call reads or changes the layout, the view, the styles or the page state, and runs on the UI thread,
 where the view draws. `attachWords` runs on the UI thread after the queries queued before it, and the
 queries queued after it wait for it.

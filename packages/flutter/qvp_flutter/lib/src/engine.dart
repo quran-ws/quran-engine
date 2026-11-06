@@ -147,6 +147,17 @@ class QvpEngine {
     double viewportH,
   ) => backend.viewClamp(view, contentW, contentH, viewportW, viewportH);
 
+  /// The way a released drag went, when it is a page swipe: +1 right, -1 left, 0 when it is
+  /// not a swipe. [dx] and [dy] are the drag in viewport px, [vx] and [vy] its release velocity
+  /// in px per second.
+  int viewSwipe(double dx, double dy, [double vx = 0, double vy = 0]) =>
+      backend.viewSwipe(dx, dy, vx, vy);
+
+  /// How many pages a released drag turns, in reading order: a mushaf runs right to left, so a
+  /// flick to the right is the next page. Add it to the page you are on.
+  int swipePages(double dx, double dy, [double vx = 0, double vy = 0]) =>
+      backend.swipePages(dx, dy, vx, vy);
+
   /// Releases backend resources. Free pages and atlases first.
   ///
   /// The engine is closed after this. On a native build, any later call on the engine or on

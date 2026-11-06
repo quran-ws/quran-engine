@@ -5,6 +5,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- `QvpPage.ayahMarksView()`, `hitAreasView(gapBias)` and `wordBandsView(words, height, padX,
+  padY)`: the viewport-px twins of `ayahMarks`, `hitAreas` and `wordBands`. Each answers
+  through the current layout, so an app that draws its own overlay on a reflowed page reads
+  where each word or mark is drawn (#82).
 
 ### Changed
 

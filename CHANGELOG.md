@@ -7,8 +7,20 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- Flutter: `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
+  read a released drag, and `QvpPage.viewAnchor(view, word, nx, ny, toX, toY, viewportW,
+  viewportH)` holds a point of a word on the screen across a new layout. The generated
+  bindings declared all three, but no Dart call reached them (#165). Both backends bind them.
+- The viewport-px twins `ayahMarksView`, `hitAreasView(gapBias)` and `wordBandsView(words,
+  height, padX, padY)` on Android (`QvpPage`) and Flutter (`QvpPage`, both backends), and
+  `ayahMarksView` on React Native. Each answers its page-unit call through the current
+  layout, so an app that draws its own overlay on a reflowed page reads where each word or
+  mark is drawn (#82). iOS bound all three already.
 
 ### Changed
+- `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and none for the three viewport-px twins on iOS.
+  React Native keeps `qvp_hit_areas_view` and `qvp_word_bands_view` as gaps, with the reason
+  that JavaScript hit-tests and places overlays through `hitTestView` and `wordBoundsView`.
 
 ### Removed
 

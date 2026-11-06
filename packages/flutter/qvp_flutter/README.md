@@ -73,16 +73,17 @@ page.ayahWordCount(2, 255); page.reciteMap(2, 255, 4); page.wordLabel(i); page.a
 page.text('2:255'); page.search('الله', mode: 'includes'); page.citation(words); page.attachWords(json); page.hasForm('qpc');
 page.hitTestExact(x, y); page.hitTest(x, y, QvpHitOptions(maxDistance: 6));         // page units, exact / gap-aware
 page.hitTestExactView(viewX, viewY); page.hitTestView(viewX, viewY);                             // viewport px through the layout
-page.lineBands(); page.hitAreas();
+page.lineBands(); page.hitAreas(); page.hitAreasView(); page.ayahMarksView();          // the *View twins: viewport px through the layout
 final l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true)); // l.scale, l.lineDy[line]
-page.wordBoundsView(i);
+page.wordBoundsView(i); page.viewToLayout(view, vx, vy); page.viewAnchor(view, w, nx, ny, toX, toY, vw, vh);
+engine.viewPan(view, dx, dy); engine.viewClamp(view, cw, ch, vw, vh); engine.swipePages(dx, dy, vx, vy);   // pan, clamp, page turn
 final h = page.style(Sel.wordMark(w, 1), '#ef6c00', ms: 200, layer: QvpLayer.top);  // Sel.path/word/ayah/line/mark/category/family/kind/decoration…
 page.styleTarget('2:255', color); page.recolorStyle(h, color); page.removeStyle(h); page.hide(Sel.kind(QvpKind.mark));
 page.theme(QvpTheme(diacritics: '#1a73e8', marks: {'shaddah': '#0a7d32'})); page.setDefaultColor('#231f20'); page.clearStyles(); page.clearLayer(QvpLayer.theme);
 page.tick(nowMs);                                       // true while animating — keep drawing frames
 page.colors(); page.styledPaths(); page.colorOf(i);            // display list (per-path colours)
 final hl = page.highlight('2:255', QvpHighlightStyle(mode: 'both', ms: 200)); page.moveHighlight(hl, T.word(3)); page.removeHighlight(hl);
-page.highlightBoxesView(); page.wordBands(words);            // viewport px; draw each id as one nonzero path behind the ink
+page.highlightBoxesView(); page.wordBands(words); page.wordBandsView(words);   // boxes; draw each id as one nonzero path behind the ink
 page.select(anchor, focus); page.selection(); page.selectionText('rasm_uthmani', true); page.clearSelection();
 page.mask('2:255', 'hide'); page.unmaskNext(); page.maskBack(); page.unmask(); page.maskHidden(); page.maskBoxesView();
 page.revealStart(lit: 2); page.revealGoto(3); page.revealPosition(); page.revealStepCount(); page.revealStop();

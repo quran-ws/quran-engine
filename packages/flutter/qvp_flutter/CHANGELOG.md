@@ -1,6 +1,14 @@
 ## Unreleased
 
 ### Added
+- `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
+  read a released drag, and `QvpPage.viewAnchor(view, word, nx, ny, toX, toY, viewportW,
+  viewportH)` holds a point of a word on the screen across a new layout. The generated
+  bindings declared all three, but no Dart call reached them (#165). Both backends bind them.
+- `QvpPage.ayahMarksView()`, `hitAreasView([gapBias])` and `wordBandsView(words, height:,
+  padX:, padY:)`: the viewport-px twins of `ayahMarks`, `hitAreas` and `wordBands`, in both
+  backends. Each answers through the current layout, so an app that draws its own overlay on
+  a reflowed page reads where each word or mark is drawn (#82).
 
 ### Changed
 

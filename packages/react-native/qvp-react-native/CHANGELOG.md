@@ -5,6 +5,9 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- `ayahMarksView(tag)` and the `ayahMarksView()` page method: the ayah marks in viewport px
+  through the current layout, as `surahHeadersView` gives the surah headings. It runs on the
+  UI thread, because it reads the layout (#82).
 
 ### Changed
 

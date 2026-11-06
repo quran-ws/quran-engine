@@ -461,6 +461,18 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   @override
+  int viewSwipe(double dx, double dy, double vx, double vy) {
+    _live();
+    return b.viewSwipe(dx, dy, vx, vy);
+  }
+
+  @override
+  int swipePages(double dx, double dy, double vx, double vy) {
+    _live();
+    return b.swipePages(dx, dy, vx, vy);
+  }
+
+  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
@@ -722,10 +734,12 @@ class QvpNativeBackend implements QvpBackend {
       );
 
   @override
-  List<QvpAyahMark> ayahMarks(PageHandle handle) =>
+  List<QvpAyahMark> ayahMarks(PageHandle handle, {required bool view}) =>
       _readArray<QvpAyahMarkC, QvpAyahMark>(
         ffi.sizeOf<QvpAyahMarkC>(),
-        (out, cap) => b.ayahMarks(_page(handle), out, cap),
+        (out, cap) => view
+            ? b.ayahMarksView(_page(handle), out, cap)
+            : b.ayahMarks(_page(handle), out, cap),
         (ptr, i) {
           final m = ptr[i];
           return QvpAyahMark(
@@ -946,26 +960,31 @@ class QvpNativeBackend implements QvpBackend {
       );
 
   @override
-  List<QvpHitArea> hitAreas(PageHandle handle, double gapBias) =>
-      _readArray<QvpHitAreaC, QvpHitArea>(
-        ffi.sizeOf<QvpHitAreaC>(),
-        (out, cap) => b.hitAreas(_page(handle), gapBias, out, cap),
-        (ptr, i) {
-          final ha = ptr[i];
-          return QvpHitArea(
-            word: ha.word,
-            line: ha.line,
-            x0: ha.x0,
-            y0: ha.y0,
-            x1: ha.x1,
-            y1: ha.y1,
-            inkX0: ha.inkX0,
-            inkY0: ha.inkY0,
-            inkX1: ha.inkX1,
-            inkY1: ha.inkY1,
-          );
-        },
+  List<QvpHitArea> hitAreas(
+    PageHandle handle,
+    double gapBias, {
+    required bool view,
+  }) => _readArray<QvpHitAreaC, QvpHitArea>(
+    ffi.sizeOf<QvpHitAreaC>(),
+    (out, cap) => view
+        ? b.hitAreasView(_page(handle), gapBias, out, cap)
+        : b.hitAreas(_page(handle), gapBias, out, cap),
+    (ptr, i) {
+      final ha = ptr[i];
+      return QvpHitArea(
+        word: ha.word,
+        line: ha.line,
+        x0: ha.x0,
+        y0: ha.y0,
+        x1: ha.x1,
+        y1: ha.y1,
+        inkX0: ha.inkX0,
+        inkY0: ha.inkY0,
+        inkX1: ha.inkX1,
+        inkY1: ha.inkY1,
       );
+    },
+  );
 
   // ── Layout & zoom ──
 
@@ -1166,6 +1185,35 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   @override
+  QvpView viewAnchor(
+    PageHandle handle,
+    QvpView view,
+    int word,
+    double nx,
+    double ny,
+    double toX,
+    double toY,
+    double viewportW,
+    double viewportH,
+  ) {
+    final page = _page(handle);
+    _writeView(_view, view);
+    b.viewAnchor(
+      page,
+      _view,
+      word,
+      nx,
+      ny,
+      toX,
+      toY,
+      viewportW,
+      viewportH,
+      _viewOut,
+    );
+    return _readView(_viewOut.ref);
+  }
+
+  @override
   ({double x, double y}) viewToLayout(
     PageHandle handle,
     QvpView view,
@@ -1324,22 +1372,34 @@ class QvpNativeBackend implements QvpBackend {
   List<QvpBox> wordBands(
     PageHandle handle,
     List<int> ws, {
+    required bool view,
     required bool inkHeight,
     required double padX,
     required double padY,
   }) => _withU32(
     ws,
     (wPtr, n) => _readBoxes(
-      (out, cap) => b.wordBands(
-        _page(handle),
-        wPtr,
-        n,
-        inkHeight ? 1 : 0,
-        padX,
-        padY,
-        out,
-        cap,
-      ),
+      (out, cap) => view
+          ? b.wordBandsView(
+              _page(handle),
+              wPtr,
+              n,
+              inkHeight ? 1 : 0,
+              padX,
+              padY,
+              out,
+              cap,
+            )
+          : b.wordBands(
+              _page(handle),
+              wPtr,
+              n,
+              inkHeight ? 1 : 0,
+              padX,
+              padY,
+              out,
+              cap,
+            ),
     ),
   );
 

@@ -1416,6 +1416,84 @@ void main() {
     expect(atlas.isDisposed, isTrue);
   });
 
+  // The engine's swipe rule: mostly sideways, and far enough or fast enough. A mushaf reads
+  // right to left, so a flick to the right turns to the next page.
+  test('viewSwipe and swipePages read a released drag', () {
+    expect(engine.viewSwipe(100, 0), 1);
+    expect(engine.viewSwipe(-100, 0), -1);
+    expect(engine.viewSwipe(10, 0), 0, reason: 'too short and too slow');
+    expect(engine.viewSwipe(10, 0, 900, 0), 1, reason: 'short but fast');
+    expect(engine.viewSwipe(100, 100), 0, reason: 'not sideways');
+    expect(engine.swipePages(100, 0), 1);
+    expect(engine.swipePages(-100, 0, -900, 0), -1);
+    expect(engine.swipePages(0, 200), 0);
+  });
+
+  test('viewAnchor holds a point of a word where it is on the screen', () {
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    const spec = QvpLayoutSpec(viewportW: 690, viewportH: 1100);
+    final l = p.layout(spec);
+    final held = engine.viewClamp(
+      const QvpView(scale: 2, offsetX: -300, offsetY: -400),
+      l.contentW,
+      l.contentH,
+      spec.viewportW,
+      spec.viewportH,
+    );
+    const word = 40;
+    final b = p.wordBoundsView(word);
+    // a point a quarter across the word and three quarters down, so a swapped pair of
+    // arguments lands somewhere else
+    final toX = held.offsetX + held.scale * (b.x0 + 0.25 * (b.x1 - b.x0));
+    final toY = held.offsetY + held.scale * (b.y0 + 0.75 * (b.y1 - b.y0));
+    final v = p.viewAnchor(
+      held,
+      word,
+      0.25,
+      0.75,
+      toX,
+      toY,
+      spec.viewportW,
+      spec.viewportH,
+    );
+    expect(v.scale, closeTo(held.scale, 1e-4));
+    expect(v.offsetX, closeTo(held.offsetX, 1e-2));
+    expect(v.offsetY, closeTo(held.offsetY, 1e-2));
+    p.dispose();
+  });
+
+  // The viewport-px twins of ayahMarks, hitAreas and wordBands: the same records through the
+  // current layout. On a printed layout each is the page-unit answer scaled and moved.
+  test('ayahMarksView, hitAreasView and wordBandsView answer in viewport px', () {
+    final p = engine.loadPage(File(pagePath).readAsBytesSync());
+    const spec = QvpLayoutSpec(viewportW: 690, viewportH: 1100);
+    final l = p.layout(spec);
+    final marks = p.ayahMarks(), marksView = p.ayahMarksView();
+    expect(marksView.map((m) => m.ayah), marks.map((m) => m.ayah));
+    expect(marksView, isNotEmpty);
+    for (var i = 0; i < marks.length; i++) {
+      expect(marksView[i].r, closeTo(marks[i].r * l.scale, 1e-2));
+      expect(marksView[i].cy, inInclusiveRange(0, l.contentH));
+    }
+    final areasView = p.hitAreasView();
+    expect(areasView.map((a) => a.word), p.hitAreas().map((a) => a.word));
+    expect(areasView.length, 147);
+    final ws = p.targetWords('2:255');
+    final bands = p.wordBands(ws), bandsView = p.wordBandsView(ws);
+    expect(bandsView.length, bands.length);
+    for (var i = 0; i < bands.length; i++) {
+      final (b, v) = (bands[i], bandsView[i]);
+      expect(v.x1 - v.x0, closeTo((b.x1 - b.x0) * l.scale, 1e-2));
+      expect(v.y0, inInclusiveRange(0, l.contentH));
+    }
+    // a reflowed page puts its words on other rows; the twins follow them there
+    p.layout(spec.copyWith(reflow: const QvpReflowSpec(zoom: 1.6)));
+    expect(p.hitAreasView().length, 147);
+    expect(p.wordBandsView(ws), isNotEmpty);
+    expect(p.ayahMarksView().length, marks.length);
+    p.dispose();
+  });
+
   test('an array larger than the scratch is read in full', () {
     // A 4 KB scratch holds 102 hit areas and 1,024 handles: page 42 has 147 words, and
     // 1,100 highlights have 1,100 handles. Both must come back whole.

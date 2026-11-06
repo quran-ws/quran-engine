@@ -93,6 +93,8 @@ abstract interface class QvpBackend {
     double viewportW,
     double viewportH,
   );
+  int viewSwipe(double dx, double dy, double vx, double vy);
+  int swipePages(double dx, double dy, double vx, double vy);
   void dispose();
 
   // ── Page lifecycle & data ──
@@ -106,7 +108,7 @@ abstract interface class QvpBackend {
   List<QvpSurah> surahs(PageHandle handle);
   List<QvpDivision> divisions(PageHandle handle);
   List<QvpSurahHeader> surahHeaders(PageHandle handle, {required bool view});
-  List<QvpAyahMark> ayahMarks(PageHandle handle);
+  List<QvpAyahMark> ayahMarks(PageHandle handle, {required bool view});
   List<QvpRosette> rosettes(PageHandle handle);
   List<QvpSajdah> sajdahs(PageHandle handle);
   List<(int, int)> ayahKeys(PageHandle handle);
@@ -149,7 +151,11 @@ abstract interface class QvpBackend {
     QvpHitOptions options,
   );
   List<QvpLineBand> lineBands(PageHandle handle);
-  List<QvpHitArea> hitAreas(PageHandle handle, double gapBias);
+  List<QvpHitArea> hitAreas(
+    PageHandle handle,
+    double gapBias, {
+    required bool view,
+  });
 
   // ── Page layout & zoom ──
   QvpLayout layout(PageHandle handle, QvpLayoutSpec spec);
@@ -203,6 +209,17 @@ abstract interface class QvpBackend {
     PageHandle handle,
     QvpLayoutSpec spec,
     double max,
+  );
+  QvpView viewAnchor(
+    PageHandle handle,
+    QvpView view,
+    int word,
+    double nx,
+    double ny,
+    double toX,
+    double toY,
+    double viewportW,
+    double viewportH,
   );
   ({double x, double y}) viewToLayout(
     PageHandle handle,
@@ -261,6 +278,7 @@ abstract interface class QvpBackend {
   List<QvpBox> wordBands(
     PageHandle handle,
     List<int> ws, {
+    required bool view,
     required bool inkHeight,
     required double padX,
     required double padY,
