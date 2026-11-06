@@ -225,10 +225,15 @@ ENUM_SITES = {
 }
 
 
+# A `/* */` block comment or a `//` line comment (Dart's `///` too), whichever starts first.
+COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+
+
 def check_enums(problems: list[str]) -> None:
-    """Every wrapper names every code of each enum in ENUMS, at the header's value. A
-    declaration runs from its start to the first `}`; a code is its SUFFIX or camelCase name
-    followed by `=` or `:` and the value."""
+    """Every wrapper names every code of each enum in ENUMS, at the header's value, and no
+    code the header lacks. A declaration runs from its start to the first `}` outside a
+    comment, and its comments are removed first, so a commented-out code is not counted. A
+    code is its SUFFIX or camelCase name followed by `=` or `:` and the value."""
     gen = gen_rn_enums()
     header = HEADER.read_text()
     for prefix, (js, cls) in ENUMS.items():
@@ -239,8 +244,12 @@ def check_enums(problems: list[str]) -> None:
             if marker not in text:
                 problems.append(f"{site} ({path}) has no `{marker}` for QVP_{prefix}_*")
                 continue
-            body = text[text.index(marker) + len(marker):]
+            body = COMMENT.sub("", text[text.index(marker) + len(marker):])
             body = body[: body.index("}")]
+            known = {n for suffix, _ in codes for n in (suffix, gen.camel(suffix))}
+            for name in re.findall(r"\b([A-Za-z_]\w*)\s*[=:]\s*\d+", body):
+                if name not in known:
+                    problems.append(f"{site} ({path}) names {name} in {marker.rstrip('{= ')}, which the header has no QVP_{prefix}_* for")
             for suffix, value in codes:
                 m = re.search(rf"\b(?:{suffix}|{gen.camel(suffix)})\s*[=:]\s*(\d+)", body)
                 if not m:
