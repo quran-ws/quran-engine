@@ -69,6 +69,21 @@ final class QvpOutOfRangeTests: XCTestCase {
         XCTAssertEqual(page.maskWords(), twin.maskWords())
     }
 
+    /// A key whose numbers are not ASCII digits that fit an Int32 is no key: `Target(parsing:)`
+    /// is nil, as Kotlin's `Target.parse` throws for it, and a page call with it never stops.
+    func testATargetKeyWithAnOddNumberIsNoKey() {
+        let huge = "99999999999999999999"
+        let keys = ["line:\(huge)", "surah:\(huge)", "\(huge):1", "2:\(huge)", "2:255-\(huge)", "2:\(huge):3", "line:2147483648",
+                    "line:٧", "surah:٢", "٢:٢٥٥", "2:٢٥٥", "٢:٢٥٥-٢٥٧", "2:255:٣", "١:١:١", "page ", "pagé", "line:-1", "line:+7", "line:"]
+        for k in keys {
+            XCTAssertNil(Target(parsing: k, page: page), k)
+            XCTAssertNil(Target(parsing: k), k)
+        }
+        // the same forms with ASCII digits that fit still parse
+        for k in ["page", "line:7", "surah:2", "2:255", "2:255-257", "line:2147483647"] { XCTAssertNotNil(Target(parsing: k), k) }
+        XCTAssertNotNil(Target(parsing: "42:1:1", page: page))
+    }
+
     func testAtlasCallsGiveTheEngineAnswer() {
         let a = atlas!
         for i in Self.bad {

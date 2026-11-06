@@ -28,6 +28,9 @@ All notable changes to the engine and its packages. The format follows
   on; `QvpPassageLayout.draw(in:pages:x:y:)`, which fills a passage into a `CGContext`, as
   Kotlin's `QvpPassageLayout.draw`; and `QvpDefaults.decimal`, every default by its camelCase
   name, as Kotlin's `QvpDefaults.decimal`. The React Native module uses all five.
+  `Target.parse` and `Target(parsing:)` read a key's numbers as ASCII digits that fit an
+  Int32, as Kotlin does: `line:٧` and `2:99999999999999999999` are no keys, and the React
+  Native module reads them as an empty word list, as on Android.
 - Flutter: `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
   read a released drag, and `QvpPage.viewAnchor(view, word, nx, ny, toX, toY, viewportW,
   viewportH)` holds a point of a word on the screen across a new layout. The generated

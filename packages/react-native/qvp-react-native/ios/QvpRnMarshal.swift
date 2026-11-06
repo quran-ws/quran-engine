@@ -52,7 +52,7 @@ enum QvpRnMarshal {
             let h = s.trimmingCharacters(in: .whitespaces)
             let digits = h.hasPrefix("#") ? String(h.dropFirst()) : h
             // QvpColor.parse reads a bad string as 0; Kotlin's throws and the default stands.
-            guard [3, 4, 6, 8].contains(digits.count), digits.allSatisfy(\.isHexDigit) else { return d }
+            guard [3, 4, 6, 8].contains(digits.count), digits.allSatisfy({ $0.isASCII && $0.isHexDigit }) else { return d }
             return QvpColor.parse(h)
         case let n as NSNumber: return UInt32(truncatingIfNeeded: n.int64Value)
         default: return d

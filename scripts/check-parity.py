@@ -204,16 +204,24 @@ def check_defaults(problems: list[str]) -> None:
 # The whole-table forms of the defaults, by camelCase name, that the React Native modules send
 # as constants: Kotlin's QvpDefaults.all and Swift's QvpDefaults.decimal. Each entry names its
 # constant, so the values are the ones checked above; this checks that no default is left out.
+# Each entry: the file, where the table starts, where it ends, and the pattern of one entry.
 DEFAULT_TABLES = {
-    "android": ("packages/android/qvp/src/main/kotlin/ws/quran/qvp/Types.kt", r'"([a-zA-Z]+)" to ([A-Z_]+)'),
-    "ios": ("packages/ios/QvpKit/Sources/QvpKit/Types.swift", r'"([a-zA-Z]+)": ([A-Z_]+)'),
+    "android": ("packages/android/qvp/src/main/kotlin/ws/quran/qvp/Types.kt", "val all: Map<String, Number> = mapOf(", "\n\n",
+                r'"([a-zA-Z]+)" to ([A-Z_]+)'),
+    "ios": ("packages/ios/QvpKit/Sources/QvpKit/Types.swift", "public static let decimal: [String: Double]", "\n        ]",
+            r'"([a-zA-Z]+)": ([A-Z_]+)'),
 }
 
 
 def check_default_tables(want: dict[str, float], problems: list[str]) -> None:
-    for site, (path, pattern) in DEFAULT_TABLES.items():
+    for site, (path, start, end, pattern) in DEFAULT_TABLES.items():
         text = (ROOT / path).read_text()
-        table = dict(re.findall(pattern, text[text.index("QvpDefaults"):]))
+        if start not in text:
+            problems.append(f"{site} ({path}) has no defaults table `{start}`")
+            continue
+        body = text[text.index(start):]
+        body = body[:body.index(end)] if end in body else body
+        table = dict(re.findall(pattern, body))
         for name in want:
             camel = name.split("_")[0].lower() + "".join(p.capitalize() for p in name.split("_")[1:])
             if table.get(camel) != name:

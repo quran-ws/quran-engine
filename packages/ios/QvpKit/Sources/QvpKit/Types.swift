@@ -226,27 +226,38 @@ public struct Target {
     /// The words from index `a` to index `b`, both included, in either order.
     public static func range(_ a: Int, _ b: Int) -> Target { Target(7, a, b) }
     /// Parse a string key; "s:a:w" word keys need the page to resolve (see QvpPage.target).
-    /// A key in none of these forms is a fatal error; `Target(parsing:page:)` returns nil for one.
+    /// The numbers are ASCII digits that fit an Int32, as Kotlin's `Target.parse` reads them.
+    /// A key in none of these forms, or with a number out of that range, is a fatal error;
+    /// `Target(parsing:page:)` returns nil for one.
     public static func parse(_ s: String, page: QvpPage? = nil) -> Target {
         guard let t = Target(parsing: s, page: page) else { preconditionFailure("bad target \(s)") }
         return t
     }
-    /// Parse a string key as `parse` does, or nil when the key is in none of its forms.
+    /// Parse a string key as `parse` does, or nil when the key is in none of its forms or a
+    /// number in it is not ASCII digits that fit an Int32.
     public init?(parsing s: String, page: QvpPage? = nil) {
         guard let t = Target.parsed(s, page: page) else { return nil }
         self = t
     }
     private static func parsed(_ s: String, page: QvpPage?) -> Target? {
         if s == "page" { return Target.page() }
-        func nums(_ pattern: String) -> [Int]? {
-            guard let re = try? NSRegularExpression(pattern: pattern), let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) else { return nil }
-            return (1..<m.numberOfRanges).compactMap { Range(m.range(at: $0), in: s).flatMap { Int(s[$0]) } }
+        // The groups of `pattern`, each read as an Int32; nil when the key does not match or a
+        // group does not fit. `[0-9]`, not `\d`: `\d` also matches Arabic-Indic digits.
+        func nums(_ pattern: String, _ n: Int) -> [Int]? {
+            guard let re = try? NSRegularExpression(pattern: pattern), let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)),
+                  m.numberOfRanges == n + 1 else { return nil }
+            var out: [Int] = []
+            for k in 1...n {
+                guard let r = Range(m.range(at: k), in: s), let v = Int32(s[r]) else { return nil }
+                out.append(Int(v))
+            }
+            return out
         }
-        if let g = nums("^line:(\\d+)$") { return line(g[0]) }
-        if let g = nums("^surah:(\\d+)$") { return surah(g[0]) }
-        if let g = nums("^(\\d+):(\\d+)-(\\d+)$") { return ayahRange(g[0], g[1], g[2]) }
-        if let g = nums("^(\\d+):(\\d+):(\\d+)$") { let i = page?.findWord(g[0], g[1], g[2]) ?? -1; return i >= 0 ? word(i) : words([]) }
-        if let g = nums("^(\\d+):(\\d+)$") { return ayah(g[0], g[1]) }
+        if let g = nums("^line:([0-9]+)$", 1) { return line(g[0]) }
+        if let g = nums("^surah:([0-9]+)$", 1) { return surah(g[0]) }
+        if let g = nums("^([0-9]+):([0-9]+)-([0-9]+)$", 3) { return ayahRange(g[0], g[1], g[2]) }
+        if let g = nums("^([0-9]+):([0-9]+):([0-9]+)$", 3) { let i = page?.findWord(g[0], g[1], g[2]) ?? -1; return i >= 0 ? word(i) : words([]) }
+        if let g = nums("^([0-9]+):([0-9]+)$", 2) { return ayah(g[0], g[1]) }
         return nil
     }
     /// Run `body` with a C QvpTarget whose `words` pointer is valid for the call.

@@ -296,7 +296,8 @@ jobs:
     name: React Native package on npm
     needs: [verify, maven]
     runs-on: ubuntu-latest
-    timeout-minutes: 100
+    # two waits of up to 60 minutes each, for Maven Central and for the GitHub release, then the build
+    timeout-minutes: 150
     permissions:
       contents: read
       id-token: write

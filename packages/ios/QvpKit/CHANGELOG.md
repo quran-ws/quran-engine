@@ -23,6 +23,9 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   on; `QvpPassageLayout.draw(in:pages:x:y:)`, which fills a passage into a `CGContext`, as
   Kotlin's `QvpPassageLayout.draw`; and `QvpDefaults.decimal`, every default by its camelCase
   name, as Kotlin's `QvpDefaults.decimal`. The React Native module uses all five.
+  `Target.parse` and `Target(parsing:)` read a key's numbers as ASCII digits that fit an
+  Int32, as Kotlin does: `line:٧` and `2:99999999999999999999` are no keys, and the React
+  Native module reads them as an empty word list, as on Android.
 
 ### Changed
 - The Android `QvpPageView`, the Flutter `QvpPageView`, the iOS `QvpPageView` and the web
