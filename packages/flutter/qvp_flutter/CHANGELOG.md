@@ -43,6 +43,16 @@
 ### Removed
 
 ### Fixed
+- `QvpKind` and `QvpDecorationKind` name every code in `qvp.h`: `QvpKind.ornament`,
+  `pageNumber` and `runningHead` (5 to 7), and `QvpDecorationKind.pageNumber`, `runningHead`
+  and `other` (5, 6 and 255). Before, `QvpPage.pathKind` and a decoration's kind could
+  return a value that no constant named.
+- Doc fixes in `types.dart`. `QvpSurahHeader`, `QvpAyahMark`, `QvpHitArea`, `QvpBox` and
+  `QvpLayout` name every call that fills them, the `_view` twins and `qvp_layout_current`
+  included. `QvpBox.line` and `QvpHitArea.line` say which calls carry a row on a reflowed
+  page. `QvpLayout.fitScale` shrinks to fit both width and height, not to height alone. The
+  default `QvpZoom` is at zoom 1, not all zero. `QvpDefaults` names its ratios apart from
+  its page-unit lengths.
 
 ## 0.8.0
 

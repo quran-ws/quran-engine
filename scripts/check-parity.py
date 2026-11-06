@@ -15,7 +15,8 @@ Output
   against the current sources (--check). Exit 1 on: a header/Rust mismatch, a stale
   Android header copy, a symbol that a wrapper neither binds nor declares as a gap, a
   header function without a row in the "Every symbol" table of docs/API.md (or a row
-  without a function), an abbreviated field name in a published JavaScript entry point, or
+  without a function), a wrapper that leaves out a QVP_KIND_*, QVP_FAMILY_*,
+  QVP_CATEGORY_* or QVP_DECORATION_* code or gives it another value, an abbreviated field name in a published JavaScript entry point, or
   React Native code files that differ from what scripts/gen-rn-enums.py writes from the
   header.
 
@@ -199,11 +200,58 @@ def check_defaults(problems: list[str]) -> None:
                 problems.append(f"{site} ({path}) has default {name} = {got[name]}, the header says {value}")
 
 
-def check_rn_codes(problems: list[str]) -> None:
-    """The React Native code files match what scripts/gen-rn-enums.py writes from the header."""
+def gen_rn_enums():
+    """scripts/gen-rn-enums.py as a module: its header enum reader and its writers."""
     spec = importlib.util.spec_from_file_location("gen_rn_enums", ROOT / "scripts/gen-rn-enums.py")
     gen = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gen)
+    return gen
+
+
+# The header enums every wrapper names, by prefix: (the JavaScript object, the native class).
+ENUMS = {
+    "KIND": ("KIND", "QvpKind"),
+    "FAMILY": ("FAMILY", "QvpFamily"),
+    "CATEGORY": ("CATEGORY", "QvpCategory"),
+    "DECORATION": ("DECORATION", "QvpDecorationKind"),
+}
+# Where each wrapper declares them, and how a declaration starts: {js} or {cls} is the name.
+ENUM_SITES = {
+    "web": ("web/qvp.js", "const {js} = {{"),
+    "react-native": ("packages/react-native/qvp-react-native/src/index.tsx", "const {js} = {{"),
+    "android": ("packages/android/qvp/src/main/kotlin/ws/quran/qvp/Types.kt", "object {cls} {{"),
+    "flutter": ("packages/flutter/qvp_flutter/lib/src/types.dart", "class {cls} {{"),
+    "ios": ("packages/ios/QvpKit/Sources/QvpKit/Types.swift", "enum {cls} {{"),
+}
+
+
+def check_enums(problems: list[str]) -> None:
+    """Every wrapper names every code of each enum in ENUMS, at the header's value. A
+    declaration runs from its start to the first `}`; a code is its SUFFIX or camelCase name
+    followed by `=` or `:` and the value."""
+    gen = gen_rn_enums()
+    header = HEADER.read_text()
+    for prefix, (js, cls) in ENUMS.items():
+        codes = gen.enum(prefix, header)
+        for site, (path, start) in ENUM_SITES.items():
+            text = (ROOT / path).read_text()
+            marker = start.format(js=js, cls=cls)
+            if marker not in text:
+                problems.append(f"{site} ({path}) has no `{marker}` for QVP_{prefix}_*")
+                continue
+            body = text[text.index(marker) + len(marker):]
+            body = body[: body.index("}")]
+            for suffix, value in codes:
+                m = re.search(rf"\b(?:{suffix}|{gen.camel(suffix)})\s*[=:]\s*(\d+)", body)
+                if not m:
+                    problems.append(f"{site} ({path}) does not name QVP_{prefix}_{suffix}")
+                elif int(m.group(1)) != value:
+                    problems.append(f"{site} ({path}) has QVP_{prefix}_{suffix} = {m.group(1)}, the header says {value}")
+
+
+def check_rn_codes(problems: list[str]) -> None:
+    """The React Native code files match what scripts/gen-rn-enums.py writes from the header."""
+    gen = gen_rn_enums()
     header = HEADER.read_text()
     tables = {prefix: gen.enum(prefix, header) for prefix in gen.TABLES}
     for path, text in ((gen.TS_OUT, gen.typescript(tables)), (gen.KT_OUT, gen.kotlin(tables))):
@@ -215,6 +263,7 @@ def main(argv: list[str]) -> int:
     check = "--check" in argv
     problems: list[str] = []
     check_defaults(problems)
+    check_enums(problems)
     check_js_names(problems)
     check_rn_codes(problems)
 
