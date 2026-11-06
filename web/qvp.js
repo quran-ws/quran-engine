@@ -457,7 +457,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /** The readout, or null when the page is not dressed: {ayahMark, surahHeader, pageFrame,
      * ayahMarks, surahHeaders, frameRepeats, frameStretched, draws, revision, viewBox,
      * overflow}. `viewBox` is [x, y, w, h] in page units; a border grows it. `overflow` is
-     * [left, top, right, bottom] in viewport px. The layout's `fitScale`, `fitX` and `fitY`
+     * [left, top, right, bottom] in layout px. The layout's `fitScale`, `fitX` and `fitY`
      * already fit the content plus this overflow, and `dressClamp` clamps to it. */
     dressInfo() {
       const s = this.e.scratch;

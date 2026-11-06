@@ -487,7 +487,7 @@ impl Page {
     }
 
     /// How much bigger the dressed page is than the laid-out content, on each side, in
-    /// viewport px through the current layout: `left, top, right, bottom`. An undressed
+    /// layout px, the space of the layout's content size: `left, top, right, bottom`. An undressed
     /// page answers zeroes.
     pub fn dress_overflow(&self) -> (f32, f32, f32, f32) {
         let Some(d) = &self.dress else { return (0.0, 0.0, 0.0, 0.0) };
@@ -502,6 +502,35 @@ impl Page {
             (ox + (vb[0] + vb[2]) * scale - cw).max(0.0),
             (oy + (vb[1] + vb[3]) * scale - ch).max(0.0),
         )
+    }
+
+    /// How far the dress draws over the content's top and below its bottom, in layout px: the
+    /// dress overflow, or more where the border's outline stands past the dress box. A stroke
+    /// is centred on its path, so half its width lies outside the box the border was fitted to.
+    /// The band of ink holds this much, so no row of the border is cut off. An undressed page
+    /// answers zeroes.
+    pub(crate) fn dress_ink_overflow(&self) -> (f32, f32) {
+        let (_, top, _, bottom) = self.dress_overflow();
+        let Some(d) = &self.dress else { return (top, bottom) };
+        let (mut y0, mut y1) = (f32::INFINITY, f32::NEG_INFINITY);
+        // The border is drawn in layout space with no group transform. A curve stays inside
+        // its control points, so the points bound it.
+        for t in d.table.iter().filter(|t| t.placement == NONE) {
+            let half = if t.flags & ODF_STROKE != 0 { t.stroke_width.max(0.0) / 2.0 } else { 0.0 };
+            let pts = &d.pts[t.pt_start as usize..(t.pt_start + t.pt_count) as usize];
+            for y in pts.iter().skip(1).step_by(2) {
+                y0 = y0.min(y - half);
+                y1 = y1.max(y + half);
+            }
+        }
+        if !(y0.is_finite() && y1.is_finite()) {
+            return (top, bottom);
+        }
+        let (scale, oy, ch) = match &self.layout {
+            Some(l) => (l.scale, l.offset_y, l.content_h),
+            None => (1.0, 0.0, self.height()),
+        };
+        (top.max(-(oy + y0 * scale)), bottom.max(oy + y1 * scale - ch))
     }
 
     /// Hold a view against the viewport, as [`View::clamp`] does, but for the dressed box:
@@ -777,7 +806,7 @@ mod tests {
     use super::*;
     use crate::fixtures::{add_path, page_with_surah_frame, square};
     use crate::style::LAYER_TOP;
-    use crate::{LayoutSpec, ReflowSpec};
+    use crate::{InkBand, LayoutSpec, ReflowSpec};
     use qvp_format::{DecoKind, DecoRec, PathKind, NONE_U16};
 
     /// The synthetic page with a surah frame on line 0, plus one real ayah medallion on
@@ -1596,5 +1625,445 @@ mod tests {
         assert!(near(tr.2, r) && near(tr.1, v[1]), "{tr:?}");
         assert!(near(bl.0, v[0]) && near(bl.3, b), "{bl:?}");
         assert!(near(br.2, r) && near(br.3, b), "{br:?}");
+    }
+
+    // ── the ink band of a dressed page (#182) ──
+
+    /// `View::ink_band` as it was before the dress overflow counted, kept to the letter so the
+    /// tests can show an undressed page's band did not move.
+    fn ink_band_before(
+        view: View,
+        content_h: f32,
+        viewport_w: f32,
+        viewport_h: f32,
+        max_height: f32,
+        max_pixels: f32,
+    ) -> InkBand {
+        let content_h = if content_h.is_finite() { content_h.max(0.0) } else { 0.0 };
+        let whole = InkBand { top: 0.0, height: content_h };
+        let scale = view.scale;
+        let screen_known = scale > 0.0 && scale.is_finite() && viewport_h > 0.0 && viewport_h.is_finite();
+        if !(screen_known && view.offset_y.is_finite()) {
+            return whole;
+        }
+        let hard = if max_height > 0.0 { max_height } else { crate::defaults::MAX_INK_HEIGHT }.max(1.0);
+        let screen = viewport_h.clamp(1.0, hard);
+        let budget = if max_pixels > 0.0 && viewport_w > 0.0 { max_pixels / viewport_w } else { f32::INFINITY };
+        let ceiling = hard.min(budget.max(screen));
+        if content_h * scale <= ceiling {
+            return whole;
+        }
+        let tall = (screen * 2.0).min(ceiling);
+        let half = (tall - screen) / 2.0;
+        let top = if half >= 1.0 { ((-view.offset_y - half) / half).floor() * half } else { -view.offset_y - half };
+        InkBand { top: top / scale, height: tall / scale }
+    }
+
+    fn same_bits(a: InkBand, b: InkBand) -> bool {
+        a.top.to_bits() == b.top.to_bits() && a.height.to_bits() == b.height.to_bits()
+    }
+
+    /// The scales, screens and limits the sweeps cross, in viewport pixels: no scale, NaN and
+    /// infinite ones, the fitted page and magnified ones; a normal, a tiny and a screen taller
+    /// than the ceiling.
+    const SCALES: [f32; 8] = [0.0, -1.0, f32::NAN, f32::INFINITY, 0.5, 1.0, 2.0, 8.0];
+    const SCREENS: [f32; 7] = [0.0, f32::NAN, 1.0, 37.0, 400.0, 844.0, 5000.0];
+
+    /// The limits a sweep tries for a box `d` viewport px tall with content `c` of it: none, at
+    /// the box, a pixel under and over it, at the content alone, and a budget under one screen.
+    fn limits(d: f32, c: f32, w: f32, h: f32) -> Vec<(f32, f32)> {
+        let mut l = vec![(0.0, 0.0), (d, 0.0), (d - 1.0, 0.0), (d + 1.0, 0.0), (c, 0.0), (1000.0, 0.0)];
+        if w > 0.0 {
+            l.extend([(0.0, d * w), (0.0, (d - 1.0) * w), (0.0, (d + 1.0) * w), (0.0, c * w), (0.0, w * h / 2.0)]);
+        }
+        l
+    }
+
+    /// Offsets from above the page to past its end, through the edges: the dressed box's top
+    /// at the screen's top, the content's top there, where the band first moves off the top of
+    /// the box, the middle, where the band reaches the bottom of the box, the box's bottom at
+    /// the screen's bottom, and a sweep between.
+    fn offsets(a: f32, d: f32, h: f32, half: f32) -> Vec<f32> {
+        let mut o = vec![h + 10.0, a, 0.0, a - 2.0 * half, a - 2.0 * half + 0.01, a - 2.0 * half - 0.01];
+        o.extend([
+            a - d / 2.0,
+            a - (d - h - half),
+            a - (d - h - half) + 0.01,
+            h - d + a,
+            h - d + a - 10.0,
+            -d - h - 10.0,
+        ]);
+        let step = (d + 2.0 * h) / 97.0;
+        let mut y = h;
+        while y > -d - h {
+            o.push(y);
+            y -= step.max(0.37);
+        }
+        o
+    }
+
+    #[test]
+    fn an_undressed_band_is_what_it_was_to_the_bit() {
+        // View::ink_band itself, over every cell of the sweep
+        for content_h in [0.0, 30.0, 618.7246, 9000.0, f32::NAN] {
+            for scale in SCALES {
+                for h in SCREENS {
+                    for w in [0.0, 390.0] {
+                        let s = if scale > 0.0 && scale.is_finite() { scale } else { 1.0 };
+                        let d = content_h * s;
+                        for (mh, mp) in limits(d, d, w, h) {
+                            for y in offsets(0.0, d, if h.is_finite() { h } else { 0.0 }, h / 2.0) {
+                                let v = View { scale, offset_x: 0.0, offset_y: y };
+                                let (new, old) =
+                                    (v.ink_band(content_h, w, h, mh, mp), ink_band_before(v, content_h, w, h, mh, mp));
+                                assert!(
+                                    same_bits(new, old),
+                                    "{content_h} {scale} {w}x{h} {mh} {mp} {y}: {new:?} != {old:?}"
+                                );
+                                // and the dressed band with no overflow
+                                let none = v.dressed_ink_band(content_h, (0.0, 0.0, 0.0), w, h, mh, mp);
+                                assert!(same_bits(none, old), "no overflow: {none:?} != {old:?}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // a page with no dress, with no layout, laid out printed and reflowed, and dressed then
+        // undressed, through the page's own call
+        let (mut p, _, _) = page();
+        let printed =
+            LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, pad_top: 10.0, pad_bottom: 10.0, ..Default::default() };
+        let reflowed = LayoutSpec { reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }), ..printed };
+        for step in 0..4 {
+            match step {
+                0 => {}
+                1 => {
+                    p.layout(&printed);
+                }
+                2 => {
+                    p.layout(&reflowed);
+                }
+                _ => {
+                    p.dress(&set(), &all()).unwrap();
+                    p.undress();
+                }
+            }
+            assert_eq!(p.dress_overflow(), (0.0, 0.0, 0.0, 0.0));
+            let ch = p.current_layout().map_or(p.height(), |l| l.content_h);
+            for scale in SCALES {
+                for h in SCREENS {
+                    let s = if scale > 0.0 && scale.is_finite() { scale } else { 1.0 };
+                    for (mh, mp) in limits(ch * s, ch * s, 200.0, h) {
+                        for y in offsets(0.0, ch * s, if h.is_finite() { h } else { 0.0 }, h / 2.0) {
+                            let v = View { scale, offset_x: 0.0, offset_y: y };
+                            let (new, old) =
+                                (p.layout_ink_band(v, 200.0, h, mh, mp), ink_band_before(v, ch, 200.0, h, mh, mp));
+                            assert!(same_bits(new, old), "step {step}, {scale} {h} {mh} {mp} {y}: {new:?} != {old:?}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_dressed_band_covers_the_screen_and_keeps_to_the_limits() {
+        // Overflow shapes, in layout px: only above, only below, both, uneven, under a pixel,
+        // and larger than a screen.
+        let shapes = [(13.472, 0.0), (0.0, 13.472), (13.472, 13.472), (19.886, 4.25), (0.3, 0.2), (300.0, 50.0)];
+        let mut cells = 0u32;
+        for (above, below) in shapes {
+            for content_h in [30.0, 618.7246, 9000.0] {
+                for scale in [0.5f32, 1.0, 2.0, 8.0] {
+                    for h in [1.0f32, 37.0, 844.0, 5000.0] {
+                        for w in [0.0, 390.0] {
+                            let px = |o: f32| if o > 0.0 { (o * scale).ceil() + 1.0 } else { 0.0 };
+                            let (a, b) = (px(above), px(below));
+                            let (c, d) = (content_h * scale, content_h * scale + a + b);
+                            for (mh, mp) in limits(d, c, w, h) {
+                                let hard = if mh > 0.0 { mh } else { crate::defaults::MAX_INK_HEIGHT }.max(1.0);
+                                let screen = h.clamp(1.0, hard);
+                                let budget = if mp > 0.0 && w > 0.0 { mp / w } else { f32::INFINITY };
+                                let ceiling = hard.min(budget.max(screen));
+                                let half = ((screen * 2.0).min(ceiling) - screen) / 2.0;
+                                for y in offsets(a, d, h, half) {
+                                    let v = View { scale, offset_x: 0.0, offset_y: y };
+                                    let band = v.dressed_ink_band(content_h, (above, below, above), w, h, mh, mp);
+                                    let tag = format!(
+                                        "{above}/{below} {content_h} x{scale} {w}x{h} {mh} {mp} at {y}: {band:?}"
+                                    );
+                                    // on the screen, in viewport px
+                                    let (top, bottom) = (y + band.top * scale, y + (band.top + band.height) * scale);
+                                    let eps = 1e-3 * (1.0 + d.abs() + y.abs());
+                                    if d <= ceiling {
+                                        // the whole dressed box, its overflow in whole pixels
+                                        assert!((band.top * scale + a).abs() <= eps, "whole top {tag}");
+                                        assert!((band.height * scale - d).abs() <= eps, "whole height {tag}");
+                                    } else if h > hard && c <= ceiling {
+                                        // No band covers this screen. The band is the hard limit
+                                        // tall, holds the whole bare page, and starts at the
+                                        // border's top or as near it as fits, on a whole pixel.
+                                        let (top, tall) = (band.top * scale, band.height * scale);
+                                        assert!((tall - hard).abs() <= eps, "the hard limit {tag}");
+                                        let want = (-(above * scale).ceil()).max((c - tall).ceil()).min(0.0);
+                                        assert!((top - want).abs() <= eps, "from the border's top {tag}");
+                                        assert!(top <= eps && top + tall >= c - eps, "the whole bare page {tag}");
+                                        // to the page's bottom exactly, unless the page is within
+                                        // the 0.01 px the band leaves under the limit
+                                        if c <= hard - 0.01 {
+                                            assert!(top + tall >= c - 1e-3, "the page's last row {tag}");
+                                        }
+                                        let host_rows = (f64::from(band.height) * f64::from(scale)).ceil();
+                                        assert!(host_rows <= f64::from(hard).ceil(), "no row over the limit {tag}");
+                                    } else {
+                                        // within the limits: never past the hard one, and past
+                                        // the budget only to cover one screen
+                                        let tall = band.height * scale;
+                                        assert!(tall <= hard + eps, "hard limit {tag}");
+                                        // a band that follows the reader and keeps whole pixels
+                                        // has one more row
+                                        let room = if c <= ceiling && half < 1.0 { 1.0 } else { 0.0 };
+                                        assert!(tall <= budget.max(screen) + room + eps, "budget {tag}");
+                                        assert!(tall >= screen - eps, "one screen {tag}");
+                                        // the band covers the screen, so every visible pixel of
+                                        // the dressed box, unless the screen is taller than the
+                                        // hard limit, when the band is exactly that tall
+                                        if h <= hard {
+                                            assert!(top <= eps && bottom >= h - eps, "covers the screen {tag}");
+                                        } else {
+                                            assert!((tall - hard).abs() <= eps, "a screen over the ceiling {tag}");
+                                        }
+                                        // Where the bare page bands too, the band is the bare
+                                        // page's, to the bit: the same steps and the same ink.
+                                        // Where it bands only because of the border, its steps
+                                        // are whole pixels, so its top is on the pixel grid of
+                                        // the whole page it was.
+                                        let plain = v.ink_band(content_h, w, h, mh, mp);
+                                        if c > ceiling {
+                                            assert!(same_bits(band, plain), "the bare band {tag} vs {plain:?}");
+                                        } else if half >= 1.0 || (screen * 2.0).min(ceiling) + 1.0 <= hard {
+                                            let top = band.top * scale;
+                                            assert!((top - top.round()).abs() <= eps, "whole steps {tag}");
+                                        }
+                                        // in the middle of the box, the band stays inside it
+                                        let inside = y - a; // the screen's top, down the dressed box
+                                        if -inside >= 2.0 * half + a && -inside + screen + half <= d {
+                                            assert!(band.top * scale >= -a - room - eps, "inside, top {tag}");
+                                            assert!(
+                                                (band.top + band.height) * scale <= c + b + room + eps,
+                                                "inside, bottom {tag}"
+                                            );
+                                        }
+                                    }
+                                    cells += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(cells > 100_000, "{cells} cells");
+    }
+
+    #[test]
+    fn a_pan_moves_the_dressed_band_one_step_at_a_time() {
+        for (above, below, h, mh, mp) in [
+            (13.472f32, 13.472f32, 844.0f32, 0.0f32, 0.0f32),
+            (19.886, 0.0, 844.0, 1000.0, 0.0),
+            (0.0, 19.886, 400.0, 0.0, 390.0 * 500.0),
+            (300.0, 50.0, 37.0, 0.0, 0.0),
+        ] {
+            for scale in [1.0f32, 2.0, 8.0] {
+                let content_h = 9000.0f32;
+                let at = |y: f32| {
+                    View { scale, offset_x: 0.0, offset_y: -y }.dressed_ink_band(
+                        content_h,
+                        (above, below, above),
+                        390.0,
+                        h,
+                        mh,
+                        mp,
+                    )
+                };
+                let first = at(0.0);
+                let (tall, screen) =
+                    (first.height * scale, h.min(if mh > 0.0 { mh } else { crate::defaults::MAX_INK_HEIGHT }));
+                let half = (tall - screen) / 2.0;
+                assert!(half >= 1.0, "{above}/{below} x{scale}: a band that steps");
+                let (mut prev, mut moves, mut y) = (first, 0, 0.0f32);
+                while y < 4000.0 {
+                    let b = at(y);
+                    assert_eq!(b.height, first.height, "the height holds");
+                    if b.top != prev.top {
+                        let moved = (b.top - prev.top) * scale;
+                        assert!(
+                            (moved - half).abs() <= 1e-2,
+                            "{above}/{below} x{scale} at {y}: moved {moved}, a step is {half}"
+                        );
+                        moves += 1;
+                    }
+                    prev = b;
+                    y += 0.37;
+                }
+                assert!(moves > 0, "the band moved");
+            }
+        }
+    }
+
+    #[test]
+    fn a_band_that_follows_the_reader_only_because_of_its_border() {
+        // 618.7246 px of content at 1.35 is 835.3 px, under an 844 px screen; 13.472 px of
+        // border above and below is 20 px each on the screen, so the dressed box is 875 px.
+        let (content_h, o, scale) = (618.7246f32, (13.472f32, 13.472f32), 1.35f32);
+        let box_px = content_h * scale + 2.0 * ((13.472f32 * scale).ceil() + 1.0);
+        assert!(content_h * scale <= 844.0 && box_px > 844.5);
+        for y in [0.0f32, -100.25, -100.75, -1234.5] {
+            let v = View { scale, offset_x: 0.0, offset_y: y };
+            // A budget of one screen: the band follows the reader on whole pixels and is one row
+            // taller than the screen, one over the budget.
+            let b = v.dressed_ink_band(content_h, (o.0, o.1, o.0), 390.0, 844.0, 0.0, 390.0 * 844.0);
+            let (top, tall) = (b.top * scale, b.height * scale);
+            assert!((tall - 845.0).abs() < 1e-3, "{y}: {b:?}");
+            assert!((top - (-y).floor()).abs() < 1e-3, "{y}: {b:?}");
+            assert!(top <= -y && top + tall >= -y + 844.0 - 1e-3, "{y}: covers the screen");
+            // A hard limit half a pixel over the screen has no room for that row: the band follows
+            // the reader as the bare page's does, with its half pixel of slack either side.
+            let b = v.dressed_ink_band(content_h, (o.0, o.1, o.0), 390.0, 844.0, 844.5, 0.0);
+            let (top, tall) = (b.top * scale, b.height * scale);
+            assert!((tall - 844.5).abs() < 1e-3, "{y}: {b:?}");
+            assert!((top - (-y - 0.25)).abs() < 1e-3, "{y}: {b:?}");
+            assert!(top <= -y && top + tall >= -y + 844.0 - 1e-3, "{y}: covers the screen");
+        }
+    }
+
+    #[test]
+    fn under_a_screen_taller_than_the_ceiling_the_band_starts_at_the_border() {
+        // 1237.4 px of page at scale 2 fits a ceiling of 1240 px; with 29 px of border above and
+        // below it does not. The screen is 5000 px.
+        let (content_h, o, scale) = (618.7246f32, (13.472f32, 13.472f32), 2.0f32);
+        // the band starts at the dress box's top, 27 px over the content, as hosts drew the border
+        let a = (13.472f32 * scale).ceil();
+        for (hard, top) in [(1240.0f32, -2.0f32), (1260.0, -22.0), (1290.0, -a), (1237.5, 0.0)] {
+            let v = View { scale, offset_x: 0.0, offset_y: -300.0 };
+            let b = v.dressed_ink_band(content_h, (o.0, o.1, o.0), 390.0, 5000.0, hard, 0.0);
+            assert!((b.height * scale - hard).abs() < 0.02, "{hard}: {b:?}");
+            assert!((b.top * scale - top).abs() < 1e-3, "{hard}: {b:?} want {top}");
+            assert!(b.top <= 0.0 && b.top + b.height >= content_h - 1e-3, "{hard}: the whole page");
+            // the host's rows, its height times the scale rounded up, are never over the limit
+            assert!((f64::from(b.height) * f64::from(scale)).ceil() <= f64::from(hard).ceil(), "{hard}: {b:?}");
+        }
+    }
+
+    #[test]
+    fn no_screen_gives_the_whole_dressed_box() {
+        for (above, below) in [(13.472f32, 13.472f32), (19.886, 0.0), (0.0, 4.25)] {
+            let whole = InkBand { top: -above, height: 618.7246 + above + below };
+            let views = [
+                (0.0, 0.0, 844.0),
+                (-1.0, 0.0, 844.0),
+                (f32::NAN, 0.0, 844.0),
+                (f32::INFINITY, 0.0, 844.0),
+                (1.0, f32::NAN, 844.0),
+                (1.0, f32::INFINITY, 844.0),
+                (1.0, f32::NEG_INFINITY, 844.0),
+                (1.0, 0.0, 0.0),
+                (1.0, 0.0, -10.0),
+                (1.0, 0.0, f32::NAN),
+                (1.0, 0.0, f32::INFINITY),
+                // a scale so large the overflow on the screen is not finite
+                (f32::MAX, 0.0, 844.0),
+            ];
+            for (scale, offset_y, h) in views {
+                for (mh, mp) in [(0.0, 0.0), (10.0, 0.0), (0.0, 390.0 * 10.0)] {
+                    let v = View { scale, offset_x: 0.0, offset_y };
+                    assert_eq!(
+                        v.dressed_ink_band(618.7246, (above, below, above), 390.0, h, mh, mp),
+                        whole,
+                        "{scale} {offset_y} {h} {mh} {mp}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_dressed_page_bands_its_dressed_box() {
+        let (mut p, _, _) = page();
+        let printed =
+            LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, pad_top: 10.0, pad_bottom: 10.0, ..Default::default() };
+        let reflowed = LayoutSpec { reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }), ..printed };
+        for spec in [printed, reflowed] {
+            p.undress();
+            p.layout(&spec);
+            let bare: Vec<InkBand> = [1.0f32, 3.0]
+                .iter()
+                .map(|&s| p.layout_ink_band(View { scale: s, offset_x: 0.0, offset_y: -50.0 }, 200.0, 100.0, 0.0, 0.0))
+                .collect();
+            p.dress(&set(), &all()).unwrap();
+            let ch = p.current_layout().unwrap().content_h;
+            let (_, bt, _, bb) = p.dress_overflow();
+            let (t, b) = p.dress_ink_overflow();
+            assert!(bt > 0.0 && bb > 0.0, "{bt} {bb}");
+            // the border is stroked, and half its stroke stands past the dress box
+            assert!(t > bt && b > bb, "{t} {b} against {bt} {bb}");
+            // every point of the border's outline is inside the whole dressed band
+            let l = p.current_layout().unwrap().clone();
+            let d = p.dress_of().unwrap();
+            for r in d.table.iter().filter(|r| r.placement == NONE) {
+                let half = if r.flags & ODF_STROKE != 0 { r.stroke_width / 2.0 } else { 0.0 };
+                for y in d.pts[r.pt_start as usize..(r.pt_start + r.pt_count) as usize].iter().skip(1).step_by(2) {
+                    let (lo, hi) = (l.offset_y + (y - half) * l.scale, l.offset_y + (y + half) * l.scale);
+                    assert!(lo >= -t - 1e-3 && hi <= l.content_h + b + 1e-3, "{lo} {hi} outside {t} {b}");
+                }
+            }
+            // the page's call is the dressed band of what the dress draws above and below
+            for scale in [f32::NAN, 0.0, 1.0, 2.5, 8.0] {
+                for (h, mh, mp) in
+                    [(400.0, 0.0, 0.0), (100.0, 0.0, 0.0), (100.0, 150.0, 0.0), (100.0, 0.0, 200.0 * 150.0)]
+                {
+                    for y in [30.0, 0.0, -50.0, -500.0, -5000.0] {
+                        let v = View { scale, offset_x: 0.0, offset_y: y };
+                        let got = p.layout_ink_band(v, 200.0, h, mh, mp);
+                        assert!(
+                            same_bits(got, v.dressed_ink_band(ch, (t, b, bt), 200.0, h, mh, mp)),
+                            "{scale} {h} {mh} {mp} {y}"
+                        );
+                    }
+                }
+            }
+            // at scale 1 the page fits: the band is the whole dressed box, its overflow rounded
+            // out to whole pixels and one more for the antialiased edge; with no scale it is the
+            // dressed box itself
+            let v = View { scale: 1.0, offset_x: 0.0, offset_y: 0.0 };
+            let whole = p.layout_ink_band(v, 200.0, 400.0, 0.0, 0.0);
+            let (a, bb) = (t.ceil() + 1.0, b.ceil() + 1.0);
+            assert!(near(whole.top, -a) && near(whole.height, ch + a + bb), "{whole:?}");
+            let none = p.layout_ink_band(View { scale: f32::NAN, ..v }, 200.0, 400.0, 0.0, 0.0);
+            assert_eq!(none, InkBand { top: -t, height: ch + t + b });
+            // a ceiling or a budget at the dressed box keeps it whole, and a pixel under bands it
+            let d = ch + a + bb;
+            for (mh, mp, whole_box) in [
+                (d, 0.0, true),
+                (d + 1.0, 0.0, true),
+                (d - 1.0, 0.0, false),
+                (ch, 0.0, false),
+                (0.0, 200.0 * d, true),
+                (0.0, 200.0 * (d + 1.0), true),
+                (0.0, 200.0 * (d - 1.0), false),
+                (0.0, 200.0 * ch, false),
+            ] {
+                let got = p.layout_ink_band(v, 200.0, 100.0, mh, mp);
+                assert_eq!(near(got.height, d), whole_box, "{mh} {mp}: {got:?}, the box is {d}");
+                assert!(got.height <= d + 1e-3, "{mh} {mp}: {got:?}");
+            }
+            // undressed again, the band is the one it was before the dress
+            p.undress();
+            for (i, &s) in [1.0f32, 3.0].iter().enumerate() {
+                let v = View { scale: s, offset_x: 0.0, offset_y: -50.0 };
+                assert!(same_bits(p.layout_ink_band(v, 200.0, 100.0, 0.0, 0.0), bare[i]));
+            }
+        }
     }
 }

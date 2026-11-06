@@ -163,16 +163,30 @@ console.log(`ok  ${hits.cases.length} hit scenarios match the engine`)
 
 // conformance/scenarios/ink-band.json: the band of the page a host keeps drawn, for a page
 // that fits, a magnified page drawn a band at a time, pans inside one step and across it, the
-// host's own limits, and no screen at all.
+// host's own limits, and no screen at all; then the same page dressed.
 const inks = JSON.parse(readFileSync(new URL('conformance/scenarios/ink-band.json', root), 'utf8'))
 const inkPage = engine.loadPage(readFileSync(pagePath))
 const inkLayout = inkPage.layout(inks.spec)
 assert.ok(Math.abs(inkLayout.contentH - inks.contentH) <= inks.tolerance * inks.contentH, `ink band contentH: got ${inkLayout.contentH}, engine says ${inks.contentH}`)
-for (const c of inks.cases) {
-  const got = inkPage.layoutInkBand(c.view, c.viewportW, c.viewportH, { maxHeight: c.maxHeight, maxPixels: c.maxPixels })
-  for (const k of ['top', 'height']) {
-    assert.ok(Math.abs(got[k] - c.band[k]) <= inks.tolerance * Math.max(1, Math.abs(c.band[k])), `ink band ${c.name} ${k}: got ${got[k]}, engine says ${c.band[k]}`)
+const inkCases = (cases, tag) => {
+  for (const c of cases) {
+    const got = inkPage.layoutInkBand(c.view, c.viewportW, c.viewportH, { maxHeight: c.maxHeight, maxPixels: c.maxPixels })
+    for (const k of ['top', 'height']) {
+      assert.ok(Math.abs(got[k] - c.band[k]) <= inks.tolerance * Math.max(1, Math.abs(c.band[k])), `${tag} ${c.name} ${k}: got ${got[k]}, engine says ${c.band[k]}`)
+    }
   }
 }
+inkCases(inks.cases, 'ink band')
+assert.equal(inks.cases.length, 14)
+// The same page dressed in the synthetic set: the band is that of the dressed box, which
+// holds the border above and below the content.
+const inkHex = readFileSync(new URL(`conformance/${inks.dressed.ornaments}`, root), 'utf8').replace(/\s+/g, '')
+const inkSet = engine.loadOrnaments(Uint8Array.from(inkHex.match(/../g), b => parseInt(b, 16)))
+assert.ok(inkPage.dress(inkSet, inks.dressed.dress), 'ink band: the engine refused the dress')
+inkPage.dressInfo().overflow.forEach((v, i) => assert.ok(Math.abs(v - inks.dressed.overflow[i]) <= inks.tolerance * Math.max(1, Math.abs(inks.dressed.overflow[i])), `ink band overflow[${i}]: got ${v}, engine says ${inks.dressed.overflow[i]}`))
+inkCases(inks.dressed.cases, 'dressed ink band')
+assert.equal(inks.dressed.cases.length, 17)
+console.log(`ok  ${inks.cases.length} ink band scenarios and ${inks.dressed.cases.length} dressed ones match the engine`)
+
 inkPage.free()
-console.log(`ok  ${inks.cases.length} ink band scenarios match the engine`)
+inkSet.free()

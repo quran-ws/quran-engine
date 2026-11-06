@@ -14,7 +14,7 @@ cargo run -q -p qvp-core --release --example lite_passage_metrics -- dist/pages 
 cargo run -q -p qvp-core --release --example dress_scenarios -- dist/pages/042.qvp "$tmp/scenarios/dress.json" "$tmp/qvo1-dress.hex"
 cargo run -q -p qvp-core --release --example zoom_scenarios -- dist/pages/042.qvp "$tmp/scenarios/zoom.json"
 cargo run -q -p qvp-core --release --example hit_scenarios -- dist/pages/042.qvp "$tmp/scenarios/hit.json"
-cargo run -q -p qvp-core --release --example ink_band_scenarios -- dist/pages/042.qvp "$tmp/scenarios/ink-band.json"
+cargo run -q -p qvp-core --release --example ink_band_scenarios -- dist/pages/042.qvp "$tmp/scenarios/ink-band.json" "$tmp/qvo1-dress.hex"
 for file in scenarios/layout.json scenarios/passage.json lite-passage-metrics.json scenarios/dress.json qvo1-dress.hex scenarios/zoom.json scenarios/hit.json scenarios/ink-band.json; do
   if [ "${1:-}" = "--check" ]; then
     if cmp -s "$tmp/$file" "conformance/$file"; then

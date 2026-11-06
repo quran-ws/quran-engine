@@ -378,7 +378,7 @@ void main() {
 
   // The band of the page a host keeps drawn: a page that fits, a magnified page
   // drawn a band at a time, pans inside one step and across it, the host's own
-  // limits, and no screen at all.
+  // limits, and no screen at all; then the same page dressed.
   test(
     'ink band scenarios match the engine (conformance/scenarios/ink-band.json)',
     () {
@@ -406,29 +406,65 @@ void main() {
         ),
       );
       close(l.contentH, json['contentH'] as num, 'contentH');
-      for (final c in cases) {
-        final v = c['view'] as Map<String, dynamic>;
-        final got = p.layoutInkBand(
-          QvpView(
-            scale: (v['scale'] as num).toDouble(),
-            offsetX: (v['offsetX'] as num).toDouble(),
-            offsetY: (v['offsetY'] as num).toDouble(),
-          ),
-          (c['viewportW'] as num).toDouble(),
-          (c['viewportH'] as num).toDouble(),
-          maxHeight: (c['maxHeight'] as num).toDouble(),
-          maxPixels: (c['maxPixels'] as num).toDouble(),
-        );
-        final want = c['band'] as Map<String, dynamic>;
-        close(got.top, want['top'] as num, 'ink band ${c['name']} top');
-        close(
-          got.height,
-          want['height'] as num,
-          'ink band ${c['name']} height',
-        );
+      void replay(List<dynamic> cases, String tag) {
+        for (final c in cases) {
+          final v = c['view'] as Map<String, dynamic>;
+          final got = p.layoutInkBand(
+            QvpView(
+              scale: (v['scale'] as num).toDouble(),
+              offsetX: (v['offsetX'] as num).toDouble(),
+              offsetY: (v['offsetY'] as num).toDouble(),
+            ),
+            (c['viewportW'] as num).toDouble(),
+            (c['viewportH'] as num).toDouble(),
+            maxHeight: (c['maxHeight'] as num).toDouble(),
+            maxPixels: (c['maxPixels'] as num).toDouble(),
+          );
+          final want = c['band'] as Map<String, dynamic>;
+          close(got.top, want['top'] as num, '$tag ${c['name']} top');
+          close(got.height, want['height'] as num, '$tag ${c['name']} height');
+        }
       }
+
+      replay(cases, 'ink band');
       expect(cases.length, 14);
+      // The same page dressed in the synthetic set: the band is that of the dressed box,
+      // which holds the border above and below the content.
+      final dressed = json['dressed'] as Map<String, dynamic>;
+      final hex = File('$repo/conformance/${dressed['ornaments']}')
+          .readAsStringSync()
+          .replaceAll(RegExp(r'\s+'), '');
+      final set = engine.loadOrnaments(
+        Uint8List.fromList([
+          for (var i = 0; i < hex.length; i += 2)
+            int.parse(hex.substring(i, i + 2), radix: 16),
+        ]),
+      );
+      final d = dressed['dress'] as Map<String, dynamic>;
+      int k(String key) => (d[key] as num).toInt();
+      double x(String key) => (d[key] as num).toDouble();
+      final info = p.dress(
+        set,
+        QvpDressSpec(
+          ayahMark: k('ayahMark'),
+          surahHeader: k('surahHeader'),
+          pageFrame: k('pageFrame'),
+          gap: x('gap'),
+          bandGap: x('bandGap'),
+          ayahMarkScale: x('ayahMarkScale'),
+          pageFrameScale: x('pageFrameScale'),
+        ),
+      );
+      expect(info, isNotNull, reason: 'the engine refused the dress');
+      final overflow = dressed['overflow'] as List<dynamic>;
+      for (var i = 0; i < 4; i++) {
+        close(info!.overflow[i], overflow[i] as num, 'overflow[$i]');
+      }
+      final dressedCases = dressed['cases'] as List<dynamic>;
+      replay(dressedCases, 'dressed ink band');
+      expect(dressedCases.length, 17);
       p.dispose();
+      set.dispose();
     },
   );
 

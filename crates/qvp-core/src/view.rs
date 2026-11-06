@@ -108,31 +108,135 @@ impl View {
     ) -> InkBand {
         let content_h = if content_h.is_finite() { content_h.max(0.0) } else { 0.0 };
         let whole = InkBand { top: 0.0, height: content_h };
-        let scale = self.scale;
-        let screen_known = scale > 0.0 && scale.is_finite() && viewport_h > 0.0 && viewport_h.is_finite();
-        if !(screen_known && self.offset_y.is_finite()) {
+        if !self.has_screen(viewport_h) {
             return whole;
         }
-        // the hard limit, at least one pixel
-        let hard = if max_height > 0.0 { max_height } else { defaults::MAX_INK_HEIGHT }.max(1.0);
-        // In viewport pixels: the screen, held under the hard limit.
-        let screen = viewport_h.clamp(1.0, hard);
-        // the pixel budget, which never takes the band below one screen
-        let budget = if max_pixels > 0.0 && viewport_w > 0.0 { max_pixels / viewport_w } else { f32::INFINITY };
-        let ceiling = hard.min(budget.max(screen));
-        if content_h * scale <= ceiling {
+        let (screen, ceiling) = band_limits(viewport_w, viewport_h, max_height, max_pixels);
+        if content_h * self.scale <= ceiling {
             return whole;
         }
-        // A band two screens tall, or as tall as the ceiling allows, and a step of half the
-        // slack. The screen at the top of the band is `-offset_y` down the page. A step under
-        // one pixel would redraw on every frame of a pan anyway, so such a band follows the
-        // reader instead, with its slack shared either side: a step larger than half the slack
-        // would leave the edge of the screen with no ink.
+        self.band_around(screen, ceiling, None)
+    }
+
+    /// [`View::ink_band`] for a page whose dress draws `above` layout pixels over the content's
+    /// top and `below` under its bottom, and whose dress box stands `box_above` over its top. Each side's overflow is rounded up to whole viewport
+    /// pixels, plus one for the antialiased edge of the border, and counts against both limits.
+    ///
+    /// - The dressed box fits: the band is that box, `above` before the content's top.
+    /// - Neither the dressed box nor the bare page fits: the band is the bare page's band, to the
+    ///   bit, so the ink in it is the ink the bare page draws.
+    /// - The bare page fits and the dressed box does not, so the page bands only because of its
+    ///   border: the band steps as the bare page's would, with the step rounded down to whole
+    ///   pixels, so its top stays on the pixel grid of the whole page it was. With under 2 px of
+    ///   slack it follows the reader; its top is then rounded down and it is one pixel taller, which
+    ///   can pass the pixel budget by one row, when the hard limit has room for that pixel.
+    /// - As above, under a screen taller than the hard limit, which no band covers: the band is as
+    ///   tall as the hard limit, holds the whole bare page, and starts at the top of the dress box
+    ///   (`box_above`, the dress overflow without the stroke), or as near it as the hard limit
+    ///   allows.
+    /// - No screen: the whole dressed box, `-above` to `content_h + below`, not rounded.
+    ///
+    /// With no overflow this is [`View::ink_band`], to the bit.
+    pub(crate) fn dressed_ink_band(
+        self,
+        content_h: f32,
+        (above, below, box_above): (f32, f32, f32),
+        viewport_w: f32,
+        viewport_h: f32,
+        max_height: f32,
+        max_pixels: f32,
+    ) -> InkBand {
+        let (above, below) = (above.max(0.0), below.max(0.0));
+        if above == 0.0 && below == 0.0 {
+            return self.ink_band(content_h, viewport_w, viewport_h, max_height, max_pixels);
+        }
+        let content_h = if content_h.is_finite() { content_h.max(0.0) } else { 0.0 };
+        let whole = InkBand { top: -above, height: content_h + above + below };
+        // The overflow on the screen in whole viewport pixels, and one more on each side that has
+        // any: the antialiased edge of the border's outline spills into the next pixel.
+        let px = |o: f32| if o > 0.0 { (o * self.scale).ceil() + 1.0 } else { 0.0 };
+        let (a, b) = (px(above), px(below));
+        if !self.has_screen(viewport_h) || !(a + b).is_finite() {
+            return whole;
+        }
+        let (screen, ceiling) = band_limits(viewport_w, viewport_h, max_height, max_pixels);
+        if content_h * self.scale + a + b <= ceiling {
+            return InkBand { top: -a / self.scale, height: content_h + (a + b) / self.scale };
+        }
+        let bare_fits = content_h * self.scale <= ceiling;
+        // A screen taller than the hard limit gets no band that covers it. The band is then as
+        // tall as the hard limit: the bare page whole, and as much border above it as fits, from
+        // the top of the dress box, as hosts drew it before the band held the border. Its top is
+        // a whole pixel, rounded up so the page stays whole.
+        if bare_fits && viewport_h > screen {
+            let hard = hard_limit(max_height);
+            // The host multiplies the height back by its own scale, which can be a double where
+            // this one is an f32, and rounds up to whole rows. A height a hair over the hard limit
+            // would make one row more, so the band stops 0.01 px short of it.
+            let mut height = hard / self.scale;
+            while f64::from(height) * f64::from(self.scale) > f64::from(hard) - 0.01 {
+                height = height.next_down();
+            }
+            // The top is taken from that height, so the band still reaches the page's bottom.
+            let box_a = (box_above.max(0.0) * self.scale).ceil();
+            let top = (-box_a).max((content_h * self.scale - height * self.scale).ceil()).min(0.0);
+            return InkBand { top: top / self.scale, height };
+        }
+        self.band_around(screen, ceiling, if bare_fits { Some(hard_limit(max_height)) } else { None })
+    }
+
+    /// The band around the reader: two screens tall, or as tall as the ceiling allows, with a
+    /// step of half the slack, both in viewport pixels. The screen at the top of the band is
+    /// `-offset_y` down the page.
+    ///
+    /// `whole_pixels`, the hard limit, keeps the band's top on whole pixels: the step is rounded
+    /// down, and a smaller step still covers the screen. A band that follows the reader has its
+    /// top rounded down and is one pixel taller, so it still covers the screen, when the hard
+    /// limit has room for that pixel.
+    fn band_around(self, screen: f32, ceiling: f32, whole_pixels: Option<f32>) -> InkBand {
+        // A step under one pixel would redraw on every frame of a pan anyway, so such a band
+        // follows the reader instead, with its slack shared either side: a step larger than half
+        // the slack would leave the edge of the screen with no ink.
         let tall = (screen * 2.0).min(ceiling);
         let half = (tall - screen) / 2.0;
-        let top = if half >= 1.0 { ((-self.offset_y - half) / half).floor() * half } else { -self.offset_y - half };
-        InkBand { top: top / scale, height: tall / scale }
+        let step = if whole_pixels.is_some() { half.floor() } else { half };
+        if step >= 1.0 {
+            let top = ((-self.offset_y - step) / step).floor() * step;
+            return InkBand { top: top / self.scale, height: tall / self.scale };
+        }
+        match whole_pixels {
+            Some(hard) if tall + 1.0 <= hard => {
+                InkBand { top: (-self.offset_y - half).floor() / self.scale, height: (tall + 1.0) / self.scale }
+            }
+            _ => InkBand { top: (-self.offset_y - half) / self.scale, height: tall / self.scale },
+        }
     }
+
+    /// True when the view has a screen to put a band around: a positive, finite scale and
+    /// viewport height, and a finite vertical offset.
+    fn has_screen(self, viewport_h: f32) -> bool {
+        self.scale > 0.0
+            && self.scale.is_finite()
+            && viewport_h > 0.0
+            && viewport_h.is_finite()
+            && self.offset_y.is_finite()
+    }
+}
+
+/// The hard limit on a band's height in viewport pixels: `max_height`, or the default when it
+/// is 0 or less, and at least one pixel.
+fn hard_limit(max_height: f32) -> f32 {
+    if max_height > 0.0 { max_height } else { defaults::MAX_INK_HEIGHT }.max(1.0)
+}
+
+/// The screen and the ceiling of a band, in viewport pixels: the screen held under the hard
+/// limit, and the tallest band both limits allow. The pixel budget never takes the ceiling
+/// below one screen.
+fn band_limits(viewport_w: f32, viewport_h: f32, max_height: f32, max_pixels: f32) -> (f32, f32) {
+    let hard = hard_limit(max_height);
+    let screen = viewport_h.clamp(1.0, hard);
+    let budget = if max_pixels > 0.0 && viewport_w > 0.0 { max_pixels / viewport_w } else { f32::INFINITY };
+    (screen, hard.min(budget.max(screen)))
 }
 
 /// How many pages a released drag turns, in reading order: +1 the page after this one, -1 the
@@ -192,6 +296,25 @@ impl Page {
 
     /// The band of the current layout to draw for this view: [`View::ink_band`] on the
     /// layout's content height, or on the page's height when the page has no layout.
+    ///
+    /// A dressed page's border stands over the content's top and bottom by the dress overflow
+    /// ([`Page::dress_overflow`]), and its outline by half a stroke more where the border is
+    /// stroked. The overflow counts against both limits, rounded up to whole viewport pixels,
+    /// plus one for the antialiased edge. A host draws the border into the band with nothing
+    /// added.
+    ///
+    /// - The dressed box fits: the band is that box.
+    /// - Neither the dressed box nor the bare page fits: the band is the bare page's band, which
+    ///   covers the screen and so every part of the border on it.
+    /// - Only the bare page fits: the band steps as the bare page's would, on whole viewport
+    ///   pixels, and covers the screen.
+    /// - The same under a screen taller than the hard limit, which no band covers: the band is
+    ///   0.01 px under the hard limit, holds the whole bare page, and starts at the dress box's
+    ///   top or as near it as fits, so the top of the border can be clipped.
+    /// - No screen: the whole dressed box.
+    ///
+    /// The overflow to the left and right does not change the band, which is as wide as the
+    /// viewport. An undressed page gets exactly what [`View::ink_band`] gives.
     pub fn layout_ink_band(
         &self,
         view: View,
@@ -201,7 +324,9 @@ impl Page {
         max_pixels: f32,
     ) -> InkBand {
         let content_h = self.current_layout().map_or(self.height(), |l| l.content_h);
-        view.ink_band(content_h, viewport_w, viewport_h, max_height, max_pixels)
+        let (above, below) = self.dress_ink_overflow();
+        let (_, box_above, _, _) = self.dress_overflow();
+        view.dressed_ink_band(content_h, (above, below, box_above), viewport_w, viewport_h, max_height, max_pixels)
     }
 
     /// Where a point of the viewport lands in the laid-out page, for a host turning a touch

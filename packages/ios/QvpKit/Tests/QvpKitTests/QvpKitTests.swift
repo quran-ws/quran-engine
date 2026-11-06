@@ -1159,7 +1159,8 @@ final class QvpKitTests: XCTestCase {
 
     /// Every wrapper replays conformance/scenarios/ink-band.json: the band of the page a host
     /// keeps drawn, for a page that fits, a magnified page drawn a band at a time, pans inside
-    /// one step and across it, the host's own limits, and no screen at all.
+    /// one step and across it, the host's own limits, and no screen at all; then the same page
+    /// dressed.
     func testInkBandScenariosMatchTheEngine() throws {
         let url = Self.repo.appendingPathComponent("conformance/scenarios/ink-band.json")
         let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
@@ -1174,17 +1175,39 @@ final class QvpKitTests: XCTestCase {
             XCTAssertLessThanOrEqual(abs(Double(got) - w), tolerance * max(1, abs(w)), "\(what): got \(got), engine says \(w)")
         }
         near(l.contentH, json["contentH"], "contentH")
-        for c in cases {
-            let n: (String) -> Float = { Float((c[$0] as! NSNumber).doubleValue) }
-            let v = c["view"] as! [String: Any]
-            let vf: (String) -> Float = { Float((v[$0] as! NSNumber).doubleValue) }
-            let got = p.layoutInkBand(QvpView(scale: vf("scale"), offsetX: vf("offsetX"), offsetY: vf("offsetY")),
-                                      viewportW: n("viewportW"), viewportH: n("viewportH"), maxHeight: n("maxHeight"), maxPixels: n("maxPixels"))
-            let want = c["band"] as! [String: Any]
-            near(got.top, want["top"], "ink band \(c["name"]!) top")
-            near(got.height, want["height"], "ink band \(c["name"]!) height")
+        func replay(_ cases: [[String: Any]], _ tag: String) {
+            for c in cases {
+                let n: (String) -> Float = { Float((c[$0] as! NSNumber).doubleValue) }
+                let v = c["view"] as! [String: Any]
+                let vf: (String) -> Float = { Float((v[$0] as! NSNumber).doubleValue) }
+                let got = p.layoutInkBand(QvpView(scale: vf("scale"), offsetX: vf("offsetX"), offsetY: vf("offsetY")),
+                                          viewportW: n("viewportW"), viewportH: n("viewportH"), maxHeight: n("maxHeight"), maxPixels: n("maxPixels"))
+                let want = c["band"] as! [String: Any]
+                near(got.top, want["top"], "\(tag) \(c["name"]!) top")
+                near(got.height, want["height"], "\(tag) \(c["name"]!) height")
+            }
         }
+        replay(cases, "ink band")
         XCTAssertEqual(cases.count, 14)
+        // The same page dressed in the synthetic set: the band is that of the dressed box, which
+        // holds the border above and below the content.
+        let dressed = json["dressed"] as! [String: Any]
+        let hex = try String(contentsOf: Self.repo.appendingPathComponent("conformance/\(dressed["ornaments"] as! String)"), encoding: .utf8)
+            .filter { !$0.isWhitespace }
+        let chars = Array(hex)
+        let bytes = Data(stride(from: 0, to: chars.count, by: 2).map { UInt8(String(chars[$0...$0 + 1]), radix: 16)! })
+        let set = try QvpOrnaments(bytes: bytes); defer { set.close() }
+        let d = dressed["dress"] as! [String: Any]
+        let k: (String) -> Int = { (d[$0] as! NSNumber).intValue }
+        let x: (String) -> Float = { Float((d[$0] as! NSNumber).doubleValue) }
+        let info = try XCTUnwrap(p.dress(set, DressSpec(ayahMark: .index(k("ayahMark")), surahHeader: .index(k("surahHeader")),
+                                                         pageFrame: .index(k("pageFrame")), gap: x("gap"), bandGap: x("bandGap"),
+                                                         ayahMarkScale: x("ayahMarkScale"), pageFrameScale: x("pageFrameScale"))),
+                                 "the engine refused the dress")
+        for (i, want) in (dressed["overflow"] as! [Any]).enumerated() { near(info.overflow[i], want, "overflow[\(i)]") }
+        let dressedCases = dressed["cases"] as! [[String: Any]]
+        replay(dressedCases, "dressed ink band")
+        XCTAssertEqual(dressedCases.count, 13)
     }
 
     // ── passage ──

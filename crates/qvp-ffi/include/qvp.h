@@ -156,7 +156,7 @@ typedef struct { uint32_t ayah_mark, surah_header, page_frame /* ornament indice
                  const uint32_t* colors /* (ornament, part, rgba) triples, NULL for the designs' own */; uint32_t n_colors; } QvpDressSpec;
 typedef struct { uint32_t ayah_mark, surah_header, page_frame, n_ayah_marks, n_surah_headers, n_frame_repeats, frame_stretched, n_draws,
                  revision /* bumped on every rebuild: cache the ornament raster against it */;
-                 float view_box[4] /* x, y, w, h page units; a border grows it */; float overflow[4] /* left, top, right, bottom viewport px */; } QvpDressInfo;
+                 float view_box[4] /* x, y, w, h page units; a border grows it */; float overflow[4] /* left, top, right, bottom layout px */; } QvpDressInfo;
 /* table: n_draws × 9 uint32: op_start, op_count, pt_start, pt_count, colour, flags, stroke_width (float bits, page
    units), part, placement (the layout's placement index, as a page draw; QVP_NONE for the border). Ops and points
    are page units, as QvpGeometry. */
@@ -258,7 +258,14 @@ uint32_t qvp_layout_draw_list(const QvpPage*, float band_top, float band_bottom 
    it. max_pixels is the pixels the host keeps for one band, width × height (<= 0: no limit); it shrinks the band from two
    screens to no less than one screen, since a shorter band leaves part of the screen with no ink. The page is whole when it fits
    both limits read this way. The one exception: no scale, no viewport height, or a scale, viewport height or view.offset_y
-   that is NaN or infinite gives the whole page however tall it is. */
+   that is NaN or infinite gives the whole page however tall it is.
+   A dressed page's border stands over the content by the dress overflow (qvp_dress_info), and a stroked border by half
+   its stroke more. That counts against both limits, rounded up to whole viewport px plus one for the antialiased edge.
+   The dressed box fits: the band is that box. Neither it nor the bare page fits: the band is the bare page's band. Only
+   the bare page fits: the band steps like the bare page's, on whole viewport px; one that follows the reader is then one
+   px taller, which can pass max_pixels by one row; and under a screen taller than max_height it is 0.01 px under
+   max_height tall, holds the bare page whole and as much of the dress box above it as fits, so the top of the border can
+   be clipped. The host draws the border into the band and adds nothing. The exception gives the whole dressed box. */
 typedef struct { float top, height; } QvpInkBand;
 void     qvp_layout_ink_band(const QvpPage*, const QvpView*, float viewport_w, float viewport_h, float max_height, float max_pixels, QvpInkBand* out);
 uint32_t qvp_layout_placements(const QvpPage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);   /* what a draw list's `placement` indexes: the groups, then the repeats */
