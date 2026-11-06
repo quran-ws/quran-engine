@@ -26,6 +26,15 @@ All notable changes to the engine and its packages. The format follows
   the whole page, however tall. Bound as `layoutInkBand` in JavaScript, Kotlin, Dart and
   Swift. React Native calls it through the Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
   Kotlin, Dart and Swift tests replay them (#134).
+- Flutter: Swift Package Manager support on iOS and macOS (#153). `Package.swift` in
+  `ios/qvp_flutter` and `macos/qvp_flutter` links `QvpEngine.xcframework` as a binary
+  target. The podspecs stay, and both builds read the same sources and framework.
+- The Flutter workflow tests and builds on more platforms (#129). The `test` job also runs
+  the shared public-API cases on the web backend in Chrome. A `darwin` job on macOS runs the
+  `dart:ffi` suite on `libqvp_ffi.dylib` and builds the example for macOS and the iOS
+  simulator, once with Swift Package Manager and once with CocoaPods.
+  `scripts/check-darwin-engine-symbols.sh` then checks that each app exports the engine. A
+  `windows` job builds the example for Windows and checks that `qvp_ffi.dll` is bundled.
 
 ### Changed
 - `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and
@@ -70,6 +79,8 @@ All notable changes to the engine and its packages. The format follows
   `QvpEngine`. Three Kotlin and React Native doc blocks sat on the wrong item and now sit on
   the item they describe. The Kotlin and Swift `QvpLayout` blocks no longer say that
   `lineDy` places a path on a reflowed page, where the words move and not the lines.
+- `scripts/build-engine-ios.sh` copies `QvpEngine.xcframework` into the Flutter plugin's
+  `ios/qvp_flutter` and `macos/qvp_flutter`, one level below the old place.
 
 ### Removed
 
@@ -103,6 +114,12 @@ All notable changes to the engine and its packages. The format follows
   row on a reflowed page. `QvpLayout.fitScale` shrinks to fit both width and height, not to
   height alone. The default `QvpZoom` is at zoom 1, not all zero. `QvpDefaults` names its
   ratios apart from its page-unit lengths.
+- Flutter: on web, a `'surah:ayah:word'` target such as `'2:255:3'` named word 0 of the
+  page. The web backend did not send the word key to `qvp.js`. The new web test found it.
+- Flutter: on the `dart:ffi` backend, a word key that is not on the page, such as `'2:1:1'`
+  on page 42, named word 0. It now names no word, as `web/qvp.js` does.
+- The XCFramework's macOS slice holds arm64 and x86_64. A Flutter macOS release build is
+  universal, and it failed to link against the arm64-only slice.
 
 ## [0.8.0] - 2026-11-04
 

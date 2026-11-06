@@ -22,7 +22,7 @@ When developing this repository, produce the native engines with:
 export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
 bash scripts/build-engine-android.sh
 
-# iOS & macOS: produces QvpEngine.xcframework
+# iOS & macOS: QvpEngine.xcframework, copied into ios/qvp_flutter and macos/qvp_flutter
 bash scripts/build-engine-ios.sh
 
 # Windows: target/dist/qvp_ffi.dll
@@ -34,6 +34,16 @@ cargo build -p qvp-ffi --release
 # Web: assets/wasm/qvp_ffi.wasm and assets/js/qvp.js (a copy of web/qvp.js)
 bash scripts/sync-flutter-web-engine.sh
 ```
+
+On iOS and macOS the plugin builds with Swift Package Manager or with CocoaPods. Flutter
+picks Swift Package Manager when `flutter config --enable-swift-package-manager` is on and
+CocoaPods when it is off. `ios/qvp_flutter/Package.swift` and `ios/qvp_flutter.podspec`
+(and the two `macos` twins) build the same C source and link the same
+`QvpEngine.xcframework` from the Swift package directory. The Swift package needs a Flutter
+version whose Swift Package Manager support provides the `FlutterFramework` package. The
+CocoaPods build has no such limit. Git does not track the framework. In a clone without it,
+Swift Package Manager fails at package resolution, before the build starts, until
+`scripts/build-engine-ios.sh` runs.
 
 Run the web step before `flutter test` or `flutter build web`. The pubspec declares the
 two asset directories, and the repository does not track the files. The release workflow
@@ -169,8 +179,20 @@ the committed file. The Flutter workflow runs it.
 ```sh
 cargo build -p qvp-ffi --release
 bash scripts/sync-flutter-web-engine.sh               # the declared web assets must exist
-cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target/release/libqvp_ffi.so + dist/pages/042.qvp, 604.qvp, atlas.qva
+cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target/release/libqvp_ffi.so (.dylib on macOS) + dist/pages/042.qvp, 604.qvp, atlas.qva
+flutter test --platform chrome test/qvp_web_test.dart  # the web backend: assets/js/qvp.js, assets/wasm/qvp_ffi.wasm + the same data
 ```
+
+`test/shared/api_cases.dart` holds the cases that drive the public API alone. Both
+backends run them: `qvp_flutter_test.dart` on `dart:ffi` and `qvp_web_test.dart` on the
+web engine, so the two must give the same answers. A case that needs `dart:io`, a library
+path or the native backend stays in `qvp_flutter_test.dart`. Name the web file in a Chrome
+run: the `dart:ffi` suite does not compile for the web. Chrome must be installed. Set
+`CHROME_EXECUTABLE` when Flutter does not find it.
+
+CI runs the `dart:ffi` suite on Linux and macOS and the web cases in Chrome. It builds the
+example for Android, web, macOS, the iOS simulator and Windows. The macOS and simulator
+builds run once with Swift Package Manager and once with CocoaPods.
 
 ## Example — Mushaf Vector Reader
 

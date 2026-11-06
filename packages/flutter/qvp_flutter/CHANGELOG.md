@@ -19,6 +19,12 @@
   the whole page, however tall. Bound as `layoutInkBand` in JavaScript, Kotlin, Dart and
   Swift. React Native calls it through the Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
   Kotlin, Dart and Swift tests replay them (#134).
+- Swift Package Manager support on iOS and macOS (#153). `ios/qvp_flutter/Package.swift`
+  and `macos/qvp_flutter/Package.swift` link `QvpEngine.xcframework` as a binary target, and
+  the podspecs stay for apps that build with CocoaPods. Flutter no longer warns that the
+  plugin does not support Swift Package Manager.
+- `test/qvp_web_test.dart` runs the cases of `test/shared/api_cases.dart` on the web backend
+  in Chrome. `test/qvp_flutter_test.dart` runs the same cases on the `dart:ffi` backend.
 
 ### Changed
 - The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
@@ -39,6 +45,10 @@
   `page_view.dart` has a block that gives its units, its range and what an empty or null
   result means. `lib/src/bindings.dart` and the three backend files in `lib/src/backend/`
   are exempt, because `qvp.h` documents the calls they marshal (#135).
+- The iOS and macOS sources moved from `Classes/` to `qvp_flutter/Sources/qvp_flutter/`, the
+  layout Swift Package Manager needs. `QvpEngine.xcframework` moved from `ios/` and `macos/`
+  to `ios/qvp_flutter/` and `macos/qvp_flutter/`, where the podspec and `Package.swift` both
+  read it. `scripts/build-engine-ios.sh` copies it there. Run it again after you pull.
 
 ### Removed
 
@@ -53,6 +63,13 @@
   page. `QvpLayout.fitScale` shrinks to fit both width and height, not to height alone. The
   default `QvpZoom` is at zoom 1, not all zero. `QvpDefaults` names its ratios apart from
   its page-unit lengths.
+- On web, a `'surah:ayah:word'` target such as `'2:255:3'` named word 0 of the page.
+  `targetWords`, `highlight`, `mask`, `text`, `cropSvg` and the other target calls took the
+  first word. The web backend now sends the word key to `qvp.js`, which finds the word on
+  the page.
+- On iOS, macOS, Android, Windows and Linux, a word key that is not on the page, such as
+  `'2:1:1'` on page 42, named word 0. It now names no word, as on web: `targetWords` is
+  empty and `text` is `''`. A shared test case holds both backends to this.
 
 ## 0.8.0
 

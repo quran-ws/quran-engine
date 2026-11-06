@@ -2032,7 +2032,18 @@ class QvpNativeBackend implements QvpBackend {
     if (t.wordKey != null && handle != null) {
       final wk = t.wordKey!;
       final w = b.findWord(_page(handle), wk[0], wk[1], wk[2]);
-      r.a = w < 0 ? 0 : w;
+      if (w < 0) {
+        // A word key that is not on this page names no word, as in qvp.js: an empty words
+        // target. It used to name word 0.
+        r.target = T.words(const []).code;
+        r.a = 0;
+        r.b = 0;
+        r.c = 0;
+        r.words = ffi.nullptr;
+        r.nWords = 0;
+        return;
+      }
+      r.a = w;
     } else {
       r.a = t.argA;
     }
