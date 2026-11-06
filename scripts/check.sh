@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Run the checks CI runs, with the same commands. No argument runs all of them.
 #
-# Usage: scripts/check.sh [fmt|lint|test|gates|parity|versions|terminology|docs|structure|shell|web]...
+# Usage: scripts/check.sh [fmt|lint|test|gates|parity|versions|terminology|docs|structure|shell|web|example]...
 #
-# Inputs: the repository; `gates` needs the data from scripts/sync-test-data.sh.
+# Inputs: the repository; `gates` and `example` need the data from scripts/sync-test-data.sh,
+# and `example` needs Playwright in web/example (npm ci, then npx playwright install chromium).
 # Output: exit 0 when every selected check passes; the first failing check's output otherwise.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ALL=(fmt lint test gates parity versions terminology docs structure shell web)
+ALL=(fmt lint test gates parity versions terminology docs structure shell web example)
 [ $# -eq 0 ] && set -- "${ALL[@]}"
 
 step() { printf '\n== %s\n' "$1"; }
@@ -136,6 +137,20 @@ for check in "$@"; do
       # syntax check, not a typecheck; it catches the file being left unrunnable.
       node --check web/example/app.js
       echo "ok  web/example/app.js parses"
+      ;;
+    example)
+      step "web example UI smoke test: open a page, click a word, highlight"
+      wasm
+      python3 web/example/build.py dev
+      # Playwright and its browser are a download of about 150 MB, so a local run without
+      # them skips with a hint. CI installs them and sets QVP_REQUIRE_DATA, so there it fails.
+      if [ ! -d web/example/node_modules/playwright ]; then
+        hint="Playwright is not installed; run (cd web/example && npm ci && npx playwright install chromium)"
+        if [ -n "${QVP_REQUIRE_DATA:-}" ]; then echo "error: $hint" >&2; exit 1; fi
+        echo "skip web example: $hint"
+      else
+        (cd web/example && node smoke.test.mjs)
+      fi
       ;;
     *)
       echo "unknown check: $check (one of: ${ALL[*]})" >&2

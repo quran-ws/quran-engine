@@ -117,3 +117,49 @@ jobs:
         with:
           node-version: "20"
       - run: scripts/check.sh web
+
+  # The web example's UI smoke test: Chromium opens a page, clicks a word and checks the
+  # highlight. Not a required check, so its name can change without the ruleset.
+  web-example:
+    name: web example (UI smoke test)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      # The same key as the Flutter workflow's page data, so the two share one cache entry.
+      - name: Cache page data
+        uses: actions/cache@v4
+        with:
+          path: dist/pages
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      - name: Fetch page data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
+          QVP_SYNC: pages
+        run: scripts/sync-test-data.sh
+      - name: Install Playwright
+        working-directory: web/example
+        run: npm ci --no-audit --no-fund
+      # The browser build follows the Playwright version in the lock file.
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/example/package-lock.json') }}
+      # With the browser in the cache, this step installs only the system libraries it needs.
+      - name: Install Chromium
+        working-directory: web/example
+        run: npx playwright install --with-deps chromium
+      - name: Open a page, click a word, highlight
+        env:
+          QVP_REQUIRE_DATA: "1"
+        run: scripts/check.sh example
