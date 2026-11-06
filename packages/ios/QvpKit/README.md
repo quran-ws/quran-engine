@@ -29,12 +29,12 @@ packages/ios/
 ## Build the engine once
 
 ```sh
-rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios     # added on demand by the script
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios aarch64-apple-darwin x86_64-apple-darwin  # added on demand by the script
 scripts/build-engine-ios.sh
 ```
 
 `cargo build -p qvp-ffi --profile dist --target …` for device (arm64), simulator (arm64 + x86_64,
-lipo'd into one slice) and macOS (arm64, so `swift test` runs on the Mac), then
+lipo'd into one slice) and macOS (arm64 + x86_64, one slice, so `swift test` runs on the Mac and a universal app links), then
 `xcodebuild -create-xcframework` with `qvp.h` and a `module.modulemap` (clang module `QvpFFI`)
 → `packages/ios/QvpKit/QvpEngine.xcframework`. Rerun after any engine change.
 

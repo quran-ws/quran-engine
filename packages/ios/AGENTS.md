@@ -19,4 +19,4 @@
   (`docs/standards/RELEASING.md`). `scripts/package-ios.sh` zips a local build the
   same way, to test the packaging. Never upload that zip.
 - Rust toolchain: `rustup` with `aarch64-apple-ios`, `aarch64-apple-ios-sim`,
-  `x86_64-apple-ios`. `cargo` is under `~/.cargo/bin`.
+  `x86_64-apple-ios`, `aarch64-apple-darwin` and `x86_64-apple-darwin`. `cargo` is under `~/.cargo/bin`.

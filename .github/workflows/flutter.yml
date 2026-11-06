@@ -211,7 +211,7 @@ jobs:
       # The same targets as ios.yml: scripts/build-engine-ios.sh builds all four.
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios, aarch64-apple-ios-sim, x86_64-apple-ios, aarch64-apple-darwin
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim, x86_64-apple-ios, aarch64-apple-darwin, x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
       - uses: subosito/flutter-action@v2
         with:
