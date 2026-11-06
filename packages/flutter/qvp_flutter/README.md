@@ -41,7 +41,9 @@ CocoaPods when it is off. `ios/qvp_flutter/Package.swift` and `ios/qvp_flutter.p
 (and the two `macos` twins) build the same C source and link the same
 `QvpEngine.xcframework` from the Swift package directory. The Swift package needs a Flutter
 version whose Swift Package Manager support provides the `FlutterFramework` package. The
-CocoaPods build has no such limit.
+CocoaPods build has no such limit. Git does not track the framework. In a clone without it,
+Swift Package Manager fails at package resolution, before the build starts, until
+`scripts/build-engine-ios.sh` runs.
 
 Run the web step before `flutter test` or `flutter build web`. The pubspec declares the
 two asset directories, and the repository does not track the files. The release workflow
