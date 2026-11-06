@@ -7,11 +7,31 @@ import QvpFFI
 /// Absent index in the C ABI.
 public let QVP_NONE: UInt32 = 0xFFFF_FFFF
 
-public enum QvpKind { public static let BODY = 0, MARK = 1, AYAH_NUMBER = 2, AYAH_MARK_ORNAMENT = 3, HEADER_INK = 4, ORNAMENT = 5, PAGE_NUMBER = 6, RUNNING_HEAD = 7, OTHER = 255 }
-public enum QvpFamily { public static let NONE = 0, DIACRITIC = 1, TANWIN = 2, DOTS = 3, WAQF = 4, SIFR = 5, SAJDAH = 6, READING_SIGN = 7 }
-public enum QvpCategory { public static let NONE = 0, HARAKAH = 1, TANWIN = 2, LETTER_DOT = 3, ORTHOGRAPHIC = 4, DABT = 5, WAQF = 6, READING_SIGN = 7, STANDALONE = 8 }
-public enum QvpDecorationKind { public static let AYAH_MARK = 0, SURAH_NAME = 1, BASMALAH = 2, DIVISION_MARK = 3, SAJDAH_MARK = 4, PAGE_NUMBER = 5, RUNNING_HEAD = 6, OTHER = 255 }
-public enum QvpLayer { public static let BASE = 0, THEME = 10, HIGHLIGHT = 50, SELECTION = 60, TOP = 100 }
+/// The path kinds (QVP_KIND_*): what a path draws.
+public enum QvpKind {
+    /// The ids by name, as qvp.h numbers them.
+    public static let BODY = 0, MARK = 1, AYAH_NUMBER = 2, AYAH_MARK_ORNAMENT = 3, HEADER_INK = 4, ORNAMENT = 5, PAGE_NUMBER = 6, RUNNING_HEAD = 7, OTHER = 255
+}
+/// The mark families (QVP_FAMILY_*) that a theme colours as one.
+public enum QvpFamily {
+    /// The ids by name, as qvp.h numbers them.
+    public static let NONE = 0, DIACRITIC = 1, TANWIN = 2, DOTS = 3, WAQF = 4, SIFR = 5, SAJDAH = 6, READING_SIGN = 7
+}
+/// The mark categories (QVP_CATEGORY_*). `QvpEngine.markCategory` gives a mark's.
+public enum QvpCategory {
+    /// The ids by name, as qvp.h numbers them.
+    public static let NONE = 0, HARAKAH = 1, TANWIN = 2, LETTER_DOT = 3, ORTHOGRAPHIC = 4, DABT = 5, WAQF = 6, READING_SIGN = 7, STANDALONE = 8
+}
+/// The decoration kinds (QVP_DECORATION_*): the page's ornaments and furniture.
+public enum QvpDecorationKind {
+    /// The ids by name, as qvp.h numbers them.
+    public static let AYAH_MARK = 0, SURAH_NAME = 1, BASMALAH = 2, DIVISION_MARK = 3, SAJDAH_MARK = 4, PAGE_NUMBER = 5, RUNNING_HEAD = 6, OTHER = 255
+}
+/// The style layers (QVP_LAYER_*). A rule on a higher layer wins over one below it.
+public enum QvpLayer {
+    /// The ids by name, as qvp.h numbers them.
+    public static let BASE = 0, THEME = 10, HIGHLIGHT = 50, SELECTION = 60, TOP = 100
+}
 
 public enum Form: Int { case rasmUthmani = 0, rasmImlai, qpc, rasm, search }
 public enum SearchMode: Int { case includes = 0, exact, prefix }
@@ -22,16 +42,34 @@ public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rubuAlHizb }
 
 /// The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). Colours 0xRRGGBBAA.
 public enum QvpDefaults {
+    /// The ink of a page before any style rule, and the highlight ink and band.
     public static let INK: UInt32 = 0x231f20ff, HIGHLIGHT_INK: UInt32 = 0x1a73e8ff, HIGHLIGHT_BAND: UInt32 = 0xd6a3264d
+    /// The padding of a highlight band and the overlap of its seams, in page units.
     public static let HIGHLIGHT_PAD_X: Float = 1.2, HIGHLIGHT_PAD_Y: Float = 0, HIGHLIGHT_SEAM: Float = 0.25
+    /// The selection band and its side padding, the share of the gap between two words that
+    /// belongs to the preceding word, and how far a tap may land from the ink, in page units.
     public static let SELECTION_BAND: UInt32 = 0x2d6fd640, SELECTION_PAD_X: Float = 0.6, GAP_BIAS: Float = 0.6, TAP_DISTANCE: Float = 6
+    /// The line grid this mushaf is designed on, and the content-width bound the examples pass as
+    /// `maxAspectSlack`.
     public static let GRID_LINES = 15, ASPECT_SLACK: Float = 1.15
+    /// The block colour of a mask, and its padding and corner radius in page units.
     public static let MASK_BLOCK: UInt32 = 0xd9d4c8ff, MASK_PAD: Float = 0.6, MASK_RADIUS: Float = 0.8
+    /// How many steps a reveal lights at once and the grey of the rest, and the padding around a
+    /// crop in page units.
     public static let REVEAL_LIT = 1, REVEAL_GREY: UInt32 = 0xc9c4b8ff, CROP_PAD: Float = 2
+    /// The size of a dressed scanned medallion against the printed ring when `ayahMarkScale` is 0.
     public static let AYAH_MARK_SCALE_SCAN: Float = 1.5
+    /// How far a short reflowed row opens towards its neighbours, as a share of the difference, and
+    /// how far a reflowed row's gaps may open, in word gaps.
     public static let REFLOW_RELAX: Float = 0.5, REFLOW_MAX_STRETCH: Float = 2
+    /// The pinch limits, as multiples of the layout's own scale, and the point at which a page counts
+    /// as zoomed in.
     public static let MIN_ZOOM: Float = 0.5, MAX_ZOOM: Float = 12, ZOOMED_THRESHOLD: Float = 1.02
+    /// How far past the midpoint between two zoom steps a pinch must reach to commit to the next one,
+    /// and the smallest change in reflow zoom that a free pinch asks for.
     public static let ZOOM_SNAP_HYSTERESIS: Float = 0.03, ZOOM_QUANTUM: Float = 0.01
+    /// A released drag is a page swipe when it is this much more sideways than up and down, and
+    /// either this far (viewport px) or this fast (px per second).
     public static let SWIPE_AXIS_RATIO: Float = 1.5, SWIPE_DISTANCE: Float = 40, SWIPE_VELOCITY: Float = 500
     /// The tallest band of ink a view draws at once, in viewport px: what `QvpPage.layoutInkBand`
     /// holds a band to by default.
@@ -73,12 +111,15 @@ public enum QvpColor {
         if h.count == 6 { h += String(format: "%02x", alpha8(alpha)) }
         return UInt32(h, radix: 16) ?? 0
     }
+    /// Replace the alpha of a 0xRRGGBBAA colour with `alpha`, 0 to 1.
     public static func withAlpha(_ rgba: UInt32, _ alpha: Float) -> UInt32 {
         (rgba & 0xFFFF_FF00) | alpha8(alpha)
     }
+    /// Split a 0xRRGGBBAA colour into its channels, each 0 to 1.
     public static func components(_ rgba: UInt32) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {
         (CGFloat((rgba >> 24) & 255) / 255, CGFloat((rgba >> 16) & 255) / 255, CGFloat((rgba >> 8) & 255) / 255, CGFloat(rgba & 255) / 255)
     }
+    /// Make an sRGB `CGColor` from a 0xRRGGBBAA colour.
     public static func cgColor(_ rgba: UInt32) -> CGColor {
         let c = components(rgba)
         return CGColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: c.a)
@@ -99,23 +140,39 @@ extension Int { func clamped(_ lo: Int, _ hi: Int) -> Int { Swift.min(Swift.max(
 public struct Selector {
     let c: QvpSelector
     init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ cc: Int = 0) { c = QvpSelector(selector: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(cc)) }
+    /// Every path of the page.
     public static func page() -> Selector { Selector(0) }
+    /// One path, by its index on the page.
     public static func path(_ i: Int) -> Selector { Selector(1, i) }
+    /// The nth path of a word, counting from 0.
     public static func wordPath(_ w: Int, _ nth: Int) -> Selector { Selector(2, w, nth) }
     /// nth mark of the word (0-based, marks only)
     public static func wordMark(_ w: Int, _ nth: Int) -> Selector { Selector(3, w, nth) }
+    /// The nth mark of a word that has this name, counting from 0.
     public static func wordMarkNamed(_ w: Int, _ mark: String, _ nth: Int = 0) -> Selector { Selector(4, w, markId(mark), nth) }
+    /// The letters of a word, without its marks.
     public static func wordBody(_ w: Int) -> Selector { Selector(5, w) }
+    /// Every mark of a word.
     public static func wordMarks(_ w: Int) -> Selector { Selector(6, w) }
+    /// Every path of a word.
     public static func word(_ w: Int) -> Selector { Selector(7, w) }
+    /// Every path of the words of an ayah, by surah and ayah number.
     public static func ayah(_ s: Int, _ a: Int) -> Selector { Selector(8, s, a) }
+    /// Every path on a printed line, by its number from 1.
     public static func line(_ n: Int) -> Selector { Selector(9, n) }
+    /// Every mark of one kind, by its name.
     public static func mark(_ name: String) -> Selector { Selector(10, markId(name)) }
+    /// Every mark of one kind, by its id.
     public static func mark(_ id: Int) -> Selector { Selector(10, id) }
+    /// Every mark of a category (`QvpCategory`).
     public static func category(_ c: Int) -> Selector { Selector(11, c) }
+    /// Every mark of a family (`QvpFamily`).
     public static func family(_ f: Int) -> Selector { Selector(12, f) }
+    /// Every path of a kind (`QvpKind`).
     public static func kind(_ k: Int) -> Selector { Selector(13, k) }
+    /// Every path of the decorations of a kind (`QvpDecorationKind`).
     public static func decoration(_ k: Int) -> Selector { Selector(14, k) }
+    /// Every path of one decoration, by its index on the page.
     public static func decorationIndex(_ i: Int) -> Selector { Selector(15, i) }
 }
 
@@ -124,13 +181,21 @@ public struct Selector {
 public struct Target {
     let kind: Int; let a: Int; let b: Int; let c: Int; let words: [UInt32]
     init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ c: Int = 0, _ words: [UInt32] = []) { self.kind = kind; self.a = a; self.b = b; self.c = c; self.words = words }
+    /// Every word of the page.
     public static func page() -> Target { Target(0) }
+    /// One word, by its index on the page.
     public static func word(_ i: Int) -> Target { Target(1, i) }
+    /// A list of words, by their indices on the page.
     public static func words(_ ws: [Int]) -> Target { Target(2, 0, 0, 0, ws.map { UInt32($0) }) }
+    /// The words of an ayah on this page, by surah and ayah number.
     public static func ayah(_ s: Int, _ a: Int) -> Target { Target(3, s, a) }
+    /// The words of the ayahs `a` to `b` of a surah on this page.
     public static func ayahRange(_ s: Int, _ a: Int, _ b: Int) -> Target { Target(4, s, a, b) }
+    /// The words of a printed line, by its number from 1.
     public static func line(_ n: Int) -> Target { Target(5, n) }
+    /// The words of a surah on this page.
     public static func surah(_ s: Int) -> Target { Target(6, s) }
+    /// The words from index `a` to index `b`, both included, in either order.
     public static func range(_ a: Int, _ b: Int) -> Target { Target(7, a, b) }
     /// Parse a string key; "s:a:w" word keys need the page to resolve (see QvpPage.target).
     public static func parse(_ s: String, page: QvpPage? = nil) -> Target {
@@ -228,11 +293,18 @@ public struct QvpLayoutSpec: Equatable {
 }
 /// The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units).
 public struct QvpGrid: Equatable { public let lines: Int, lineSpacing: Float }
-/// Page → viewport: viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. `fitScale`, `fitX`, `fitY` show the
+/// Page → viewport. On a printed page, viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. A reflowed
+/// page (`reflowed`) moves words, not lines, so `lineDy` places no path there: draw through `QvpPage.layoutDrawList` and
+/// `QvpPage.layoutPlacements`, and ask `QvpPage.wordBoundsView` where a word is. `fitScale`, `fitX`, `fitY` show the
 /// whole content in the viewport (shrink to height, never enlarge, centred); the host's pan and zoom go on top.
 public final class QvpLayout {
+    /// The page-to-viewport scale and offset, the content size in viewport points, and the line
+    /// spacing in page units.
     public let scale: Float, offsetX: Float, offsetY: Float, contentW: Float, contentH: Float, lineSpacing: Float
+    /// Per printed line, or per row when the page is reflowed: the shift down in page units, and the
+    /// top and bottom of its slot.
     public let lineDy: [Float], slotTop: [Float], slotBottom: [Float]
+    /// The scale and offset that show the whole content in the viewport.
     public let fitScale: Float, fitX: Float, fitY: Float
     /// True when this layout broke the words onto rows of its own, and how many rows it made.
     /// A reflowed page places paths by group (`QvpPage.layoutGroups`), not by printed line.

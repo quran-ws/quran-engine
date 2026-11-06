@@ -17,6 +17,8 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
+/// The pages of a pager: one controller per page number for life, with the page data loaded
+/// on demand and evicted least recently used.
 @available(iOS 17.0, macOS 14.0, *)
 @MainActor @Observable
 public final class QvpPageCache {

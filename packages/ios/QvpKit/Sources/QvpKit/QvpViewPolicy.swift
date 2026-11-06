@@ -4,6 +4,7 @@
 import CoreGraphics
 import QvpFFI
 
+/// The view-state helpers that both iOS renderers share. Every number comes from the engine.
 public enum QvpViewPolicy {
     /// The engine's own ceiling on the magnifying glass, `QVP_DEFAULT_MAX_ZOOM`: what
     /// `QvpPageView.maxZoom` and `QvpCanvasController.maxZoom` start at.

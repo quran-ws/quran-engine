@@ -1,5 +1,6 @@
-# The Swift package and the iOS example: build the engine XCFramework, run the Swift
-# tests on the macOS slice, generate and build the example for the simulator.
+# The Swift package and the iOS example: check QvpKit's doc blocks with swiftlint on Linux,
+# build the engine XCFramework, run the Swift tests on the macOS slice, generate and build the
+# example for the simulator.
 name: iOS
 
 on:
@@ -24,6 +25,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # missing_docs parses the sources with SwiftSyntax and needs no Xcode, so the Linux build of a
+  # pinned release runs it. A newer swiftlint can count differently from the baseline, so the
+  # version and the checksum change together, with the baseline written again.
+  doc-blocks:
+    name: QvpKit doc blocks (swiftlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SWIFTLINT_VERSION: "0.65.1"
+      SWIFTLINT_SHA256: caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install swiftlint
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/swiftlint.zip" \
+            "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/swiftlint_linux_amd64.zip"
+          echo "$SWIFTLINT_SHA256  $RUNNER_TEMP/swiftlint.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/swiftlint.zip" swiftlint-static -d "$RUNNER_TEMP/swiftlint"
+          echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
+      # .swiftlint.yml turns on missing_docs alone, reads swiftlint-baseline.json, and makes a
+      # finding an error.
+      - name: missing_docs
+        working-directory: packages/ios/QvpKit
+        run: swiftlint-static lint --quiet
+
   swift:
     name: QvpKit tests and example build
     runs-on: macos-15

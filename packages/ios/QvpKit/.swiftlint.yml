@@ -1,0 +1,10 @@
+# swiftlint for QvpKit: the doc-block rule of docs/standards/CODE-STYLE.md and nothing else.
+# swiftlint-baseline.json lists the items that had no doc block when the check went in; a new
+# item without one fails. Write the list again after items are documented:
+#   swiftlint lint --write-baseline swiftlint-baseline.json
+only_rules:
+  - missing_docs
+included:
+  - Sources
+baseline: swiftlint-baseline.json
+strict: true
