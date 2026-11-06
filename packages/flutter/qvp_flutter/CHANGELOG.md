@@ -19,6 +19,10 @@
   the whole page, however tall. Bound as `layoutInkBand` in JavaScript, Kotlin, Dart and
   Swift. React Native calls it through the Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
   Kotlin, Dart and Swift tests replay them (#134).
+- Swift Package Manager support on iOS and macOS (#153). `ios/qvp_flutter/Package.swift`
+  and `macos/qvp_flutter/Package.swift` link `QvpEngine.xcframework` as a binary target, and
+  the podspecs stay for apps that build with CocoaPods. Flutter no longer warns that the
+  plugin does not support Swift Package Manager.
 
 ### Changed
 - The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
@@ -39,6 +43,10 @@
   `page_view.dart` has a block that gives its units, its range and what an empty or null
   result means. `lib/src/bindings.dart` and the three backend files in `lib/src/backend/`
   are exempt, because `qvp.h` documents the calls they marshal (#135).
+- The iOS and macOS sources moved from `Classes/` to `qvp_flutter/Sources/qvp_flutter/`, the
+  layout Swift Package Manager needs. `QvpEngine.xcframework` moved from `ios/` and `macos/`
+  to `ios/qvp_flutter/` and `macos/qvp_flutter/`, where the podspec and `Package.swift` both
+  read it. `scripts/build-engine-ios.sh` copies it there. Run it again after you pull.
 
 ### Removed
 

@@ -26,6 +26,9 @@ All notable changes to the engine and its packages. The format follows
   the whole page, however tall. Bound as `layoutInkBand` in JavaScript, Kotlin, Dart and
   Swift. React Native calls it through the Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
   Kotlin, Dart and Swift tests replay them (#134).
+- Flutter: Swift Package Manager support on iOS and macOS (#153). `Package.swift` in
+  `ios/qvp_flutter` and `macos/qvp_flutter` links `QvpEngine.xcframework` as a binary
+  target. The podspecs stay, and both builds read the same sources and framework.
 
 ### Changed
 - `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and
@@ -70,6 +73,8 @@ All notable changes to the engine and its packages. The format follows
   `QvpEngine`. Three Kotlin and React Native doc blocks sat on the wrong item and now sit on
   the item they describe. The Kotlin and Swift `QvpLayout` blocks no longer say that
   `lineDy` places a path on a reflowed page, where the words move and not the lines.
+- `scripts/build-engine-ios.sh` copies `QvpEngine.xcframework` into the Flutter plugin's
+  `ios/qvp_flutter` and `macos/qvp_flutter`, one level below the old place.
 
 ### Removed
 

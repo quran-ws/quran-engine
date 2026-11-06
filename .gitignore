@@ -22,8 +22,9 @@ packages/android/example/src/main/assets/pages/
 packages/flutter/**/android/src/main/jniLibs/
 packages/flutter/**/windows/*.dll
 packages/flutter/**/linux/*.so
-packages/flutter/**/ios/*.xcframework/
-packages/flutter/**/macos/*.xcframework/
+# scripts/build-engine-ios.sh copies QvpEngine.xcframework into the plugin's ios/qvp_flutter
+# and macos/qvp_flutter
+packages/flutter/**/*.xcframework/
 packages/flutter/**/build/
 packages/flutter/**/.dart_tool/
 # scripts/sync-example-data.sh fills it; the README keeps the directory in a fresh clone

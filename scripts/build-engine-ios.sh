@@ -52,9 +52,13 @@ xcodebuild -create-xcframework \
 echo "engine packaged: $XC"
 ls "$XC"
 
-for dest in packages/flutter/qvp_flutter/ios packages/flutter/qvp_flutter/macos; do
+# The Flutter plugin: its podspec and its Package.swift both read the framework from the
+# Swift package directory, ios/qvp_flutter and macos/qvp_flutter. The loop also removes a
+# copy at the old place, one directory up, which nothing reads now.
+for platform in packages/flutter/qvp_flutter/ios packages/flutter/qvp_flutter/macos; do
+  dest="$platform/qvp_flutter"
   if [ -d "$dest" ]; then
-    rm -rf "$dest/QvpEngine.xcframework"
+    rm -rf "$platform/QvpEngine.xcframework" "$dest/QvpEngine.xcframework"
     cp -R "$XC" "$dest/"
     echo "copied to $dest/QvpEngine.xcframework"
   fi

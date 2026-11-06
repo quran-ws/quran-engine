@@ -22,7 +22,7 @@ When developing this repository, produce the native engines with:
 export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
 bash scripts/build-engine-android.sh
 
-# iOS & macOS: produces QvpEngine.xcframework
+# iOS & macOS: QvpEngine.xcframework, copied into ios/qvp_flutter and macos/qvp_flutter
 bash scripts/build-engine-ios.sh
 
 # Windows: target/dist/qvp_ffi.dll
@@ -34,6 +34,14 @@ cargo build -p qvp-ffi --release
 # Web: assets/wasm/qvp_ffi.wasm and assets/js/qvp.js (a copy of web/qvp.js)
 bash scripts/sync-flutter-web-engine.sh
 ```
+
+On iOS and macOS the plugin builds with Swift Package Manager or with CocoaPods. Flutter
+picks Swift Package Manager when `flutter config --enable-swift-package-manager` is on and
+CocoaPods when it is off. `ios/qvp_flutter/Package.swift` and `ios/qvp_flutter.podspec`
+(and the two `macos` twins) build the same C source and link the same
+`QvpEngine.xcframework` from the Swift package directory. The Swift package needs a Flutter
+version whose Swift Package Manager support provides the `FlutterFramework` package. The
+CocoaPods build has no such limit.
 
 Run the web step before `flutter test` or `flutter build web`. The pubspec declares the
 two asset directories, and the repository does not track the files. The release workflow
