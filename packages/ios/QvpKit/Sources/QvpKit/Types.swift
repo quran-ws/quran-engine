@@ -91,7 +91,7 @@ public enum QvpDefaults {
             "minZoom": MIN_ZOOM, "maxZoom": MAX_ZOOM, "zoomedThreshold": ZOOMED_THRESHOLD,
             "swipeAxisRatio": SWIPE_AXIS_RATIO, "swipeDistance": SWIPE_DISTANCE, "swipeVelocity": SWIPE_VELOCITY,
             "zoomSnapHysteresis": ZOOM_SNAP_HYSTERESIS, "zoomQuantum": ZOOM_QUANTUM,
-            "reflowRelax": REFLOW_RELAX, "reflowMaxStretch": REFLOW_MAX_STRETCH,
+            "reflowRelax": REFLOW_RELAX, "reflowMaxStretch": REFLOW_MAX_STRETCH, "maxInkHeight": MAX_INK_HEIGHT,
         ]
         return all.mapValues { v in
             switch v {
@@ -157,7 +157,7 @@ public enum QvpColor {
         let c = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil) ?? color
         let k = c.components ?? [0, 0, 0, 1]
         let (r, g, b, a) = k.count >= 4 ? (k[0], k[1], k[2], k[3]) : (k[0], k[0], k[0], k.count > 1 ? k[1] : 1)
-        func u(_ v: CGFloat) -> UInt32 { UInt32(Int((v * 255).rounded()).clamped(0, 255)) }
+        func u(_ v: CGFloat) -> UInt32 { UInt32(truncatingIfNeeded: Int((v * 255).rounded()).clamped(0, 255)) }
         return (u(r) << 24) | (u(g) << 16) | (u(b) << 8) | u(a)
     }
 }
@@ -167,7 +167,7 @@ extension Int { func clamped(_ lo: Int, _ hi: Int) -> Int { Swift.min(Swift.max(
 /// What a style rule applies to (mirrors Sel in web/qvp.js and Selector in Kotlin).
 public struct Selector {
     let c: QvpSelector
-    init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ cc: Int = 0) { c = QvpSelector(selector: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(cc)) }
+    init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ cc: Int = 0) { c = QvpSelector(selector: UInt8(truncatingIfNeeded: kind), a: UInt32(truncatingIfNeeded: a), b: UInt32(truncatingIfNeeded: b), c: UInt32(truncatingIfNeeded: cc)) }
     /// Every path of the page.
     public static func page() -> Selector { Selector(0) }
     /// One path, by its index on the page.
@@ -214,7 +214,7 @@ public struct Target {
     /// One word, by its index on the page.
     public static func word(_ i: Int) -> Target { Target(1, i) }
     /// A list of words, by their indices on the page.
-    public static func words(_ ws: [Int]) -> Target { Target(2, 0, 0, 0, ws.map { UInt32($0) }) }
+    public static func words(_ ws: [Int]) -> Target { Target(2, 0, 0, 0, ws.map { UInt32(truncatingIfNeeded: $0) }) }
     /// The words of an ayah on this page, by surah and ayah number.
     public static func ayah(_ s: Int, _ a: Int) -> Target { Target(3, s, a) }
     /// The words of the ayahs `a` to `b` of a surah on this page.
@@ -252,7 +252,7 @@ public struct Target {
     /// Run `body` with a C QvpTarget whose `words` pointer is valid for the call.
     func withC<R>(_ body: (UnsafePointer<QvpTarget>) -> R) -> R {
         words.withUnsafeBufferPointer { wp in
-            var t = QvpTarget(target: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(c), words: wp.baseAddress, n_words: UInt32(wp.count))
+            var t = QvpTarget(target: UInt8(truncatingIfNeeded: kind), a: UInt32(truncatingIfNeeded: a), b: UInt32(truncatingIfNeeded: b), c: UInt32(truncatingIfNeeded: c), words: wp.baseAddress, n_words: UInt32(truncatingIfNeeded: wp.count))
             return withUnsafePointer(to: &t, body)
         }
     }
@@ -317,11 +317,11 @@ public struct QvpLayoutSpec: Equatable {
         // a zoom of 0 is the printed page, and 255 asks the engine for its own default
         let r = reflow
         return QvpFFI.QvpLayoutSpec(viewport_w: viewportW, viewport_h: viewportH, pad_top: padTop, pad_bottom: padBottom, pad_left: padLeft, pad_right: padRight, line_spacing: lineSpacing,
-                             fill_height: fillHeight ? 1 : 0, grid_lines: UInt32(gridLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack,
+                             fill_height: fillHeight ? 1 : 0, grid_lines: UInt32(truncatingIfNeeded: gridLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack,
                              reflow_zoom: r?.zoom ?? 0,
-                             reflow_fill: r.map { UInt8($0.fill.rawValue) } ?? 255,
-                             reflow_breaks: r.map { UInt8($0.breaks.rawValue) } ?? 255,
-                             reflow_gaps: r.map { UInt8($0.gaps.rawValue) } ?? 1,
+                             reflow_fill: r.map { UInt8(truncatingIfNeeded: $0.fill.rawValue) } ?? 255,
+                             reflow_breaks: r.map { UInt8(truncatingIfNeeded: $0.breaks.rawValue) } ?? 255,
+                             reflow_gaps: r.map { UInt8(truncatingIfNeeded: $0.gaps.rawValue) } ?? 1,
                              reflow_word_gap: r?.wordGap ?? 1,
                              reflow_max_stretch: r?.maxStretch ?? 0,
                              reflow_relax: r?.relax ?? -1,
@@ -380,7 +380,7 @@ public struct QvpHighlightStyle: Equatable {
         self.mode = mode; self.ink = ink; self.band = band; self.height = height; self.padX = padX; self.padY = padY; self.radius = radius; self.seam = seam; self.transitionMs = transitionMs; self.layer = layer
     }
     var c: QvpFFI.QvpHighlightStyle {
-        QvpFFI.QvpHighlightStyle(mode: UInt8(mode.rawValue), height: UInt8(height.rawValue), ink: ink, band: band, pad_x: padX, pad_y: padY, radius: radius, seam: seam, transition_ms: UInt32(transitionMs), layer: Int32(layer))
+        QvpFFI.QvpHighlightStyle(mode: UInt8(truncatingIfNeeded: mode.rawValue), height: UInt8(truncatingIfNeeded: height.rawValue), ink: ink, band: band, pad_x: padX, pad_y: padY, radius: radius, seam: seam, transition_ms: UInt32(truncatingIfNeeded: transitionMs), layer: Int32(truncatingIfNeeded: layer))
     }
 }
 /// Colours that are nil (or alpha 0) leave that colour alone.
@@ -417,13 +417,13 @@ func collect<T>(_ initial: Int = 256, _ f: (UnsafeMutablePointer<T>, UInt32) -> 
     var cap = initial
     while true {
         var total: UInt32 = 0
-        let buf = [T](unsafeUninitializedCapacity: cap) { p, n in total = f(p.baseAddress!, UInt32(cap)); n = Swift.min(Int(total), cap) }
+        let buf = [T](unsafeUninitializedCapacity: cap) { p, n in total = f(p.baseAddress!, UInt32(truncatingIfNeeded: cap)); n = Swift.min(Int(total), cap) }
         if Int(total) <= cap { return buf }
         cap = Int(total)
     }
 }
 func withBytes<R>(_ s: String, _ body: (UnsafePointer<UInt8>, UInt32) -> R) -> R {
     var b = Array(s.utf8); if b.isEmpty { b = [0] }
-    let n = UInt32(s.utf8.count)
+    let n = UInt32(truncatingIfNeeded: s.utf8.count)
     return b.withUnsafeBufferPointer { body($0.baseAddress!, n) }
 }

@@ -198,6 +198,26 @@ def check_defaults(problems: list[str]) -> None:
                 problems.append(f"{site} ({path}) has no default named {name}")
             elif abs(got[name] - value) > 1e-9:
                 problems.append(f"{site} ({path}) has default {name} = {got[name]}, the header says {value}")
+    check_default_tables(want, problems)
+
+
+# The whole-table forms of the defaults, by camelCase name, that the React Native modules send
+# as constants: Kotlin's QvpDefaults.all and Swift's QvpDefaults.decimal. Each entry names its
+# constant, so the values are the ones checked above; this checks that no default is left out.
+DEFAULT_TABLES = {
+    "android": ("packages/android/qvp/src/main/kotlin/ws/quran/qvp/Types.kt", r'"([a-zA-Z]+)" to ([A-Z_]+)'),
+    "ios": ("packages/ios/QvpKit/Sources/QvpKit/Types.swift", r'"([a-zA-Z]+)": ([A-Z_]+)'),
+}
+
+
+def check_default_tables(want: dict[str, float], problems: list[str]) -> None:
+    for site, (path, pattern) in DEFAULT_TABLES.items():
+        text = (ROOT / path).read_text()
+        table = dict(re.findall(pattern, text[text.index("QvpDefaults"):]))
+        for name in want:
+            camel = name.split("_")[0].lower() + "".join(p.capitalize() for p in name.split("_")[1:])
+            if table.get(camel) != name:
+                problems.append(f"{site} ({path}) has no `{camel}` for {name} in its defaults table")
 
 
 def gen_rn_enums():

@@ -34,7 +34,7 @@ public struct QvpZoom: Equatable {
     /// The size in force, 1 at the printed page, whichever field the mode steers by.
     public var zoom: Float
     public init(mode: QvpZoomMode = .stepped, step: Int = 0, zoom: Float = 1) { self.mode = mode; self.step = step; self.zoom = zoom }
-    var c: QvpFFI.QvpZoom { QvpFFI.QvpZoom(mode: mode.rawValue, step: UInt32(step), zoom: zoom) }
+    var c: QvpFFI.QvpZoom { QvpFFI.QvpZoom(mode: mode.rawValue, step: UInt32(truncatingIfNeeded: step), zoom: zoom) }
     init(_ z: QvpFFI.QvpZoom) { self.mode = QvpZoomMode(rawValue: z.mode) ?? .stepped; self.step = Int(z.step); self.zoom = z.zoom }
 }
 
@@ -111,7 +111,7 @@ extension QvpPage {
     /// printed page.
     public func zoomToStep(_ spec: QvpLayoutSpec, _ zoom: QvpZoom, _ step: Int, _ view: QvpView) -> QvpZoomChange {
         var s = spec.c, z = zoom.c, v = view.c, out = QvpFFI.QvpZoomChange()
-        qvp_zoom_to_step(p, &s, &z, UInt32(step), &v, &out)
+        qvp_zoom_to_step(p, &s, &z, UInt32(truncatingIfNeeded: step), &v, &out)
         if out.relaid != 0 { readLayout() }
         return QvpZoomChange(zoom: QvpZoom(out.zoom), view: QvpView(out.view), relaid: out.relaid != 0)
     }
@@ -126,7 +126,7 @@ extension QvpPage {
     /// The reflow zoom one step of this page's control means; step 0 is the printed page.
     public func zoomAtStep(_ spec: QvpLayoutSpec, _ step: Int) -> Float {
         var s = spec.c
-        return qvp_zoom_at_step(p, &s, UInt32(step))
+        return qvp_zoom_at_step(p, &s, UInt32(truncatingIfNeeded: step))
     }
     /// What a sideways drag on this page means: pan it, or turn the page.
     public func sidewaysDrag(_ zoom: QvpZoom, _ view: QvpView, fitScale: Float) -> QvpSideways {
@@ -181,7 +181,7 @@ extension QvpPage {
     /// pinch keeps its place when the layout reflows under it.
     public func viewAnchor(_ view: QvpView, word: Int, nx: Float, ny: Float, toX: Float, toY: Float, viewportW: Float, viewportH: Float) -> QvpView {
         var v = view.c, out = QvpFFI.QvpView()
-        qvp_view_anchor(p, &v, UInt32(word), nx, ny, toX, toY, viewportW, viewportH, &out)
+        qvp_view_anchor(p, &v, UInt32(truncatingIfNeeded: word), nx, ny, toX, toY, viewportW, viewportH, &out)
         return QvpView(out)
     }
 }

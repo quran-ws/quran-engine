@@ -14,7 +14,7 @@ public enum OrnamentKind: Int, CaseIterable, Hashable {
     case ayahMark = 0, surahHeader, pageFrame
     public var name: String { ["ayah_mark", "surah_header", "page_frame"][rawValue] }
     /// The QVP_LINE_ART_* bit of this kind.
-    var lineArtBit: UInt32 { 1 << UInt32(rawValue) }
+    var lineArtBit: UInt32 { 1 << UInt32(truncatingIfNeeded: rawValue) }
 }
 
 /// Where an ornament's artwork came from (QVP_LINEAGE_*).
@@ -64,11 +64,11 @@ public final class QvpOrnaments {
         var out: [Ornament] = []
         for i in 0..<count {
             var o = QvpOrnament()
-            guard qvp_ornament_info(h, UInt32(i), &o) != 0 else { continue }
+            guard qvp_ornament_info(h, UInt32(truncatingIfNeeded: i), &o) != 0 else { continue }
             // the strings point into the set and live as long as it: copy them now
             let parts: [OrnamentPart] = (0..<Int(o.n_parts)).compactMap { k in
                 var q = QvpOrnamentPart()
-                guard qvp_ornament_part(h, UInt32(i), UInt32(k), &q) != 0 else { return nil }
+                guard qvp_ornament_part(h, UInt32(truncatingIfNeeded: i), UInt32(truncatingIfNeeded: k), &q) != 0 else { return nil }
                 return OrnamentPart(index: k, color: q.color, stroke: q.stroke != 0, name: q.name.string)
             }
             out.append(Ornament(index: i, kind: OrnamentKind(rawValue: Int(o.kind)) ?? .ayahMark, lineage: OrnamentLineage(rawValue: Int(o.lineage)) ?? .scan,
@@ -92,7 +92,7 @@ public final class QvpOrnaments {
     /// The ornament of `kind` in `style`, or nil.
     public func find(_ kind: OrnamentKind, _ style: String) -> Ornament? {
         let s = p
-        let i = withBytes(style) { sp, sn in qvp_ornament_find(s, UInt32(kind.rawValue), sp, sn) }
+        let i = withBytes(style) { sp, sn in qvp_ornament_find(s, UInt32(truncatingIfNeeded: kind.rawValue), sp, sn) }
         return i < 0 ? nil : list.first { $0.index == Int(i) }
     }
     /// The ornaments of one kind.
@@ -205,21 +205,21 @@ extension QvpPage {
         func index(_ c: OrnamentChoice?, _ kind: OrnamentKind) -> UInt32 {
             let choice = c ?? spec.style.map { OrnamentChoice.style($0) } ?? .absent
             switch choice {
-            case .ornament(let o): return UInt32(o.index)
-            case .index(let i): return i < 0 ? QVP_NONE : UInt32(i)
-            case .style(let s): return set.find(kind, s).map { UInt32($0.index) } ?? QVP_NONE
+            case .ornament(let o): return UInt32(truncatingIfNeeded: o.index)
+            case .index(let i): return i < 0 ? QVP_NONE : UInt32(truncatingIfNeeded: i)
+            case .style(let s): return set.find(kind, s).map { UInt32(truncatingIfNeeded: $0.index) } ?? QVP_NONE
             case .absent: return QVP_NONE
             }
         }
         let ayah = index(spec.ayahMark, .ayahMark), header = index(spec.surahHeader, .surahHeader), frame = index(spec.pageFrame, .pageFrame)
         let lineArt = spec.lineArt.reduce(UInt32(0)) { $0 | $1.lineArtBit }
-        let triples: [UInt32] = spec.colors.flatMap { [UInt32($0.ornament), UInt32($0.part), $0.color] }
+        let triples: [UInt32] = spec.colors.flatMap { [UInt32(truncatingIfNeeded: $0.ornament), UInt32(truncatingIfNeeded: $0.part), $0.color] }
         dressDraws = nil
         // the triples stay alive across the call
         let ok = triples.withUnsafeBufferPointer { tp in
             var s = QvpDressSpec(ayah_mark: ayah, surah_header: header, page_frame: frame, gap: spec.gap, band_gap: spec.bandGap,
                                  ayah_mark_scale: spec.ayahMarkScale, page_frame_scale: spec.pageFrameScale, line_art: lineArt,
-                                 colors: triples.isEmpty ? nil : tp.baseAddress, n_colors: UInt32(triples.count / 3))
+                                 colors: triples.isEmpty ? nil : tp.baseAddress, n_colors: UInt32(truncatingIfNeeded: triples.count / 3))
             return qvp_dress(p, ornaments, &s)
         }
         // the dress changed the layout's fit: read it again
@@ -269,7 +269,7 @@ extension QvpPage {
             }
             let flags = t[i * 9 + 5], placement = t[i * 9 + 8]
             out.append(OrnamentDraw(path: m, color: t[i * 9 + 4], kind: OrnamentKind(rawValue: Int(flags & 0xff)) ?? .ayahMark,
-                                    evenOdd: flags & UInt32(QVP_DRAW_EVENODD) != 0, stroke: flags & UInt32(QVP_DRAW_STROKE) != 0,
+                                    evenOdd: flags & UInt32(truncatingIfNeeded: QVP_DRAW_EVENODD) != 0, stroke: flags & UInt32(truncatingIfNeeded: QVP_DRAW_STROKE) != 0,
                                     strokeWidth: Float(bitPattern: t[i * 9 + 6]), part: Int(t[i * 9 + 7]),
                                     placement: placement == QVP_NONE ? nil : Int(placement)))
         }

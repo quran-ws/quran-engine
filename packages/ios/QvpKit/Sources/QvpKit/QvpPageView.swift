@@ -326,8 +326,10 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         invalidateContent()
     }
     private var lastSize = CGSize.zero
-    /// The layout the current size and knobs ask for, before the zoom control has its say.
-    var baseSpec: QvpLayoutSpec {
+    /// The layout the current size and knobs ask for, before the zoom control has its say: the
+    /// printed page this view lays out. Kotlin's `QvpPageView.layoutSpec()` is the same spec.
+    /// `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure it.
+    public var baseSpec: QvpLayoutSpec {
         QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, fillHeight: fillHeight,
                       reflow: QvpReflowSpec(zoom: 0, breaks: reflowBreaks), surahFrames: surahFrames)
     }

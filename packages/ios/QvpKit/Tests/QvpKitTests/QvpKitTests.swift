@@ -51,11 +51,32 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(page.targetWords(Target(parsing: "page", page: page)!).count, page.nWords)
     }
 
-    func testDefaultsTableHoldsEveryDefaultAsTheHeaderDecimal() {
-        XCTAssertEqual(QvpDefaults.decimal.count, 29)
-        XCTAssertEqual(QvpDefaults.decimal["selectionPadX"], 0.6)
-        XCTAssertEqual(QvpDefaults.decimal["ink"], Double(0x231f20ff))
-        XCTAssertEqual(QvpDefaults.decimal["gridLines"], 15)
+    func testDefaultsTableHoldsEveryDefaultAsTheHeaderDecimal() throws {
+        // Every QVP_DEFAULT_* of the header, by camelCase name, as the number the header states.
+        let header = try String(contentsOf: Self.repo.appendingPathComponent("crates/qvp-ffi/include/qvp.h"), encoding: .utf8)
+        let re = try NSRegularExpression(pattern: #"#define QVP_DEFAULT_([A-Z_]+)\s+(0x[0-9a-fA-F]+|[0-9.]+)"#)
+        var want: [String: Double] = [:]
+        for m in re.matches(in: header, range: NSRange(header.startIndex..., in: header)) {
+            let name = String(header[Range(m.range(at: 1), in: header)!]).lowercased().split(separator: "_")
+            let camel = String(name[0]) + name.dropFirst().map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined()
+            let text = String(header[Range(m.range(at: 2), in: header)!])
+            want[camel] = text.hasPrefix("0x") ? Double(UInt64(text.dropFirst(2), radix: 16)!) : Double(text)!
+        }
+        XCTAssertGreaterThanOrEqual(want.count, 30)
+        XCTAssertEqual(QvpDefaults.decimal, want)
+    }
+
+    /// The fill measures read the printed page: a spec with the reader's zoom folded in gets the
+    /// same answers as the spec before it. The page views pass the spec before the zoom
+    /// (`QvpPageView.baseSpec`, Kotlin's `layoutSpec()`), and so do both React Native modules.
+    func testFillMeasuresReadThePrintedPage() {
+        let base = QvpLayoutSpec(viewportW: 390, viewportH: 844, padTop: 12, padBottom: 12, reflow: QvpReflowSpec(zoom: 0))
+        var zoomed = base
+        zoomed.reflow?.zoom = 2
+        XCTAssertEqual(page.layoutLineSpacingToFill(base), page.layoutLineSpacingToFill(zoomed))
+        XCTAssertEqual(page.layoutWastedFraction(base), page.layoutWastedFraction(zoomed))
+        XCTAssertEqual(page.layoutPrintedHeight(base), page.layoutPrintedHeight(zoomed))
+        XCTAssertGreaterThan(page.layoutLineSpacingToFill(base), 1)
     }
 
     func testPassageDrawFillsTheLayout() throws {
