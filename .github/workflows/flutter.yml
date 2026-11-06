@@ -79,7 +79,7 @@ jobs:
       # use the newest style, so the flag names it. A contributor runs the same command.
       - name: Format
         working-directory: packages/flutter/qvp_flutter
-        run: dart format --language-version=latest --output=none --set-exit-if-changed lib test example/lib
+        run: dart format --language-version=latest --output=none --set-exit-if-changed lib test example/lib example/test
 
       - name: Analyze
         working-directory: packages/flutter/qvp_flutter
@@ -91,6 +91,13 @@ jobs:
         run: flutter pub get && flutter analyze
       - name: Test
         working-directory: packages/flutter/qvp_flutter
+        env:
+          QVP_LIB: ${{ github.workspace }}/target/release/libqvp_ffi.so
+        run: flutter test
+      # The example's UI smoke test: open a bundled page, tap a word, check the highlight.
+      # It runs on the host with the same engine build and the assets synced above.
+      - name: Test the example
+        working-directory: packages/flutter/qvp_flutter/example
         env:
           QVP_LIB: ${{ github.workspace }}/target/release/libqvp_ffi.so
         run: flutter test

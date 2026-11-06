@@ -11,7 +11,7 @@ until it passes.
 | `qvp-convert` | the identity gate: SVG → QVP → SVG, rasterised at 4×, pixel-diffed. 8 pages on every PR, all 604 nightly | the `quran-svg-elements` bundle (`pages/`, `index/`) |
 | `qvp-ffi` | one ABI test per function family on a real page | the data release (`dist/pages/`) |
 | each wrapper | one binding test per C symbol on a known page, plus the shared scenarios | the data release |
-| each example | one UI smoke test: open a page, tap a word, highlight. The iOS Demo has it, as `DemoUITests`, and the iOS workflow runs it on the simulator. The Android `device` job runs the Kotlin library's tests, not an example test. The Flutter, React Native and web examples have none yet (#154) | the example's page set |
+| each example | one UI smoke test: open a page, tap a word, highlight. The iOS Demo has it, as `DemoUITests`, and the iOS workflow runs it on the simulator. The web example has it as `web/example/smoke.test.mjs`, which Chromium runs through Playwright in the `web example` job. The Flutter example has it as `example/test/smoke_test.dart`, a widget test on the host engine library that the Flutter workflow runs. The React Native example has it as `__tests__/smoke.test.tsx`, a Jest test that sends the native view's page-load and word-tap events and checks the `highlights` prop the app sends back. Jest has no device, so the engine does not draw it there. The Android `device` job runs the Kotlin library's tests, and the Android example has no smoke test yet | the example's page set. The web test serves `dist/pages` |
 | `web/lite.mjs` | the conformance fixtures | `conformance/` |
 | `web/lite-passage.mjs` | synthetic ranges, unchanged paths, markers, bounds, cross-page ranges, Rust ink metrics and the core's passage scenarios | synthetic tests need no data; the 604-page sweep and the scenarios require `dist/pages/` in `gates` |
 
@@ -41,7 +41,7 @@ wrapper into the core, it gets a scenario.
 ## What CI runs
 
 Each job runs one `scripts/check.sh` command, named in the last column. A PR that changes
-only documents skips `engine`, `gates` and `web`, and a skipped job counts as passing.
+only documents skips `engine`, `gates`, `web` and `web example`, and a skipped job counts as passing.
 
 | job | runs on | contents | `scripts/check.sh` |
 |---|---|---|---|
@@ -49,14 +49,16 @@ only documents skips `engine`, `gates` and `web`, and a skipped job counts as pa
 | `gates (identity, ABI, conformance)` | PRs that change code | identity gate (8 pages), line shift, zoom control, passage and ABI tests, conformance fixtures, zoom table, then the web tests that read pages with `QVP_REQUIRE_DATA=1`: `smoke.mjs`, `lite-passage.test.mjs`, `scenarios.test.mjs`, `passage.test.mjs` | `gates` |
 | `standards (parity, versions, terminology, structure)` | every PR | parity (`--check`), versions, structure, terminology (zero findings), shellcheck over every shell script. The job has no Flutter, so `parity` skips the Flutter bindings check | `parity versions structure terminology shell` |
 | `web (wasm, smoke, lite)` | PRs that change code | wasm build, then without data: `smoke.mjs`, `lite.test.mjs`, `lite-passage.test.mjs`, and a parse of the web example | `web` |
-| `android`, `ios`, `flutter`, `react-native` | PRs that touch that package or its workflow. `android`, `ios` and `flutter` also run for `crates/` and the Cargo manifests; `android`, `flutter` and `react-native` also run for the shared Android toolchain action; `react-native` also runs for the Kotlin library | build and the package's tests. `flutter` also checks that the generated `bindings.dart` matches the header (`scripts/check-flutter-bindings.sh`) | none; each workflow lists its commands |
+| `web example (UI smoke test)` | PRs that change code | Playwright and Chromium, then the web example's UI smoke test with `QVP_REQUIRE_DATA=1`. Not a required check | `example` |
+| `android`, `ios`, `flutter`, `react-native` | PRs that touch that package or its workflow. `android`, `ios` and `flutter` also run for `crates/` and the Cargo manifests; `android`, `flutter` and `react-native` also run for the shared Android toolchain action; `react-native` also runs for the Kotlin library | build and the package's tests. `flutter` also runs the example's smoke test and checks that the generated `bindings.dart` matches the header (`scripts/check-flutter-bindings.sh`) | none; each workflow lists its commands |
 | `nightly` | schedule | identity gate over all 604 pages, and the benchmark on page 042 uploaded as an artifact for comparison with `docs/MEASURED.md` | none |
 
 Locally, `scripts/check.sh` with no argument runs every command above once. `web` then
 leaves `smoke.mjs` and `lite-passage.test.mjs` to `gates`, which runs them with data.
+`example` skips its test when Playwright is not installed in `web/example`.
 
 ## How it is checked
 
-The branch ruleset of `main` requires the four job names in the table above as status
-checks, by exact string, so a rename of one of them needs the ruleset updated first, or no
-PR can merge. Every platform job that ran must pass as well.
+The branch ruleset of `main` requires the names of the `engine`, `gates`, `standards` and
+`web` jobs in the table above as status checks, by exact string. A rename of one of them
+needs the ruleset updated first, or no PR can merge. Every platform job that ran must pass as well.

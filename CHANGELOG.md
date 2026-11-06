@@ -18,9 +18,21 @@ All notable changes to the engine and its packages. The format follows
   mark is drawn (#82). iOS bound all three already.
 
 ### Changed
-- `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and none for the three viewport-px twins on iOS.
+- `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and
+  none for the three viewport-px twins on iOS.
   React Native keeps `qvp_hit_areas_view` and `qvp_word_bands_view` as gaps, with the reason
   that JavaScript hit-tests and places overlays through `hitTestView` and `wordBoundsView`.
+- The web example has a UI smoke test, `web/example/smoke.test.mjs`. Chromium opens page 440,
+  clicks a word and checks the highlight in the app's state, the engine's boxes and the
+  canvas pixels. `scripts/check.sh example` runs it, and the `web example` job in CI runs
+  that command (#154).
+- The Flutter example has a UI smoke test, `example/test/smoke_test.dart`. A widget test on
+  the host engine library opens page 1, taps a word, and checks the engine's highlight on
+  that word and the word key in the selection panel. The Flutter workflow runs it (#154).
+- The React Native example has a UI smoke test, `__tests__/smoke.test.tsx`. It sends the
+  native view's page-load and word-tap events, and checks that the app sends one highlight
+  on the tapped word in the `highlights` prop and shows the word key. The workflow's
+  `npm test` step runs it (#154).
 
 ### Removed
 
