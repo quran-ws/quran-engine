@@ -5,15 +5,25 @@ import kotlin.math.roundToInt
 
 /** Constants mirroring qvp.h. Colours everywhere are 0xRRGGBBAA (see [QvpColor]). */
 object QvpKind { const val BODY = 0; const val MARK = 1; const val AYAH_NUMBER = 2; const val AYAH_MARK_ORNAMENT = 3; const val HEADER_INK = 4; const val ORNAMENT = 5; const val PAGE_NUMBER = 6; const val RUNNING_HEAD = 7; const val OTHER = 255 }
+/** The mark families (QVP_FAMILY_*) that a theme colours as one. */
 object QvpFamily { const val NONE = 0; const val DIACRITIC = 1; const val TANWIN = 2; const val DOTS = 3; const val WAQF = 4; const val SIFR = 5; const val SAJDAH = 6; const val READING_SIGN = 7 }
+/** The mark categories (QVP_CATEGORY_*). [QvpEngine.markCategory] gives a mark's. */
 object QvpCategory { const val NONE = 0; const val HARAKAH = 1; const val TANWIN = 2; const val LETTER_DOT = 3; const val ORTHOGRAPHIC = 4; const val DABT = 5; const val WAQF = 6; const val READING_SIGN = 7; const val STANDALONE = 8 }
+/** The decoration kinds (QVP_DECORATION_*): the page's ornaments and furniture. */
 object QvpDecorationKind { const val AYAH_MARK = 0; const val SURAH_NAME = 1; const val BASMALAH = 2; const val DIVISION_MARK = 3; const val SAJDAH_MARK = 4; const val PAGE_NUMBER = 5; const val RUNNING_HEAD = 6; const val OTHER = 255 }
+/** The style layers (QVP_LAYER_*). A rule on a higher layer wins over one below it. */
 object QvpLayer { const val BASE = 0; const val THEME = 10; const val HIGHLIGHT = 50; const val SELECTION = 60; const val TOP = 100 }
+/** The text forms (QVP_FORM_*). Every form but [RASM_UTHMANI] needs the words sidecar. */
 enum class Form(val id: Int) { RASM_UTHMANI(0), RASM_IMLAI(1), QPC(2), RASM(3), SEARCH(4) }
+/** How a search matches a word: it contains the query, equals it, or starts with it. */
 enum class SearchMode(val id: Int) { INCLUDES(0), EXACT(1), PREFIX(2) }
+/** What a highlight paints: the words' ink, a band behind them, or both. */
 enum class HighlightMode(val id: Int) { INK(0), BAND(1), BOTH(2) }
+/** How tall a highlight band is: the printed line spacing, or the words' ink. */
 enum class BandHeight(val id: Int) { LINE_SPACING(0), INK(1) }
+/** How a mask covers a word: it hides the ink, or draws a block or a blur over it. */
 enum class MaskMode(val id: Int) { HIDE(0), BLOCK(1), BLUR(2) }
+/** The divisions of the mushaf (QVP_DIVISION_*). */
 enum class Division(val id: Int) { JUZ(0), HIZB(1), NISF(2), RUBU_AL_HIZB(3) }
 
 /** The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). Colours 0xRRGGBBAA. */
@@ -62,7 +72,9 @@ fun markId(name: String): Int = QvpEngine.markFromName(name)
 
 /** 0xRRGGBBAA ↔ Android ARGB. */
 object QvpColor {
+    /** Convert 0xRRGGBBAA to an Android ARGB colour. */
     fun argb(rgba: Int): Int = (rgba shl 24) or (rgba ushr 8)
+    /** Convert an Android ARGB colour to 0xRRGGBBAA. */
     fun rgba(argb: Int): Int = (argb shl 8) or (argb ushr 24)
     /** 0..1 → 0..255, rounded to the nearest step, as in every wrapper. NaN and out-of-range values clamp
      * first, so a bad alpha is 0 or 255, never a throw. */
@@ -74,29 +86,46 @@ object QvpColor {
         if (h.length == 6) h += "%02x".format(alpha8(alpha))
         return h.toLong(16).toInt()
     }
+    /** Replace the alpha of a 0xRRGGBBAA colour with [alpha], 0 to 1. */
     fun withAlpha(rgba: Int, alpha: Float): Int = (rgba and 0xffffff00.toInt()) or alpha8(alpha)
 }
 
 /** What a style rule applies to (mirrors Sel in web/qvp.js). */
 class Selector private constructor(internal val arr: IntArray) {
     companion object {
+        /** Every path of the page. */
         fun page() = Selector(intArrayOf(0, 0, 0, 0))
+        /** One path, by its index on the page. */
         fun path(i: Int) = Selector(intArrayOf(1, i, 0, 0))
+        /** The nth path of a word, counting from 0. */
         fun wordPath(w: Int, nth: Int) = Selector(intArrayOf(2, w, nth, 0))
         /** nth mark of the word (0-based, marks only) */
         fun wordMark(w: Int, nth: Int) = Selector(intArrayOf(3, w, nth, 0))
+        /** The nth mark of a word that has this name, counting from 0. */
         fun wordMarkNamed(w: Int, mark: String, nth: Int = 0) = Selector(intArrayOf(4, w, markId(mark), nth))
+        /** The letters of a word, without its marks. */
         fun wordBody(w: Int) = Selector(intArrayOf(5, w, 0, 0))
+        /** Every mark of a word. */
         fun wordMarks(w: Int) = Selector(intArrayOf(6, w, 0, 0))
+        /** Every path of a word. */
         fun word(w: Int) = Selector(intArrayOf(7, w, 0, 0))
+        /** Every path of the words of an ayah, by surah and ayah number. */
         fun ayah(s: Int, a: Int) = Selector(intArrayOf(8, s, a, 0))
+        /** Every path on a printed line, by its number from 1. */
         fun line(n: Int) = Selector(intArrayOf(9, n, 0, 0))
+        /** Every mark of one kind, by its name. */
         fun mark(mark: String) = Selector(intArrayOf(10, markId(mark), 0, 0))
+        /** Every mark of one kind, by its id. */
         fun mark(id: Int) = Selector(intArrayOf(10, id, 0, 0))
+        /** Every mark of a category ([QvpCategory]). */
         fun category(c: Int) = Selector(intArrayOf(11, c, 0, 0))
+        /** Every mark of a family ([QvpFamily]). */
         fun family(f: Int) = Selector(intArrayOf(12, f, 0, 0))
+        /** Every path of a kind ([QvpKind]). */
         fun kind(k: Int) = Selector(intArrayOf(13, k, 0, 0))
+        /** Every path of the decorations of a kind ([QvpDecorationKind]). */
         fun decoration(k: Int) = Selector(intArrayOf(14, k, 0, 0))
+        /** Every path of one decoration, by its index on the page. */
         fun decorationIndex(i: Int) = Selector(intArrayOf(15, i, 0, 0))
     }
 }
@@ -104,14 +133,23 @@ class Selector private constructor(internal val arr: IntArray) {
 /** What resolves to a word list (mirrors T in web/qvp.js). Strings: "page", "2:255", "2:255:3", "2:255-257", "line:7", "surah:2". */
 class Target private constructor(internal val arr: IntArray) {
     companion object {
+        /** Every word of the page. */
         fun page() = Target(intArrayOf(0, 0, 0, 0))
+        /** One word, by its index on the page. */
         fun word(i: Int) = Target(intArrayOf(1, i, 0, 0))
+        /** A list of words, by their indices on the page. */
         fun words(ws: IntArray) = Target(intArrayOf(2, 0, 0, 0) + ws)
+        /** A list of words, by their indices on the page. */
         fun words(ws: List<Int>) = words(ws.toIntArray())
+        /** The words of an ayah on this page, by surah and ayah number. */
         fun ayah(s: Int, a: Int) = Target(intArrayOf(3, s, a, 0))
+        /** The words of the ayahs [a] to [b] of a surah on this page. */
         fun ayahRange(s: Int, a: Int, b: Int) = Target(intArrayOf(4, s, a, b))
+        /** The words of a printed line, by its number from 1. */
         fun line(n: Int) = Target(intArrayOf(5, n, 0, 0))
+        /** The words of a surah on this page. */
         fun surah(s: Int) = Target(intArrayOf(6, s, 0, 0))
+        /** The words from index [a] to index [b], both included, in either order. */
         fun range(a: Int, b: Int) = Target(intArrayOf(7, a, b, 0))
         /** parse a string key; word keys need the page to resolve, see [QvpPage.target] */
         fun parse(s: String, page: QvpPage? = null): Target {
@@ -126,29 +164,36 @@ class Target private constructor(internal val arr: IntArray) {
     }
 }
 
+/** One word of the page. The box is in page units; [ayahIndex] and [lineIndex] index the page's records. */
 data class QvpWord(val index: Int, val surah: Int, val ayah: Int, val word: Int, val line: Int, val ayahIndex: Int, val lineIndex: Int,
                    val x0: Float, val y0: Float, val x1: Float, val y1: Float, val text: String, val firstPath: Int, val nPaths: Int) {
     val wordKey get() = "$surah:$ayah:$word"
     val ayahKey get() = "$surah:$ayah"
 }
+/** The part of one ayah that is on this page: [fragment] of [fragments], with its words and its box in page units. */
 data class QvpAyah(val index: Int, val surah: Int, val ayah: Int, val fragment: Int, val fragments: Int, val flags: Int, val rubuAlHizb: Int, val firstWord: Int, val nWords: Int,
                    val ayahMarkDecoration: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
+/** One printed line: its words, its box, and its band, in page units. */
 data class QvpLine(val index: Int, val lineNumber: Int, val isHeader: Boolean, val firstWord: Int, val nWords: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
                    val bandY0: Float, val bandY1: Float, val centre: Float)
+/** One decoration of the page: an ayah mark, a surah name, a basmalah or other furniture. The box is in page units. */
 data class QvpDecoration(val index: Int, val decoration: Int, val surah: Int, val ayah: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float,
                          val text: String, val firstPath: Int, val nPaths: Int)
-/** Indices are -1 when absent. */
 /** The one hit shape for every hit test; the exact variants report distance 0. `isExact` is true only when the point is inside an outline. Indices are -1 when absent. */
 data class QvpHit(val word: Int, val path: Int, val decoration: Int, val line: Int, val distance: Float, val isExact: Boolean)
+/** How a gap-aware hit test resolves a point: the farthest distance (0 for no bound), the gap bias, and whether an exact hit wins. */
 data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = QvpDefaults.GAP_BIAS, val preferExact: Boolean = true)
+/** One rectangle to draw: its line and corner radius, and for a highlight or mask box the id it belongs to and its colour (0xRRGGBBAA). A word band from [QvpPage.wordBands] or `wordBandsView` has id 0 and colour 0. [QvpPage.wordBands] gives it in page units, and the calls that end in `View` give it in viewport px. */
 data class QvpBox(val id: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val color: Int, val radius: Float)
+/** The gap-aware rectangle of one word, with the box of its ink: in page units from [QvpPage.hitAreas], in viewport px from [QvpPage.hitAreasView]. */
 data class QvpHitArea(val word: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val inkX0: Float, val inkY0: Float, val inkX1: Float, val inkY1: Float)
+/** The vertical band of one line, and its ink, in page units. */
 data class QvpLineBand(val line: Int, val lineNumber: Int, val y0: Float, val y1: Float, val mid: Float, val inkY0: Float, val inkY1: Float)
-/** Spacing only opens up: `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid. */
-/** How a reflowed row fills the width, how the words are broken onto rows, and where the air
- * between two words comes from. */
+/** How a reflowed row fills the width. */
 enum class QvpFill(val id: Int) { RAGGED(0), JUSTIFIED(1), CENTRED(2) }
+/** How a reflow breaks the words onto rows. */
 enum class QvpBreaks(val id: Int) { GREEDY(0), EVEN(1), FITTED(2), PRINTED(3) }
+/** Where the air between two reflowed words comes from: the print, or one width for every gap. */
 enum class QvpGapMode(val id: Int) { PRINTED(0), UNIFORM(1) }
 
 /** Ask for a reflowed page: the same page width with bigger ink, so fewer words fit a row and the
@@ -158,6 +203,7 @@ data class QvpReflowSpec(val zoom: Float, val fill: QvpFill = QvpFill.CENTRED, v
                          val gaps: QvpGapMode = QvpGapMode.UNIFORM, val wordGap: Float = 1f,
                          val relax: Float = QvpDefaults.REFLOW_RELAX, val maxStretch: Float = QvpDefaults.REFLOW_MAX_STRETCH)
 
+/** Ask for a layout of the page in a viewport, lengths in viewport px. Spacing only opens up: `lineSpacing` < 1 is clamped by the engine. `gridLines` 0 = the page's own grid. */
 data class QvpLayoutSpec(val viewportW: Float, val viewportH: Float, val padTop: Float = 0f, val padBottom: Float = 0f, val padLeft: Float = 0f, val padRight: Float = 0f,
                          val lineSpacing: Float = 1f, val fillHeight: Boolean = false, val gridLines: Int = 0,
                          /** Printed side margins to cut, page units (0 = keep). */ val cropLeft: Float = 0f, val cropRight: Float = 0f,
@@ -212,12 +258,16 @@ data class QvpPlacement(val dx: Float, val dy: Float, val kx: Float, val ky: Flo
 }
 /** The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units). */
 data class QvpGrid(val lines: Int, val lineSpacing: Float)
-/** Page → viewport: viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. [fitScale], [fitX], [fitY] show the
- *  whole content in the viewport (shrink to height, never enlarge, centred): the host's pan and zoom go on top. */
+/** Page → viewport. On a printed page, viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. A reflowed
+ *  page ([reflowed]) moves words, not lines, so [lineDy] places no path there: draw through [QvpPage.layoutDrawList] and
+ *  [QvpPage.layoutPlacements], and ask [QvpPage.wordBoundsView] where a word is. [lineDy] and the slots then hold the rows.
+ *  [fitScale], [fitX], [fitY] show the whole content in the viewport (shrink to height, never enlarge, centred): the host's
+ *  pan and zoom go on top. */
 class QvpLayout(val scale: Float, val offsetX: Float, val offsetY: Float, val contentW: Float, val contentH: Float, val lineSpacing: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray,
                 val fitScale: Float = 1f, val fitX: Float = 0f, val fitY: Float = 0f,
                 /** True when this layout broke the words onto rows of its own, and how many it made. */
                 val reflowed: Boolean = false, val rows: Int = 0)
+/** How a highlight looks. Colours are 0xRRGGBBAA, the paddings and radius page units, and [transitionMs] the fade time. */
 data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val ink: Int = QvpDefaults.HIGHLIGHT_INK, val band: Int = QvpDefaults.HIGHLIGHT_BAND, val height: BandHeight = BandHeight.LINE_SPACING,
                              val padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, val padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y, val radius: Float = 0f, val seam: Float = QvpDefaults.HIGHLIGHT_SEAM, val transitionMs: Int = 0, val layer: Int = QvpLayer.HIGHLIGHT) {
     internal fun ints() = intArrayOf(mode.id, height.id, ink, band, transitionMs, layer)
@@ -226,7 +276,9 @@ data class QvpHighlightStyle(val mode: HighlightMode = HighlightMode.BAND, val i
 /** Colours with alpha 0 (or null) leave that colour alone. */
 data class QvpTheme(val ink: Int? = null, val diacritics: Int? = null, val dots: Int? = null, val waqf: Int? = null, val sifr: Int? = null, val ayahMark: Int? = null, val numeral: Int? = null,
                     val headers: Int? = null, val marks: Map<String, Int> = emptyMap(), val transitionMs: Int = 0)
+/** One surah with text on the page: its ayah count, its banner and basmalah flags, its place and its names. */
 data class QvpSurah(val number: Int, val ayahCount: Int, val hasBanner: Boolean, val hasBasmalah: Boolean, val place: String, val bannerDecoration: Int, val arabic: String, val latin: String, val english: String)
+/** A division that starts on this page, and the ayah and line it starts at. */
 data class QvpDivision(val division: Division, val number: Int, val surah: Int, val ayah: Int, val line: Int, val ayahIndex: Int)
 /** A surah heading: the box a frame fills, and the title ink inside it. */
 data class QvpSurahHeader(
@@ -235,12 +287,19 @@ data class QvpSurahHeader(
     val titleX0: Float, val titleY0: Float, val titleX1: Float, val titleY1: Float,
 )
 
+/** One ayah-mark medallion: its centre and radius, and its ornament and numeral paths. The centre and radius are in page units from [QvpPage.ayahMarks], in viewport px from [QvpPage.ayahMarksView]. */
 data class QvpAyahMark(val decoration: Int, val surah: Int, val ayah: Int, val line: Int, val cx: Float, val cy: Float, val r: Float, val ornamentPath: Int, val numeralPath: Int)
+/** One drawn hizb rosette, with the division numbers it marks. */
 data class QvpRosette(val decoration: Int, val surah: Int, val ayah: Int, val juz: Int, val hizb: Int, val nisf: Int, val rubuAlHizb: Int, val rubuAlHizbInHizb: Int)
+/** One sajdah sign on the page, and the ayah it belongs to. */
 data class QvpSajdah(val decoration: Int, val surah: Int, val ayah: Int, val signPath: Int)
+/** One search match. [isLooseMatch] is true when only the loose pass found it, and a UI should say so. */
 data class QvpMatch(val word: Int, val index: Int, val isLooseMatch: Boolean, val wordKey: String, val text: String)
+/** The crop rectangle of a target in page units, and how many words it holds. */
 data class QvpCropBounds(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val nWords: Int, val ayahMarkDecoration: Int)
+/** One surah of the atlas: the page it starts on, its ayah count, its place and its names. */
 data class QvpAtlasSurah(val number: Int, val page: Int, val ayahCount: Int, val place: String, val arabic: String, val latin: String, val english: String)
+/** Where a division starts: the ayah and the page. */
 data class QvpAtlasRubuAlHizb(val rubuAlHizb: Int, val surah: Int, val ayah: Int, val page: Int) { val ayahKey get() = "$surah:$ayah" }
 
 // ── passage ──
@@ -336,7 +395,9 @@ data class QvpOrnamentPart(val index: Int, val color: Int, val stroke: Boolean, 
 /** Which ornament a dress takes for one kind: an ornament of the set, its index, a style name (the
  * ornament of that kind in that mushaf), or [None]. */
 sealed interface QvpOrnamentRef {
+    /** An ornament of the set, by its index. */
     data class Index(val index: Int) : QvpOrnamentRef
+    /** The ornament of this kind in a style, by the style's name. */
     data class Style(val style: String) : QvpOrnamentRef
     /** No ornament of this kind, even when the spec names a style. */
     data object None : QvpOrnamentRef

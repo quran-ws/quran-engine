@@ -60,6 +60,16 @@ All notable changes to the engine and its packages. The format follows
   that gives its units, its range and what an empty or null result means. The generated
   `bindings.dart` and the three backend files are exempt, because `qvp.h` documents the
   calls they marshal. `docs/standards/CODE-STYLE.md` names the lint and the exemption (#135).
+- CI checks that public items have doc blocks (#141). eslint `jsdoc/require-jsdoc` runs in
+  the `standards` job for `web/qvp.js`, `web/lite*.mjs` and the React Native package. detekt
+  runs in the Android workflow for the Kotlin library, and swiftlint `missing_docs` in the
+  iOS workflow for QvpKit. A baseline lists the items that had no block when each check went
+  in, so only a new item without one fails. `docs/standards/CODE-STYLE.md` states the scope.
+- Doc blocks on the lite modules, the exports and engine calls of `web/qvp.js`, most of the
+  React Native exports, the Kotlin and Swift types, selectors and targets, and Swift's
+  `QvpEngine`. Three Kotlin and React Native doc blocks sat on the wrong item and now sit on
+  the item they describe. The Kotlin and Swift `QvpLayout` blocks no longer say that
+  `lineDy` places a path on a reflowed page, where the words move and not the lines.
 
 ### Removed
 

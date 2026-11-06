@@ -38,10 +38,10 @@ One standard for Rust, C, JavaScript, Kotlin, Dart and Swift.
 |---|---|---|---|
 | Rust | `//!` | `///` | `#![warn(missing_docs)]` in `qvp-core` and `qvp-format`, errors in CI |
 | C header | block comment at top | `/** … */` above each declaration | `check-parity.py` requires a block per symbol |
-| JavaScript / TypeScript | `//` line | JSDoc `/** … */` | review; eslint `jsdoc/require-jsdoc` is not set up (issue #141) |
-| Kotlin | `//` line | KDoc `/** … */` | review; detekt `UndocumentedPublicFunction` is not set up (issue #141) |
+| JavaScript / TypeScript | `//` line | JSDoc `/** … */` | eslint `jsdoc/require-jsdoc` in the `standards` job (`scripts/check.sh docblocks`), with a baseline |
+| Kotlin | `//` line | KDoc `/** … */` | detekt `UndocumentedPublicClass` and `UndocumentedPublicFunction` in the Android workflow, with a baseline |
 | Dart | `//` line | `///` | `flutter analyze` in `.github/workflows/flutter.yml` runs the `public_member_api_docs` lint that the package's `analysis_options.yaml` turns on; `dart format --language-version=latest` in CI. Exempt: the generated `lib/src/bindings.dart` and the three backend files `qvp_backend.dart`, `qvp_backend_native.dart` and `qvp_backend_web.dart` in `lib/src/backend/`, because they only marshal C calls that `qvp.h` documents |
-| Swift | `//` line | `///` | review; swiftlint `missing_docs` is not set up (issue #141) |
+| Swift | `//` line | `///` | swiftlint `missing_docs` in the iOS workflow, with a baseline |
 | shell / Python | purpose, inputs, outputs at the top | n/a | review |
 
 ## Formatting
@@ -56,5 +56,21 @@ runs with missing docs as errors in the `engine` job (`scripts/check.sh docs`). 
 workflow runs `flutter analyze`, which fails on a public Dart item with no doc block, and
 `dart format --language-version=latest`. After a `pub get`, plain `dart format` reads the
 package's minimum Dart version (3.6) and gives an older style. The flag keeps the newest
-style. Where the table says review, no tool runs: the JavaScript, Kotlin and Swift
-linters are owed (issue #141).
+style. Where the table says review, no tool runs.
+
+The three doc-block linters check what an app calls:
+
+| linter | config | what it checks | baseline |
+|---|---|---|---|
+| eslint `jsdoc/require-jsdoc` | `scripts/lint/eslint.config.mjs` | `web/qvp.js`: every class, function and constant in the object that its `global.QVP = { … }` line assigns, and every method of an exported class whose name does not start with `_`. `web/lite*.mjs`: every exported function and class, and the public methods of an exported class. The React Native `src/`: every exported declaration, the public members of an exported class, and every member of `Qvp` | `scripts/lint/eslint-suppressions.json`: a count per file |
+| detekt | `packages/android/detekt.yml` | every public class and function of `packages/android/qvp/src/main/kotlin`. A default companion object is left out | `packages/android/detekt-baseline.xml`: one entry per item |
+| swiftlint `missing_docs` | `packages/ios/QvpKit/.swiftlint.yml` | every public declaration of `QvpKit/Sources` that swiftlint reports. swiftlint leaves out extensions, and the members of a type that inherits from another type | `packages/ios/QvpKit/swiftlint-baseline.json`: one entry per item |
+
+A constructor needs no block of its own: the class block says how to make one. The baseline
+lists the public items that had no doc block when the linter went in. A new item without one
+fails CI. eslint also fails when a file has fewer items than its count, until you prune the
+count. detekt and swiftlint keep a stale entry, so write their baseline again when you document
+an item. Each config file names the command that writes its baseline. The baselines hold the
+methods of the page and atlas classes in `web/qvp.js`, Kotlin and Swift, the members of the
+React Native `Qvp` object, and Swift's `QvpPageCanvas`. A doc block on one of them, with the
+baseline written again, makes the baseline shorter.

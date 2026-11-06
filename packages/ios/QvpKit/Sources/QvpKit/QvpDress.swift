@@ -83,6 +83,7 @@ public final class QvpOrnaments {
     deinit { close() }
     /// Free the native set. A second call does nothing. A page dressed from it keeps its dress.
     public func close() { if let s = h { qvp_ornaments_free(s); h = nil } }
+    /// False once the set is closed.
     public var isOpen: Bool { h != nil }
     /// The engine handle. Internal: the wrapper marshals through it, no app ever sees it.
     /// A call on a closed set stops the program with the fatal error `QvpOrnaments is closed`.
@@ -172,14 +173,19 @@ public struct DressInfo: Equatable {
 
 /// One draw of the ornament display list, in page units. Paint it behind the page ink.
 public struct OrnamentDraw {
+    /// The outline, in page units.
     public let path: CGPath
+    /// The colour, 0xRRGGBBAA.
     public let color: UInt32
+    /// The kind of ornament the draw belongs to.
     public let kind: OrnamentKind
     /// Fill with the even-odd rule.
     public let evenOdd: Bool
     /// Stroke with `strokeWidth` (page units), round caps and joins, instead of filling.
     public let stroke: Bool
+    /// The width of a stroke, in page units.
     public let strokeWidth: Float
+    /// The part of the ornament's design the draw paints.
     public let part: Int
     /// The index into `QvpPage.layoutPlacements()` the draw goes under, as a page draw does.
     /// nil for the border, which is drawn in layout space with the identity placement.

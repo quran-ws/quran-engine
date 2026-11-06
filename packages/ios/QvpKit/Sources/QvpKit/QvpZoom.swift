@@ -47,11 +47,15 @@ public func qvpSwipePages(translation t: CGSize, velocity v: CGSize) -> Int? {
 }
 
 /// What a sideways drag on a page means.
-public enum QvpSideways { case pan, turnPage }
+public enum QvpSideways {
+    /// The drag pans the page, or it turns the page.
+    case pan, turnPage
+}
 
 /// What a gesture produced: the control to keep, the view to draw with, and whether the page was
 /// laid out again under it. A host redraws its overlays when `relaid` is true.
 public struct QvpZoomChange {
+    /// The control to keep, the view to draw with, and whether the page was laid out again.
     public let zoom: QvpZoom, view: QvpView, relaid: Bool
 }
 
