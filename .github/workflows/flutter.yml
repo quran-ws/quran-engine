@@ -257,10 +257,15 @@ jobs:
           ../../../../scripts/check-darwin-engine-symbols.sh build/macos/Build/Products/Release/qvp_flutter_example.app
           flutter build ios --simulator --no-codesign
           ../../../../scripts/check-darwin-engine-symbols.sh build/ios/iphonesimulator/Runner.app
-      # flutter clean removes the Swift package build, so these builds link through the pods.
+      # The Swift package builds wrote references to the plugin's Package.swift into the
+      # example's Xcode projects. With them, Xcode resolves the plugin package outside
+      # Flutter's ephemeral directory, finds no FlutterFramework next to it and stops. So the
+      # step restores the example's tracked files, and flutter clean removes the Swift package
+      # build. These builds then link through the pods.
       - name: Build the example with CocoaPods
         working-directory: packages/flutter/qvp_flutter/example
         run: |
+          git checkout -- .
           flutter config --no-enable-swift-package-manager
           flutter clean
           flutter pub get
