@@ -55,16 +55,22 @@ class QvpAndroidTest {
             // the viewport-px twins: the same records as the page-space calls, inside the layout
             val marks = page.ayahMarks()
             val marksInView = page.ayahMarksView()
+            assertTrue(marks.isNotEmpty())
             assertEquals(marks.map { it.ayah }, marksInView.map { it.ayah })
             assertTrue(marksInView.all { it.cy > 0f && it.cy < layout.contentH })
+            // scaled by the layout, so a twin wired to the page-space call fails here
+            assertTrue(layout.scale > 1.5f)
+            marks.zip(marksInView).forEach { (m, v) -> assertEquals(m.r * layout.scale, v.r, 1e-2f) }
             val areasInView = page.hitAreasView()
             assertEquals(page.hitAreas().map { it.word }, areasInView.map { it.word })
             assertTrue(areasInView.all { it.y1 <= layout.contentH + 1f })
             val ayah = page.targetWords(Target.ayah(1, 2))
             val bands = page.wordBands(ayah)
             val bandsInView = page.wordBandsView(ayah)
+            assertTrue(bands.isNotEmpty())
             assertEquals(bands.size, bandsInView.size)
             assertTrue(bandsInView.all { it.y0 >= 0f && it.y1 <= layout.contentH })
+            bands.zip(bandsInView).forEach { (b, v) -> assertEquals((b.x1 - b.x0) * layout.scale, v.x1 - v.x0, 1e-2f) }
 
             assertFalse(page.isClosed)
         } finally {

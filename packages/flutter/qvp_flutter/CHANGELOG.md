@@ -1,7 +1,7 @@
 ## Unreleased
 
 ### Added
-- Flutter: `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
+- `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
   read a released drag, and `QvpPage.viewAnchor(view, word, nx, ny, toX, toY, viewportW,
   viewportH)` holds a point of a word on the screen across a new layout. The generated
   bindings declared all three, but no Dart call reached them (#165). Both backends bind them.
