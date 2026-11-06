@@ -22,6 +22,8 @@ import 'page.dart' show pageClock;
 /// Spacing only opens up: `lineSpacing` < 1 is clamped by the engine.
 @immutable
 class QvpViewLayout {
+  /// The defaults leave 24 px above and below the page and 16 px at each side, at the printed
+  /// line spacing.
   const QvpViewLayout({
     this.padTop = 24,
     this.padBottom = 24,
@@ -31,10 +33,19 @@ class QvpViewLayout {
     this.gridLines = 0,
     this.surahFrames = true,
   });
+
+  /// [padTop], [padBottom] and [padSide] are the space around the page in viewport px;
+  /// [padSide] goes on the left and on the right. [lineSpacing] multiplies the printed spacing.
   final double padTop, padBottom, padSide, lineSpacing;
+
+  /// [fillHeight] opens the line spacing until the page fills the padded height.
+  /// [surahFrames] draws the print's own frames around surah names; a reflowed page has none.
   final bool fillHeight, surahFrames;
+
+  /// The grid to lay the page out inside, in lines; 0 is the page's own ([QvpPage.grid]).
   final int gridLines;
 
+  /// This layout with the given fields changed.
   QvpViewLayout copyWith({
     double? padTop,
     double? padBottom,
@@ -53,6 +64,8 @@ class QvpViewLayout {
     surahFrames: surahFrames ?? this.surahFrames,
   );
 
+  /// The engine spec for a viewport of [viewportW] by [viewportH] px, with the content kept
+  /// no wider than [QvpDefaults.aspectSlack] allows.
   QvpLayoutSpec toSpec(double viewportW, double viewportH) => QvpLayoutSpec(
     viewportW: viewportW,
     viewportH: viewportH,
@@ -96,6 +109,8 @@ class QvpViewLayout {
 /// after that view is gone. [toView] needs a view that holds the controller now, and throws a
 /// [StateError] without one. Before any [QvpPageView] has taken the controller, all three throw.
 class QvpViewController extends ChangeNotifier {
+  /// The reader's zoom and pan: a layout point `p` draws at `offset + scale · p`. Set them
+  /// with [set], which notifies the view.
   double scale = 1, offsetX = 0, offsetY = 0;
   bool _fitRequested = true;
 
@@ -128,6 +143,7 @@ class QvpViewController extends ChangeNotifier {
   /// The reader's pan and zoom as the engine has it.
   QvpView get view => QvpView(scale: scale, offsetX: offsetX, offsetY: offsetY);
 
+  /// Sets the fields given and notifies the views that use this controller.
   void set({double? scale, double? offsetX, double? offsetY}) {
     this.scale = scale ?? this.scale;
     this.offsetX = offsetX ?? this.offsetX;
@@ -206,6 +222,7 @@ typedef QvpDecorationTapCallback = void Function(
 /// Renders a [QvpPage] with the engine's layout, animated highlights, masks,
 /// styled paths, tap / long-press selection and pinch / pan.
 class QvpPageView extends StatefulWidget {
+  /// Shows [page]. Every other argument has a default.
   const QvpPageView({
     super.key,
     required this.page,
@@ -226,7 +243,10 @@ class QvpPageView extends StatefulWidget {
     this.onZoomChanged,
   });
 
+  /// The page to draw. The view lays it out, ticks it and draws it; it does not free it.
   final QvpPage page;
+
+  /// The padding, spacing and grid the view lays the page out with.
   final QvpViewLayout layout;
 
   /// The size the reader is at changed: a pinch committed, or a step was asked for. The page
@@ -238,6 +258,8 @@ class QvpPageView extends StatefulWidget {
 
   /// Default ink; applied to the page with `setDefaultColor` when it changes. Anything [rgba] accepts.
   final Object? defaultInk;
+
+  /// The pan and zoom to share with the host. Null gives the view a controller of its own.
   final QvpViewController? controller;
 
   /// Tap on a word (gap-aware), with the word and its hit.
@@ -245,6 +267,8 @@ class QvpPageView extends StatefulWidget {
 
   /// Tap on a decoration that is not a word, with the decoration and its hit.
   final QvpDecorationTapCallback? onDecorationTap;
+
+  /// Tap that hits neither a word nor a decoration.
   final VoidCallback? onEmptyTap;
 
   /// Whole-word selection changed through long-press-drag (empty list = cleared).
@@ -252,6 +276,9 @@ class QvpPageView extends StatefulWidget {
 
   /// Max distance (page units) for the gap-aware tap.
   final double hitMaxDistance;
+
+  /// [selectionEnabled] turns on long-press-drag selection, [panZoomEnabled] the pinch, pan
+  /// and double-tap fit, and [paperShadow] a shadow under the paper.
   final bool selectionEnabled, panZoomEnabled, paperShadow;
 
   /// Band colour of the drag selection (0xRRGGBBAA), drawn in [QvpLayer.selection].
@@ -279,6 +306,8 @@ class QvpPageView extends StatefulWidget {
   State<QvpPageView> createState() => QvpPageViewState();
 }
 
+/// The state of a [QvpPageView]. Reach it with a `GlobalKey` to read the zoom, the render
+/// [QvpPageViewStats.stats] or the clock the view ticks the page with.
 class QvpPageViewState extends State<QvpPageView>
     with SingleTickerProviderStateMixin {
   late QvpViewController _ctl;
@@ -308,7 +337,10 @@ class QvpPageViewState extends State<QvpPageView>
   /// The scale the page was last fitted at: the floor of a magnifying pinch.
   double _fitScale = 1;
 
+  /// The controller in use: the widget's own, or the one the view made.
   QvpViewController get controller => _ctl;
+
+  /// The page the widget shows.
   QvpPage get page => widget.page;
 
   /// How far the glass is over the fitted page: the view scale over the fitted scale, 1 at rest
@@ -430,6 +462,7 @@ class QvpPageViewState extends State<QvpPageView>
     }
   }
 
+  /// Milliseconds since the view was made: the time the view passes to [QvpPage.tick].
   double get nowMs => _clock.elapsedMicroseconds / 1000;
 
   void _onTick(Duration _) {
@@ -1525,6 +1558,9 @@ class _QvpPainter extends CustomPainter {
 
 /// Render statistics of a [QvpPageView] (base / overlay timings of the last frame).
 extension QvpPageViewStats on QvpPageViewState {
+  /// What the last frame drew. `basePaths` and `baseMs` are the cached base ink's paths and
+  /// milliseconds, `overlayPaths` and `overlayMs` the styled overlay's. `bands` counts the
+  /// highlight bands.
   ({
     int basePaths,
     double baseMs,

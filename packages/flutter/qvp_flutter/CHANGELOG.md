@@ -33,6 +33,12 @@
     nothing changes.
   - The web band now stays under the tallest canvas a browser makes, and under the ink budget
     down to one screen.
+- `flutter analyze` fails on a public item with no doc block: `analysis_options.yaml` turns
+  on `public_member_api_docs`. Every public type, field and call in `types.dart`,
+  `page.dart`, `engine.dart`, `atlas.dart`, `ornaments.dart`, `passage.dart` and
+  `page_view.dart` has a block that gives its units, its range and what an empty or null
+  result means. `lib/src/bindings.dart` and the three backend files in `lib/src/backend/`
+  are exempt, because `qvp.h` documents the calls they marshal (#135).
 
 ### Removed
 

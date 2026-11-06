@@ -1,4 +1,8 @@
 // QvpBackend — the call surface each platform implements, and the handles it hands back.
+// Each member is the platform half of a call that page.dart, engine.dart, atlas.dart,
+// ornaments.dart or passage.dart documents, and crates/qvp-ffi/include/qvp.h documents the C
+// call under it. A block here would repeat theirs.
+// ignore_for_file: public_member_api_docs
 import 'dart:typed_data';
 
 import '../types.dart';
