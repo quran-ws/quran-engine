@@ -168,12 +168,14 @@ static jfloatArray surah_headers(JNIEnv* env, jlong h, int view) {
 jfloatArray FN(surahHeaders)(JNIEnv* env, jclass c, jlong h) { return surah_headers(env, h, 0); }
 jfloatArray FN(surahHeadersView)(JNIEnv* env, jclass c, jlong h) { return surah_headers(env, h, 1); }
 /* 9 per: decoration, surah, ayah, line, cx, cy, r, ornamentPath(-1), numeralPath(-1) */
-jfloatArray FN(ayahMarks)(JNIEnv* env, jclass c, jlong h) {
-    COLLECT(QvpAyahMark, 128, m, n, qvp_ayah_marks(PG(h), m, cap));
+static jfloatArray ayah_marks(JNIEnv* env, jlong h, int view) {
+    COLLECT(QvpAyahMark, 128, m, n, view ? qvp_ayah_marks_view(PG(h), m, cap) : qvp_ayah_marks(PG(h), m, cap));
     float* v = (float*)malloc((n ? n : 1) * 9 * sizeof(float));
     for (uint32_t i = 0; i < n; i++) { float* o = v + i * 9; o[0] = (float)m[i].decoration; o[1] = m[i].surah; o[2] = m[i].ayah; o[3] = (float)m[i].line; o[4] = m[i].cx; o[5] = m[i].cy; o[6] = m[i].r; o[7] = m[i].ornament_path == QVP_NONE ? -1.f : (float)m[i].ornament_path; o[8] = m[i].numeral_path == QVP_NONE ? -1.f : (float)m[i].numeral_path; }
     jfloatArray a = floats(env, v, n * 9); free(v); COLLECT_END(m); return a;
 }
+jfloatArray FN(ayahMarks)(JNIEnv* env, jclass c, jlong h) { return ayah_marks(env, h, 0); }
+jfloatArray FN(ayahMarksView)(JNIEnv* env, jclass c, jlong h) { return ayah_marks(env, h, 1); }
 /* 8 per: decoration, surah, ayah, juz, hizb, nisf, rubuAlHizb, rubuAlHizbInHizb */
 jintArray FN(rosettes)(JNIEnv* env, jclass c, jlong h) {
     COLLECT(QvpRosette, 32, r, n, qvp_rosettes(PG(h), r, cap));
@@ -241,12 +243,15 @@ jfloatArray FN(lineBands)(JNIEnv* env, jclass c, jlong h) {
     jfloatArray a = floats(env, v, n * 7); free(v); COLLECT_END(b); return a;
 }
 /* 10 per: word, line, x0, y0, x1, y1, inkX0, inkY0, inkX1, inkY1 */
-jfloatArray FN(hitAreas)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) {
-    uint32_t n = qvp_hit_areas(PG(h), gapBias, NULL, 0); QvpHitArea* b = (QvpHitArea*)malloc((n ? n : 1) * sizeof(QvpHitArea)); qvp_hit_areas(PG(h), gapBias, b, n);
+static jfloatArray hit_areas(JNIEnv* env, jlong h, jfloat gapBias, int view) {
+    uint32_t (*fn)(const QvpPage*, float, QvpHitArea*, uint32_t) = view ? qvp_hit_areas_view : qvp_hit_areas;
+    uint32_t n = fn(PG(h), gapBias, NULL, 0); QvpHitArea* b = (QvpHitArea*)malloc((n ? n : 1) * sizeof(QvpHitArea)); fn(PG(h), gapBias, b, n);
     float* v = (float*)malloc((n ? n : 1) * 10 * sizeof(float));
     for (uint32_t i = 0; i < n; i++) { float* o = v + i * 10; o[0] = (float)b[i].word; o[1] = (float)b[i].line; o[2] = b[i].x0; o[3] = b[i].y0; o[4] = b[i].x1; o[5] = b[i].y1; o[6] = b[i].ink_x0; o[7] = b[i].ink_y0; o[8] = b[i].ink_x1; o[9] = b[i].ink_y1; }
     jfloatArray a = floats(env, v, n * 10); free(v); free(b); return a;
 }
+jfloatArray FN(hitAreas)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) { return hit_areas(env, h, gapBias, 0); }
+jfloatArray FN(hitAreasView)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) { return hit_areas(env, h, gapBias, 1); }
 
 /* ───────── layout ───────── */
 /* spec {vw, vh, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft,
@@ -507,11 +512,14 @@ jintArray FN(highlightHandles)(JNIEnv* env, jclass c, jlong h) {
 jintArray FN(highlightWords)(JNIEnv* env, jclass c, jlong h, jint handle) { uint32_t n = qvp_highlight_words(PG(h), (uint32_t)handle, NULL, 0); uint32_t* b = (uint32_t*)malloc((n ? n : 1) * 4); qvp_highlight_words(PG(h), (uint32_t)handle, b, n); jintArray a = ints(env, (const jint*)b, n); free(b); return a; }
 /* boxes: 8 ints per box: id, line, x0, y0, x1, y1 (float bits), color, radius (float bits) */
 jintArray FN(highlightBoxesView)(JNIEnv* env, jclass c, jlong h) { uint32_t n = qvp_highlight_boxes_view(PG(h), NULL, 0); QvpBox* b = (QvpBox*)malloc((n ? n : 1) * sizeof(QvpBox)); qvp_highlight_boxes_view(PG(h), b, n); jintArray a = boxes_out(env, b, n); free(b); return a; }
-jintArray FN(wordBands)(JNIEnv* env, jclass c, jlong h, jintArray words, jint height, jfloat padX, jfloat padY) {
+static jintArray word_bands(JNIEnv* env, jlong h, jintArray words, jint height, jfloat padX, jfloat padY, int view) {
     jsize n = (*env)->GetArrayLength(env, words); jint* w = (*env)->GetIntArrayElements(env, words, NULL);
-    COLLECT(QvpBox, 64, b, k, qvp_word_bands(PG(h), (const uint32_t*)w, (uint32_t)n, (uint8_t)height, padX, padY, b, cap));
+    COLLECT(QvpBox, 64, b, k, view ? qvp_word_bands_view(PG(h), (const uint32_t*)w, (uint32_t)n, (uint8_t)height, padX, padY, b, cap)
+                                   : qvp_word_bands(PG(h), (const uint32_t*)w, (uint32_t)n, (uint8_t)height, padX, padY, b, cap));
     (*env)->ReleaseIntArrayElements(env, words, w, JNI_ABORT); jintArray a = boxes_out(env, b, k); COLLECT_END(b); return a;
 }
+jintArray FN(wordBands)(JNIEnv* env, jclass c, jlong h, jintArray words, jint height, jfloat padX, jfloat padY) { return word_bands(env, h, words, height, padX, padY, 0); }
+jintArray FN(wordBandsView)(JNIEnv* env, jclass c, jlong h, jintArray words, jint height, jfloat padX, jfloat padY) { return word_bands(env, h, words, height, padX, padY, 1); }
 
 /* ───────── selection ───────── */
 void FN(select)(JNIEnv* env, jclass c, jlong h, jint anchor, jint focus) { qvp_select(PG(h), anchor < 0 ? QVP_NONE : (uint32_t)anchor, focus < 0 ? QVP_NONE : (uint32_t)focus); }

@@ -52,6 +52,19 @@ class QvpAndroidTest {
             val inView = page.surahHeadersView()
             assertEquals(headers.size, inView.size)
             assertTrue(inView[0].titleY0 > 0f && inView[0].titleY1 < layout.contentH)
+            // the viewport-px twins: the same records as the page-space calls, inside the layout
+            val marks = page.ayahMarks()
+            val marksInView = page.ayahMarksView()
+            assertEquals(marks.map { it.ayah }, marksInView.map { it.ayah })
+            assertTrue(marksInView.all { it.cy > 0f && it.cy < layout.contentH })
+            val areasInView = page.hitAreasView()
+            assertEquals(page.hitAreas().map { it.word }, areasInView.map { it.word })
+            assertTrue(areasInView.all { it.y1 <= layout.contentH + 1f })
+            val ayah = page.targetWords(Target.ayah(1, 2))
+            val bands = page.wordBands(ayah)
+            val bandsInView = page.wordBandsView(ayah)
+            assertEquals(bands.size, bandsInView.size)
+            assertTrue(bandsInView.all { it.y0 >= 0f && it.y1 <= layout.contentH })
 
             assertFalse(page.isClosed)
         } finally {
