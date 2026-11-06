@@ -208,7 +208,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      # The same targets as ios.yml: scripts/build-engine-ios.sh builds all four.
+      # The same targets as ios.yml: scripts/build-engine-ios.sh builds all five.
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios, aarch64-apple-ios-sim, x86_64-apple-ios, aarch64-apple-darwin, x86_64-apple-darwin
