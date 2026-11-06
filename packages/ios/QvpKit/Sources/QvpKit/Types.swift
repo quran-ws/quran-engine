@@ -74,6 +74,34 @@ public enum QvpDefaults {
     /// The tallest band of ink a view draws at once, in viewport px: what `QvpPage.layoutInkBand`
     /// holds a band to by default.
     public static let MAX_INK_HEIGHT: Float = 4096
+
+    /// Every default by its camelCase name, as the decimals the header states, for a host that
+    /// reads the table whole (the React Native module's constants). A Float goes through its
+    /// shortest decimal string, so 0.6 stays 0.6 as a Double; a colour is unsigned 0xRRGGBBAA.
+    /// Member references only: the numbers live above, where the parity check reads them.
+    public static let decimal: [String: Double] = {
+        let all: [String: Any] = [
+            "ink": INK, "highlightInk": HIGHLIGHT_INK, "highlightBand": HIGHLIGHT_BAND,
+            "highlightPadX": HIGHLIGHT_PAD_X, "highlightPadY": HIGHLIGHT_PAD_Y, "highlightSeam": HIGHLIGHT_SEAM,
+            "selectionBand": SELECTION_BAND, "selectionPadX": SELECTION_PAD_X, "gapBias": GAP_BIAS, "tapDistance": TAP_DISTANCE,
+            "gridLines": GRID_LINES, "aspectSlack": ASPECT_SLACK,
+            "maskBlock": MASK_BLOCK, "maskPad": MASK_PAD, "maskRadius": MASK_RADIUS,
+            "revealLit": REVEAL_LIT, "revealGrey": REVEAL_GREY, "cropPad": CROP_PAD,
+            "ayahMarkScaleScan": AYAH_MARK_SCALE_SCAN,
+            "minZoom": MIN_ZOOM, "maxZoom": MAX_ZOOM, "zoomedThreshold": ZOOMED_THRESHOLD,
+            "swipeAxisRatio": SWIPE_AXIS_RATIO, "swipeDistance": SWIPE_DISTANCE, "swipeVelocity": SWIPE_VELOCITY,
+            "zoomSnapHysteresis": ZOOM_SNAP_HYSTERESIS, "zoomQuantum": ZOOM_QUANTUM,
+            "reflowRelax": REFLOW_RELAX, "reflowMaxStretch": REFLOW_MAX_STRETCH,
+        ]
+        return all.mapValues { v in
+            switch v {
+            case let f as Float: return Double("\(f)") ?? Double(f)
+            case let u as UInt32: return Double(u)
+            case let i as Int: return Double(i)
+            default: return 0
+            }
+        }
+    }()
 }
 
 /// How a reflowed row fills the width, how the words are broken onto rows, and where the air
@@ -198,7 +226,17 @@ public struct Target {
     /// The words from index `a` to index `b`, both included, in either order.
     public static func range(_ a: Int, _ b: Int) -> Target { Target(7, a, b) }
     /// Parse a string key; "s:a:w" word keys need the page to resolve (see QvpPage.target).
+    /// A key in none of these forms is a fatal error; `Target(parsing:page:)` returns nil for one.
     public static func parse(_ s: String, page: QvpPage? = nil) -> Target {
+        guard let t = Target(parsing: s, page: page) else { preconditionFailure("bad target \(s)") }
+        return t
+    }
+    /// Parse a string key as `parse` does, or nil when the key is in none of its forms.
+    public init?(parsing s: String, page: QvpPage? = nil) {
+        guard let t = Target.parsed(s, page: page) else { return nil }
+        self = t
+    }
+    private static func parsed(_ s: String, page: QvpPage?) -> Target? {
         if s == "page" { return Target.page() }
         func nums(_ pattern: String) -> [Int]? {
             guard let re = try? NSRegularExpression(pattern: pattern), let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) else { return nil }
@@ -209,7 +247,7 @@ public struct Target {
         if let g = nums("^(\\d+):(\\d+)-(\\d+)$") { return ayahRange(g[0], g[1], g[2]) }
         if let g = nums("^(\\d+):(\\d+):(\\d+)$") { let i = page?.findWord(g[0], g[1], g[2]) ?? -1; return i >= 0 ? word(i) : words([]) }
         if let g = nums("^(\\d+):(\\d+)$") { return ayah(g[0], g[1]) }
-        preconditionFailure("bad target \(s)")
+        return nil
     }
     /// Run `body` with a C QvpTarget whose `words` pointer is valid for the call.
     func withC<R>(_ body: (UnsafePointer<QvpTarget>) -> R) -> R {

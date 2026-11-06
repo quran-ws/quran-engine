@@ -107,6 +107,32 @@ public struct QvpPassageLayout: Equatable {
     public let isTruncated: Bool
     /// Where the host draws its ellipsis after a cut: from the last row's top to its baseline.
     public let ellipsis: CGRect?
+
+    /// Fill the layout into `ctx` with its top-left corner at (`x`, `y`), in the context's fill
+    /// colour. `pages` maps a page number to the open page the passage was loaded from, which
+    /// holds the outlines. A draw whose page is not in the map, or is closed, is skipped. The
+    /// ellipsis after a cut is the host's to draw, at `ellipsis`.
+    public func draw(in ctx: CGContext, pages: [Int: QvpPage], x: CGFloat = 0, y: CGFloat = 0) {
+        let s = CGFloat(scale)
+        var cur = -1
+        ctx.saveGState()
+        for d in draws {
+            guard let page = pages[d.page], page.isOpen else { continue }
+            if d.placement != cur {
+                // A point p of a path lands at scale · (k · p + d): the placement first, then the scale.
+                let q = d.placement < placements.count ? placements[d.placement] : .identity
+                ctx.restoreGState(); ctx.saveGState()
+                ctx.concatenate(CGAffineTransform(a: s * CGFloat(q.kx), b: 0, c: 0, d: s * CGFloat(q.ky),
+                                                  tx: x + s * CGFloat(q.dx), ty: y + s * CGFloat(q.dy)))
+                cur = d.placement
+            }
+            let paths = page.buildPaths()
+            guard d.path < paths.count else { continue }
+            ctx.addPath(paths[d.path])
+            ctx.fillPath(using: page.pathEvenOdd(d.path) ? .evenOdd : .winding)
+        }
+        ctx.restoreGState()
+    }
 }
 
 /// One ayah of a passage, with its text from the page's own word records.

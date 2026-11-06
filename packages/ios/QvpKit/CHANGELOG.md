@@ -15,6 +15,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   the whole page, however tall. Bound as `layoutInkBand` in JavaScript, Kotlin, Dart and
   Swift. React Native calls it through the Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
   Kotlin, Dart and Swift tests replay them (#134).
+- QvpKit: `QvpPageView.reflowBreaks` and `QvpPageView.onZoomChanged`, as on Android;
+  `Target(parsing:page:)`, which returns nil for a key that `Target.parse` stops the program
+  on; `QvpPassageLayout.draw(in:pages:x:y:)`, which fills a passage into a `CGContext`, as
+  Kotlin's `QvpPassageLayout.draw`; and `QvpDefaults.decimal`, every default by its camelCase
+  name, as Kotlin's `QvpDefaults.decimal`. The React Native module uses all five.
 
 ### Changed
 - The Android `QvpPageView`, the Flutter `QvpPageView`, the iOS `QvpPageView` and the web

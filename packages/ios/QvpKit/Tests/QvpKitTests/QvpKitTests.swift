@@ -44,6 +44,40 @@ final class QvpKitTests: XCTestCase {
         }
     }
 
+    func testTargetParsingReturnsNilForABadKey() {
+        XCTAssertNil(Target(parsing: "2:x"))
+        XCTAssertNil(Target(parsing: ""))
+        XCTAssertEqual(Target(parsing: "line:7")?.kind, 5)
+        XCTAssertEqual(page.targetWords(Target(parsing: "page", page: page)!).count, page.nWords)
+    }
+
+    func testDefaultsTableHoldsEveryDefaultAsTheHeaderDecimal() {
+        XCTAssertEqual(QvpDefaults.decimal.count, 29)
+        XCTAssertEqual(QvpDefaults.decimal["selectionPadX"], 0.6)
+        XCTAssertEqual(QvpDefaults.decimal["ink"], Double(0x231f20ff))
+        XCTAssertEqual(QvpDefaults.decimal["gridLines"], 15)
+    }
+
+    func testPassageDrawFillsTheLayout() throws {
+        let passage = try QvpPassage(pages: [page], surah: page.words[0].surah, from: page.words[0].ayah)
+        defer { passage.close() }
+        let l = try XCTUnwrap(passage.layout(QvpPassageSpec(width: 300, scale: 0.5)))
+        let w = Int(l.width.rounded(.up)), h = Int(l.height.rounded(.up))
+        let ctx = try XCTUnwrap(CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                          space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue))
+        ctx.setFillColor(gray: 1, alpha: 1); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.setFillColor(gray: 0, alpha: 1)
+        l.draw(in: ctx, pages: [page.pageNo: page])
+        let px = UnsafeBufferPointer(start: ctx.data!.assumingMemoryBound(to: UInt8.self), count: ctx.bytesPerRow * h)
+        // the dark pixels of the image, leaving out each row's padding
+        func dark() -> Int { (0..<h).reduce(0) { n, y in n + (0..<w).filter { px[y * ctx.bytesPerRow + $0] < 128 }.count } }
+        XCTAssertGreaterThan(dark(), 100)
+        // a page the map lacks draws nothing
+        ctx.setFillColor(gray: 1, alpha: 1); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        l.draw(in: ctx, pages: [:])
+        XCTAssertEqual(dark(), 0)
+    }
+
     func testEngineVersionNamesArabicTools() {
         XCTAssertGreaterThan(QvpEngine.formatVersion(), 0)
         XCTAssertTrue(QvpEngine.version().split(separator: ".").count == 3)

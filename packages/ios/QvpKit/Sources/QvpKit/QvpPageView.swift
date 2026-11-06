@@ -33,6 +33,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     public var fillHeight = false { didSet { relayout() } }
     /// Draw source-native frames around surah names on the printed page.
     public var surahFrames = true { didSet { guard oldValue != surahFrames else { return }; relayout() } }
+    /// How the words are broken onto rows as the reader zooms in.
+    public var reflowBreaks: QvpBreaks = .fitted { didSet { guard oldValue != reflowBreaks else { return }; relayout() } }
     /// Paper behind the page content (nil = transparent).
     public var paperColor: UIColor? { didSet { invalidateContent() } }
     /// 0xRRGGBBAA band colour of the drag selection.
@@ -44,6 +46,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// A sideways flick, in pages: +1 the page after this one, -1 the page before it. The
     /// muṣḥaf's own order, so a host adds it to the page it is on.
     public var onSwipe: ((Int) -> Void)?
+    /// The size the reader is at changed: a pinch committed, or a step was asked for.
+    public var onZoomChanged: ((QvpZoom) -> Void)?
     /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
     /// (e.g. marking reading progress) can still call `resetView()` itself — `isZoomed` says when.
     public var onDoubleTap: ((QvpHit?) -> Void)?
@@ -324,7 +328,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     private var lastSize = CGSize.zero
     /// The layout the current size and knobs ask for, before the zoom control has its say.
     var baseSpec: QvpLayoutSpec {
-        QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, fillHeight: fillHeight, surahFrames: surahFrames)
+        QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, fillHeight: fillHeight,
+                      reflow: QvpReflowSpec(zoom: 0, breaks: reflowBreaks), surahFrames: surahFrames)
     }
     /// The spec in force: the knobs above with the reader's zoom control folded in.
     public var layoutSpec: QvpLayoutSpec {
@@ -484,7 +489,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// Take what a gesture produced: the page is already laid out at the new size, and the view
     /// already holds the word the fingers were on.
     private func apply(_ c: QvpZoomChange) {
+        let moved = c.zoom != zoom
         zoom = c.zoom
+        if moved { onZoomChanged?(c.zoom) }
         viewScale = CGFloat(c.view.scale); viewOx = CGFloat(c.view.offsetX); viewOy = CGFloat(c.view.offsetY)
         if c.relaid { drawList = nil; baseKey = "" }
         invalidateContent()
