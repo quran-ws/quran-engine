@@ -44,8 +44,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   /**
    * Get a colour as 0xRRGGBBAA. A number passes through. A string is '#rgb', '#rgba', '#rrggbb' or
    * '#rrggbbaa'; `alpha` (0 to 1) applies to the forms without one, which are opaque without it.
-   * A string of another length is read as hex as it is, low 32 bits kept, and one that is not
-   * hex gives 0. A value that is neither a number nor a string is 0.
+   * Any other string gives a colour that is not defined: pass one of these forms. A value that
+   * is neither a number nor a string is 0.
    */
   function rgba(c, alpha) {
     if (typeof c === 'number') return c >>> 0;

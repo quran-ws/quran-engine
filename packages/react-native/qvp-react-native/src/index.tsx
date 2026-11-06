@@ -334,7 +334,7 @@ export const QvpPageView = forwardRef<QvpPageViewHandle, QvpPageViewProps>(funct
 // ── the passage view ─────────────────────────────────────────────────────────────────────────
 /** Where the rows of a passage start: at the right edge, in the middle, or across the width. */
 export type PassageAlign = 'right' | 'center' | 'justified';
-/** One row of a laid-out passage, in dp: the box of its ink, and the height its words sit on. */
+/** One row of a laid-out passage, in dp: the box of its ink, and `baseline`, the y its words sit on. */
 export interface PassageRow { x0: number; y0: number; x1: number; y1: number; baseline: number }
 /** One word of a laid-out passage with its signs, in dp: its key, the page it is printed on and its row.
  * `x0`…`y1` is the word and its signs; `wordX0`…`wordY1` is the word alone, which leaves out the signs:

@@ -183,7 +183,7 @@ data class QvpDecoration(val index: Int, val decoration: Int, val surah: Int, va
 data class QvpHit(val word: Int, val path: Int, val decoration: Int, val line: Int, val distance: Float, val isExact: Boolean)
 /** How a gap-aware hit test resolves a point: the farthest distance (0 for no bound), the gap bias, and whether an exact hit wins. */
 data class QvpHitOptions(val maxDistance: Float = 0f, val gapBias: Float = QvpDefaults.GAP_BIAS, val preferExact: Boolean = true)
-/** One rectangle to draw: the highlight or mask it belongs to, its line, its colour (0xRRGGBBAA) and its corner radius. [QvpPage.wordBands] gives it in page units, and the calls that end in `View` give it in viewport px. */
+/** One rectangle to draw: its line and corner radius, and for a highlight or mask box the id it belongs to and its colour (0xRRGGBBAA). A word band from [QvpPage.wordBands] or `wordBandsView` has id 0 and colour 0. [QvpPage.wordBands] gives it in page units, and the calls that end in `View` give it in viewport px. */
 data class QvpBox(val id: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val color: Int, val radius: Float)
 /** The gap-aware rectangle of one word, with the box of its ink: in page units from [QvpPage.hitAreas], in viewport px from [QvpPage.hitAreasView]. */
 data class QvpHitArea(val word: Int, val line: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val inkX0: Float, val inkY0: Float, val inkX1: Float, val inkY1: Float)
