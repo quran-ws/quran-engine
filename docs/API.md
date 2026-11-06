@@ -466,6 +466,10 @@ layout:
   shorter than the screen leaves part of the screen with no ink. So a band can hold more
   pixels than `maxPixels` when one screen does.
 
+The limits are in the unit of the viewport the host passes. A host that measures its view in
+points, as iOS does, divides a limit in device pixels by the screen scale: a bitmap of 16384
+rows at 3 pixels to the point is a `maxHeight` of 5461 points.
+
 The page is whole when it fits under both limits, read this way. One case ignores both limits:
 a view with no scale, a viewport with no height, or a scale, viewport height or `offsetY` that
 is NaN or infinite has no screen to put a band around, so the band is the whole page however

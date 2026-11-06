@@ -52,9 +52,9 @@ All notable changes to the engine and its packages. The format follows
   native view's page-load and word-tap events, and checks that the app sends one highlight
   on the tapped word in the `highlights` prop and shows the word key. The workflow's
   `npm test` step runs it (#154).
-- The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
-  engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
-  not agree (#134):
+- The Android `QvpPageView`, the Flutter `QvpPageView`, the iOS `QvpPageView` and the web
+  `CanvasRenderer` ask the engine for their band of ink. Each had its own copy of the
+  arithmetic, and the copies did not agree (#134):
   - Android drew a printed page as a band. It now draws any page whole when the page fits the
     ceiling and the ink budget, as it already did for a reflowed page. Its band no longer
     passes the ceiling on a screen taller than 4096 px. The ink budget now limits the band as
@@ -64,6 +64,11 @@ All notable changes to the engine and its packages. The format follows
     nothing changes.
   - The web band now stays under the tallest canvas a browser makes, and under the ink budget
     down to one screen.
+  - iOS drew a printed page as a band one screen tall, from the top of the page. It now draws
+    any page whole when the page fits 16384 bitmap rows and the ink budget, and a magnified
+    printed page too tall for them as a band around the reader. A dressed page's bitmap is
+    still the band plus the dress overflow above and below, as the Android ornament layer is.
+    The ink budget no longer counts the overflow.
 - Flutter: `flutter analyze` fails on a public item with no doc block. The package turns on
   the `public_member_api_docs` lint, and every public item of the API files has a block
   that gives its units, its range and what an empty or null result means. The generated

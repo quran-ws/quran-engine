@@ -446,8 +446,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     }
     /// Where the cached ink starts and how tall it is, for the page and place in hand.
     private var currentBand: (top: CGFloat, height: CGFloat) {
-        guard let p = page, let l = p.currentLayout else { return (0, max(bounds.height, 1)) }
-        return band(for: p, l, offsetY: viewOy, scale: window?.screen.scale ?? contentScaleFactor)
+        guard let p = page, p.isOpen, p.currentLayout != nil else { return (0, max(bounds.height, 1)) }
+        return band(for: p, offsetY: viewOy, scale: window?.screen.scale ?? contentScaleFactor)
     }
     private var bandTop: CGFloat { currentBand.top }
     private var bandHeight: CGFloat { currentBand.height }
@@ -603,7 +603,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         let styledSet = Set(styled.map { $0.path })
         let ink = p.defaultInk
         let scale = window?.screen.scale ?? contentScaleFactor
-        let (top, bandH) = band(for: p, l, offsetY: offsetY, scale: scale)
+        let (top, bandH) = band(for: p, offsetY: offsetY, scale: scale)
         let W = Int(bounds.width * scale), bandPx = Int((bandH * scale).rounded(.up))
         guard W > 0, bandPx > 0 else { return nil }
         let bands = p.highlightBoxesView()
@@ -668,20 +668,23 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         return (key, image)
     }
 
-    /// The band of one page worth drawing: the whole of it when it fits the ink budget, and two
-    /// screens around the reader when it does not.
-    /// A dressed page's band reaches past the content by the dress overflow, so the border
-    /// above and below it is drawn too.
-    private func band(for p: QvpPage, _ l: QvpLayout, offsetY: CGFloat, scale: CGFloat) -> (top: CGFloat, height: CGFloat) {
+    /// The band of one page worth drawing, in view points down the page. The engine picks it:
+    /// the whole page when it fits, otherwise two screens around the reader, with a top that
+    /// moves in steps. Its limits are the bitmap's, in device pixels made points: 16384 rows,
+    /// and the ink budget at four bytes a pixel.
+    /// A dressed page's border stands past the content by the dress overflow, and this view
+    /// draws the border into the same bitmap as the ink. So the bitmap is the band plus the
+    /// overflow above and below, as the Android ornament layer is, and the overflow comes off
+    /// the row limit so the bitmap stays under it.
+    private func band(for p: QvpPage, offsetY: CGFloat, scale: CGFloat) -> (top: CGFloat, height: CGFloat) {
         let o = dressOverflow(p)
         let above = ((o?.top ?? 0) * viewScale).rounded(.up), below = ((o?.bottom ?? 0) * viewScale).rounded(.up)
-        let contentH = CGFloat(l.contentH) * viewScale + above + below
-        let whole = (contentH * scale).rounded(.up) <= 16384
-            && Int((bounds.width * scale).rounded(.up) * (contentH * scale).rounded(.up)) * 4 <= inkBudget
-        if l.reflowed, whole { return (-above, max(contentH, 1)) }
-        if !l.reflowed { return (-above, max(bounds.height + above + below, 1)) }
-        let step = max(bounds.height / 2, 1)
-        return (((-offsetY - step) / step).rounded(.down) * step, max(bounds.height * 2, 1))
+        let s = max(scale, 1)
+        let view = QvpView(scale: Float(viewScale), offsetX: Float(viewOx), offsetY: Float(offsetY))
+        let b = p.layoutInkBand(view, viewportW: Float(bounds.width), viewportH: Float(bounds.height),
+                                maxHeight: Float(max(16384 / s - above - below, 1)),
+                                maxPixels: Float(CGFloat(inkBudget) / (4 * s * s)))
+        return (CGFloat(b.top) * viewScale - above, max(CGFloat(b.height) * viewScale + above + below, 1))
     }
 
     private func paths(_ p: QvpPage) -> [CGPath] { p.buildPaths() }

@@ -17,9 +17,9 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   Kotlin, Dart and Swift tests replay them (#134).
 
 ### Changed
-- The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
-  engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
-  not agree (#134):
+- The Android `QvpPageView`, the Flutter `QvpPageView`, the iOS `QvpPageView` and the web
+  `CanvasRenderer` ask the engine for their band of ink. Each had its own copy of the
+  arithmetic, and the copies did not agree (#134):
   - Android drew a printed page as a band. It now draws any page whole when the page fits the
     ceiling and the ink budget, as it already did for a reflowed page. Its band no longer
     passes the ceiling on a screen taller than 4096 px. The ink budget now limits the band as
@@ -29,6 +29,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
     nothing changes.
   - The web band now stays under the tallest canvas a browser makes, and under the ink budget
     down to one screen.
+  - iOS drew a printed page as a band one screen tall, from the top of the page. It now draws
+    any page whole when the page fits 16384 bitmap rows and the ink budget, and a magnified
+    printed page too tall for them as a band around the reader. A dressed page's bitmap is
+    still the band plus the dress overflow above and below, as the Android ornament layer is.
+    The ink budget no longer counts the overflow.
 
 ### Removed
 
