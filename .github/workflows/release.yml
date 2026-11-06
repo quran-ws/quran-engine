@@ -253,12 +253,6 @@ jobs:
           else
             npm publish --access public --ignore-scripts
           fi
-          if npm view "@quran.ws/qvp-react-native@$VERSION" version >/dev/null 2>&1; then
-            echo "::notice::@quran.ws/qvp-react-native $VERSION already exists on npm"
-          else
-            cd packages/react-native/qvp-react-native
-            npm publish --access public
-          fi
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -291,6 +285,87 @@ jobs:
           cd packages/flutter/qvp_flutter
           flutter pub publish --dry-run
           flutter pub publish --force
+
+  # The React Native package takes its Kotlin library, ws.quran:qvp-android, from Maven
+  # Central at the package version. So this job waits for the maven job and for Maven Central
+  # to serve that version, then compiles the module against it, and only then publishes to
+  # npm. The other registries do not wait for Maven Central, and a Maven failure does not
+  # stop them.
+  react-native:
+    name: React Native package on npm
+    needs: [verify, maven]
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Check npm for the version
+        id: npm
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          npm install -g npm@11.19.1
+          [ "$(npm --version)" = 11.19.1 ]
+          if npm view "@quran.ws/qvp-react-native@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::@quran.ws/qvp-react-native $VERSION already exists on npm"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+      # The maven job ends when Central accepts the release. Central then needs time to sync
+      # to repo1.maven.org, often 10 to 30 minutes. Ask every 60 seconds, for up to 60 minutes.
+      - name: Wait for Maven Central to serve the library
+        if: steps.npm.outputs.published != 'true'
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          pom="https://repo1.maven.org/maven2/ws/quran/qvp-android/$VERSION/qvp-android-$VERSION.pom"
+          tries=60
+          for i in $(seq 1 "$tries"); do
+            if curl -fsSI "$pom" >/dev/null 2>&1; then
+              echo "Maven Central serves ws.quran:qvp-android:$VERSION (try $i of $tries)"
+              exit 0
+            fi
+            echo "Maven Central does not serve ws.quran:qvp-android:$VERSION yet (try $i of $tries)"
+            [ "$i" -lt "$tries" ] && sleep 60
+          done
+          echo "::error::Maven Central did not serve $pom after $tries tries; rerun this job when it does"
+          exit 1
+      - uses: ./.github/actions/android-toolchain
+        if: steps.npm.outputs.published != 'true'
+        with:
+          packages: platforms;android-35 platforms;android-36 build-tools;36.0.0
+      - name: Install the example
+        if: steps.npm.outputs.published != 'true'
+        working-directory: packages/react-native/example
+        run: npm install --no-audit --no-fund
+      # -PqvpFromMaven leaves the `:qvp` project out of the example's build, so the module
+      # takes ws.quran:qvp-android from Maven Central at the version in its package.json, as
+      # an app that installs the package from npm does. A module that calls library API the
+      # published AAR lacks fails here, before npm holds it.
+      - name: Compile the module against the library on Maven Central
+        if: steps.npm.outputs.published != 'true'
+        working-directory: packages/react-native/example/android
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          have="$(node -p "require('../../qvp-react-native/package.json').version")"
+          [ "$have" = "$VERSION" ] || {
+            echo "::error::packages/react-native/qvp-react-native/package.json has version $have, not $VERSION"
+            exit 1
+          }
+          ./gradlew --no-daemon -PqvpFromMaven :quran.ws_qvp-react-native:compileReleaseKotlin
+      - name: npm
+        if: steps.npm.outputs.published != 'true'
+        working-directory: packages/react-native/qvp-react-native
+        run: npm publish --access public
 
   cdn:
     name: engine builds to cdn.quran.ws
