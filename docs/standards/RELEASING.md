@@ -25,6 +25,14 @@
    - the Android AAR, XCFramework zip, and their checksums as release assets. `Package.swift`
      points at the prepared XCFramework URL and checksum
    The release notes are the changelog section.
+
+   The `react-native` job publishes `@quran.ws/qvp-react-native` alone, after the `maven`
+   job. The package takes `ws.quran:qvp-android` from Maven Central at its own version, so
+   npm must not hold the package before Maven Central serves the library. The job asks
+   Maven Central for the version's POM every 60 seconds, for up to 60 minutes, because the
+   sync after the `maven` job often takes 10 to 30 minutes. Then it compiles the Android
+   module against that library with `-PqvpFromMaven`, and only then publishes to npm. The
+   other registries do not wait for it. A Maven failure stops only this job.
 5. Nobody publishes by hand. If a step fails, fix and re-run the workflow for the same
    tag. The workflow skips and reports any registry that refuses the same version twice.
 
@@ -43,7 +51,8 @@ crates.io, npm and pub.dev use GitHub trusted publishing with short-lived OpenID
 tokens. Each crate and each npm package trusts `.github/workflows/release.yml` of this
 repository. The pub.dev package trusts this repository and the `v{{version}}` tag pattern.
 None of the three needs a repository secret. The crates.io, npm and pub.dev steps are safe
-to rerun for the same tag.
+to rerun for the same tag. If Maven Central does not serve the library within 60 minutes,
+rerun the `react-native` job when it does.
 
 A registry failure keeps the workflow red, but does not block verified Wasm, Apple and Android
 artifacts from reaching the CDN. CDN publishing verifies and skips an identical artifact family

@@ -44,6 +44,11 @@ All notable changes to the engine and its packages. The format follows
   module compiled the Kotlin library from `../../../android/qvp`, a path that exists only
   in this repository (#42). CI resolves the library from Maven Central through the
   example's build with `-PqvpFromMaven`.
+- The release workflow publishes `@quran.ws/qvp-react-native` to npm in its own job, after
+  the Maven Central job. The job waits up to 60 minutes for Maven Central to serve
+  `ws.quran:qvp-android` at the release version, then compiles the module against it with
+  `-PqvpFromMaven`. Before, npm could hold a package version whose library Maven Central
+  did not serve yet, or did not serve at all after a Maven failure (#172).
 
 ## [0.8.0] - 2026-11-04
 
