@@ -261,10 +261,12 @@ data class QvpGrid(val lines: Int, val lineSpacing: Float)
 /** Page → viewport. On a printed page, viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. A reflowed
  *  page ([reflowed]) moves words, not lines, so [lineDy] places no path there: draw through [QvpPage.layoutDrawList] and
  *  [QvpPage.layoutPlacements], and ask [QvpPage.wordBoundsView] where a word is. [lineDy] and the slots then hold the rows.
- *  Draw at fitX + fitScale*viewX, fitY + fitScale*viewY, and put the host's pan and zoom on top. On a printed page
- *  [fitScale] shrinks the content to fit both the viewport width and height (never above 1) and [fitX], [fitY] centre it.
- *  On a reflowed page [fitScale] is 1 and the host scrolls: [fitX] centres the content across the viewport, and [fitY]
- *  puts its top at the top of the viewport. */
+ *  Draw at fitX + fitScale*viewX, fitY + fitScale*viewY, and put the host's pan and zoom on top. The fit shows a box:
+ *  the content, plus the dress overflow on each side when the page is dressed ([QvpDressInfo.overflow]). On a printed
+ *  page [fitScale] shrinks the box to fit both the viewport width and height (never above 1), and the box is centred. On
+ *  a reflowed page [fitScale] is 1 and the host scrolls: the box is centred across the viewport, and its top is at the
+ *  top of the viewport. [fitX] and [fitY] place the content's own origin, so the overflow sits to their left and above
+ *  them. */
 class QvpLayout(val scale: Float, val offsetX: Float, val offsetY: Float, val contentW: Float, val contentH: Float, val lineSpacing: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray,
                 val fitScale: Float = 1f, val fitX: Float = 0f, val fitY: Float = 0f,
                 /** True when this layout broke the words onto rows of its own, and how many it made. */
@@ -459,8 +461,8 @@ data class QvpDressView(val view: QvpView, val width: Float, val height: Float)
 /**
  * What a dress put on the page. The three ornament indices are null for a kind left as printed.
  * [viewBox] is the page box the border grew, in page units. [overflow] is how far the border reaches
- * past the laid-out content on each side, in viewport px: fit content plus overflow, or the border is
- * cropped. [revision] counts up on every rebuild (a new dress, and every layout).
+ * past the laid-out content on each side, in viewport px. The layout's fit ([QvpLayout.fitScale]) already
+ * holds it, so a host that draws at the fit shows the whole border. [revision] counts up on every rebuild (a new dress, and every layout).
  */
 data class QvpDressInfo(val ayahMark: Int?, val surahHeader: Int?, val pageFrame: Int?, val ayahMarks: Int, val surahHeaders: Int,
                         val frameRepeats: Int, val frameStretched: Boolean, val draws: Int, val revision: Int,

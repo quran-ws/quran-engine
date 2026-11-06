@@ -145,10 +145,11 @@ page.lineSpacing                     // the printed line spacing of this page, i
 
 **The fit.** `fitScale`, `fitX`, `fitY` is the view transform for the laid-out content. A
 host draws at `fitX + fitScale·viewX`, `fitY + fitScale·viewY` and applies its own pan and
-zoom on top. A printed page shows whole: `fitScale` shrinks the content to fit both the
-viewport width and height (it is never more than 1), and `fitX`, `fitY` centre it. A
-reflowed page is scrolled, not shrunk: `fitScale` is 1, `fitX` centres the content across
-the viewport, and `fitY` puts its top at the top of the viewport. `maxAspectSlack` bounds the content width to
+zoom on top. The fit shows a box: the content, plus the dress overflow on each side when
+the page is dressed (see the dress section below). A printed page shows whole: `fitScale`
+shrinks the box to fit both the viewport width and height (it is never more than 1), and
+the box is centred. A reflowed page is scrolled, not shrunk: `fitScale` is 1, the box is
+centred across the viewport, and its top is at the top of the viewport. `maxAspectSlack` bounds the content width to
 `viewportH·pageW/pageH·slack` so a landscape screen does not stretch the lines (0 = no
 bound; the examples use 1.15). `cropLeft`/`cropRight` cut the printed side margins (page
 units) so the ink spans the padded width. Wrappers compute none of this; the engine's

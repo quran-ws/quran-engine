@@ -401,14 +401,18 @@ public final class QvpCanvasController {
         layoutRevision &+= 1
         cache.clear(); invalidate()
     }
-    /// Fit the content height and centre it.
+    /// Go back to the fitted view (`fittedView()`).
     public func resetView() {
         springTask?.cancel(); springTask = nil
         let f = fittedView()
         viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
         invalidate()
     }
-    /// The transform `resetView()` applies: content height fitted, centred.
+    /// The transform `resetView()` applies. A printed page takes the layout's fit: the content
+    /// plus any dress overflow, shrunk to fit the view and centred. A reflowed page takes scale 1,
+    /// centred across, its top at the top.
+    /// A printed page the host scrolls takes `dressView`: the same box fitted to the width,
+    /// never enlarged, centred across, its top at the top.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
         // The layout's fit already holds a dress's border: the engine fits content plus overflow.

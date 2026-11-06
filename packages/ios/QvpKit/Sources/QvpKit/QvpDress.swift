@@ -167,7 +167,8 @@ public struct DressInfo: Equatable {
     /// x, y, w, h in page units. A border grows it past the page.
     public let viewBox: [Float]
     /// left, top, right, bottom in viewport px: how far the border reaches past the laid-out
-    /// content. Fit content plus overflow, or the border is cropped.
+    /// content. The layout's fit (`QvpLayout.fitScale`) already holds it, so a host that draws
+    /// at the fit shows the whole border.
     public let overflow: [Float]
 }
 
