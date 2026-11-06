@@ -312,6 +312,11 @@ class QvpWebBackend implements QvpBackend {
     if (t.words != null && t.words!.isNotEmpty) {
       res['words'] = Uint32List.fromList(t.words!).toJS;
     }
+    // A '2:255:3' target names a word by key. qvp.js finds it on the page, as the native
+    // backend does with qvp_find_word. Without the key it read word 0.
+    if (t.wordKey != null) {
+      res['wordKey'] = t.wordKey!.map((n) => n.toJS).toList().toJS;
+    }
     return res;
   }
 
