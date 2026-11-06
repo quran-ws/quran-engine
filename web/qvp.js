@@ -1208,20 +1208,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const ink = page.defaultInk;
       const W = this.canvas.width, H = this.canvas.height;
       // The cached ink is a band of the page, not the screen, so scrolling inside it is one
-      // blit and nothing is drawn again. A page that is several screens of ink used to redraw
-      // every path on every frame of a drag, because the cache was keyed on where the reader
-      // had scrolled to. The band is rebuilt only when the drag has travelled half a screen.
-      const viewH = H / dpr, slack = viewH / 2, step = viewH / 2;
+      // blit and nothing is drawn again. The engine picks the band: the whole page when it
+      // fits, otherwise two screens around the reader, with a top that moves in steps. It is
+      // asked in device px, so its limits are the canvas's own: the tallest canvas a browser
+      // makes, and the ink budget at four bytes a pixel.
       const scale = view.scale || 1;
-      // A page that fits the ink budget is drawn once, the parts past both ends of the screen
-      // included, and then scrolling draws nothing at all. A taller one keeps a band of itself,
-      // two screens tall, redrawn when the reader scrolls out of it.
-      const contentH = (L.contentH || 0) * scale;
-      const whole = contentH > 0 && W * contentH * dpr * 4 <= this.inkBudget && contentH * dpr <= MAX_CANVAS_PX;
-      const bandTop = whole ? 0 : Math.floor((-view.offsetY - slack) / step) * step;   // view px
-      const bandH = whole ? contentH : viewH + 2 * slack;
+      const band = page.layoutInkBand({ scale: scale * dpr, offsetX: view.offsetX * dpr, offsetY: view.offsetY * dpr }, W, H,
+        { maxHeight: MAX_CANVAS_PX, maxPixels: this.inkBudget / 4 });
       // the ink drawn into the band, in layout px: what the engine is asked for
-      const cullTop = bandTop / scale, cullBottom = (bandTop + bandH) / scale;
+      const cullTop = band.top, cullBottom = band.top + band.height;
+      const bandTop = band.top * scale, bandH = band.height * scale;   // view px
       // the view the band is rendered under: the reader's, less where the band starts
       const bandView = { ...view, offsetY: -bandTop };
       const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${bandTop.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.lineSpacing}|${L.lineDy ? L.lineDy[0] : ''}|${L.groups ? L.groups.length + ':' + L.groups[1] : ''}|${(L.repeats || []).length}|${L.omitted ? L.omitted.size : 0}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
@@ -1239,7 +1235,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
         const [a, d, tx, ty] = this.placementTransform(page, v, { dx: places[g * 4], dy: places[g * 4 + 1], kx: places[g * 4 + 2], ky: places[g * 4 + 3] }, dpr);
         c.setTransform(a, 0, 0, d, tx, ty);
       };
-      const baseH = Math.ceil(bandH * dpr);
+      const baseH = Math.max(1, Math.ceil(bandH * dpr));
       if (key !== this.baseKey || this.base.width !== W || this.base.height !== baseH) {
         const t0 = performance.now();
         this.base.width = W; this.base.height = baseH;

@@ -5,8 +5,27 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- `qvp_layout_ink_band` picks the band of a laid-out page that a host keeps drawn: the whole
+  page when it fits, otherwise two screens around the reader. The band's top moves in steps,
+  so a pan inside one step redraws nothing. The band is in layout px, ready for
+  `qvp_layout_draw_list`. Its two limits are in viewport px: `max_height` (0 takes the new
+  `QVP_DEFAULT_MAX_INK_HEIGHT`, 4096) and `max_pixels`, a pixel budget (0 is no limit). Bound
+  as `layoutInkBand` in JavaScript, Kotlin, Dart and Swift. React Native calls it through the
+  Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
+  Kotlin, Dart and Swift tests replay them (#134).
 
 ### Changed
+- The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
+  engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
+  not agree (#134):
+  - Android drew a printed page as a band. It now draws any page whole when the page fits the
+    ceiling and the ink budget, as it already did for a reflowed page. Its band no longer
+    passes the ceiling on a screen taller than 4096 px, and the ink budget now limits the band
+    as well as the whole page.
+  - Flutter measured the 4096 ceiling in layout px. It now measures it in viewport px, so a
+    magnified page bands once it is taller than 4096 px on the screen. At a view scale of 1
+    nothing changes.
+  - The web band now stays under the tallest canvas a browser makes, and under the ink budget.
 
 ### Removed
 

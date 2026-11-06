@@ -131,7 +131,9 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     /** The line shifts of the layout in hand, hashed once per layout rather than once a frame. */
     private var hashedLayout: QvpLayout? = null
     private var lineDyHash = 0
-    /** The band of ink in hand: where it starts down the page and how tall it is. */
+    /** The band of ink in hand, as the engine gave it in layout px. */
+    private var inkBand = QvpInkBand(0f, 1f)
+    /** The same band in screen px: where it starts down the page and how tall it is. */
     private var bandTop = 0f
     private var bandHeight = 0f
     private var selectionHandle = 0
@@ -495,10 +497,6 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         return out
     }
 
-    /** Where the cached ink starts and how tall it is, for the page and place in hand. A page
-     * that fits the budget is kept whole, so scrolling draws nothing; a taller one keeps a band
-     * two screens tall. A bitmap taller than this cannot be drawn on every device, whatever the
-     * budget says. */
     /** What the layout in hand draws and where, read once per band rather than once a frame.
      * Asking the engine on every frame — and once per styled path — was most of what a scroll
      * was spending its time on. */
@@ -507,33 +505,25 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val ofPath = IntArray(nPaths) { NO_PLACEMENT }.apply { for (d in draws) if (this[d.path] == NO_PLACEMENT) this[d.path] = d.placement }
     }
     private var drawList: DrawList? = null
-    private fun drawListNow(key: InkKey, top: Float, bandH: Float): DrawList {
+    private fun drawListNow(key: InkKey): DrawList {
         drawList?.let { if (it.key == key) return it }
         val p = page!!
-        val s = kotlin.math.max(viewScale, 0.001f)
-        val q = DrawList(p.layoutDrawList((top / s) to ((top + bandH) / s)), p.layoutPlacements(), key.copy(), p.nPaths)
+        val b = inkBand
+        val q = DrawList(p.layoutDrawList(b.top to (b.top + b.height)), p.layoutPlacements(), key.copy(), p.nPaths)
         drawList = q
         return q
     }
 
-    /** Set [bandTop] and [bandHeight] for the page and the place in hand. */
+    /** Set [inkBand], [bandTop] and [bandHeight] for the page and the place in hand. The engine
+     * picks the band: the whole page when it fits, so scrolling draws nothing, and otherwise two
+     * screens around the reader, with a top that moves in steps rather than with the finger, so a
+     * drag inside one step is one blit and nothing is drawn again. Its limits are the bitmap's: the
+     * engine's ceiling on a band's height, and the ink budget at four bytes a pixel. */
     private fun measureBand() {
-        val screen = kotlin.math.max(height.toFloat(), 1f)
-        val l = page?.currentLayout
-        if (l != null && l.reflowed) {
-            val contentH = l.contentH * viewScale
-            // The whole page at once, when it fits: scrolling then draws nothing at all. A bitmap
-            // taller than the GPU will take is not drawn either, so that bounds it as well.
-            val fits = contentH <= MAX_INK_PX && width.toLong() * contentH.toLong() * 4 <= inkBudget
-            if (fits) { bandTop = 0f; bandHeight = kotlin.math.max(contentH, 1f); return }
-        }
-        // Otherwise a band around the reader, measured down the page — the screen starts at
-        // -viewOy in the page's own space. Its top moves in steps rather than following the
-        // finger, so a drag inside the band is one blit and nothing is drawn again; a band that
-        // tracked the finger exactly drew the whole page on every frame of a magnified drag.
-        val tall = kotlin.math.min(screen * 2f, MAX_INK_PX)
-        val step = kotlin.math.max((tall - screen) / 2f, 1f)
-        bandTop = kotlin.math.floor((-viewOy - step) / step) * step; bandHeight = tall
+        val p = page ?: return
+        val b = p.layoutInkBand(currentView, width.toFloat(), height.toFloat(), maxPixels = inkBudget / 4f)
+        inkBand = b
+        bandTop = b.top * viewScale; bandHeight = kotlin.math.max(b.height * viewScale, 1f)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -581,7 +571,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
                 b.eraseColor(Color.TRANSPARENT)
                 val bc = Canvas(b); paint.color = QvpColor.argb(ink)
                 // the band is drawn under its own vertical offset: its top row is `top`
-                val q = drawListNow(key, top, bandH)
+                val q = drawListNow(key)
                 val places = q.places
                 var cur = -1; var n = 0
                 for (d in q.draws) {
@@ -596,7 +586,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         // the ink sits at `viewOy + top` on screen; scrolling inside the band only moves it
         canvas.drawBitmap(b!!, 0f, viewOy + top, null)
         val t1 = System.nanoTime()
-        val q = drawListNow(probe, top, bandH)
+        val q = drawListNow(probe)
         val places = q.places
         var cur = -1; var i = 0
         canvas.save()
@@ -712,14 +702,12 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         /** The engine's own ceiling on the magnifying glass: what [maxZoom] starts at. The floor
          * is the fitted page, which the engine applies. */
         const val MAX_ZOOM = QvpDefaults.MAX_ZOOM
-        /** A bitmap taller than this cannot be drawn on every device, so the ink keeps a band. */
-        private const val MAX_INK_PX = 4096f
         /** The height of the ornament layer for [wanted] px of band plus border, at [width] px wide:
-         * no taller than [MAX_INK_PX], and no larger in bytes than [budget]. 0 when not even one
+         * no taller than [QvpDefaults.MAX_INK_HEIGHT], and no larger in bytes than [budget]. 0 when not even one
          * row fits, and the layer is then skipped. */
         internal fun ornamentLayerHeight(wanted: Float, width: Int, budget: Int): Int {
             if (width <= 0) return 0
-            val h = kotlin.math.ceil(wanted).toInt().coerceIn(1, MAX_INK_PX.toInt())
+            val h = kotlin.math.ceil(wanted).toInt().coerceIn(1, QvpDefaults.MAX_INK_HEIGHT.toInt())
             val rows = (budget.toLong().coerceAtLeast(0L) / (width.toLong() * 4)).coerceAtMost(h.toLong())
             return rows.toInt()
         }
