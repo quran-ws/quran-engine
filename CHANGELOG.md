@@ -47,9 +47,18 @@ All notable changes to the engine and its packages. The format follows
   `QVP_DEFAULT_MAX_INK_HEIGHT`, 4096), which no band passes, and `max_pixels`, a pixel budget
   (0 is no limit), which shrinks the band from two screens to no less than one. With no
   screen (no scale, no viewport height, or a non-finite scale, height or offset) the band is
-  the whole page, however tall. Bound as `layoutInkBand` in JavaScript, Kotlin, Dart and
-  Swift. React Native calls it through the Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
-  Kotlin, Dart and Swift tests replay them (#134).
+  the whole page, however tall. A dressed page's dress overflow, and half the border's stroke
+  past it, counts against both limits, rounded up to whole viewport px plus one for the
+  antialiased edge. Its band is the dressed box when that fits. When neither the dressed box
+  nor the bare page fits, it is the bare page's band. When only the bare page fits, it steps on
+  whole viewport px, and under a screen taller than the ceiling it is the ceiling tall, holding
+  the bare page whole and as much border above it as fits. That is a deliberate choice: the
+  views used to cut the page's bottom rows there, and now the page's ink stays whole and the
+  top of the border is clipped as needed. iOS rounds that top to whole points, so up to 2 more
+  device rows of the border can be clipped there. With no screen it is the whole dressed box (#182). Bound as
+  `layoutInkBand` in JavaScript, Kotlin, Dart and Swift. React Native calls it through the
+  Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers for a bare and
+  a dressed page, and the web, Kotlin, Dart and Swift tests replay them (#134).
 - Flutter: Swift Package Manager support on iOS and macOS (#153). `Package.swift` in
   `ios/qvp_flutter` and `macos/qvp_flutter` links `QvpEngine.xcframework` as a binary
   target. The podspecs stay, and both builds read the same sources and framework.
@@ -95,8 +104,29 @@ All notable changes to the engine and its packages. The format follows
   - iOS drew a printed page as a band one screen tall, from the top of the page. It now draws
     any page whole when the page fits 16384 bitmap rows and the ink budget, and a magnified
     printed page too tall for them as a band around the reader. A dressed page's bitmap is
-    still the band plus the dress overflow above and below, as the Android ornament layer is.
-    The ink budget no longer counts the overflow.
+    the engine's band, which holds the border, so the view no longer adds the overflow
+    itself (#182). On a screen taller than 16384 bitmap rows the view took the overflow off
+    that limit, so a page that fitted it could be cut at the bottom; the page is now whole.
+  - The SwiftUI `QvpPageCanvas` steps its band in half screens as before, but asks the
+    engine for it, with a budget of two screens. A page that fits in two screens is now drawn
+    whole, in a bitmap no taller than the band was. A canvas taller than 16384 bitmap rows
+    over two screens gets a band held to 16384 rows. On a canvas an odd number of points tall,
+    the band's top could fall on half a pixel at 3x, so the ink was drawn soft; a page that fits
+    in two screens is now drawn whole on whole pixels.
+- The dress overflow is no longer added to the band by the views (#182). On Android the
+  ornament layer was the band plus the overflow, cut at the 4096-row ceiling and the ink
+  budget, so the bottom of a border could go missing. It is now the engine's band, the same
+  rows as the base ink, so on any screen under the ceiling the border on it is drawn whole. On
+  a screen taller than the ceiling the layer is the ceiling tall, from the border's top. The
+  web `CanvasRenderer`'s ornament layer is the
+  engine's band too. On a screen whose device pixel ratio is not a whole number, such as
+  1.5, the web border could be drawn a device pixel off the ink, since its layer was placed by
+  rounding of its own. It now sits on the ink's pixels. On both, the base ink's bitmap is now
+  the dressed band, a few rows taller than the bare band on a page that fits. A page whose
+  dressed box is just over a limit its bare page fits under now bands, so a pan can redraw it;
+  that costs time, not pixels. Flutter and React Native need no change.
+- `QvpDressInfo.overflow` and its twins in every wrapper are documented in layout px, which
+  is what the engine returns. The docs said viewport px (#182).
 - Flutter: `flutter analyze` fails on a public item with no doc block. The package turns on
   the `public_member_api_docs` lint, and every public item of the API files has a block
   that gives its units, its range and what an empty or null result means. The generated

@@ -650,7 +650,7 @@ final class QvpKitTests: XCTestCase {
         c.setBounds(CGSize(width: Self.readingBox.width, height: 400), fromCanvas: 1)
         let pageHeight = CGFloat(try XCTUnwrap(p.currentLayout).contentH)
         c.setBounds(CGSize(width: Self.readingBox.width, height: pageHeight), fromCanvas: 1)
-        XCTAssertEqual(c.bandTop, 0); XCTAssertEqual(c.bandHeight, pageHeight, accuracy: 0.01)
+        XCTAssertEqual(c.band(displayScale: 3).top, 0); XCTAssertEqual(c.band(displayScale: 3).height, pageHeight, accuracy: 0.01)
 
         let focal = CGPoint(x: Self.readingBox.width / 2, y: 500)
         c.pinch(2, at: focal)
@@ -658,16 +658,16 @@ final class QvpKitTests: XCTestCase {
         // Where the fingers' point on the page is now, in the scaled page.
         let scaledFocal = focal.y - c.viewOy
         XCTAssertEqual(scaledFocal, focal.y * 2, accuracy: 1e-3, "the point under the fingers scaled about them")
-        XCTAssertLessThanOrEqual(c.bandTop, scaledFocal, "the band starts at or above the fingers")
-        XCTAssertGreaterThanOrEqual(c.bandTop + c.bandHeight, scaledFocal, "and ends at or below them")
-        XCTAssertEqual(c.bandHeight, min(800, pageHeight * 2), accuracy: 0.01, "two boxes, or the whole scaled page")
+        XCTAssertLessThanOrEqual(c.band(displayScale: 3).top, scaledFocal, "the band starts at or above the fingers")
+        XCTAssertGreaterThanOrEqual(c.band(displayScale: 3).top + c.band(displayScale: 3).height, scaledFocal, "and ends at or below them")
+        XCTAssertEqual(c.band(displayScale: 3).height, min(800, pageHeight * 2), accuracy: 0.01, "two boxes, or the whole scaled page")
 
         // The peek springs back and the whole page is painted again.
         c.pinchEnded()
         for _ in 0..<200 where abs(c.viewScale - 1) > 1e-6 { try await Task.sleep(nanoseconds: 10_000_000) }
         XCTAssertEqual(c.viewScale, 1, accuracy: 1e-6)
         XCTAssertEqual(c.viewOy, 0, accuracy: 1e-3)
-        XCTAssertEqual(c.bandTop, 0, accuracy: 1e-3); XCTAssertEqual(c.bandHeight, pageHeight, accuracy: 0.01)
+        XCTAssertEqual(c.band(displayScale: 3).top, 0, accuracy: 1e-3); XCTAssertEqual(c.band(displayScale: 3).height, pageHeight, accuracy: 0.01)
     }
 
     /// The zoom steps are the box's, not the canvas's: a page that reflowed and grew its canvas
@@ -1207,7 +1207,107 @@ final class QvpKitTests: XCTestCase {
         for (i, want) in (dressed["overflow"] as! [Any]).enumerated() { near(info.overflow[i], want, "overflow[\(i)]") }
         let dressedCases = dressed["cases"] as! [[String: Any]]
         replay(dressedCases, "dressed ink band")
-        XCTAssertEqual(dressedCases.count, 13)
+        XCTAssertEqual(dressedCases.count, 17)
+    }
+
+    /// The SwiftUI canvas asks the engine for its band, with a budget of two screens: a page
+    /// taller than two screens is drawn two screens at a time, with a top that moves in steps of
+    /// half a screen, as the canvas always did; a page that fits in two screens is drawn whole.
+    @MainActor func testCanvasBandIsTheEnginesTwoScreens() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        // an even height, and odd ones, whose half-screen steps fall on half points
+        for h: CGFloat in [844, 845, 667] {
+            let p = try Self.loadPage(); defer { p.close() }
+            let set = try QvpOrnaments(bytes: QvpDressTests.ornamentBytes); defer { set.close() }
+            let c = QvpCanvasController()
+            c.page = p
+            c.setBounds(CGSize(width: 390, height: h), fromCanvas: 1)
+            // the printed page fits the screen: whole
+            var b = c.band(displayScale: 3)
+            XCTAssertEqual(b.top, 0, accuracy: 1e-4)
+            XCTAssertEqual(b.height, CGFloat(try XCTUnwrap(p.currentLayout).contentH) * c.viewScale, accuracy: 1e-3)
+            // reflowed past two screens: the old canvas's band, two screens stepping by half a screen
+            c.zoomToStep(c.zoomSteps.count)
+            XCTAssertGreaterThan(CGFloat(try XCTUnwrap(p.currentLayout).contentH) * c.viewScale, 2 * h)
+            let step = h / 2
+            var moves = 0, last = c.band(displayScale: 3).top
+            for i in 1...40 {
+                // a drag's translation is cumulative
+                c.pan(CGSize(width: 0, height: -137 * CGFloat(i)))
+                b = c.band(displayScale: 3)
+                XCTAssertEqual(b.top, ((-c.viewOy - step) / step).rounded(.down) * step, accuracy: 1e-2, "height \(h), offset \(c.viewOy)")
+                XCTAssertEqual(b.height, 2 * h, accuracy: 1e-2)
+                XCTAssertLessThanOrEqual(b.top, -c.viewOy + 1e-2)
+                XCTAssertGreaterThanOrEqual(b.top + b.height, -c.viewOy + h - 1e-2)
+                if b.top != last { moves += 1; last = b.top }
+            }
+            XCTAssertGreaterThan(moves, 0)
+            // dressed, the band is still two screens, and its top on the bare page's steps
+            XCTAssertNotNil(p.dress(set, DressSpec(ayahMark: 0, surahHeader: 1, pageFrame: 2, ayahMarkScale: 1)))
+            b = c.band(displayScale: 3)
+            XCTAssertEqual(b.height, 2 * h, accuracy: 1e-2)
+            XCTAssertEqual(b.top, ((-c.viewOy - step) / step).rounded(.down) * step, accuracy: 1e-2)
+        }
+    }
+
+    /// The band a view draws into one bitmap, in points: the engine's band times the view's
+    /// scale, under 16384 device rows and the view's pixel budget, and the whole dressed box
+    /// when it fits.
+    func testInkBandPointsKeepsTheBitmapUnderItsLimits() throws {
+        let p = try Self.loadPage(); defer { p.close() }
+        let set = try QvpOrnaments(bytes: QvpDressTests.ornamentBytes); defer { set.close() }
+        _ = p.layout(QvpLayoutSpec(viewportW: 390, viewportH: 844, padTop: 24, padBottom: 24, padLeft: 16, padRight: 16))
+        let contentH = CGFloat(try XCTUnwrap(p.currentLayout).contentH)
+        // The scale at which the bare page is 3 points under 16384 rows at 3x, and the dressed page
+        // over. The band stops 0.01 point short of the limit, so 3 points leave room for 2 whole
+        // points of border above the page.
+        let fitsBare = (16384 / 3 - 3) / contentH
+        for dressed in [false, true] {
+            if dressed { XCTAssertNotNil(p.dress(set, DressSpec(ayahMark: 0, surahHeader: 1, pageFrame: 2, ayahMarkScale: 1))) }
+            // what each case is: the page or dressed box whole, a band around the screen, or a
+            // screen taller than 16384 rows over a page that fits bare and not dressed
+            enum Kind { case whole, screen, tall }
+            for (vs, oy, w, h, s, budget, kind): (CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, Kind) in [
+                (1, 0, 390, 844, 3, 1e9, .whole),
+                (8, -2000, 390, 844, 3, 1e9, .screen),
+                (8, -2000, 390, 844, 3, 390 * 844, .screen),
+                (12, -1000, 390, 6000, 3, 1e9, .tall),
+                (fitsBare, -300, 390, 6000, 3, 1e9, dressed ? .tall : .whole),
+            ] {
+                let view = QvpView(scale: Float(vs), offsetX: 0, offsetY: Float(oy))
+                let b = p.inkBandPoints(view, viewScale: vs, viewportW: w, viewportH: h, displayScale: s, maxPixels: budget)
+                let e = p.layoutInkBand(view, viewportW: Float(w), viewportH: Float(h), maxHeight: Float(16384 / s), maxPixels: Float(budget))
+                let tag = "dressed \(dressed), scale \(vs), \(w)x\(h)"
+                XCTAssertEqual(b.top, CGFloat(e.top) * vs, accuracy: 1e-3, tag)
+                XCTAssertEqual(b.height, CGFloat(e.height) * vs, accuracy: 1e-3, tag)
+                XCTAssertLessThanOrEqual(b.height * s, 16384 + 1e-2, tag)
+                XCTAssertLessThanOrEqual(b.height * w, max(budget, w * min(h, 16384 / s)) + w + 1e-2, tag)
+                switch kind {
+                case .whole:
+                    // the page fits: whole, and a dressed page's band reaches past the content
+                    XCTAssertLessThanOrEqual(b.top, 0, tag)
+                    XCTAssertGreaterThanOrEqual(b.top + b.height, contentH * vs - 1e-3, tag)
+                    if dressed { XCTAssertLessThan(b.top, 0, tag) } else { XCTAssertEqual(b.top, 0, accuracy: 1e-6, tag) }
+                case .screen:
+                    XCTAssertLessThanOrEqual(b.top, -oy + 1e-3, tag)
+                    XCTAssertGreaterThanOrEqual(b.top + b.height, -oy + h - 1e-3, tag)
+                case .tall:
+                    // no band covers a screen this tall: the ceiling's worth of rows
+                    XCTAssertEqual(b.height * s, 16384, accuracy: 1e-1, tag)
+                    if vs == fitsBare {
+                        // A page that fits bare keeps all its ink: the band reaches its bottom. Its
+                        // top is a whole point, between the dress box's top and the page's, here
+                        // 2 points above the page.
+                        let boxTop = (try XCTUnwrap(p.dressOverflow).top * vs).rounded(.up)
+                        XCTAssertGreaterThanOrEqual(b.top + b.height, contentH * vs - 1e-3, tag)
+                        XCTAssertEqual(b.top, b.top.rounded(), accuracy: 1e-3, tag)
+                        XCTAssertGreaterThanOrEqual(b.top, -boxTop - 1e-3, tag)
+                        XCTAssertLessThanOrEqual(b.top, 0, tag)
+                        XCTAssertEqual(b.top, -2, accuracy: 1e-3, tag)
+                    }
+                }
+            }
+        }
     }
 
     // ── passage ──
