@@ -328,6 +328,13 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
      * [hitTestView]. The inverse of `offset + scale·p`. */
     fun viewToLayout(view: QvpView, viewX: Float, viewY: Float): Pair<Float, Float> =
         QvpNative.viewToLayout(h, view.floats(), viewX, viewY).let { it[0] to it[1] }
+    /** Which band of the current layout to keep drawn for [view] and a viewport: the whole page when it
+     * fits, otherwise two screens around the reader. The top moves in steps, so a pan inside one step
+     * redraws nothing; pass `top` and `top + height` to [layoutDrawList]. [maxHeight] is the tallest
+     * band the host can draw and [maxPixels] the pixels it keeps for one, both in viewport px; 0 takes
+     * [QvpDefaults.MAX_INK_HEIGHT] and no pixel limit. */
+    fun layoutInkBand(view: QvpView, viewportW: Float, viewportH: Float, maxHeight: Float = 0f, maxPixels: Float = 0f): QvpInkBand =
+        QvpNative.layoutInkBand(h, view.floats(), viewportW, viewportH, maxHeight, maxPixels).let { QvpInkBand(it[0], it[1]) }
     /** The reflow zoom one step of this page's control means; step 0 is the printed page. */
     fun zoomAtStep(spec: QvpLayoutSpec, step: Int): Float = QvpNative.zoomAtStep(h, spec.floats(), step)
     /** The zoom steps this page ships with, lowest first. Zoom 1, the printed page, is the step before them. */

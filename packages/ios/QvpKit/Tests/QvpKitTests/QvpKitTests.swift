@@ -1102,6 +1102,36 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(cases.count, 8)
     }
 
+    /// Every wrapper replays conformance/scenarios/ink-band.json: the band of the page a host
+    /// keeps drawn, for a page that fits, a magnified page drawn a band at a time, pans inside
+    /// one step and across it, the host's own limits, and no screen at all.
+    func testInkBandScenariosMatchTheEngine() throws {
+        let url = Self.repo.appendingPathComponent("conformance/scenarios/ink-band.json")
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let tolerance = json["tolerance"] as! Double
+        let cases = json["cases"] as! [[String: Any]]
+        let s = json["spec"] as! [String: Any]
+        let f: (String) -> Float = { Float((s[$0] as! NSNumber).doubleValue) }
+        let p = try Self.loadPage(); defer { p.close() }
+        let l = p.layout(QvpLayoutSpec(viewportW: f("viewportW"), viewportH: f("viewportH"), padTop: f("padTop"), padBottom: f("padBottom"), padLeft: f("padLeft"), padRight: f("padRight")))
+        func near(_ got: Float, _ want: Any?, _ what: String) {
+            let w = (want as! NSNumber).doubleValue
+            XCTAssertLessThanOrEqual(abs(Double(got) - w), tolerance * max(1, abs(w)), "\(what): got \(got), engine says \(w)")
+        }
+        near(l.contentH, json["contentH"], "contentH")
+        for c in cases {
+            let n: (String) -> Float = { Float((c[$0] as! NSNumber).doubleValue) }
+            let v = c["view"] as! [String: Any]
+            let vf: (String) -> Float = { Float((v[$0] as! NSNumber).doubleValue) }
+            let got = p.layoutInkBand(QvpView(scale: vf("scale"), offsetX: vf("offsetX"), offsetY: vf("offsetY")),
+                                      viewportW: n("viewportW"), viewportH: n("viewportH"), maxHeight: n("maxHeight"), maxPixels: n("maxPixels"))
+            let want = c["band"] as! [String: Any]
+            near(got.top, want["top"], "ink band \(c["name"]!) top")
+            near(got.height, want["height"], "ink band \(c["name"]!) height")
+        }
+        XCTAssertEqual(cases.count, 10)
+    }
+
     // ── passage ──
 
     func testPassageLaysOutAyah2255AndCutsIt() throws {

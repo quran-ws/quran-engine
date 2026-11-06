@@ -1214,6 +1214,29 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   @override
+  QvpInkBand layoutInkBand(
+    PageHandle handle,
+    QvpView view,
+    double viewportW,
+    double viewportH,
+    double maxHeight,
+    double maxPixels,
+  ) {
+    _writeView(_view, view);
+    final p = _scratch.cast<QvpInkBandC>();
+    b.layoutInkBand(
+      _page(handle),
+      _view,
+      viewportW,
+      viewportH,
+      maxHeight,
+      maxPixels,
+      p,
+    );
+    return QvpInkBand(top: p.ref.top, height: p.ref.height);
+  }
+
+  @override
   ({double x, double y}) viewToLayout(
     PageHandle handle,
     QvpView view,

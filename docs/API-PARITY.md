@@ -32,6 +32,7 @@ is owed.
 | `qvp_layout_current` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_layout_draw_list` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_layout_groups` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_ink_band` | react-native | native: `QvpRnPageView` calls it through the Kotlin `QvpPageView` while rendering; no drawing happens in JavaScript |
 | `qvp_layout_omitted_paths` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_layout_path_groups` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_layout_placements` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
@@ -273,7 +274,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-173 symbols in the header, 173 Rust exports. web: 172 bound, android: 170 bound, flutter: 164 bound, ios: 167 bound, react-native: 97 bound.
+174 symbols in the header, 174 Rust exports. web: 173 bound, android: 171 bound, flutter: 165 bound, ios: 168 bound, react-native: 97 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -338,6 +339,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_layout_current` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_draw_list` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_groups` | yes | yes | gap (other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
+| `qvp_layout_ink_band` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it through the Kotlin `QvpPageView` while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_line_spacing_to_fill` | yes | yes | yes | yes | yes |
 | `qvp_layout_omitted_paths` | yes | yes | gap (other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_path_groups` | yes | yes | gap (other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |

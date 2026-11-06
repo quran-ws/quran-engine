@@ -33,6 +33,9 @@ public enum QvpDefaults {
     public static let MIN_ZOOM: Float = 0.5, MAX_ZOOM: Float = 12, ZOOMED_THRESHOLD: Float = 1.02
     public static let ZOOM_SNAP_HYSTERESIS: Float = 0.03, ZOOM_QUANTUM: Float = 0.01
     public static let SWIPE_AXIS_RATIO: Float = 1.5, SWIPE_DISTANCE: Float = 40, SWIPE_VELOCITY: Float = 500
+    /// The tallest band of ink a view draws at once, in viewport px: what `QvpPage.layoutInkBand`
+    /// holds a band to by default.
+    public static let MAX_INK_HEIGHT: Float = 4096
 }
 
 /// How a reflowed row fills the width, how the words are broken onto rows, and where the air

@@ -55,6 +55,13 @@ public struct QvpZoomChange {
     public let zoom: QvpZoom, view: QvpView, relaid: Bool
 }
 
+/// `QvpPage.layoutInkBand`: the band of the layout a host keeps drawn, in layout px. It sits on
+/// the screen at `view.offsetY + view.scale·y`.
+public struct QvpInkBand: Equatable {
+    public var top: Float, height: Float
+    public init(top: Float, height: Float) { self.top = top; self.height = height }
+}
+
 /// Pan and zoom over a laid-out page: a point `p` in layout points draws at `offset + scale·p`.
 public struct QvpView: Equatable {
     public var scale: Float, offsetX: Float, offsetY: Float
@@ -147,6 +154,16 @@ extension QvpPage {
         var out = [Float](repeating: 0, count: 2)
         qvp_view_to_layout(p, &v, viewX, viewY, &out)
         return (out[0], out[1])
+    }
+    /// Which band of the current layout to keep drawn for `view` and a viewport: the whole page
+    /// when it fits, otherwise two screens around the reader. The top moves in steps, so a pan
+    /// inside one step redraws nothing; pass `top` and `top + height` to `layoutDrawList`.
+    /// `maxHeight` is the tallest band the host can draw and `maxPixels` the pixels it keeps for
+    /// one, both in viewport px; 0 takes `QvpDefaults.MAX_INK_HEIGHT` and no pixel limit.
+    public func layoutInkBand(_ view: QvpView, viewportW: Float, viewportH: Float, maxHeight: Float = 0, maxPixels: Float = 0) -> QvpInkBand {
+        var v = view.c, out = QvpFFI.QvpInkBand()
+        qvp_layout_ink_band(p, &v, viewportW, viewportH, maxHeight, maxPixels, &out)
+        return QvpInkBand(top: out.top, height: out.height)
     }
     /// Hold the content against the viewport: centre an axis it does not fill, cover the
     /// viewport on an axis it overflows, so no drag opens a blank strip beside the page.

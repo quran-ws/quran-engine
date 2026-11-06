@@ -227,6 +227,14 @@ abstract interface class QvpBackend {
     double viewX,
     double viewY,
   );
+  QvpInkBand layoutInkBand(
+    PageHandle handle,
+    QvpView view,
+    double viewportW,
+    double viewportH,
+    double maxHeight,
+    double maxPixels,
+  );
   ({double x0, double y0, double x1, double y1}) wordBoundsView(
     PageHandle handle,
     int wordIndex,

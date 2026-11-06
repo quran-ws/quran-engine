@@ -15,7 +15,7 @@ and `qvp_hit_test(...)` in C.
 - **Defaults.** Every default a wrapper applies (ink, highlight colours and padding, gap bias,
   tap distance, mask and reveal colours, crop padding, the reflow defaults
   `QVP_DEFAULT_REFLOW_RELAX` and `QVP_DEFAULT_REFLOW_MAX_STRETCH`, the selection band's side
-  padding `QVP_DEFAULT_SELECTION_PAD_X`) is a `QVP_DEFAULT_*` value in `qvp.h`,
+  padding `QVP_DEFAULT_SELECTION_PAD_X`, the ink band's ceiling `QVP_DEFAULT_MAX_INK_HEIGHT`) is a `QVP_DEFAULT_*` value in `qvp.h`,
   defined once in the engine (`crates/qvp-core/src/defaults.rs`) and mirrored as `QvpDefaults`
   in each wrapper; the parity check keeps every copy equal.
 - **Handles.** Every mutating style/highlight call returns a handle; removing the handle
@@ -434,12 +434,33 @@ The band holds it to a part of the laid-out page, in viewport px, as `L.slots` a
 `…View` answer are; a band no taller than nothing means the whole page.
 
 A reflowed page is several screens of ink, so a renderer draws it into an image once and lets
-the reader scroll that image, rather than drawing again on every frame. Both reference
-renderers keep the whole page when it fits their ink budget — about 18 MB for a page of this
-muṣḥaf at its largest step on a phone — and fall back to a band two screens tall when it does
-not, which is redrawn only when the reader scrolls out of it. That is what the band argument is
-for. On iOS the image is the content of a `UIScrollView`, so the scroll itself — the
+the reader scroll that image, rather than drawing again on every frame. That is what the band
+argument is for. On iOS the image is the content of a `UIScrollView`, so the scroll itself — the
 deceleration, the rubber band at the ends, the indicator — is the platform's own.
+
+**Which band to draw.** `page.layoutInkBand(view, viewportW, viewportH, {maxHeight, maxPixels})`
+picks the band, so no host computes it. It returns `{top, height}` in layout px, the space of
+`layoutDrawList`, and the band sits on the screen at `view.offsetY + view.scale · y`:
+
+```js
+const band = page.layoutInkBand(view, viewportW, viewportH, { maxPixels: inkBudget / 4 })
+const drawList = page.layoutDrawList(band.top, band.top + band.height)
+```
+
+The band is the whole page when the page fits. Otherwise it is two screens tall around the
+reader, and its top moves in steps: half a screen while the ceiling leaves room for two. A pan inside one step returns the same band,
+so the image in hand stays valid. A pan across a step moves the band by exactly one step. Put
+`band.top` in the image's cache key.
+
+The two limits are in viewport px, because a texture is measured on the screen, not in the
+layout. `maxHeight` is the tallest band the host can draw; 0 takes
+`QVP_DEFAULT_MAX_INK_HEIGHT` (4096), a height that every GPU these wrappers run on can draw.
+`maxPixels` is how many pixels the host keeps for one band, its width times its height; 0
+means no limit. A host with a byte budget passes the budget divided by its bytes per pixel.
+The page is whole only when it is inside both limits, and a band never passes either. A view
+with no scale, or a viewport with no height, gets the whole page. A host that draws in device
+pixels passes the view, the viewport and the limits in device pixels, as `CanvasRenderer`
+does; the band comes back in layout px either way.
 
 `reflowMaxZoom(spec)` is the largest zoom at which every word still fits a row (2.44 on page
 121, whose longest word is 121 of 345 page units). Clamp a pinch to it; past it the engine
@@ -919,6 +940,7 @@ function in the header has no row here, or a row names a function the header lac
 | layout | `qvp_layout_path_groups` | `layout.pathGroup` | Return the group of every path; empty unless the page is reflowed. |
 | layout | `qvp_layout_omitted_paths` | `layout.omitted` | Return the paths this layout does not draw: sheet furniture, and a native surah frame when reflowed. |
 | layout | `qvp_layout_draw_list` | `page.layoutDrawList(bandTop, bandBottom)` | Return every path that the layout draws inside a band, with its placement, in drawing order. |
+| layout | `qvp_layout_ink_band` | `page.layoutInkBand(view, viewportW, viewportH, {maxHeight, maxPixels})` | Return the band of the layout to keep drawn for a view: the whole page when it fits, otherwise two screens around the reader, with a top that moves in steps. |
 | layout | `qvp_layout_placements` | `page.layoutPlacements()` | Return what a draw list's placement indexes: the groups, then the repeats. |
 | layout | `qvp_layout_row_words` | `page.rowWords(row)` | Return the words of a reflowed row, in reading order. |
 | layout | `qvp_layout_word_row` | `page.wordRow(word)` | Return the row a word landed on, or null when it is on none. |

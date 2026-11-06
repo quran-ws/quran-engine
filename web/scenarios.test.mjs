@@ -1,4 +1,4 @@
-// Replay conformance/scenarios/layout.json, dress.json, zoom.json and hit.json through the
+// Replay conformance/scenarios/layout.json, dress.json, zoom.json, hit.json and ink-band.json through the
 // reference wrapper and compare every number with the engine's recorded answer. Needs
 // web/qvp_ffi.wasm and dist/pages/042.qvp.
 import assert from 'node:assert/strict'
@@ -160,3 +160,19 @@ for (const c of hits.cases) {
 }
 hitPage.free()
 console.log(`ok  ${hits.cases.length} hit scenarios match the engine`)
+
+// conformance/scenarios/ink-band.json: the band of the page a host keeps drawn, for a page
+// that fits, a magnified page drawn a band at a time, pans inside one step and across it, the
+// host's own limits, and no screen at all.
+const inks = JSON.parse(readFileSync(new URL('conformance/scenarios/ink-band.json', root), 'utf8'))
+const inkPage = engine.loadPage(readFileSync(pagePath))
+const inkLayout = inkPage.layout(inks.spec)
+assert.ok(Math.abs(inkLayout.contentH - inks.contentH) <= inks.tolerance * inks.contentH, `ink band contentH: got ${inkLayout.contentH}, engine says ${inks.contentH}`)
+for (const c of inks.cases) {
+  const got = inkPage.layoutInkBand(c.view, c.viewportW, c.viewportH, { maxHeight: c.maxHeight, maxPixels: c.maxPixels })
+  for (const k of ['top', 'height']) {
+    assert.ok(Math.abs(got[k] - c.band[k]) <= inks.tolerance * Math.max(1, Math.abs(c.band[k])), `ink band ${c.name} ${k}: got ${got[k]}, engine says ${c.band[k]}`)
+  }
+}
+inkPage.free()
+console.log(`ok  ${inks.cases.length} ink band scenarios match the engine`)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fetch the pages and the scenario files the Android instrumentation tests read. Page data is
 # not part of the SDK. Input: QVP_PAGES, dist/pages or the data release named by QVP_DATA_TAG.
-# Output: packages/android/qvp/src/androidTest/assets/{NNN.qvp, passage.json, zoom.json, hit.json}.
+# Output: packages/android/qvp/src/androidTest/assets/{NNN.qvp, passage.json, zoom.json, hit.json, ink-band.json}.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -48,6 +48,7 @@ fi
 cp conformance/scenarios/passage.json "$destination/passage.json"
 cp conformance/scenarios/zoom.json "$destination/zoom.json"
 cp conformance/scenarios/hit.json "$destination/hit.json"
+cp conformance/scenarios/ink-band.json "$destination/ink-band.json"
 
 python3 - "$destination" "$tag" <<'PY'
 import hashlib
@@ -82,4 +83,4 @@ for name in sorted(checked):
     if actual != expected[name]:
         raise SystemExit(f"{name} checksum mismatch: {actual}")
 PY
-echo "Android test data ready: $destination/{$(IFS=,; echo "${pages[*]}")}.qvp, passage.json, zoom.json and hit.json"
+echo "Android test data ready: $destination/{$(IFS=,; echo "${pages[*]}")}.qvp, passage.json, zoom.json, hit.json and ink-band.json"
