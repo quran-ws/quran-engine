@@ -208,6 +208,9 @@ await atlas.pagesOfJuz(30); atlas.searchSurahs('cow' | 'البقرة' | '2'); at
 
 On iOS, a view method takes and returns points, where Android takes dp.
 
+`layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure the
+printed page. Both platforms pass the engine the view's spec before the reader's zoom.
+
 The module runs a call on one of two threads (on iOS, two queues). Its own query thread runs each call that reads only
 what a page fixed when it loaded: `info`, `words`, `word`, `ayahs`, `lines`, `decorations`, `findWord`,
 `targetWords`, `wordForm`, `hasForm`, the metadata calls except `surahHeaders`, `surahHeadersView`

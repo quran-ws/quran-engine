@@ -7,6 +7,9 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
+  `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
+  `QvpPassageWord.wordKey`, as Kotlin's.
 - React Native on iOS (#41). The package has an iOS module over QvpKit with the method names
   and result shapes of the Android module, so `src/index.tsx` has no platform branch. It
   hosts QvpKit's `QvpPageView` for `<QvpPageView />` and draws `<QvpPassageView />`, with the
@@ -57,8 +60,8 @@ All notable changes to the engine and its packages. The format follows
 ### Changed
 - React Native: `scripts/gen-rn-enums.py` also writes `ios/QvpRnCodes.swift`, and
   `scripts/check-parity.py` checks it. `scripts/sync-example-data.sh react-native` copies
-  the pages to the iOS example too. The npm release job waits for the `publish` job, so the
-  XCFramework the pod downloads is public before npm holds the package.
+  the pages to the iOS example too. The npm release job waits until the GitHub release serves
+  the XCFramework, so the file the pod downloads is public before npm holds the package.
 - `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and
   none for the three viewport-px twins on iOS.
   React Native keeps `qvp_hit_areas_view` and `qvp_word_bands_view` as gaps, with the reason
@@ -112,6 +115,11 @@ All notable changes to the engine and its packages. The format follows
 ### Removed
 
 ### Fixed
+- QvpKit: an index or count out of range no longer stops the program. Every call passes
+  an Int to the C ABI as the parameter's unsigned width, cut from the Int as JNI's casts cut
+  a jint on Android, and the engine answers: `wordLabel(-1)` is "", `findWord(-1, …)` is -1,
+  `unmaskNext(-1)` unhides every word. Before, `UInt32(i)` trapped on a negative or huge
+  value, and `qvp.wordLabel(-1)` from React Native stopped the iOS app.
 - `docs/API.md` and the Rust doc of `mask_back`: `unmaskNext` returns how many words it
   unhid, not how many are still hidden. `maskBack` hides the last shown words by their position in the mask, not by the
   order they were shown in.

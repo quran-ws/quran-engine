@@ -53,7 +53,9 @@ The pod `qvp-react-native` compiles QvpKit's sources from `packages/ios/QvpKit` 
 engine from `packages/ios/QvpKit/QvpEngine.xcframework`. Build the engine once with
 `scripts/build-engine-ios.sh` from the repository root, and again after a change under
 `crates/`. Run `pod install` again after a change to QvpKit's sources. The example needs
-macOS, Xcode 16 and CocoaPods.
+macOS, Xcode 16 and CocoaPods. Copy the pages first with `scripts/sync-example-data.sh
+react-native` from the repository root: the Xcode project bundles `ios/QvpExample/pages`,
+and the build fails when that folder is missing.
 
 ```sh
 npm install

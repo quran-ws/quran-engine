@@ -45,16 +45,25 @@ final class QvpModule: NSObject {
         guard let p = v.page, p.isOpen else { throw QvpRnError("QvpPageView \(tag) has no page loaded") }
         return p
     }
-    /// A read-only page query on the query queue, with the page held open until it returns.
+    /// A read-only page query on the query queue, with the page held open until it returns. The
+    /// queue sees the view's state alone, never the view. A view the registry does not hold
+    /// yet is looked up again on the main thread, after the prop batches queued there, as
+    /// Android looks it up through the UIManager, and the query runs there.
     private func readPage(_ tag: NSNumber, _ resolve: @escaping RCTPromiseResolveBlock, _ reject: @escaping RCTPromiseRejectBlock,
-                          _ block: @escaping (QvpRnPageView, QvpPage) throws -> Any?) {
-        queries.async {
+                          _ block: @escaping (QvpRnPageState, QvpPage, _ loadMs: Double, _ bytes: Int) throws -> Any?) {
+        let run = { (s: QvpRnPageState) in
             self.settle(resolve, reject) {
-                let v = try self.view(tag)
-                return try v.read { p in
-                    guard let p, p.isOpen else { throw QvpRnError("QvpPageView \(tag) has no page loaded") }
-                    return try block(v, p)
+                try s.read { p, ms, bytes in
+                    guard let p else { throw QvpRnError("QvpPageView \(tag) has no page loaded") }
+                    return try block(s, p, ms, bytes)
                 }
+            }
+        }
+        queries.async {
+            if let s = QvpRnRegistry.state(tag.intValue) { run(s); return }
+            DispatchQueue.main.async {
+                guard let s = QvpRnRegistry.state(tag.intValue) else { reject("qvp", "no QvpPageView with tag \(tag)", nil); return }
+                run(s)
             }
         }
     }
@@ -98,34 +107,34 @@ final class QvpModule: NSObject {
 
     // ── page facts ──
     @objc func info(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { v, p in QvpRnMarshal.pageInfo(p, v.words(p).forms).merging(["loadMs": v.loadMs, "bytes": v.pageBytes]) { a, _ in a } }
+        readPage(tag, resolve, reject) { s, p, ms, bytes in QvpRnMarshal.pageInfo(p, s.words(p).forms).merging(["loadMs": ms, "bytes": bytes]) { a, _ in a } }
     }
     @objc func words(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { v, p in v.words(p).all() }
+        readPage(tag, resolve, reject) { s, p, _, _ in s.words(p).all() }
     }
     @objc func word(_ tag: NSNumber, index: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { v, p in v.words(p).word(index.intValue) }
+        readPage(tag, resolve, reject) { s, p, _, _ in s.words(p).word(index.intValue) }
     }
     @objc func ayahs(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.ayahs.map { QvpRnMarshal.ayah($0) } }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.ayahs.map { QvpRnMarshal.ayah($0) } }
     }
     @objc func lines(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.lines.map { QvpRnMarshal.line($0) } }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.lines.map { QvpRnMarshal.line($0) } }
     }
     @objc func decorations(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.decorations.map { QvpRnMarshal.decoration($0) } }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.decorations.map { QvpRnMarshal.decoration($0) } }
     }
     @objc func findWord(_ tag: NSNumber, s: NSNumber, a: NSNumber, w: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.findWord(s.intValue, a.intValue, w.intValue) }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.findWord(s.intValue, a.intValue, w.intValue) }
     }
     @objc func targetWords(_ tag: NSNumber, target: Any?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.targetWords(QvpRnMarshal.target(target, p)) }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.targetWords(QvpRnMarshal.target(target, p)) }
     }
     @objc func wordForm(_ tag: NSNumber, index: NSNumber, form: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.wordForm(index.intValue, QvpRnMarshal.form(form)) }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.wordForm(index.intValue, QvpRnMarshal.form(form)) }
     }
     @objc func hasForm(_ tag: NSNumber, form: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.hasForm(QvpRnMarshal.form(form)) }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.hasForm(QvpRnMarshal.form(form)) }
     }
     @objc func attachWords(_ tag: NSNumber, json: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         inOrder(tag, resolve, reject) { v, p in v.attachWords(p, json) }
@@ -133,10 +142,10 @@ final class QvpModule: NSObject {
 
     // ── metadata ──
     @objc func surahs(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.surahs().map { QvpRnMarshal.surah($0) } }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.surahs().map { QvpRnMarshal.surah($0) } }
     }
     @objc func divisions(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.divisions().map { QvpRnMarshal.division($0) } }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.divisions().map { QvpRnMarshal.division($0) } }
     }
     @objc func surahHeaders(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         withPage(tag, resolve, reject) { _, p in p.surahHeaders().map { QvpRnMarshal.surahHeader($0) } }
@@ -145,50 +154,50 @@ final class QvpModule: NSObject {
         withPage(tag, resolve, reject) { _, p in p.surahHeadersView().map { QvpRnMarshal.surahHeader($0) } }
     }
     @objc func ayahMarks(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.ayahMarks().map { QvpRnMarshal.ayahMark($0) } }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.ayahMarks().map { QvpRnMarshal.ayahMark($0) } }
     }
     @objc func ayahMarksView(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         withPage(tag, resolve, reject) { _, p in p.ayahMarksView().map { QvpRnMarshal.ayahMark($0) } }
     }
     @objc func rosettes(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.rosettes().map { QvpRnMarshal.rosette($0) } }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.rosettes().map { QvpRnMarshal.rosette($0) } }
     }
     @objc func sajdahs(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.sajdahs().map { QvpRnMarshal.sajdah($0) } }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.sajdahs().map { QvpRnMarshal.sajdah($0) } }
     }
     @objc func ayahKeys(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.ayahKeys().map { ["surah": $0.0, "ayah": $0.1, "ayahKey": "\($0.0):\($0.1)"] as [String: Any?] } }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.ayahKeys().map { ["surah": $0.0, "ayah": $0.1, "ayahKey": "\($0.0):\($0.1)"] as [String: Any?] } }
     }
     @objc func ayahWordCount(_ tag: NSNumber, s: NSNumber, a: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in let c = p.ayahWordCount(s.intValue, a.intValue); return ["count": c.count, "isComplete": c.isComplete] as [String: Any?] }
+        readPage(tag, resolve, reject) { _, p, _, _ in let c = p.ayahWordCount(s.intValue, a.intValue); return ["count": c.count, "isComplete": c.isComplete] as [String: Any?] }
     }
     @objc func reciteMap(_ tag: NSNumber, s: NSNumber, a: NSNumber, n: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.reciteMap(s.intValue, a.intValue, nSegments: n.intValue) }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.reciteMap(s.intValue, a.intValue, nSegments: n.intValue) }
     }
     @objc func wordLabel(_ tag: NSNumber, i: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.wordLabel(i.intValue) }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.wordLabel(i.intValue) }
     }
     @objc func ayahLabel(_ tag: NSNumber, i: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in p.ayahLabel(i.intValue) }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.ayahLabel(i.intValue) }
     }
 
     // ── text and search ──
     @objc func text(_ tag: NSNumber, target: Any?, opts: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         let o = opt(opts)
-        readPage(tag, resolve, reject) { _, p in
+        readPage(tag, resolve, reject) { _, p, _, _ in
             p.text(QvpRnMarshal.target(target, p), form: QvpRnMarshal.form(o["form"]), wordSep: QvpRnMarshal.str(o["wordSep"]) ?? " ", lineSep: QvpRnMarshal.str(o["lineSep"]) ?? "\n")
         }
     }
     @objc func search(_ tag: NSNumber, query: String, opts: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         let o = opt(opts)
-        readPage(tag, resolve, reject) { _, p in
+        readPage(tag, resolve, reject) { _, p, _, _ in
             p.search(query, form: QvpRnMarshal.form(o["form"], .search), mode: QvpRnMarshal.searchMode(o["mode"]), normalize: !QvpRnMarshal.isFalse(o["normalize"]),
                      looseMatch: !QvpRnMarshal.isFalse(o["looseMatch"]), limit: QvpRnMarshal.num(o["limit"]) ?? 0).map { QvpRnMarshal.match($0) }
         }
     }
     @objc func citation(_ tag: NSNumber, words: NSArray, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         let ws = ints(words)
-        readPage(tag, resolve, reject) { _, p in p.citation(ws) }
+        readPage(tag, resolve, reject) { _, p, _, _ in p.citation(ws) }
     }
     @objc func arabic(_ op: String, s: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         off(resolve, reject) {
@@ -241,19 +250,20 @@ final class QvpModule: NSObject {
     @objc func resetView(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         withPage(tag, resolve, reject) { v, _ in v.resetView(); return nil }
     }
-    /// The leading that fills this view's viewport, from the spec the view lays out with.
+    /// The leading that fills this view's viewport. This call and the two after it measure the
+    /// printed page, so they take the view's spec before the reader's zoom, as Android does.
     @objc func layoutLineSpacingToFill(_ tag: NSNumber, max: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        withPage(tag, resolve, reject) { v, p in p.layoutLineSpacingToFill(v.inner.layoutSpec, max: max.floatValue) }
+        withPage(tag, resolve, reject) { v, p in p.layoutLineSpacingToFill(v.inner.baseSpec, max: max.floatValue) }
     }
     @objc func layoutWastedFraction(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        withPage(tag, resolve, reject) { v, p in p.layoutWastedFraction(v.inner.layoutSpec) }
+        withPage(tag, resolve, reject) { v, p in p.layoutWastedFraction(v.inner.baseSpec) }
     }
-    /// The page's height at the printed pitch for the spec this view lays out with.
+    /// The page's height at the printed pitch for the view's spec before the reader's zoom.
     @objc func layoutPrintedHeight(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        withPage(tag, resolve, reject) { v, p in p.layoutPrintedHeight(v.inner.layoutSpec) }
+        withPage(tag, resolve, reject) { v, p in p.layoutPrintedHeight(v.inner.baseSpec) }
     }
     @objc func grid(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        readPage(tag, resolve, reject) { _, p in let g = p.grid; return ["lines": g.lines, "lineSpacing": g.lineSpacing] as [String: Any?] }
+        readPage(tag, resolve, reject) { _, p, _, _ in let g = p.grid; return ["lines": g.lines, "lineSpacing": g.lineSpacing] as [String: Any?] }
     }
     @objc func stats(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         ui(resolve, reject) { QvpRnRegistry.get(tag.intValue)?.stats() }
@@ -314,7 +324,7 @@ final class QvpModule: NSObject {
     // ── crop ──
     @objc func cropBounds(_ tag: NSNumber, target: Any?, opts: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         let o = opt(opts)
-        readPage(tag, resolve, reject) { _, p in
+        readPage(tag, resolve, reject) { _, p, _, _ in
             p.cropBounds(QvpRnMarshal.target(target, p), pad: QvpRnMarshal.flt(o["pad"], QvpDefaults.CROP_PAD), keepAyahMarks: !QvpRnMarshal.isFalse(o["keepAyahMarks"]))
                 .map { QvpRnMarshal.cropBounds($0) }
         }
@@ -332,7 +342,8 @@ final class QvpModule: NSObject {
         off(resolve, reject) {
             if let id = self.atlasByUri[uri] { return id }
             let bytes = try QvpRnBytes.read(uri)
-            guard let a = try? QvpAtlas(bytes: bytes) else { throw QvpRnError("not a QVP atlas: \(uri)") }
+            let a: QvpAtlas
+            do { a = try QvpAtlas(bytes: bytes) } catch { throw QvpRnError("not a QVP atlas: \(uri) (QvpError.\(error))") }
             let id = self.nextAtlas; self.nextAtlas += 1
             self.atlases[id] = a; self.atlasByUri[uri] = id
             return id
@@ -391,7 +402,8 @@ final class QvpModule: NSObject {
     @objc func loadOrnaments(_ uri: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         ui(resolve, reject) {
             let bytes = try QvpRnBytes.read(uri)
-            guard let set = try? QvpOrnaments(bytes: bytes) else { throw QvpRnError("not an ornament set: \(uri)") }
+            let set: QvpOrnaments
+            do { set = try QvpOrnaments(bytes: bytes) } catch { throw QvpRnError("not an ornament set: \(uri) (QvpError.\(error))") }
             return QvpOrnamentSets.add(set)
         }
     }

@@ -2,16 +2,68 @@
 import UIKit
 import React
 
+/// What the module's query queue reads of one view: the page in view, its word records and how
+/// it loaded, behind one lock. It holds no UIKit object, so a query that outlives the view
+/// releases nothing UIKit off the main thread. The main thread writes it where the page is
+/// replaced, closed or given a words sidecar. Each write waits for the queries in progress.
+final class QvpRnPageState {
+    private let lock: UnsafeMutablePointer<pthread_rwlock_t> = {
+        let l = UnsafeMutablePointer<pthread_rwlock_t>.allocate(capacity: 1)
+        l.initialize(to: pthread_rwlock_t())
+        pthread_rwlock_init(l, nil)
+        return l
+    }()
+    private var page: QvpPage?
+    private var wordTable: QvpRnWords?
+    private var loadMs = 0.0
+    private var pageBytes = 0
+
+    deinit {
+        pthread_rwlock_destroy(lock)
+        lock.deinitialize(count: 1)
+        lock.deallocate()
+    }
+
+    /// Run `block` on the page in view and how it loaded, held open until the block returns:
+    /// nil when no page is loaded. The block must not wait for the main thread, which can be
+    /// waiting for this lock.
+    func read<T>(_ block: (QvpPage?, _ loadMs: Double, _ bytes: Int) throws -> T) rethrows -> T {
+        pthread_rwlock_rdlock(lock); defer { pthread_rwlock_unlock(lock) }
+        return try block(page.flatMap { $0.isOpen ? $0 : nil }, loadMs, pageBytes)
+    }
+    private func write<T>(_ block: () throws -> T) rethrows -> T {
+        pthread_rwlock_wrlock(lock); defer { pthread_rwlock_unlock(lock) }
+        return try block()
+    }
+    /// Put `p` in view with how it loaded, and drop the word records of the page before.
+    func swap(_ p: QvpPage?, loadMs: Double, bytes: Int) {
+        write { page = p; wordTable = nil; self.loadMs = loadMs; pageBytes = bytes }
+    }
+    /// Attach a words sidecar. Queries in progress finish first, and the word records built
+    /// before it are dropped, since the forms they hold have changed.
+    func attachWords(_ p: QvpPage, _ json: String) -> Int { write { let n = p.attachWords(json); wordTable = nil; return n } }
+    /// Close the page in view, after the queries in progress.
+    func close() { write { page?.close(); page = nil; wordTable = nil } }
+    /// How the page in view loaded: milliseconds and bytes.
+    var load: (ms: Double, bytes: Int) { read { _, ms, bytes in (ms, bytes) } }
+
+    private let wordsLock = NSLock()
+    /// The word records of `p`, built on first use and kept until the page changes or takes a sidecar.
+    func words(_ p: QvpPage) -> QvpRnWords {
+        wordsLock.lock(); defer { wordsLock.unlock() }
+        if let w = wordTable, w.page === p { return w }
+        let w = QvpRnWords(p); wordTable = w; return w
+    }
+}
+
 /// The React Native host of `QvpPageView`. It owns the loaded `QvpPage`, loads bytes from the
 /// prop-given URI, and reconciles the declarative props (theme, styles, highlights, mask, reveal,
 /// dress) against engine handles, so JS never sees a handle. Every decision (hit test, layout,
 /// style resolution, bands, masks) is the engine's. This class marshals and forwards, as
 /// android/.../QvpRnPageView.kt does.
 ///
-/// The module reads the page from its query queue while this view draws on the main thread (see
-/// `read`). Those reads touch only what the page fixed when it loaded, so the two do not meet,
-/// except where the page is closed, replaced, or given a words sidecar: each of these holds the
-/// lock for writing, and waits for a query in progress to finish.
+/// The module reads the page from its query queue while this view draws on the main thread,
+/// through `state`. Those reads touch only what the page fixed when it loaded.
 ///
 /// Lengths are in points, which are the dp of the JS side.
 @objc(QvpRnPageView)
@@ -19,35 +71,17 @@ final class QvpRnPageView: UIView {
     /// QvpKit's renderer, hosted rather than subclassed.
     let inner = QvpPageView(frame: .zero)
     var page: QvpPage? { inner.page }
-
-    private var lock = pthread_rwlock_t()
-    /// Run `block` on the page in view, held open until the block returns: nil when no page is
-    /// loaded. The block must not wait for the main thread, which can be waiting for this lock.
-    func read<T>(_ block: (QvpPage?) throws -> T) rethrows -> T {
-        pthread_rwlock_rdlock(&lock); defer { pthread_rwlock_unlock(&lock) }
-        return try block(page)
-    }
-    private func write<T>(_ block: () throws -> T) rethrows -> T {
-        pthread_rwlock_wrlock(&lock); defer { pthread_rwlock_unlock(&lock) }
-        return try block()
-    }
-    /// Attach a words sidecar. Queries in progress finish first, and the word records built
-    /// before it are dropped, since the forms they hold have changed.
-    func attachWords(_ p: QvpPage, _ json: String) -> Int { write { let n = p.attachWords(json); dropWords(); return n } }
-
-    private let wordsLock = NSLock()
-    private var wordTable: QvpRnWords?
-    /// The word records of `p`, built on first use and kept until the page changes or takes a sidecar.
-    func words(_ p: QvpPage) -> QvpRnWords {
-        wordsLock.lock(); defer { wordsLock.unlock() }
-        if let w = wordTable, w.page === p { return w }
-        let w = QvpRnWords(p); wordTable = w; return w
-    }
-    private func dropWords() { wordsLock.lock(); wordTable = nil; wordsLock.unlock() }
+    /// What the module's query queue reads.
+    let state = QvpRnPageState()
+    /// The word records of `p`, built once per page.
+    func words(_ p: QvpPage) -> QvpRnWords { state.words(p) }
+    /// Attach a words sidecar to the page in view.
+    func attachWords(_ p: QvpPage, _ json: String) -> Int { state.attachWords(p, json) }
+    var loadMs: Double { state.load.ms }
+    var pageBytes: Int { state.load.bytes }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        pthread_rwlock_init(&lock, nil)
         inner.frame = bounds
         inner.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(inner)
@@ -72,10 +106,23 @@ final class QvpRnPageView: UIView {
         }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-    deinit {
+    deinit { destroy() }
+
+    /// React Native dropped the view: React Native removes it from its parent when it unmounts
+    /// it, and never moves it to another. Close the page now, as Android's onDropViewInstance
+    /// does, rather than when the last reference goes.
+    private var mounted = false
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        if superview != nil { mounted = true } else if mounted { destroy() }
+    }
+    /// Unregister, and close the page after the queries in progress. A later prop batch loads
+    /// the page again.
+    func destroy() {
         QvpRnRegistry.unregister(self)
-        page?.close()
-        pthread_rwlock_destroy(&lock)
+        inner.page = nil
+        state.close()
+        loadedKey = nil
     }
 
     // ── events ──
@@ -146,12 +193,13 @@ final class QvpRnPageView: UIView {
     private var appliedDress: NSDictionary?
     private var appliedInk: UInt32?
     private(set) var revealStepCount = 0
-    private(set) var loadMs = 0.0
-    private(set) var pageBytes = 0
 
     /// A prop changed: commit once, after the rest of the batch has been set.
     private var commitQueued = false
     private func changed() {
+        // React Native sets the tag before the first prop, so the module finds the view from
+        // the first prop batch on.
+        QvpRnRegistry.register(self)
         if commitQueued { return }
         commitQueued = true
         DispatchQueue.main.async { [weak self] in
@@ -223,7 +271,7 @@ final class QvpRnPageView: UIView {
                 bytes = try QvpRnBytes.read(key)
             }
             let t0 = CFAbsoluteTimeGetCurrent()
-            do { p = try QvpPage(bytes: bytes) } catch { throw QvpRnError("not a QVP page: \(key.prefix(64))") }
+            do { p = try QvpPage(bytes: bytes) } catch { throw QvpRnError("not a QVP page: \(key.prefix(64)) (QvpError.\(error))") }
             ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
             // No query sees the page before the swap below, so the sidecar needs no lock.
             if let w = wordsUri {
@@ -233,19 +281,17 @@ final class QvpRnPageView: UIView {
             swap(nil)
             throw error
         }
-        loadMs = ms; pageBytes = bytes.count
-        swap(p)
+        swap(p, loadMs: ms, bytes: bytes.count)
         layoutDirty = true
-        emit(onPageLoad, QvpRnMarshal.pageInfo(p, words(p).forms).merging(["loadMs": loadMs, "bytes": pageBytes, "uri": pageUri]) { a, _ in a })
+        emit(onPageLoad, QvpRnMarshal.pageInfo(p, words(p).forms).merging(["loadMs": ms, "bytes": bytes.count, "uri": pageUri]) { a, _ in a })
     }
     /// Put `p` in view and close the old page, with no query reading either.
-    private func swap(_ p: QvpPage?) {
-        write {
-            let old = inner.page
-            inner.page = p
-            dropWords()
-            if old !== p { old?.close() }
-        }
+    private func swap(_ p: QvpPage?, loadMs: Double = 0, bytes: Int = 0) {
+        let old = inner.page
+        state.swap(p, loadMs: loadMs, bytes: bytes)
+        inner.page = p
+        // the state no longer holds the old page, so no query reads it now
+        if old !== p { old?.close() }
     }
 
     private func applyInk(_ p: QvpPage) {
@@ -370,7 +416,7 @@ final class QvpRnPageView: UIView {
     func undressNow(_ p: QvpPage) { p.undress(); resetView(); inner.setNeedsDisplay() }
 
     func stats() -> [String: Any?] {
-        ["loadMs": loadMs, "bytes": pageBytes, "baseMs": inner.lastBaseMs, "overlayMs": inner.lastOverlayMs, "basePaths": inner.lastBasePaths,
+        ["loadMs": state.load.ms, "bytes": state.load.bytes, "baseMs": inner.lastBaseMs, "overlayMs": inner.lastOverlayMs, "basePaths": inner.lastBasePaths,
          "overlayPaths": inner.lastOverlayPaths, "bands": inner.lastBands, "hitUs": inner.lastHitUs, "animating": inner.animating,
          "styleHandles": page.map { $0.isOpen ? $0.styleHandles().count : 0 } ?? 0, "highlightHandles": page.map { $0.isOpen ? $0.highlightHandles().count : 0 } ?? 0,
          "engineVersion": QvpEngine.version(), "viewScale": Double(inner.viewScale), "layout": page?.currentLayout.map { QvpRnMarshal.layout($0) }]
@@ -385,21 +431,37 @@ func same(_ a: Any?, _ b: Any?) -> Bool {
 }
 
 /// Views by react tag, so the module can find the page behind a `viewTag`. The main thread
-/// registers views and the module's query queue looks them up. The registry holds them weakly:
-/// a view that React Native drops leaves it by itself.
+/// registers and looks up views. The query queue looks up only a view's state, which holds no
+/// UIKit object, so no view is retained or released off the main thread. The registry holds a
+/// view weakly, and a view leaves it when React Native drops it.
 enum QvpRnRegistry {
-    private final class Weak { weak var view: QvpRnPageView?; init(_ v: QvpRnPageView) { view = v } }
+    private final class Entry {
+        weak var view: QvpRnPageView?
+        let id: ObjectIdentifier
+        let state: QvpRnPageState
+        init(_ v: QvpRnPageView) { view = v; id = ObjectIdentifier(v); state = v.state }
+    }
     private static let lock = NSLock()
-    private static var views: [Int: Weak] = [:]
+    private static var entries: [Int: Entry] = [:]
+    /// Main thread.
     static func register(_ v: QvpRnPageView) {
         guard let tag = v.reactTag?.intValue, tag > 0 else { return }
-        lock.lock(); views[tag] = Weak(v); lock.unlock()
+        lock.lock(); defer { lock.unlock() }
+        if entries[tag]?.id != ObjectIdentifier(v) { entries[tag] = Entry(v) }
     }
+    /// Main thread, and the view's deinit.
     static func unregister(_ v: QvpRnPageView) {
-        lock.lock(); views = views.filter { $0.value.view != nil && $0.value.view !== v }; lock.unlock()
+        let id = ObjectIdentifier(v)
+        lock.lock(); entries = entries.filter { $0.value.id != id }; lock.unlock()
     }
+    /// The view with this tag. Main thread only.
     static func get(_ tag: Int) -> QvpRnPageView? {
         lock.lock(); defer { lock.unlock() }
-        return views[tag]?.view
+        return entries[tag]?.view
+    }
+    /// The state of the view with this tag. Any thread.
+    static func state(_ tag: Int) -> QvpRnPageState? {
+        lock.lock(); defer { lock.unlock() }
+        return entries[tag]?.state
     }
 }

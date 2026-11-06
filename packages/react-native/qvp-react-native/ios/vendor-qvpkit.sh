@@ -33,4 +33,4 @@ if not url or not checksum:
     raise SystemExit(f"error: {sys.argv[1]} has no XCFramework URL and checksum")
 pathlib.Path(sys.argv[2]).write_text(json.dumps({"url": url.group(1), "sha256": checksum.group(1)}, indent=2) + "\n")
 PY
-echo "vendored $(ls ios/vendor/QvpKit | wc -l | tr -d ' ') QvpKit sources and ios/vendor/QvpEngine.json" >&2
+echo "vendored $(find ios/vendor/QvpKit -name '*.swift' | wc -l | tr -d ' ') QvpKit sources and ios/vendor/QvpEngine.json" >&2

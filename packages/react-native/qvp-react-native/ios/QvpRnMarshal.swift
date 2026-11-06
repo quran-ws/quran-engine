@@ -298,7 +298,7 @@ enum QvpRnMarshal {
         return ["width": l.width, "height": l.height, "scale": l.scale, "lineSpacing": l.lineSpacing, "printedLineSpacing": p.lineSpacing,
                 "isTruncated": l.isTruncated, "ellipsis": e.map { [$0.minX, $0.minY, $0.maxX, $0.maxY] },
                 "rows": l.rows.map { ["x0": $0.x0, "y0": $0.y0, "x1": $0.x1, "y1": $0.y1, "baseline": $0.baseline] as [String: Any?] },
-                "words": l.words.map { ["surah": $0.surah, "ayah": $0.ayah, "word": $0.word, "wordKey": "\($0.surah):\($0.ayah):\($0.word)", "page": $0.page, "row": $0.row,
+                "words": l.words.map { ["surah": $0.surah, "ayah": $0.ayah, "word": $0.word, "wordKey": $0.wordKey, "page": $0.page, "row": $0.row,
                                         "x0": $0.x0, "y0": $0.y0, "x1": $0.x1, "y1": $0.y1,
                                         "wordX0": $0.wordX0, "wordY0": $0.wordY0, "wordX1": $0.wordX1, "wordY1": $0.wordY1] as [String: Any?] },
                 "ayahs": l.ayahs.map { ["surah": $0.surah, "ayah": $0.ayah, "x0": $0.x0, "y0": $0.y0, "x1": $0.x1, "y1": $0.y1] as [String: Any?] },

@@ -61,7 +61,10 @@ else
     Dir.mktmpdir do |tmp|
       zip = File.join(tmp, "QvpEngine.xcframework.zip")
       Pod::UI.puts "qvp-react-native: downloading #{url}" if defined?(Pod::UI)
-      system("curl", "-fsSL", "--retry", "3", "-o", zip, url, exception: true)
+      unless system("curl", "-fsSL", "--retry", "3", "-o", zip, url)
+        raise "qvp-react-native: could not download #{url}. Release v#{package["version"]} may not be published yet. " \
+              "Set QVP_ENGINE_XCFRAMEWORK to an XCFramework that scripts/build-engine-ios.sh built, or try again later."
+      end
       got = Digest::SHA256.file(zip).hexdigest
       raise "qvp-react-native: #{url} has SHA-256 #{got}, the package expects #{sha256}" unless got == sha256
       system("unzip", "-q", zip, "-d", tmp, exception: true)

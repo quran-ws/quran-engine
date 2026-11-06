@@ -47,8 +47,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
     down to one screen.
 - React Native: `scripts/gen-rn-enums.py` also writes `ios/QvpRnCodes.swift`, and
   `scripts/check-parity.py` checks it. `scripts/sync-example-data.sh react-native` copies
-  the pages to the iOS example too. The npm release job waits for the `publish` job, so the
-  XCFramework the pod downloads is public before npm holds the package.
+  the pages to the iOS example too. The npm release job waits until the GitHub release serves
+  the XCFramework, so the file the pod downloads is public before npm holds the package.
 
 ### Removed
 

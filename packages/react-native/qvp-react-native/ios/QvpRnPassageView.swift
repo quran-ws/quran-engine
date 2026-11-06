@@ -47,6 +47,14 @@ final class QvpRnPassageView: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
     deinit { destroy() }
 
+    /// React Native dropped the view: it removes the view from its parent when it unmounts it,
+    /// and never moves it to another. Close the pages now, as Android's onDropViewInstance does.
+    private var mounted = false
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        if superview != nil { mounted = true } else if mounted { destroy() }
+    }
+
     private func destroy() {
         passage?.close(); passage = nil
         pages.forEach { $0.close() }; pages = []; pagesByNumber = [:]
@@ -93,7 +101,8 @@ final class QvpRnPassageView: UIView {
         // so a URI that fails after it leaves nothing for `destroy` to miss.
         for uri in pageUris {
             let bytes = try QvpRnBytes.read(uri)
-            guard let p = try? QvpPage(bytes: bytes) else { throw QvpRnError("not a QVP page: \(uri)") }
+            let p: QvpPage
+            do { p = try QvpPage(bytes: bytes) } catch { throw QvpRnError("not a QVP page: \(uri) (QvpError.\(error))") }
             pages.append(p)
         }
         pagesByNumber = Dictionary(pages.map { ($0.pageNo, $0) }) { a, _ in a }
@@ -101,7 +110,7 @@ final class QvpRnPassageView: UIView {
             passage = basmalah ? try QvpPassage(basmalahOf: surah, pages: pages)
                                : try QvpPassage(pages: pages, surah: surah, from: from, to: to > 0 ? to : from)
         } catch {
-            throw QvpRnError(basmalah ? "no basmalah of surah \(surah) on the pages given" : "the pages given do not hold \(surah):\(from)-\(to > 0 ? to : from)")
+            throw QvpRnError((basmalah ? "no basmalah of surah \(surah) on the pages given" : "the pages given do not hold \(surah):\(from)-\(to > 0 ? to : from)") + " (QvpError.\(error))")
         }
     }
 
