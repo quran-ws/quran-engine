@@ -3,6 +3,7 @@
 use crate::abi::{fill, fill_with, guard, LAYOUT_BUF};
 use crate::convert::placement;
 use crate::types::*;
+use crate::view::QvpView;
 use qvp_core::*;
 
 pub(crate) unsafe fn layout_spec(spec: *const QvpLayoutSpec) -> LayoutSpec {
@@ -171,6 +172,37 @@ pub unsafe extern "C" fn qvp_layout_draw_list(
         // The list a count call built is the one this fill copies.
         (*page)
             .with_layout_draw_list(band, |list| fill_with(out.cast(), cap, list.iter().map(|d| [d.path, d.placement])))
+    })
+}
+
+/// The band of the current layout a host keeps drawn, in layout px: the space of
+/// `qvp_layout_draw_list`'s band. `top` and `height` sit on the screen at
+/// `view.offset_y + view.scale·y`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct QvpInkBand {
+    pub top: f32,
+    pub height: f32,
+}
+
+/// Which band of the current layout to draw for a view and a viewport: the whole page when it
+/// fits, otherwise two screens around the reader, with a top that moves in steps so a pan
+/// inside one step redraws nothing. `max_height` and `max_pixels` are in viewport px: the
+/// tallest band the host can draw (0 or less: `QVP_DEFAULT_MAX_INK_HEIGHT`) and how many
+/// pixels, width × height, it keeps for one (0 or less: no limit).
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_ink_band(
+    page: *const Page,
+    view: *const QvpView,
+    viewport_w: f32,
+    viewport_h: f32,
+    max_height: f32,
+    max_pixels: f32,
+    out: *mut QvpInkBand,
+) {
+    guard(|| {
+        let b = (*page).layout_ink_band((*view).into(), viewport_w, viewport_h, max_height, max_pixels);
+        *out = QvpInkBand { top: b.top, height: b.height };
     })
 }
 

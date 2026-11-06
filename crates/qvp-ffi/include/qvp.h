@@ -34,6 +34,7 @@ extern "C" {
 #define QVP_DEFAULT_ZOOM_QUANTUM   0.01f
 #define QVP_DEFAULT_REFLOW_RELAX   0.5f    /* how far a short reflowed row opens towards its neighbours */
 #define QVP_DEFAULT_REFLOW_MAX_STRETCH 2.0f /* how far a reflowed row's gaps may open, in word gaps */
+#define QVP_DEFAULT_MAX_INK_HEIGHT 4096.0f /* the tallest band of ink qvp_layout_ink_band draws at once, in viewport px */
 #define QVP_DEFAULT_SWIPE_AXIS_RATIO 1.5f
 #define QVP_DEFAULT_SWIPE_DISTANCE 40.0f
 #define QVP_DEFAULT_SWIPE_VELOCITY 500.0f
@@ -247,6 +248,14 @@ uint32_t qvp_layout_repeats(const QvpPage*, float* out /* n × {first_path, n_pa
 uint32_t qvp_layout_path_groups(const QvpPage*, uint32_t* out, uint32_t cap);    /* the group of every path; empty unless reflowed */
 uint32_t qvp_layout_omitted_paths(const QvpPage*, uint32_t* out, uint32_t cap);  /* paths this layout does not draw (sheet furniture and a native surah frame when reflowed) */
 uint32_t qvp_layout_draw_list(const QvpPage*, float band_top, float band_bottom /* <= top = the whole page */, uint32_t* out /* n × {path, placement} */, uint32_t cap);   /* everything this layout draws inside a band of it, in drawing order: one loop draws any page */
+/* Which band of the current layout to keep drawn: the whole page when it fits, otherwise two screens around the reader. Its top
+   moves in steps, so a pan inside one step redraws nothing and a pan across one moves the band by one step. Pass top and
+   top + height to qvp_layout_draw_list.
+   The band is in layout px and sits on the screen at view.offset_y + view.scale·y. The limits are viewport px, since a texture is
+   measured on the screen: max_height is the tallest band the host can draw (<= 0: QVP_DEFAULT_MAX_INK_HEIGHT), max_pixels the
+   pixels it keeps for one, width × height (<= 0: no limit). No scale or no viewport height: the whole page. */
+typedef struct { float top, height; } QvpInkBand;
+void     qvp_layout_ink_band(const QvpPage*, const QvpView*, float viewport_w, float viewport_h, float max_height, float max_pixels, QvpInkBand* out);
 uint32_t qvp_layout_placements(const QvpPage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);   /* what a draw list's `placement` indexes: the groups, then the repeats */
 uint32_t qvp_layout_row_words(const QvpPage*, uint32_t row, uint32_t* out, uint32_t cap);     /* the words of a reflowed row */
 uint32_t qvp_layout_word_row(const QvpPage*, uint32_t word);                    /* the row a word landed on, or QVP_NONE */

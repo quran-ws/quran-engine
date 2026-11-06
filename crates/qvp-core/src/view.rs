@@ -65,6 +65,66 @@ impl View {
     }
 }
 
+/// The band of a laid-out page a host keeps drawn, in layout pixels: the space
+/// [`Page::layout_draw_list_in`] takes its band in. A point `y` of the band is on the screen
+/// at `offset_y + scale·y`.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct InkBand {
+    pub top: f32,
+    pub height: f32,
+}
+
+impl View {
+    /// The band of a page `content_h` layout pixels tall that a host draws for this view and a
+    /// viewport `viewport_w` × `viewport_h` pixels: the whole page when it fits, otherwise a
+    /// band two screens tall around the reader.
+    ///
+    /// A host draws the band once into a picture or a bitmap and moves that picture as the
+    /// reader pans. The band's top moves in steps of half its slack rather than with the
+    /// finger, so a pan inside one step changes neither the band nor the picture, and a pan
+    /// across a step moves the band by exactly one step.
+    ///
+    /// Two limits bound the band, both in viewport pixels, because a texture is measured on
+    /// the screen and not in the layout. `max_height` is the tallest band the host can draw:
+    /// 0 or less takes [`defaults::MAX_INK_HEIGHT`]. `max_pixels` is how many pixels the host
+    /// keeps for the band, its width times its height: 0 or less means no such limit. The
+    /// page is drawn whole only when it is inside both, and a band never passes either.
+    ///
+    /// A view with no scale, or a viewport with no height, has no screen to put a band
+    /// around, so the band is the whole page.
+    pub fn ink_band(
+        self,
+        content_h: f32,
+        viewport_w: f32,
+        viewport_h: f32,
+        max_height: f32,
+        max_pixels: f32,
+    ) -> InkBand {
+        let content_h = if content_h.is_finite() { content_h.max(0.0) } else { 0.0 };
+        let whole = InkBand { top: 0.0, height: content_h };
+        let scale = self.scale;
+        if !(scale > 0.0 && scale.is_finite() && viewport_h > 0.0 && viewport_h.is_finite()) {
+            return whole;
+        }
+        let mut ceiling = if max_height > 0.0 { max_height } else { defaults::MAX_INK_HEIGHT };
+        if max_pixels > 0.0 && viewport_w > 0.0 {
+            ceiling = ceiling.min(max_pixels / viewport_w);
+        }
+        // a band is at least one pixel tall, whatever the limits say
+        let ceiling = ceiling.max(1.0);
+        if content_h * scale <= ceiling {
+            return whole;
+        }
+        // In viewport pixels: the screen, a band two screens tall, and a step of half the
+        // slack. The screen at the top of the band is `-offset_y` down the page.
+        let screen = viewport_h.clamp(1.0, ceiling);
+        let tall = (screen * 2.0).min(ceiling);
+        let step = ((tall - screen) / 2.0).max(1.0);
+        let top = ((-self.offset_y - step) / step).floor() * step;
+        InkBand { top: top / scale, height: tall / scale }
+    }
+}
+
 /// How many pages a released drag turns, in reading order: +1 the page after this one, -1 the
 /// page before it, 0 when the drag is not a swipe at all.
 ///
@@ -118,6 +178,20 @@ impl Page {
         };
         View { scale: view.scale, offset_x: to_x - view.scale * px, offset_y: to_y - view.scale * py }
             .clamp(content_w, content_h, viewport_w, viewport_h)
+    }
+
+    /// The band of the current layout to draw for this view: [`View::ink_band`] on the
+    /// layout's content height, or on the page's height when the page has no layout.
+    pub fn layout_ink_band(
+        &self,
+        view: View,
+        viewport_w: f32,
+        viewport_h: f32,
+        max_height: f32,
+        max_pixels: f32,
+    ) -> InkBand {
+        let content_h = self.current_layout().map_or(self.height(), |l| l.content_h);
+        view.ink_band(content_h, viewport_w, viewport_h, max_height, max_pixels)
     }
 
     /// Where a point of the viewport lands in the laid-out page, for a host turning a touch

@@ -84,6 +84,12 @@ pub const ZOOM_LEAVE_EFFORT: f32 = 0.08;
 /// hundredth is under half a percent.
 pub const ZOOM_QUANTUM: f32 = 0.01;
 
+/// The tallest band of ink a host draws at once, in viewport pixels (`View::ink_band`). A
+/// texture taller than this cannot be drawn on every GPU these wrappers run on, so a page
+/// taller than this on the screen is drawn a band at a time. It is a safe floor across those
+/// GPUs, not a property of the mushaf, and a host that knows its own limit passes that one.
+pub const MAX_INK_HEIGHT: f32 = 4096.0;
+
 /// A released drag is a page swipe when it is this much more sideways than up and down, and
 /// either this far (viewport px) or this fast (px per second).
 pub const SWIPE_AXIS_RATIO: f32 = 1.5;
