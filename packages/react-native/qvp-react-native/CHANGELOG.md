@@ -5,6 +5,19 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- React Native on iOS (#41). The package has an iOS module over QvpKit with the method names
+  and result shapes of the Android module, so `src/index.tsx` has no platform branch. It
+  hosts QvpKit's `QvpPageView` for `<QvpPageView />` and draws `<QvpPassageView />`, with the
+  same props and events as Android. View methods take and return points on iOS, where they
+  take dp on Android. `qvp-react-native.podspec` compiles the module with QvpKit's Swift
+  sources and links `QvpEngine.xcframework`. Inside this repository the pod takes the engine
+  that `scripts/build-engine-ios.sh` writes. `QVP_ENGINE_XCFRAMEWORK` names another one.
+  Otherwise `pod install` downloads the XCFramework that `Package.swift` names for the
+  release and checks its SHA-256 checksum. The npm tarball holds the QvpKit sources, which
+  the `prepack` script copies, and never the XCFramework. The example builds and runs on
+  the iOS simulator with the same 29 pages as Android. The `ios` job of the React Native
+  workflow builds the engine, installs the pods and builds the example for the simulator,
+  and the `typecheck` job checks what the npm tarball holds.
 - `ayahMarksView(tag)` and the `ayahMarksView()` page method: the ayah marks in viewport px
   through the current layout, as `surahHeadersView` gives the surah headings. It runs on the
   UI thread, because it reads the layout (#82).
@@ -32,6 +45,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
     nothing changes.
   - The web band now stays under the tallest canvas a browser makes, and under the ink budget
     down to one screen.
+- React Native: `scripts/gen-rn-enums.py` also writes `ios/QvpRnCodes.swift`, and
+  `scripts/check-parity.py` checks it. `scripts/sync-example-data.sh react-native` copies
+  the pages to the iOS example too. The npm release job waits for the `publish` job, so the
+  XCFramework the pod downloads is public before npm holds the package.
 
 ### Removed
 
@@ -40,6 +57,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's
   edge (#134).
+||||||| parent of 2818fd8 (feat(react-native): an iOS module over QvpKit)
+- React Native example: Metro leaves `../qvp-react-native/node_modules` out of the bundle.
+  After an `npm install` in the library, the bundle held a second copy of React, and the app
+  stopped at its first hook.
 - React Native: the npm package builds in an app outside this repository. When the app's
   build has no `:qvp` project and no `qvpAndroidDir` property, the Android module depends
   on `ws.quran:qvp-android` from Maven Central, at the version in the package's

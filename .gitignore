@@ -45,6 +45,12 @@ packages/react-native/**/android/app/src/main/res/drawable-*/
 packages/react-native/**/android/app/src/main/res/raw/
 packages/react-native/**/.cxx/
 packages/react-native/qvp-react-native/lib/
+# the pod's copy of QvpKit and the engine: ios/vendor-qvpkit.sh and the podspec write it
+packages/react-native/qvp-react-native/ios/vendor/
+packages/react-native/example/ios/QvpExample/pages/
+packages/react-native/example/ios/.xcode.env.local
+packages/react-native/example/ios/Podfile.lock
+packages/react-native/example/ios/*.xcworkspace/
 packages/react-native/example/ios/Pods/
 packages/react-native/example/ios/build/
 packages/react-native/*.log

@@ -1,10 +1,13 @@
 # @quran.ws/qvp-react-native
 
-React Native wrapper for the QVP vector mushaf engine. Android-first: a native view
-(`<QvpPageView />`) hosting the Kotlin library's `QvpPageView` (`ws.quran.qvp`,
-`packages/android/qvp`, JNI over `crates/qvp-ffi/include/qvp.h`) plus a promise-based module
-(`QvpModule`) for queries. The wrapper is *thin*: no hit-testing, layout or styling logic in JS or
-in the module — it marshals props/targets/selectors and reconciles declarative arrays against engine
+React Native wrapper for the QVP vector mushaf engine, on Android and iOS. Each platform has
+a native view (`<QvpPageView />`) and a promise-based module (`QvpModule`) for queries. On
+Android the view hosts the Kotlin library's `QvpPageView` (`ws.quran.qvp`,
+`packages/android/qvp`, JNI over `crates/qvp-ffi/include/qvp.h`). On iOS it hosts QvpKit's
+`QvpPageView` (`packages/ios/QvpKit`, Swift over the same header). The two modules have the
+same method names and give the same result shapes, so the JavaScript side has no platform
+branch. The wrapper is *thin*: no hit-testing, layout or styling logic in JS or in the
+module — it marshals props/targets/selectors and reconciles declarative arrays against engine
 handles. Names follow `docs/API.md`. **The package ships no page data.**
 
 ## Install
@@ -35,12 +38,38 @@ The Maven Central library holds the engine. In ways 1 and 2 the engine comes fro
 `packages/android/qvp/prebuilt/<abi>/libqvp_ffi.a`. Make it once with
 `scripts/build-engine-android.sh` from the repository root.
 
+iOS needs CocoaPods. React Native's autolinking finds `qvp-react-native.podspec`, so run
+`pod install` in your app's `ios` folder after `npm install`. The pod compiles QvpKit's Swift
+sources with the module and links the engine, `QvpEngine.xcframework`. It takes the engine in
+one of three ways, and the first that applies wins:
+
+1. Inside this repository, as `../example` does, the pod takes the XCFramework that
+   `scripts/build-engine-ios.sh` writes at `packages/ios/QvpKit/QvpEngine.xcframework`. It
+   copies QvpKit's sources from `packages/ios/QvpKit` at each `pod install`, so run
+   `pod install` again after you change them.
+2. The environment variable `QVP_ENGINE_XCFRAMEWORK` names an XCFramework to link, for
+   example an engine that you built yourself:
+
+   ```sh
+   QVP_ENGINE_XCFRAMEWORK=/path/to/QvpEngine.xcframework pod install
+   ```
+
+3. Otherwise `pod install` downloads the XCFramework of this package's release from GitHub,
+   the one that SwiftPM takes for QvpKit, and checks its SHA-256 checksum. An app that
+   installs the package from npm needs nothing more. The download needs `curl` and `unzip`.
+
+The pod and QvpKit through SwiftPM each link the engine. Do not use both in one app: the
+engine's C symbols would be defined twice.
+
 Requirements: RN ≥ 0.76 (legacy view manager / native module through the interop layer, verified on
-0.87 with the New Architecture), minSdk 24. Ways 1 and 2 also need NDK 27 and CMake 3.22.
+0.87 with the New Architecture). Android: minSdk 24, and ways 1 and 2 also need NDK 27 and
+CMake 3.22. iOS: iOS 15.1, CocoaPods and Xcode 16.
 
 Page data: `cargo run -p qvp-convert --release -- batch pages dist/pages` → `NNN.qvp`,
 `NNN.words.json`, `atlas.qva`. Put them wherever you like (assets, files dir, downloads) and pass
-URIs: `asset://pages/042.qvp`, `file:///…`, `/abs/path`, or `base64:…`.
+URIs: `asset://pages/042.qvp`, `file:///…`, `/abs/path`, or `base64:…`. On iOS an `asset://`
+URI names a file in the app bundle: `asset://pages/042.qvp` is `pages/042.qvp` under the
+bundle's resources, for example a folder reference named `pages`.
 
 ## The view
 
@@ -88,7 +117,7 @@ Reconciliation: each `highlights` entry maps to one engine handle. A new id → 
 changes (`null` → `revealStop`). When `pageUri` changes, the old page is freed and every declarative
 prop is re-applied to the new page.
 
-Gestures are the Kotlin view's: tap → gap-aware `hitTestView` → `onWordTap` / `onDecorationTap` /
+Gestures are the native view's (Kotlin or QvpKit): tap → gap-aware `hitTestView` → `onWordTap` / `onDecorationTap` /
 `onEmptyTap`; long-press-drag → engine `select` with a band in `LAYER.SELECTION`; pinch / pan;
 double-tap resets. Props `selectionEnabled`, `zoomEnabled`, `hitMaxDistance`, `selectionBand`.
 
@@ -177,13 +206,15 @@ await atlas.pagesOfJuz(30); atlas.searchSurahs('cow' | 'البقرة' | '2'); at
 // tag-level equivalents: Qvp.atlasPageOf(id, s, a), Qvp.atlasSearchSurahs(id, text), Qvp.atlasPagesOfJuz(id, n), Qvp.atlasJuzOf(id, s, a), …
 ```
 
-The module runs a call on one of two threads. Its own query thread runs each call that reads only
+On iOS, a view method takes and returns points, where Android takes dp.
+
+The module runs a call on one of two threads (on iOS, two queues). Its own query thread runs each call that reads only
 what a page fixed when it loaded: `info`, `words`, `word`, `ayahs`, `lines`, `decorations`, `findWord`,
 `targetWords`, `wordForm`, `hasForm`, the metadata calls except `surahHeaders`, `surahHeadersView`
 and `ayahMarksView`, `text`, `search`, `citation`, `cropBounds`, `grid`, the engine-wide helpers and
 the atlas. A long call there does not hold up a frame. The view keeps its page open until such a call returns. Every other
-call reads or changes the layout, the view, the styles or the page state, and runs on the UI thread,
-where the view draws. `attachWords` runs on the UI thread after the queries queued before it, and the
+call reads or changes the layout, the view, the styles or the page state, and runs on the UI thread
+(the main thread on iOS), where the view draws. `attachWords` runs on the UI thread after the queries queued before it, and the
 queries queued after it wait for it.
 
 `words` builds each word's record once per page: its forms, its label and the names of its paths.
@@ -204,15 +235,16 @@ android/src/main/java/ws/quran/qvp/rn/
   QvpRnWords.kt         each word's record, built once per page
   Codes.kt              QVP_TARGET_* and QVP_SELECTOR_* by name (scripts/gen-rn-enums.py writes it)
   QvpPackage.kt
+qvp-react-native.podspec                   the iOS pod: the module, QvpKit's sources and QvpEngine.xcframework
+ios/
+  QvpModule.m           what React Native sees: the module's methods, the two view managers' props and events
+  QvpModule.swift       the module over QvpKit, with the method names of QvpModule.kt
+  QvpRnPageView.swift   hosts QvpKit's QvpPageView: page loading, prop → handle reconciliation, events
+  QvpRnPassageView.swift loads the pages, lays the passage out at the view's width, draws it, reports the layout
+  QvpRnMarshal.swift    JS shapes ↔ QvpKit types, key for key as Marshal.kt
+  QvpRnBytes.swift      the bytes a URI names, and each word's record, built once per page
+  QvpRnCodes.swift      QVP_TARGET_* and QVP_SELECTOR_* by name (scripts/gen-rn-enums.py writes it)
+  vendor-qvpkit.sh      copies QvpKit's sources and the XCFramework's URL and checksum into ios/vendor (prepack)
 src/index.tsx                              typed API: <QvpPageView/>, <QvpPassageView/>, useQvp(), Qvp, QvpAtlas, QvpOrnaments, Sel, T, constants
 src/codes.ts                               the same codes for T and Sel (scripts/gen-rn-enums.py writes it)
 ```
-
-## iOS — TODO
-
-Not implemented (no macOS in the build environment). The iOS side mirrors the Android module over the
-same `qvp.h`: a Swift `QvpPage`/`QvpAtlas` over `libqvp_ffi.a` (build with
-`cargo build -p qvp-ffi --profile dist --target aarch64-apple-ios[-sim]`), a `UIView` renderer with the
-same draw order (highlight bands → cached base ink → styled ink → mask boxes, `tick(now)` per
-`CADisplayLink` frame), an `RCTViewManager` exposing the props above with the same reconciliation, and
-an `RCTBridgeModule` with the same method names. `src/index.tsx` needs no changes.

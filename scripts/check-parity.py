@@ -279,7 +279,7 @@ def check_rn_codes(problems: list[str]) -> None:
     gen = gen_rn_enums()
     header = HEADER.read_text()
     tables = {prefix: gen.enum(prefix, header) for prefix in gen.TABLES}
-    for path, text in ((gen.TS_OUT, gen.typescript(tables)), (gen.KT_OUT, gen.kotlin(tables))):
+    for path, text in gen.outputs(tables):
         if not path.exists() or path.read_text() != text:
             problems.append(f"{path.relative_to(ROOT)} is out of date; run scripts/gen-rn-enums.py")
 

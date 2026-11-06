@@ -7,6 +7,24 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- React Native on iOS (#41). The package has an iOS module over QvpKit with the method names
+  and result shapes of the Android module, so `src/index.tsx` has no platform branch. It
+  hosts QvpKit's `QvpPageView` for `<QvpPageView />` and draws `<QvpPassageView />`, with the
+  same props and events as Android. View methods take and return points on iOS, where they
+  take dp on Android. `qvp-react-native.podspec` compiles the module with QvpKit's Swift
+  sources and links `QvpEngine.xcframework`. Inside this repository the pod takes the engine
+  that `scripts/build-engine-ios.sh` writes. `QVP_ENGINE_XCFRAMEWORK` names another one.
+  Otherwise `pod install` downloads the XCFramework that `Package.swift` names for the
+  release and checks its SHA-256 checksum. The npm tarball holds the QvpKit sources, which
+  the `prepack` script copies, and never the XCFramework. The example builds and runs on
+  the iOS simulator with the same 29 pages as Android. The `ios` job of the React Native
+  workflow builds the engine, installs the pods and builds the example for the simulator,
+  and the `typecheck` job checks what the npm tarball holds.
+- QvpKit: `QvpPageView.reflowBreaks` and `QvpPageView.onZoomChanged`, as on Android;
+  `Target(parsing:page:)`, which returns nil for a key that `Target.parse` stops the program
+  on; `QvpPassageLayout.draw(in:pages:x:y:)`, which fills a passage into a `CGContext`, as
+  Kotlin's `QvpPassageLayout.draw`; and `QvpDefaults.decimal`, every default by its camelCase
+  name, as Kotlin's `QvpDefaults.decimal`. The React Native module uses all five.
 - Flutter: `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
   read a released drag, and `QvpPage.viewAnchor(view, word, nx, ny, toX, toY, viewportW,
   viewportH)` holds a point of a word on the screen across a new layout. The generated
@@ -37,6 +55,10 @@ All notable changes to the engine and its packages. The format follows
   `windows` job builds the example for Windows and checks that `qvp_ffi.dll` is bundled.
 
 ### Changed
+- React Native: `scripts/gen-rn-enums.py` also writes `ios/QvpRnCodes.swift`, and
+  `scripts/check-parity.py` checks it. `scripts/sync-example-data.sh react-native` copies
+  the pages to the iOS example too. The npm release job waits for the `publish` job, so the
+  XCFramework the pod downloads is public before npm holds the package.
 - `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and
   none for the three viewport-px twins on iOS.
   React Native keeps `qvp_hit_areas_view` and `qvp_word_bands_view` as gaps, with the reason
@@ -97,6 +119,10 @@ All notable changes to the engine and its packages. The format follows
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's
   edge (#134).
+||||||| parent of 2818fd8 (feat(react-native): an iOS module over QvpKit)
+- React Native example: Metro leaves `../qvp-react-native/node_modules` out of the bundle.
+  After an `npm install` in the library, the bundle held a second copy of React, and the app
+  stopped at its first hook.
 - React Native: the npm package builds in an app outside this repository. When the app's
   build has no `:qvp` project and no `qvpAndroidDir` property, the Android module depends
   on `ws.quran:qvp-android` from Maven Central, at the version in the package's
