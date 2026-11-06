@@ -10,9 +10,12 @@ const int qvpNone = 0xffffffff;
 
 /// `QVP_KIND_*`
 abstract final class QvpKind {
-  /// The kinds. [body] is a letter's body and [mark] a mark on a word. [ayahNumber] is the
-  /// numeral in an ayah mark, and [ayahMarkOrnament] the ring around it. [headerInk] is the ink
-  /// of a surah header. [other] is a path the source did not classify.
+  /// The kinds this class names. [body] is a letter's body and [mark] a mark on a word.
+  /// [ayahNumber] is the numeral in an ayah mark, and [ayahMarkOrnament] the ring around it.
+  /// [headerInk] is the ink of a surah header. [other] is a path the source did not classify.
+  /// The header has more (`QVP_KIND_ORNAMENT`, `QVP_KIND_PAGE_NUMBER` and
+  /// `QVP_KIND_RUNNING_HEAD`, 5 to 7), so [QvpPage.pathKind] can return a value this class
+  /// does not name.
   static const int body = 0,
       mark = 1,
       ayahNumber = 2,
@@ -137,8 +140,12 @@ abstract final class QvpDefaults {
       swipeDistance = 40,
       swipeVelocity = 500;
 
-  /// How far a pinch must go past a zoom step before it snaps to the next one, and the step
-  /// the zoom is rounded to.
+  /// [zoomSnapHysteresis] is how far past the midpoint between two zoom steps a pinch must
+  /// reach before it commits to the next step, either way, as a factor: 0.03 means 1.03 times
+  /// the midpoint going up, and the midpoint divided by 1.03 going down. When a short reach
+  /// from the current step is nearer than the midpoint, the factor applies to that reach. It
+  /// holds a finger that rests on the line from flickering between two layouts.
+  /// [zoomQuantum] is the smallest change in reflow zoom a free pinch asks the page for.
   static const double zoomSnapHysteresis = 0.03, zoomQuantum = 0.01;
 
   /// How far a justified row's gaps may open, as a multiple of the usual air between two
@@ -463,7 +470,7 @@ abstract final class T {
 /// One word of a page ([QvpPage.words]), in page units.
 @immutable
 final class QvpWordInfo {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_word_info`.
   const QvpWordInfo({
     required this.index,
     required this.surah,
@@ -512,7 +519,7 @@ final class QvpWordInfo {
 /// in page units.
 @immutable
 final class QvpAyahInfo {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_ayah_info`.
   const QvpAyahInfo({
     required this.index,
     required this.surah,
@@ -555,7 +562,7 @@ final class QvpAyahInfo {
 /// One printed line of a page ([QvpPage.lines]), in page units.
 @immutable
 final class QvpLineInfo {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_line_info`.
   const QvpLineInfo({
     required this.index,
     required this.lineNumber,
@@ -587,7 +594,7 @@ final class QvpLineInfo {
 /// basmalah, a division mark, a sajdah sign or page furniture, in page units.
 @immutable
 final class QvpDecorationInfo {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_decoration_info`.
   const QvpDecorationInfo({
     required this.index,
     required this.decoration,
@@ -605,7 +612,8 @@ final class QvpDecorationInfo {
 
   /// [index] is the position in [QvpPage.decorations], and [decoration] the [QvpDecorationKind].
   /// [surah] and [ayah] are the ayah it belongs to, 0 when it has none. [line] is the line
-  /// index it sits in, or [qvpNone]. Its paths are [nPaths] paths from [firstPath].
+  /// index of its first path, so every decoration has a real line. Its paths are [nPaths]
+  /// paths from [firstPath].
   final int index, decoration, surah, ayah, line, firstPath, nPaths;
 
   /// The decoration's ink box: left, top, right, bottom.
@@ -619,8 +627,7 @@ final class QvpDecorationInfo {
 /// `isExact` is true only when the point is inside an outline. Indices are -1 when absent.
 @immutable
 final class QvpHit {
-  /// The backend builds these, and the page fills [wordKey] and [ayahKey]. An app reads them
-  /// and does not make its own.
+  /// The backend fills one from a hit test, and the page adds [wordKey] and [ayahKey].
   const QvpHit({
     required this.word,
     required this.path,
@@ -672,7 +679,8 @@ final class QvpHitOptions {
 /// A band / mask box in layout viewport px (`QvpBox`).
 @immutable
 final class QvpBox {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_highlight_boxes_view`, `qvp_word_bands` or
+  /// `qvp_mask_boxes_view`.
   const QvpBox({
     required this.id,
     required this.line,
@@ -685,8 +693,9 @@ final class QvpBox {
   });
 
   /// [id] is the highlight handle of a highlight band, 0 for a word band or a mask box. [line]
-  /// is the line, or the row of a reflowed page, that the box sits on. [color] is 0xRRGGBBAA,
-  /// mid-transition included; 0 for a word band.
+  /// is the line index for a box on a printed page. On a reflowed page a highlight or word
+  /// band carries its row instead, but a mask box still carries the printed line index.
+  /// [color] is 0xRRGGBBAA, mid-transition included; 0 for a word band.
   final int id, line, color;
 
   /// The box (left, top, right, bottom) and its corner radius.
@@ -697,7 +706,7 @@ final class QvpBox {
 /// neighbours and to fill the line band.
 @immutable
 final class QvpHitArea {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_hit_areas`.
   const QvpHitArea({
     required this.word,
     required this.line,
@@ -721,7 +730,7 @@ final class QvpHitArea {
 /// The vertical band of one printed line ([QvpPage.lineBands]), in page units.
 @immutable
 final class QvpLineBand {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_line_bands`.
   const QvpLineBand({
     required this.line,
     required this.lineNumber,
@@ -873,7 +882,11 @@ final class QvpZoom {
 /// on the screen at `view.offsetY + view.scale·y`.
 @immutable
 final class QvpInkBand {
+  /// The backend fills one from `qvp_layout_ink_band`.
   const QvpInkBand({required this.top, required this.height});
+
+  /// The band's top and height in layout px. Pass `top` and `top + height` to
+  /// [QvpPage.layoutDrawList].
   final double top, height;
 
   @override
@@ -911,7 +924,7 @@ final class QvpView {
 /// laid out again under it.
 @immutable
 final class QvpZoomChange {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_zoom_pinch` or `qvp_zoom_to_step`.
   const QvpZoomChange({
     required this.zoom,
     required this.view,
@@ -953,7 +966,7 @@ final class QvpPlacement {
 /// One stroke of a layout: the path to draw, under the placement of that index.
 @immutable
 final class QvpDraw {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_layout_draw_list`.
   const QvpDraw(this.path, this.placement);
 
   /// The path index on the page, and the index into [QvpPage.layoutPlacements].
@@ -1119,7 +1132,7 @@ final class QvpLayoutSpec {
 /// Output of [QvpPage.layout]. Page → viewport: `viewX = offsetX + x*scale`, `viewY = offsetY + (y + lineDy[line])*scale`.
 @immutable
 final class QvpLayout {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_layout`.
   const QvpLayout({
     required this.scale,
     required this.offsetX,
@@ -1241,10 +1254,11 @@ final class QvpTheme {
   final int ms;
 }
 
-/// One surah with text on a page ([QvpPage.surahs]).
+/// One surah on a page ([QvpPage.surahs]): a surah with words here, or one whose name banner
+/// or basmalah is here.
 @immutable
 final class QvpSurah {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_surah_at`.
   const QvpSurah({
     required this.number,
     required this.ayahCount,
@@ -1257,22 +1271,27 @@ final class QvpSurah {
     required this.english,
   });
 
-  /// The surah's number, from 1, and how many ayahs it has in all. [bannerDecoration] is the
-  /// index in [QvpPage.decorations] of its name banner, or [qvpNone] when the banner is on
-  /// another page.
+  /// The surah's number, from 1. [ayahCount] is how many ayahs it has in all, but only when
+  /// its name banner or basmalah is on this page; a surah that continues from an earlier page
+  /// has 0. [bannerDecoration] is the index in [QvpPage.decorations] of its name banner, or
+  /// [qvpNone] when the banner is on another page.
   final int number, ayahCount, bannerDecoration;
 
-  /// Whether this page prints the surah's name banner, and a basmalah above it.
+  /// Whether this page prints the surah's name banner, and whether it prints the basmalah,
+  /// which sits below the name and above the surah's first ayah.
   final bool hasBanner, hasBasmalah;
 
-  /// 'makkah' | 'madinah' | ''
+  /// 'makkah' | 'madinah' | '', and the names in Arabic, Latin letters and English. Like
+  /// [ayahCount], they come from the name banner or the basmalah on this page: a surah that
+  /// continues from an earlier page has every one empty. [QvpAtlas.surah] has them for every
+  /// surah.
   final String place, arabic, latin, english;
 }
 
 /// A juz, hizb, nisf or `rubu_al_hizb` that starts on a page ([QvpPage.divisions]).
 @immutable
 final class QvpDivision {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_divisions`.
   const QvpDivision({
     required this.division,
     required this.line,
@@ -1294,7 +1313,7 @@ final class QvpDivision {
 /// ([QvpPage.surahHeadersView]).
 @immutable
 final class QvpSurahHeader {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_surah_headers`.
   const QvpSurahHeader({
     required this.decoration,
     required this.surah,
@@ -1323,7 +1342,7 @@ final class QvpSurahHeader {
 /// ([QvpPage.ayahMarksView]).
 @immutable
 final class QvpAyahMark {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_ayah_marks`.
   const QvpAyahMark({
     required this.decoration,
     required this.surah,
@@ -1348,7 +1367,7 @@ final class QvpAyahMark {
 /// A drawn hizb rosette on a page ([QvpPage.rosettes]).
 @immutable
 final class QvpRosette {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_rosettes`.
   const QvpRosette({
     required this.decoration,
     required this.surah,
@@ -1376,7 +1395,7 @@ final class QvpRosette {
 /// A sajdah sign on a page ([QvpPage.sajdahs]).
 @immutable
 final class QvpSajdah {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_sajdahs`.
   const QvpSajdah({
     required this.decoration,
     required this.surah,
@@ -1392,7 +1411,7 @@ final class QvpSajdah {
 /// One search hit on a page ([QvpPage.search]).
 @immutable
 final class QvpMatch {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_search`.
   const QvpMatch({
     required this.word,
     required this.index,
@@ -1415,7 +1434,7 @@ final class QvpMatch {
 /// The crop box of a target ([QvpPage.cropBounds]), in page units.
 @immutable
 final class QvpCropBounds {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_crop_bounds`.
   const QvpCropBounds({
     required this.x0,
     required this.y0,
@@ -1436,7 +1455,7 @@ final class QvpCropBounds {
 /// One surah of the atlas ([QvpAtlas.surah]).
 @immutable
 final class QvpAtlasSurah {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_atlas_surah`.
   const QvpAtlasSurah({
     required this.number,
     required this.page,
@@ -1458,7 +1477,7 @@ final class QvpAtlasSurah {
 /// Where a division starts, from the atlas ([QvpAtlas.division]).
 @immutable
 final class QvpAtlasRubuAlHizb {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_atlas_division`.
   const QvpAtlasRubuAlHizb({
     required this.rubuAlHizb,
     required this.surah,
@@ -1502,7 +1521,7 @@ enum QvpLineage {
 /// What an ornament may be redistributed under. Read it before you publish a page wearing it.
 @immutable
 final class QvpOrnamentLicence {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_ornament_info`.
   const QvpOrnamentLicence({
     required this.id,
     required this.status,
@@ -1527,7 +1546,7 @@ final class QvpOrnamentLicence {
 /// leaves open (its slot).
 @immutable
 final class QvpOrnamentPart {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_ornament_part`.
   const QvpOrnamentPart({
     required this.index,
     required this.color,
@@ -1552,7 +1571,7 @@ final class QvpOrnamentPart {
 /// One ornament of a [QvpOrnaments] set.
 @immutable
 final class QvpOrnament {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_ornament_info`.
   const QvpOrnament({
     required this.index,
     required this.kind,
@@ -1707,7 +1726,7 @@ final class QvpDressSpec {
 /// The readout of a dressed page.
 @immutable
 final class QvpDressInfo {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_dress_info`.
   const QvpDressInfo({
     required this.ayahMark,
     required this.surahHeader,
@@ -1751,7 +1770,7 @@ final class QvpDressInfo {
 /// [QvpPage.dressView]: the view for a host that scrolls the page, and the dressed box's size.
 @immutable
 final class QvpDressView {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_dress_view`.
   const QvpDressView({
     required this.view,
     required this.width,
@@ -1768,7 +1787,7 @@ final class QvpDressView {
 /// One entry of the ornament display list, in page units. Paint it behind the page ink.
 @immutable
 final class QvpDressDraw {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_dress_geometry`.
   const QvpDressDraw({
     required this.path,
     required this.color,
@@ -1786,7 +1805,7 @@ final class QvpDressDraw {
   /// 0xRRGGBBAA.
   final int color;
 
-  /// The kind of ornament it draws.
+  /// The kind of ornament the draw belongs to, so a host can paint or skip one kind.
   final QvpOrnamentKind kind;
 
   /// True when [path] fills with the even-odd rule. [path] has the rule set already.
@@ -1901,7 +1920,7 @@ final class QvpPassageSpec {
 /// One ayah of a passage, with its text from the page's own word records.
 @immutable
 final class QvpPassageText {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_passage_ayah_text`.
   const QvpPassageText({
     required this.surah,
     required this.ayah,
@@ -1922,7 +1941,7 @@ final class QvpPassageText {
 /// words sit on.
 @immutable
 final class QvpPassageRow {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_passage_rows`.
   const QvpPassageRow({
     required this.x0,
     required this.y0,
@@ -1938,7 +1957,7 @@ final class QvpPassageRow {
 /// One word of a laid-out passage with the signs that go with it, in layout px.
 @immutable
 final class QvpPassageWord {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_passage_words`.
   const QvpPassageWord({
     required this.surah,
     required this.ayah,
@@ -1970,7 +1989,7 @@ final class QvpPassageWord {
 /// The bounds of one ayah that a layout shows, in layout px.
 @immutable
 final class QvpPassageAyah {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_passage_ayahs`.
   const QvpPassageAyah({
     required this.surah,
     required this.ayah,
@@ -1991,7 +2010,7 @@ final class QvpPassageAyah {
 /// [QvpPassageLayout.placements] it goes under.
 @immutable
 final class QvpPassageDraw {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_passage_draw_list`.
   const QvpPassageDraw(this.page, this.path, this.placement);
 
   /// The page number, the path index on that page, and the index into
@@ -2002,7 +2021,7 @@ final class QvpPassageDraw {
 /// A laid-out passage.
 @immutable
 final class QvpPassageLayout {
-  /// The backend builds these. An app reads them and does not make its own.
+  /// The backend fills one from `qvp_passage_layout`.
   const QvpPassageLayout({
     required this.width,
     required this.height,

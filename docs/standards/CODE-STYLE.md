@@ -40,7 +40,7 @@ One standard for Rust, C, JavaScript, Kotlin, Dart and Swift.
 | C header | block comment at top | `/** … */` above each declaration | `check-parity.py` requires a block per symbol |
 | JavaScript / TypeScript | `//` line | JSDoc `/** … */` | review; eslint `jsdoc/require-jsdoc` is not set up (issue #141) |
 | Kotlin | `//` line | KDoc `/** … */` | review; detekt `UndocumentedPublicFunction` is not set up (issue #141) |
-| Dart | `//` line | `///` | `flutter analyze` in `.github/workflows/flutter.yml` runs the `public_member_api_docs` lint that the package's `analysis_options.yaml` turns on; `dart format --language-version=latest` in CI. Exempt: the generated `lib/src/bindings.dart` and the backends in `lib/src/backend/`, because they only marshal C calls that `qvp.h` documents |
+| Dart | `//` line | `///` | `flutter analyze` in `.github/workflows/flutter.yml` runs the `public_member_api_docs` lint that the package's `analysis_options.yaml` turns on; `dart format --language-version=latest` in CI. Exempt: the generated `lib/src/bindings.dart` and the three backend files `qvp_backend.dart`, `qvp_backend_native.dart` and `qvp_backend_web.dart` in `lib/src/backend/`, because they only marshal C calls that `qvp.h` documents |
 | Swift | `//` line | `///` | review; swiftlint `missing_docs` is not set up (issue #141) |
 | shell / Python | purpose, inputs, outputs at the top | n/a | review |
 

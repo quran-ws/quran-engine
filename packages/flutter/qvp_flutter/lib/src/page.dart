@@ -247,7 +247,9 @@ class QvpPage extends ChangeNotifier {
   List<int> targetWords(Object target) =>
       _backend.targetWords(handle, QvpTarget.of(target));
 
-  /// Surahs starting or continuing on this page.
+  /// The surahs on this page: those with words here, and those whose name banner or basmalah
+  /// is here. A surah that continues from an earlier page has no names and an `ayahCount` of
+  /// 0 (see [QvpSurah.ayahCount]).
   List<QvpSurah> surahs() => _backend.surahs(handle);
 
   /// Divisions (juz / hizb / nisf / rubuAlHizb) that start on this page.
@@ -528,7 +530,7 @@ class QvpPage extends ChangeNotifier {
 
   /// The [QvpLayoutSpec.lineSpacing] multiplier that makes the page fill the padded viewport of
   /// [spec] when it is fitted to width; 1 when it fills it already. [max] caps the multiplier,
-  /// and 0 or less leaves it uncapped.
+  /// and any [max] of 1 or less leaves it uncapped.
   double layoutLineSpacingToFill(QvpLayoutSpec spec, [double max = 0]) =>
       _backend.layoutLineSpacingToFill(handle, spec, max);
 
@@ -843,7 +845,9 @@ class QvpPage extends ChangeNotifier {
     return r;
   }
 
-  /// Hides again the last [n] words that were unhidden and returns how many it hid.
+  /// Hides [n] shown words again and returns how many it hid. It walks the mask from its last
+  /// word back (from its first word with `reverse` in [maskOptions]) and hides the first [n]
+  /// shown words it meets. Their place in the mask decides, not the order they were unhidden in.
   int maskBack([int n = 1]) {
     final r = _backend.maskBack(handle, n);
     _touch();
