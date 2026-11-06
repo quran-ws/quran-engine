@@ -76,6 +76,20 @@ All notable changes to the engine and its packages. The format follows
   `ws.quran:qvp-android` at the release version, then compiles the module against it with
   `-PqvpFromMaven`. Before, npm could hold a package version whose library Maven Central
   did not serve yet, or did not serve at all after a Maven failure (#172).
+- Flutter and React Native: the path-kind and decoration-kind constants name every code in
+  `qvp.h`. Flutter adds `QvpKind.ornament`, `pageNumber` and `runningHead` (5 to 7) and
+  `QvpDecorationKind.pageNumber`, `runningHead` and `other` (5, 6 and 255). React Native
+  adds `KIND.ORNAMENT`, `PAGE_NUMBER` and `RUNNING_HEAD` and `DECORATION.PAGE_NUMBER`,
+  `RUNNING_HEAD` and `OTHER`. Before, `QvpPage.pathKind` and a decoration's kind could
+  return a value that no constant named. Web, Android and iOS named every code already.
+  `scripts/check-parity.py` now fails when a wrapper leaves out a `QVP_KIND_*`,
+  `QVP_FAMILY_*`, `QVP_CATEGORY_*` or `QVP_DECORATION_*` code, or gives one another value.
+- Flutter: doc fixes in `types.dart`. `QvpSurahHeader`, `QvpAyahMark`, `QvpHitArea`, `QvpBox`
+  and `QvpLayout` name every call that fills them, the `_view` twins and
+  `qvp_layout_current` included. `QvpBox.line` and `QvpHitArea.line` say which calls carry a
+  row on a reflowed page. `QvpLayout.fitScale` shrinks to fit both width and height, not to
+  height alone. The default `QvpZoom` is at zoom 1, not all zero. `QvpDefaults` names its
+  ratios apart from its page-unit lengths.
 
 ## [0.8.0] - 2026-11-04
 

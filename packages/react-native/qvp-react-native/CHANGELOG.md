@@ -43,6 +43,9 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   module compiled the Kotlin library from `../../../android/qvp`, a path that exists only
   in this repository (#42). CI resolves the library from Maven Central through the
   example's build with `-PqvpFromMaven`.
+- `KIND` and `DECORATION` name every code in `qvp.h`: `KIND.ORNAMENT`, `PAGE_NUMBER` and
+  `RUNNING_HEAD` (5 to 7), and `DECORATION.PAGE_NUMBER`, `RUNNING_HEAD` and `OTHER` (5, 6
+  and 255). Before, a path or decoration kind could be a value that no constant named.
 
 ## [0.8.0] - 2026-11-04
 

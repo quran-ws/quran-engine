@@ -10,17 +10,19 @@ const int qvpNone = 0xffffffff;
 
 /// `QVP_KIND_*`
 abstract final class QvpKind {
-  /// The kinds this class names. [body] is a letter's body and [mark] a mark on a word.
-  /// [ayahNumber] is the numeral in an ayah mark, and [ayahMarkOrnament] the ring around it.
-  /// [headerInk] is the ink of a surah header. [other] is a path the source did not classify.
-  /// The header has more (`QVP_KIND_ORNAMENT`, `QVP_KIND_PAGE_NUMBER` and
-  /// `QVP_KIND_RUNNING_HEAD`, 5 to 7), so [QvpPage.pathKind] can return a value this class
-  /// does not name.
+  /// The path kinds. [body] is a letter's body and [mark] a mark on a word. [ayahNumber]
+  /// is the numeral in an ayah mark, and [ayahMarkOrnament] the ring around it.
+  /// [headerInk] is the ink of a surah header, and [ornament] a printed ornament, such as
+  /// the frame around a surah name. [pageNumber] is the printed page number, and [runningHead] the surah name and
+  /// juz printed above the page. [other] is a path the source did not classify.
   static const int body = 0,
       mark = 1,
       ayahNumber = 2,
       ayahMarkOrnament = 3,
       headerInk = 4,
+      ornament = 5,
+      pageNumber = 6,
+      runningHead = 7,
       other = 255;
 }
 
@@ -56,13 +58,17 @@ abstract final class QvpCategory {
 
 /// `QVP_DECORATION_*`
 abstract final class QvpDecorationKind {
-  /// The decoration kinds: an ayah mark, a surah name, the basmalah, a division mark and a
-  /// sajdah mark.
+  /// The decoration kinds: an ayah mark, a surah name, the basmalah, a division mark, a
+  /// sajdah mark, the printed page number and the running head. [other] is a decoration
+  /// the source did not classify.
   static const int ayahMark = 0,
       surahName = 1,
       basmalah = 2,
       divisionMark = 3,
-      sajdahMark = 4;
+      sajdahMark = 4,
+      pageNumber = 5,
+      runningHead = 6,
+      other = 255;
 }
 
 /// `QVP_FORM_*` — text forms. Strings 'rasmUthmani' | 'rasmImlai' | 'qpc' | 'rasm' | 'search' are accepted everywhere a form is.
@@ -113,9 +119,10 @@ abstract final class QvpDefaults {
       maskBlock = 0xd9d4c8ff,
       revealGrey = 0xc9c4b8ff;
 
-  /// The lengths are page units. [gapBias] is the share of a gap the hit test gives the word
-  /// before it. [aspectSlack] bounds how wide a view's content gets. [ayahMarkScaleScan] is a
-  /// scanned medallion's size in a dress.
+  /// The pads, the seam, [tapDistance], [maskPad], [maskRadius] and [cropPad] are page
+  /// units. The others are ratios. [gapBias] is the share of a gap the hit test gives the
+  /// word before it. [aspectSlack] bounds how wide a view's content gets.
+  /// [ayahMarkScaleScan] is a scanned medallion's size in a dress, against the printed ring.
   static const double highlightPadX = 1.2,
       highlightPadY = 0,
       highlightSeam = 0.25,
@@ -679,8 +686,8 @@ final class QvpHitOptions {
 /// A band / mask box in layout viewport px (`QvpBox`).
 @immutable
 final class QvpBox {
-  /// The backend fills one from `qvp_highlight_boxes_view`, `qvp_word_bands` or
-  /// `qvp_mask_boxes_view`.
+  /// The backend fills one from `qvp_highlight_boxes_view`, `qvp_word_bands`,
+  /// `qvp_word_bands_view` or `qvp_mask_boxes_view`.
   const QvpBox({
     required this.id,
     required this.line,
@@ -693,8 +700,10 @@ final class QvpBox {
   });
 
   /// [id] is the highlight handle of a highlight band, 0 for a word band or a mask box. [line]
-  /// is the line index for a box on a printed page. On a reflowed page a highlight or word
-  /// band carries its row instead, but a mask box still carries the printed line index.
+  /// is the line index for a box on a printed page. On a reflowed page a highlight band and a
+  /// band from [QvpPage.wordBandsView] carry their row instead. A band from
+  /// [QvpPage.wordBands] is in page units and carries the printed line index, and so does a
+  /// mask box.
   /// [color] is 0xRRGGBBAA, mid-transition included; 0 for a word band.
   final int id, line, color;
 
@@ -706,7 +715,7 @@ final class QvpBox {
 /// neighbours and to fill the line band.
 @immutable
 final class QvpHitArea {
-  /// The backend fills one from `qvp_hit_areas`.
+  /// The backend fills one from `qvp_hit_areas` or `qvp_hit_areas_view`.
   const QvpHitArea({
     required this.word,
     required this.line,
@@ -720,7 +729,8 @@ final class QvpHitArea {
     required this.inkY1,
   });
 
-  /// The word index, and the line index (a row index on a reflowed page).
+  /// The word index, and the printed line index. On a reflowed page an area from
+  /// [QvpPage.hitAreasView] carries its row index instead.
   final int word, line;
 
   /// The gap-aware box (left, top, right, bottom), and the word's ink box inside it.
@@ -847,8 +857,8 @@ enum QvpZoomMode {
   magnify,
 }
 
-/// Where the reader's zoom control stands. A host keeps this beside its [QvpView]; all zero is
-/// the default control, stepped and on the printed page.
+/// Where the reader's zoom control stands. A host keeps this beside its [QvpView]. The
+/// default, `QvpZoom()`, is stepped and on the printed page, at zoom 1.
 @immutable
 final class QvpZoom {
   /// The default control: stepped, on the printed page.
@@ -1132,7 +1142,7 @@ final class QvpLayoutSpec {
 /// Output of [QvpPage.layout]. Page → viewport: `viewX = offsetX + x*scale`, `viewY = offsetY + (y + lineDy[line])*scale`.
 @immutable
 final class QvpLayout {
-  /// The backend fills one from `qvp_layout`.
+  /// The backend fills one from `qvp_layout` or `qvp_layout_current`.
   const QvpLayout({
     required this.scale,
     required this.offsetX,
@@ -1161,8 +1171,8 @@ final class QvpLayout {
   /// How many rows a reflowed page made; 0 when it was not reflowed.
   final int rows;
 
-  /// The view transform that shows the whole content in the viewport (shrink to height, never
-  /// enlarge, centred). The host's pan and zoom go on top.
+  /// The view transform that shows the whole content in the viewport (shrink to fit both
+  /// width and height, never enlarge, centred). The host's pan and zoom go on top.
   final double fitScale, fitX, fitY;
 
   /// Per-line vertical shift in page units (index = line record index).
@@ -1313,7 +1323,7 @@ final class QvpDivision {
 /// ([QvpPage.surahHeadersView]).
 @immutable
 final class QvpSurahHeader {
-  /// The backend fills one from `qvp_surah_headers`.
+  /// The backend fills one from `qvp_surah_headers` or `qvp_surah_headers_view`.
   const QvpSurahHeader({
     required this.decoration,
     required this.surah,
@@ -1342,7 +1352,7 @@ final class QvpSurahHeader {
 /// ([QvpPage.ayahMarksView]).
 @immutable
 final class QvpAyahMark {
-  /// The backend fills one from `qvp_ayah_marks`.
+  /// The backend fills one from `qvp_ayah_marks` or `qvp_ayah_marks_view`.
   const QvpAyahMark({
     required this.decoration,
     required this.surah,
