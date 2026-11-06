@@ -52,7 +52,7 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   and 255). Before, a path or decoration kind could be a value that no constant named.
 - The docs of the layout's fit (`fit_scale`, `fit_x`, `fit_y`) say what a reflowed page
   does. On a reflowed page `fit_scale` is 1 and the host scrolls the content. `fit_x`
-  centres it across the viewport, and `fit_y` puts its top at the top of the viewport.
+  centres it across the viewport, and `fit_y` puts the top of the box at the top of the viewport.
   Before, `qvp.h`, the Rust docs, `docs/API.md` and the Kotlin, Swift, Dart and React Native docs
   said that the fit shrinks every page into the viewport and centres it. `qvp.h`, the Rust docs,
   `docs/API.md`, Kotlin and Swift also said that a printed page shrinks to the viewport

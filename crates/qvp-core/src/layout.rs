@@ -132,9 +132,8 @@ pub struct Layout {
     /// A dress is included. On a dressed page the box that is fitted is the content plus
     /// the dress overflow on each side ([`Page::dress_overflow`]), so the border is in view
     /// too. `fit_x` and `fit_y` still place the content's own origin: the overflow sits
-    /// to the left of `fit_x` and above `fit_y`. A reflowed page keeps `fit_scale` at 1 and
-    /// puts the top of the border at the top of the viewport. Its rows are made narrower so
-    /// that the border fits across the viewport. A dress, a new dress and an
+    /// to the left of `fit_x` and above `fit_y`. On a reflowed page the rows are made
+    /// narrower so that the border fits across the viewport. A dress, a new dress and an
     /// undress refit the current layout.
     pub fit_scale: f32,
     pub fit_x: f32,

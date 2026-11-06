@@ -153,7 +153,7 @@ public final class QvpCanvasController {
     /// to the laid-out page (`hostPageSize`): a reflowed page, or a printed one too
     /// tall for the box. The canvas then attaches no drag of its own — the scroll view takes
     /// every vertical drag, with the momentum, bounce and indicator a reader expects — never
-    /// shrinks the page to the box's height (`fitScale` is the host's to ignore) nor centres it as if
+    /// shrinks the page to fit the box (`fitScale` is the host's to ignore) nor centres it as if
     /// it had (`fitX` goes with `fitScale`), keeps it at its top,
     /// shrinks a dressed printed page only as far as its border needs to fit across the width,
     /// and caches the ink for its whole bounds, which ARE the page, rather than a band around a
