@@ -50,8 +50,18 @@ only documents skips `engine`, `gates`, `web` and `web example`, and a skipped j
 | `standards (parity, versions, terminology, structure)` | every PR | parity (`--check`), versions, structure, terminology (zero findings), shellcheck over every shell script, and the eslint doc-block check. The job has no Flutter, so `parity` skips the Flutter bindings check, and no swiftlint, so `docblocks` skips it | `parity versions structure terminology shell docblocks` |
 | `web (wasm, smoke, lite)` | PRs that change code | wasm build, then without data: `smoke.mjs`, `lite.test.mjs`, `lite-passage.test.mjs`, and a parse of the web example | `web` |
 | `web example (UI smoke test)` | PRs that change code | Playwright and Chromium, then the web example's UI smoke test with `QVP_REQUIRE_DATA=1`. Not a required check | `example` |
-| `android`, `ios`, `flutter`, `react-native` | PRs that touch that package or its workflow. `android`, `ios` and `flutter` also run for `crates/` and the Cargo manifests; `android`, `flutter` and `react-native` also run for the shared Android toolchain action; `react-native` also runs for the Kotlin library | build and the package's tests. `flutter` also runs the example's smoke test and checks that the generated `bindings.dart` matches the header (`scripts/check-flutter-bindings.sh`). `android` runs detekt, and `ios` runs swiftlint in a Linux job of its own, the doc-block checks of `CODE-STYLE.md` | none; each workflow lists its commands |
+| `android`, `ios`, `flutter`, `react-native` | PRs that touch that package or its workflow. `android`, `ios` and `flutter` also run for `crates/` and the Cargo manifests; `android`, `flutter` and `react-native` also run for the shared Android toolchain action; `react-native` also runs for the Kotlin library; `flutter` also runs for `scripts/build-engine-ios.sh` and `scripts/build-engine-windows.ps1` | build and the package's tests. `flutter` also runs the example's smoke test and checks that the generated `bindings.dart` matches the header (`scripts/check-flutter-bindings.sh`). Its four jobs are below the table. `android` runs detekt, and `ios` runs swiftlint in a Linux job of its own, the doc-block checks of `CODE-STYLE.md` | none; each workflow lists its commands |
 | `nightly` | schedule | identity gate over all 604 pages, and the benchmark on page 042 uploaded as an artifact for comparison with `docs/MEASURED.md` | none |
+
+The `flutter` workflow has four jobs:
+
+- `test` (Linux) runs the `dart:ffi` suite and the example's smoke test. Then it runs the
+  shared public-API cases on the web backend in Chrome.
+- `example` (Linux) builds the example for Android and web.
+- `darwin` (macOS) runs the `dart:ffi` suite on the dylib. Then it builds the example for
+  macOS and the iOS simulator, once with Swift Package Manager and once with CocoaPods.
+  `scripts/check-darwin-engine-symbols.sh` checks that each app exports the engine.
+- `windows` builds the example for Windows and checks that the app bundles `qvp_ffi.dll`.
 
 Locally, `scripts/check.sh` with no argument runs every command above once. `web` then
 leaves `smoke.mjs` and `lite-passage.test.mjs` to `gates`, which runs them with data.

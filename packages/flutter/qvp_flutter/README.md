@@ -177,8 +177,20 @@ the committed file. The Flutter workflow runs it.
 ```sh
 cargo build -p qvp-ffi --release
 bash scripts/sync-flutter-web-engine.sh               # the declared web assets must exist
-cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target/release/libqvp_ffi.so + dist/pages/042.qvp, 604.qvp, atlas.qva
+cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target/release/libqvp_ffi.so (.dylib on macOS) + dist/pages/042.qvp, 604.qvp, atlas.qva
+flutter test --platform chrome test/qvp_web_test.dart  # the web backend: assets/js/qvp.js, assets/wasm/qvp_ffi.wasm + the same data
 ```
+
+`test/shared/api_cases.dart` holds the cases that drive the public API alone. Both
+backends run them: `qvp_flutter_test.dart` on `dart:ffi` and `qvp_web_test.dart` on the
+web engine, so the two must give the same answers. A case that needs `dart:io`, a library
+path or the native backend stays in `qvp_flutter_test.dart`. Name the web file in a Chrome
+run: the `dart:ffi` suite does not compile for the web. Chrome must be installed. Set
+`CHROME_EXECUTABLE` when Flutter does not find it.
+
+CI runs the `dart:ffi` suite on Linux and macOS and the web cases in Chrome. It builds the
+example for Android, web, macOS, the iOS simulator and Windows. The macOS and simulator
+builds run once with Swift Package Manager and once with CocoaPods.
 
 ## Example — Mushaf Vector Reader
 

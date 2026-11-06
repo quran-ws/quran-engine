@@ -29,6 +29,12 @@ All notable changes to the engine and its packages. The format follows
 - Flutter: Swift Package Manager support on iOS and macOS (#153). `Package.swift` in
   `ios/qvp_flutter` and `macos/qvp_flutter` links `QvpEngine.xcframework` as a binary
   target. The podspecs stay, and both builds read the same sources and framework.
+- The Flutter workflow tests and builds on more platforms (#129). The `test` job also runs
+  the shared public-API cases on the web backend in Chrome. A `darwin` job on macOS runs the
+  `dart:ffi` suite on `libqvp_ffi.dylib` and builds the example for macOS and the iOS
+  simulator, once with Swift Package Manager and once with CocoaPods.
+  `scripts/check-darwin-engine-symbols.sh` then checks that each app exports the engine. A
+  `windows` job builds the example for Windows and checks that `qvp_ffi.dll` is bundled.
 
 ### Changed
 - `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and

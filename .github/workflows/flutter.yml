@@ -1,5 +1,6 @@
-# The Flutter package: analyze, run the dart:ffi tests against a host build of the
-# engine and the page data release, and build the example for Android and web.
+# The Flutter package: analyze, run the tests on the dart:ffi backend (Linux and macOS) and
+# on the web backend (Chrome), and build the example for Android, web, macOS, the iOS
+# simulator and Windows.
 name: Flutter
 
 on:
@@ -15,6 +16,9 @@ on:
       - "scripts/sync-flutter-web-engine.sh"
       - "scripts/check-flutter-bindings.sh"
       - "scripts/build-engine-android.sh"
+      - "scripts/build-engine-ios.sh"
+      - "scripts/build-engine-windows.ps1"
+      - "scripts/check-darwin-engine-symbols.sh"
       - "scripts/sync-example-data.sh"
       - "scripts/sync-test-data.sh"
   push:
@@ -101,6 +105,13 @@ jobs:
         env:
           QVP_LIB: ${{ github.workspace }}/target/release/libqvp_ffi.so
         run: flutter test
+      # The shared cases (test/shared/api_cases.dart) again, on the web backend: qvp.js and
+      # the wasm the "Build the web engine assets" step wrote. The runner image has Chrome.
+      # The step names the file, because a Chrome run compiles every file it loads, and the
+      # dart:ffi suite does not compile for the web.
+      - name: Test the web backend in Chrome
+        working-directory: packages/flutter/qvp_flutter
+        run: flutter test --platform chrome test/qvp_web_test.dart
 
   # The example is the only app that reads the plugin's manifests, icon catalogs and asset
   # declarations, and only a build reads them. The analyzer passed while the launcher icons
@@ -184,3 +195,111 @@ jobs:
       - name: Build the example for web
         working-directory: packages/flutter/qvp_flutter/example
         run: flutter build web
+
+  # The two Apple platforms. Nothing else builds the podspecs, the Swift packages or the
+  # dylib branch of the test harness. The job runs the dart:ffi suite on the macOS host
+  # library, then builds the example for macOS and for the iOS simulator twice: once with
+  # Swift Package Manager and once with CocoaPods. The plugin ships both, and each one
+  # links QvpEngine.xcframework its own way. After each build a check finds the engine's
+  # symbols in the app, because a build can pass while the linker drops them.
+  darwin:
+    name: macOS tests, macOS and iOS example builds
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      # The same targets as ios.yml: scripts/build-engine-ios.sh builds all four.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim, x86_64-apple-ios, aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+      - name: Cache page data
+        uses: actions/cache@v4
+        with:
+          path: dist/pages
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      - name: Fetch page data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
+          QVP_SYNC: pages
+        run: scripts/sync-test-data.sh
+      - name: Build the host engine library
+        run: cargo build -p qvp-ffi --release
+      # The native suite does not read the web engine assets, so this job does not build
+      # them. The example builds bundle the asset directories, which git keeps with a README.
+      - name: Get packages
+        working-directory: packages/flutter/qvp_flutter
+        run: flutter pub get
+      - name: Test
+        working-directory: packages/flutter/qvp_flutter
+        env:
+          QVP_LIB: ${{ github.workspace }}/target/release/libqvp_ffi.dylib
+        run: flutter test
+      # Copies the framework into ios/qvp_flutter and macos/qvp_flutter, where the podspecs
+      # and the Swift packages read it.
+      - name: Build QvpEngine.xcframework
+        run: scripts/build-engine-ios.sh
+      - name: Example assets (the example's pubspec declares the pages directory)
+        run: scripts/sync-example-data.sh flutter
+      # macOS builds in release, where the linker strips most. The simulator build is debug,
+      # the only mode Flutter builds for the simulator.
+      - name: Build the example with Swift Package Manager
+        working-directory: packages/flutter/qvp_flutter/example
+        run: |
+          flutter config --enable-swift-package-manager
+          flutter pub get
+          flutter build macos
+          ../../../../scripts/check-darwin-engine-symbols.sh build/macos/Build/Products/Release/qvp_flutter_example.app
+          flutter build ios --simulator --no-codesign
+          ../../../../scripts/check-darwin-engine-symbols.sh build/ios/iphonesimulator/Runner.app
+      # flutter clean removes the Swift package build, so these builds link through the pods.
+      - name: Build the example with CocoaPods
+        working-directory: packages/flutter/qvp_flutter/example
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter clean
+          flutter pub get
+          flutter build macos
+          ../../../../scripts/check-darwin-engine-symbols.sh build/macos/Build/Products/Release/qvp_flutter_example.app
+          flutter build ios --simulator --no-codesign
+          ../../../../scripts/check-darwin-engine-symbols.sh build/ios/iphonesimulator/Runner.app
+
+  # windows/CMakeLists.txt finds qvp_ffi.dll and hands it to the app bundle. Only a Windows
+  # build runs it. The job stages the DLL the way the package README says to, builds the
+  # example and checks that the DLL sits next to the executable.
+  windows:
+    name: Windows example build
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+      # The dist profile, into packages/flutter/qvp_flutter/windows/qvp_ffi.dll, the first
+      # place CMake looks.
+      - name: Build the engine library
+        run: ./scripts/build-engine-windows.ps1
+      # No page data: the example's pages directory and the plugin's asset directories are
+      # in git with a README each, and the build only bundles them.
+      - name: Build the example
+        working-directory: packages/flutter/qvp_flutter/example
+        run: |
+          flutter pub get
+          flutter build windows
+      - name: The DLL is bundled
+        working-directory: packages/flutter/qvp_flutter/example
+        shell: bash
+        run: |
+          dll=build/windows/x64/runner/Release/qvp_ffi.dll
+          test -s "$dll" || { echo "::error::$dll is missing; the plugin did not bundle the engine"; exit 1; }
+          ls -l "$dll"
