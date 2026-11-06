@@ -837,7 +837,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * page when it fits, otherwise two screens around the reader. The top moves in steps, so a
      * pan inside one step redraws nothing; pass `top` and `top + height` to `layoutDrawList`.
      * `maxHeight` is the tallest band the host can draw and `maxPixels` the pixels it keeps for
-     * one, both in viewport px; 0 takes `MAX_INK_HEIGHT` and no pixel limit. */
+     * one, both in viewport px; 0 takes `MAX_INK_HEIGHT` and no pixel limit. The pixel limit
+     * never takes the band below one screen. */
     layoutInkBand(view, viewportW, viewportH, { maxHeight = 0, maxPixels = 0 } = {}) {
       const i = this.e._putView(view, this.e.scratch2 + 32768);
       this.e.ex.qvp_layout_ink_band(this.h, i, viewportW, viewportH, maxHeight, maxPixels, this.e.scratch);

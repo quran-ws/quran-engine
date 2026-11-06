@@ -41,7 +41,7 @@ class QvpInkBandConformanceTest {
                 close(got.top, want.getDouble("top"), "ink band ${c.getString("name")} top")
                 close(got.height, want.getDouble("height"), "ink band ${c.getString("name")} height")
             }
-            assertEquals(10, cases.length())
+            assertEquals(14, cases.length())
         }
     }
 }

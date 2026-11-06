@@ -770,7 +770,7 @@ void main() {
           'ink band ${c['name']} height',
         );
       }
-      expect(cases.length, 10);
+      expect(cases.length, 14);
       p.dispose();
     },
   );

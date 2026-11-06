@@ -252,8 +252,11 @@ uint32_t qvp_layout_draw_list(const QvpPage*, float band_top, float band_bottom 
    moves in steps, so a pan inside one step redraws nothing and a pan across one moves the band by one step. Pass top and
    top + height to qvp_layout_draw_list.
    The band is in layout px and sits on the screen at view.offset_y + view.scale·y. The limits are viewport px, since a texture is
-   measured on the screen: max_height is the tallest band the host can draw (<= 0: QVP_DEFAULT_MAX_INK_HEIGHT), max_pixels the
-   pixels it keeps for one, width × height (<= 0: no limit). No scale or no viewport height: the whole page. */
+   measured on the screen. max_height is the tallest band the host can draw (<= 0: QVP_DEFAULT_MAX_INK_HEIGHT), and no band passes
+   it. max_pixels is the pixels the host keeps for one band, width × height (<= 0: no limit); it shrinks the band from two
+   screens to no less than one screen, since a shorter band leaves part of the screen with no ink. The page is whole when it fits
+   both limits read this way. The one exception: no scale, no viewport height, or a scale, viewport height or view.offset_y
+   that is NaN or infinite gives the whole page however tall it is. */
 typedef struct { float top, height; } QvpInkBand;
 void     qvp_layout_ink_band(const QvpPage*, const QvpView*, float viewport_w, float viewport_h, float max_height, float max_pixels, QvpInkBand* out);
 uint32_t qvp_layout_placements(const QvpPage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);   /* what a draw list's `placement` indexes: the groups, then the repeats */

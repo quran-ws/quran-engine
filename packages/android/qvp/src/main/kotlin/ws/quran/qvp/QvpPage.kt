@@ -332,7 +332,8 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
      * fits, otherwise two screens around the reader. The top moves in steps, so a pan inside one step
      * redraws nothing; pass `top` and `top + height` to [layoutDrawList]. [maxHeight] is the tallest
      * band the host can draw and [maxPixels] the pixels it keeps for one, both in viewport px; 0 takes
-     * [QvpDefaults.MAX_INK_HEIGHT] and no pixel limit. */
+     * [QvpDefaults.MAX_INK_HEIGHT] and no pixel limit. The pixel limit never takes the band below
+     * one screen. */
     fun layoutInkBand(view: QvpView, viewportW: Float, viewportH: Float, maxHeight: Float = 0f, maxPixels: Float = 0f): QvpInkBand =
         QvpNative.layoutInkBand(h, view.floats(), viewportW, viewportH, maxHeight, maxPixels).let { QvpInkBand(it[0], it[1]) }
     /** The reflow zoom one step of this page's control means; step 0 is the printed page. */

@@ -9,9 +9,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   page when it fits, otherwise two screens around the reader. The band's top moves in steps,
   so a pan inside one step redraws nothing. The band is in layout px, ready for
   `qvp_layout_draw_list`. Its two limits are in viewport px: `max_height` (0 takes the new
-  `QVP_DEFAULT_MAX_INK_HEIGHT`, 4096) and `max_pixels`, a pixel budget (0 is no limit). Bound
-  as `layoutInkBand` in JavaScript, Kotlin, Dart and Swift. React Native calls it through the
-  Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
+  `QVP_DEFAULT_MAX_INK_HEIGHT`, 4096), which no band passes, and `max_pixels`, a pixel budget
+  (0 is no limit), which shrinks the band from two screens to no less than one. With no
+  screen (no scale, no viewport height, or a non-finite scale, height or offset) the band is
+  the whole page, however tall. Bound as `layoutInkBand` in JavaScript, Kotlin, Dart and
+  Swift. React Native calls it through the Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
   Kotlin, Dart and Swift tests replay them (#134).
 
 ### Changed
@@ -20,12 +22,13 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   not agree (#134):
   - Android drew a printed page as a band. It now draws any page whole when the page fits the
     ceiling and the ink budget, as it already did for a reflowed page. Its band no longer
-    passes the ceiling on a screen taller than 4096 px, and the ink budget now limits the band
-    as well as the whole page.
+    passes the ceiling on a screen taller than 4096 px. The ink budget now limits the band as
+    well as the whole page, down to one screen and never below.
   - Flutter measured the 4096 ceiling in layout px. It now measures it in viewport px, so a
     magnified page bands once it is taller than 4096 px on the screen. At a view scale of 1
     nothing changes.
-  - The web band now stays under the tallest canvas a browser makes, and under the ink budget.
+  - The web band now stays under the tallest canvas a browser makes, and under the ink budget
+    down to one screen.
 
 ### Removed
 

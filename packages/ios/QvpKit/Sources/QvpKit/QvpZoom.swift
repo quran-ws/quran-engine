@@ -159,7 +159,8 @@ extension QvpPage {
     /// when it fits, otherwise two screens around the reader. The top moves in steps, so a pan
     /// inside one step redraws nothing; pass `top` and `top + height` to `layoutDrawList`.
     /// `maxHeight` is the tallest band the host can draw and `maxPixels` the pixels it keeps for
-    /// one, both in viewport px; 0 takes `QvpDefaults.MAX_INK_HEIGHT` and no pixel limit.
+    /// one, both in viewport px; 0 takes `QvpDefaults.MAX_INK_HEIGHT` and no pixel limit. The
+    /// pixel limit never takes the band below one screen.
     public func layoutInkBand(_ view: QvpView, viewportW: Float, viewportH: Float, maxHeight: Float = 0, maxPixels: Float = 0) -> QvpInkBand {
         var v = view.c, out = QvpFFI.QvpInkBand()
         qvp_layout_ink_band(p, &v, viewportW, viewportH, maxHeight, maxPixels, &out)

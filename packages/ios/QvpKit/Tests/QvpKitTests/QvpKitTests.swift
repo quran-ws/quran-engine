@@ -1129,7 +1129,7 @@ final class QvpKitTests: XCTestCase {
             near(got.top, want["top"], "ink band \(c["name"]!) top")
             near(got.height, want["height"], "ink band \(c["name"]!) height")
         }
-        XCTAssertEqual(cases.count, 10)
+        XCTAssertEqual(cases.count, 14)
     }
 
     // ── passage ──

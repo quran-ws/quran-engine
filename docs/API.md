@@ -448,19 +448,29 @@ const drawList = page.layoutDrawList(band.top, band.top + band.height)
 ```
 
 The band is the whole page when the page fits. Otherwise it is two screens tall around the
-reader, and its top moves in steps: half a screen while the ceiling leaves room for two. A pan inside one step returns the same band,
-so the image in hand stays valid. A pan across a step moves the band by exactly one step. Put
-`band.top` in the image's cache key.
+reader, and its top moves in steps: half a screen while the limits leave room for two. A pan
+inside one step returns the same band, so the image in hand stays valid. A pan across a step
+moves the band by exactly one step. Put `band.top` in the image's cache key.
 
 The two limits are in viewport px, because a texture is measured on the screen, not in the
-layout. `maxHeight` is the tallest band the host can draw; 0 takes
-`QVP_DEFAULT_MAX_INK_HEIGHT` (4096), a height that every GPU these wrappers run on can draw.
-`maxPixels` is how many pixels the host keeps for one band, its width times its height; 0
-means no limit. A host with a byte budget passes the budget divided by its bytes per pixel.
-The page is whole only when it is inside both limits, and a band never passes either. A view
-with no scale, or a viewport with no height, gets the whole page. A host that draws in device
-pixels passes the view, the viewport and the limits in device pixels, as `CanvasRenderer`
-does; the band comes back in layout px either way.
+layout:
+
+- `maxHeight` is the tallest band the host can draw. 0 takes `QVP_DEFAULT_MAX_INK_HEIGHT`
+  (4096), a height that every GPU these wrappers run on can draw. No band is taller than
+  `maxHeight`. A screen taller than it gets a band of exactly `maxHeight`.
+- `maxPixels` is how many pixels the host keeps for one band, its width times its height. 0
+  means no limit. A host with a byte budget passes the budget divided by its bytes per pixel.
+  The budget can shrink the band from two screens down to one screen, but not below: a band
+  shorter than the screen leaves part of the screen with no ink. So a band can hold more
+  pixels than `maxPixels` when one screen does.
+
+The page is whole when it fits under both limits, read this way. One case ignores both limits:
+a view with no scale, a viewport with no height, or a scale, viewport height or `offsetY` that
+is NaN or infinite has no screen to put a band around, so the band is the whole page however
+tall it is.
+
+A host that draws in device pixels passes the view, the viewport and the limits in device
+pixels, as `CanvasRenderer` does. The band comes back in layout px either way.
 
 `reflowMaxZoom(spec)` is the largest zoom at which every word still fits a row (2.44 on page
 121, whose longest word is 121 of 345 page units). Clamp a pinch to it; past it the engine

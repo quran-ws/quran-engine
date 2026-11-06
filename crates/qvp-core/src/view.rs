@@ -86,12 +86,16 @@ impl View {
     ///
     /// Two limits bound the band, both in viewport pixels, because a texture is measured on
     /// the screen and not in the layout. `max_height` is the tallest band the host can draw:
-    /// 0 or less takes [`defaults::MAX_INK_HEIGHT`]. `max_pixels` is how many pixels the host
-    /// keeps for the band, its width times its height: 0 or less means no such limit. The
-    /// page is drawn whole only when it is inside both, and a band never passes either.
+    /// 0 or less takes [`defaults::MAX_INK_HEIGHT`]. It is a hard limit, and a screen taller
+    /// than it gets a band of exactly `max_height`. `max_pixels` is how many pixels the host
+    /// keeps for the band, its width times its height: 0 or less means no such limit. It is a
+    /// soft limit: it can shrink the band from two screens down to one screen, never below,
+    /// because a band shorter than the screen leaves part of the screen with no ink. The page
+    /// is drawn whole when it fits under both limits, read the same way.
     ///
-    /// A view with no scale, or a viewport with no height, has no screen to put a band
-    /// around, so the band is the whole page.
+    /// One case passes both limits: a view with no scale, a viewport with no height, or a
+    /// non-finite scale, height or vertical offset has no screen to put a band around, so
+    /// the band is the whole page, however tall it is.
     pub fn ink_band(
         self,
         content_h: f32,
@@ -103,21 +107,22 @@ impl View {
         let content_h = if content_h.is_finite() { content_h.max(0.0) } else { 0.0 };
         let whole = InkBand { top: 0.0, height: content_h };
         let scale = self.scale;
-        if !(scale > 0.0 && scale.is_finite() && viewport_h > 0.0 && viewport_h.is_finite()) {
+        let screen_known = scale > 0.0 && scale.is_finite() && viewport_h > 0.0 && viewport_h.is_finite();
+        if !(screen_known && self.offset_y.is_finite()) {
             return whole;
         }
-        let mut ceiling = if max_height > 0.0 { max_height } else { defaults::MAX_INK_HEIGHT };
-        if max_pixels > 0.0 && viewport_w > 0.0 {
-            ceiling = ceiling.min(max_pixels / viewport_w);
-        }
-        // a band is at least one pixel tall, whatever the limits say
-        let ceiling = ceiling.max(1.0);
+        // the hard limit, at least one pixel
+        let hard = if max_height > 0.0 { max_height } else { defaults::MAX_INK_HEIGHT }.max(1.0);
+        // In viewport pixels: the screen, held under the hard limit.
+        let screen = viewport_h.clamp(1.0, hard);
+        // the pixel budget, which never takes the band below one screen
+        let budget = if max_pixels > 0.0 && viewport_w > 0.0 { max_pixels / viewport_w } else { f32::INFINITY };
+        let ceiling = hard.min(budget.max(screen));
         if content_h * scale <= ceiling {
             return whole;
         }
-        // In viewport pixels: the screen, a band two screens tall, and a step of half the
+        // A band two screens tall, or as tall as the ceiling allows, and a step of half the
         // slack. The screen at the top of the band is `-offset_y` down the page.
-        let screen = viewport_h.clamp(1.0, ceiling);
         let tall = (screen * 2.0).min(ceiling);
         let step = ((tall - screen) / 2.0).max(1.0);
         let top = ((-self.offset_y - step) / step).floor() * step;

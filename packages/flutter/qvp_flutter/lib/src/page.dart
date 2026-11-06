@@ -491,7 +491,8 @@ class QvpPage extends ChangeNotifier {
   /// when it fits, otherwise two screens around the reader. The top moves in steps, so a pan
   /// inside one step redraws nothing; pass `top` and `top + height` to [layoutDrawList].
   /// [maxHeight] is the tallest band the host can draw and [maxPixels] the pixels it keeps for
-  /// one, both in viewport px; 0 takes [QvpDefaults.maxInkHeight] and no pixel limit.
+  /// one, both in viewport px; 0 takes [QvpDefaults.maxInkHeight] and no pixel limit. The
+  /// pixel limit never takes the band below one screen.
   QvpInkBand layoutInkBand(
     QvpView view,
     double viewportW,

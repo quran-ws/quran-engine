@@ -19,6 +19,12 @@
     {"name": "the host's own height", "view": {"scale": 2, "offsetX": 0, "offsetY": -300},
      "viewportW": 390, "viewportH": 844, "maxHeight": 1000, "maxPixels": 0,
      "band": {"top": 78, "height": 500}},
+    {"name": "the page below the top of the screen", "view": {"scale": 8, "offsetX": 0, "offsetY": 300},
+     "viewportW": 390, "viewportH": 844, "maxHeight": 0, "maxPixels": 0,
+     "band": {"top": -105.5, "height": 211}},
+    {"name": "a budget under one screen", "view": {"scale": 8, "offsetX": 0, "offsetY": -2000},
+     "viewportW": 390, "viewportH": 844, "maxHeight": 0, "maxPixels": 117000,
+     "band": {"top": 249.875, "height": 105.5}},
     {"name": "the host's pixel budget", "view": {"scale": 3, "offsetX": 0, "offsetY": -600},
      "viewportW": 390, "viewportH": 844, "maxHeight": 0, "maxPixels": 585000,
      "band": {"top": 0, "height": 500}},
@@ -33,6 +39,12 @@
      "band": {"top": 0, "height": 618.7246}},
     {"name": "no scale", "view": {"scale": 0, "offsetX": 0, "offsetY": -2000},
      "viewportW": 390, "viewportH": 844, "maxHeight": 0, "maxPixels": 0,
-     "band": {"top": 0, "height": 618.7246}}
+     "band": {"top": 0, "height": 618.7246}},
+    {"name": "a budget exactly at the whole page", "view": {"scale": 2, "offsetX": 0, "offsetY": -600},
+     "viewportW": 390, "viewportH": 844, "maxHeight": 0, "maxPixels": 482605.2,
+     "band": {"top": 0, "height": 618.7246}},
+    {"name": "a budget a row under the whole page", "view": {"scale": 2, "offsetX": 0, "offsetY": -600},
+     "viewportW": 390, "viewportH": 844, "maxHeight": 0, "maxPixels": 482215.2,
+     "band": {"top": 196.22461, "height": 618.2246}}
   ]
 }

@@ -164,3 +164,51 @@ fn the_page_band_reads_the_current_layout() {
     let b = p.layout_ink_band(v, 200.0, 100.0, h / 2.0, 0.0);
     assert!(b.height <= h / 2.0 && b.height > 0.0);
 }
+
+#[test]
+fn a_pixel_budget_never_takes_the_band_below_one_screen() {
+    let at = |offset_y: f32, max_pixels: f32| {
+        View { scale: 1.0, offset_x: 0.0, offset_y }.ink_band(9000.0, 400.0, 800.0, 0.0, max_pixels)
+    };
+    // 300 rows of budget for an 800 px screen: the band is the screen, not 300 px
+    assert_eq!(at(-1000.0, 400.0 * 300.0).height, 800.0);
+    // and the band still covers the screen, wherever the reader is
+    for y in [0.0, -1000.0, -1000.5, -4321.25] {
+        let b = at(y, 400.0 * 300.0);
+        assert!(b.top <= -y && b.top + b.height >= -y + 800.0 - 2.0, "offset {y}: {b:?}");
+    }
+    // between one screen and two, the budget sets the height
+    assert_eq!(at(0.0, 400.0 * 1200.0).height, 1200.0);
+    // a page under one screen is whole, however small the budget
+    let v = View { scale: 1.0, offset_x: 0.0, offset_y: 0.0 };
+    assert_eq!(v.ink_band(500.0, 400.0, 800.0, 0.0, 400.0 * 10.0), InkBand { top: 0.0, height: 500.0 });
+    // the hard limit still holds under a screen taller than it
+    assert_eq!(v.ink_band(9000.0, 400.0, 800.0, 600.0, 400.0 * 300.0).height, 600.0);
+}
+
+#[test]
+fn a_non_finite_offset_means_the_whole_page() {
+    let whole = InkBand { top: 0.0, height: 9000.0 };
+    for offset_y in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let v = View { scale: 1.0, offset_x: 0.0, offset_y };
+        assert_eq!(v.ink_band(9000.0, 400.0, 800.0, 0.0, 0.0), whole, "offset {offset_y}");
+    }
+    // so do a non-finite scale and viewport height
+    let v = View { scale: f32::INFINITY, offset_x: 0.0, offset_y: 0.0 };
+    assert_eq!(v.ink_band(9000.0, 400.0, 800.0, 0.0, 0.0), whole);
+    let v = View { scale: 1.0, offset_x: 0.0, offset_y: 0.0 };
+    assert_eq!(v.ink_band(9000.0, 400.0, f32::INFINITY, 0.0, 0.0), whole);
+    // a NaN limit is no limit: the height takes the default and the budget none
+    assert_eq!(v.ink_band(9000.0, 400.0, 800.0, f32::NAN, f32::NAN).height, 1600.0);
+    // an infinite limit holds every page, so the page is whole
+    assert_eq!(v.ink_band(9000.0, 400.0, 800.0, f32::INFINITY, f32::INFINITY), whole);
+}
+
+#[test]
+fn a_page_below_the_top_of_the_screen_bands_from_above_it() {
+    // the page starts 300 px down the screen: the band starts above the page
+    let v = View { scale: 1.0, offset_x: 0.0, offset_y: 300.0 };
+    let b = v.ink_band(9000.0, 400.0, 800.0, 0.0, 0.0);
+    assert_eq!(b, InkBand { top: -800.0, height: 1600.0 });
+    assert!(b.top <= -300.0 && b.top + b.height >= 500.0);
+}

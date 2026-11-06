@@ -188,8 +188,9 @@ pub struct QvpInkBand {
 /// Which band of the current layout to draw for a view and a viewport: the whole page when it
 /// fits, otherwise two screens around the reader, with a top that moves in steps so a pan
 /// inside one step redraws nothing. `max_height` and `max_pixels` are in viewport px: the
-/// tallest band the host can draw (0 or less: `QVP_DEFAULT_MAX_INK_HEIGHT`) and how many
-/// pixels, width × height, it keeps for one (0 or less: no limit).
+/// tallest band the host can draw (0 or less: `QVP_DEFAULT_MAX_INK_HEIGHT`), and how many
+/// pixels, width × height, it keeps for one (0 or less: no limit), which never takes the band
+/// below one screen. No screen, or a non-finite scale, height or offset, gives the whole page.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_layout_ink_band(
     page: *const Page,

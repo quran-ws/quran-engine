@@ -96,9 +96,11 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         apply(p.zoomToStep(layoutSpec(), zoom, step, currentView))
     }
     private var pendingStep: Int? = null
-    /** How much ink to keep ready at once. A page that fits is drawn once, the parts past both
-     * ends of the screen included, and scrolling then draws nothing. A taller one keeps a band
-     * of itself two screens tall, redrawn when the reader scrolls out of it. */
+    /** How much ink to keep ready at once, in bytes at four a pixel. A page that fits is drawn
+     * once, the parts past both ends of the screen included, and scrolling then draws nothing. A
+     * taller one keeps a band of itself two screens tall, redrawn when the reader scrolls out of
+     * it. A budget under two screens shrinks the band, but never below one screen: the band then
+     * holds more than the budget rather than leave part of the screen with no ink. */
     var inkBudget = 64 shl 20
     /** Ink drawn earlier, kept so a page the reader turns to — or back to — is ready. One page's
      * worth by default: a bitmap of a whole page runs to tens of megabytes, and holding several
