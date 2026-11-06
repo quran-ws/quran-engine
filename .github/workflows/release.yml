@@ -290,10 +290,11 @@ jobs:
   # Central at the package version. So this job waits for the maven job and for Maven Central
   # to serve that version, then compiles the module against it, and only then publishes to
   # npm. The other registries do not wait for Maven Central, and a Maven failure does not
-  # stop them.
+  # stop them. The job also waits for the publish job: the package's iOS pod downloads the
+  # XCFramework from this release, which the publish job makes public.
   react-native:
     name: React Native package on npm
-    needs: [verify, maven]
+    needs: [verify, maven, publish]
     runs-on: ubuntu-latest
     timeout-minutes: 100
     permissions:
