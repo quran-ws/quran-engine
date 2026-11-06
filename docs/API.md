@@ -993,8 +993,8 @@ function in the header has no row here, or a row names a function the header lac
 | memorisation | `qvp_mask_from` | `page.maskFrom(word, mode)` | Mask every word from a word index to the end of the page. |
 | memorisation | `qvp_mask_options` | `page.maskOptions(options)` | Set the block colour, padding, radius and direction of the mask. |
 | memorisation | `qvp_mask_transition` | none yet (a declared gap); `page.maskTransition(ms)` in Swift | Set the fade time of a hide in milliseconds; 0 is instant, and unmask resets it. |
-| memorisation | `qvp_unmask_next` | `page.unmaskNext(n)` | Unhide the next `n` masked words; returns how many are still hidden. |
-| memorisation | `qvp_mask_back` | `page.maskBack(n)` | Re-hide the last `n` revealed words. |
+| memorisation | `qvp_unmask_next` | `page.unmaskNext(n)` | Unhide the next `n` hidden words, in mask order (from the end when the mask is reversed); returns how many it unhid. |
+| memorisation | `qvp_mask_back` | `page.maskBack(n)` | Hide again the last `n` shown words of the mask, walking back from its end (from its start when reversed); returns how many it hid. The position in the mask decides, not the order the words were shown in. |
 | memorisation | `qvp_unmask_word` | `page.unmaskWord(i)` | Unhide one word. |
 | memorisation | `qvp_mask_word` | `page.maskWord(i)` | Hide one word again. |
 | memorisation | `qvp_unmask_all` | `page.unmaskAll()` | Unhide every masked word. |

@@ -74,6 +74,9 @@ All notable changes to the engine and its packages. The format follows
 ### Removed
 
 ### Fixed
+- `docs/API.md` and the Rust doc of `mask_back`: `unmaskNext` returns how many words it
+  unhid, not how many are still hidden. `maskBack` hides the last shown words by their position in the mask, not by the
+  order they were shown in.
 - React Native: the npm package builds in an app outside this repository. When the app's
   build has no `:qvp` project and no `qvpAndroidDir` property, the Android module depends
   on `ws.quran:qvp-android` from Maven Central, at the version in the package's
