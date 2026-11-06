@@ -104,6 +104,7 @@ let l = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacin
 passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing, align: .justified))  // rows reach both edges; maxStretch caps the gaps
 let basmalah = try QvpPassage(basmalahOf: 2, pages: [page])   // a surah's basmalah, one row, no words; throws for surahs 1 and 9
 l?.draws; l?.placements; l?.words; l?.ellipsis           // draw page `page`'s path `path` at scale·(kx·x+dx), scale·(ky·y+dy)
+l?.draw(in: ctx, pages: [page.pageNo: page])            // or let the layout fill itself into a CGContext, in its fill colour
 
 let atlas = try QvpAtlas(bytes: atlasData)
 atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36)
@@ -124,6 +125,8 @@ view.padTop = 12; view.padBottom = 12; view.padSide = 8; view.lineSpacing = 1; v
 // lineSpacing < 1 is clamped by the engine: spacing only ever opens up
 view.paperColor = UIColor(...); view.selectionBand = 0x2d6fd640; view.hitOptions = QvpHitOptions(maxDistance: 6)
 view.onWordTap = { word, hit in }; view.onDecorationTap = { decoration, hit in }; view.onEmptyTap = { }; view.onSelectionChanged = { words in }
+view.reflowBreaks = .fitted               // how a reflowed page breaks its rows; .printed keeps the print's lines
+view.onZoomChanged = { zoom in }          // a pinch committed, or zoomToStep moved the control
 view.onSwipe = { dir in }                 // horizontal swipe while not zoomed (+1 finger right, −1 left): flip pages; view.isZoomed
 view.onDoubleTap = { hit in }              // nil (default) resets the view; a host that repurposes it calls resetView() itself
 view.onLongPress = { hit in }              // only while selectionEnabled is false; longPressDuration (0.35)

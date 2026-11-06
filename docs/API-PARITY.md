@@ -130,7 +130,6 @@ is owed.
 
 | gap | wrappers | issue |
 |---|---|---|
-| iOS support (no podspec) | react-native | #41 |
 | no CI job builds the iOS, macOS, Windows or web targets | flutter | #129 |
 
 ## Renames for 0.2

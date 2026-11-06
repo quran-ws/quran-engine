@@ -2,7 +2,7 @@
  * @quran.ws/qvp-react-native — typed JS API over the native module.
  *
  * Names follow docs/API.md. Nothing here decides anything: targets, selectors and colours are marshalled
- * to the Kotlin library (`ws.quran.qvp`), which is JNI over crates/qvp-ffi/include/qvp.h.
+ * to the Kotlin library (`ws.quran.qvp`) on Android and to QvpKit on iOS, both over crates/qvp-ffi/include/qvp.h.
  * Declarative props (`highlights`, `styles`, `theme`, `mask`, `reveal`) are reconciled against engine
  * handles on the native side, so JS never sees a handle.
  */
@@ -53,7 +53,7 @@ export function rgba(c: Color, alpha: number): string {
 
 // ── targets and selectors (same shapes as web/qvp.js T / Sel) ────────────────────────────────
 // The codes come from qvp.h through codes.ts, which scripts/gen-rn-enums.py writes; the Android
-// module reads them back with the same table.
+// and iOS modules read them back with the same table.
 /** A target as `T` makes it: a QVP_TARGET_* code and its arguments. */
 export interface TargetObj { target: number; a?: number; b?: number; c?: number; words?: number[] }
 /** 'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | word index | [indices] | T.* */
@@ -410,7 +410,7 @@ export function QvpPassageView(props: QvpPassageViewProps) {
 const M = NativeModules.QvpModule as any;
 // Before the first use: reading the constants of a missing module is a TypeError, and this
 // message says what to do instead.
-if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not linked (Android only for now; see README)');
+if (!M) throw new Error('@quran.ws/qvp-react-native: native module QvpModule not linked; rebuild the app (on iOS, run pod install first; see README)');
 
 /** The native module's constants: the engine's name tables, and its defaults by camelCase name
  * (`QVP_DEFAULT_*` in qvp.h; colours as unsigned 0xRRGGBBAA). */
@@ -427,7 +427,7 @@ export const MARKS: string[] = NAMES.marks ?? [];
  * predates this package, and the error says so. */
 const nativeDefault = (key: string): number => {
   const v = NAMES.defaults?.[key];
-  if (typeof v !== 'number') throw new Error(`@quran.ws/qvp-react-native: native module QvpModule is older than this package (no default ${key}); rebuild the Android app`);
+  if (typeof v !== 'number') throw new Error(`@quran.ws/qvp-react-native: native module QvpModule is older than this package (no default ${key}); rebuild the app`);
   return v;
 };
 const SNAKE = (camel: string) => camel.replace(/([A-Z])/g, '_$1').toUpperCase();

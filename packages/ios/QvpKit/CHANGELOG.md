@@ -5,6 +5,9 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
+  `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
+  `QvpPassageWord.wordKey`, as Kotlin's.
 - `qvp_layout_ink_band` picks the band of a laid-out page that a host keeps drawn: the whole
   page when it fits, otherwise two screens around the reader. The band's top moves in steps,
   so a pan inside one step redraws nothing. The band is in layout px, ready for
@@ -15,6 +18,14 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   the whole page, however tall. Bound as `layoutInkBand` in JavaScript, Kotlin, Dart and
   Swift. React Native calls it through the Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers, and the web,
   Kotlin, Dart and Swift tests replay them (#134).
+- QvpKit: `QvpPageView.reflowBreaks` and `QvpPageView.onZoomChanged`, as on Android;
+  `Target(parsing:page:)`, which returns nil for a key that `Target.parse` stops the program
+  on; `QvpPassageLayout.draw(in:pages:x:y:)`, which fills a passage into a `CGContext`, as
+  Kotlin's `QvpPassageLayout.draw`; and `QvpDefaults.decimal`, every default by its camelCase
+  name, as Kotlin's `QvpDefaults.decimal`. The React Native module uses all five.
+  `Target.parse` and `Target(parsing:)` read a key's numbers as ASCII digits that fit an
+  Int32, as Kotlin does: `line:٧` and `2:99999999999999999999` are no keys, and the React
+  Native module reads them as an empty word list, as on Android.
 
 ### Changed
 - The Android `QvpPageView`, the Flutter `QvpPageView`, the iOS `QvpPageView` and the web
@@ -53,6 +64,13 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   `fit_x`, `fit_y` place the content's own origin. The docs of the dress overflow in
   Kotlin, Swift and Dart told a host to fit the overflow itself. The engine's fit holds it
   already. The iOS `resetView()` docs said that the view fits the content height.
+||||||| parent of 0ae7bde (fix(ios): an out-of-range Int reaches the engine as the C ABI reads it, and the defaults table is whole)
+||||||| parent of 3d4fb4c (fix(ios): an out-of-range Int reaches the engine as the C ABI reads it, and the defaults table is whole)
+- QvpKit: an index or count out of range no longer stops the program. Every call passes
+  an Int to the C ABI as the parameter's unsigned width, cut from the Int as JNI's casts cut
+  a jint on Android, and the engine answers: `wordLabel(-1)` is "", `findWord(-1, …)` is -1,
+  `unmaskNext(-1)` unhides every word. Before, `UInt32(i)` trapped on a negative or huge
+  value, and `qvp.wordLabel(-1)` from React Native stopped the iOS app.
 
 ## [0.8.0] - 2026-11-04
 

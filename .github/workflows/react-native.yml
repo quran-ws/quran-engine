@@ -1,6 +1,7 @@
 # The React Native package: install, typecheck, and build the TypeScript output, then
 # compile the Android module's Kotlin, run its JVM unit tests, and resolve the Kotlin
-# library from Maven Central as an app outside this repository does.
+# library from Maven Central as an app outside this repository does. The iOS job builds the
+# engine XCFramework, installs the example's pods and builds the example for the simulator.
 name: React Native
 
 on:
@@ -14,6 +15,14 @@ on:
       # sources or its build file can break the module.
       - "packages/android/qvp/build.gradle.kts"
       - "packages/android/qvp/src/main/kotlin/**"
+      # The iOS module compiles QvpKit's sources and links the engine the script builds.
+      - "packages/ios/**"
+      - "crates/qvp-ffi/include/qvp.h"
+      - "Package.swift"
+      - "scripts/build-engine-ios.sh"
+      - "scripts/gen-rn-enums.py"
+      - "scripts/sync-example-data.sh"
+      - "scripts/sync-test-data.sh"
   push:
     branches: [main]
   workflow_dispatch:
@@ -56,6 +65,19 @@ jobs:
       - name: Test the example
         working-directory: packages/react-native/example
         run: npm test -- --ci
+      # The npm tarball must build in an app outside this repository: it holds the iOS sources,
+      # QvpKit's sources (the prepack script copies them) and the XCFramework's URL and
+      # checksum, and never the XCFramework itself.
+      - name: Check the npm tarball
+        run: |
+          set -o pipefail
+          tgz="$(npm pack --pack-destination "$RUNNER_TEMP" | tail -1)"
+          files="$(tar -tzf "$RUNNER_TEMP/$tgz" | sed 's|^package/||')"
+          for f in qvp-react-native.podspec ios/QvpModule.swift ios/QvpModule.m ios/vendor/QvpEngine.json \
+                   ios/vendor/QvpKit/QvpPage.swift ios/vendor/QvpKit/QvpPageView.swift; do
+            grep -qxF "$f" <<<"$files" || { echo "::error::the npm tarball lacks $f"; exit 1; }
+          done
+          if grep -qi "xcframework/" <<<"$files"; then echo "::error::the npm tarball holds an XCFramework"; exit 1; fi
       # Compile the Android module's Kotlin in release and debug, and run its JVM unit tests.
       # Gradle runs in the example's build, because that build includes the module and the
       # Kotlin library as projects. A Kotlin error in the module, or a change to the library's
@@ -94,3 +116,56 @@ jobs:
             | tee "$RUNNER_TEMP/deps.txt"
           grep -qF -- "--- ws.quran:qvp-android:$v" "$RUNNER_TEMP/deps.txt"
           if grep -E "qvp-android.*FAILED|project :qvp" "$RUNNER_TEMP/deps.txt"; then exit 1; fi
+
+  ios:
+    name: iOS module and example build
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim, x86_64-apple-ios, aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Cache page data
+        uses: actions/cache@v4
+        with:
+          path: dist/pages
+          key: test-data-pages-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      # The example bundles 29 pages and the atlas, as the Android example does.
+      - name: Fetch page data
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
+          QVP_SYNC: pages
+        run: |
+          scripts/sync-test-data.sh
+          scripts/sync-example-data.sh react-native
+      # Inside this repository the pod links the XCFramework this script writes, and copies
+      # QvpKit's sources from packages/ios/QvpKit (qvp-react-native.podspec).
+      - name: Build QvpEngine.xcframework
+        run: scripts/build-engine-ios.sh
+      # Only the example installs. A node_modules inside the library would hold a second React.
+      - name: Install the example
+        working-directory: packages/react-native/example
+        run: npm ci --no-audit --no-fund
+      - name: Cache the pods
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/react-native/example/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: rn-ios-pods-${{ hashFiles('packages/react-native/example/package-lock.json', 'packages/react-native/example/ios/Podfile', 'packages/react-native/qvp-react-native/qvp-react-native.podspec') }}
+      - name: Install the pods
+        working-directory: packages/react-native/example/ios
+        run: pod install
+      # Release, so the build also bundles the JavaScript, as an app that runs without Metro.
+      - name: Build the example for the simulator
+        working-directory: packages/react-native/example/ios
+        run: |
+          set -o pipefail
+          xcodebuild -workspace QvpExample.xcworkspace -scheme QvpExample -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ../../../../target/rn-ios-build CODE_SIGNING_ALLOWED=NO build | tail -40
