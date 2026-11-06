@@ -29,6 +29,10 @@ All notable changes to the engine and its packages. The format follows
 - The Flutter example has a UI smoke test, `example/test/smoke_test.dart`. A widget test on
   the host engine library opens page 1, taps a word, and checks the engine's highlight on
   that word and the word key in the selection panel. The Flutter workflow runs it (#154).
+- The React Native example has a UI smoke test, `__tests__/smoke.test.tsx`. It sends the
+  native view's page-load and word-tap events, and checks that the app sends one highlight
+  on the tapped word in the `highlights` prop and shows the word key. The workflow's
+  `npm test` step runs it (#154).
 
 ### Removed
 
