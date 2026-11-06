@@ -540,7 +540,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         overflowNow = dressed?.overflow ?: QvpInsets.ZERO
         measureBand()
         val top = bandTop; val bandH = bandHeight
-        val bandPx = kotlin.math.ceil(bandH).toInt().coerceAtLeast(1)
+        val place = bandBitmap(top, bandH, viewOy)
+        val bandPx = place.rows
         if (l !== hashedLayout) { hashedLayout = l; lineDyHash = l.lineDy.contentHashCode() }
         // The key holds where the band starts, never where the reader has scrolled to, so a drag
         // inside the band is one blit and nothing is drawn again.
@@ -578,7 +579,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
                 var cur = -1; var n = 0
                 for (d in q.draws) {
                     if (styledOn[d.path]) continue
-                    if (d.placement != cur) { bc.setMatrix(placementMatrix(places.getOrElse(d.placement) { QvpPlacement.IDENTITY }, -top)); cur = d.placement }
+                    if (d.placement != cur) { bc.setMatrix(placementMatrix(places.getOrElse(d.placement) { QvpPlacement.IDENTITY }, place.drawDy)); cur = d.placement }
                     bc.drawPath(p.path(d.path), paint); n++
                 }
                 baseKey = key; lastBaseMs = (System.nanoTime() - t0) / 1e6; lastBasePaths = n
@@ -586,7 +587,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             }
         }
         // the ink sits at `viewOy + top` on screen; scrolling inside the band only moves it
-        canvas.drawBitmap(b!!, 0f, viewOy + top, null)
+        canvas.drawBitmap(b!!, 0f, place.blitY, null)
         val t1 = System.nanoTime()
         val q = drawListNow(probe)
         val places = q.places
@@ -617,16 +618,15 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
      * placement its ink is drawn under, so a medallion follows its word and a band its title; the
      * border has none and sits in layout space. A tiled border is hundreds of outlines and nothing
      * about it changes while a highlight animates or the reader scrolls inside the band, so the
-     * layer is drawn once per band, view scale and dress revision, and blitted after that. A
-     * border stands past the content's top and bottom, so the layer is the band plus the overflow.
+     * layer is drawn once per band, view scale and dress revision, and blitted after that. The
+     * engine's band of a dressed page holds every part of the border on the screen, except under a
+     * screen taller than the 4096-row ceiling, where the band keeps the page's ink and the top of
+     * the border can be clipped. So the layer is the band, the same rows as the base ink.
      */
     private fun drawOrnaments(canvas: Canvas, p: QvpPage, info: QvpDressInfo, top: Float, bandH: Float) {
-        val padTop = kotlin.math.ceil(kotlin.math.max(info.overflow.top, 0f) * viewScale)
-        val padBottom = kotlin.math.ceil(kotlin.math.max(info.overflow.bottom, 0f) * viewScale)
-        // One layer never passes what a bitmap may be or what the base ink may take; the top of the
-        // band stays where it is and the layer is cut at the bottom.
-        val layerH = ornamentLayerHeight(bandH + padTop + padBottom, width, inkBudget)
-        if (layerH == 0) { ornamentLayer = null; ornamentKey = null; return }
+        if (width <= 0) { ornamentLayer = null; ornamentKey = null; return }
+        val place = bandBitmap(top, bandH, viewOy)
+        val layerH = place.rows
         val key = ornamentProbe.also { it.set(p, info.revision, viewScale, viewOx, top, width, layerH) }
         var b = ornamentLayer
         if (b == null || key != ornamentKey) {
@@ -637,8 +637,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             layer.eraseColor(Color.TRANSPARENT)
             val bc = Canvas(layer)
             val places = p.layoutPlacements()
-            // the layer's top row is `top - padTop` down the page
-            val dy = padTop - top
+            // the layer's top row is `top` down the page
+            val dy = place.drawDy
             var cur = Int.MIN_VALUE; var n = 0
             for (o in p.dressGeometry()) {
                 val g = o.placement ?: -1
@@ -653,7 +653,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             }
             ornamentKey = key.copy(); lastOrnamentMs = (System.nanoTime() - t0) / 1e6; lastOrnamentDraws = n
         }
-        canvas.drawBitmap(b!!, 0f, viewOy + top - padTop, null)
+        canvas.drawBitmap(b!!, 0f, place.blitY, null)
     }
 
     /** Keep ink already drawn, by page and size, so a page the reader turns back to is ready. */
@@ -688,6 +688,10 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         }
     }
 
+    /** The bitmap of a band: [rows] tall, drawn with its content moved by [drawDy] so the band's top
+     * is its first row, and blitted at [blitY] on screen. */
+    internal data class BandBitmap(val rows: Int, val drawDy: Float, val blitY: Float)
+
     /** What the ornament layer was drawn for, kept the same way as [InkKey]. */
     private data class OrnamentKey(var page: QvpPage? = null, var revision: Int = 0, var scale: Float = 0f, var offsetX: Float = 0f,
                                    var top: Float = 0f, var width: Int = 0, var height: Int = 0) {
@@ -704,15 +708,13 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         /** The engine's own ceiling on the magnifying glass: what [maxZoom] starts at. The floor
          * is the fitted page, which the engine applies. */
         const val MAX_ZOOM = QvpDefaults.MAX_ZOOM
-        /** The height of the ornament layer for [wanted] px of band plus border, at [width] px wide:
-         * no taller than [QvpDefaults.MAX_INK_HEIGHT], and no larger in bytes than [budget]. 0 when not even one
-         * row fits, and the layer is then skipped. */
-        internal fun ornamentLayerHeight(wanted: Float, width: Int, budget: Int): Int {
-            if (width <= 0) return 0
-            val h = kotlin.math.ceil(wanted).toInt().coerceIn(1, QvpDefaults.MAX_INK_HEIGHT.toInt())
-            val rows = (budget.toLong().coerceAtLeast(0L) / (width.toLong() * 4)).coerceAtMost(h.toLong())
-            return rows.toInt()
-        }
+        /** The rows of a bitmap that holds a band [bandH] px tall: the base ink's and the ornament
+         * layer's, which are the same band. At least one row. */
+        internal fun bandRows(bandH: Float): Int = kotlin.math.ceil(bandH).toInt().coerceAtLeast(1)
+        /** Where the bitmap of a band [top] px down the page and [bandH] px tall goes, for a page whose
+         * top is at [viewOy] on screen: the base ink's and the ornament layer's, which are drawn the
+         * same way. */
+        internal fun bandBitmap(top: Float, bandH: Float, viewOy: Float) = BandBitmap(bandRows(bandH), -top, viewOy + top)
         /** Log the band arithmetic, for tracking down ink that does not reach the screen. */
         var TRACE = false
     }

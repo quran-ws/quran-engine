@@ -1170,25 +1170,26 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * border carries none and sits in layout space. Rasterised once per band, like the
      * base ink, so a scroll inside the band is one blit: a tiled border is hundreds of
      * outlines and nothing about it changes while a highlight animates or the reader
-     * scrolls. A border stands past the content's top and bottom, so the band grows by
-     * the dress overflow. A new layout redraws it, as it moves the placements.
+     * scrolls. The engine's band of a dressed page holds every part of the border on the
+     * screen, except under a screen taller than the tallest band, where the band keeps the
+     * page's ink and the top of the border can be clipped. So the layer is the band, the same
+     * rows as the base ink. A new layout
+     * redraws it, as it moves the placements.
      */
     drawOrnaments(c, page, view, dpr, bandTop, bandH, bandView) {
       const info = page.dressInfo();
       if (!info) { this.ornamentLayer = null; this.ornamentKey = ''; this.ornamentFor = null; return; }
-      const scale = view.scale || 1;
-      const padTop = Math.ceil(info.overflow[1] * scale), padBottom = Math.ceil(info.overflow[3] * scale);
-      const top = bandTop - padTop;   // view px; a clamped canvas (H) keeps this top and loses its bottom edge
-      const W = this.canvas.width, H = Math.min(MAX_CANVAS_PX, Math.ceil((bandH + padTop + padBottom) * dpr));
+      // the band, held to the tallest canvas a browser makes, which the band reaches only by rounding
+      const W = this.canvas.width, H = Math.min(MAX_CANVAS_PX, Math.max(1, Math.ceil(bandH * dpr)));
       const L = page.currentLayout;
       // `page.h` is the page's engine handle, unique while the page is open: two dressed pages
       // drawn by one renderer with no layout would otherwise share a revision and a raster
-      const key = `${page.h}|${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${top.toFixed(1)}|${dpr}|${info.revision}|${W}x${H}`;
+      const key = `${page.h}|${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${bandTop.toFixed(1)}|${dpr}|${info.revision}|${W}x${H}`;
       if (!this.ornamentLayer || key !== this.ornamentKey || this.ornamentFor !== L) {
         if (!this.ornamentLayer) this.ornamentLayer = document.createElement('canvas');
         this.ornamentLayer.width = W; this.ornamentLayer.height = H;
         const b = this.ornamentLayer.getContext('2d');
-        const v = { ...bandView, offsetY: bandView.offsetY + padTop };
+        const v = bandView;
         let cur = -2;
         for (const o of page.dressGeometry()) {
           if (o.placement !== cur) {
@@ -1202,7 +1203,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
         this.ornamentKey = key; this.ornamentFor = L;
       }
       c.setTransform(1, 0, 0, 1, 0, 0);
-      c.drawImage(this.ornamentLayer, 0, Math.round(dpr * (view.offsetY + top)));
+      c.drawImage(this.ornamentLayer, 0, Math.round(dpr * (view.offsetY + bandTop)));
     }
     /** transform of one group of paths: a point p is drawn at (kx·p.x + dx, ky·p.y + dy), page units */
     groupTransform(page, view, group, dpr) {
