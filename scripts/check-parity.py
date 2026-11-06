@@ -225,15 +225,32 @@ ENUM_SITES = {
 }
 
 
-# A `/* */` block comment or a `//` line comment (Dart's `///` too), whichever starts first.
-COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+# The tokens of an enum block that are not code: a string literal, a `/* */` block comment
+# or a `//` line comment (Dart's `///` too), whichever starts first, and the `}` that ends
+# the block.
+TOKEN = re.compile(r""""(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|/\*.*?\*/|//[^\n]*|\}""", re.S)
+
+
+def enum_body(tail: str) -> str:
+    """The code of an enum block, from just after its opening `{` to its closing `}`. Its
+    comments are removed and its strings emptied, so neither a commented-out code nor a
+    `//` or `}` inside a string counts."""
+    out, at = [], 0
+    for m in TOKEN.finditer(tail):
+        out.append(tail[at:m.start()])
+        at = m.end()
+        token = m.group()
+        if token == "}":
+            return "".join(out)
+        if token[0] in "\"'":
+            out.append(token[0] * 2)
+    raise ValueError("the enum block has no closing `}`")
 
 
 def check_enums(problems: list[str]) -> None:
     """Every wrapper names every code of each enum in ENUMS, at the header's value, and no
     code the header lacks. A declaration runs from its start to the first `}` outside a
-    comment, and its comments are removed first, so a commented-out code is not counted. A
-    code is its SUFFIX or camelCase name followed by `=` or `:` and the value."""
+    comment or a string (`enum_body`), so a commented-out code is not counted. A code is its SUFFIX or camelCase name followed by `=` or `:` and the value."""
     gen = gen_rn_enums()
     header = HEADER.read_text()
     for prefix, (js, cls) in ENUMS.items():
@@ -244,8 +261,7 @@ def check_enums(problems: list[str]) -> None:
             if marker not in text:
                 problems.append(f"{site} ({path}) has no `{marker}` for QVP_{prefix}_*")
                 continue
-            body = COMMENT.sub("", text[text.index(marker) + len(marker):])
-            body = body[: body.index("}")]
+            body = enum_body(text[text.index(marker) + len(marker):])
             known = {n for suffix, _ in codes for n in (suffix, gen.camel(suffix))}
             for name in re.findall(r"\b([A-Za-z_]\w*)\s*[=:]\s*\d+", body):
                 if name not in known:

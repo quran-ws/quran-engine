@@ -62,6 +62,7 @@ for check in "$@"; do
       step "header vs Rust vs every wrapper"
       # --check compares docs/API-PARITY.md with the sources and writes nothing. After an
       # API change, regenerate the table with `python3 scripts/check-parity.py`.
+      python3 scripts/test_check_parity.py
       python3 scripts/check-parity.py --check
       # The Flutter bindings are generated from the header. Generating them needs Flutter
       # and libclang, which the standards job does not install; the Flutter workflow runs
