@@ -26,6 +26,9 @@ All notable changes to the engine and its packages. The format follows
   clicks a word and checks the highlight in the app's state, the engine's boxes and the
   canvas pixels. `scripts/check.sh example` runs it, and the `web example` job in CI runs
   that command (#154).
+- The Flutter example has a UI smoke test, `example/test/smoke_test.dart`. A widget test on
+  the host engine library opens page 1, taps a word, and checks the engine's highlight on
+  that word and the word key in the selection panel. The Flutter workflow runs it (#154).
 
 ### Removed
 
