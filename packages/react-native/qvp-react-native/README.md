@@ -13,22 +13,30 @@ handles. Names follow `docs/API.md`. **The package ships no page data.**
 npm install @quran.ws/qvp-react-native        # or a file:/git dependency inside the monorepo
 ```
 
-Android needs the Kotlin library. Preferred: include it as a Gradle project in your app's
-`android/settings.gradle` (this is what `../example` does):
+Android needs the Kotlin library `ws.quran.qvp`. The module finds it in one of three ways,
+and the first that applies wins:
 
-```groovy
-include ':qvp'
-project(':qvp').projectDir = file('<repo>/packages/android/qvp')   // e.g. '../../../android/qvp'
-```
+1. Your app's `android/settings.gradle` includes the library as the Gradle project `:qvp`.
+   The module then depends on `project(':qvp')`. `../example` does this:
 
-The module then depends on `project(':qvp')`. If `:qvp` is not included, the module compiles the
-library's Kotlin + JNI sources itself from `qvpAndroidDir` (Gradle property; default
-`../../../android/qvp`, right for the monorepo). Either way the engine comes from
-`packages/android/qvp/prebuilt/<abi>/libqvp_ffi.a` — produce it once with
-`scripts/build-engine-android.sh` from the repo root.
+   ```groovy
+   include ':qvp'
+   project(':qvp').projectDir = file('<repo>/packages/android/qvp')   // e.g. '../../../android/qvp'
+   ```
+
+2. The Gradle property `qvpAndroidDir` names a checkout of `packages/android/qvp`. The module
+   compiles the library's Kotlin and JNI sources from that folder.
+3. Otherwise the module depends on `ws.quran:qvp-android` from Maven Central, at the version
+   of this package. An app that installs the package from npm needs nothing more. To use a
+   different library version, set the Gradle property `qvpVersion`, for example
+   `qvpVersion=0.8.0` in `android/gradle.properties`.
+
+The Maven Central library holds the engine. In ways 1 and 2 the engine comes from
+`packages/android/qvp/prebuilt/<abi>/libqvp_ffi.a`. Make it once with
+`scripts/build-engine-android.sh` from the repository root.
 
 Requirements: RN ≥ 0.76 (legacy view manager / native module through the interop layer, verified on
-0.87 with the New Architecture), minSdk 24, NDK 27, CMake 3.22.
+0.87 with the New Architecture), minSdk 24. Ways 1 and 2 also need NDK 27 and CMake 3.22.
 
 Page data: `cargo run -p qvp-convert --release -- batch pages dist/pages` → `NNN.qvp`,
 `NNN.words.json`, `atlas.qva`. Put them wherever you like (assets, files dir, downloads) and pass

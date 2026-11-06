@@ -13,6 +13,13 @@ All notable changes to the engine and its packages. The format follows
 ### Removed
 
 ### Fixed
+- React Native: the npm package builds in an app outside this repository. When the app's
+  build has no `:qvp` project and no `qvpAndroidDir` property, the Android module depends
+  on `ws.quran:qvp-android` from Maven Central, at the version in the package's
+  `package.json`. The Gradle property `qvpVersion` sets a different version. Before, the
+  module compiled the Kotlin library from `../../../android/qvp`, a path that exists only
+  in this repository (#42). CI resolves the library from Maven Central through the
+  example's build with `-PqvpFromMaven`.
 
 ## [0.8.0] - 2026-11-04
 

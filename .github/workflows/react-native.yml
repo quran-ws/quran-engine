@@ -1,5 +1,6 @@
 # The React Native package: install, typecheck, and build the TypeScript output, then
-# compile the Android module's Kotlin and run its JVM unit tests.
+# compile the Android module's Kotlin, run its JVM unit tests, and resolve the Kotlin
+# library from Maven Central as an app outside this repository does.
 name: React Native
 
 on:
@@ -68,3 +69,28 @@ jobs:
           ./gradlew --no-daemon
           :quran.ws_qvp-react-native:compileReleaseKotlin
           :quran.ws_qvp-react-native:testDebugUnitTest
+
+      # An app that installs the package from npm has no `:qvp` project, so the module takes
+      # ws.quran:qvp-android from Maven Central. -PqvpFromMaven leaves `:qvp` out of the
+      # example's build to take that path. The step checks that Gradle resolves the artifact,
+      # at the version in the package's package.json. It does not compile against it: between
+      # releases, the module can call library API that the last published version lacks. When
+      # Maven Central does not hold the package version yet, as in a release pull request, the
+      # step checks the latest published version through -PqvpVersion.
+      - name: Resolve the Kotlin library from Maven Central
+        working-directory: packages/react-native/example/android
+        run: |
+          set -o pipefail
+          maven=https://repo1.maven.org/maven2/ws/quran/qvp-android
+          v="$(node -p "require('../../qvp-react-native/package.json').version")"
+          override=""
+          if ! curl -fsSI "$maven/$v/qvp-android-$v.pom" >/dev/null; then
+            v="$(curl -fsS "$maven/maven-metadata.xml" | sed -n 's|.*<release>\(.*\)</release>.*|\1|p')"
+            echo "::notice::qvp-android $v is the latest on Maven Central; the package version is not published yet"
+            override="-PqvpVersion=$v"
+          fi
+          ./gradlew --no-daemon -PqvpFromMaven $override \
+            :quran.ws_qvp-react-native:dependencies --configuration releaseCompileClasspath \
+            | tee "$RUNNER_TEMP/deps.txt"
+          grep -qF -- "--- ws.quran:qvp-android:$v" "$RUNNER_TEMP/deps.txt"
+          if grep -E "qvp-android.*FAILED|project :qvp" "$RUNNER_TEMP/deps.txt"; then exit 1; fi
