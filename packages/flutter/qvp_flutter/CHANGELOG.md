@@ -74,6 +74,13 @@
 - On iOS, macOS, Android, Windows and Linux, a word key that is not on the page, such as
   `'2:1:1'` on page 42, named word 0. It now names no word, as on web: `targetWords` is
   empty and `text` is `''`. A shared test case holds both backends to this.
+- The docs of the layout's fit (`fit_scale`, `fit_x`, `fit_y`) say what a reflowed page
+  does. On a reflowed page `fit_scale` is 1 and the host scrolls the content. `fit_x`
+  centres it across the viewport, and `fit_y` puts its top at the top of the viewport.
+  Before, `qvp.h`, the Rust docs, `docs/API.md` and the Kotlin, Swift, Dart and React Native docs
+  said that the fit shrinks every page into the viewport and centres it. `qvp.h`, the Rust docs,
+  `docs/API.md`, Kotlin and Swift also said that a printed page shrinks to the viewport
+  height. It shrinks to fit both the width and the height.
 
 ## 0.8.0
 

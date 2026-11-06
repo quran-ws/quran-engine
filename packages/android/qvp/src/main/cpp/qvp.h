@@ -129,8 +129,10 @@ typedef struct { uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; 
 typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint8_t fill_height; uint32_t grid_lines; float crop_left, crop_right, max_aspect_slack, reflow_zoom; uint8_t reflow_fill, reflow_breaks, reflow_gaps; float reflow_word_gap, reflow_max_stretch, reflow_relax, banner_zoom; uint8_t surah_frames; } QvpLayoutSpec;
 /* the grid a page is designed on: the mushaf's line count (15 here, or more when a page has more) and the printed spacing */
 typedef struct { uint32_t lines; float line_spacing; } QvpGrid;
-/* fit_*: the view transform that shows the whole content (shrink to the viewport height, never enlarge, centred):
-   draw at fit_x + fit_scale·view_x, fit_y + fit_scale·view_y; the host's pan and zoom go on top.
+/* fit_*: the view transform for the content: draw at fit_x + fit_scale·view_x, fit_y + fit_scale·view_y, and the
+   host's pan and zoom go on top. On a printed page, fit_scale shrinks the content to fit both the viewport width
+   and height and is never more than 1, and fit_x, fit_y centre the content. On a reflowed page, fit_scale is 1
+   and the host scrolls: fit_x centres the content across the viewport, and fit_y puts its top at the top.
    A dressed page fits the content plus the dress overflow, so the border is in view; fit_x, fit_y still place
    the content's origin. qvp_dress and qvp_undress refit the current layout: read it again with qvp_layout_current. */
 typedef struct { float scale, offset_x, offset_y, content_w, content_h, line_spacing; uint32_t n_lines; const float* lines; /* n_lines × {dy, slot_top, slot_bottom}; the rows when reflowed */ float fit_scale, fit_x, fit_y; uint32_t reflowed, n_rows; } QvpLayout;

@@ -119,11 +119,14 @@ pub struct Layout {
     pub laid_height: f32,
     /// The line spacing the layout produced, in page units (printed spacing + the added delta).
     pub line_spacing: f32,
-    /// The view transform that shows the whole laid-out content inside the viewport:
-    /// shrink by `fit_scale` when the content is taller than the viewport (never enlarge),
-    /// then offset by `fit_x`, `fit_y` so the content is centred. A host draws at
+    /// The view transform for the laid-out content. A host draws at
     /// `fit_x + fit_scale · vx`, `fit_y + fit_scale · vy`, and applies its own pan and
     /// zoom on top.
+    ///
+    /// A printed page shows whole: `fit_scale` shrinks the content to fit both the viewport
+    /// width and height (it is never more than 1), and `fit_x`, `fit_y` centre it. A
+    /// reflowed page is scrolled, not shrunk: `fit_scale` is 1, `fit_x` centres the content
+    /// across the viewport, and `fit_y` puts its top at the top of the viewport.
     ///
     /// A dress is included. On a dressed page the box that is fitted is the content plus
     /// the dress overflow on each side ([`Page::dress_overflow`]), so the border is in view

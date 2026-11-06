@@ -261,8 +261,10 @@ data class QvpGrid(val lines: Int, val lineSpacing: Float)
 /** Page → viewport. On a printed page, viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. A reflowed
  *  page ([reflowed]) moves words, not lines, so [lineDy] places no path there: draw through [QvpPage.layoutDrawList] and
  *  [QvpPage.layoutPlacements], and ask [QvpPage.wordBoundsView] where a word is. [lineDy] and the slots then hold the rows.
- *  [fitScale], [fitX], [fitY] show the whole content in the viewport (shrink to height, never enlarge, centred): the host's
- *  pan and zoom go on top. */
+ *  Draw at fitX + fitScale*viewX, fitY + fitScale*viewY, and put the host's pan and zoom on top. On a printed page
+ *  [fitScale] shrinks the content to fit both the viewport width and height (never above 1) and [fitX], [fitY] centre it.
+ *  On a reflowed page [fitScale] is 1 and the host scrolls: [fitX] centres the content across the viewport, and [fitY]
+ *  puts its top at the top of the viewport. */
 class QvpLayout(val scale: Float, val offsetX: Float, val offsetY: Float, val contentW: Float, val contentH: Float, val lineSpacing: Float, val lineDy: FloatArray, val slotTop: FloatArray, val slotBottom: FloatArray,
                 val fitScale: Float = 1f, val fitX: Float = 0f, val fitY: Float = 0f,
                 /** True when this layout broke the words onto rows of its own, and how many it made. */

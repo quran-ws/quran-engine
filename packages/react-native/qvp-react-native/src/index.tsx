@@ -143,7 +143,10 @@ export interface ViewState { scale: number; offsetX: number; offsetY: number }
  * Page to viewport. On a printed page, viewX = offsetX + x · scale and viewY = offsetY + (y + lineDy[line]) · scale.
  * A reflowed page, which the default stepped zoom gives once the reader zooms in, moves words, not lines, so `lineDy`
  * places nothing there and `lineDy` and `slots` hold the rows: ask `wordBoundsView` where a word is, and `hitTestView`
- * what is under a point. The fit fields show the whole content.
+ * what is under a point. Draw at fitX + fitScale · viewX, fitY + fitScale · viewY, and put the pan and zoom on top.
+ * On a printed page `fitScale` shrinks the content to fit both the viewport width and height (never above 1), and
+ * `fitX`, `fitY` centre it. On a reflowed page `fitScale` is 1 and the content scrolls: `fitX` centres it across the
+ * viewport, and `fitY` puts its top at the top of the viewport.
  */
 export interface Layout { scale: number; offsetX: number; offsetY: number; contentW: number; contentH: number; lineSpacing: number; fitScale: number; fitX: number; fitY: number; lineDy: number[]; slots: number[][] }
 /** Timings and counts of the last frame and the page load, for a debug overlay. */

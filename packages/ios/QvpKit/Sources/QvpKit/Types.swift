@@ -295,8 +295,11 @@ public struct QvpLayoutSpec: Equatable {
 public struct QvpGrid: Equatable { public let lines: Int, lineSpacing: Float }
 /// Page → viewport. On a printed page, viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. A reflowed
 /// page (`reflowed`) moves words, not lines, so `lineDy` places no path there: draw through `QvpPage.layoutDrawList` and
-/// `QvpPage.layoutPlacements`, and ask `QvpPage.wordBoundsView` where a word is. `fitScale`, `fitX`, `fitY` show the
-/// whole content in the viewport (shrink to height, never enlarge, centred); the host's pan and zoom go on top.
+/// `QvpPage.layoutPlacements`, and ask `QvpPage.wordBoundsView` where a word is. Draw at fitX + fitScale*viewX,
+/// fitY + fitScale*viewY, and put the host's pan and zoom on top. On a printed page `fitScale` shrinks the content to
+/// fit both the viewport width and height (never above 1) and `fitX`, `fitY` centre it. On a reflowed page `fitScale`
+/// is 1 and the host scrolls: `fitX` centres the content across the viewport, and `fitY` puts its top at the top of
+/// the viewport.
 public final class QvpLayout {
     /// The page-to-viewport scale and offset, the content size in viewport points, and the line
     /// spacing in page units.
@@ -304,7 +307,8 @@ public final class QvpLayout {
     /// Per printed line, or per row when the page is reflowed: the shift down in page units, and the
     /// top and bottom of its slot.
     public let lineDy: [Float], slotTop: [Float], slotBottom: [Float]
-    /// The scale and offset that show the whole content in the viewport.
+    /// The view transform for the content: shrink to fit and centre on a printed page, scale 1
+    /// and scrolled on a reflowed one (see the type's doc).
     public let fitScale: Float, fitX: Float, fitY: Float
     /// True when this layout broke the words onto rows of its own, and how many rows it made.
     /// A reflowed page places paths by group (`QvpPage.layoutGroups`), not by printed line.

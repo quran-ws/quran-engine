@@ -1171,8 +1171,12 @@ final class QvpLayout {
   /// How many rows a reflowed page made; 0 when it was not reflowed.
   final int rows;
 
-  /// The view transform that shows the whole content in the viewport (shrink to fit both
-  /// width and height, never enlarge, centred). The host's pan and zoom go on top.
+  /// The view transform for the content: draw at `fitX + fitScale*viewX`,
+  /// `fitY + fitScale*viewY`, and put the host's pan and zoom on top. On a printed page
+  /// [fitScale] shrinks the content to fit both the viewport width and height (never
+  /// above 1) and [fitX], [fitY] centre it. On a reflowed page [fitScale] is 1 and the
+  /// host scrolls: [fitX] centres the content across the viewport, and [fitY] puts its
+  /// top at the top of the viewport.
   final double fitScale, fitX, fitY;
 
   /// Per-line vertical shift in page units (index = line record index).
