@@ -111,6 +111,8 @@ All notable changes to the engine and its packages. The format follows
   row on a reflowed page. `QvpLayout.fitScale` shrinks to fit both width and height, not to
   height alone. The default `QvpZoom` is at zoom 1, not all zero. `QvpDefaults` names its
   ratios apart from its page-unit lengths.
+- Flutter: on web, a `'surah:ayah:word'` target such as `'2:255:3'` named word 0 of the
+  page. The web backend did not send the word key to `qvp.js`. The new web test found it.
 
 ## [0.8.0] - 2026-11-04
 

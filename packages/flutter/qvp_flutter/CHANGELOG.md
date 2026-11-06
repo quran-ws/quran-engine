@@ -23,6 +23,8 @@
   and `macos/qvp_flutter/Package.swift` link `QvpEngine.xcframework` as a binary target, and
   the podspecs stay for apps that build with CocoaPods. Flutter no longer warns that the
   plugin does not support Swift Package Manager.
+- `test/qvp_web_test.dart` runs the cases of `test/shared/api_cases.dart` on the web backend
+  in Chrome. `test/qvp_flutter_test.dart` runs the same cases on the `dart:ffi` backend.
 
 ### Changed
 - The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
@@ -61,6 +63,10 @@
   page. `QvpLayout.fitScale` shrinks to fit both width and height, not to height alone. The
   default `QvpZoom` is at zoom 1, not all zero. `QvpDefaults` names its ratios apart from
   its page-unit lengths.
+- On web, a `'surah:ayah:word'` target such as `'2:255:3'` named word 0 of the page.
+  `targetWords`, `highlight`, `mask`, `text`, `cropSvg` and the other target calls took the
+  first word. The web backend now sends the word key to `qvp.js`, which finds the word as
+  the native backend does.
 
 ## 0.8.0
 
