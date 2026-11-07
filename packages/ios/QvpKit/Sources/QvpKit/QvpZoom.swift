@@ -170,6 +170,19 @@ extension QvpPage {
         qvp_layout_ink_band(p, &v, viewportW, viewportH, maxHeight, maxPixels, &out)
         return QvpInkBand(top: out.top, height: out.height)
     }
+    /// The band a view draws into one bitmap, in view points down the page: `layoutInkBand` for
+    /// a viewport measured in points, with the bitmap's limits in device pixels made points.
+    /// A bitmap is at most 16384 rows, which is `16384 / displayScale` points, and `maxPixels`
+    /// is the points the view keeps for it, its width times its height. `viewScale` is the
+    /// view's scale as the view holds it, so the points come back on the view's own grid. The
+    /// height is at least one point.
+    func inkBandPoints(_ view: QvpView, viewScale: CGFloat, viewportW: CGFloat, viewportH: CGFloat,
+                       displayScale: CGFloat, maxPixels: CGFloat) -> (top: CGFloat, height: CGFloat) {
+        let s = max(displayScale, 1)
+        let b = layoutInkBand(view, viewportW: Float(viewportW), viewportH: Float(viewportH),
+                              maxHeight: Float(16384 / s), maxPixels: Float(maxPixels))
+        return (CGFloat(b.top) * viewScale, max(CGFloat(b.height) * viewScale, 1))
+    }
     /// Hold the content against the viewport: centre an axis it does not fill, cover the
     /// viewport on an axis it overflows, so no drag opens a blank strip beside the page.
     public func viewClamp(_ view: QvpView, contentW: Float, contentH: Float, viewportW: Float, viewportH: Float) -> QvpView {

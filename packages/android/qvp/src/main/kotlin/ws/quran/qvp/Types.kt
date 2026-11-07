@@ -461,7 +461,7 @@ data class QvpDressView(val view: QvpView, val width: Float, val height: Float)
 /**
  * What a dress put on the page. The three ornament indices are null for a kind left as printed.
  * [viewBox] is the page box the border grew, in page units. [overflow] is how far the border reaches
- * past the laid-out content on each side, in viewport px. The layout's fit ([QvpLayout.fitScale]) already
+ * past the laid-out content on each side, in layout px. The layout's fit ([QvpLayout.fitScale]) already
  * holds it, so a host that draws at the fit shows the whole border. [revision] counts up on every rebuild (a new dress, and every layout).
  */
 data class QvpDressInfo(val ayahMark: Int?, val surahHeader: Int?, val pageFrame: Int?, val ayahMarks: Int, val surahHeaders: Int,

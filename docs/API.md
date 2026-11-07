@@ -462,7 +462,8 @@ layout:
 
 - `maxHeight` is the tallest band the host can draw. 0 takes `QVP_DEFAULT_MAX_INK_HEIGHT`
   (4096), a height that every GPU these wrappers run on can draw. No band is taller than
-  `maxHeight`. A screen taller than it gets a band of exactly `maxHeight`.
+  `maxHeight`. A screen taller than it gets a band of exactly `maxHeight`, or for a dressed page
+  whose bare page fits, one 0.01 px under it (see below).
 - `maxPixels` is how many pixels the host keeps for one band, its width times its height. 0
   means no limit. A host with a byte budget passes the budget divided by its bytes per pixel.
   The budget can shrink the band from two screens down to one screen, but not below: a band
@@ -477,6 +478,30 @@ The page is whole when it fits under both limits, read this way. One case ignore
 a view with no scale, a viewport with no height, or a scale, viewport height or `offsetY` that
 is NaN or infinite has no screen to put a band around, so the band is the whole page however
 tall it is.
+
+A dressed page's border stands over the content's top and bottom by the dress overflow, and a
+stroked border by half its stroke more, since a stroke is centred on its outline. That
+overflow counts against both limits, rounded up to whole viewport px, plus one px for the
+antialiased edge. The host draws the border into the band and adds no rows of its own. The
+overflow to the left and right does not change the band, which is as wide as the viewport.
+
+- The dressed box fits: the band is that box, the content plus the overflow above and below.
+- Neither the dressed box nor the bare page fits: the band is the bare page's band, to the
+  bit. It covers the screen, and so every part of the border on it.
+- Only the bare page fits, so the page bands because of its border: the band steps as the bare
+  page's would, with the step rounded down to whole viewport px, so its ink stays on the pixel
+  grid of the whole page. A band that follows the reader (under 2 px of slack) has its top
+  rounded down and is one px taller, which can pass `maxPixels` by one row, when `maxHeight`
+  has room for it.
+- The same, under a screen taller than `maxHeight`, which no band covers: the band is 0.01 px
+  under `maxHeight` tall, so a host that rounds its rows up stays under `maxHeight`. It holds the whole bare page and starts at the top of the dress box
+  (`overflow[1]` over the content, without the stroke), or as near it as `maxHeight` allows.
+  The rest of the border is not drawn. This is where hosts started their ornament layer before
+  the band held the border.
+- No screen: the band is everything the dress draws above, on and below the page, not rounded.
+
+A page whose dressed box is just over a limit that its bare page fits under now bands, so a pan
+can draw it again where it was drawn whole before. That costs time, not pixels.
 
 A host that draws in device pixels passes the view, the viewport and the limits in device
 pixels, as `CanvasRenderer` does. The band comes back in layout px either way.
@@ -789,7 +814,7 @@ drawn in layout space. `CanvasRenderer` does all of this.
 
 **A dressed page is bigger than its text.** `viewBox` is the page box the border grew, in
 page units, and `overflow` is how far the border reaches past the laid-out content on each
-side, in viewport px. The layout's fit includes the dress: `fitScale`, `fitX` and `fitY` fit
+side, in layout px. The layout's fit includes the dress: `fitScale`, `fitX` and `fitY` fit
 the content plus the overflow in the viewport, so a host that draws at the layout's fit shows
 the whole border with no arithmetic of its own. `fitX` and `fitY` still place the content's
 origin, and the overflow sits to their left and above them. A printed page shrinks to fit

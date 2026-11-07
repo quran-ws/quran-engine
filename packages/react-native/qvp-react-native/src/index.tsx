@@ -201,7 +201,7 @@ export interface DressSpec {
   colors?: [Ornament | number, number, Color][];
 }
 /** The engine's readout of a dressed page. `viewBox` is [x, y, w, h] in page units; `overflow` is
- * [left, top, right, bottom] in viewport px, how far the border reaches past the content. */
+ * [left, top, right, bottom] in layout px, how far the border reaches past the content. */
 export interface DressInfo {
   ayahMark: number | null; surahHeader: number | null; pageFrame: number | null;
   ayahMarks: number; surahHeaders: number; frameRepeats: number; frameStretched: boolean;

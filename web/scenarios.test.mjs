@@ -3,7 +3,7 @@
 // web/qvp_ffi.wasm and dist/pages/042.qvp.
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { QvpEngine, wasmUrl } from './index.mjs'
+import { QvpEngine, CanvasRenderer, wasmUrl } from './index.mjs'
 
 const root = new URL('..', import.meta.url)
 const pagePath = new URL('dist/pages/042.qvp', root)
@@ -163,16 +163,93 @@ console.log(`ok  ${hits.cases.length} hit scenarios match the engine`)
 
 // conformance/scenarios/ink-band.json: the band of the page a host keeps drawn, for a page
 // that fits, a magnified page drawn a band at a time, pans inside one step and across it, the
-// host's own limits, and no screen at all.
+// host's own limits, and no screen at all; then the same page dressed.
 const inks = JSON.parse(readFileSync(new URL('conformance/scenarios/ink-band.json', root), 'utf8'))
 const inkPage = engine.loadPage(readFileSync(pagePath))
 const inkLayout = inkPage.layout(inks.spec)
 assert.ok(Math.abs(inkLayout.contentH - inks.contentH) <= inks.tolerance * inks.contentH, `ink band contentH: got ${inkLayout.contentH}, engine says ${inks.contentH}`)
-for (const c of inks.cases) {
-  const got = inkPage.layoutInkBand(c.view, c.viewportW, c.viewportH, { maxHeight: c.maxHeight, maxPixels: c.maxPixels })
-  for (const k of ['top', 'height']) {
-    assert.ok(Math.abs(got[k] - c.band[k]) <= inks.tolerance * Math.max(1, Math.abs(c.band[k])), `ink band ${c.name} ${k}: got ${got[k]}, engine says ${c.band[k]}`)
+const inkCases = (cases, tag) => {
+  for (const c of cases) {
+    const got = inkPage.layoutInkBand(c.view, c.viewportW, c.viewportH, { maxHeight: c.maxHeight, maxPixels: c.maxPixels })
+    for (const k of ['top', 'height']) {
+      assert.ok(Math.abs(got[k] - c.band[k]) <= inks.tolerance * Math.max(1, Math.abs(c.band[k])), `${tag} ${c.name} ${k}: got ${got[k]}, engine says ${c.band[k]}`)
+    }
   }
 }
+inkCases(inks.cases, 'ink band')
+assert.equal(inks.cases.length, 14)
+// The same page dressed in the synthetic set: the band is that of the dressed box, which
+// holds the border above and below the content.
+const inkHex = readFileSync(new URL(`conformance/${inks.dressed.ornaments}`, root), 'utf8').replace(/\s+/g, '')
+const inkSet = engine.loadOrnaments(Uint8Array.from(inkHex.match(/../g), b => parseInt(b, 16)))
+assert.ok(inkPage.dress(inkSet, inks.dressed.dress), 'ink band: the engine refused the dress')
+inkPage.dressInfo().overflow.forEach((v, i) => assert.ok(Math.abs(v - inks.dressed.overflow[i]) <= inks.tolerance * Math.max(1, Math.abs(inks.dressed.overflow[i])), `ink band overflow[${i}]: got ${v}, engine says ${inks.dressed.overflow[i]}`))
+inkCases(inks.dressed.cases, 'dressed ink band')
+assert.equal(inks.dressed.cases.length, 17)
+console.log(`ok  ${inks.cases.length} ink band scenarios and ${inks.dressed.cases.length} dressed ones match the engine`)
+
+// CanvasRenderer draws a dressed page's ornament layer into the engine's band: the layer has the
+// base ink's rows and is blitted where the base ink is, so the border is not cut off at the
+// tallest canvas or the ink budget. A stub canvas records each canvas's size and every blit.
+{
+  const ctx = canvas => {
+    const calls = { blits: [] }
+    return new Proxy({ canvas, calls }, {
+      get(t, k) {
+        if (k in t) return t[k]
+        if (k === 'drawImage') return (img, x, y) => calls.blits.push({ img, h: img.height, y })
+        return () => {}
+      },
+      set() { return true },
+    })
+  }
+  const canvas = (width = 1, height = 1) => { const c = { width, height }; c.ctx = ctx(c); c.getContext = () => c.ctx; return c }
+  const had = { document: globalThis.document, Path2D: globalThis.Path2D }
+  globalThis.document = { createElement: () => canvas() }
+  globalThis.Path2D = class { moveTo() {} lineTo() {} quadraticCurveTo() {} bezierCurveTo() {} closePath() {} rect() {} roundRect() {} }
+  const L = inkPage.currentLayout
+  const [W, H] = [inks.spec.viewportW, inks.spec.viewportH]
+  const views = [
+    ['fitted', { scale: L.fitScale, offsetX: L.fitX, offsetY: L.fitY }, 64 << 20],
+    ['magnified', { scale: 8, offsetX: 0, offsetY: -2000 }, 64 << 20],
+    ['magnified at the bottom', { scale: 8, offsetX: 0, offsetY: H - 8 * L.contentH }, 64 << 20],
+    ['under a budget of one screen', { scale: 8, offsetX: 0, offsetY: -2000 }, 4 * W * 2 * H * 2],
+    ['under a budget the bare page fits', { scale: 1, offsetX: 0, offsetY: 0 }, 4 * W * 2 * Math.ceil(L.contentH * 2 + 2)],
+  ]
+  let drawn = 0
+  for (const dpr of [1, 2, 3]) {
+    for (const [name, view, budget] of views) {
+      const c = canvas(W * dpr, H * dpr)
+      const r = new CanvasRenderer(c)
+      r.inkBudget = budget
+      r.draw(inkPage, view, dpr)
+      const band = inkPage.layoutInkBand({ scale: view.scale * dpr, offsetX: view.offsetX * dpr, offsetY: view.offsetY * dpr }, W * dpr, H * dpr,
+        { maxHeight: 16384, maxPixels: budget / 4 })
+      const rows = Math.max(1, Math.ceil(band.height * view.scale * dpr))
+      const y = Math.round(dpr * (view.offsetY + band.top * view.scale))
+      const tag = `renderer ${name} at dpr ${dpr}`
+      const [orn, base] = c.ctx.calls.blits
+      assert.ok(orn && orn.img === r.ornamentLayer && base && base.img === r.base, `${tag}: the ornament layer, then the base ink`)
+      assert.equal(orn.h, rows, `${tag}: the ornament layer is the band`)
+      assert.equal(base.h, rows, `${tag}: the base ink is the band`)
+      assert.equal(orn.y, y, `${tag}: the ornament layer sits at the band's top`)
+      assert.equal(base.y, y, `${tag}: the base ink sits at the band's top`)
+      assert.ok(rows <= 16384, `${tag}: ${rows} rows`)
+      // the band covers the screen, so every row of the border on it
+      assert.ok(y <= 0 && y + rows >= H * dpr || band.height * view.scale * dpr <= 16384 && band.top <= 0, `${tag}: the band covers the screen`)
+      drawn++
+    }
+  }
+  // an undressed page has no ornament layer
+  inkPage.undress()
+  const bare = canvas(W, H)
+  const r = new CanvasRenderer(bare)
+  r.draw(inkPage, { scale: 1, offsetX: 0, offsetY: 0 }, 1)
+  assert.equal(r.ornamentLayer, null)
+  assert.deepEqual(bare.ctx.calls.blits.map(b => b.img), [r.base])
+  globalThis.document = had.document
+  globalThis.Path2D = had.Path2D
+  console.log(`ok  CanvasRenderer draws a dressed page's border into the engine's band (${drawn} views)`)
+}
 inkPage.free()
-console.log(`ok  ${inks.cases.length} ink band scenarios match the engine`)
+inkSet.free()

@@ -683,19 +683,15 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// the whole page when it fits, otherwise two screens around the reader, with a top that
     /// moves in steps. Its limits are the bitmap's, in device pixels made points: 16384 rows,
     /// and the ink budget at four bytes a pixel.
-    /// A dressed page's border stands past the content by the dress overflow, and this view
-    /// draws the border into the same bitmap as the ink. So the bitmap is the band plus the
-    /// overflow above and below, as the Android ornament layer is, and the overflow comes off
-    /// the row limit so the bitmap stays under it.
+    /// The band of a dressed page holds every part of its border on the screen, except under a
+    /// screen taller than 16384 rows, where it keeps the page's ink and the top of the border can
+    /// be clipped, and this view
+    /// draws the border into the same bitmap as the ink, so the band is the bitmap.
     private func band(for p: QvpPage, offsetY: CGFloat, scale: CGFloat) -> (top: CGFloat, height: CGFloat) {
-        let o = dressOverflow(p)
-        let above = ((o?.top ?? 0) * viewScale).rounded(.up), below = ((o?.bottom ?? 0) * viewScale).rounded(.up)
         let s = max(scale, 1)
         let view = QvpView(scale: Float(viewScale), offsetX: Float(viewOx), offsetY: Float(offsetY))
-        let b = p.layoutInkBand(view, viewportW: Float(bounds.width), viewportH: Float(bounds.height),
-                                maxHeight: Float(max(16384 / s - above - below, 1)),
-                                maxPixels: Float(CGFloat(inkBudget) / (4 * s * s)))
-        return (CGFloat(b.top) * viewScale - above, max(CGFloat(b.height) * viewScale + above + below, 1))
+        return p.inkBandPoints(view, viewScale: viewScale, viewportW: bounds.width, viewportH: bounds.height,
+                               displayScale: scale, maxPixels: CGFloat(inkBudget) / (4 * s * s))
     }
 
     private func paths(_ p: QvpPage) -> [CGPath] { p.buildPaths() }
