@@ -31,6 +31,7 @@ class QvpViewLayout {
     this.lineSpacing = 1,
     this.fillHeight = false,
     this.gridLines = 0,
+    this.maxAspectSlack = QvpDefaults.aspectSlack,
     this.surahFrames = true,
   });
 
@@ -45,6 +46,9 @@ class QvpViewLayout {
   /// The grid to lay the page out inside, in lines; 0 is the page's own ([QvpPage.grid]).
   final int gridLines;
 
+  /// Maximum aspect slack for viewport fit guard.
+  final double maxAspectSlack;
+
   /// This layout with the given fields changed.
   QvpViewLayout copyWith({
     double? padTop,
@@ -53,6 +57,7 @@ class QvpViewLayout {
     double? lineSpacing,
     bool? fillHeight,
     int? gridLines,
+    double? maxAspectSlack,
     bool? surahFrames,
   }) => QvpViewLayout(
     padTop: padTop ?? this.padTop,
@@ -61,11 +66,12 @@ class QvpViewLayout {
     lineSpacing: lineSpacing ?? this.lineSpacing,
     fillHeight: fillHeight ?? this.fillHeight,
     gridLines: gridLines ?? this.gridLines,
+    maxAspectSlack: maxAspectSlack ?? this.maxAspectSlack,
     surahFrames: surahFrames ?? this.surahFrames,
   );
 
   /// The engine spec for a viewport of [viewportW] by [viewportH] px, with the content kept
-  /// no wider than [QvpDefaults.aspectSlack] allows.
+  /// no wider than [maxAspectSlack] allows.
   QvpLayoutSpec toSpec(double viewportW, double viewportH) => QvpLayoutSpec(
     viewportW: viewportW,
     viewportH: viewportH,
@@ -76,7 +82,7 @@ class QvpViewLayout {
     lineSpacing: lineSpacing,
     fillHeight: fillHeight,
     gridLines: gridLines,
-    maxAspectSlack: QvpDefaults.aspectSlack,
+    maxAspectSlack: maxAspectSlack,
     surahFrames: surahFrames,
   );
 
@@ -89,6 +95,7 @@ class QvpViewLayout {
       other.lineSpacing == lineSpacing &&
       other.fillHeight == fillHeight &&
       other.gridLines == gridLines &&
+      other.maxAspectSlack == maxAspectSlack &&
       other.surahFrames == surahFrames;
 
   @override
@@ -99,6 +106,7 @@ class QvpViewLayout {
     lineSpacing,
     fillHeight,
     gridLines,
+    maxAspectSlack,
     surahFrames,
   );
 }
@@ -214,10 +222,8 @@ typedef QvpWordTapCallback = void Function(QvpWordInfo word, QvpHit hit);
 
 /// A tap on a decoration (ayah mark, surah banner, …) that is not a word, and
 /// the hit that found it: line / distance / isExact, as for a word.
-typedef QvpDecorationTapCallback = void Function(
-  QvpDecorationInfo decoration,
-  QvpHit hit,
-);
+typedef QvpDecorationTapCallback =
+    void Function(QvpDecorationInfo decoration, QvpHit hit);
 
 /// Renders a [QvpPage] with the engine's layout, animated highlights, masks,
 /// styled paths, tap / long-press selection and pinch / pan.
@@ -234,6 +240,7 @@ class QvpPageView extends StatefulWidget {
     this.onDecorationTap,
     this.onEmptyTap,
     this.onSelectionChanged,
+    this.onSwipe,
     this.hitMaxDistance = QvpDefaults.tapDistance,
     this.selectionEnabled = true,
     this.panZoomEnabled = true,
@@ -274,6 +281,10 @@ class QvpPageView extends StatefulWidget {
   /// Whole-word selection changed through long-press-drag (empty list = cleared).
   final void Function(List<int> words)? onSelectionChanged;
 
+  /// A sideways flick, in pages: +1 the page after this one, -1 the page before it. The
+  /// muṣḥaf's own order, so a host adds it to the page it is on.
+  final void Function(int pages)? onSwipe;
+
   /// Max distance (page units) for the gap-aware tap.
   final double hitMaxDistance;
 
@@ -301,6 +312,13 @@ class QvpPageView extends StatefulWidget {
   }) {
     _InkCache.prepare(page, inkColor: inkColor, surahFrames: surahFrames);
   }
+
+  /// Evicts any cached ink pictures for [pageNumber].
+  static void evictPage(int pageNumber) => _InkCache.evictPage(pageNumber);
+
+  /// True if base ink for [pageNumber] is currently cached in the picture cache.
+  static bool hasCachedInk(int pageNumber) =>
+      _InkCache.hasCachedInk(pageNumber);
 
   @override
   State<QvpPageView> createState() => QvpPageViewState();
@@ -512,8 +530,10 @@ class QvpPageViewState extends State<QvpPageView>
     // screen because the reader asked for it: the engine shows its top.
     _ctl.scale = l.fitScale;
     _fitScale = l.fitScale;
-    _ctl.offsetX = l.fitX;
-    _ctl.offsetY = l.fitY;
+    // Land the page on whole device pixels, matching native Android's round(v.offsetX/Y).
+    // A fractional offset forces Skia to resample every texture blit, causing blurriness and extra raster load.
+    _ctl.offsetX = l.fitX.roundToDouble();
+    _ctl.offsetY = l.fitY.roundToDouble();
   }
 
   /// Re-runs the engine layout and fits the page.
@@ -545,9 +565,12 @@ class QvpPageViewState extends State<QvpPageView>
     }
   }
 
+  double _swipeDx = 0.0;
+
   /// The fingers went down, or their number changed: Flutter starts the scale gesture again
   /// then, with `scale` back at 1, so this is where every pinch is measured from.
   void _onScaleStart(ScaleStartDetails d) {
+    _swipeDx = 0.0;
     _gView = _ctl.view;
     _gFocal = d.localFocalPoint;
     // where the control stood when the fingers went down: the engine measures them against this,
@@ -559,12 +582,18 @@ class QvpPageViewState extends State<QvpPageView>
   /// border on the screen too, not only its text.
   void _hold(QvpView v) {
     final h = page.dressClamp(v, _size.width, _size.height);
-    _ctl.set(scale: h.scale, offsetX: h.offsetX, offsetY: h.offsetY);
+    _ctl.set(
+      scale: h.scale,
+      offsetX: h.offsetX.roundToDouble(),
+      offsetY: h.offsetY.roundToDouble(),
+    );
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
-    if (!widget.panZoomEnabled || _size == Size.zero) return;
+    if (_size == Size.zero) return;
     if (d.pointerCount < 2) {
+      _swipeDx += d.focalPointDelta.dx;
+      if (!widget.panZoomEnabled) return;
       // One finger: a drag. A page with no sideways travel to spend scrolls up and down only;
       // the engine says which, and holds the page against the viewport either way.
       final sideways =
@@ -578,6 +607,7 @@ class QvpPageViewState extends State<QvpPageView>
       );
       return;
     }
+    if (!widget.panZoomEnabled) return;
     // the fingers' drift since the pinch began: it pans the page, so two fingers drag it
     final drift = d.localFocalPoint - _gFocal;
     if (_gZoom.mode == QvpZoomMode.magnify) {
@@ -619,6 +649,26 @@ class QvpPageViewState extends State<QvpPageView>
       widget.onZoomChanged?.call(c.zoom);
     }
     _hold(page.engine.viewPan(c.view, drift.dx, drift.dy));
+  }
+
+  void _onScaleEnd(ScaleEndDetails d) {
+    if (widget.onSwipe != null &&
+        _zoom.mode != QvpZoomMode.magnify &&
+        _fitScale > 0 &&
+        _ctl.scale <= _fitScale * 1.05) {
+      final sideways = page.sidewaysDrag(_zoom, _ctl.view, _fitScale);
+      if (sideways == QvpSideways.turnPage) {
+        final pages = page.engine.swipePages(
+          _swipeDx,
+          0.0,
+          d.velocity.pixelsPerSecond.dx,
+          d.velocity.pixelsPerSecond.dy,
+        );
+        if (pages != 0) {
+          widget.onSwipe!(pages);
+        }
+      }
+    }
   }
 
   /// Move the control to one of the page's steps: 0 is the printed page.
@@ -737,8 +787,15 @@ class QvpPageViewState extends State<QvpPageView>
               behavior: HitTestBehavior.opaque,
               onTapUp: _onTapUp,
               onDoubleTap: widget.panZoomEnabled ? fit : null,
-              onScaleStart: widget.panZoomEnabled ? _onScaleStart : null,
-              onScaleUpdate: widget.panZoomEnabled ? _onScaleUpdate : null,
+              onScaleStart: (widget.panZoomEnabled || widget.onSwipe != null)
+                  ? _onScaleStart
+                  : null,
+              onScaleUpdate: (widget.panZoomEnabled || widget.onSwipe != null)
+                  ? _onScaleUpdate
+                  : null,
+              onScaleEnd: (widget.panZoomEnabled || widget.onSwipe != null)
+                  ? _onScaleEnd
+                  : null,
               onLongPressStart: widget.selectionEnabled
                   ? _onLongPressStart
                   : null,
@@ -897,6 +954,26 @@ class _LruCache {
     }
     return false;
   }
+
+  void evictPage(int pageNumber) {
+    final toRemove = <_InkKey>[];
+    for (final entry in _entries.entries) {
+      if (entry.key.page == pageNumber) {
+        entry.value.dispose();
+        toRemove.add(entry.key);
+      }
+    }
+    for (final k in toRemove) {
+      _entries.remove(k);
+    }
+  }
+
+  bool hasPage(int pageNumber) {
+    for (final key in _entries.keys) {
+      if (key.page == pageNumber) return true;
+    }
+    return false;
+  }
 }
 
 class _DrawList {
@@ -998,6 +1075,11 @@ class _BoxLayer {
 /// Per-page render cache: base ink picture and layout draws.
 class _InkCache {
   static final _LruCache _globalInkCache = _LruCache();
+
+  static void evictPage(int pageNumber) =>
+      _globalInkCache.evictPage(pageNumber);
+  static bool hasCachedInk(int pageNumber) =>
+      _globalInkCache.hasPage(pageNumber);
 
   static _PictureCacheEntry? getGlobalInk(_InkKey key) =>
       _globalInkCache.get(key);
@@ -1133,7 +1215,7 @@ class _InkCache {
       styled = page.styledPaths();
       var key = 1;
       for (var i = 0; i < styled.length; i++) {
-        key = 31 * key + styled[i].path;
+        key = 31 * (31 * key + styled[i].path) + styled[i].color;
       }
       styledKey = key;
       styledColors = [for (final s in styled) QvpColor.toColor(s.color)];
