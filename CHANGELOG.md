@@ -7,6 +7,10 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- Flutter: `QvpPageView.onSwipe` reports released horizontal drags in pages (+1 next, -1 previous),
+  matching iOS `QvpPageView.onSwipe` and engine `swipePages`. `QvpViewLayout.maxAspectSlack`
+  allows custom aspect ratio tolerance. `QvpPageView.evictPage` and `QvpPageView.hasCachedInk`
+  expose picture cache management.
 - QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
   `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
   `QvpPassageWord.wordKey`, as Kotlin's.
@@ -148,6 +152,12 @@ All notable changes to the engine and its packages. The format follows
 ### Removed
 
 ### Fixed
+- Flutter: `_InkCache` hashes styled path colors into `styledKey`, preventing stale base ink
+  reuse when styled paths change colors without changing path index.
+- Flutter: `QvpPageView` snaps view offsets to whole device pixels via `roundToDouble()`,
+  matching native Android `round(v.offsetX)` to eliminate subpixel resampling blur.
+- Flutter: `QvpPage` caches `ayahMarksView()` and `surahHeadersView()` until layout mutation,
+  reducing per-frame FFI crossings.
 - QvpKit: an index or count out of range no longer stops the program. Every call passes
   an Int to the C ABI as the parameter's unsigned width, cut from the Int as JNI's casts cut
   a jint on Android, and the engine answers: `wordLabel(-1)` is "", `findWord(-1, …)` is -1,
