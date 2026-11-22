@@ -69,3 +69,40 @@ Two things that look wrong and are not, both documented in the bundle's
 - **A mark can be drawn outside its own word** (§9.9) — a word-final tanwin
   floats into the gap toward the next word. Word bounding boxes therefore
   overlap. Ownership is the enclosing `g.word`, never proximity.
+
+## Fixed in quran-svg-elements v2.0.0
+
+The words archive of v2.0.0 fixes ink that v1.1.2 filed with the wrong word. Upstream
+records each item in `docs/defects/reported.json`.
+
+- p232 `11:91:12` drew two letters short: a waqf sign was counted as a letter piece of the
+  word before it.
+- p540 `57:22:12`: one stroke of its tanwin al-kasr was filed with the word on the line below.
+- p470 `40:27:9`, p567 `69:10:5`, p437 `35:29:14`: the tanwin was paired from strokes of
+  two different letters.
+- p526: three words beside a hizb rosette held ink of a neighbouring word.
+
+When the converter builds the pages from the words archive of v2.0.0, 575 of the 604 page
+files differ from data-v0.5.0. On 470 of these pages, only the paint order changes: the
+page holds the same elements in a different order. On the other 105 pages, some marks have
+a new outline or position. The identity gate passes on all 604 pages.
+
+### The `qpc` text changed
+
+The words index of v2.0.0 takes its text from the quran-text release. Its `qpc` form is
+different from v1.1.2 in 4159 words on 603 of the 604 pages. The word keys and the other
+four text forms do not change. Each count below is the number of places that have the edit:
+
+- 2945: U+0622 ARABIC LETTER ALEF WITH MADDA ABOVE becomes U+0627 ARABIC LETTER ALEF and <!-- terminology: ignore (Unicode character names) -->
+  U+0653 ARABIC MADDAH ABOVE.
+- 397 and 393: the text gains a U+0651 ARABIC SHADDA in 397 places and loses one in 393. <!-- terminology: ignore (Unicode character names) -->
+  Most of these pairs move the shaddah to a different place in its cluster.
+- 277: U+064E ARABIC FATHA becomes U+0653 ARABIC MADDAH ABOVE. <!-- terminology: ignore (Unicode character names) -->
+- 206: a U+0640 ARABIC TATWEEL now comes between
+  U+06E1 ARABIC SMALL HIGH DOTLESS HEAD OF KHAH and U+0654 ARABIC HAMZA ABOVE. <!-- terminology: ignore (Unicode character names) -->
+- 132: a U+0640 ARABIC TATWEEL now comes between U+0650 ARABIC KASRA and <!-- terminology: ignore (Unicode character names) -->
+  U+0654 ARABIC HAMZA ABOVE. <!-- terminology: ignore (Unicode character names) -->
+
+This is an upstream change to the text of record. The converter copies the text as it is.
+An app that stores `qpc` strings or offsets into them from an older data release must not
+mix them with the `qpc` text of the new release.

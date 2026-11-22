@@ -9,7 +9,7 @@ and under what terms an app may use it.
 | file | what |
 |---|---|
 | `NNN.qvp` | one printed page in the QVP1 format (`docs/FORMAT.md`): outlines, words, ayah fragments, lines, decorations |
-| `NNN.words.json` | that page's five text forms per word key: `rasm_uthmani`, `rasm_imlai`, `qpc`, `rasm`, `search` |
+| `NNN.words.json` | that page's five text forms per word key: `rasm_uthmani`, `rasm_imlai`, `qpc`, `rasm`, `search`. From the next data release, also `w`, the word's number in the quran-text release. `w` is not a key, because its numbering has gaps. |
 | `atlas.qva` | the cross-page index in the QVA1 format: pages, surahs, the 240 `rubu_al_hizb` boundaries |
 | `atlas.json` | the same atlas as JSON, for tooling |
 | `surah-names/qvp/NNN.qvp` | one compact, title-only engine asset for surah `NNN` |
@@ -31,7 +31,8 @@ The mushaf is the **King Fahd Glorious Qur'an Printing Complex (KFGQPC) Madani m
 version 4, 1441 AH**, in the Hafs reading, as vector artwork. The immediate source is the
 `quran-svg-elements` release (`https://github.com/quran-ws/quran-svg-elements`,
 `hafs-kfgqpc` bundle): one SVG per page with every word tagged by its key, plus an index of
-the text forms. `docs/UPSTREAM-DATA-ISSUES.md` lists what was found wrong in that source
+the text forms. From v2.0.0 that release holds two archives. The page data is built from
+the words archive. `docs/UPSTREAM-DATA-ISSUES.md` lists what was found wrong in that source
 and fixed there; the converter never patches data.
 
 ## The ornament set

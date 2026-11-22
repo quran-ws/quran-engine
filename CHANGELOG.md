@@ -68,6 +68,8 @@ All notable changes to the engine and its packages. The format follows
   simulator, once with Swift Package Manager and once with CocoaPods.
   `scripts/check-darwin-engine-symbols.sh` then checks that each app exports the engine. A
   `windows` job builds the example for Windows and checks that `qvp_ffi.dll` is bundled.
+- `qvp-convert` writes `w`, each word's number in the quran-text release, to
+  `NNN.words.json`. An engine that does not know the field ignores it.
 
 ### Changed
 - React Native: `scripts/gen-rn-enums.py` also writes `ios/QvpRnCodes.swift`, and
@@ -144,6 +146,13 @@ All notable changes to the engine and its packages. The format follows
   `lineDy` places a path on a reflowed page, where the words move and not the lines.
 - `scripts/build-engine-ios.sh` copies `QvpEngine.xcframework` into the Flutter plugin's
   `ios/qvp_flutter` and `macos/qvp_flutter`, one level below the old place.
+- The page source is the words archive of `quran-svg-elements` v2.0.0. `scripts/sync-test-data.sh`
+  takes the archive name from the tag, so a tag before v2.0.0 still resolves. The ink fixes
+  of that release reach apps with the next data release (`docs/UPSTREAM-DATA-ISSUES.md`).
+- The `qpc` text of 4159 words changes with the next data release, because the words index
+  of `quran-svg-elements` v2.0.0 takes it from the quran-text release. Do not mix `qpc`
+  strings or offsets from an older data release with the new ones
+  (`docs/UPSTREAM-DATA-ISSUES.md`).
 
 ### Removed
 
