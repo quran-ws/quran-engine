@@ -17,7 +17,10 @@ All notable changes to the engine and its packages. The format follows
   `crates/qvp-convert/tests/letters.rs` check it. The structure gate checks that every
   path of a word has exactly one role and that the letter count is the archive's count.
   The ink gate draws each page from its pieces and compares it with the page by the
-  identity gate's metric. All 604 pages pass both. `scripts/check.sh gates` runs them on
+  identity gate's metric. For each cut path, it also asserts that the area of the pieces
+  is the area of the path within upstream's edge limit of 0.0125 units times the length
+  of the edges remade near the outline, and that each side of a cut has a partner side.
+  All 604 pages pass both. `scripts/check.sh gates` runs them on
   8 pages when `pages-letters/` is present. The letter division comes from DigitalKhatt's
   `medinamushafanalyzer` (`docs/DATA.md`). The sizes and the gate's figures are in
   `docs/MEASURED.md`.

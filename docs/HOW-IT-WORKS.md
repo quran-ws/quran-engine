@@ -36,7 +36,7 @@ source SVG ──converter──▶ page file ──engine──▶ outlines + c
    arcs as close cubic curves (`docs/DATA.md`).
 3. **The page file** (`.qvp`, Quran Vector Page) holds the outlines, plus tables that say
    which outline belongs to which word, which word to which line and ayah, and where each
-   one sits on the page. A page is about 210 KB, a quarter of the SVG. Coordinates are
+   one sits on the page. A page is about 134 KB, a fifth of the SVG. Coordinates are
    *page units*: the printed page's own coordinate space, 345 by 550 for this mushaf.
 4. **The engine** (`crates/qvp-core`, written in Rust) loads a page file and holds its
    tables and outlines in memory. It exposes about 170 functions through a C header, and

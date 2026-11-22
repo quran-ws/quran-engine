@@ -76,10 +76,26 @@ which letter.
 Two gates check each layer (`crates/qvp-convert/tests/letters.rs`). The structure gate
 checks that every path of every word has exactly one role and that the letter count is
 the count of the archive's index. The ink gate draws the page from the
-pieces and compares it with the page (`docs/MEASURED.md`). It proves that the two drawings
-differ only at the cuts, and less than the identity gate allows. It does not prove that a
-cut falls where a calligrapher would put it. It does not say whether a reader can see a
-seam.
+pieces and compares it with the page (`docs/MEASURED.md`). It asserts these things:
+
+- The page drawn from its pieces passes the pixel threshold of the identity gate.
+- For each cut path, the area of its pieces is within 0.0125 units × L of the area of the
+  path. 0.0125 units is the edge limit that `quran-svg-elements` states. L is the length
+  of the edges that a cut made again, near the outline of the path. One path is a known
+  exception, with its exact difference (page 001, word 1:2:1).
+- Every side of a cut has a partner: a side of another piece of the same path runs along
+  it within 0.028 units.
+- A subpath inside another winds the other way, so that the areas count ink.
+
+It reports, and does not assert, the page drawn with the pieces of each path as one path,
+and the result of losing, doubling or replacing each piece. It cannot see these:
+
+- A change to the pieces that moves less ink than the area limit allows. Of all single
+  lost pieces, 25 pass, up to 0.034 square units. Of all doubled pieces, 16 pass.
+- A gap or an overlap between the pieces of two different paths.
+- Where ink moved inside one path. The pixel threshold sees this at page level only.
+- Whether a cut falls where a calligrapher would put it, and whether a reader can see a
+  seam.
 
 Quran.ws did not measure where a joined outline divides between two letters. That
 division is the output of DigitalKhatt's `medinamushafanalyzer`

@@ -24,14 +24,12 @@ and each fix is verified here rather than taken on trust:
 
 ## Still open
 
-### 1. No per-letter segmentation
+### 1. Per-letter segmentation: provided by v2.0.0
 
-Body paths are per connected stroke, not per letter. Tajwid colouring by letter
-(e.g. colouring only the noon of an ikhfa) is not possible from this data. The
-dev profile's `<g class="ligature">` is a rendering run, not a spelling — the
-bundle's own `schema/FORMAT.md` §10.3 says so — and the production profile drops
-it. If letter colouring is a product goal, the pipeline needs to emit letter
-boundaries (or at least glyph ids) per body path.
+The words archive has body paths per connected stroke, not per letter. The letters
+archive of `quran-svg-elements` v2.0.0 divides every word into letters, and cuts an
+outline that joins several letters into pieces. The converter builds the letter layer
+from it. `docs/DATA.md`, section "The letter layer", says how and what its limits are.
 
 ### 2. Ayah numbers are one merged outline per number
 
@@ -99,6 +97,15 @@ When the converter builds the pages from the words archive of v2.0.0, 575 of the
 files differ from data-v0.5.0. On 470 of these pages, only the paint order changes: the
 page holds the same elements in a different order. On the other 105 pages, some marks have
 a new outline or position. The identity gate passes on all 604 pages.
+
+### The letters archive
+
+- Page 001, word 1:2:1, page path 47: the source outline ends with a closed subpath of
+  three points, 0.05 by 0.01 units, with an area of 0.00025 square units. The one piece of
+  this outline does not draw it. The ink gate pins this as its one exception
+  (`KNOWN_LEFT_OUT` in `crates/qvp-convert/tests/letters.rs`).
+- At some cuts, the sides of two neighbouring pieces do not coincide: 116 cut sides in 32
+  outlines, each within 0.0200 units of its neighbour's side.
 
 ### The `qpc` text changed
 

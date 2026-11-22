@@ -91,14 +91,21 @@ words archive of the same release.
 |---|---|---|
 | raw | 37,200,857 B | 81,218,231 B |
 | each file after `gzip -9`, summed | 30,001,948 B | 41,632,217 B |
+| each file after `brotli -q 11`, summed | 25,946,365 B | 37,249,927 B |
 | smallest file | page 001, 16,045 B | page 001, 37,486 B |
 | largest file | page 552, 81,582 B | page 552, 170,465 B |
 
 The layers hold 333,220 letters and 261,953 pieces. A piece is a part of a joined outline
 that the converter cut out for one letter. The pieces come from 89,853 page paths. Raw,
 the layers are 45.8% of the size of the page files. After `gzip -9` they are 72.1%,
-because gzip makes a layer only 19.4% smaller and a page file 48.7% smaller. This page
-gives no brotli figure: the machine that measured the files had no `brotli`.
+because gzip makes a layer only 19.4% smaller and a page file 48.7% smaller. After brotli
+at quality 11 they are 69.7%: brotli makes a layer 30.3% smaller and a page file 54.1%
+smaller. The brotli figures come from the Python `brotli` module, version 1.1.0, one file
+at a time:
+
+```sh
+python3 -c 'import brotli,glob,sys; print(sum(len(brotli.compress(open(f,"rb").read(), quality=11)) for f in glob.glob(sys.argv[1])))' 'dist/letters/[0-9][0-9][0-9].qvl'
+```
 
 ```sh
 cargo run -p qvp-convert --release -- letters pages-letters pages dist/letters
@@ -123,17 +130,37 @@ than 0.05% of its pixels differ. That is 1,518 of 3,036,000 pixels.
 | each piece as its own path (asserted) | 0 | 350,588 | 516 and 552, 765 px (0.0252%) |
 | the pieces of one path as one path (reported) | 0 | 4,196 | 022, 20 px |
 
-When each piece is its own path, 346,601 differing pixels (98.9%) are within 1.5 px of a
-cut. The other 3,987 are near an edge that a cut made again, and none are elsewhere. The
+When each piece is its own path, 347,129 differing pixels (99.0%) are within 1.5 px of a
+cut. The other 3,459 are near an edge that a cut made again, and none are elsewhere. The
 worst page uses half of what the gate allows. When the pieces of one path are one path,
-only 269 differing pixels are near a cut, because the seam at the cuts is gone.
+only 737 differing pixels are near a cut, because the seam at the cuts is gone. The other
+3,459 are near an edge that a cut made again.
 
 The gate also compares areas. For each of the 89,853 cut paths, it takes the absolute
 difference between the area of the path and the area of its pieces. The sum of these
 differences is 1,466.9 square units, 0.0244% of the 6,003,600 square units of the paths.
 `quran-svg-elements` states that the edge of a cut piece is less than 0.0125 units from
-the artwork. That limit bounds the area difference of each path, and each difference is
-at most 0.438 of its bound. With 32 threads the gate took 4.8 s for 604 pages.
+the artwork. The gate asserts three things for each cut path:
+
+- The area of its pieces is within 0.0125 units × L of the area of the path. L is the
+  length of the edges that a cut made again near the outline of the path. Near means
+  within 0.028 units: 0.0125 units, 0.0141 units for the rounding of the path and of the
+  piece, and the error of the measure. The worst path uses 0.491 of this limit (page 381,
+  path 810).
+- Every other new edge that a piece draws once is a side of a cut. A side of another
+  piece of the same path must run along it, within 0.028 units. 116 such sides in 32
+  paths all have one. The farthest is 0.0200 units away.
+- A subpath inside another subpath winds the other way: 139,403 do, and none winds the
+  same way.
+
+One path is an exception, and the gate expects its exact difference. On page 001, the
+piece of word 1:2:1 leaves out a closed subpath of three points. The subpath is 0.05 by
+0.01 units, with an area of 0.00025 square units.
+
+A test changes the pieces of each path in turn (`QVP_LETTERS_SWEEP=1`). Of 261,874 lost
+pieces, 25 still pass, and the most ink one of them moves is 0.034 square units. Of
+261,953 doubled pieces, 16 pass, up to 0.135 square units. No piece replaced by its
+neighbour passes. With 32 threads the gate took 16.2 s for 604 pages.
 
 ## Known rough edges
 
