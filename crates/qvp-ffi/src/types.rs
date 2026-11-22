@@ -304,7 +304,9 @@ pub struct QvpLetterHit {
 }
 
 /// Letters by what they are (`qvp_find_letters`, `qvp_style_add_letters`). 40 bytes on a
-/// 64-bit target and 32 on wasm32, as `QvpTarget` is 32 or 24.
+/// 64-bit target and 32 on wasm32, as `QvpTarget` is 32 or 24. Its own fields leave no hole,
+/// but the `QvpTarget` in it has the holes of that struct. It is input only: the engine reads
+/// it and never writes it, so no byte of it goes back to the host.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct QvpLetterQuery {
@@ -318,8 +320,10 @@ pub struct QvpLetterQuery {
     pub _pad: [u8; 2],
 }
 
-// The letter structs have no implicit padding, so no byte the engine leaves unwritten crosses the
-// ABI. Checked when each target builds, wasm32 included; tests/abi.rs checks every offset.
+// The three letter structs the engine writes (info, member, hit) have no implicit padding, so no
+// byte the engine leaves unwritten goes back to the host. `QvpLetterQuery` is input only and keeps
+// the holes of its `QvpTarget`. The sizes are checked when each target builds, wasm32 included;
+// tests/abi.rs checks every offset.
 const _: () = {
     use std::mem::size_of;
     assert!(size_of::<QvpLetterInfo>() == 52);

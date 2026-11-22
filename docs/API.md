@@ -754,7 +754,7 @@ nothing until a layer is attached.
 |---|---|---|
 | `QVP_SELECTOR_LETTER` (16) | word, letter, part | A part of one letter. `QVP_LETTER_PART_ALL` takes every member. `QVP_LETTER_PART_BODY_AND_DOTS` takes each member at the letter's own offset. That is the ink of `WORD_CHARS` over the one offset. `QVP_LETTER_PART_MARKS` takes the other members. |
 | `QVP_SELECTOR_LETTER_MARK` (17) | word, letter, n | The nth mark of the letter, in text order. Dots count. |
-| `QVP_SELECTOR_LETTER_MARK_NAMED` (18) | word, letter, mark id | Each member whose path has that mark. |
+| `QVP_SELECTOR_LETTER_MARK_NAMED` (18) | word, letter, mark id | Each member whose path has that mark. An id with no name counts as 255, `unknown`, as in `QVP_SELECTOR_MARK`. An id above 255 takes nothing. |
 | `QVP_SELECTOR_WORD_CHARS` (19) | word, first, last | The ink of the `qpc` characters from `first` to `last`, both included. |
 | `qvp_style_add_letters` | a `QvpLetterQuery` | The letters of a scope that are one character, carry one mark, or both, and the part of each. |
 
@@ -769,6 +769,12 @@ placement, and leaves out the path. `qvp_styled_paths` leaves out the paths that
 does not hold, and `qvp_crop_svg` writes the pieces. `qvp_colors` gives a colour to each path,
 and also to each piece that is not drawn.
 
+**Tick first.** After you change the rules or the state (a style, a theme, a highlight, a
+mask, a reveal), call `qvp_tick` with the time now before any call that reads colours, styled
+paths, the draw revision or the draw list. Those calls apply a pending change at the time of
+the last tick. If one of them comes first, a transition starts at that earlier time, and it
+can be over before the next tick shows it. This is how `qvp_colors` always worked.
+
 **Each frame.** Call these in this order:
 
 1. `qvp_tick`.
@@ -777,8 +783,10 @@ and also to each piece that is not drawn.
 4. `qvp_layout_draw_list`, when the revision, the layout or the band is different from the
    list that you keep.
 
-The draw list and the revision apply the rule changes that are pending, as `qvp_colors` does.
-So their answers agree with each change made before the call, in any order of calls.
+On a page with a layer, the draw list and the revision apply the rule changes that are
+pending, as `qvp_colors` does. So the swap in their answers holds each change made before the
+call. On a page with no layer, they do not touch the rules, because the list does not depend
+on them.
 
 The revision counts up when a layer is attached, and when a cut path starts or stops drawing
 its pieces. It can count up with no visible change, for example on a second attach of the
@@ -791,12 +799,17 @@ choose there. Ink that the page stores as a mark wins over body ink, and of two 
 same ink, the one drawn last wins. The engine tests the pieces of a cut path, never the path.
 A point on the cut path between two pieces (a seam) is an exact hit on the nearest piece.
 
-Off the ink, the word is the one `qvp_hit_test` finds with the same options, and the hit is
-near (`is_exact` 0): the letter with the nearest box. When several boxes hold the point, as in
-the counter of a waw, the letter whose body ink is nearest wins. `distance` is the distance to
+A counter is the hole in the body of a letter, such as a waw or a meem. A point in a counter
+gives a near hit (`is_exact` 0) on that letter, in its word, at distance 0. The counter decides the
+word, also where the box of another word reaches over it.
+
+Anywhere else off the ink, the word is the one `qvp_hit_test` finds with the same options, and
+the hit is near: the letter with the nearest box. When several boxes hold the point, the letter
+whose body ink is nearest wins. `distance` is the distance to
 that letter's box, so it is 0 inside the box. `max_distance` limits the distance to the word,
 as in `qvp_hit_test`, not the distance to the letter. A host that wants only close letters
-filters on `distance`. `gap_bias` and `prefer_exact` also act only off the ink.
+filters on `distance`. `gap_bias` and `prefer_exact` also act only off the ink and out of a
+counter.
 
 A word-level mark, such as a waqf sign, has the letter `QVP_NONE`. `mark` is the mark id of
 the path that the point hit. Body ink has 0, but a body that the page stores as a mark, such
@@ -1053,7 +1066,7 @@ function in the header has no row here, or a row names a function the header lac
 | text and search | `qvp_citation` | `page.citation(words)` | Return a citation such as `2:255-257, 3:1` for a word list. |
 | text and search | `qvp_attach_words` | `page.attachWords(json)` | Attach the words sidecar's text forms; returns the number of words updated, −1 on bad JSON. |
 | text and search | `qvp_has_form` | `page.hasForm(form)` | Return whether a text form is available (the derived forms need the sidecar). |
-| letters | `qvp_attach_letters` | `page.attachLetters(bytes)` | Attach the letter layer of the page, and add its pieces to the path table. −1 for a bad file or a layer of another page. Then nothing changes. |
+| letters | `qvp_attach_letters` | `page.attachLetters(bytes)` | Attach the letter layer of the page, and add its pieces to the path table. Returns −1, and changes nothing, for one of these: a bad file, a layer of another page, a file over 1 MiB, a page whose words share paths. |
 | letters | `qvp_has_letters` | `page.hasLetters()` | Return whether a letter layer is attached. |
 | letters | `qvp_letter_count` | `page.letterCount(word)` | Return how many letters a word has. 0 with no layer. |
 | letters | `qvp_letter_info` | `page.letter(word, i)` | Return one letter: its offset, character, member and mark counts, the other offset its body draws, and its box. |

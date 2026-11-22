@@ -10,12 +10,15 @@ use crate::types::*;
 use qvp_core::*;
 
 /// Attach a letter layer (`NNN.qvl`). 0 on success. -1 for a NULL page or NULL bytes, a file
-/// that does not decode, a layer of another page, or a file over the size limit: the page
-/// then keeps the layer it had, and nothing it answered before changes.
+/// that does not decode, a layer of another page, a file over `MAX_LETTER_LAYER_BYTES` (checked
+/// before the bytes are read), or a page whose words share paths: the page then keeps the
+/// layer it had, and nothing it answered before changes.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_attach_letters(page: *mut Page, bytes: *const u8, len: u32) -> i32 {
     guard(|| {
-        if page.is_null() || bytes.is_null() {
+        // the size check comes before the slice is formed: a slice may not reach isize::MAX
+        // bytes, which a u32 length can on wasm32
+        if page.is_null() || bytes.is_null() || len as usize > defaults::MAX_LETTER_LAYER_BYTES {
             return -1;
         }
         match (*page).attach_letters(std::slice::from_raw_parts(bytes, len as usize)) {

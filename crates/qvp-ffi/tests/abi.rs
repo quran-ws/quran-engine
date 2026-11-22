@@ -1195,6 +1195,12 @@ fn letters_over_the_abi() {
         assert_eq!(qvp_attach_letters(p, layer.as_ptr(), 3), -1, "three bytes are no layer");
         assert_eq!(qvp_attach_letters(p, std::ptr::null(), 0), -1);
         assert_eq!(qvp_attach_letters(std::ptr::null_mut(), layer.as_ptr(), layer.len() as u32), -1);
+        let mut other = letters_layer();
+        other.page = 2;
+        let other = layer_bytes(&letters_page_data(), &other);
+        assert_eq!(qvp_attach_letters(p, other.as_ptr(), other.len() as u32), -1, "another page's layer");
+        assert_eq!(qvp_attach_letters(p, layer.as_ptr(), (1 << 20) + 1), -1, "over the size limit, before a read");
+        assert_eq!(qvp_attach_letters(p, layer.as_ptr(), u32::MAX), -1);
         assert_eq!(qvp_has_letters(p), 0, "a refused attach changes nothing");
         qvp_page_info(p, &mut info);
         assert_eq!(info.n_paths, 8);
@@ -1218,7 +1224,11 @@ fn letters_over_the_abi() {
         );
         assert_eq!((li.x0, li.y0, li.x1, li.y1, li.has_ink, li._pad), (50.0, 6.0, 60.0, 24.0, 1, [0; 3]));
         assert_eq!(qvp_letter_info(p, 0, 1, &mut li), 1);
-        assert_eq!((li.at, li.text, li.n_members, li.n_marks), (2, 0x0644, 1, 0));
+        // every pair of neighbouring fields differs here, so a swap of two shows
+        assert_eq!(
+            (li.word, li.index, li.at, li.text, li.n_members, li.n_marks, li.more_at, li.n_more_at),
+            (0, 1, 2, 0x0644, 1, 0, QVP_NONE, 0)
+        );
         // the lam's piece reaches one unit past its source and its word
         assert_eq!((li.x0, li.y0, li.x1, li.y1), (39.0, 10.0, 50.0, 20.0));
         assert_eq!(qvp_letter_info(p, 1, 0, &mut li), 1);
@@ -1246,6 +1256,9 @@ fn letters_over_the_abi() {
         let mut omitted = [std::mem::zeroed::<QvpLetterMember>(); 2];
         assert_eq!(qvp_letter_members(p, 2, 0, omitted.as_mut_ptr(), 2), 2);
         assert_eq!(m(&omitted[1]), (7, QVP_NONE, Mark::OmittedAlif as u8, 0, 0, 0), "a mark with no offset");
+        // a body that is a page path, not a piece: is_body and is_cut apart
+        assert_eq!(qvp_letter_members(p, 1, 1, omitted.as_mut_ptr(), 2), 1);
+        assert_eq!(m(&omitted[0]), (4, 2, 0, 1, 0, 0));
         assert_eq!(qvp_letter_members(p, 0, 5, members.as_mut_ptr(), 4), 0);
 
         // ── a path's letter, an offset's letter ──
@@ -1264,6 +1277,7 @@ fn letters_over_the_abi() {
         assert_eq!(letter, 0);
         assert_eq!(qvp_letter_at_offset(p, 1, 3, &mut letter), 0, "a word-level mark is no letter's");
         assert_eq!(qvp_letter_at_offset(p, 1, QVP_NONE, &mut letter), 0);
+        assert_eq!(qvp_letter_at_offset(p, 1, 2, std::ptr::null_mut()), 1, "a NULL out still answers");
 
         // ── selectors ──
         assert_eq!(qvp_style_add(p, 0, &sel(SEL_LETTER, 0, 0, 3), RED, 0), 0, "part 3 is no part");
@@ -1301,9 +1315,12 @@ fn letters_over_the_abi() {
         assert_eq!(qvp_find_letters(p, &QvpLetterQuery { text: 0xD800, ..lam }, std::ptr::null_mut(), 0), 0);
         assert_eq!(qvp_find_letters(p, &QvpLetterQuery { text: 0x110000, ..lam }, std::ptr::null_mut(), 0), 0);
         assert_eq!(qvp_find_letters(p, std::ptr::null(), std::ptr::null_mut(), 0), 0);
+        // mark and part apart: a swap of the two bytes gives another answer for both queries
         let dot = QvpLetterQuery { mark: Mark::Dot as u8, ..any };
         assert_eq!(qvp_find_letters(p, &dot, pairs.as_mut_ptr(), 3), 1);
         assert_eq!(&pairs[..2], &[0, 0]);
+        let marks_part = QvpLetterQuery { part: 2, ..any };
+        assert_eq!(qvp_find_letters(p, &marks_part, std::ptr::null_mut(), 0), 5, "part does not filter");
         let word_1 = QvpTarget { target: 1, a: 1, ..page_target() };
         assert_eq!(qvp_find_letters(p, &QvpLetterQuery { scope: word_1, ..lam }, pairs.as_mut_ptr(), 3), 1);
         assert_eq!(&pairs[..2], &[1, 0]);
@@ -1386,7 +1403,7 @@ fn letters_over_the_abi() {
 }
 
 /// `is_body` is the member's role, and `mark` the path's mark: a body that the page stores as
-/// a mark, as a dagger alif, has both.
+/// a mark, as an `omitted_alif`, has both.
 #[test]
 fn a_letter_hit_says_whether_it_is_body_ink() {
     unsafe {
@@ -1445,6 +1462,111 @@ fn the_draw_list_answers_for_every_rule_so_far() {
         assert_eq!(qvp_style_recolor(p, h, qvp_core::DEFAULT_INK, 0), 1);
         assert_eq!(draw_pairs(p), PLAIN);
         assert_eq!(qvp_layout_draw_revision(p), r0.wrapping_add(4));
+        qvp_page_free(p);
+    }
+}
+
+/// A page whose words share paths takes no layer, and keeps its answers.
+#[test]
+fn a_page_whose_words_share_paths_takes_no_layer() {
+    unsafe {
+        let mut data = letters_page_data();
+        // word 1 starts at path 2, so path 2 sits in the runs of words 0 and 1
+        data.words[1].first_path = 2;
+        data.words[1].n_paths = 4;
+        let bytes = encode(&data);
+        let p = qvp_page_load(bytes.as_ptr(), bytes.len());
+        assert!(!p.is_null());
+        let mut w = std::mem::zeroed::<QvpWordInfo>();
+        assert_eq!(qvp_word_info(p, 1, &mut w), 1);
+        assert_eq!((w.first_path, w.n_paths), (2, 4), "the file keeps the overlap");
+        let layer = layer_bytes(&data, &letters_layer());
+        assert_eq!(qvp_attach_letters(p, layer.as_ptr(), layer.len() as u32), -1);
+        assert_eq!(qvp_has_letters(p), 0);
+        let mut info = std::mem::zeroed::<QvpPageInfo>();
+        qvp_page_info(p, &mut info);
+        assert_eq!(info.n_paths, 8);
+        qvp_page_free(p);
+    }
+}
+
+/// A mark id with no name counts as 255, unknown, in the letter selector and the query, as in
+/// QVP_SELECTOR_MARK and QVP_SELECTOR_WORD_MARK_NAMED: it takes the paths whose mark the
+/// converter did not recognise. An id above 255 takes nothing in the letter selector.
+#[test]
+fn a_mark_id_with_no_name_is_the_unknown_mark() {
+    unsafe {
+        let mut data = letters_page_data();
+        data.paths[2].mark = Mark::Unknown; // the ba's fathah, as a mark the converter did not know
+        let bytes = encode(&data);
+        let p = qvp_page_load(bytes.as_ptr(), bytes.len());
+        assert!(!p.is_null());
+        let layer = layer_bytes(&data, &letters_layer());
+        assert_eq!(qvp_attach_letters(p, layer.as_ptr(), layer.len() as u32), 0);
+        let reds = |p: *mut qvp_core::Page, s: QvpSelector| -> Vec<u32> {
+            let h = qvp_style_add(p, 0, &s, RED, 0);
+            assert!(h > 0);
+            let got = (0..10).filter(|&i| qvp_color_of(p, i) == RED).collect();
+            qvp_style_remove(p, h);
+            got
+        };
+        for id in [36, 200, 254, 255] {
+            assert_eq!(reds(p, QvpSelector { selector: SEL_LETTER_MARK_NAMED, a: 0, b: 0, c: id }), [2], "id {id}");
+            assert_eq!(reds(p, QvpSelector { selector: 10, a: id, b: 0, c: 0 }), [2], "QVP_SELECTOR_MARK {id}");
+            let q = QvpLetterQuery { scope: page_target(), text: 0, mark: id as u8, part: 0, _pad: [0; 2] };
+            let mut pairs = [7u32; 4];
+            assert_eq!(qvp_find_letters(p, &q, pairs.as_mut_ptr(), 2), 1, "query mark {id}");
+            assert_eq!(&pairs[..2], &[0, 0]);
+        }
+        for id in [0, 256, 256 + 255, u32::MAX] {
+            assert!(reds(p, QvpSelector { selector: SEL_LETTER_MARK_NAMED, a: 0, b: 0, c: id }).is_empty(), "id {id}");
+        }
+        qvp_page_free(p);
+
+        // on the shared fixture no path has an unknown mark, so an id with no name takes nothing
+        let (p, layer) = letters_page();
+        assert_eq!(qvp_attach_letters(p, layer.as_ptr(), layer.len() as u32), 0);
+        let h = qvp_style_add(p, 0, &QvpSelector { selector: SEL_LETTER_MARK_NAMED, a: 0, b: 0, c: 200 }, RED, 0);
+        assert!(h > 0);
+        assert!((0..10).all(|i| qvp_color_of(p, i) != RED));
+        qvp_page_free(p);
+    }
+}
+
+/// On a page with no layer the draw list and the draw revision leave the rules alone, so a
+/// fade added after a tick starts at the next tick, as it did before the letter layer existed.
+#[test]
+fn a_page_with_no_layer_keeps_its_fade() {
+    unsafe {
+        let (p, _) = letters_page();
+        let mut lay = std::mem::zeroed::<QvpLayout>();
+        qvp_layout(p, &letters_spec(), &mut lay);
+        let word_0 = QvpSelector { selector: 7, a: 0, b: 0, c: 0 };
+        for read in 0..3 {
+            qvp_tick(p, 1000.0);
+            let h = qvp_style_add(p, 0, &word_0, RED, 200);
+            match read {
+                0 => {
+                    draw_pairs(p);
+                }
+                1 => {
+                    qvp_layout_draw_revision(p);
+                }
+                _ => {} // neither: the behaviour before the letter layer
+            }
+            assert_eq!(qvp_tick(p, 60000.0), 1, "call {read}: the fade starts at this tick");
+            assert_eq!(qvp_color_of(p, 0), qvp_core::DEFAULT_INK, "call {read}");
+            assert_eq!(qvp_tick(p, 60100.0), 1);
+            let mid = qvp_color_of(p, 0);
+            assert!(mid != qvp_core::DEFAULT_INK && mid != RED, "call {read}: mid-fade {mid:08x}");
+            assert_eq!(qvp_tick(p, 60200.0), 0);
+            assert_eq!(qvp_color_of(p, 0), RED);
+            assert_eq!(qvp_style_remove(p, h), 1);
+            qvp_tick(p, 70000.0);
+            qvp_tick(p, 80000.0);
+            assert_eq!(qvp_color_of(p, 0), qvp_core::DEFAULT_INK);
+        }
+        assert_eq!(draw_pairs(p), PLAIN);
         qvp_page_free(p);
     }
 }

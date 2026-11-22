@@ -79,7 +79,9 @@ enum { QVP_SELECTOR_PAGE = 0, QVP_SELECTOR_PATH, QVP_SELECTOR_WORD_PATH, QVP_SEL
    LETTER: a word, b the letter's index in the word, c a part (QVP_LETTER_PART_*; c > 2 is a bad selector).
    LETTER_MARK: a word, b a letter, c the nth mark of the letter in text order (dots count; a body never does).
    LETTER_MARK_NAMED: a word, b a letter, c a mark id: every member whose path has that mark, a body the page stores
-     as a mark included. 0, or an id above 255, selects nothing.
+     as a mark included. 0, or an id above 255, selects nothing. An id with no name (36 to 254 today) counts as 255,
+     unknown, as it does in QVP_SELECTOR_MARK and QVP_SELECTOR_WORD_MARK_NAMED: it takes the members whose mark the
+     converter did not recognise.
    WORD_CHARS: a word, b and c the first and last qpc code-point offset, both included (b > c is a bad selector; an
      offset above 0xFFFE counts as 0xFFFE): every path that draws one of those characters, a word-level mark included.
    A word or a letter past the page selects nothing, as QVP_SELECTOR_WORD does. */
@@ -158,7 +160,8 @@ typedef struct { uint8_t target /* QVP_TARGET_* */; uint32_t a, b, c; const uint
 typedef struct { uint8_t selector /* QVP_SELECTOR_* */; uint32_t a, b, c; } QvpSelector;
 /* one letter of a word (qvp_letter_info). index: the letter's index in its word. at: the letter's qpc code-point
    offset. more_at: the first other offset its body draws (the kashida of 2:97:5), QVP_NONE when none; n_more_at counts
-   them. n_marks: the members that are not body, dots included. The box is in page units: the union of the members'
+   them and can be more than 1 (the Hafs data has at most 1). qvp_letter_at_offset gives the letter of any of them, so
+   a host never needs the others from here. n_marks: the members that are not body, dots included. The box is in page units: the union of the members'
    boxes, and a piece can reach past its word's box. has_ink 0: no member has an outline (ink drawn off the page). */
 typedef struct { uint32_t word, index, at, text /* code point */, n_members, n_marks, more_at, n_more_at;
                  float x0, y0, x1, y1; uint8_t has_ink, _pad[3]; } QvpLetterInfo;
@@ -167,19 +170,25 @@ typedef struct { uint32_t word, index, at, text /* code point */, n_members, n_m
    piece has its source's, 0. */
 typedef struct { uint32_t path, at; uint8_t mark, is_body, is_cut, _pad; } QvpLetterMember;
 /* the letter under a point (qvp_hit_test_letter). The hit prefers ink. letter: the index in the word, QVP_NONE for a
-   word-level mark. line: the word's printed line index.
-   is_exact 1: the point is on the ink of path, in path's word, and distance is 0. A cut path is never path: its
-     pieces are, and a point on the cut path between two pieces (a seam) hits the nearest piece. Ink the page stores as
-     a mark wins over body ink, and of two of the same ink, the one drawn last wins.
-   is_exact 0: the point is on no ink. word is the one qvp_hit_test finds with the same options. The letter is the one
-     whose box is nearest; when several boxes hold the point (a counter), the one whose body ink is nearest. path is
-     its first body member, distance is the distance to its box in page units (0 inside the box), mark and is_body 0.
+   word-level mark. line: the printed line index of word.
+   is_exact 1: the point is on the ink of a word path. word is that path's word, whatever word qvp_hit_test would pick
+     there, and distance is 0. A cut path is never path: its pieces are, and a point the cut path holds but no piece
+     holds (a seam between two pieces) hits the piece nearest the point. Ink the page stores as a mark wins over body
+     ink, and of two of the same ink, the one drawn last wins, in any word.
+   is_exact 0, in a counter: the point is on no ink, inside a counter of a letter's body (the hole of a waw or a meem).
+     The hit is that letter, in that letter's word, at distance 0, even where another word's box reaches over the
+     counter.
+   is_exact 0, elsewhere: word is the one qvp_hit_test finds with the same options. The letter is the one whose box is
+     nearest; when several boxes hold the point, the one whose body ink is nearest.
+   A near hit (is_exact 0) has path the letter's first body member, distance the distance to its box in page units (0
+   inside the box), mark 0 and is_body 0.
    at: the offset of the path hit, or of the letter; QVP_NONE when none. mark: the mark id of the path hit. Body ink has
-   0, but a body the page stores as a mark (a dagger alif, mark 12) has that mark's id. is_body: 1 when path is a body
-   member of its letter, 0 for a mark member, a word-level mark and a near hit. */
+   0, but a body the page stores as a mark (omitted_alif, 12) has that mark's id. is_body: 1 when path is a body member
+   of its letter, 0 for a mark member, a word-level mark and a near hit. */
 typedef struct { uint32_t word, letter, path, at, line; float distance; uint8_t mark, is_exact, is_body, _pad; } QvpLetterHit;
 /* letters by what they are (qvp_find_letters, qvp_style_add_letters). scope: the words to look in. text: a code
-   point, 0 = any letter. mark: a mark id that one of the letter's members must carry, 0 = any. part:
+   point, 0 = any letter. mark: a mark id that one of the letter's members must carry, 0 = any; an id with no name
+   counts as 255, unknown, as in QVP_SELECTOR_LETTER_MARK_NAMED. part:
    QVP_LETTER_PART_*, what of each letter a rule takes; it does not filter qvp_find_letters. */
 typedef struct { QvpTarget scope; uint32_t text; uint8_t mark, part, _pad[2]; } QvpLetterQuery;
 typedef struct { uint8_t mode, height; uint32_t ink, band; float pad_x, pad_y, radius, seam; uint32_t transition_ms; int32_t layer; } QvpHighlightStyle;
@@ -291,11 +300,14 @@ int      qvp_hit_test_exact(const QvpPage*, float x, float y, QvpHit* out);     
 int      qvp_hit_test_exact_view(const QvpPage*, float view_x, float view_y, QvpHit* out);                         /* outline, else box; no gap; viewport px */
 int      qvp_hit_test_letter(const QvpPage*, float x, float y, const QvpHitOptions* opt /* NULL ok */, QvpLetterHit* out);   /* the letter or mark under a point, page units */
 int      qvp_hit_test_letter_view(const QvpPage*, float view_x, float view_y, const QvpHitOptions* opt, QvpLetterHit* out);   /* the same, viewport px */
-/* 0: no layer, no word under the point within opt's max_distance, or a decoration. On ink the hit is always exact,
-   whatever opt says: max_distance, gap_bias and prefer_exact choose the word off ink, as in qvp_hit_test, and
+/* 0: no layer; or off ink and out of a counter, qvp_hit_test finds no word within opt's max_distance, finds a
+   decoration, or finds a word with no letter that has a box. On ink, and in a counter, opt does not act: the hit is
+   always found there. Elsewhere max_distance, gap_bias and prefer_exact choose the word, as in qvp_hit_test, and
    max_distance limits the distance to the word, not to the letter. A tap between words gives the nearest letter of
    that word, which can be far: check is_exact, or filter on distance. The hit does not follow the colours: the pieces
-   of a cut path are tested whether it draws whole or as its pieces. */
+   of a cut path are tested whether it draws whole or as its pieces. The view variant takes each word's point back to
+   page units through the current layout's placement of that word, printed or reflowed; with no layout the point is in
+   page units. */
 uint32_t qvp_line_bands(const QvpPage*, QvpLineBand* out, uint32_t cap);
 uint32_t qvp_hit_areas(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);
 uint32_t qvp_hit_areas_view(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);   /* the same, in viewport px; a reflowed page's rows */
@@ -335,15 +347,16 @@ uint32_t qvp_layout_path_groups(const QvpPage*, uint32_t* out, uint32_t cap);   
 uint32_t qvp_layout_omitted_paths(const QvpPage*, uint32_t* out, uint32_t cap);  /* paths this layout does not draw (sheet furniture and a native surah frame when reflowed) */
 uint32_t qvp_layout_draw_list(const QvpPage*, float band_top, float band_bottom /* <= top = the whole page */, uint32_t* out /* n × {path, placement} */, uint32_t cap);   /* everything this layout draws inside a band of it, in drawing order: one loop draws any page */
 /* With a letter layer, a cut path whose pieces differ in colour is listed as its pieces, in its place and under its
-   placement, and never with them. This call and qvp_layout_draw_revision apply pending rule changes first, as
-   qvp_colors does, so they answer for every change made so far, in whatever order a host calls them. */
+   placement, and never with them. On a page with a letter layer, this call and qvp_layout_draw_revision apply pending
+   rule changes first, as qvp_colors does, so the swap they answer for holds every change made so far. On a page with
+   no layer they leave the rules alone: the list does not depend on them. */
 uint32_t qvp_layout_draw_revision(const QvpPage*);
 /* Counts up, and wraps, when the draw list can change while the layout and the band stay the same: a letter layer is
    attached, or a cut path starts or stops drawing its pieces. It never stays the same when the drawn set changes. It
    can count up with no visible change, such as a second attach of the same layer or a swap outside the band. Colours
    that move leave it alone, and it stays 0 on a page with no layer. Key a cached draw list on it, the layout and the band.
-   Per frame: qvp_tick, then qvp_colors or qvp_styled_paths, then qvp_layout_draw_revision, then qvp_layout_draw_list
-   when the revision, the layout or the band changed. */
+   Per frame, after the rule: qvp_tick, then qvp_colors or qvp_styled_paths, then qvp_layout_draw_revision, then
+   qvp_layout_draw_list when the revision, the layout or the band changed. */
 /* Which band of the current layout to keep drawn: the whole page when it fits, otherwise two screens around the reader. Its top
    moves in steps (with under 2 px of slack it follows the reader), so a pan inside one step redraws nothing and a pan across
    one moves the band by one step. Pass top and top + height to qvp_layout_draw_list.
@@ -395,6 +408,10 @@ uint32_t qvp_style_handles(const QvpPage*, uint32_t* out, uint32_t cap);
 
 /* clock & display list ------------------------------------------------------------------ */
 uint8_t  qvp_tick(QvpPage*, double now_ms);                                 /* 1 while animating: keep drawing frames */
+/* The rule: after a change of rules or state (a style, a theme, a highlight, a mask, a reveal), call qvp_tick
+   with the time now before any call that reads colours, styled paths, the draw revision or the draw list. Those calls
+   apply a pending change at the time of the last tick, so a transition read first starts at that earlier time, and it
+   can be over before the next tick shows it. qvp_tick applies the change at its own time, and the fade is seen whole. */
 const uint32_t* qvp_colors(QvpPage*);                                       /* n_paths colours (current, mid-transition), a letter layer's pieces included; valid until qvp_attach_letters returns 0 */
 uint32_t qvp_styled_paths(QvpPage*, uint32_t* out_pairs, uint32_t cap);          /* (path, colour) pairs ≠ default ink; leaves out what the draw list cannot hold now: a cut path drawn as its pieces, a piece whose path is drawn whole */
 uint32_t qvp_color_of(QvpPage*, uint32_t path);

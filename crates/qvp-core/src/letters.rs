@@ -132,7 +132,8 @@ pub struct LetterMember {
 /// and `path` is then that letter's first body member.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LetterHit {
-    /// The word's index on the page. Always the word that [`Page::hit_test`] reports.
+    /// The word's index on the page. On ink, the word of that ink; in a counter, the word of
+    /// the counter's letter; elsewhere, the word that [`Page::hit_test`] reports.
     pub word: u32,
     /// The letter's index in its word. `NONE` for a word-level mark.
     pub letter: u32,
@@ -148,11 +149,11 @@ pub struct LetterHit {
     /// on a near hit inside the box but off the ink.
     pub distance: f32,
     /// The mark of the path that was hit, as [`LetterMember::mark`] gives it. Body ink has
-    /// `Mark::None`, unless the page stores the body as a mark, such as a dagger alif. A near
+    /// `Mark::None`, unless the page stores the body as a mark, such as an `omitted_alif`. A near
     /// hit has `Mark::None`.
     pub mark: Mark,
-    /// True when the point is inside the path's outline. False when the hit is the nearest
-    /// letter's box.
+    /// True when the point is on ink: inside the path's outline, or on a seam between two
+    /// pieces of a cut path, where `path` is the nearest piece. False for a near hit.
     pub is_exact: bool,
     /// True when the path is a body member of its letter.
     pub is_body: bool,
