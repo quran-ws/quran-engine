@@ -174,6 +174,8 @@ for check in "$@"; do
         node web/lite-passage.test.mjs
       fi
       node web/lite.test.mjs
+      # The letter layer replay reads the synthetic fixtures in conformance/, so it needs no data.
+      node web/letters.test.mjs
       # The example is plain JavaScript that no test loads, so parse it here. This is a
       # syntax check, not a typecheck; it catches the file being left unrunnable.
       node --check web/example/app.js
