@@ -261,9 +261,14 @@ fn a_run_leaves_no_stale_file() {
 //    path, so that no antialiasing seam is drawn along a cut.
 // 2. Area, for each source. A lost or an extra piece can stay under the pixel threshold of
 //    a page, so the gate also compares each source with its pieces, from the geometry. See
-//    `EDGE` and `MAX_AREA_RATIO`.
+//    `EDGE` and `MAX_AREA_RATIO`. The allowance counts only the remade outline edges, the
+//    new segments near the source outline. Every other new segment that a piece draws once
+//    is a cut side, and it must have a partner: a side of another piece along it (see
+//    `partner_limit`). The gate also asserts what a sum of signed areas rests on: a
+//    subpath nested inside another winds against it (see `nesting`).
 //
 // Run all 604:  QVP_REQUIRE_LETTERS=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test letters ink
+// The mutation sweep of the area check runs only with QVP_LETTERS_SWEEP=1.
 //
 // A page that fails the pixel check writes its diff images to target/letters/.
 // `QVP_LETTERS_DIFFS=1` also writes them for the three worst pages of a run. Red pixels
@@ -282,12 +287,14 @@ const MAX_DIFF_FRACTION: f64 = 0.0005;
 const EDGE: f64 = 0.0125;
 
 /// The largest allowed ratio of the area difference of a source to `EDGE` × L, where L is
-/// the length of the remade edges of its pieces (see `split`). It is 1 by derivation:
-/// the pieces of a source cover it, and a cut adds on one side the area it removes on the
-/// other. So ink can move only between a remade edge and the part of the artwork that it
-/// replaces. Every point of that edge is within `EDGE` of the artwork, so the area between
-/// them is at most `EDGE` times the length of the edge, to first order. L is measured on
-/// the control polygon, which is never shorter than the curve.
+/// the control-polygon length of the remade outline edges of its pieces (see `Split`).
+/// The pieces of a source cover it, and a cut adds on one side the area that it removes on
+/// the other. So ink can move only between a remade edge and the part of the artwork that
+/// it replaces. Every point of that edge is within `near_limit` of the source outline, so,
+/// to first order, the area between them is at most (`EDGE` + `rounding`) × L. The control
+/// polygon is never shorter than the curve. The gate asserts `EDGE` × L, which is
+/// stricter. Real data stays under it: the worst ratio on 604 pages is 0.491, page 381
+/// path 810.
 const MAX_AREA_RATIO: f64 = 1.0;
 
 /// Sources whose pieces leave out a part of the source: the page, the source path, and
@@ -435,7 +442,7 @@ fn compare(
 }
 
 /// One segment of an outline, the same whichever way it runs.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Seg {
     Line((i32, i32), (i32, i32)),
     Quad((i32, i32), (i32, i32), (i32, i32)),
@@ -493,43 +500,290 @@ struct Split {
     /// Segments that the pieces draw twice and the source does not draw: two pieces, or two
     /// subpaths of one piece, meet there.
     cuts: Vec<Seg>,
-    /// Segments that the pieces draw once and the source does not draw, such as one part of
-    /// a source curve that a cut divides.
+    /// Segments that a piece draws once, that the source does not draw, and that lie within
+    /// `near_limit` of the source outline: remade outline edges, such as one part of a
+    /// source curve that a cut divides. Only these count in L.
     edges: Vec<Seg>,
+    /// Every other segment that a piece draws once: a cut side. It must have a partner (see
+    /// `partner_limit`).
+    sides: Vec<Seg>,
+    /// The cut sides with no partner, with the piece that draws each.
+    alone: Vec<(Seg, usize)>,
     /// The first segment that the pieces draw more often than a cover of the source can: a
     /// source segment more often than the source draws it, or a new segment more than twice.
     extra: Option<String>,
 }
 
-/// Split the segments of the pieces of one source. A segment counts once for each time a
-/// path draws it.
-fn split(src: &[Cmd], run: &[PieceRec]) -> Split {
-    let mut in_src: HashMap<Seg, usize> = HashMap::new();
-    for s in segments(src) {
-        *in_src.entry(s).or_default() += 1;
+/// One source and what the split of its pieces needs of it: how often it draws each
+/// segment, and its outline flattened into a grid.
+struct Source {
+    quant: u16,
+    in_src: HashMap<Seg, usize>,
+    outline: Grid,
+    /// Whether a segment lies within `near_limit` of the outline. It does not depend on the
+    /// pieces, so the mutation test asks it once per segment.
+    near: std::cell::RefCell<HashMap<Seg, bool>>,
+}
+
+impl Source {
+    fn new(src: &[Cmd], quant: u16) -> Self {
+        let mut in_src: HashMap<Seg, usize> = HashMap::new();
+        let mut outline = Grid::default();
+        for s in segments(src) {
+            *in_src.entry(s).or_default() += 1;
+            outline.add(&flatten(&s, quant), 0);
+        }
+        Source { quant, in_src, outline, near: Default::default() }
     }
-    let mut count: HashMap<Seg, usize> = HashMap::new();
-    for p in run {
+
+    fn near(&self, s: &Seg) -> bool {
+        if let Some(n) = self.near.borrow().get(s) {
+            return *n;
+        }
+        let limit = near_limit(self.quant);
+        let n = within(&flatten(s, self.quant), limit, |p| self.outline.dist(p, None));
+        self.near.borrow_mut().insert(*s, n);
+        n
+    }
+
+    /// Split the segments of the pieces. A segment counts once for each time a path draws
+    /// it.
+    fn split(&self, run: &[PieceRec]) -> Split {
+        // Per segment: how often the pieces draw it, and the last piece that draws it.
+        let mut count: HashMap<Seg, (usize, usize)> = HashMap::new();
+        for (k, p) in run.iter().enumerate() {
+            for s in segments(&p.cmds) {
+                let e = count.entry(s).or_default();
+                *e = (e.0 + 1, k);
+            }
+        }
+        let mut all: Vec<(Seg, (usize, usize))> = count.into_iter().collect();
+        all.sort();
+        let mut out = Split { cuts: vec![], edges: vec![], sides: vec![], alone: vec![], extra: None };
+        let mut side_of = vec![];
+        for (s, (n, k)) in all {
+            let limit = self.in_src.get(&s).copied().unwrap_or(2);
+            if n > limit && out.extra.is_none() {
+                out.extra =
+                    Some(format!("the pieces draw a segment {n} times, a cover of the source draws it {limit} times"));
+            }
+            match (self.in_src.contains_key(&s), n) {
+                (true, _) => {}
+                (false, 1) if self.near(&s) => out.edges.push(s),
+                (false, 1) => {
+                    out.sides.push(s);
+                    side_of.push(k);
+                }
+                (false, _) => out.cuts.push(s),
+            }
+        }
+        if !out.sides.is_empty() {
+            let pieces = pieces_grid(run, self.quant);
+            for (s, &k) in out.sides.iter().zip(&side_of) {
+                if !within(&flatten(s, self.quant), partner_limit(self.quant), |p| pieces.dist(p, Some(k as u32))) {
+                    out.alone.push((*s, k));
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Every segment of every piece of a run, in one grid, each tagged with its piece.
+fn pieces_grid(run: &[PieceRec], quant: u16) -> Grid {
+    let mut g = Grid::default();
+    for (k, p) in run.iter().enumerate() {
         for s in segments(&p.cmds) {
-            *count.entry(s).or_default() += 1;
+            g.add(&flatten(&s, quant), k as u32);
         }
     }
-    let mut all: Vec<(Seg, usize)> = count.into_iter().collect();
-    all.sort();
-    let mut out = Split { cuts: vec![], edges: vec![], extra: None };
-    for (s, n) in all {
-        let limit = in_src.get(&s).copied().unwrap_or(2);
-        if n > limit && out.extra.is_none() {
-            out.extra =
-                Some(format!("the pieces draw a segment {n} times, a cover of the source draws it {limit} times"));
-        }
-        match (in_src.contains_key(&s), n) {
-            (true, _) => {}
-            (false, 1) => out.edges.push(s),
-            (false, _) => out.cuts.push(s),
+    g
+}
+
+/// The largest distance from a cut side to the segments of the other pieces of its run,
+/// measured at points `STEP` apart. A distance of `CELL` or more reads as `CELL`.
+fn partner_distance(s: &Seg, k: usize, pieces: &Grid, quant: u16) -> f64 {
+    let pts = flatten(s, quant);
+    let mut worst: f64 = 0.0;
+    for w in pts.windows(2) {
+        let n = (dist(w[0], w[1]) / STEP).ceil().max(1.0) as usize;
+        for i in 0..=n {
+            let t = i as f64 / n as f64;
+            worst = worst.max(pieces.dist(lerp(w[0], w[1], t), Some(k as u32)));
         }
     }
+    worst
+}
+
+// ───────────────────────────── distances ─────────────────────────────
+//
+// A remade edge and a cut side differ in one thing: how far the segment is from the
+// source outline. A cut side needs a partner: a side of another piece of its source along
+// it. Both tests measure the largest distance from a segment to a set of other segments.
+
+/// What rounding to `1/quant` can do to two outlines. Rounding moves a coordinate by at
+/// most `0.5/quant`, and so a point by at most `√2/(2·quant)`. A Bézier curve is a convex
+/// combination of its control points, so when each control point moves by at most that,
+/// each point of the curve moves by at most that too. The page rounds the source and the
+/// piece each, so two curves that upstream draws `d` apart are at most `d + √2/quant`
+/// apart in the page: 0.0141 units at `quant` 100.
+fn rounding(quant: u16) -> f64 {
+    std::f64::consts::SQRT_2 / quant as f64
+}
+
+/// The flattening tolerance of a curve, in page units.
+const FLAT: f64 = 0.0002;
+/// The longest step between two points at which a distance is measured, in page units.
+const STEP: f64 = 0.002;
+/// How much the measure can miss: the flattening of each of the two curves, and half a step
+/// between two measured points (a distance changes by at most the length moved along the
+/// segment).
+const MEASURE: f64 = 2.0 * FLAT + STEP / 2.0;
+
+/// The largest distance from the source outline at which a segment that a piece draws
+/// once is a remade outline edge: upstream's limit, the rounding of the source and of the
+/// piece, and the measure's own error. 0.0280 units at `quant` 100. It is derived, not
+/// tuned.
+fn near_limit(quant: u16) -> f64 {
+    EDGE + rounding(quant) + MEASURE
+}
+
+/// The largest distance from a cut side to the sides of the other pieces of its source:
+/// 0.0280 units at `quant` 100. Upstream's polygon check (quran-svg-elements
+/// `schema/FORMAT.md` §6.9) finds any strip 0.0125 units wide that is lost, added, or held
+/// by two letters. So, where two pieces meet, the gap or the overlap between their sides is
+/// less than `EDGE` wide, and the two sides are less than `EDGE` apart. The page rounds
+/// both sides (`rounding`), and the measure adds its error (`MEASURE`).
+///
+/// That check passes a strip under 0.002 units² of any width, so this distance is not a
+/// promise of upstream. It is the distance that a gap of the width that upstream checks
+/// can give. On all 604 pages, every cut side is within it of a side of another piece:
+/// 116 cut sides in 32 sources, the farthest 0.0200 units.
+fn partner_limit(quant: u16) -> f64 {
+    EDGE + rounding(quant) + MEASURE
+}
+
+/// The size of a grid cell, in page units. A query finds every segment within one cell of
+/// its point, so every distance that a test compares is less than this.
+const CELL: f64 = 0.1;
+
+fn dist(a: (f64, f64), b: (f64, f64)) -> f64 {
+    (b.0 - a.0).hypot(b.1 - a.1)
+}
+
+fn lerp(a: (f64, f64), b: (f64, f64), t: f64) -> (f64, f64) {
+    (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)
+}
+
+/// The distance from `p` to the line segment from `a` to `b`.
+fn to_line(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 == 0.0 { 0.0 } else { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
+    dist(p, (a.0 + t * dx, a.1 + t * dy))
+}
+
+/// A segment as a polyline in page units, within `FLAT` of the curve.
+fn flatten(s: &Seg, quant: u16) -> Vec<(f64, f64)> {
+    let q = quant as f64;
+    let p = |(x, y): (i32, i32)| kurbo::Point::new(x as f64 / q, y as f64 / q);
+    let mut bp = kurbo::BezPath::new();
+    match *s {
+        Seg::Line(a, b) => {
+            bp.move_to(p(a));
+            bp.line_to(p(b));
+        }
+        Seg::Quad(a, c, b) => {
+            bp.move_to(p(a));
+            bp.quad_to(p(c), p(b));
+        }
+        Seg::Cubic(a, c1, c2, b) => {
+            bp.move_to(p(a));
+            bp.curve_to(p(c1), p(c2), p(b));
+        }
+    }
+    let mut out = vec![];
+    kurbo::flatten(&bp, FLAT, |el| {
+        if let kurbo::PathEl::MoveTo(p) | kurbo::PathEl::LineTo(p) = el {
+            out.push((p.x, p.y));
+        }
+    });
     out
+}
+
+/// True when every point of the polyline `pts` is within `limit` of what `d` measures. The
+/// walk steps by `limit - d(p)`, and by at least `STEP`: no point between two steps can be
+/// farther than `limit`, except by half a step when the step is `STEP`.
+fn within(pts: &[(f64, f64)], limit: f64, d: impl Fn((f64, f64)) -> f64) -> bool {
+    for w in pts.windows(2) {
+        let len = dist(w[0], w[1]);
+        let mut at = 0.0;
+        loop {
+            let p = lerp(w[0], w[1], if len > 0.0 { (at / len).min(1.0) } else { 1.0 });
+            let here = d(p);
+            if here > limit {
+                return false;
+            }
+            if at >= len {
+                break;
+            }
+            at += (limit - here).max(STEP);
+        }
+    }
+    pts.len() != 1 || d(pts[0]) <= limit
+}
+
+/// A point in page units.
+type Pt = (f64, f64);
+
+/// Line segments in square cells of side `CELL`. A segment longer than a cell is cut into
+/// parts no longer than a cell, so each part touches at most four cells.
+#[derive(Default)]
+struct Grid {
+    cells: HashMap<(i64, i64), Vec<u32>>,
+    lines: Vec<(Pt, Pt, u32)>,
+}
+
+fn cell(p: (f64, f64)) -> (i64, i64) {
+    ((p.0 / CELL).floor() as i64, (p.1 / CELL).floor() as i64)
+}
+
+impl Grid {
+    /// Add a polyline, with a tag.
+    fn add(&mut self, pts: &[(f64, f64)], tag: u32) {
+        for w in pts.windows(2) {
+            let n = (dist(w[0], w[1]) / CELL).ceil().max(1.0) as usize;
+            for i in 0..n {
+                let (a, b) = (lerp(w[0], w[1], i as f64 / n as f64), lerp(w[0], w[1], (i + 1) as f64 / n as f64));
+                let id = self.lines.len() as u32;
+                self.lines.push((a, b, tag));
+                let (c0, c1) = (cell((a.0.min(b.0), a.1.min(b.1))), cell((a.0.max(b.0), a.1.max(b.1))));
+                for cx in c0.0..=c1.0 {
+                    for cy in c0.1..=c1.1 {
+                        self.cells.entry((cx, cy)).or_default().push(id);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The distance from `p` to the nearest line whose tag is not `skip`, or `CELL` when
+    /// none is nearer than that.
+    fn dist(&self, p: (f64, f64), skip: Option<u32>) -> f64 {
+        let (cx, cy) = cell(p);
+        let mut best = CELL;
+        for x in cx - 1..=cx + 1 {
+            for y in cy - 1..=cy + 1 {
+                for &id in self.cells.get(&(x, y)).map(Vec::as_slice).unwrap_or(&[]) {
+                    let (a, b, tag) = self.lines[id as usize];
+                    if Some(tag) != skip {
+                        best = best.min(to_line(p, a, b));
+                    }
+                }
+            }
+        }
+        best
+    }
 }
 
 /// The commands of page path `i`, or an error that names the page.
@@ -537,12 +791,14 @@ fn cmds_of(name: &str, page: &PageData, i: u32) -> Result<Vec<Cmd>, String> {
     page.path_cmds(i as usize).map_err(|e| format!("page {name}: path {i}: {e}"))
 }
 
-/// The cuts and the remade edges of all pieces of a page, for the masks.
+/// The cuts (with the cut sides) and the remade edges of all pieces of a page, for the
+/// masks.
 fn new_segments(name: &str, page: &PageData, pieces: &[PieceRec]) -> Result<(Vec<Seg>, Vec<Seg>), String> {
     let (mut cuts, mut edges) = (vec![], vec![]);
     for run in pieces.chunk_by(|a, b| a.source == b.source) {
-        let s = split(&cmds_of(name, page, run[0].source)?, run);
+        let s = Source::new(&cmds_of(name, page, run[0].source)?, page.header.quant).split(run);
         cuts.extend(s.cuts);
+        cuts.extend(s.sides);
         edges.extend(s.edges);
     }
     Ok((cuts, edges))
@@ -612,6 +868,115 @@ fn area(cmds: &[Cmd]) -> f64 {
     bp.area()
 }
 
+/// The subpaths of a path, each with its signed area, its box and its outline flattened, in
+/// quantised units.
+struct Subpath {
+    area: f64,
+    lo: (f64, f64),
+    hi: (f64, f64),
+    poly: Vec<(f64, f64)>,
+}
+
+fn subpaths(cmds: &[Cmd]) -> Vec<Subpath> {
+    let mut runs: Vec<Vec<Cmd>> = vec![];
+    for c in cmds {
+        match c {
+            Cmd::MoveTo(..) => runs.push(vec![*c]),
+            _ => {
+                if let Some(r) = runs.last_mut() {
+                    r.push(*c);
+                }
+            }
+        }
+    }
+    runs.iter()
+        .map(|r| {
+            let mut poly = vec![];
+            for s in segments(r) {
+                // `flatten` works in page units; quant 1 keeps quantised units.
+                let pts = flatten(&s, 1);
+                poly.extend_from_slice(&pts[..pts.len() - 1]);
+                poly.push(pts[pts.len() - 1]);
+            }
+            let lo = poly.iter().fold((f64::MAX, f64::MAX), |m, p| (m.0.min(p.0), m.1.min(p.1)));
+            let hi = poly.iter().fold((f64::MIN, f64::MIN), |m, p| (m.0.max(p.0), m.1.max(p.1)));
+            let first = match r[0] {
+                Cmd::MoveTo(x, y) => (x as f64, y as f64),
+                _ => unreachable!("a run starts with a move"),
+            };
+            if poly.is_empty() {
+                poly.push(first);
+            }
+            Subpath { area: area(r), lo, hi, poly }
+        })
+        .collect()
+}
+
+/// Whether subpath `s` lies inside the outline `poly`, from five points of `s`: the
+/// centroid of its outline points and four of its points, a quarter of the way apart. A
+/// point within one quantised unit of `poly` is left out: two subpaths that touch share
+/// points, and for such a point the even-odd test can go either way. The answer is the
+/// majority of the points left.
+fn held_by(s: &[(f64, f64)], poly: &[(f64, f64)]) -> bool {
+    let n = s.len();
+    let c = s.iter().fold((0.0, 0.0), |m, p| (m.0 + p.0 / n as f64, m.1 + p.1 / n as f64));
+    let (mut yes, mut no) = (0, 0);
+    for p in [c, s[0], s[n / 4], s[n / 2], s[3 * n / 4]] {
+        let mut odd = false;
+        let mut near = f64::MAX;
+        for i in 0..poly.len() {
+            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+            if (a.1 > p.1) != (b.1 > p.1) && p.0 < a.0 + (p.1 - a.1) * (b.0 - a.0) / (b.1 - a.1) {
+                odd = !odd;
+            }
+            near = near.min(to_line(p, a, b));
+        }
+        if near < 1.0 {
+            continue;
+        }
+        if odd {
+            yes += 1;
+        } else {
+            no += 1;
+        }
+    }
+    yes > no
+}
+
+/// For each subpath nested inside another: whether it winds against the smallest subpath
+/// that holds it. The sum of signed areas counts ink only when it does. A full test of
+/// containment is costly, so the test is a cheap one: the box of the inner subpath lies in
+/// the box of the outer, and most of a few points of the inner lie inside the outer's
+/// flattened outline (`held_by`). Returns the count that winds against and the count that winds with.
+fn nesting(cmds: &[Cmd]) -> (usize, usize) {
+    let subs = subpaths(cmds);
+    let (mut against, mut with) = (0, 0);
+    for (i, s) in subs.iter().enumerate() {
+        if s.area == 0.0 {
+            continue;
+        }
+        let parent = subs
+            .iter()
+            .enumerate()
+            .filter(|(j, o)| {
+                *j != i
+                    && o.area.abs() > s.area.abs()
+                    && o.lo.0 <= s.lo.0
+                    && o.lo.1 <= s.lo.1
+                    && o.hi.0 >= s.hi.0
+                    && o.hi.1 >= s.hi.1
+                    && held_by(&s.poly, &o.poly)
+            })
+            .min_by(|a, b| a.1.area.abs().total_cmp(&b.1.area.abs()));
+        match parent {
+            Some((_, o)) if o.area.signum() == s.area.signum() => with += 1,
+            Some(_) => against += 1,
+            None => {}
+        }
+    }
+    (against, with)
+}
+
 /// The area check of one source, in page units.
 struct SourceArea {
     /// Signed areas: of the source, and the sum over its pieces.
@@ -620,21 +985,27 @@ struct SourceArea {
     /// The sum over the pieces of the size of each piece's signed area. The signed area of
     /// a whole path already takes its holes out.
     sum_abs: f64,
-    /// L: the control-polygon length of the remade edges.
+    /// L: the control-polygon length of the remade outline edges.
     len: f64,
+    /// The cut sides with no partner, with the piece that draws each.
+    alone: Vec<(Seg, usize)>,
+    /// The number of cut sides.
+    n_sides: usize,
     extra: Option<String>,
 }
 
 impl SourceArea {
-    fn new(src: &[Cmd], run: &[PieceRec], quant: u16) -> Self {
-        let q = quant as f64;
+    fn new(source: &Source, src_area: f64, run: &[PieceRec]) -> Self {
+        let q = source.quant as f64;
         let areas: Vec<f64> = run.iter().map(|p| area(&p.cmds) / (q * q)).collect();
-        let s = split(src, run);
+        let s = source.split(run);
         SourceArea {
-            src: area(src) / (q * q),
+            src: src_area / (q * q),
             sum: areas.iter().sum(),
             sum_abs: areas.iter().map(|a| a.abs()).sum(),
             len: s.edges.iter().map(polygon_len).sum::<f64>() / q,
+            alone: s.alone,
+            n_sides: s.sides.len(),
             extra: s.extra,
         }
     }
@@ -658,8 +1029,8 @@ impl SourceArea {
     fn ratio_b(&self) -> f64 {
         self.ratio((self.sum_abs - self.src.abs()).abs())
     }
-    /// Why the source fails, or `None`.
-    fn failure(&self) -> Option<String> {
+    /// Why the area fails, or `None`.
+    fn area_failure(&self) -> Option<String> {
         let mut why = vec![];
         if self.ratio_a() > MAX_AREA_RATIO {
             why.push(format!(
@@ -679,6 +1050,14 @@ impl SourceArea {
             ));
         }
         why.extend(self.extra.clone());
+        (!why.is_empty()).then(|| why.join("; "))
+    }
+    /// Why the source fails the area check or the partner rule, or `None`.
+    fn failure(&self) -> Option<String> {
+        let mut why: Vec<String> = self.area_failure().into_iter().collect();
+        if let Some((s, k)) = self.alone.first() {
+            why.push(format!("{} cut sides with no partner, the first of piece {k}: {s:?}", self.alone.len()));
+        }
         (!why.is_empty()).then(|| why.join("; "))
     }
 }
@@ -701,6 +1080,9 @@ fn word_of(page: &PageData, i: u32) -> String {
         .map(|w| format!("{}:{}:{}", w.surah, w.ayah, w.word))
         .unwrap_or_else(|| "no word".into())
 }
+
+/// A cut side with no partner: its source, its word, its piece, its partner distance.
+type Alone = (u32, String, usize, f64);
 
 /// Per page: the area check of every source.
 #[derive(Default)]
@@ -726,19 +1108,33 @@ struct Area {
     worst_b_path: u32,
     /// Pieces whose signed area has another sign than their source's.
     turned: usize,
-    /// Sources in `KNOWN_LEFT_OUT` that differ by the expected area.
-    known: usize,
+    /// For each entry of `KNOWN_LEFT_OUT`, how many times it matched on this page.
+    known: Vec<usize>,
+    /// The cut sides, and the sources that have at least one.
+    sides: usize,
+    sources_with_sides: usize,
+    /// The largest partner distance of a cut side that has a partner, and its source.
+    worst_partner: f64,
+    worst_partner_path: u32,
+    /// Each cut side with no partner: its source, its word, its piece, its distance.
+    alone: Vec<Alone>,
+    /// Nested subpaths, in sources and pieces, that wind against their holder and with it.
+    nested_against: usize,
+    nested_with: Vec<String>,
     /// One line for each source that fails.
     failures: Vec<String>,
 }
 
 fn areas(name: &str, page: &PageData, pieces: &[PieceRec]) -> Result<Area, String> {
-    let mut a = Area::default();
-    let q2 = (page.header.quant as f64).powi(2);
+    let mut a = Area { known: vec![0; KNOWN_LEFT_OUT.len()], ..Area::default() };
+    let quant = page.header.quant;
+    let q2 = (quant as f64).powi(2);
     for run in pieces.chunk_by(|a, b| a.source == b.source) {
         let path = run[0].source;
         let src_cmds = cmds_of(name, page, path)?;
-        let s = SourceArea::new(&src_cmds, run, page.header.quant);
+        let source = Source::new(&src_cmds, quant);
+        let s = SourceArea::new(&source, area(&src_cmds), run);
+        let at = format!("page {name}: word {}: path {path}", word_of(page, path));
         let d = (s.src - s.sum).abs();
         a.sum += d;
         a.total += s.src.abs();
@@ -750,7 +1146,40 @@ fn areas(name: &str, page: &PageData, pieces: &[PieceRec]) -> Result<Area, Strin
             (a.worst_fraction, a.worst_fraction_path) = (d / s.src.abs(), path);
         }
         a.turned += run.iter().filter(|p| (area(&p.cmds) / q2).signum() != s.src.signum()).count();
-        let known = KNOWN_LEFT_OUT.iter().find(|k| k.0 == name && k.1 == path);
+        for (what, cmds) in std::iter::once(("the source".to_owned(), &src_cmds))
+            .chain(run.iter().enumerate().map(|(k, p)| (format!("piece {k}"), &p.cmds)))
+        {
+            let (against, with) = nesting(cmds);
+            a.nested_against += against;
+            if with > 0 {
+                a.nested_with.push(format!("{at}: {what}: {with} nested subpaths wind with their holder"));
+            }
+        }
+
+        // The partner rule: measure every cut side, for the report.
+        a.sides += s.n_sides;
+        a.sources_with_sides += (s.n_sides > 0) as usize;
+        if s.n_sides > 0 {
+            let split = source.split(run);
+            let grid = pieces_grid(run, quant);
+            let mut side_piece: HashMap<Seg, usize> = HashMap::new();
+            for (k, p) in run.iter().enumerate() {
+                for seg in segments(&p.cmds) {
+                    side_piece.insert(seg, k);
+                }
+            }
+            for seg in &split.sides {
+                let k = side_piece[seg];
+                let pd = partner_distance(seg, k, &grid, quant);
+                if split.alone.iter().any(|(x, _)| x == seg) {
+                    a.alone.push((path, word_of(page, path), k, pd));
+                } else if pd > a.worst_partner {
+                    (a.worst_partner, a.worst_partner_path) = (pd, path);
+                }
+            }
+        }
+
+        let known = KNOWN_LEFT_OUT.iter().position(|k| k.0 == name && k.1 == path);
         // The worst ratios are of the sources that the check holds to the bound.
         if known.is_none() && s.ratio_a() > a.worst_a {
             (a.worst_a, a.worst_a_path) = (s.ratio_a(), path);
@@ -758,16 +1187,20 @@ fn areas(name: &str, page: &PageData, pieces: &[PieceRec]) -> Result<Area, Strin
         if known.is_none() && s.ratio_b() > a.worst_b {
             (a.worst_b, a.worst_b_path) = (s.ratio_b(), path);
         }
-        let at = format!("page {name}: word {}: path {path}", word_of(page, path));
-        match (s.failure(), known) {
+        if let Some((seg, k)) = s.alone.first() {
+            a.failures
+                .push(format!("{at}: {} cut sides with no partner, the first of piece {k}: {seg:?}", s.alone.len()));
+        }
+        match (s.area_failure(), known) {
             (None, None) => {}
             (Some(why), None) => a.failures.push(format!("{at}: {why}")),
             (None, Some(_)) => a.failures.push(format!("{at}: passes; remove it from KNOWN_LEFT_OUT")),
-            (Some(why), Some(&(_, _, left_out))) => {
+            (Some(why), Some(i)) => {
+                let left_out = KNOWN_LEFT_OUT[i].2;
                 if s.extra.is_some() || (d * q2 - left_out).abs() > ROUNDING * q2 {
                     a.failures.push(format!("{at}: {why}; KNOWN_LEFT_OUT expects {left_out} quantum squares"));
                 } else {
-                    a.known += 1;
+                    a.known[i] += 1;
                 }
             }
         }
@@ -919,7 +1352,9 @@ fn ink() {
     let (sum, src): (f64, f64) = rows.iter().fold((0.0, 0.0), |(s, t), r| (s + r.area.sum, t + r.area.total));
     let signed: f64 = rows.iter().map(|r| r.area.signed).sum();
     let turned: usize = rows.iter().map(|r| r.area.turned).sum();
-    let known: usize = rows.iter().map(|r| r.area.known).sum();
+    // How many times each entry of `KNOWN_LEFT_OUT` matched over the run.
+    let known: Vec<usize> = (0..KNOWN_LEFT_OUT.len()).map(|i| rows.iter().map(|r| r.area.known[i]).sum()).collect();
+    let n_known: usize = known.iter().sum();
     let worst_by = |f: fn(&Area) -> f64| rows.iter().max_by(|a, b| f(&a.area).total_cmp(&f(&b.area)));
     if let (Some(w), Some(wf), Some(wa), Some(wb)) =
         (worst_by(|a| a.worst), worst_by(|a| a.worst_fraction), worst_by(|a| a.worst_a), worst_by(|a| a.worst_b))
@@ -937,11 +1372,41 @@ fn ink() {
             wf.area.worst_fraction_path
         );
         println!(
-            "area check, allowed ratio {MAX_AREA_RATIO}: (a) worst {:.3} on page {} path {}; (b) worst {:.3} on page {} path {}; {turned} pieces turn against their source; {known} known sources leave out a part",
+            "area check, allowed ratio {MAX_AREA_RATIO}: (a) worst {:.3} on page {} path {}; (b) worst {:.3} on page {} path {}; {turned} pieces turn against their source; {n_known} known sources leave out a part",
             wa.area.worst_a, wa.page, wa.area.worst_a_path, wb.area.worst_b, wb.page, wb.area.worst_b_path
         );
     }
-    let area_failures: Vec<&String> = rows.iter().flat_map(|r| &r.area.failures).collect();
+    // The partner rule.
+    let sides: usize = rows.iter().map(|r| r.area.sides).sum();
+    let with_sides: usize = rows.iter().map(|r| r.area.sources_with_sides).sum();
+    let alone: Vec<(&str, &Alone)> =
+        rows.iter().flat_map(|r| r.area.alone.iter().map(move |x| (r.page.as_str(), x))).collect();
+    if let Some(w) = worst_by(|a| a.worst_partner) {
+        println!(
+            "partner: {sides} cut sides in {with_sides} sources, limit {:.4} units; worst side with a partner {:.4} on page {} path {}; {} sides with no partner",
+            partner_limit(100),
+            w.area.worst_partner,
+            w.page,
+            w.area.worst_partner_path,
+            alone.len()
+        );
+    }
+    for (page, (path, word, k, d)) in &alone {
+        let d = if *d >= CELL { format!(">= {CELL}") } else { format!("{d:.4}") };
+        println!("  no partner: page {page} path {path} word {word} piece {k}: {d} units");
+    }
+    let against: usize = rows.iter().map(|r| r.area.nested_against).sum();
+    let with: Vec<&String> = rows.iter().flat_map(|r| &r.area.nested_with).collect();
+    println!("nesting: {against} nested subpaths wind against their holder, {} with it", with.len());
+
+    let mut area_failures: Vec<String> = rows.iter().flat_map(|r| r.area.failures.iter().cloned()).collect();
+    area_failures.extend(with.iter().map(|w| w.to_string()));
+    // An entry of `KNOWN_LEFT_OUT` whose page is in the run must match once.
+    for (k, n) in KNOWN_LEFT_OUT.iter().zip(&known) {
+        if rows.iter().any(|r| r.page == k.0) && *n != 1 {
+            area_failures.push(format!("page {}: path {}: KNOWN_LEFT_OUT matched {n} times, not once", k.0, k.1));
+        }
+    }
     for f in area_failures.iter().take(50) {
         eprintln!("FAIL {f}");
     }
@@ -969,23 +1434,28 @@ fn ink() {
 /// the next piece of its source, and add the whole source outline as one more piece. The
 /// median and the percentile are of the pieces whose source has two pieces or more.
 ///
-/// Then every piece of every source gets each change, and the test prints how many pass.
-/// A change that moves less ink than the allowance of its source (`EDGE` × L) can pass
-/// unless the segment count sees it, so the test does not assert that sweep.
+/// With `QVP_LETTERS_SWEEP=1`, every piece of every source then gets each change, and the
+/// test prints how many pass. A change that moves less ink than the allowance of its
+/// source (`EDGE` × L) can pass unless the segment count or the partner rule sees it, so
+/// the test does not assert that sweep. The sweep takes most of the test's time, so it
+/// runs only when asked.
 #[test]
 fn the_area_check_catches_a_lost_or_extra_piece() {
     if !have_letters() {
         return;
     }
     const NAMES: [&str; 3] = ["lost", "doubled", "replaced"];
-    /// Per change in the sweep: made, caught by (a), by (b), by the segment count, and
-    /// caught by none, with the most ink, in page units squared, that such a change moves.
+    let sweep = std::env::var("QVP_LETTERS_SWEEP").is_ok();
+    /// Per change in the sweep: made, caught by (a), by (b), by the segment count, by the
+    /// partner rule, and caught by none, with the most ink, in page units squared, that
+    /// such a change moves.
     #[derive(Default, Clone, Copy)]
     struct Row {
         made: usize,
         a: usize,
         b: usize,
         segments: usize,
+        partner: usize,
         none: usize,
         largest_missed: f64,
     }
@@ -995,7 +1465,8 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
         let quant = lp.page.header.quant;
         let pieces = &lp.data.pieces;
         let fails = |src: u32, run: &[PieceRec]| -> Result<bool, String> {
-            Ok(SourceArea::new(&cmds_of(page, &lp.page, src)?, run, quant).failure().is_some())
+            let cmds = cmds_of(page, &lp.page, src)?;
+            Ok(SourceArea::new(&Source::new(&cmds, quant), area(&cmds), run).failure().is_some())
         };
         let run_of = |k: usize| -> (usize, &[PieceRec]) {
             let s = pieces[k].source;
@@ -1033,9 +1504,14 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
 
         // The sweep.
         let mut t = [Row::default(); 3];
+        if !sweep {
+            return Ok(t);
+        }
         for run in pieces.chunk_by(|a, b| a.source == b.source) {
             let src = cmds_of(page, &lp.page, run[0].source)?;
-            let before = SourceArea::new(&src, run, quant);
+            let source = Source::new(&src, quant);
+            let src_area = area(&src);
+            let before = SourceArea::new(&source, src_area, run);
             for k in 0..run.len() {
                 let mut changes: Vec<(usize, Vec<PieceRec>)> = vec![];
                 if run.len() > 1 {
@@ -1050,12 +1526,13 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
                 doubled.insert(k, run[k].clone());
                 changes.push((1, doubled));
                 for (c, v) in changes {
-                    let s = SourceArea::new(&src, &v, quant);
+                    let s = SourceArea::new(&source, src_area, &v);
                     let row = &mut t[c];
                     row.made += 1;
                     row.a += (s.ratio_a() > MAX_AREA_RATIO) as usize;
                     row.b += (s.ratio_b() > MAX_AREA_RATIO) as usize;
                     row.segments += s.extra.is_some() as usize;
+                    row.partner += !s.alone.is_empty() as usize;
                     if s.failure().is_none() {
                         row.none += 1;
                         row.largest_missed = row.largest_missed.max((s.sum - before.sum).abs());
@@ -1077,6 +1554,7 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
                     sum.a += add.a;
                     sum.b += add.b;
                     sum.segments += add.segments;
+                    sum.partner += add.partner;
                     sum.none += add.none;
                     sum.largest_missed = sum.largest_missed.max(add.largest_missed);
                 }
@@ -1084,11 +1562,13 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
             Err(e) => errors.push(e),
         }
     }
-    for (name, r) in NAMES.iter().zip(total) {
-        println!(
-            "{name:>8}: {} changes; (a) catches {}, (b) {}, the segment count {}; {} pass, moving at most {:.4} units²",
-            r.made, r.a, r.b, r.segments, r.none, r.largest_missed
-        );
+    if sweep {
+        for (name, r) in NAMES.iter().zip(total) {
+            println!(
+                "{name:>8}: {} changes; (a) catches {}, (b) {}, the segment count {}, the partner rule {}; {} pass, moving at most {:.4} units²",
+                r.made, r.a, r.b, r.segments, r.partner, r.none, r.largest_missed
+            );
+        }
     }
     assert!(errors.is_empty(), "{errors:#?}");
 }
