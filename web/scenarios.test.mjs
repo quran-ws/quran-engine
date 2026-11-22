@@ -39,13 +39,15 @@ const set = engine.loadOrnaments(Uint8Array.from(hex.match(/../g), b => parseInt
 const near = (a, b, what) => assert.ok(Math.abs(a - b) <= dressed.tolerance * Math.max(1, Math.abs(b)), `${what}: got ${a}, engine says ${b}`)
 let m = 0
 for (const c of dressed.cases) {
-  const tag = `dress ${c.spec.viewportW}x${c.spec.viewportH}${c.spec.reflow ? ' reflow ' + c.spec.reflow.zoom : ''}`
+  const tag = `dress ${c.spec.viewportW}x${c.spec.viewportH}${c.spec.reflow ? ' reflow ' + c.spec.reflow.zoom : ''}${c.spec.fillHeight ? ' filled' : ''}`
   page.undress()
   page.layout(c.spec)
   assert.ok(page.dress(set, dressed.dress), `${tag}: the engine refused the dress`)
   const L = page.currentLayout
   for (const k of ['fitScale', 'fitX', 'fitY']) near(L[k], c.fit[k], `${tag} ${k}`)
   page.dressInfo().overflow.forEach((v, i) => near(v, c.overflow[i], `${tag} overflow[${i}]`))
+  // the printed height holds the border, as the canvas of a host that scrolls the page does
+  near(page.layoutPrintedHeight(c.spec), c.printedHeight, `${tag} layoutPrintedHeight`)
   // the border on screen at the fit: a reflowed page is scrolled up and down only, so the
   // border must fit across the viewport
   const vb = page.dressInfo().viewBox
@@ -65,6 +67,8 @@ for (const c of dressed.cases) {
     near(got.height, want.height, `${tag} ${call} height`)
     // scale 0 fits the dressed box to the width
     if (want.scale === 0) assert.ok(got.width <= want.viewportW + 0.5 && got.view.scale <= 1, `${tag} ${call}: ${got.width} wide`)
+    // fill-height fills the viewport with the border included
+    if (want.scale === 0 && c.spec.fillHeight) near(got.height, c.spec.viewportH, `${tag} ${call} fills the height`)
   }
   m++
 }

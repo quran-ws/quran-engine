@@ -275,7 +275,9 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** The share of the padded viewport left empty when the page is fitted to width. */
     fun layoutWastedFraction(spec: QvpLayoutSpec): Float = QvpNative.layoutWastedFraction(h, spec.floats())
     /** The page's height laid out for [spec] at the printed pitch, in viewport px: `contentH` before
-     * fill-height adds any leading, padding included. What a host asks before it sizes the canvas. */
+     * fill-height adds any leading, padding included. What a host asks before it sizes the canvas.
+     * On a page dressed in a border it is the whole page, border included: the dressed box fitted
+     * to the viewport width, as `dressView` at scale 0 fits it. */
     fun layoutPrintedHeight(spec: QvpLayoutSpec): Float = QvpNative.layoutPrintedHeight(h, spec.floats())
     /** Read back the layout the page already has, without computing one: what to call after the
      * engine laid the page out itself, as the zoom control does. */

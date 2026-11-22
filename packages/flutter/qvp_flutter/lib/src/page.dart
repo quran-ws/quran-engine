@@ -445,7 +445,8 @@ class QvpPage extends ChangeNotifier {
 
   /// The page's height laid out for [spec] at the printed pitch, in viewport px: `contentH`
   /// before fill-height adds any leading, padding included. What a host asks before it sizes
-  /// the canvas.
+  /// the canvas. On a page dressed in a border it is the whole page, border included: the
+  /// dressed box fitted to the viewport width, as `dressView` at scale 0 fits it.
   double layoutPrintedHeight(QvpLayoutSpec spec) =>
       _backend.layoutPrintedHeight(handle, spec);
   double layoutLineSpacingToFill(QvpLayoutSpec spec, [double max = 0]) =>

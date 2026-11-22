@@ -269,6 +269,69 @@ final class QvpDressTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(c.hostPageSize).height, size.height, accuracy: 0.5, "the box, not the canvas, sizes the page")
     }
 
+    /// A reader that scrolls the page itself and fills its box: the page is dressed first and
+    /// cropped to its ink after, as such a host does. Planned from `printedHeight(forWidth:)` and
+    /// sized from `hostPageSize`, the bordered page fills the box exactly, and the view follows
+    /// the crop with no `resetView()`.
+    @MainActor func testCanvasHostScrollsFillsTheBoxWithTheBorder() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let page = try Self.page604(); defer { page.close() }
+        let set = try QvpOrnaments(bytes: Self.ornamentBytes)
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.fillHeight = true
+        c.hostViewportHeight = Self.box.height
+        c.page = page
+        c.setBounds(Self.box, fromCanvas: 1)
+        XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
+        c.relayout(); c.resetView()
+        // the crop arrives after the dress, and only relayouts
+        let ink = try XCTUnwrap(page.cropBounds("page", pad: 1))
+        c.cropLeft = ink.x0
+        c.cropRight = page.width - ink.x1
+        // the plan: the bordered page's height for the width, before the canvas is sized
+        let planned = try XCTUnwrap(c.printedHeight(forWidth: Self.box.width))
+        XCTAssertLessThanOrEqual(planned, Self.box.height, "page 604 fits a phone's box")
+        let half = try XCTUnwrap(c.printedHeight(forWidth: Self.box.width / 2))
+        XCTAssertEqual(2 * half, planned, accuracy: 0.01, "in proportion to the width")
+        // the canvas sized from hostPageSize is the box, border included
+        let size = try XCTUnwrap(c.hostPageSize)
+        XCTAssertEqual(size.width, Self.box.width, accuracy: 0.01)
+        XCTAssertEqual(size.height, Self.box.height, accuracy: 0.01)
+        let l = try XCTUnwrap(page.currentLayout), o = try XCTUnwrap(page.dressOverflow)
+        XCTAssertGreaterThan(CGFloat(l.contentH), Self.box.height, "contentH is the text before the border shrinks it")
+        // the view is the engine's fit of the cropped layout
+        let d = page.dressView(0, viewportW: Float(Self.box.width))
+        XCTAssertEqual(c.viewScale, CGFloat(d.view.scale), accuracy: 0.0001)
+        XCTAssertEqual(c.viewOx, CGFloat(d.view.offsetX), accuracy: 0.01)
+        XCTAssertEqual(c.viewOy, CGFloat(d.view.offsetY), accuracy: 0.01)
+        // the border's top is the canvas's top and its bottom the canvas's bottom
+        XCTAssertEqual(c.viewOy - o.top * c.viewScale, 0, accuracy: 0.05)
+        XCTAssertEqual(c.viewOy + (CGFloat(l.contentH) + o.bottom) * c.viewScale, Self.box.height, accuracy: 0.05)
+    }
+
+    /// A dress lays a printed page out again inside the engine. `resetView()` alone, as the
+    /// header asks, draws what a `relayout()` draws: the controller takes up the engine's layout.
+    @MainActor func testResetViewAfterADressTakesUpTheNewLayout() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let page = try Self.page604(); defer { page.close() }
+        let set = try QvpOrnaments(bytes: Self.ornamentBytes)
+        let c = QvpCanvasController()
+        c.fillHeight = true
+        c.paperColor = 0xffffffff
+        c.page = page
+        c.setBounds(Self.box, fromCanvas: 1)
+        _ = try Self.render(c)
+        let before = c.layoutRevision
+        XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
+        c.resetView()
+        XCTAssertGreaterThan(c.layoutRevision, before, "a host overlay hears of the new rows")
+        let shown = try Self.render(c)
+        c.relayout(); c.resetView()
+        let relaid = try Self.render(c)
+        XCTAssertEqual(shown.pixels, relaid.pixels, "the ink sits where a relayout puts it")
+    }
+
     #if canImport(UIKit)
     /// The same scroll through QvpPageView's `scroll(by:)`.
     @MainActor func testPageViewScrollKeepsTheBorder() throws {
