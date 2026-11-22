@@ -85,13 +85,14 @@ pieces and compares it with the page (`docs/MEASURED.md`). It asserts these thin
   exception, with its exact difference (page 001, word 1:2:1).
 - Every side of a cut has a partner: a side of another piece of the same path runs along
   it within 0.028 units.
+- Where two pieces meet along a cut, they draw the cut in opposite directions.
 - A subpath inside another winds the other way, so that the areas count ink.
 
 It reports, and does not assert, the page drawn with the pieces of each path as one path,
 and the result of losing, doubling or replacing each piece. It cannot see these:
 
 - A change to the pieces that moves less ink than the area limit allows. Of all single
-  lost pieces, 25 pass, up to 0.034 square units. Of all doubled pieces, 16 pass.
+  lost pieces, 25 pass, up to 0.034 square units. No doubled piece passes.
 - A gap or an overlap between the pieces of two different paths.
 - Where ink moved inside one path. The pixel threshold sees this at page level only.
 - Whether a cut falls where a calligrapher would put it, and whether a reader can see a

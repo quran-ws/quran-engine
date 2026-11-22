@@ -398,3 +398,11 @@ to the same layer that the writer encoded.
   source of pieces. One path can be the source of several pieces.
 - Every path inside the path run of a word has a role. So a layer covers every word of
   its page. A word whose path run ends past the page's path table is an error.
+
+Coverage has a cost for later versions. A layer gives every path of every word exactly
+one role, so a layer covers every word of its page. A layer cannot leave out a word that
+its source does not divide into letters.
+
+Upstream keeps the `data-unsplit` attribute for such a word, and no page uses it today.
+The converter stops a page that has one. To support such a word, add a new record or a
+new format version. Do not make a reader relax this check.

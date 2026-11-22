@@ -140,7 +140,7 @@ The gate also compares areas. For each of the 89,853 cut paths, it takes the abs
 difference between the area of the path and the area of its pieces. The sum of these
 differences is 1,466.9 square units, 0.0244% of the 6,003,600 square units of the paths.
 `quran-svg-elements` states that the edge of a cut piece is less than 0.0125 units from
-the artwork. The gate asserts three things for each cut path:
+the artwork. The gate asserts four things for each cut path:
 
 - The area of its pieces is within 0.0125 units × L of the area of the path. L is the
   length of the edges that a cut made again near the outline of the path. Near means
@@ -150,6 +150,9 @@ the artwork. The gate asserts three things for each cut path:
 - Every other new edge that a piece draws once is a side of a cut. A side of another
   piece of the same path must run along it, within 0.028 units. 116 such sides in 32
   paths all have one. The farthest is 0.0200 units away.
+- Where two pieces of the path meet along a cut, they draw the cut in opposite
+  directions. All 319,037 such cuts do. A copy of a piece draws its new edges a second
+  time in the same direction, so this rule finds a doubled piece.
 - A subpath inside another subpath winds the other way: 139,403 do, and none winds the
   same way.
 
@@ -158,9 +161,13 @@ piece of word 1:2:1 leaves out a closed subpath of three points. The subpath is 
 0.01 units, with an area of 0.00025 square units.
 
 A test changes the pieces of each path in turn (`QVP_LETTERS_SWEEP=1`). Of 261,874 lost
-pieces, 25 still pass, and the most ink one of them moves is 0.034 square units. Of
-261,953 doubled pieces, 16 pass, up to 0.135 square units. No piece replaced by its
-neighbour passes. With 32 threads the gate took 16.2 s for 604 pages.
+pieces, 25 still pass, and the most ink one of them moves is 0.034 square units. No
+doubled piece of the 261,953 passes, and no piece replaced by its neighbour passes.
+
+On the Intel Core i9-13900 with 32 threads, the `ink` test alone took 17.7 s to 19.2 s
+for 604 pages over three runs. The whole test file, with the default test harness, took
+20.2 s to 24.2 s. The harness runs the four tests of the file at the same time. The
+sweep test alone, with `QVP_LETTERS_SWEEP=1`, took 11.5 s to 12.5 s.
 
 ## Known rough edges
 

@@ -20,6 +20,8 @@ All notable changes to the engine and its packages. The format follows
   identity gate's metric. For each cut path, it also asserts that the area of the pieces
   is the area of the path within upstream's edge limit of 0.0125 units times the length
   of the edges remade near the outline, and that each side of a cut has a partner side.
+  Two pieces that meet along a cut must draw it in opposite directions, so a doubled
+  piece fails.
   All 604 pages pass both. `scripts/check.sh gates` runs them on
   8 pages when `pages-letters/` is present. The letter division comes from DigitalKhatt's
   `medinamushafanalyzer` (`docs/DATA.md`). The sizes and the gate's figures are in
