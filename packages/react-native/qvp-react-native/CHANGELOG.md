@@ -5,6 +5,16 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.9.0] - 2026-11-22
+
+### Added
 - React Native on iOS (#41). The package has an iOS module over QvpKit with the method names
   and result shapes of the Android module, so `src/index.tsx` has no platform branch. It
   hosts QvpKit's `QvpPageView` for `<QvpPageView />` and draws `<QvpPassageView />`, with the
@@ -72,8 +82,20 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   `scripts/check-parity.py` checks it. `scripts/sync-example-data.sh react-native` copies
   the pages to the iOS example too. The npm release job waits until the GitHub release serves
   the XCFramework, so the file the pod downloads is public before npm holds the package.
-
-### Removed
+- `layoutPrintedHeight` on a page dressed in a border answers the height of the whole page,
+  border included: the dressed box fitted to the viewport width, as `dressView` at scale 0
+  fits it. That is the height a host that scrolls the page gives its canvas, so a host can
+  plan a box for a bordered page before it sizes the canvas. With no padding the height is in
+  proportion to the width. An undressed page answers `contentH` as before.
+- Fill-height on a page dressed in a border fills the viewport with the border included:
+  `dressView(0, viewportW).height` is `viewportH`. Before, the text filled the viewport and the
+  border reached past it above and below. `layoutLineSpacingToFill` answers the same leading.
+- A printed layout of a dressed page narrows `cropLeft` and `cropRight` where a medallion
+  reaches past them, so the crop never cuts into a medallion. A medallion stays centred on
+  its printed ring. On page 50, four font markers reached about 1 unit past a crop measured
+  from the words.
+- `dress` and `undress` lay a printed page out again from its own spec, as they already did
+  for a reflowed page, because the crop and the fill now depend on the dress.
 
 ### Fixed
 - A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
@@ -105,6 +127,16 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   `fit_x`, `fit_y` place the content's own origin. The docs of the dress overflow in
   Kotlin, Swift and Dart told a host to fit the overflow itself. The engine's fit holds it
   already. The iOS `resetView()` docs said that the view fits the content height.
+- A page dressed without a border no longer grows its dressed box to the whole printed page.
+  The box is the laid-out page, so a crop is kept. Before, `dressView` at scale 0 shrank a
+  cropped page to show the cut margins, by about 3.5% on page 50. A reflowed page dressed
+  without a border is no longer pushed off to the left: on page 50 at zoom 1.8, `fitX` was
+  −170 px.
+- The release workflow publishes `@quran.ws/qvp-react-native` to npm in its own job, after
+  the Maven Central job. The job waits up to 60 minutes for Maven Central to serve
+  `ws.quran:qvp-android` at the release version, then compiles the module against it with
+  `-PqvpFromMaven`. Before, npm could hold a package version whose library Maven Central
+  did not serve yet, or did not serve at all after a Maven failure (#172).
 
 ## [0.8.0] - 2026-11-04
 
