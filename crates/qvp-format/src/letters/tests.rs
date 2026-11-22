@@ -251,6 +251,14 @@ fn renumber(d: &mut LetterData) {
     }
 }
 
+/// Write the body digest of a patched file again, so that a test reaches the rule it is
+/// about instead of the body digest.
+pub(super) fn seal(mut b: Vec<u8>) -> Vec<u8> {
+    let d = body_digest(&b);
+    b[BODY_DIGEST_AT..BODY_DIGEST_AT + 8].copy_from_slice(&d.to_le_bytes());
+    b
+}
+
 fn header_u32(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
 }
@@ -260,7 +268,7 @@ fn sections(b: &[u8]) -> Vec<(usize, usize)> {
     let mut at = HEADER_LEN;
     (0..N_SECTIONS)
         .map(|i| {
-            let len = header_u32(b, 24 + 4 * i) as usize;
+            let len = header_u32(b, LENGTHS_AT + 4 * i) as usize;
             at += len;
             (at - len, len)
         })
@@ -273,9 +281,9 @@ fn patch_varint(b: &[u8], at: usize, old_len: usize, v: u32, sec: usize) -> Vec<
     write_varint(&mut out, v);
     let grown = out.len() - at;
     out.extend_from_slice(&b[at + old_len..]);
-    let len = header_u32(b, 24 + 4 * sec) as usize + grown - old_len;
-    out[24 + 4 * sec..28 + 4 * sec].copy_from_slice(&(len as u32).to_le_bytes());
-    out
+    let len = header_u32(b, LENGTHS_AT + 4 * sec) as usize + grown - old_len;
+    out[LENGTHS_AT + 4 * sec..LENGTHS_AT + 4 + 4 * sec].copy_from_slice(&(len as u32).to_le_bytes());
+    seal(out)
 }
 
 // ── round trips ──
@@ -400,38 +408,147 @@ fn the_encoder_is_deterministic() {
 
 // ── the page digest ──
 
+/// The vectors of `docs/FORMAT.md`, computed by a separate Python version of the digest.
 #[test]
-fn page_digest_is_fnv_1a_64() {
-    assert_eq!(page_digest(b""), 0xcbf2_9ce4_8422_2325);
-    assert_eq!(page_digest(b"a"), 0xaf63_dc4c_8601_ec8c);
-    assert_eq!(page_digest(b"foobar"), 0x8594_4171_f739_67e8);
+fn digest64_has_the_vectors_of_the_format() {
+    assert_eq!(digest64(b""), 0x99b6_af66_b78b_8ad8);
+    assert_eq!(digest64(b"a"), 0xc24e_fef7_cc63_c094);
+    assert_eq!(digest64(b"foobar"), 0xce77_3884_005e_c91d);
+    assert_eq!(digest64(b"0123456789abcdef"), 0xa97c_4e98_d939_8a71);
+    // fed in parts, the digest is the digest of the whole
+    let mut h = pieces::Digest::new();
+    for part in [&b"012"[..], b"34567", b"89abcde", b"f"] {
+        h.bytes(part);
+    }
+    assert_eq!(h.finish(), 0xa97c_4e98_d939_8a71);
+}
+
+/// A page of one word and one path, a triangle: page 3, `quant` 100.
+fn tiny_page() -> PageData {
+    let mut p = sample_page();
+    p.header.page = 3;
+    p.ops.clear();
+    p.paths.truncate(1);
+    let cmds = [Cmd::MoveTo(0, 0), Cmd::LineTo(10, 0), Cmd::LineTo(0, 10), Cmd::Close];
+    p.paths[0].bbox = encode_cmds(&cmds, 0, 0, &mut p.ops);
+    p.paths[0].op_len = p.ops.len() as u32;
+    p.words.truncate(1);
+    p.words[0].n_paths = 1;
+    p
+}
+
+/// The page digest's input, written out byte by byte from `docs/FORMAT.md`.
+#[test]
+fn the_page_digest_hashes_the_bytes_the_format_gives() {
+    let page = tiny_page();
+    assert_eq!(page.paths[0].kind as u8, 0, "kind body");
+    let input: Vec<u8> = vec![
+        3, 0, // page
+        100, 0, // quant
+        1, 0, 0, 0, // words
+        1, 0, 0, 0, // paths
+        0, 0, 0, 0, 1, 0, // word 0: first path 0, one path
+        0, 0, 0, 0, // path 0: kind body (0), mark none, family none, flags 0
+        0, // its run: the first opcode, a move
+        0, 0, 0, 0, 0, 0, 0, 0, // the move's point, absolute: 0, 0
+        7, 0, 0, 0, // seven more bytes
+        1, 20, 0, // a line by 10, 0
+        1, 19, 20, // a line by -10, 10
+        4,  // a close
+        0, 0, 0, 0, // no glyph outline
+    ];
+    assert_eq!(digest64(&input), TINY_PAGE_DIGEST);
+    assert_eq!(page_digest(&page), Ok(TINY_PAGE_DIGEST));
+}
+
+/// The page digest of `tiny_page`, as `docs/FORMAT.md` quotes it, computed by a separate
+/// Python version of the digest over the bytes above.
+const TINY_PAGE_DIGEST: u64 = 0x5e3b_2943_ec12_96d2;
+
+#[test]
+fn the_page_digest_covers_what_the_layer_depends_on_and_nothing_else() {
+    let d = page_digest(&sample_page()).unwrap();
+    let digest = |f: fn(&mut PageData)| {
+        let mut p = sample_page();
+        f(&mut p);
+        page_digest(&p).unwrap()
+    };
+    // not in it: the box, the strings, a word's text, a path's box and origin
+    assert_eq!(digest(|p| p.header.width = 1.0), d);
+    assert_eq!(digest(|p| p.strings.push("x".into())), d);
+    assert_eq!(digest(|p| p.words[0].qpc = 0), d);
+    assert_eq!(digest(|p| p.paths[1].bbox.x0 -= 1), d);
+    // in it: a word's path run, a path's kind or mark, the order of the paths
+    assert_ne!(digest(|p| p.words[1].n_paths = 2), d);
+    assert_ne!(digest(|p| p.paths[4].kind = PathKind::Body), d);
+    assert_ne!(digest(|p| p.paths[5].mark = Mark::Dot), d);
+    assert_ne!(digest(|p| p.paths.swap(4, 5)), d);
+    // and every path's geometry, a source's or not; the origin it is coded from is not
+    for path in [2usize, 4] {
+        let mut moved = sample_page();
+        let cmds: Vec<Cmd> = moved
+            .path_cmds(path)
+            .unwrap()
+            .iter()
+            .map(|c| if let Cmd::LineTo(x, y) = c { Cmd::LineTo(x + 1, *y) } else { *c })
+            .collect();
+        let off = moved.ops.len() as u32;
+        encode_cmds(&cmds, 0, 0, &mut moved.ops);
+        moved.paths[path].op_off = off;
+        moved.paths[path].op_len = moved.ops.len() as u32 - off;
+        assert_ne!(page_digest(&moved), Ok(d), "path {path}");
+    }
+    let mut rebased = sample_page();
+    let cmds = rebased.path_cmds(4).unwrap();
+    let off = rebased.ops.len() as u32;
+    encode_cmds(&cmds, 9000, 3000, &mut rebased.ops);
+    rebased.paths[4].op_off = off;
+    rebased.paths[4].op_len = rebased.ops.len() as u32 - off;
+    (rebased.paths[4].ox, rebased.paths[4].oy) = (9000, 3000);
+    assert_eq!(page_digest(&rebased), Ok(d));
 }
 
 #[test]
-fn the_header_names_the_page_file() {
+fn the_header_holds_both_digests() {
     let page = sample_page();
     let b = enc(&sample());
-    let file = crate::encode(&page);
-    assert_eq!(letters_page_digest(&b), Ok(page_digest(&file)));
-    assert_eq!(page_data_digest(&page), Ok(page_digest(&file)));
-    // other bytes of the same page give another digest
-    let mut other = page.clone();
-    other.header.width = 346.0;
-    assert_ne!(letters_page_digest(&encode_letters(&sample(), &other).unwrap()), letters_page_digest(&b));
-    assert_eq!(letters_page_digest(b"QVL1"), Err(Error::BadMagic));
-    assert_eq!(letters_page_digest(&b[..HEADER_LEN - 1]), Err(Error::Truncated("header")));
-    assert_eq!(letters_page_digest(b"QVP1\x01\x00"), Err(Error::BadMagic));
+    let stored = |at: usize| u64::from_le_bytes(b[at..at + 8].try_into().unwrap());
+    assert_eq!(Ok(stored(PAGE_DIGEST_AT)), page_digest(&page));
+    let mut zeroed = b.clone();
+    zeroed[BODY_DIGEST_AT..BODY_DIGEST_AT + 8].fill(0);
+    assert_eq!(stored(BODY_DIGEST_AT), digest64(&zeroed));
 }
 
 #[test]
-fn a_page_whose_commands_do_not_decode_has_no_digest() {
+fn a_damaged_byte_fails_the_body_digest() {
+    let b = enc(&rich());
+    for at in [0x30, HEADER_LEN, b.len() / 2, b.len() - 1] {
+        let mut bad = b.clone();
+        bad[at] ^= 1;
+        assert_eq!(dec(&bad), Err(Error::Damaged("body digest")), "byte {at}");
+    }
+    let mut bad = b.clone();
+    bad[BODY_DIGEST_AT] ^= 1;
+    assert_eq!(dec(&bad), Err(Error::Damaged("body digest")));
+}
+
+#[test]
+fn a_page_whose_runs_leave_the_opcodes_has_no_digest() {
     let mut page = sample_page();
-    page.ops[page.paths[3].op_off as usize] = 9;
-    assert_eq!(page_data_digest(&page), Err(Error::Corrupt("bad opcode")));
+    page.paths[3].op_len = u32::MAX;
+    assert_eq!(page_digest(&page), Err(Error::Bounds("path ops")));
     assert!(encode_letters(&sample(), &page).is_err());
 }
 
-// ── what the encoder refuses ──
+#[test]
+fn a_source_whose_commands_do_not_decode_is_refused() {
+    let mut page = sample_page();
+    page.ops[page.paths[2].op_off as usize] = 9;
+    assert!(encode_letters(&sample(), &page).is_err());
+    page.ops[page.paths[2].op_off as usize] = 0;
+    page.ops[page.paths[2].op_off as usize + 3] = 9;
+    assert_eq!(encode_letters(&sample(), &page), Err(Error::Corrupt("bad opcode")));
+}
 
 #[test]
 fn the_encoder_refuses_a_piece_it_cannot_code() {
@@ -463,15 +580,16 @@ fn the_encoder_refuses_a_piece_it_cannot_code() {
 fn rejects_bad_magic() {
     let mut bytes = enc(&sample());
     bytes[3] = b'2';
-    assert_eq!(dec(&bytes), Err(Error::BadMagic));
-    assert_eq!(dec(b"QV"), Err(Error::BadMagic));
+    assert_eq!(dec(&bytes), Err(Error::NotLetterLayer));
+    assert_eq!(dec(b"QV"), Err(Error::NotLetterLayer));
+    assert_eq!(dec(&enc(&sample())[..HEADER_LEN - 1]), Err(Error::Damaged("header")));
 }
 
 #[test]
 fn rejects_bad_version() {
     let mut bytes = enc(&sample());
     bytes[4] = 2;
-    assert_eq!(dec(&bytes), Err(Error::BadVersion(2)));
+    assert_eq!(dec(&bytes), Err(Error::LetterLayerVersion(2)));
 }
 
 #[test]
@@ -479,14 +597,14 @@ fn rejects_a_zero_quant() {
     let mut bytes = enc(&sample());
     bytes[6] = 0;
     bytes[7] = 0;
-    assert_eq!(dec(&bytes), Err(Error::Corrupt("quant")));
+    assert_eq!(dec(&seal(bytes)), Err(Error::Damaged("quant")));
 }
 
 #[test]
 fn rejects_trailing_bytes() {
     let mut bytes = enc(&sample());
     bytes.push(0);
-    assert_eq!(dec(&bytes), Err(Error::Corrupt("trailing bytes")));
+    assert_eq!(dec(&seal(bytes)), Err(Error::Damaged("trailing bytes")));
 }
 
 #[test]
@@ -497,14 +615,15 @@ fn rejects_another_page() {
         f(&mut p);
         decode_letters(&bytes, &p)
     };
-    assert_eq!(refused(|p| p.header.page = 8), Err(Error::Corrupt("layer page")));
-    assert_eq!(refused(|p| p.header.quant = 10), Err(Error::Corrupt("layer quant")));
-    assert_eq!(refused(|p| p.paths.truncate(5)), Err(Error::Corrupt("layer path count")));
-    assert_eq!(refused(|p| p.words.truncate(1)), Err(Error::Corrupt("layer word count")));
+    assert_eq!(refused(|p| p.header.page = 8), Err(Error::OtherPage("page number")));
+    assert_eq!(refused(|p| p.header.quant = 10), Err(Error::OtherPage("quant")));
+    assert_eq!(refused(|p| p.paths.truncate(5)), Err(Error::OtherPage("path count")));
+    assert_eq!(refused(|p| p.words.truncate(1)), Err(Error::OtherPage("word count")));
+    assert_eq!(refused(|p| p.paths[4].mark = Mark::Dot), Err(Error::OtherPage("page digest")));
 }
 
-/// A page with the layer's counts but other paths: the decoder gives an error or some
-/// layer, and never panics. The digest tells the two pages apart.
+/// A page with the layer's counts but other paths is another page: the page digest, or the
+/// sources it reads, tell it apart before any piece.
 #[test]
 fn another_page_with_the_same_counts_does_not_panic() {
     let d = rich();
@@ -534,10 +653,7 @@ fn another_page_with_the_same_counts_does_not_panic() {
     p.paths[3].flags = PF_GLYPH;
     pages.push(p);
     for (i, p) in pages.iter().enumerate() {
-        if let Ok(other) = decode_letters(&bytes, p) {
-            assert_ne!(other, d, "page {i}");
-        }
-        assert_ne!(page_data_digest(p).ok(), letters_page_digest(&bytes).ok(), "page {i}");
+        assert!(matches!(decode_letters(&bytes, p), Err(Error::OtherPage(_))), "page {i}");
     }
 }
 
@@ -558,11 +674,11 @@ fn a_huge_count_does_not_allocate() {
     assert_eq!(bytes[HEADER_LEN..HEADER_LEN + 4], [3, 5, 2, 2]);
     for i in 0..4 {
         let patched = patch_varint(&bytes, HEADER_LEN + i, 1, u32::MAX, 0);
-        assert_eq!(dec(&patched), Err(Error::Truncated("tables")), "count {i}");
+        assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("tables")), "count {i}");
     }
     // the alphabet count follows the four counts
     let patched = patch_varint(&bytes, HEADER_LEN + 4, 1, u32::MAX, 0);
-    assert_eq!(dec(&patched), Err(Error::Truncated("alphabet")));
+    assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("alphabet")));
 }
 
 #[test]
@@ -570,11 +686,11 @@ fn a_huge_more_at_count_does_not_allocate() {
     let mut d = sample();
     d.letters[2].more_at = vec![0x7F; 1];
     let bytes = enc(&d);
-    let tables_end = HEADER_LEN + header_u32(&bytes, 24) as usize;
+    let tables_end = HEADER_LEN + header_u32(&bytes, LENGTHS_AT) as usize;
     // The more_at count of the last letter is 1, then its one offset 0x7F.
     let at = (HEADER_LEN..tables_end).find(|&i| bytes[i] == 1 && bytes[i + 1] == 0x7F).unwrap();
     let patched = patch_varint(&bytes, at, 1, u32::MAX, 0);
-    assert_eq!(dec(&patched), Err(Error::Truncated("more_at")));
+    assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("more_at")));
 }
 
 #[test]
@@ -583,14 +699,14 @@ fn a_huge_operation_count_does_not_allocate() {
     // the last varint of the tables is the operation count of the last piece
     let (t, len) = sections(&bytes)[0];
     let patched = patch_varint(&bytes, t + len - 1, 1, u32::MAX, 0);
-    assert_eq!(dec(&patched), Err(Error::Truncated("operations")));
+    assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("piece operations")));
 }
 
 #[test]
 fn rejects_a_member_count_that_differs_from_the_members_table() {
     let mut d = sample();
     d.letters[2].n_members = 2;
-    assert_eq!(dec(&enc(&d)), Err(Error::Corrupt("member count")));
+    assert_eq!(dec(&enc(&d)), Err(Error::Damaged("member count")));
 }
 
 #[test]
@@ -600,11 +716,11 @@ fn rejects_out_of_range_indices() {
         f(&mut d);
         dec(&enc(&d))
     };
-    assert_eq!(decoded(|d| d.members[0].path = MemberPath::Page(6)), Err(Error::Bounds("member page path")));
-    assert_eq!(decoded(|d| d.members[2].path = MemberPath::Piece(2)), Err(Error::Bounds("member piece")));
-    assert_eq!(decoded(|d| d.letters[2].word = 2), Err(Error::Bounds("letter word")));
-    assert_eq!(decoded(|d| d.word_marks[1].word = 2), Err(Error::Bounds("word mark word")));
-    assert_eq!(decoded(|d| d.word_marks[1].path = 6), Err(Error::Bounds("word mark path")));
+    assert_eq!(decoded(|d| d.members[0].path = MemberPath::Page(6)), Err(Error::Damaged("member page path")));
+    assert_eq!(decoded(|d| d.members[2].path = MemberPath::Piece(2)), Err(Error::Damaged("member piece")));
+    assert_eq!(decoded(|d| d.letters[2].word = 2), Err(Error::Damaged("letter word")));
+    assert_eq!(decoded(|d| d.word_marks[1].word = 2), Err(Error::Damaged("word mark word")));
+    assert_eq!(decoded(|d| d.word_marks[1].path = 6), Err(Error::Damaged("word mark path")));
     // a source past the page: the group's source is the first varint after the word marks
     let bytes = enc(&sample());
     let (t, len) = sections(&bytes)[0];
@@ -612,7 +728,7 @@ fn rejects_out_of_range_indices() {
     let at = (t..t + len - 4).rev().find(|&i| bytes[i..i + 3] == [1, 2, 1]).unwrap();
     let mut patched = bytes.clone();
     patched[at + 1] = 6;
-    assert_eq!(dec(&patched), Err(Error::Bounds("piece source")));
+    assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("piece source")));
 }
 
 #[test]
@@ -626,14 +742,14 @@ fn rejects_a_surrogate_as_text() {
     let at = (HEADER_LEN..bytes.len() - 2).find(|&i| bytes[i..i + 3] == [0xD7, 0xA3, 0x03]).unwrap();
     let mut patched = bytes.clone();
     patched[at] = 0xD8;
-    assert_eq!(dec(&patched), Err(Error::Corrupt("alphabet")));
+    assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("alphabet")));
     let mut patched = bytes.clone();
     // the alphabet has two characters: an index of 2 is past it
     let (t, len) = sections(&bytes)[0];
     let tables = &bytes[t..t + len];
     let last_letter_text = tables.iter().rposition(|&b| b == 1).unwrap();
     patched[t + last_letter_text] = 2;
-    assert!(dec(&patched).is_err());
+    assert!(dec(&seal(patched.clone())).is_err());
 }
 
 #[test]
@@ -641,14 +757,14 @@ fn rejects_unknown_member_flags() {
     let bytes = enc(&sample());
     // The flags column of the sample: a body, a mark at its letter's offset plus one, two
     // piece bodies, a body.
-    let tables_end = HEADER_LEN + header_u32(&bytes, 24) as usize;
+    let tables_end = HEADER_LEN + header_u32(&bytes, LENGTHS_AT) as usize;
     let flags_at = (HEADER_LEN..tables_end - 4)
         .find(|&i| bytes[i..i + 5] == [1, 8, 3, 3, 1])
         .expect("the flags column of the sample");
     for bad in [0x20, 0x80, 6 << 2] {
         let mut patched = bytes.clone();
         patched[flags_at] |= bad;
-        assert_eq!(dec(&patched), Err(Error::Corrupt("member flags")), "{bad:#x}");
+        assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("member flags")), "{bad:#x}");
     }
 }
 
@@ -670,7 +786,7 @@ fn rejects_a_coordinate_out_of_range() {
     assert!(len >= want.len());
     let mut patched = bytes.clone();
     patched[xs..xs + over.len()].copy_from_slice(&over);
-    assert_eq!(dec(&patched), Err(Error::Corrupt("coordinate range")));
+    assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("coordinate range")));
 }
 
 #[test]
@@ -682,7 +798,7 @@ fn rejects_a_piece_that_does_not_start_with_a_move() {
     assert_eq!(bytes[seg], 0);
     let mut patched = bytes.clone();
     patched[seg] = 1;
-    assert_eq!(dec(&patched), Err(Error::Corrupt("piece start")));
+    assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("piece start")));
 }
 
 #[test]
@@ -696,7 +812,7 @@ fn rejects_unused_operation_bits() {
     assert_eq!(bytes[ops + len - 1] >> 4, 0, "an odd count of operations");
     let mut patched = bytes.clone();
     patched[ops + len - 1] |= 0x10;
-    assert_eq!(dec(&patched), Err(Error::Corrupt("operations")));
+    assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged("operations")));
     // and the unused bits of the last correction byte
     let d = rich();
     let bytes = enc(&d);
@@ -706,7 +822,7 @@ fn rejects_unused_operation_bits() {
     if used < 3 {
         let mut patched = bytes.clone();
         patched[corr + len - 1] |= 3 << 6;
-        assert!(dec(&patched).is_err());
+        assert!(dec(&seal(patched.clone())).is_err());
     }
 }
 
@@ -716,16 +832,21 @@ fn a_letter_with_no_offset_is_refused() {
     d.letters[0].at = NO_AT;
     d.members[0].at = 0;
     assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("letter at")));
-    assert_eq!(dec(&enc(&d)), Err(Error::Corrupt("letter at")));
+    assert_eq!(dec(&enc(&d)), Err(Error::Damaged("letter at")));
 }
 
 // ── malformed files ──
 
-/// What decodes, encodes again to bytes that decode to the same layer.
+/// What decodes, encodes again to bytes that decode to the same layer. A changed file
+/// fails its body digest, so the file is also decoded with its body digest written again,
+/// which reaches the rules past it.
 fn stable(b: &[u8], page: &PageData, what: &dyn Fn() -> String) {
-    if let Ok(d) = decode_letters(b, page) {
-        let again = encode_letters(&d, page).unwrap_or_else(|e| panic!("{}: {e:?}", what()));
-        assert_eq!(decode_letters(&again, page), Ok(d), "{}", what());
+    let sealed = if b.len() >= HEADER_LEN { seal(b.to_vec()) } else { b.to_vec() };
+    for b in [b, &sealed[..]] {
+        if let Ok(d) = decode_letters(b, page) {
+            let again = encode_letters(&d, page).unwrap_or_else(|e| panic!("{}: {e:?}", what()));
+            assert_eq!(decode_letters(&again, page), Ok(d), "{}", what());
+        }
     }
 }
 
@@ -778,7 +899,7 @@ fn a_mutation_fuzz_never_panics() {
                 }
                 4 => {
                     // a section length, grown or shrunk by a little
-                    let f = 24 + 4 * (rng.step() as usize % N_SECTIONS);
+                    let f = LENGTHS_AT + 4 * (rng.step() as usize % N_SECTIONS);
                     if f + 4 <= b.len() {
                         let v = header_u32(&b, f).wrapping_add(rng.step() % 9).wrapping_sub(4);
                         b[f..f + 4].copy_from_slice(&v.to_le_bytes());
@@ -792,11 +913,11 @@ fn a_mutation_fuzz_never_panics() {
         }
         let p = if case % 7 == 0 { &swapped } else { &page };
         stable(&b, p, &|| format!("case {case}"));
-        if decode_letters(&b, p).is_ok() {
+        if b.len() >= HEADER_LEN && decode_letters(&seal(b.clone()), p).is_ok() {
             decoded += 1;
         }
     }
-    eprintln!("{cases} mutated files: {decoded} decode, the rest are errors");
+    eprintln!("{cases} mutated files: {decoded} decode with their body digest written again");
 }
 
 // ── the rules that tie a layer to its page ──
@@ -1022,7 +1143,7 @@ fn splice_tables(b: &[u8], at: usize, remove: usize, insert: &[u8]) -> Vec<u8> {
     let f = LENGTHS_AT;
     let len = header_u32(b, f) as usize + insert.len() - remove;
     out[f..f + 4].copy_from_slice(&(len as u32).to_le_bytes());
-    out
+    seal(out)
 }
 
 /// The tables of `sample`, byte by byte: counts 0 to 3; the alphabet 4 to 7 (2, then 0x628
@@ -1058,7 +1179,7 @@ fn rejects_tables_that_are_not_canonical() {
             // the stored value, at the start of the `at` column
             patched = splice_tables(&patched, 26, 0, &[0]);
         }
-        assert_eq!(dec(&patched), Err(Error::Corrupt(what)), "{what}: {insert:?}");
+        assert_eq!(dec(&seal(patched.clone())), Err(Error::Damaged(what)), "{what}: {insert:?}");
     }
 }
 
@@ -1070,9 +1191,9 @@ fn a_varint_holds_32_bits_at_most() {
     assert_eq!(dec(&long), Ok(sample()));
     // a fifth byte with bits above the 32nd, and a sixth byte
     let over = splice_tables(&b, 0, 1, &[0x83, 0x80, 0x80, 0x80, 0x10]);
-    assert_eq!(dec(&over), Err(Error::Corrupt("varint too long")));
+    assert_eq!(dec(&over), Err(Error::Damaged("varint too long")));
     let six = splice_tables(&b, 0, 1, &[0x83, 0x80, 0x80, 0x80, 0x80, 0x00]);
-    assert_eq!(dec(&six), Err(Error::Corrupt("varint too long")));
+    assert_eq!(dec(&six), Err(Error::Damaged("varint too long")));
 }
 
 #[test]
@@ -1086,5 +1207,11 @@ fn rejects_a_source_that_starts_without_a_move() {
     encode_cmds(&cmds, 0, 0, &mut page.ops);
     page.paths[2].op_off = off;
     page.paths[2].op_len = page.ops.len() as u32 - off;
-    assert_eq!(decode_letters(&bytes, &page), Err(Error::Corrupt("source start")));
+    // the page changed, so its digest differs; with the changed page's digest, the reader
+    // meets the source
+    assert_eq!(decode_letters(&bytes, &page), Err(Error::OtherPage("page digest")));
+    let mut named = bytes.clone();
+    named[PAGE_DIGEST_AT..PAGE_DIGEST_AT + 8].copy_from_slice(&page_digest(&page).unwrap().to_le_bytes());
+    assert_eq!(decode_letters(&seal(named), &page), Err(Error::OtherPage("source start")));
+    assert_eq!(encode_letters(&sample(), &page), Err(Error::Corrupt("source start")));
 }

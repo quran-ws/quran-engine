@@ -8,25 +8,30 @@
 //! The file follows the conventions of `codec.rs`: a fixed header with section lengths,
 //! and tables in varints and zigzag deltas. A piece is coded against its source path in
 //! the page (`pieces.rs`), so decoding a layer needs its page. The header holds a digest
-//! of the page file the layer was built for. `docs/FORMAT.md` specifies the file.
+//! of what the layer takes from its page, and a digest of the file itself.
+//! `docs/FORMAT.md` specifies the file.
 
 mod pieces;
 
 use crate::{unzigzag, write_varint, zigzag, Cmd, Error, PageData, PathKind, COORD_LIMIT, PF_GLYPH};
-use pieces::{decode_pieces, encode_pieces, Reader, Streams, N_STREAMS};
+use pieces::{decode_pieces, encode_pieces, load_sources, Digest, Reader, Streams, N_STREAMS};
+pub use pieces::{
+    MAX_GROUP_PIECES, MAX_LAYER_COMMANDS, MAX_LAYER_OPERATIONS, MAX_PIECE_COMMANDS, MAX_PIECE_OPERATIONS, MAX_REGISTRY,
+};
 
 pub const LETTERS_MAGIC: &[u8; 4] = b"QVL1";
 pub const LETTERS_VERSION: u16 = 1;
 /// "No offset" for a member or a word-level mark.
 pub const NO_AT: u16 = 0xFFFF;
 
-/// magic(4) + version, quant, page, word count(8) + path count(4) + page digest(8) + ten
-/// section lengths(40).
-const HEADER_LEN: usize = 64;
-/// Where the page digest sits in the header.
-const DIGEST_AT: usize = 16;
+/// magic(4) + version, quant, page, word count(8) + path count(4) + page digest(8) + body
+/// digest(8) + ten section lengths(40).
+const HEADER_LEN: usize = 72;
+/// Where the page digest and the body digest sit in the header.
+const PAGE_DIGEST_AT: usize = 16;
+const BODY_DIGEST_AT: usize = 24;
 /// Where the ten section lengths start in the header.
-const LENGTHS_AT: usize = 24;
+const LENGTHS_AT: usize = 32;
 /// The tables section, then the geometry sections.
 const N_SECTIONS: usize = 1 + N_STREAMS;
 
@@ -239,71 +244,151 @@ impl<'a> Rd<'a> {
     }
 }
 
-// ───────────────────────────── the page digest ─────────────────────────────
+// ───────────────────────────── the digests ─────────────────────────────
 
-/// The digest of a page file: FNV-1a, 64 bits, over every byte of the file.
-pub fn page_digest(page_file: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for &b in page_file {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
+/// The digest of `bytes` that both digests of a letter layer use (`docs/FORMAT.md`, "The
+/// digests"): 64 bits, a word at a time.
+pub fn digest64(bytes: &[u8]) -> u64 {
+    let mut h = Digest::new();
+    h.bytes(bytes);
+    h.finish()
 }
 
-/// The digest of the file that `encode` writes for `page`. A page that was read from a
-/// file gives the digest of that file: `encode(decode(bytes)) == bytes` holds for every
-/// file that `encode` wrote, and for each of the 604 pages of the data release. A path
-/// whose commands do not decode is an error, where `encode` would panic.
-pub fn page_data_digest(page: &PageData) -> Result<u64, Error> {
-    for i in 0..page.paths.len() {
-        if !page.is_instance(i) {
-            page.path_cmds(i)?;
+/// The page digest: the digest of what a layer depends on in its page, in the order that
+/// `docs/FORMAT.md` gives: the page number, `quant`, the word and path counts, each word's
+/// path run, and each path's kind, mark, family, flags and geometry, then the glyph
+/// outlines. Strings, boxes and every other field are not in it, so a words sidecar does
+/// not change it. A path's geometry does not depend on its origin: its first point is
+/// absolute. It is an error when a path's run leaves the opcode stream, or a glyph
+/// instance has no instance record.
+pub fn page_digest(page: &PageData) -> Result<u64, Error> {
+    let mut h = Digest::new();
+    h.bytes(&page.header.page.to_le_bytes());
+    h.bytes(&page.header.quant.to_le_bytes());
+    h.bytes(&(page.words.len() as u32).to_le_bytes());
+    h.bytes(&(page.paths.len() as u32).to_le_bytes());
+    for w in &page.words {
+        h.bytes(&w.first_path.to_le_bytes());
+        h.bytes(&w.n_paths.to_le_bytes());
+    }
+    for p in &page.paths {
+        h.bytes(&[p.kind as u8, p.mark as u8, p.family as u8, p.flags]);
+        if p.flags & PF_GLYPH != 0 {
+            let i = page.insts.get(p.op_off as usize).ok_or(Error::Bounds("glyph instance"))?;
+            h.bytes(&i.glyph.to_le_bytes());
+            for v in [i.a, i.b, i.c, i.d, i.e, i.f] {
+                h.bytes(&v.to_bits().to_le_bytes());
+            }
+        } else {
+            hash_run(&mut h, page, p.op_off, p.op_len, (p.ox, p.oy))?;
         }
     }
-    for g in 0..page.glyphs.len() {
-        page.glyph_cmds(g)?;
+    h.bytes(&(page.glyphs.len() as u32).to_le_bytes());
+    for g in &page.glyphs {
+        hash_run(&mut h, page, g.op_off, g.op_len, (0, 0))?;
     }
-    Ok(page_digest(&crate::encode(page)))
+    Ok(h.finish())
 }
 
-/// The page digest in a layer's header: the digest of the page file the layer was built
-/// for. A reader compares it with the digest of its page file before it decodes the
-/// layer. The magic and the version are checked; the rest of the file is not.
-pub fn letters_page_digest(b: &[u8]) -> Result<u64, Error> {
-    check_magic(b)?;
-    let d = b.get(DIGEST_AT..DIGEST_AT + 8).ok_or(Error::Truncated("header"))?;
-    Ok(u64::from_le_bytes(d.try_into().expect("eight bytes")))
+/// One opcode run of the page into the page digest: its first opcode, its first point as
+/// two absolute i32 when that opcode has one, then the length of the rest of the run and
+/// the rest as it is: each later point is a delta from the point before it.
+fn hash_run(h: &mut Digest, page: &PageData, off: u32, len: u32, origin: (i32, i32)) -> Result<(), Error> {
+    let end = off.checked_add(len).ok_or(Error::Bounds("path ops"))?;
+    let run = page.ops.get(off as usize..end as usize).ok_or(Error::Bounds("path ops"))?;
+    let mut pos = 0;
+    if let Some(&op) = run.first() {
+        pos = 1;
+        h.bytes(&[op]);
+        if op <= crate::OP_CUBIC {
+            let dx = unzigzag(crate::read_varint(run, &mut pos)?);
+            let dy = unzigzag(crate::read_varint(run, &mut pos)?);
+            h.bytes(&origin.0.wrapping_add(dx).to_le_bytes());
+            h.bytes(&origin.1.wrapping_add(dy).to_le_bytes());
+        }
+    }
+    h.bytes(&((run.len() - pos) as u32).to_le_bytes());
+    h.bytes(&run[pos..]);
+    Ok(())
+}
+
+/// The body digest: the digest of the whole file, with its own eight bytes taken as 0.
+fn body_digest(b: &[u8]) -> u64 {
+    let mut h = Digest::new();
+    h.bytes(&b[..BODY_DIGEST_AT]);
+    h.bytes(&[0; 8]);
+    h.bytes(&b[BODY_DIGEST_AT + 8..]);
+    h.finish()
 }
 
 fn check_magic(b: &[u8]) -> Result<(), Error> {
     if b.len() < 6 || &b[0..4] != LETTERS_MAGIC {
-        return Err(Error::BadMagic);
+        return Err(Error::NotLetterLayer);
     }
     let version = u16::from_le_bytes([b[4], b[5]]);
     if version != LETTERS_VERSION {
-        return Err(Error::BadVersion(version));
+        return Err(Error::LetterLayerVersion(version));
     }
     if b.len() < HEADER_LEN {
-        return Err(Error::Truncated("header"));
+        return Err(Error::Damaged("header"));
+    }
+    Ok(())
+}
+
+/// The limits that a layer's data must keep: commands per piece and per layer, pieces per
+/// source. Pieces of one source are next to each other, as `check_against` requires.
+fn check_limits(d: &LetterData) -> Result<(), Error> {
+    let mut total = 0u64;
+    for p in &d.pieces {
+        if p.cmds.len() as u64 > MAX_PIECE_COMMANDS as u64 {
+            return Err(Error::Bounds("piece commands"));
+        }
+        total += p.cmds.len() as u64;
+    }
+    if total > MAX_LAYER_COMMANDS as u64 {
+        return Err(Error::Bounds("layer commands"));
+    }
+    let mut run = (None, 0u32);
+    for p in &d.pieces {
+        run = if run.0 == Some(p.source) { (run.0, run.1 + 1) } else { (Some(p.source), 1) };
+        if run.1 > MAX_GROUP_PIECES {
+            return Err(Error::Bounds("group pieces"));
+        }
     }
     Ok(())
 }
 
 // ───────────────────────────── encode ─────────────────────────────
 
-/// Encode a letter layer for `page`. The header takes the digest of the file `encode`
-/// writes for `page`, so the converter writes the digest of the `NNN.qvp` it writes.
+/// Encode a letter layer for `page`. The header takes the page digest of `page` and the
+/// layer's sources, and the body digest of the file.
 ///
 /// It is an error when a piece cannot be coded against the page: the pieces are not in
 /// source order, a source is not an inline path of the page, a source path's commands do
-/// not decode, or a piece does not start with a move or has a point outside the envelope.
-/// `check_against` rejects each of these, so every layer that it accepts encodes, and
-/// `decode_letters` gives that layer back.
+/// not decode, a piece does not start with a move or has a point outside the envelope, or
+/// the layer is past a limit. `check_against` rejects each of these, so every layer that it
+/// accepts encodes, and `decode_letters` gives that layer back.
 pub fn encode_letters(d: &LetterData, page: &PageData) -> Result<Vec<u8>, Error> {
-    let digest = page_data_digest(page)?;
+    check_limits(d)?;
+    // the pieces as groups of one source, in source order
+    let mut groups: Vec<(u32, u32)> = Vec::new();
+    for p in &d.pieces {
+        match groups.last_mut() {
+            Some(g) if g.0 == p.source => g.1 += 1,
+            Some(g) if g.0 > p.source => return Err(Error::Corrupt("piece order")),
+            _ => groups.push((p.source, 1)),
+        }
+    }
+    let digest = page_digest(page)?;
+    let sources_list: Vec<u32> = groups.iter().map(|g| g.0).collect();
+    let sources = load_sources(page, &sources_list)?;
     let mut geo = Streams::default();
-    let runs = encode_pieces(page, &d.pieces, &mut geo)?;
+    let runs = encode_pieces(&sources, &d.pieces, &mut geo)?;
+    // two operations per command at most, so a layer inside the command limits is inside these
+    let ops: u64 = runs.iter().map(|r| *r as u64).sum();
+    if runs.iter().any(|r| *r > MAX_PIECE_OPERATIONS) || ops > MAX_LAYER_OPERATIONS as u64 {
+        return Err(Error::Bounds("operations"));
+    }
 
     // ── tables ──
     let mut t: Vec<u8> = Vec::with_capacity(d.letters.len() * 3 + d.members.len() * 3 + 64);
@@ -402,17 +487,9 @@ pub fn encode_letters(d: &LetterData, page: &PageData) -> Result<Vec<u8>, Error>
         pp = w.path;
         vi(&mut t, opt(w.at));
     }
-    // the pieces as groups of one source, in source order
-    let mut groups: Vec<(u32, u32)> = Vec::new();
-    for p in &d.pieces {
-        match groups.last_mut() {
-            Some(g) if g.0 == p.source => g.1 += 1,
-            _ => groups.push((p.source, 1)),
-        }
-    }
     vi(&mut t, groups.len() as u32);
     for (i, (s, n)) in groups.iter().enumerate() {
-        // `encode_pieces` checked the order, so each source is above the one before
+        // the groups checked the order above, so each source is above the one before
         let v = if i == 0 { *s } else { s - groups[i - 1].0 - 1 };
         vi(&mut t, v);
         vi(&mut t, n - 1);
@@ -430,6 +507,7 @@ pub fn encode_letters(d: &LetterData, page: &PageData) -> Result<Vec<u8>, Error>
     }
     o.extend_from_slice(&d.n_page_paths.to_le_bytes());
     o.extend_from_slice(&digest.to_le_bytes());
+    o.extend_from_slice(&[0; 8]);
     for s in &sections {
         o.extend_from_slice(&(s.len() as u32).to_le_bytes());
     }
@@ -437,22 +515,37 @@ pub fn encode_letters(d: &LetterData, page: &PageData) -> Result<Vec<u8>, Error>
     for s in &sections {
         o.extend_from_slice(s);
     }
+    let body = body_digest(&o);
+    o[BODY_DIGEST_AT..BODY_DIGEST_AT + 8].copy_from_slice(&body.to_le_bytes());
     Ok(o)
 }
 
 // ───────────────────────────── decode ─────────────────────────────
 
-/// Decode a letter layer against its page. A file that fails any check in
-/// `docs/FORMAT.md`'s "What a reader rejects" is an error: `Bounds` for an index past its
-/// table, `Truncated` for a count or a run that its section cannot hold, `Corrupt` for a
-/// value outside its field. A page with another page number, `quant`, path count or word
-/// count than the header's is `Corrupt`.
+/// Decode a letter layer against its page. Each check of `docs/FORMAT.md`'s "What a
+/// reader rejects" is an error of one of four kinds:
+/// - `NotLetterLayer`: the file does not start with `QVL1`;
+/// - `LetterLayerVersion`: a version this reader does not know;
+/// - `OtherPage`: the layer was built for another page, or for other paths of this one.
+///   Its page number, `quant`, a count or its page digest differs;
+/// - `Damaged`: the file's bytes are not what its writer wrote (the body digest differs),
+///   or they break a rule of the format.
 ///
-/// The decoder does not compare the page digest: a page in memory does not keep its
-/// file. A reader compares [`letters_page_digest`] with the digest of its page file, and
-/// calls [`LetterData::check_against`] on the result.
+/// The body digest is checked first, the page before any table, and the page digest
+/// before any piece. A reader then calls [`LetterData::check_against`] on the result.
 pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
+    decode_checked(b, page).map_err(|e| match e {
+        Error::Bounds(w) | Error::Truncated(w) | Error::Corrupt(w) => Error::Damaged(w),
+        e => e,
+    })
+}
+
+fn decode_checked(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
     check_magic(b)?;
+    let stored = u64::from_le_bytes(b[BODY_DIGEST_AT..BODY_DIGEST_AT + 8].try_into().expect("eight bytes"));
+    if body_digest(b) != stored {
+        return Err(Error::Damaged("body digest"));
+    }
     let u16a = |at: usize| u16::from_le_bytes([b[at], b[at + 1]]);
     let u32a = |at: usize| u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]);
     let (quant, page_no, n_page_words, n_page_paths) = (u16a(6), u16a(8), u16a(10), u32a(12));
@@ -471,16 +564,24 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
     }
     // The pieces are coded against the page's paths: the page must be the layer's page.
     if page.header.page != page_no {
-        return Err(Error::Corrupt("layer page"));
+        return Err(Error::OtherPage("page number"));
     }
     if page.header.quant != quant {
-        return Err(Error::Corrupt("layer quant"));
+        return Err(Error::OtherPage("quant"));
     }
     if page.paths.len() as u64 != n_page_paths as u64 {
-        return Err(Error::Corrupt("layer path count"));
+        return Err(Error::OtherPage("path count"));
     }
     if page.words.len() as u64 != n_page_words as u64 {
-        return Err(Error::Corrupt("layer word count"));
+        return Err(Error::OtherPage("word count"));
+    }
+    let stored = u64::from_le_bytes(b[PAGE_DIGEST_AT..PAGE_DIGEST_AT + 8].try_into().expect("eight bytes"));
+    let digest = page_digest(page).map_err(|e| match e {
+        Error::Bounds(w) | Error::Truncated(w) | Error::Corrupt(w) => Error::OtherPage(w),
+        e => e,
+    })?;
+    if digest != stored {
+        return Err(Error::OtherPage("page digest"));
     }
 
     // ── tables ──
@@ -494,6 +595,10 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
         return Err(Error::Truncated("tables"));
     }
     let [n_letters, n_members, n_word_marks, n_pieces] = counts;
+    // each piece draws at least one command
+    if n_pieces as u64 > MAX_LAYER_COMMANDS as u64 {
+        return Err(Error::Bounds("pieces"));
+    }
 
     // Each character takes at least one byte of what is left.
     let n_alpha = t.vi("alphabet")? as usize;
@@ -673,6 +778,9 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
             return Err(Error::Bounds("piece source"));
         }
         let n = t.vi("piece group")? as u64 + 1;
+        if n > MAX_GROUP_PIECES as u64 {
+            return Err(Error::Bounds("group pieces"));
+        }
         in_groups += n;
         if in_groups > n_pieces as u64 || (i + 1 == n_groups && in_groups != n_pieces as u64) {
             return Err(Error::Corrupt("piece count"));
@@ -684,7 +792,11 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
     }
     let mut runs = Vec::with_capacity(n_pieces);
     for _ in 0..n_pieces {
-        runs.push(t.vi("piece operations")?);
+        let n = t.vi("piece operations")?;
+        if n > MAX_PIECE_OPERATIONS {
+            return Err(Error::Bounds("piece operations"));
+        }
+        runs.push(n);
     }
     // The tables are one varint run: the reader must land exactly on the section's end.
     if t.pos != t.b.len() {
@@ -696,16 +808,26 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
     // the runs before any piece is sized from them.
     let ops = sec[1].len() as u64;
     let total: u64 = runs.iter().map(|n| *n as u64).sum();
+    if total > MAX_LAYER_OPERATIONS as u64 {
+        return Err(Error::Bounds("layer operations"));
+    }
     if total > ops * 2 {
         return Err(Error::Truncated("operations"));
     }
     if ops != total.div_ceil(2) {
         return Err(Error::Corrupt("operations"));
     }
+    // The page digest matched, so a source that is not an inline path of the page, or
+    // that does not decode, is the page's error, not the file's.
+    let sources_list: Vec<u32> = groups.iter().map(|g| g.0).collect();
+    let sources = load_sources(page, &sources_list).map_err(|e| match e {
+        Error::Bounds(w) | Error::Truncated(w) | Error::Corrupt(w) => Error::OtherPage(w),
+        e => e,
+    })?;
     let mut geo: [&[u8]; N_STREAMS] = [&[]; N_STREAMS];
     geo.copy_from_slice(&sec[1..]);
     let mut r = Reader::new(geo);
-    let pieces = decode_pieces(page, &groups, &runs, &mut r)?;
+    let pieces = decode_pieces(&sources, &groups, &runs, &mut r)?;
     r.finish()?;
 
     Ok(LetterData { page: page_no, quant, n_page_paths, n_page_words, letters, members, word_marks, pieces })
@@ -757,6 +879,7 @@ impl LetterData {
         if self.pieces.windows(2).any(|w| w[0].source > w[1].source) {
             return Err(Error::Corrupt("piece order"));
         }
+        check_limits(self)?;
         // What the decoder needs to give a piece back unchanged: it starts with a move,
         // and every point is inside the envelope.
         for p in &self.pieces {

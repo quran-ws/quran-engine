@@ -170,26 +170,39 @@ fn a_bad_layer_is_refused_and_the_old_one_kept() {
 }
 
 #[test]
-fn a_layer_built_for_other_bytes_of_the_page_is_refused() {
-    // the same page, words and paths, but another file: one header field differs
+fn a_layer_for_other_bytes_of_the_page_is_refused() {
+    // the same page and counts, but the source of the pieces drawn one unit to the right
     let mut other = letters_page_data();
-    other.header.width = 101.0;
+    let cmds: Vec<Cmd> = other
+        .path_cmds(0)
+        .unwrap()
+        .iter()
+        .map(|c| match *c {
+            Cmd::MoveTo(x, y) => Cmd::MoveTo(x + 1, y),
+            Cmd::LineTo(x, y) => Cmd::LineTo(x + 1, y),
+            c => c,
+        })
+        .collect();
+    let off = other.ops.len() as u32;
+    qvp_format::encode_cmds(&cmds, other.paths[0].ox, other.paths[0].oy, &mut other.ops);
+    other.paths[0].op_off = off;
+    other.paths[0].op_len = other.ops.len() as u32 - off;
     let stale = layer_for(&letters_layer(), &other);
-    let refused = Err(Error::Corrupt("letter layer page file"));
-    // a page loaded from its file
-    let mut p = Page::load(&encode(&letters_page_data())).unwrap();
-    assert_eq!(p.attach_letters(&stale), refused);
-    assert!(!p.has_letters());
-    assert_eq!((p.geometry().table.len(), p.draw_revision()), (8, 0));
-    // the layer built for this file attaches, and a refused one keeps it
-    p.attach_letters(&layer_bytes()).unwrap();
-    assert_eq!(p.attach_letters(&stale), refused);
+    let mut p = letters_page();
+    assert_eq!(p.attach_letters(&stale), Err(Error::OtherPage("page digest")));
     assert_eq!((p.geometry().table.len(), p.draw_revision(), p.letter_count(0)), (10, 1, 2));
-    // a page built from data has the file that `encode` writes for it
-    assert_eq!(page_without_layer().attach_letters(&stale), refused);
     let mut q = Page::from_data(other).unwrap();
     q.attach_letters(&stale).unwrap();
-    assert_eq!(q.attach_letters(&layer_bytes()), refused);
+}
+
+#[test]
+fn a_damaged_layer_is_refused() {
+    let mut bytes = layer_bytes();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    let mut p = letters_page();
+    assert_eq!(p.attach_letters(&bytes), Err(Error::Damaged("body digest")));
+    assert_eq!((p.geometry().table.len(), p.draw_revision(), p.letter_count(0)), (10, 1, 2));
 }
 
 #[test]
@@ -250,9 +263,8 @@ fn without_qpc_offsets_are_used_as_stored() {
     for w in &mut data.words {
         w.qpc = NONE_U16;
     }
-    let layer = layer_for(&letters_layer(), &data);
     let mut p = Page::from_data(data).unwrap();
-    p.attach_letters(&layer).unwrap();
+    p.attach_letters(&layer_bytes()).unwrap();
     assert_eq!(p.path_letter(5), Some((NONE, 3)));
     assert_eq!(p.letter_at_offset(1, 1), Some(0));
     // a sidecar with other forms only leaves them unchecked
@@ -585,9 +597,8 @@ fn a_letter_drawn_off_the_page_has_no_ink() {
     // head is: its paths have no outline, and neither does a piece cut there
     let mut data = letters_page_data();
     data.header.height = 45.0;
-    let layer = layer_for(&letters_layer(), &data);
     let mut p = Page::from_data(data).unwrap();
-    p.attach_letters(&layer).unwrap();
+    p.attach_letters(&layer_bytes()).unwrap();
     assert!(!p.letter_info(2, 0).unwrap().has_ink);
     assert!(p.letter_info(0, 0).unwrap().has_ink);
 }

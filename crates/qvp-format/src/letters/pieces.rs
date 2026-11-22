@@ -211,103 +211,187 @@ fn key(p: P) -> u64 {
     ((p.0 as u32 as u64) << 32) | p.1 as u32 as u64
 }
 
+/// The limits of a layer (`docs/FORMAT.md`, "Limits"). The decoder checks each before it
+/// allocates for it, and the encoder refuses a layer past them.
+pub const MAX_LAYER_COMMANDS: u32 = 65_535;
+pub const MAX_PIECE_COMMANDS: u32 = 512;
+pub const MAX_PIECE_OPERATIONS: u32 = 1_024;
+pub const MAX_LAYER_OPERATIONS: u32 = 2 * MAX_LAYER_COMMANDS;
+pub const MAX_GROUP_PIECES: u32 = 64;
+pub const MAX_REGISTRY: usize = 256;
+
+/// The digest of a byte sequence, fed in parts (`docs/FORMAT.md`, "The digests"): the
+/// bytes as 64-bit little-endian words, each mixed in with a multiply and a shift, the last
+/// word padded with zero bytes, then the length.
+pub(super) struct Digest {
+    h: u64,
+    buf: [u8; 8],
+    n: usize,
+    len: u64,
+}
+
+const DIGEST_START: u64 = 0xcbf2_9ce4_8422_2325;
+const DIGEST_K: u64 = 0x9E37_79B9_7F4A_7C15;
+
+impl Digest {
+    pub(super) fn new() -> Digest {
+        Digest { h: DIGEST_START, buf: [0; 8], n: 0, len: 0 }
+    }
+    fn word(&mut self, w: u64) {
+        self.h = (self.h ^ w).wrapping_mul(DIGEST_K);
+        self.h ^= self.h >> 29;
+    }
+    pub(super) fn bytes(&mut self, mut b: &[u8]) {
+        self.len = self.len.wrapping_add(b.len() as u64);
+        if self.n > 0 {
+            let k = (8 - self.n).min(b.len());
+            self.buf[self.n..self.n + k].copy_from_slice(&b[..k]);
+            self.n += k;
+            b = &b[k..];
+            if self.n < 8 {
+                return;
+            }
+            self.word(u64::from_le_bytes(self.buf));
+            self.n = 0;
+        }
+        let (words, rest) = b.as_chunks::<8>();
+        for c in words {
+            self.word(u64::from_le_bytes(*c));
+        }
+        self.buf[..rest.len()].copy_from_slice(rest);
+        self.n = rest.len();
+    }
+    pub(super) fn finish(mut self) -> u64 {
+        self.buf[self.n..].fill(0);
+        self.word(u64::from_le_bytes(self.buf));
+        self.h = (self.h ^ self.len).wrapping_mul(DIGEST_K);
+        self.h ^ (self.h >> 32)
+    }
+}
+
+/// The segments of every source of a layer, in group order: group `i` holds
+/// `segs[at[i]..at[i + 1]]`, numbered from 0 inside the group.
+#[derive(Default)]
+pub(super) struct Sources {
+    segs: Vec<Seg>,
+    at: Vec<usize>,
+}
+
+/// List the segments of each source, in order. An error here is the page's: a source that
+/// is not an inline path of it, or whose commands do not decode.
+pub(super) fn load_sources(page: &PageData, sources: &[u32]) -> Result<Sources, Error> {
+    let mut out = Sources { segs: Vec::new(), at: Vec::with_capacity(sources.len() + 1) };
+    out.at.push(0);
+    for &s in sources {
+        parse_source(page, s, &mut out.segs)?;
+        out.at.push(out.segs.len());
+    }
+    Ok(out)
+}
+
+/// The commands of one source path, appended to `segs` as its segments, each subpath's
+/// first segment numbered from the source's first.
+fn parse_source(page: &PageData, source: u32, segs: &mut Vec<Seg>) -> Result<(), Error> {
+    let p = page.paths.get(source as usize).ok_or(Error::Bounds("piece source"))?;
+    if p.flags & PF_GLYPH != 0 {
+        return Err(Error::Corrupt("piece source glyph"));
+    }
+    let end = p.op_off.checked_add(p.op_len).ok_or(Error::Bounds("path ops"))?;
+    let ops = page.ops.get(p.op_off as usize..end as usize).ok_or(Error::Bounds("path ops"))?;
+    // A source that has commands starts with a move: a command before the first move
+    // would have no start point.
+    if ops.first().is_some_and(|&op| op != V1_MOVE) {
+        return Err(Error::Corrupt("source start"));
+    }
+    let base = segs.len();
+    // The opcode run of a page path, as `decode_cmds` reads it, into segments.
+    let (mut cur, mut first) = ((0, 0), (0, 0));
+    let mut sub0 = base;
+    let mut open = false;
+    let finish = |segs: &mut Vec<Seg>, sub0: usize, cur: P, first: P| {
+        if cur != first {
+            segs.push(Seg { start: cur, draw: Draw::line(first), sub0: 0, sub_len: 0, bits: 0 });
+        }
+        let n = (segs.len() - sub0) as u32;
+        for s in &mut segs[sub0..] {
+            s.sub0 = (sub0 - base) as u32;
+            s.sub_len = n;
+        }
+    };
+    let (mut pos, mut at) = (0usize, (p.ox, p.oy));
+    let mut pt = |pos: &mut usize| -> Result<P, Error> {
+        // the page's own opcode run, read as QVP1 reads it
+        let dx = unzigzag(crate::read_varint(ops, pos)?);
+        let dy = unzigzag(crate::read_varint(ops, pos)?);
+        at.0 = at.0.checked_add(dx).ok_or(Error::Corrupt("coordinate overflow"))?;
+        at.1 = at.1.checked_add(dy).ok_or(Error::Corrupt("coordinate overflow"))?;
+        if !in_envelope(at) {
+            return Err(Error::Corrupt("source range"));
+        }
+        Ok(at)
+    };
+    while pos < ops.len() {
+        let op = ops[pos];
+        pos += 1;
+        if op == V1_MOVE {
+            if open {
+                finish(segs, sub0, cur, first);
+            }
+            cur = pt(&mut pos)?;
+            sub0 = segs.len();
+            first = cur;
+            open = true;
+            continue;
+        }
+        if op == V1_CLOSE {
+            if open {
+                finish(segs, sub0, cur, first);
+            }
+            open = false;
+            cur = first;
+            continue;
+        }
+        let deg = match op {
+            V1_LINE => 1,
+            V1_QUAD => 2,
+            V1_CUBIC => 3,
+            _ => return Err(Error::Corrupt("bad opcode")),
+        };
+        let mut d = Draw { deg, pts: [(0, 0); 3] };
+        for q in d.pts.iter_mut().take(deg as usize) {
+            *q = pt(&mut pos)?;
+        }
+        if !open {
+            sub0 = segs.len();
+            open = true;
+        }
+        segs.push(Seg { start: cur, draw: d, sub0: 0, sub_len: 0, bits: 0 });
+        cur = d.end();
+    }
+    if open {
+        finish(segs, sub0, cur, first);
+    }
+    if segs.len() - base > u32::MAX as usize {
+        return Err(Error::Bounds("source segments"));
+    }
+    for s in &mut segs[base..] {
+        s.bits = v_bits(s.start, &s.draw);
+    }
+    Ok(())
+}
+
 impl Group {
-    /// Build the segments of `source`. The source must be an inline path of the page, and
-    /// each of its points inside the envelope.
-    fn load(&mut self, page: &PageData, source: u32) -> Result<(), Error> {
+    /// Start group `i` of `sources`: its segments, and an empty registry and reverse list.
+    fn load(&mut self, sources: &Sources, i: usize) {
         self.segs.clear();
+        self.segs.extend_from_slice(&sources.segs[sources.at[i]..sources.at[i + 1]]);
         self.starts.clear();
         self.reg.clear();
         self.reg_at.clear();
         self.rev.clear();
-        let p = page.paths.get(source as usize).ok_or(Error::Bounds("piece source"))?;
-        if p.flags & PF_GLYPH != 0 {
-            return Err(Error::Corrupt("piece source glyph"));
-        }
-        let end = p.op_off.checked_add(p.op_len).ok_or(Error::Bounds("path ops"))?;
-        let ops = page.ops.get(p.op_off as usize..end as usize).ok_or(Error::Bounds("path ops"))?;
-        // The opcode run of a page path, as `decode_cmds` reads it, into segments.
-        let (mut cur, mut first) = ((0, 0), (0, 0));
-        let mut sub0 = 0usize;
-        let mut open = false;
-        let finish = |segs: &mut Vec<Seg>, sub0: usize, cur: P, first: P| {
-            if cur != first {
-                segs.push(Seg { start: cur, draw: Draw::line(first), sub0: 0, sub_len: 0, bits: 0 });
-            }
-            let n = (segs.len() - sub0) as u32;
-            for s in &mut segs[sub0..] {
-                s.sub0 = sub0 as u32;
-                s.sub_len = n;
-            }
-        };
-        // A source that has commands starts with a move: a command before the first move
-        // would have no start point.
-        if ops.first().is_some_and(|&op| op != V1_MOVE) {
-            return Err(Error::Corrupt("source start"));
-        }
-        let (mut pos, mut at) = (0usize, (p.ox, p.oy));
-        let mut pt = |pos: &mut usize| -> Result<P, Error> {
-            // the page's own opcode run, read as QVP1 reads it
-            let dx = unzigzag(crate::read_varint(ops, pos)?);
-            let dy = unzigzag(crate::read_varint(ops, pos)?);
-            at.0 = at.0.checked_add(dx).ok_or(Error::Corrupt("coordinate overflow"))?;
-            at.1 = at.1.checked_add(dy).ok_or(Error::Corrupt("coordinate overflow"))?;
-            if !in_envelope(at) {
-                return Err(Error::Corrupt("source range"));
-            }
-            Ok(at)
-        };
-        while pos < ops.len() {
-            let op = ops[pos];
-            pos += 1;
-            if op == V1_MOVE {
-                if open {
-                    finish(&mut self.segs, sub0, cur, first);
-                }
-                cur = pt(&mut pos)?;
-                sub0 = self.segs.len();
-                first = cur;
-                open = true;
-                continue;
-            }
-            if op == V1_CLOSE {
-                if open {
-                    finish(&mut self.segs, sub0, cur, first);
-                }
-                open = false;
-                cur = first;
-                continue;
-            }
-            let deg = match op {
-                V1_LINE => 1,
-                V1_QUAD => 2,
-                V1_CUBIC => 3,
-                _ => return Err(Error::Corrupt("bad opcode")),
-            };
-            let mut d = Draw { deg, pts: [(0, 0); 3] };
-            for q in d.pts.iter_mut().take(deg as usize) {
-                *q = pt(&mut pos)?;
-            }
-            if !open {
-                sub0 = self.segs.len();
-                open = true;
-            }
-            self.segs.push(Seg { start: cur, draw: d, sub0: 0, sub_len: 0, bits: 0 });
-            cur = d.end();
-        }
-        if open {
-            finish(&mut self.segs, sub0, cur, first);
-        }
-        if self.segs.len() > u32::MAX as usize {
-            return Err(Error::Bounds("source segments"));
-        }
-        for s in &mut self.segs {
-            s.bits = v_bits(s.start, &s.draw);
-        }
         self.starts.extend(self.segs.iter().enumerate().map(|(i, s)| (key(s.start), i as u32)));
         self.starts.sort_unstable();
         self.budget = self.segs.len() as u32;
-        Ok(())
     }
 
     /// The segments that start at `p`, in segment order.
@@ -323,9 +407,13 @@ impl Group {
         s.sub0 + (k - s.sub0 + 1) % s.sub_len
     }
 
-    fn push_reg(&mut self, p: P, seg: u32, v: u32) {
+    fn push_reg(&mut self, p: P, seg: u32, v: u32) -> Result<(), Error> {
+        if self.reg.len() >= MAX_REGISTRY {
+            return Err(Error::Bounds("registry size"));
+        }
         self.reg_at.insert(p, self.reg.len() as u32);
         self.reg.push((p, seg, v));
+        Ok(())
     }
 
     /// The registry entry `back` places before the latest.
@@ -456,7 +544,7 @@ fn checked(p: P) -> Result<P, Error> {
 /// piece's operation count. The caller checked that the runs add up to the operations
 /// that the operations section holds.
 pub(super) fn decode_pieces(
-    page: &PageData,
+    sources: &Sources,
     groups: &[(u32, u32)],
     runs: &[u32],
     r: &mut Reader,
@@ -465,12 +553,17 @@ pub(super) fn decode_pieces(
     let mut g = Group::default();
     let mut cur: P = (0, 0);
     let mut run_i = 0usize;
-    for &(source, n_pieces) in groups {
-        g.load(page, source)?;
+    let mut total = 0u32;
+    for (i, &(source, n_pieces)) in groups.iter().enumerate() {
+        g.load(sources, i);
         for _ in 0..n_pieces {
             let n_ops = runs[run_i];
             run_i += 1;
             let cmds = decode_piece(&mut g, n_ops, &mut cur, r)?;
+            total += cmds.len() as u32;
+            if total > MAX_LAYER_COMMANDS {
+                return Err(Error::Bounds("layer commands"));
+            }
             out.push(PieceRec { source, cmds });
         }
     }
@@ -478,7 +571,10 @@ pub(super) fn decode_pieces(
 }
 
 fn decode_piece(g: &mut Group, n_ops: u32, cur: &mut P, r: &mut Reader) -> Result<Vec<Cmd>, Error> {
+    // the tables checked the operation count against its limit
     let mut cmds: Vec<Cmd> = Vec::with_capacity(n_ops as usize + 1);
+    // each operation adds at most two commands, and a run is checked before it draws
+    let over = |cmds: &Vec<Cmd>| cmds.len() as u32 > MAX_PIECE_COMMANDS;
     let mut first = *cur;
     let mut open = false;
     let close = |cmds: &mut Vec<Cmd>, g: &mut Group, cur: &mut P, first: P| {
@@ -497,6 +593,9 @@ fn decode_piece(g: &mut Group, n_ops: u32, cur: &mut P, r: &mut Reader) -> Resul
             Some(ESC_CLOSE) => {
                 close(&mut cmds, g, cur, first);
                 open = false;
+                if over(&cmds) {
+                    return Err(Error::Bounds("piece commands"));
+                }
                 continue;
             }
             Some(ESC_NO_CLOSE) => {
@@ -520,6 +619,9 @@ fn decode_piece(g: &mut Group, n_ops: u32, cur: &mut P, r: &mut Reader) -> Resul
             *cur = p;
             first = p;
             open = true;
+            if over(&cmds) {
+                return Err(Error::Bounds("piece commands"));
+            }
             continue;
         }
         open = true;
@@ -560,6 +662,9 @@ fn decode_piece(g: &mut Group, n_ops: u32, cur: &mut P, r: &mut Reader) -> Resul
                 if len > g.budget {
                     return Err(Error::Corrupt("run length"));
                 }
+                if cmds.len() as u64 + len as u64 > MAX_PIECE_COMMANDS as u64 {
+                    return Err(Error::Bounds("piece commands"));
+                }
                 g.budget -= len;
                 for j in 0..len {
                     if j > 0 {
@@ -585,9 +690,15 @@ fn decode_piece(g: &mut Group, n_ops: u32, cur: &mut P, r: &mut Reader) -> Resul
         };
         cmds.push(d.cmd());
         *cur = d.end();
+        if over(&cmds) {
+            return Err(Error::Bounds("piece commands"));
+        }
     }
     if open {
         close(&mut cmds, g, cur, first);
+    }
+    if over(&cmds) {
+        return Err(Error::Bounds("piece commands"));
     }
     // A piece is ink: it starts with a move, which the next piece's deltas start from.
     match cmds.first() {
@@ -603,7 +714,7 @@ fn on_segment(g: &mut Group, r: &mut Reader) -> Result<P, Error> {
     let seg = g.segs[s as usize];
     let v = r.v(&seg)?;
     let p = r.corrected(point_at(&seg, u_of(v, seg.bits)))?;
-    g.push_reg(p, s, v);
+    g.push_reg(p, s, v)?;
     Ok(p)
 }
 
@@ -652,10 +763,10 @@ fn part(g: &mut Group, code: u8, cur: P, r: &mut Reader) -> Result<Draw, Error> 
         };
     }
     if let Some(v) = start_v {
-        g.push_reg(cur, s, v);
+        g.push_reg(cur, s, v)?;
     }
     if let Some(v) = end_v {
-        g.push_reg(d.end(), s, v);
+        g.push_reg(d.end(), s, v)?;
     }
     Ok(d)
 }
@@ -737,17 +848,20 @@ const NEAR: f64 = 2.0;
 
 /// Encode the pieces into `w`. Pieces must be in source order. Returns the operation
 /// count of each piece.
-pub(super) fn encode_pieces(page: &PageData, pieces: &[PieceRec], w: &mut Streams) -> Result<Vec<u32>, Error> {
+/// Encode the pieces into `w`. `sources` holds the groups' sources in order, and the
+/// pieces are in that order. Returns the operation count of each piece.
+pub(super) fn encode_pieces(sources: &Sources, pieces: &[PieceRec], w: &mut Streams) -> Result<Vec<u32>, Error> {
     let mut runs = Vec::with_capacity(pieces.len());
     let mut e = Enc::default();
     let mut cur: P = (0, 0);
     let mut source: Option<u32> = None;
+    let mut group = 0usize;
     for pc in pieces {
         if source != Some(pc.source) {
-            if source.is_some_and(|s| s > pc.source) {
-                return Err(Error::Corrupt("piece order"));
+            if source.is_some() {
+                group += 1;
             }
-            e.g.load(page, pc.source)?;
+            e.g.load(sources, group);
             e.rev_at.clear();
             source = Some(pc.source);
         }
@@ -788,7 +902,7 @@ fn encode_piece(e: &mut Enc, cmds: &[Cmd], cur: &mut P, w: &mut Streams) -> Resu
                 }
                 closed = false;
                 let p = (x, y);
-                encode_move(e, *cur, p, w);
+                encode_move(e, *cur, p, w)?;
                 *cur = p;
                 first = p;
                 open = true;
@@ -811,7 +925,7 @@ fn encode_piece(e: &mut Enc, cmds: &[Cmd], cur: &mut P, w: &mut Streams) -> Resu
             ref c => {
                 let d = Draw::of(c).expect("a drawing command");
                 open = true;
-                i += encode_draw(e, cmds, i, *cur, d, w);
+                i += encode_draw(e, cmds, i, *cur, d, w)?;
                 *cur = Draw::of(&cmds[i - 1]).expect("a drawing command").end();
             }
         }
@@ -823,7 +937,7 @@ fn encode_piece(e: &mut Enc, cmds: &[Cmd], cur: &mut P, w: &mut Streams) -> Resu
     Ok(())
 }
 
-fn encode_move(e: &mut Enc, cur: P, p: P, w: &mut Streams) {
+fn encode_move(e: &mut Enc, cur: P, p: P, w: &mut Streams) -> Result<(), Error> {
     let g = &mut e.g;
     if let Some(&r) = g.reg_at.get(&p) {
         w.op(OP_MOVE_REG);
@@ -833,11 +947,12 @@ fn encode_move(e: &mut Enc, cur: P, p: P, w: &mut Streams) {
         w.vi(SEG, k);
     } else if let Some(on) = find_on(g, p) {
         w.op(OP_MOVE_ON);
-        write_on(g, p, on, w);
+        write_on(g, p, on, w)?;
     } else {
         w.escape(ESC_MOVE);
         w.delta(cur, p);
     }
+    Ok(())
 }
 
 /// A point on a segment: the segment, `v`, and the correction.
@@ -847,17 +962,17 @@ struct On {
     corr: [i32; 2],
 }
 
-fn write_on(g: &mut Group, p: P, on: On, w: &mut Streams) {
+fn write_on(g: &mut Group, p: P, on: On, w: &mut Streams) -> Result<(), Error> {
     w.vi(SEG, on.seg);
     w.vi(TS, on.v);
     w.corr(on.corr[0]);
     w.corr(on.corr[1]);
-    g.push_reg(p, on.seg, on.v);
+    g.push_reg(p, on.seg, on.v)
 }
 
 /// Code the drawing command at `cmds[i]`, and the run of source segments it starts.
 /// Returns how many commands it coded.
-fn encode_draw(e: &mut Enc, cmds: &[Cmd], i: usize, cur: P, d: Draw, w: &mut Streams) -> usize {
+fn encode_draw(e: &mut Enc, cmds: &[Cmd], i: usize, cur: P, d: Draw, w: &mut Streams) -> Result<usize, Error> {
     // a run of source segments
     if e.g.budget > 0 {
         let list = e.g.starting_at(cur);
@@ -880,14 +995,14 @@ fn encode_draw(e: &mut Enc, cmds: &[Cmd], i: usize, cur: P, d: Draw, w: &mut Str
             }
             w.vi(LENS, len - 1);
             e.g.budget -= len;
-            return len as usize;
+            return Ok(len as usize);
         }
     }
     // a command that an earlier one drew backwards
     if let Some(j) = e.rev_at.remove(&(cur, d)) {
         w.op(OP_REVERSE);
         w.vi(BACK, (e.g.rev.len() - 1 - j as usize) as u32);
-        return 1;
+        return Ok(1);
     }
     // a part of one segment
     if let Some(f) = find_part(&e.g, cur, &d) {
@@ -908,12 +1023,12 @@ fn encode_draw(e: &mut Enc, cmds: &[Cmd], i: usize, cur: P, d: Draw, w: &mut Str
             w.corr(*c);
         }
         if let Some(v0) = f.start_v {
-            e.g.push_reg(cur, f.seg, v0);
+            e.g.push_reg(cur, f.seg, v0)?;
         }
         if matches!(f.code, OP_PART_TO_NEW | OP_PART_X_TO_NEW) {
-            e.g.push_reg(d.end(), f.seg, f.end_v);
+            e.g.push_reg(d.end(), f.seg, f.end_v)?;
         }
-        return 1;
+        return Ok(1);
     }
     if d.deg == 1 {
         let p = d.end();
@@ -926,7 +1041,7 @@ fn encode_draw(e: &mut Enc, cmds: &[Cmd], i: usize, cur: P, d: Draw, w: &mut Str
             w.vi(SEG, k);
         } else if let Some(on) = find_on(g, p) {
             w.op(OP_LINE_ON);
-            write_on(g, p, on, w);
+            write_on(g, p, on, w)?;
         } else {
             w.escape(ESC_LINE);
             w.delta(cur, p);
@@ -944,7 +1059,7 @@ fn encode_draw(e: &mut Enc, cmds: &[Cmd], i: usize, cur: P, d: Draw, w: &mut Str
         }
     }
     e.push_rev(cur, d);
-    1
+    Ok(1)
 }
 
 // ── the encoder's search: floats estimate a split, integers decide it ──
@@ -1048,6 +1163,10 @@ impl Corr {
 }
 
 fn find_on(g: &Group, p: P) -> Option<On> {
+    // a point on a segment takes a registry entry
+    if g.reg.len() >= MAX_REGISTRY {
+        return None;
+    }
     let mut best: Option<(i64, On)> = None;
     for (s, seg) in g.segs.iter().enumerate() {
         if !near_box(seg, p) {
@@ -1192,6 +1311,10 @@ fn best_part(g: &Group, cur: P, d: &Draw, cands: &[(u32, Option<u32>, u32, bool)
             }
         }
         if u_of(v1, bits) <= u_of(v0, bits) {
+            continue;
+        }
+        // a stored start and a new end each take a registry entry
+        if g.reg.len() + free as usize + (code == OP_PART_TO_NEW) as usize > MAX_REGISTRY {
             continue;
         }
         let k = cost(c.as_slice());
