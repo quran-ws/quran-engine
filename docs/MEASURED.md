@@ -211,18 +211,41 @@ neighbouring word reaches over the counter. The hit test now gives a point in a 
 that counter's letter (`docs/API.md`, "The letter under a point"). On the Intel Core
 i9-13900, the gate took 24.3 s for 604 pages and about 2 s for the default 8 pages.
 
-What a layer costs the engine on page 003, in a release build on the same machine (the
-median of 20,000 calls):
+What a layer costs the engine on page 003, in a release build on the same machine, pinned
+to one core with no other work running: the median of five runs, each the median of 20,000
+calls. A draw-list build is forced by a band that changes on every call.
 
 | | |
 |---|---|
 | a settled `tick`, with or without a layer and letter rules | 13 ns |
-| draw-list build, no layer | 5.56 µs |
-| draw-list build, a layer and no letter rule | 5.63 µs |
-| draw-list build, 400 letter rules, 194 cut paths drawn as pieces | 6.72 µs |
-| letter hit on ink | 359 ns |
-| letter hit in a gap between words | 339 ns |
-| word hit on the same ink point, for scale | 467 ns |
+| draw-list build, no layer | 1.95 µs |
+| draw-list build, a layer and no letter rule | 3.02 µs |
+| draw-list build, 400 letter rules, 194 cut paths drawn as pieces | 3.53 µs |
+| letter hit on ink | 362 ns |
+| letter hit in a gap between words | 340 ns |
+| word hit on the same ink point, for scale | 437 ns |
+
+A page with no layer costs what it cost before the letter layer. The table compares page
+042 in the engine before the letter layer and in the engine now, built with the settings of
+the `dist` profile and pinned to one core: the median of nine runs of each, run in turn,
+with the lowest and highest run.
+
+| page 042, no layer | before the letter layer | now |
+|---|---|---|
+| page load + geometry | 1.18 ms (1.17–1.23) | 1.18 ms (1.17–1.20) |
+| colours after one word rule | 4.43 µs (4.34–4.55) | 3.98 µs (3.92–4.17) |
+| colours after a theme | 15.1 µs (15.0–15.4) | 15.0 µs (14.8–15.3) |
+| first `tick` after an ayah highlight | 39.7 µs (39.6–40.5) | 39.8 µs (39.6–40.1) |
+| `styled_paths` | 0.88 µs (0.86–0.90) | 0.82 µs (0.81–0.83) |
+| draw-list build, printed | 1.07 µs (1.04–1.17) | 1.05 µs (1.05–1.19) |
+| draw-list build, reflowed at zoom 1.6 | 1.02 µs (1.02–1.09) | 1.02 µs (1.02–1.08) |
+| idle `tick` | 2.3 ns (2.3–2.5) | 1.9 ns (1.9–1.9) |
+| exact hit test | 658 ns (653–710) | 652 ns (647–661) |
+| gap-aware hit test | 447 ns (444–469) | 443 ns (441–449) |
+
+The same code can measure up to 18% apart in two binaries, because the compiler lays the
+code out differently: `styled_paths` of the old engine measures 0.75 µs in the bench example
+and 0.88 µs in the program above.
 
 ## Known rough edges
 

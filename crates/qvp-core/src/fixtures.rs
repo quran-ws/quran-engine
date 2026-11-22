@@ -286,7 +286,7 @@ pub(crate) fn letters_page_data() -> PageData {
     let mut w0 = add(&square(4000, 1000, 6000, 2000), PathKind::Body, Mark::None, Family::None);
     w0.union(&add(&square(5400, 2200, 5600, 2400), PathKind::Mark, Mark::Dot, Family::Dots));
     w0.union(&add(&square(5400, 600, 5600, 800), PathKind::Mark, Mark::Fathah, Family::Diacritic));
-    // word 1: lam with its kashida, ha, and a waqf sign that belongs to the word
+    // word 1: lam with its tatweel, ha, and a waqf sign that belongs to the word
     let mut w1 = add(&square(2000, 1000, 3000, 2000), PathKind::Body, Mark::None, Family::None);
     w1.union(&add(&square(1000, 1000, 2000, 2000), PathKind::Body, Mark::None, Family::None));
     w1.union(&add(&square(1400, 400, 1600, 600), PathKind::Mark, Mark::WaqfJaizWaslAwla, Family::Waqf));

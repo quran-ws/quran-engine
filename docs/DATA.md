@@ -143,6 +143,12 @@ page in the engine and asserts what an app relies on:
   point of ink on a 0.5-unit grid, printed and reflowed, and inside each counter, the hole of
   a letter's body.
 
+The counter check does not see a counter that a cut divides between two pieces, because
+no single member holds it: of the 88,914 counters of cut paths on the 604
+pages, 883 are divided, 863 of them the loop of a kaf joined to the alif or lam after it,
+and a point in such a loop names the nearer of the two letters (the alif or lam for 192,775
+of 555,399 points sampled, another word for 412 points of word 76:20:6).
+
 Quran.ws did not measure where a joined outline divides between two letters. That
 division is the output of DigitalKhatt's `medinamushafanalyzer`
 (<https://github.com/DigitalKhatt/medinamushafanalyzer>) at commit `056191f`, the work of

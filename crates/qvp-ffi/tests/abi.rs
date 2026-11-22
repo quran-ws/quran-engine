@@ -1271,7 +1271,7 @@ fn letters_over_the_abi() {
         assert_eq!(qvp_path_letter(p, 0, &mut letter, &mut at), 0, "a cut path has no letter of its own");
         assert_eq!(qvp_path_letter(p, 10, &mut letter, &mut at), 0, "past the table");
         assert_eq!(qvp_path_letter(p, 3, std::ptr::null_mut(), std::ptr::null_mut()), 1, "NULL outs are allowed");
-        assert_eq!(qvp_letter_at_offset(p, 1, 1, &mut letter), 1, "the kashida the lam draws");
+        assert_eq!(qvp_letter_at_offset(p, 1, 1, &mut letter), 1, "the tatweel the lam draws");
         assert_eq!(letter, 0);
         assert_eq!(qvp_letter_at_offset(p, 0, 1, &mut letter), 1, "the ba's fathah");
         assert_eq!(letter, 0);
@@ -1290,7 +1290,7 @@ fn letters_over_the_abi() {
             (sel(SEL_LETTER, 0, 0, 2), &[2]),      // its marks: the fathah
             (sel(SEL_LETTER_MARK, 0, 0, 1), &[2]), // its second mark in text order
             (sel(SEL_LETTER_MARK_NAMED, 0, 0, Mark::Dot as u32), &[1]),
-            (sel(SEL_WORD_CHARS, 1, 1, 3), &[3, 4, 5]), // the lam's kashida, the ha, the waqf sign
+            (sel(SEL_WORD_CHARS, 1, 1, 3), &[3, 4, 5]), // the lam's tatweel, the ha, the waqf sign
             (sel(SEL_WORD_CHARS, 0, 0, u32::MAX), &[0, 1, 2, 8, 9]), // a range past the text clamps
         ];
         for (s, want) in checks {

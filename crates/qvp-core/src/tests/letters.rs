@@ -135,7 +135,7 @@ fn an_offset_names_its_letter() {
     assert_eq!(p.letter_at_offset(0, 0), Some(0));
     assert_eq!(p.letter_at_offset(0, 1), Some(0), "the fathah");
     assert_eq!(p.letter_at_offset(0, 2), Some(1));
-    assert_eq!(p.letter_at_offset(1, 1), Some(0), "the kashida the lam draws");
+    assert_eq!(p.letter_at_offset(1, 1), Some(0), "the tatweel the lam draws");
     assert_eq!(p.letter_at_offset(1, 3), None, "a word-level mark is no letter");
     assert_eq!(p.letter_at_offset(1, 9), None);
     assert_eq!(p.letter_at_offset(1, 0x1_0000), None);
@@ -240,7 +240,7 @@ fn a_short_qpc_drops_the_offset() {
     assert_eq!(p.attach_words_json(r#"{"1:1:2": {"qpc": "لـه"}}"#.as_bytes()), Some(1));
     assert_eq!(p.path_letter(5), Some((NONE, NONE)));
     assert_eq!(p.letter_at_offset(1, 2), Some(1));
-    assert_eq!(p.letter_at_offset(1, 1), Some(0), "the kashida is inside the text");
+    assert_eq!(p.letter_at_offset(1, 1), Some(0), "the tatweel is inside the text");
     // the same with the sidecar attached first
     let mut q = page_without_layer();
     q.attach_words_json(r#"{"1:1:2": {"qpc": "ل"}}"#.as_bytes()).unwrap();
@@ -709,7 +709,7 @@ fn word_chars_mark() {
 }
 
 #[test]
-fn word_chars_kashida() {
+fn word_chars_tatweel() {
     assert_eq!(selected(Selector::WordChars(1, 1, 1)), vec![3]);
 }
 
@@ -823,7 +823,7 @@ fn a_short_qpc_hides_offsets_from_a_range() {
             assert_eq!(reds(&mut p), vec![3, 4, 5], "unchecked before the sidecar");
             p.attach_words_json(json).unwrap();
         }
-        // the lam at 0 stays; its kashida (1), the ha (2) and the waqf sign (3) are past the
+        // the lam at 0 stays; its tatweel (1), the ha (2) and the waqf sign (3) are past the
         // text. The ha keeps its index, so the letter selector still takes it
         assert_eq!(reds(&mut p), vec![3, 4], "sidecar first: {before}");
     }

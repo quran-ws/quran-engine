@@ -399,7 +399,7 @@ pub(crate) fn member_matches(lt: &Letters, sel: &Selector, c: &PathCtx, m: &Path
             if inside(m.at) {
                 return true;
             }
-            // the other characters a body draws, such as the kashida of a lam
+            // the other characters a body draws, such as the tatweel of a lam
             m.is_body
                 && m.letter != NONE
                 && lt

@@ -86,7 +86,7 @@ pub struct LetterRec {
     /// The letter's character.
     pub text: char,
     /// Offsets of other characters that the letter's body also draws. Empty for every
-    /// letter but one in the Hafs data: the lam of 2:97:5 also draws its kashida.
+    /// letter but one in the Hafs data: the lam of 2:97:5 also draws its tatweel.
     pub more_at: Vec<u16>,
     pub first_member: u32,
     pub n_members: u16,
