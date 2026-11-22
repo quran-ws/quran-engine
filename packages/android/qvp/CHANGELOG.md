@@ -60,6 +60,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ### Removed
 
 ### Fixed
+- `QvpPageView` draws a styled path only where the engine's draw list puts it. The web, iOS
+  and Flutter views do the same. Before, the view drew every styled path. It put a styled
+  path that the list leaves out, such as a page number under reflow, at its printed line. It
+  drew a path once when the list holds it twice. `lastOverlayPaths` now counts the styled
+  draws.
 - A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's

@@ -502,9 +502,16 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     /** What the layout in hand draws and where, read once per band rather than once a frame.
      * Asking the engine on every frame — and once per styled path — was most of what a scroll
      * was spending its time on. */
-    private class DrawList(val draws: List<QvpDraw>, val places: List<QvpPlacement>, val key: InkKey, nPaths: Int) {
-        /** The placement of one path, for the styled pass: that of its first draw, or [NO_PLACEMENT]. */
-        val ofPath = IntArray(nPaths) { NO_PLACEMENT }.apply { for (d in draws) if (this[d.path] == NO_PLACEMENT) this[d.path] = d.placement }
+    private class DrawList(val draws: List<QvpDraw>, val places: List<QvpPlacement>, val key: InkKey, private val nPaths: Int) {
+        private var styledFrom: IntArray? = null
+        private var styledTriples = IntArray(0)
+
+        /** The draws of the styled pass, from [styledDraws]. The engine's draw list says what to
+         * draw and where. The view keeps the triples until the styled paths or the list change. */
+        fun styledNow(styled: IntArray): IntArray {
+            if (styled !== styledFrom) { styledTriples = styledDraws(draws, styled, nPaths); styledFrom = styled }
+            return styledTriples
+        }
     }
     private var drawList: DrawList? = null
     private fun drawListNow(key: InkKey): DrawList {
@@ -591,18 +598,17 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val t1 = System.nanoTime()
         val q = drawListNow(probe)
         val places = q.places
+        val triples = q.styledNow(styled)
         var cur = -1; var i = 0
         canvas.save()
-        while (i < styled.size) {
-            val pi = styled[i]; val col = styled[i + 1]; i += 2
-            if (col and 0xff == 0) continue
-            val g = q.ofPath[pi].let { if (it != NO_PLACEMENT) it else p.pathLine(pi) }
+        while (i < triples.size) {
+            val pi = triples[i]; val g = triples[i + 1]; val col = triples[i + 2]; i += 3
             if (g != cur) { canvas.restore(); canvas.save(); canvas.concat(placementMatrix(places.getOrElse(g) { QvpPlacement.IDENTITY })); cur = g }
             paint.color = QvpColor.argb(col); canvas.drawPath(p.path(pi), paint)
         }
         canvas.restore()
         maskLayer.draw(canvas, paint, viewScale, viewOx, viewOy)
-        lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = styled.size / 2; lastBands = highlightLayer.boxes
+        lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = triples.size / 3; lastBands = highlightLayer.boxes
         if (moving) { animating = true; Choreographer.getInstance().postFrameCallback(frameCb) }
     }
 
@@ -701,8 +707,6 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     }
 
     companion object {
-        /** No draw of this path in the band: the styled pass places it by its printed line. */
-        private const val NO_PLACEMENT = Int.MIN_VALUE
         /** An offset far past any page, to ask the clamp for the end of a scroll. */
         private const val FAR = 1e7f
         /** The engine's own ceiling on the magnifying glass: what [maxZoom] starts at. The floor
