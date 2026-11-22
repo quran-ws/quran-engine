@@ -15,7 +15,7 @@ import ws.quran.qvp.Target
  * Targets from JS: "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | word index |
  * [word indices] | {target, a, b, c, words} (target = QVP_TARGET_* or its name in [Codes]).
  * Selectors from JS: {selector, a, b, c} (selector = QVP_SELECTOR_* or its name in [Codes]). Colours: '#rgb' | '#rrggbb' | '#rrggbbaa'.
- * Letter queries from JS: {scope, letter | text, mark, part} (scope a target as above, mark a name or an id).
+ * Letter queries from JS: {scope, text, mark, part} (scope a target as above, text a character or a code point, mark a name or an id).
  */
 object Marshal {
     // ── colours ──
@@ -98,16 +98,23 @@ object Marshal {
     }
 
     /**
-     * JS letter query → [QvpLetterQuery]. `scope` is a target (the page when missing). `text` is a
-     * code point; else `letter` is a character, whose first code point is taken; neither is any
-     * letter. `mark` is a mark id, or a name the engine resolves; none is any. `part` is a
-     * QVP_LETTER_PART_* code, [QvpLetterPart.ALL] when missing.
+     * JS letter query → [QvpLetterQuery]. `scope` is a target (the page when missing). `text` is
+     * the letter's character, one Unicode scalar, or its code point as a number; missing or ""
+     * is any letter, and a string of more than one character throws an
+     * [IllegalArgumentException], which rejects the call. `mark` is a mark id, or a name the
+     * engine resolves; none is any. `part` is a QVP_LETTER_PART_* code, [QvpLetterPart.ALL]
+     * when missing.
      */
     fun letterQuery(v: Any?, page: QvpPage?): QvpLetterQuery {
         val m = v as? Map<*, *> ?: return QvpLetterQuery()
-        val text = num(m["text"]) ?: (m["letter"] as? String)?.takeIf { it.isNotEmpty() }?.codePointAt(0) ?: 0
+        val scope = target(m["scope"], page)
         val mark = when (val x = m["mark"]) { is Number -> x.toInt(); is String -> if (x.isEmpty()) 0 else markId(x); else -> 0 }
-        return QvpLetterQuery(target(m["scope"], page), text, mark, num(m["part"]) ?: QvpLetterPart.ALL)
+        val part = num(m["part"]) ?: QvpLetterPart.ALL
+        return when (val t = m["text"]) {
+            is String -> QvpLetterQuery(scope, t, mark, part)
+            is Number -> QvpLetterQuery(scope, t.toInt(), mark, part)
+            else -> QvpLetterQuery(scope, 0, mark, part)
+        }
     }
 
     /** The constant of [entries] that [v] names, in any of its spellings: the constant's own
@@ -244,7 +251,7 @@ object Marshal {
     }
     fun letterMember(m: QvpLetterMember): Map<String, Any?> = mapOf("path" to m.path, "at" to m.at, "mark" to m.mark, "markName" to m.markName, "isBody" to m.isBody, "isCut" to m.isCut)
     /** One letter with its members and, apart, its marks, both in the engine's order. -1 is an absent offset. */
-    fun letter(l: QvpLetter): Map<String, Any?> = mapOf("word" to l.word, "index" to l.index, "at" to l.at, "text" to l.text, "character" to l.character,
+    fun letter(l: QvpLetter): Map<String, Any?> = mapOf("word" to l.word, "index" to l.index, "at" to l.at, "codePoint" to l.codePoint, "text" to l.text,
         "moreAt" to l.moreAt, "nMoreAt" to l.nMoreAt, "nMembers" to l.nMembers, "nMarks" to l.nMarks, "x0" to l.x0, "y0" to l.y0, "x1" to l.x1, "y1" to l.y1,
         "hasInk" to l.hasInk, "members" to l.members.map { letterMember(it) }, "marks" to l.marks.map { letterMember(it) })
     fun pathLetter(r: QvpPathLetter): Map<String, Any?> = mapOf("letter" to r.letter, "at" to r.at)

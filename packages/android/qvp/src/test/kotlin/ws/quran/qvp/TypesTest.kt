@@ -82,8 +82,32 @@ class TypesTest {
         assertArrayEquals(intArrayOf(0, 0, 2, 2, 0, 0, 0, 1, 1, 5), QvpLetterQuery(Target.words(intArrayOf(1, 1, 5)), part = QvpLetterPart.MARKS).ints())
         assertArrayEquals(intArrayOf(0, 255, 0, 4, 1, 1, 2), QvpLetterQuery(Target.ayahRange(1, 1, 2), mark = 255).ints())
         // a letter given as a character goes in as its code point; no mark name needs the engine here
-        assertArrayEquals(intArrayOf(0x1F600, 0, 0, 0, 0, 0, 0), QvpLetterQuery.of(letter = "\uD83D\uDE00").ints())
-        assertArrayEquals(intArrayOf(0x644, 0, 0, 0, 0, 0, 0), QvpLetterQuery.of(letter = "\u0644").ints())
+        assertArrayEquals(intArrayOf(0x1F600, 0, 0, 0, 0, 0, 0), QvpLetterQuery.of(text = "\uD83D\uDE00").ints())
+        assertArrayEquals(intArrayOf(0x644, 0, 0, 0, 0, 0, 0), QvpLetterQuery.of(text = "\u0644").ints())
+        assertArrayEquals(intArrayOf(0x644, 16, 1, 1, 2, 0, 0), QvpLetterQuery(Target.word(2), "\u0644", 16, QvpLetterPart.BODY_AND_DOTS).ints())
+    }
+
+    /** A query's text is its character and its code point the same as a number; "" is any
+     * letter, and a text that is not one Unicode scalar throws, as a bad target does. */
+    @Test
+    fun letterQueryTextIsOneCharacter() {
+        val lam = QvpLetterQuery(text = "\u0644")
+        assertEquals("\u0644", lam.text)
+        assertEquals(0x644, lam.codePoint)
+        assertArrayEquals(lam.ints(), QvpLetterQuery(codePoint = 0x644).ints())
+        assertEquals("\uD83D\uDE00", QvpLetterQuery(text = "\uD83D\uDE00").text)
+        assertEquals(0x1F600, QvpLetterQuery(text = "\uD83D\uDE00").codePoint)
+        for (any in listOf(QvpLetterQuery(text = ""), QvpLetterQuery.of(), QvpLetterQuery.of(text = ""), QvpLetterQuery())) {
+            assertEquals(0, any.codePoint)
+            assertEquals("", any.text)
+        }
+        for (bad in listOf("\u0644\u0627", "\u0628\u064E", "\uD800", "\uDE00", "ab")) {
+            assertThrows(IllegalArgumentException::class.java) { QvpLetterQuery(text = bad) }
+            assertThrows(IllegalArgumentException::class.java) { QvpLetterQuery.of(text = bad) }
+        }
+        // a code point goes to the engine as it is: the engine refuses one that is no Unicode scalar
+        assertArrayEquals(intArrayOf(0x110000, 0, 0, 0, 0, 0, 0), QvpLetterQuery(codePoint = 0x110000).ints())
+        assertEquals("", QvpLetterQuery(codePoint = 0x110000).text)
     }
 
     /** The bridge's letter records map to the friendly types field by field: a swap of two fields
@@ -100,6 +124,8 @@ class TypesTest {
                             QvpLetterMember(7, -1, 12, "omitted_alif", isBody = false, isCut = false)), members)
         val letter = QvpLetter.of(intArrayOf(4, 1, 2, 0x628, 4, 3, 5, 1, bits(50f), bits(6f), bits(60.5f), bits(24f), 1), members)
         assertEquals(QvpLetter(4, 1, 2, 0x628, "\u0628", 5, 1, 4, 3, 50f, 6f, 60.5f, 24f, true, members), letter)
+        assertEquals("\u0628", letter.text)
+        assertEquals(0x628, letter.codePoint)
         assertEquals(listOf(1, 2, 7), letter.marks.map { it.path })
         assertEquals(false, QvpLetter.of(intArrayOf(0, 0, -1, 0x648, 0, 0, -1, 0, 0, 0, 0, 0, 0), emptyList()).hasInk)
         val hit = QvpLetterHit.of(intArrayOf(2, -1, 5, 3, 1, bits(0.25f), 12, 0, 1), name)

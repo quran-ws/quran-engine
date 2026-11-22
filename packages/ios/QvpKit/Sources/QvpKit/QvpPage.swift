@@ -177,7 +177,7 @@ public final class QvpPage {
     public func letter(_ w: Int, _ i: Int) -> QvpLetter? {
         var v = QvpFFI.QvpLetterInfo()
         guard qvp_letter_info(p, UInt32(truncatingIfNeeded: w), UInt32(truncatingIfNeeded: i), &v) != 0 else { return nil }
-        return QvpLetter(word: Int(v.word), index: Int(v.index), at: index(v.at), text: v.text, nMembers: Int(v.n_members), nMarks: Int(v.n_marks),
+        return QvpLetter(word: Int(v.word), index: Int(v.index), at: index(v.at), codePoint: v.text, nMembers: Int(v.n_members), nMarks: Int(v.n_marks),
                          moreAt: index(v.more_at), nMoreAt: Int(v.n_more_at), x0: v.x0, y0: v.y0, x1: v.x1, y1: v.y1, hasInk: v.has_ink != 0,
                          members: letterMembers(w, i))
     }

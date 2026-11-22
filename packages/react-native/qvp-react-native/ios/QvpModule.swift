@@ -185,7 +185,7 @@ final class QvpModule: NSObject {
     }
     @objc func findLetters(_ tag: NSNumber, query: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         let q = opt(query)
-        inOrder(tag, resolve, reject) { _, p in QvpRnMarshal.foundLetters(p.findLetters(QvpRnMarshal.letterQuery(q, p))) }
+        inOrder(tag, resolve, reject) { _, p in try QvpRnMarshal.foundLetters(p.findLetters(QvpRnMarshal.letterQuery(q, p))) }
     }
     /// The letter or mark under a point in page units.
     @objc func hitTestLetter(_ tag: NSNumber, x: NSNumber, y: NSNumber, opts: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {

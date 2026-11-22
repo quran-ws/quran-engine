@@ -126,7 +126,8 @@ internal class LettersReplay(private val read: (String) -> ByteArray) {
         }
     }
 
-    private fun query(o: JSONObject) = QvpLetterQuery(target(o.getJSONObject("scope")), o.getInt("text"), o.getInt("mark"), o.getInt("part"))
+    // the scenario's text is the engine's code point, which can be one no string holds: pass it as a number
+    private fun query(o: JSONObject) = QvpLetterQuery(target(o.getJSONObject("scope")), codePoint = o.getInt("text"), mark = o.getInt("mark"), part = o.getInt("part"))
 
     private fun options(o: JSONObject?) =
         if (o == null) QvpHitOptions()   // the defaults are what a NULL QvpHitOptions gives
@@ -156,7 +157,7 @@ internal class LettersReplay(private val read: (String) -> ByteArray) {
         got!!
         assertEquals(what, listOf(want.getInt("word"), want.getInt("index"), want.getInt("at"), want.getInt("text"), want.getString("char"),
                                   want.getInt("nMembers"), want.getInt("nMarks"), want.getInt("moreAt"), want.getInt("nMoreAt"), want.getBoolean("hasInk")),
-                     listOf(got.word, got.index, got.at, got.text, got.character, got.nMembers, got.nMarks, got.moreAt, got.nMoreAt, got.hasInk))
+                     listOf(got.word, got.index, got.at, got.codePoint, got.text, got.nMembers, got.nMarks, got.moreAt, got.nMoreAt, got.hasInk))
         close(got.x0, want.getDouble("x0"), "$what x0"); close(got.y0, want.getDouble("y0"), "$what y0")
         close(got.x1, want.getDouble("x1"), "$what x1"); close(got.y1, want.getDouble("y1"), "$what y1")
         want.optJSONArray("members")?.let { sameMembers(got.members, it, what) }

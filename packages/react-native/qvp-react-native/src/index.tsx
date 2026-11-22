@@ -132,13 +132,13 @@ export interface Hit { word: number; path: number; decoration: number; line: num
 export interface LetterMember { path: number; at: number; mark: number; markName: string; isBody: boolean; isCut: boolean }
 /**
  * One letter of a word, from the letter layer. `index` is the letter's index in its word, `at` its code-point offset in
- * the word's `qpc` text, `text` its code point and `character` the same as a string. `moreAt` is the first other offset
- * its body draws (a kashida), -1 when none, and `nMoreAt` counts them. The box is in page units: the union of its
+ * the word's `qpc` text, `text` its character and `codePoint` the same as a number. `moreAt` is the first other offset
+ * its body draws (a tatweel), -1 when none, and `nMoreAt` counts them. The box is in page units: the union of its
  * members' boxes. `hasInk` is false when no member has an outline. `members` holds the bodies first, then the marks in
  * text order, as the engine gives them; `marks` holds the marks alone, so `marks[n]` is the path `Sel.letterMark(word, index, n)` takes.
  */
 export interface Letter {
-  word: number; index: number; at: number; text: number; character: string; moreAt: number; nMoreAt: number; nMembers: number; nMarks: number;
+  word: number; index: number; at: number; codePoint: number; text: string; moreAt: number; nMoreAt: number; nMembers: number; nMarks: number;
   x0: number; y0: number; x1: number; y1: number; hasInk: boolean; members: LetterMember[]; marks: LetterMember[];
 }
 /** The letter role of a path: the letter's index in the path's word (-1 for a word-level mark) and the path's offset (-1 when none). */
@@ -152,11 +152,11 @@ export interface PathLetter { letter: number; at: number }
 export interface LetterHit { word: number; letter: number; path: number; at: number; line: number; distance: number; mark: number; markName: string; isExact: boolean; isBody: boolean }
 /**
  * Letters by what they are (`findLetters`, a style rule's `letters`). `scope` is the words to look in (the page when
- * left out). `letter` is one character (its first code point is used), or `text` the code point; neither is any letter.
- * `mark` is a mark name or id that one of the letter's members must carry; none is any. `part` (`LETTER_PART`) is what of
+ * left out). `text` is the letter's character, one Unicode scalar, or its code point as a number; left out or `''` is
+ * any letter, and a string of more than one character rejects the call (a style rule with one adds no rule). `mark` is a mark name or id that one of the letter's members must carry; none is any. `part` (`LETTER_PART`) is what of
  * each letter a rule takes; it does not filter `findLetters`.
  */
-export interface LetterQuery { scope?: Target; letter?: string; text?: number; mark?: string | number; part?: number }
+export interface LetterQuery { scope?: Target; text?: string | number; mark?: string | number; part?: number }
 /** The part of one ayah that is on this page: `fragment` of `fragments`, with its words and its box in page units. */
 export interface Ayah { index: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDecoration: number; bbox: number[] }
 /** One printed line: its words, its box, and its band, in page units. */

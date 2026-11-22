@@ -85,6 +85,10 @@ for (const c of S.letters) {
     sameInfo(got, want, what)
     sameMembers(got.members, want.members, `${what} members`)
     sameMembers(p.letterMembers(want.word, want.index), want.members, `${what} letterMembers`)
+    // a letter's text is its character, one Unicode scalar, and codePoint the same as a number
+    assert.equal(typeof got.text, 'string', `${what} text is a string`)
+    assert.equal([...got.text].length, 1, `${what} text is one character`)
+    assert.equal(got.text.codePointAt(0), got.codePoint, `${what} codePoint`)
     // a letter's marks are its members that are not body, in the engine's order
     assert.deepEqual(got.marks, got.members.filter(m => !m.isBody), `${what} marks`)
   }
@@ -138,6 +142,11 @@ for (const c of S.queries) {
   assert.deepEqual(found(p.findLetters({ scope: [1], part: 'marks' })), [[1, 0], [1, 1]])
   assert.deepEqual(found(p.findLetters({ scope: T.word(2) })), [[2, 0]])
   assert.throws(() => p.findLetters({ text: 'لا' }), TypeError)
+  assert.throws(() => p.findLetters({ text: '\ud800' }), TypeError)
+  assert.throws(() => p.styleLetters({ text: 'بَ' }, S.red), TypeError)
+  // '' is any letter, as 0 and a text left out are
+  assert.deepEqual(found(p.findLetters({ text: '' })), found(p.findLetters({})))
+  assert.deepEqual(found(p.findLetters({ text: 0 })), found(p.findLetters({})))
   p.free()
 }
 console.log(`ok  ${S.queries.length} letter queries find and colour as the engine says`)

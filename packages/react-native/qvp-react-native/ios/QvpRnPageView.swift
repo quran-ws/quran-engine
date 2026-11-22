@@ -397,7 +397,8 @@ final class QvpRnPageView: UIView {
             var h = 0
             if hide { h = QvpRnMarshal.selector(e["selector"]).map { p.hide($0) } ?? 0 }
             else if QvpRnMarshal.some(e["selector"]) != nil { h = QvpRnMarshal.selector(e["selector"]).map { p.style($0, color, transitionMs: ms, layer: layer) } ?? 0 }
-            else if QvpRnMarshal.some(e["letters"]) != nil { h = p.styleLetters(QvpRnMarshal.letterQuery(e["letters"], p), color, transitionMs: ms, layer: layer) }
+            // a query whose text is not one character adds no rule, as a bad selector does
+            else if QvpRnMarshal.some(e["letters"]) != nil { h = (try? QvpRnMarshal.letterQuery(e["letters"], p)).map { p.styleLetters($0, color, transitionMs: ms, layer: layer) } ?? 0 }
             else if QvpRnMarshal.some(e["target"]) != nil { h = p.styleTarget(QvpRnMarshal.target(e["target"], p), color, transitionMs: ms, layer: layer) }
             if h != 0 { next.append((id, Rule(handle: h, entry: e))) }
         }

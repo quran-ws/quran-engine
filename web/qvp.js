@@ -353,14 +353,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   }
   /** Write a letter query (QvpLetterQuery, 32 bytes on wasm32) at `at`: the scope's QvpTarget at 0
    * (24 bytes), the code point at 24, the mark at 28 and the part at 29. `scope` is a target
-   * already resolved by the page (`page._target`); `text` a one-character string or a code
-   * point, 0 for any letter; `mark` an id or a name, 0 for any; `part` as in `Sel.letter`. */
+   * already resolved by the page (`page._target`); `text` the letter's character (one Unicode
+   * scalar, '' for any letter) or its code point (0 for any letter); `mark` an id or a name, 0
+   * for any; `part` as in `Sel.letter`. A string that is not one Unicode scalar throws. */
   function writeLetterQuery(e, at, q, writeScope) {
     const text = q.text ?? 0, mark = q.mark ?? 0;
     let cp = text;
     if (typeof text === 'string') {
-      if ([...text].length !== 1) throw new TypeError(`a letter query's text is one character, not ${JSON.stringify(text)}`);
-      cp = text.codePointAt(0);
+      const chars = [...text];
+      cp = chars.length ? text.codePointAt(0) : 0;
+      if (chars.length > 1 || (cp >= 0xd800 && cp <= 0xdfff)) throw new TypeError(`a letter query's text is one character, not ${JSON.stringify(text)}`);
     }
     const part = partId(q.part ?? 'all');
     writeScope(at, q.scope ?? 'page');
@@ -734,7 +736,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /**
      * Get one letter of a word, or null: {word, index, at, codePoint, text, moreAt, nMoreAt, box:
      * {x0, y0, x1, y1}, hasInk, members, marks}. `text` is the character and `codePoint` its code
-     * point. `moreAt` is the first other offset the body draws (a kashida), -1 when none, and
+     * point. `moreAt` is the first other offset the body draws (a tatweel), -1 when none, and
      * `nMoreAt` counts those offsets. The box is in page units, the union of the members' boxes.
      * `members` is `letterMembers(w, i)`; `marks` is its members that are not body, in the same
      * order, so `marks[n]` is what `Sel.letterMark(w, i, n)` takes.
@@ -777,9 +779,10 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /**
      * Find letters by what they are: [{word, letter}], in word order, then letter order. The
      * query is {scope, text, mark, part}: `scope` takes what every target takes ('page' when
-     * left out), `text` a one-character string or a code point (0 or left out: any letter),
-     * `mark` a mark id or name that one of the letter's members carries (0 or left out: any).
-     * `part` does not filter here. A bad query (a part above 2, a text that is not a code point)
+     * left out), `text` the letter's character or its code point ('', 0 or left out: any
+     * letter), `mark` a mark id or name that one of the letter's members carries (0 or left
+     * out: any). `part` does not filter here. A text string that is not one Unicode scalar
+     * throws a TypeError. A bad query (a part above 2, a code point that is no Unicode scalar)
      * finds nothing.
      */
     findLetters(query) {

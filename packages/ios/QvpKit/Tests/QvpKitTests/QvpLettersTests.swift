@@ -49,7 +49,7 @@ final class QvpLettersTests: XCTestCase {
         let q = v as! [String: Any], s = q["scope"] as! [String: Any]
         let words = (s["words"] as! [NSNumber]).map { UInt32(truncatingIfNeeded: $0.int64Value) }
         let scope = Target(int(s["target"]), int(s["a"]), int(s["b"]), int(s["c"]), words)
-        return QvpLetterQuery(scope: scope, text: u32(q["text"]), mark: int(q["mark"]), part: int(q["part"]))
+        return QvpLetterQuery(scope: scope, codePoint: u32(q["text"]), mark: int(q["mark"]), part: int(q["part"]))
     }
     private func options(_ v: Any?) -> QvpHitOptions {
         // null passes no options: the engine's defaults, which are what QvpHitOptions() holds
@@ -83,9 +83,9 @@ final class QvpLettersTests: XCTestCase {
     private func sameLetter(_ got: QvpLetter?, _ want: Any?, _ tolerance: Double, _ tag: String) {
         guard let w = want as? [String: Any] else { return XCTAssertNil(got, "\(tag): got a letter, engine says none") }
         guard let got else { return XCTFail("\(tag): got no letter") }
-        XCTAssertEqual([got.word, got.index, got.at, Int(got.text), got.nMembers, got.nMarks, got.moreAt, got.nMoreAt],
+        XCTAssertEqual([got.word, got.index, got.at, Int(got.codePoint), got.nMembers, got.nMarks, got.moreAt, got.nMoreAt],
                        [int(w["word"]), int(w["index"]), int(w["at"]), int(w["text"]), int(w["nMembers"]), int(w["nMarks"]), int(w["moreAt"]), int(w["nMoreAt"])], tag)
-        XCTAssertEqual(got.char, w["char"] as! String, "\(tag) char")
+        XCTAssertEqual(got.text, w["char"] as! String, "\(tag) text")
         XCTAssertEqual(got.hasInk, w["hasInk"] as! Bool, "\(tag) hasInk")
         close(got.x0, w["x0"], tolerance, "\(tag) x0"); close(got.y0, w["y0"], tolerance, "\(tag) y0")
         close(got.x1, w["x1"], tolerance, "\(tag) x1"); close(got.y1, w["y1"], tolerance, "\(tag) y1")
@@ -274,7 +274,8 @@ final class QvpLettersTests: XCTestCase {
         XCTAssertEqual(p.table.count, 80)
         XCTAssertEqual(p.buildPaths().count, 10, "the paths are built again with the pieces")
         let lam = try XCTUnwrap(p.letter(0, 1))
-        XCTAssertEqual(lam.char, "ل")
+        XCTAssertEqual(lam.text, "ل")
+        XCTAssertEqual(lam.codePoint, 0x644)
         XCTAssertEqual(lam.members.map(\.path), [9])
         XCTAssertEqual(p.letters(0).count, 2)
         p.layout(spec(j, "printed"))
@@ -291,6 +292,11 @@ final class QvpLettersTests: XCTestCase {
         XCTAssertTrue(paths.contains(8) && paths.contains(9), "the outline draws as its pieces")
         XCTAssertFalse(paths.contains(0), "and never with them")
         XCTAssertEqual(p.findLetters(QvpLetterQuery("ل")).map { [$0.word, $0.letter] }, [[0, 1], [1, 0]])
+        XCTAssertEqual(p.findLetters(QvpLetterQuery(text: "ل")).map { [$0.word, $0.letter] }, [[0, 1], [1, 0]])
+        XCTAssertEqual(QvpLetterQuery(text: "ل").codePoint, 0x644)
+        XCTAssertEqual(QvpLetterQuery(codePoint: 0x644).text, "ل")
+        XCTAssertEqual(QvpLetterQuery(text: "").codePoint, 0)
+        XCTAssertEqual(QvpLetterQuery().text, "")
         let hit = try XCTUnwrap(p.hitTestLetter(45, 15))
         XCTAssertEqual([hit.word, hit.letter, hit.path], [0, 1, 9])
         XCTAssertTrue(hit.isExact)

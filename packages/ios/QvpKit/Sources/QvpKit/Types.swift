@@ -232,26 +232,36 @@ public struct QvpLetterQuery {
     /// The words to look in.
     public var scope: Target
     /// The letter's character as a code point. 0 takes any letter.
-    public var text: UInt32
+    public var codePoint: UInt32
     /// A mark id that one of the letter's members must carry. 0 takes any letter.
     public var mark: Int
     /// What of each letter a style rule takes (`QvpLetterPart`). It does not filter `findLetters`.
     public var part: Int
     /// A query by code point and mark id, as the C struct holds them.
-    public init(scope: Target = .page(), text: UInt32 = 0, mark: Int = 0, part: Int = QvpLetterPart.ALL) {
-        self.scope = scope; self.text = text; self.mark = mark; self.part = part
+    public init(scope: Target = .page(), codePoint: UInt32 = 0, mark: Int = 0, part: Int = QvpLetterPart.ALL) {
+        self.scope = scope; self.codePoint = codePoint; self.mark = mark; self.part = part
     }
     /// A query by character and mark name: `QvpLetterQuery("ن", mark: "shaddah")`. A nil
     /// character takes any letter, and a nil mark any mark.
-    public init(_ char: Unicode.Scalar?, mark: String? = nil, scope: Target = .page(), part: Int = QvpLetterPart.ALL) {
-        self.init(scope: scope, text: char?.value ?? 0, mark: mark.map(markId) ?? 0, part: part)
+    public init(_ text: Unicode.Scalar?, mark: String? = nil, scope: Target = .page(), part: Int = QvpLetterPart.ALL) {
+        self.init(scope: scope, codePoint: text?.value ?? 0, mark: mark.map(markId) ?? 0, part: part)
     }
+    /// A query by the letter's character as a string: one Unicode scalar, or "" for any letter.
+    /// A string of more than one scalar is a programmer error, as a bad target string is.
+    public init(text: String, mark: String? = nil, scope: Target = .page(), part: Int = QvpLetterPart.ALL) {
+        let scalars = Array(text.unicodeScalars)
+        precondition(scalars.count <= 1, "a letter query's text is one character, not \"\(text)\"")
+        self.init(scalars.first, mark: mark, scope: scope, part: part)
+    }
+    /// The letter's character: `codePoint` as a string, "" for 0 and for a number that is no
+    /// Unicode scalar.
+    public var text: String { codePoint == 0 ? "" : (Unicode.Scalar(codePoint).map { String(Character($0)) } ?? "") }
     /// Run `body` with a C QvpLetterQuery whose scope's `words` pointer is valid for the call.
     func withC<R>(_ body: (UnsafePointer<QvpFFI.QvpLetterQuery>) -> R) -> R {
         scope.withC { (tp: UnsafePointer<QvpTarget>) -> R in
             var q = QvpFFI.QvpLetterQuery()
             q.scope = tp.pointee
-            q.text = text
+            q.text = codePoint
             q.mark = UInt8(truncatingIfNeeded: mark)
             q.part = UInt8(truncatingIfNeeded: part)
             return withUnsafePointer(to: &q, body)
@@ -363,10 +373,10 @@ public struct QvpLetter: Equatable {
     /// The word, the letter's index in it, and the letter's qpc code-point offset (-1 when none).
     public let word: Int, index: Int, at: Int
     /// The letter's character, as a code point.
-    public let text: UInt32
+    public let codePoint: UInt32
     /// How many members the letter has, and how many of them are not body (dots included).
     public let nMembers: Int, nMarks: Int
-    /// The first other offset the body draws, such as a kashida (-1 when none), and how many such
+    /// The first other offset the body draws, such as a tatweel (-1 when none), and how many such
     /// offsets there are. `QvpPage.letterAtOffset` gives the letter of each one.
     public let moreAt: Int, nMoreAt: Int
     /// The letter's box in page units: the union of its members' boxes. A piece can reach past
@@ -377,7 +387,7 @@ public struct QvpLetter: Equatable {
     /// The paths of the letter, in the engine's order: the bodies first, then the marks in text order.
     public let members: [QvpLetterMember]
     /// The letter's character, as a string.
-    public var char: String { Unicode.Scalar(text).map { String(Character($0)) } ?? "" }
+    public var text: String { Unicode.Scalar(codePoint).map { String(Character($0)) } ?? "" }
     /// The members that are not body, in text order: `marks[n]` is what
     /// `Selector.letterMark(word, index, n)` takes. The engine lists them after the bodies.
     public var marks: [QvpLetterMember] { Array(members.suffix(nMarks)) }

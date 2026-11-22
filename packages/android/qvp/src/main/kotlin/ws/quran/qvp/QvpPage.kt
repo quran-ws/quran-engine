@@ -281,7 +281,7 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
      * (letter -1). Null for a cut path, a path with no letter role, or no layer. */
     fun pathLetter(path: Int): QvpPathLetter? = QvpNative.pathLetter(h, path)?.let { QvpPathLetter(it[0], it[1]) }
     /** The letter of word [word] that draws the character at code-point offset [at] (its own or
-     * a kashida it draws) or holds a mark there. Null when no letter has it. */
+     * a tatweel it draws) or holds a mark there. Null when no letter has it. */
     fun letterAtOffset(word: Int, at: Int): Int? = QvpNative.letterAtOffset(h, word, at).let { if (it == NONE) null else it }
     /** The letters the query finds, as (word, letter index) pairs, in word order and then letter
      * order. The query's part does not filter. Empty for a bad query or no layer. */

@@ -6,7 +6,7 @@
 // Targets from JS: "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | word index |
 // [word indices] | {target, a, b, c, words} (target = QVP_TARGET_* or its name in QvpRnCodes).
 // Selectors from JS: {selector, a, b, c} (selector = QVP_SELECTOR_* or its name in QvpRnCodes).
-// Letter queries from JS: {scope, letter | text, mark, part} (scope a target as above, mark a name or an id).
+// Letter queries from JS: {scope, text, mark, part} (scope a target as above, text a character or a code point, mark a name or an id).
 // Colours: '#rgb' | '#rrggbb' | '#rrggbbaa' | 0xRRGGBBAA.
 //
 // QvpKit's sources compile into this pod's module, so its types need no import.
@@ -129,20 +129,28 @@ enum QvpRnMarshal {
     }
 
     /// A JS letter query as a QvpLetterQuery, as Marshal.kt reads it. `scope` is a target (the page
-    /// when missing). `text` is a code point; else `letter` is a character, whose first code point
-    /// is taken; neither is any letter. `mark` is a mark id, or a name the engine resolves; none is
-    /// any. `part` is a QVP_LETTER_PART_* code, ALL when missing.
-    static func letterQuery(_ v: Any?, _ page: QvpPage?) -> QvpLetterQuery {
+    /// when missing). `text` is the letter's character, one Unicode scalar, or its code point as a
+    /// number; missing or "" is any letter, and a string of more than one character throws, which
+    /// rejects the call. `mark` is a mark id, or a name the engine resolves; none is any. `part`
+    /// is a QVP_LETTER_PART_* code, ALL when missing.
+    static func letterQuery(_ v: Any?, _ page: QvpPage?) throws -> QvpLetterQuery {
         guard let m = dict(v) else { return QvpLetterQuery() }
-        let text: UInt32
-        if let t = num(m["text"]) { text = UInt32(truncatingIfNeeded: t) } else { text = str(m["letter"])?.unicodeScalars.first?.value ?? 0 }
+        let codePoint: UInt32
+        switch some(m["text"]) {
+        case let n as NSNumber: codePoint = UInt32(truncatingIfNeeded: n.intValue)
+        case let s as String:
+            let scalars = Array(s.unicodeScalars)
+            guard scalars.count <= 1 else { throw QvpRnError("a letter query's text is one character, not \"\(s)\"") }
+            codePoint = scalars.first?.value ?? 0
+        default: codePoint = 0
+        }
         let mark: Int
         switch some(m["mark"]) {
         case let n as NSNumber: mark = n.intValue
         case let s as String: mark = s.isEmpty ? 0 : markId(s)
         default: mark = 0
         }
-        return QvpLetterQuery(scope: target(m["scope"], page), text: text, mark: mark, part: num(m["part"]) ?? QvpLetterPart.ALL)
+        return QvpLetterQuery(scope: target(m["scope"], page), codePoint: codePoint, mark: mark, part: num(m["part"]) ?? QvpLetterPart.ALL)
     }
 
     /// The case of an Int-backed enum that `v` names, in any of its spellings: the Kotlin
@@ -291,7 +299,7 @@ enum QvpRnMarshal {
     }
     /// One letter with its members and, apart, its marks, both in the engine's order. -1 is an absent offset.
     static func letter(_ l: QvpLetter) -> [String: Any?] {
-        ["word": l.word, "index": l.index, "at": l.at, "text": Int(l.text), "character": l.char, "moreAt": l.moreAt, "nMoreAt": l.nMoreAt,
+        ["word": l.word, "index": l.index, "at": l.at, "codePoint": Int(l.codePoint), "text": l.text, "moreAt": l.moreAt, "nMoreAt": l.nMoreAt,
          "nMembers": l.nMembers, "nMarks": l.nMarks, "x0": l.x0, "y0": l.y0, "x1": l.x1, "y1": l.y1, "hasInk": l.hasInk,
          "members": l.members.map { letterMember($0) }, "marks": l.marks.map { letterMember($0) }]
     }

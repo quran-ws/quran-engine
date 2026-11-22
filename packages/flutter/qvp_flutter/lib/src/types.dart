@@ -510,13 +510,13 @@ abstract final class T {
 @immutable
 final class QvpLetterQuery {
   /// [scope] takes anything a target takes: a [QvpTarget], a string such as 'page' or
-  /// '2:255', or a `List<int>` of word indices. [text] is a one-character string or a code
-  /// point; 0 takes any letter. [mark] is a mark id or name that one of the letter's members
+  /// '2:255', or a `List<int>` of word indices. [text] is the letter's character, one Unicode
+  /// scalar, or its code point; '' and 0 take any letter. [mark] is a mark id or name that one of the letter's members
   /// carries; 0 takes any. [part] ([QvpLetterPart]) is what of each letter a style rule takes;
   /// it does not filter [QvpPage.findLetters].
   const QvpLetterQuery({
     this.scope = 'page',
-    this.text = 0,
+    this.text = '',
     this.mark = 0,
     this.part = QvpLetterPart.all,
   });
@@ -524,7 +524,7 @@ final class QvpLetterQuery {
   /// The words to look in.
   final Object scope;
 
-  /// The letter's character: a one-character string or a code point. 0 takes any letter.
+  /// The letter's character, one Unicode scalar, or its code point. '' and 0 take any letter.
   final Object text;
 
   /// A mark id or name. 0 takes any.
@@ -536,12 +536,15 @@ final class QvpLetterQuery {
   /// [scope] as a [QvpTarget].
   QvpTarget get target => QvpTarget.of(scope);
 
-  /// [text] as a code point. Throws an [ArgumentError] for a string that is not one character.
+  /// [text] as a code point, 0 for ''. Throws an [ArgumentError] for a string that is not one
+  /// Unicode scalar. A code point goes to the engine as it is, which refuses one that is no
+  /// Unicode scalar.
   int get codePoint {
     final t = text;
     if (t is int) return t;
     final runes = (t as String).runes;
-    if (runes.length != 1) {
+    if (runes.isEmpty) return 0;
+    if (runes.length != 1 || (runes.first >= 0xD800 && runes.first <= 0xDFFF)) {
       throw ArgumentError.value(
         t,
         'text',
@@ -824,7 +827,7 @@ final class QvpLetter {
   /// How many members the letter has, and how many of them are not body, dots included.
   final int nMembers, nMarks;
 
-  /// The first other offset the body draws, such as a kashida, -1 when none, and how many
+  /// The first other offset the body draws, such as a tatweel, -1 when none, and how many
   /// such offsets there are. [QvpPage.letterAtOffset] gives the letter of each one.
   final int moreAt, nMoreAt;
 

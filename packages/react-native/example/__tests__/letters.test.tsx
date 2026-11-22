@@ -24,7 +24,7 @@ const BODY: LetterMember = { path: 9, at: 2, mark: 0, markName: '', isBody: true
 const DOT: LetterMember = { path: 4, at: 2, mark: 16, markName: 'dot', isBody: false, isCut: false };
 const FATHAH: LetterMember = { path: 5, at: 3, mark: 1, markName: 'fathah', isBody: false, isCut: false };
 const LETTER: Letter = {
-  word: 0, index: 1, at: 2, text: 0x0628, character: 'ب', moreAt: -1, nMoreAt: 0, nMembers: 3, nMarks: 2,
+  word: 0, index: 1, at: 2, codePoint: 0x0628, text: 'ب', moreAt: -1, nMoreAt: 0, nMembers: 3, nMarks: 2,
   x0: 10, y0: 20, x1: 30, y1: 40, hasInk: true, members: [BODY, DOT, FATHAH], marks: [DOT, FATHAH],
 };
 const HIT: LetterHit = { word: 0, letter: -1, path: 7, at: 5, line: 0, distance: 0, mark: 12, markName: 'omitted_alif', isExact: true, isBody: false };
@@ -66,6 +66,9 @@ test('each letter call passes its arguments through and reads the answer back', 
   const [l] = await Qvp.letters(42, 0);
   expect(last('letters')).toEqual([42, 0]);
   expect(l).toEqual(LETTER);
+  // a letter's text is its character, and codePoint the same as a number
+  expect([...l.text]).toHaveLength(1);
+  expect(l.text.codePointAt(0)).toBe(l.codePoint);
   expect(l.marks[1]).toBe(l.members[2]);
   expect(await Qvp.letters(42, 7)).toEqual([]);
 
@@ -76,7 +79,7 @@ test('each letter call passes its arguments through and reads the answer back', 
   expect(await Qvp.letterAtOffset(42, 0, 9)).toBeNull();
   expect(last('letterAtOffset')).toEqual([42, 0, 9]);
 
-  const query = { scope: T.ayah(1, 1), letter: 'ب', mark: 'fathah', part: LETTER_PART.BODY_AND_DOTS };
+  const query = { scope: T.ayah(1, 1), text: 'ب', mark: 'fathah', part: LETTER_PART.BODY_AND_DOTS };
   expect(await Qvp.findLetters(42, query)).toEqual([{ word: 0, letter: 1 }, { word: 3, letter: 0 }]);
   expect(last('findLetters')).toEqual([42, query]);
   await Qvp.findLetters(42, { text: 0x0644, mark: 12 });
@@ -98,7 +101,7 @@ test('the view ref binds the letter calls to its tag', async () => {
   await ref.current!.letters(0);
   await ref.current!.pathLetter(9);
   await ref.current!.letterAtOffset(0, 2);
-  await ref.current!.findLetters({ letter: 'ب' });
+  await ref.current!.findLetters({ text: 'ب' });
   await ref.current!.hitTestLetter(1, 2, { gapBias: 0.5 });
   await ref.current!.hitTestLetterView(3, 4);
   expect(await ref.current!.hasLetters()).toBe(true);
@@ -106,7 +109,7 @@ test('the view ref binds the letter calls to its tag', async () => {
   expect(last('letters')).toEqual([tag, 0]);
   expect(last('pathLetter')).toEqual([tag, 9]);
   expect(last('letterAtOffset')).toEqual([tag, 0, 2]);
-  expect(last('findLetters')).toEqual([tag, { letter: 'ب' }]);
+  expect(last('findLetters')).toEqual([tag, { text: 'ب' }]);
   expect(last('hitTestLetter')).toEqual([tag, 1, 2, { gapBias: 0.5 }]);
   expect(last('hitTestLetterView')).toEqual([tag, 3, 4, null]);
   expect(last('hasLetters')).toEqual([tag]);
@@ -114,7 +117,7 @@ test('the view ref binds the letter calls to its tag', async () => {
 
 test('lettersUri and a style rule with letters reach the native view', async () => {
   let tree!: ReactTestRenderer.ReactTestRenderer;
-  const letters = { scope: T.word(3), letter: 'ل', part: LETTER_PART.MARKS };
+  const letters = { scope: T.word(3), text: 'ل', part: LETTER_PART.MARKS };
   await ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
       <QvpPageView

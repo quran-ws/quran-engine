@@ -165,14 +165,14 @@ data class QvpLetterMember(val path: Int, val at: Int, val mark: Int, val markNa
 
 /**
  * One letter of a word, from the letter layer. [index] is the letter's index in its word, [at]
- * its code-point offset in the word's `qpc` text, [text] its code point and [character] the
- * same as a string. [moreAt] is the first other offset its body draws (a kashida), -1 when
+ * its code-point offset in the word's `qpc` text, [text] its character and [codePoint] the
+ * same as a number. [moreAt] is the first other offset its body draws (a tatweel), -1 when
  * none, and [nMoreAt] counts them. The box is in page units: the union of its members' boxes.
  * [hasInk] is false when no member has an outline. [members] holds the bodies first, then the
  * marks in text order, as the engine gives them; [marks] holds the marks alone, so `marks[n]`
  * is the path [Selector.letterMark] `n` takes.
  */
-data class QvpLetter(val word: Int, val index: Int, val at: Int, val text: Int, val character: String, val moreAt: Int, val nMoreAt: Int,
+data class QvpLetter(val word: Int, val index: Int, val at: Int, val codePoint: Int, val text: String, val moreAt: Int, val nMoreAt: Int,
                      val nMembers: Int, val nMarks: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val hasInk: Boolean,
                      val members: List<QvpLetterMember>) {
     /** The members that are not body, dots included, in text order. */
@@ -211,21 +211,41 @@ data class QvpLetterHit(val word: Int, val letter: Int, val path: Int, val at: I
 
 /**
  * Letters by what they are ([QvpPage.findLetters], [QvpPage.styleLetters]). [scope] is the words
- * to look in. [text] is a code point, 0 for any letter. [mark] is a mark id that one of the
- * letter's members must carry, 0 for any. [part] ([QvpLetterPart]) is what of each letter a rule
- * takes; it does not filter [QvpPage.findLetters].
+ * to look in. [text] is the letter's character, "" for any letter, and [codePoint] the same as
+ * a number, 0 for any letter. [mark] is a mark id that one of the letter's members must carry,
+ * 0 for any. [part] ([QvpLetterPart]) is what of each letter a rule takes; it does not filter
+ * [QvpPage.findLetters].
  */
-data class QvpLetterQuery(val scope: Target = Target.page(), val text: Int = 0, val mark: Int = 0, val part: Int = QvpLetterPart.ALL) {
+data class QvpLetterQuery(val scope: Target = Target.page(), val codePoint: Int = 0, val mark: Int = 0, val part: Int = QvpLetterPart.ALL) {
+    /** A query by the letter's character: [text] is one Unicode scalar, or "" for any letter.
+     * Anything else throws an [IllegalArgumentException], as a bad target does. */
+    constructor(scope: Target = Target.page(), text: String, mark: Int = 0, part: Int = QvpLetterPart.ALL) :
+        this(scope, letterCodePoint(text), mark, part)
+
+    /** The letter's character: [codePoint] as a string, "" for 0 and for a number that is no
+     * code point. The engine refuses a query whose code point is no Unicode scalar. */
+    val text: String get() = if (codePoint == 0 || !Character.isValidCodePoint(codePoint)) "" else String(Character.toChars(codePoint))
+
     /** The record the bridge reads: {text, mark, part}, then the scope's target record. */
-    internal fun ints(): IntArray = intArrayOf(text, mark, part) + scope.arr
+    internal fun ints(): IntArray = intArrayOf(codePoint, mark, part) + scope.arr
 
     companion object {
-        /** A query by a letter and a mark name: [letter] is one character (its first code point),
-         * null for any; [mark] a mark name, null for any. */
-        fun of(scope: Target = Target.page(), letter: String? = null, mark: String? = null, part: Int = QvpLetterPart.ALL) =
-            QvpLetterQuery(scope, letter?.codePointAt(0) ?: 0, mark?.let { markId(it) } ?: 0, part)
+        /** A query by a character and a mark name: [text] is one Unicode scalar, null or "" for
+         * any letter; [mark] a mark name, null for any. A [text] of more than one character
+         * throws an [IllegalArgumentException]. */
+        fun of(scope: Target = Target.page(), text: String? = null, mark: String? = null, part: Int = QvpLetterPart.ALL) =
+            QvpLetterQuery(scope, text ?: "", mark?.let { markId(it) } ?: 0, part)
     }
 }
+
+/** The code point of a letter query's [text]: one Unicode scalar, or 0 for "". */
+internal fun letterCodePoint(text: String): Int {
+    if (text.isEmpty()) return 0
+    val cp = text.codePointAt(0)
+    require(Character.charCount(cp) == text.length && cp !in SURROGATES) { "a letter query's text is one character, not \"$text\"" }
+    return cp
+}
+private val SURROGATES = 0xD800..0xDFFF
 
 /** What resolves to a word list (mirrors T in web/qvp.js). Strings: "page", "2:255", "2:255:3", "2:255-257", "line:7", "surah:2". */
 class Target private constructor(internal val arr: IntArray) {

@@ -196,6 +196,9 @@ void letterCases(FutureOr<LetterFixture> Function() load) {
       },
       reason: what,
     );
+    // a letter's text is its character, one Unicode scalar, and codePoint the same as a number
+    expect(l.text.runes.length, 1, reason: '$what text is one character');
+    expect(l.text.runes.first, l.codePoint, reason: '$what codePoint');
     close(l.x0, w['x0'] as num, '$what x0');
     close(l.y0, w['y0'] as num, '$what y0');
     close(l.x1, w['x1'] as num, '$what x1');
@@ -348,6 +351,14 @@ void letterCases(FutureOr<LetterFixture> Function() load) {
       () => const QvpLetterQuery(text: 'لا').codePoint,
       throwsArgumentError,
     );
+    expect(
+      () => const QvpLetterQuery(text: '\uD800').codePoint,
+      throwsArgumentError,
+    );
+    // '' is any letter, as 0 and a text left out are
+    expect(const QvpLetterQuery(text: '').codePoint, 0);
+    expect(const QvpLetterQuery().codePoint, 0);
+    expect(const QvpLetterQuery(text: 0x644).codePoint, 0x644);
   });
 
   test(

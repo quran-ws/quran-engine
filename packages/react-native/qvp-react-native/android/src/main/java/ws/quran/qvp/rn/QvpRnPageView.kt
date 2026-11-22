@@ -271,7 +271,8 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
             val h = when {
                 e["hide"] == true -> Marshal.selector(e["selector"])?.let { p.hide(it) } ?: 0
                 e["selector"] != null -> Marshal.selector(e["selector"])?.let { p.style(it, color, ms, layer) } ?: 0
-                e["letters"] != null -> p.styleLetters(Marshal.letterQuery(e["letters"], p), color, ms, layer)
+                // a query whose text is not one character adds no rule, as a bad selector does
+                e["letters"] != null -> runCatching { Marshal.letterQuery(e["letters"], p) }.getOrNull()?.let { p.styleLetters(it, color, ms, layer) } ?: 0
                 e["target"] != null -> p.styleTarget(Marshal.target(e["target"], p), color, ms, layer)
                 else -> 0
             }
