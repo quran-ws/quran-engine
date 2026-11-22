@@ -47,7 +47,7 @@ only documents skips `engine`, `gates`, `web` and `web example`, and a skipped j
 | job | runs on | contents | `scripts/check.sh` |
 |---|---|---|---|
 | `engine (fmt, clippy, tests, rustdoc)` | PRs that change code | format check, clippy with warnings as errors, workspace tests, rustdoc, the prose report | `fmt lint test docs` |
-| `gates (identity, ABI, conformance)` | PRs that change code | identity gate (8 pages), line shift, zoom control, passage and ABI tests, conformance fixtures, zoom table, then the web tests that read pages with `QVP_REQUIRE_DATA=1`: `smoke.mjs`, `lite-passage.test.mjs`, `scenarios.test.mjs`, `passage.test.mjs` | `gates` |
+| `gates (identity, ABI, conformance)` | PRs that change code | identity gate (8 pages), line shift, zoom control, passage, dress fit and ABI tests, conformance fixtures, zoom table, then the web tests that read pages with `QVP_REQUIRE_DATA=1`: `smoke.mjs`, `lite-passage.test.mjs`, `scenarios.test.mjs`, `passage.test.mjs` | `gates` |
 | `standards (parity, versions, terminology, structure)` | every PR | parity (`--check`), versions, structure, terminology (zero findings), shellcheck over every shell script, and the eslint doc-block check. The job has no Flutter, so `parity` skips the Flutter bindings check, and no swiftlint, so `docblocks` skips it | `parity versions structure terminology shell docblocks` |
 | `web (wasm, smoke, lite)` | PRs that change code | wasm build, then without data: `smoke.mjs`, `lite.test.mjs`, `lite-passage.test.mjs`, and a parse of the web example | `web` |
 | `web example (UI smoke test)` | PRs that change code | Playwright and Chromium, then the web example's UI smoke test with `QVP_REQUIRE_DATA=1`. Not a required check | `example` |

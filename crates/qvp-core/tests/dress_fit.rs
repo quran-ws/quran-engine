@@ -248,3 +248,59 @@ fn a_page_dressed_without_a_border_is_placed_as_the_undressed_page() {
         }
     }
 }
+
+/// A pinch or a step on a page dressed in a border lands on the new layout's resting scale.
+/// The printed page rests shrunk so its border fits across the width, and a reflowed page
+/// rests at scale 1 because its rows are narrowed instead. Page 584 in a phone reader that
+/// scrolls the page itself, where a pinch carried one layout's scale into the other.
+#[test]
+fn a_pinch_on_a_bordered_page_lands_on_the_new_layout_s_rest() {
+    let set = furniture();
+    let Some(mut p) = common::page(584) else { return };
+    let spec = LayoutSpec {
+        viewport_w: 370.0,
+        reflow: Some(ReflowSpec { zoom: 0.0, fill: Fill::Justified, ..Default::default() }),
+        ..reader_spec(&p)
+    };
+    let rest = |p: &Page| p.dress_view(0.0, spec.viewport_w).0;
+    let printed = Zoom { mode: ZoomMode::Stepped, step: 0, zoom: 1.0 };
+    let focal = (185.0, 350.0);
+    for dressed in [true, false] {
+        p.undress();
+        if dressed {
+            p.dress(&set, &DressSpec { page_frame: 1, ..Default::default() }).unwrap();
+        }
+        let case = if dressed { "bordered" } else { "bare" };
+        let at = p.zoom_spec(&spec, printed);
+        p.layout(&at);
+        let at_print = rest(&p);
+        if dressed {
+            assert!(at_print.scale < 0.9, "the border shrinks the printed page: {}", at_print.scale);
+        }
+        // pinch in from the printed page's rest
+        let c = p.zoom_pinch(&spec, printed, at_print, 1.6, focal);
+        assert!(c.relaid && c.zoom.step >= 1, "{case}: {:?}", c.zoom);
+        let at_zoom = rest(&p);
+        assert!((c.view.scale - at_zoom.scale).abs() < 1e-4, "{case} in: {} vs rest {}", c.view.scale, at_zoom.scale);
+        // and back out from the reflowed page's rest
+        let back = p.zoom_pinch(&spec, c.zoom, at_zoom, 0.4, focal);
+        assert!(back.relaid && back.zoom.step == 0, "{case}: {:?}", back.zoom);
+        assert!(
+            (back.view.scale - at_print.scale).abs() < 1e-4,
+            "{case} out: {} vs {}",
+            back.view.scale,
+            at_print.scale
+        );
+        // the step button lands on the same scale
+        let step = p.zoom_to_step(&spec, back.zoom, 2, back.view);
+        assert!(
+            (step.view.scale - rest(&p).scale).abs() < 1e-4,
+            "{case} step: {} vs {}",
+            step.view.scale,
+            rest(&p).scale
+        );
+        if !dressed {
+            assert_eq!((c.view.scale, back.view.scale, step.view.scale), (1.0, 1.0, 1.0), "a bare page keeps scale 1");
+        }
+    }
+}

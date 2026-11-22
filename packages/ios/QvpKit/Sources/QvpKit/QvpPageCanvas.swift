@@ -658,6 +658,14 @@ public final class QvpCanvasController {
         isPinching = false
         // A reflowed page is a size the reader chose, not a peek: it stays until they change it.
         if zoomSpringsBack && zoomMode == .magnify { springBack() }
+        // A page the host scrolls rests at the engine's fit, and a pinch lands there as a step
+        // button does. Its last frame may have been held against a canvas the host had not yet
+        // resized for the new layout, so the view is fitted once more now. A magnified peek is
+        // the reader's own and stays.
+        if hostScrolls, zoomMode != .magnify {
+            let f = fittedView()
+            viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
+        }
         // The pinch painted a band around the fingers; the page is painted whole once, now.
         if hostScrolls { invalidate() }
     }

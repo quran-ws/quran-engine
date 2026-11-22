@@ -310,6 +310,42 @@ final class QvpDressTests: XCTestCase {
         XCTAssertEqual(c.viewOy + (CGFloat(l.contentH) + o.bottom) * c.viewScale, Self.box.height, accuracy: 0.05)
     }
 
+    /// A pinch on a bordered page in a canvas the host scrolls lands where a step button does:
+    /// the new layout's rest view, at its scale, with the border's top at the canvas's top. The
+    /// host gives the canvas the new page's size between two frames of the gesture, as a
+    /// SwiftUI host does.
+    @MainActor func testHostScrolledPinchOnABorderedPageLandsAtRest() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let page = try Self.page604(); defer { page.close() }
+        let set = try QvpOrnaments(bytes: Self.ornamentBytes)
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.fillHeight = true
+        c.hostViewportHeight = Self.box.height
+        c.page = page
+        c.setBounds(Self.box, fromCanvas: 1)
+        XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
+        c.resetView()
+        XCTAssertLessThan(c.viewScale, 1, "the printed page rests shrunk so its border fits across")
+        let focus = CGPoint(x: Self.box.width / 2, y: Self.box.height / 2)
+        func pinch(_ factor: CGFloat) throws {
+            c.pinch(factor, at: focus)
+            c.setBounds(try XCTUnwrap(c.hostPageSize), fromCanvas: 1)
+            c.pinch(factor, at: focus)
+            c.pinchEnded()
+            let rest = page.dressView(0, viewportW: Float(Self.box.width)).view
+            XCTAssertEqual(c.viewScale, CGFloat(rest.scale), accuracy: 0.0001, "pinch \(factor): scale")
+            XCTAssertEqual(c.viewOx, CGFloat(rest.offsetX), accuracy: 0.01, "pinch \(factor): x")
+            XCTAssertEqual(c.viewOy, CGFloat(rest.offsetY), accuracy: 0.01, "pinch \(factor): the border's top is the canvas's top")
+        }
+        try pinch(1.6)
+        XCTAssertEqual(page.currentLayout?.reflowed, true)
+        XCTAssertEqual(c.viewScale, 1, accuracy: 0.0001, "a reflowed bordered page rests at scale 1")
+        try pinch(0.4)
+        XCTAssertEqual(page.currentLayout?.reflowed, false)
+        XCTAssertEqual(try XCTUnwrap(c.hostPageSize).height, Self.box.height, accuracy: 0.01, "the printed page fills its box again")
+    }
+
     /// A dress lays a printed page out again inside the engine. `resetView()` alone, as the
     /// header asks, draws what a `relayout()` draws: the controller takes up the engine's layout.
     @MainActor func testResetViewAfterADressTakesUpTheNewLayout() throws {
@@ -329,7 +365,12 @@ final class QvpDressTests: XCTestCase {
         let shown = try Self.render(c)
         c.relayout(); c.resetView()
         let relaid = try Self.render(c)
-        XCTAssertEqual(shown.pixels, relaid.pixels, "the ink sits where a relayout puts it")
+        // Ink drawn under the old placements is a line or more away, a difference of up to 255
+        // in many pixels. Two rasterizations of the same frame may round an antialiased edge one
+        // level apart, as macOS 27 does, so that much is let through.
+        XCTAssertEqual(shown.pixels.count, relaid.pixels.count)
+        let worst = zip(shown.pixels, relaid.pixels).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        XCTAssertLessThanOrEqual(worst, 2, "the ink sits where a relayout puts it")
     }
 
     #if canImport(UIKit)

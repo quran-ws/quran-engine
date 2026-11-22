@@ -312,8 +312,20 @@ impl Page {
             let inside = |p: f32, a: f32, b: f32| if b > a { ((p - a) / (b - a)).clamp(0.0, 1.0) } else { 0.5 };
             (h.word, (inside(lx, x0, x1), inside(ly, y0, y1)))
         });
+        // How wide the page sits against the screen, before and after. A page dressed in a border
+        // rests shrunk on the printed page, so the border fits across, and at scale 1 once it
+        // reflows, because its rows are narrowed instead. The view keeps its size against that
+        // rest: carried as it was, a pinch would draw the reflowed page at the printed page's
+        // shrink, or the printed page at scale 1 with its border cut off. An undressed page
+        // rests at scale 1 in every layout, so its view is left as it is.
+        let dressed = self.dress_of().is_some();
+        let width_rest = |p: &Page| p.dress_view(0.0, spec.viewport_w).0.scale;
+        let before = if dressed { width_rest(self) } else { 1.0 };
         let laid = self.zoom_spec(spec, next);
-        let l = self.layout(&laid);
+        self.layout(&laid);
+        let view =
+            if dressed && before > 0.0 { View { scale: view.scale * width_rest(self) / before, ..view } } else { view };
+        let l = self.current_layout().expect("laid out above");
         let (content_w, content_h) = (l.content_w, l.content_h);
         let viewport = (spec.viewport_w, spec.viewport_h);
         let view = match held {
