@@ -1352,3 +1352,371 @@ fn letter_rules_follow_a_different_second_layer() {
     assert_eq!(reds(&mut v), vec![6, 8]);
     assert_eq!(v.letter_members(2, 0).iter().map(|m| m.path).collect::<Vec<_>>(), vec![6, 8, 7, 9]);
 }
+
+// ── the letter under a point ──
+
+/// The letter hit at a point in page units, with the default options.
+fn letter_at(p: &Page, x: f32, y: f32) -> Option<LetterHit> {
+    p.hit_test_letter(x, y, &HitOptions::default())
+}
+
+/// An exact letter hit, as the tests below expect one.
+fn exact(word: u32, letter: u32, path: u32, at: u32, mark: Mark, line: u32) -> LetterHit {
+    LetterHit { word, letter, path, at, line, distance: 0.0, mark, is_exact: true }
+}
+
+/// A grid of points over the fixture page and past its edges, in page units.
+fn grid() -> Vec<(f32, f32)> {
+    let mut out = Vec::new();
+    let mut y = -5.0;
+    while y <= 105.0 {
+        let mut x = -5.0;
+        while x <= 105.0 {
+            out.push((x, y));
+            x += 0.5;
+        }
+        y += 0.5;
+    }
+    out
+}
+
+/// The letter fixture with two marks drawn over the ba's piece. Paths 3 and 4 are new in
+/// word 0, so every later page path moves up by two and the pieces are paths 10 and 11:
+/// - path 3: a sukun of the lam (letter 1, offset 2), `square(5300,1300,5700,1700)`;
+/// - path 4: a shaddah of the ba (letter 0, offset 0), `square(5450,1450,5550,1550)`.
+///
+/// Both lie inside piece 0 (the ba), and path 4 lies inside path 3.
+fn overlap_page() -> Page {
+    let mut data = letters_page_data();
+    let mut extra = Vec::new();
+    push_path(
+        &mut data.ops,
+        &mut extra,
+        &square(5300, 1300, 5700, 1700),
+        PathKind::Mark,
+        Mark::Sukun,
+        Family::Diacritic,
+        PF_EVENODD,
+    );
+    push_path(
+        &mut data.ops,
+        &mut extra,
+        &square(5450, 1450, 5550, 1550),
+        PathKind::Mark,
+        Mark::Shaddah,
+        Family::Diacritic,
+        PF_EVENODD,
+    );
+    for (i, rec) in extra.into_iter().enumerate() {
+        data.paths.insert(3 + i, rec);
+    }
+    data.words[0].n_paths = 5;
+    data.words[1].first_path = 5;
+    data.words[2].first_path = 8;
+    data.canonicalize_ops();
+    let mut layer = letters_layer();
+    layer.n_page_paths = 10;
+    let member = |path: u32, at: u16, is_body: bool| qvp_format::letters::MemberRec {
+        path: qvp_format::letters::MemberPath::Page(path),
+        at,
+        is_body,
+    };
+    let piece = |i: u32| qvp_format::letters::MemberRec {
+        path: qvp_format::letters::MemberPath::Piece(i),
+        at: if i == 0 { 0 } else { 2 },
+        is_body: true,
+    };
+    layer.members = vec![
+        piece(0),
+        member(1, 0, false),
+        member(2, 1, false),
+        member(4, 0, false),
+        piece(1),
+        member(3, 2, false),
+        member(5, 0, true),
+        member(6, 2, true),
+        member(8, 0, true),
+        member(9, qvp_format::letters::NO_AT, false),
+    ];
+    for (l, (first, n)) in layer.letters.iter_mut().zip([(0, 4), (4, 2), (6, 1), (7, 1), (8, 2)]) {
+        l.first_member = first;
+        l.n_members = n;
+    }
+    layer.word_marks[0].path = 7;
+    let mut p = Page::from_data(data).unwrap();
+    p.attach_letters(&encode_letters(&layer)).unwrap();
+    p
+}
+
+#[test]
+fn a_point_on_a_piece_names_its_letter() {
+    let p = letters_page();
+    assert_eq!(letter_at(&p, 55.0, 15.0), Some(exact(0, 0, 8, 0, Mark::None, 0)));
+    assert_eq!(letter_at(&p, 45.0, 15.0), Some(exact(0, 1, 9, 2, Mark::None, 0)));
+    // the lam's piece reaches one unit past its word's box: the word hit test still picks
+    // word 0 there, and the point is on the lam's ink
+    assert_eq!(p.hit_test(39.5, 15.0, &HitOptions::default()).unwrap().word, 0);
+    assert_eq!(letter_at(&p, 39.5, 15.0), Some(exact(0, 1, 9, 2, Mark::None, 0)));
+    // an uncut body is its own path
+    assert_eq!(letter_at(&p, 25.0, 15.0), Some(exact(1, 0, 3, 0, Mark::None, 0)));
+    assert_eq!(letter_at(&p, 15.0, 55.0), Some(exact(2, 0, 6, 0, Mark::None, 1)));
+}
+
+#[test]
+fn a_point_on_a_mark_names_the_mark() {
+    let p = letters_page();
+    assert_eq!(letter_at(&p, 55.0, 23.0), Some(exact(0, 0, 1, 0, Mark::Dot, 0)));
+    assert_eq!(letter_at(&p, 55.0, 7.0), Some(exact(0, 0, 2, 1, Mark::Fathah, 0)));
+    // a mark with no offset
+    assert_eq!(letter_at(&p, 15.0, 47.0), Some(exact(2, 0, 7, NONE, Mark::OmittedAlif, 1)));
+}
+
+#[test]
+fn a_word_mark_has_no_letter() {
+    let p = letters_page();
+    assert_eq!(letter_at(&p, 15.0, 5.0), Some(exact(1, NONE, 5, 3, Mark::WaqfJaizWaslAwla, 0)));
+}
+
+#[test]
+fn between_words_the_nearest_letter() {
+    let p = letters_page();
+    // the gap goes to word 0; its lam's box starts at 39 (the piece reaches past the word)
+    let h = letter_at(&p, 35.0, 15.0).unwrap();
+    assert_eq!(
+        h,
+        LetterHit { word: 0, letter: 1, path: 9, at: 2, line: 0, distance: 4.0, mark: Mark::None, is_exact: false }
+    );
+    // inside a letter's box but off its ink: distance 0, still not exact
+    let h = letter_at(&p, 55.0, 21.0).unwrap();
+    assert_eq!((h.word, h.letter, h.path, h.at, h.distance, h.is_exact), (0, 0, 8, 0, 0.0, false));
+    assert_eq!(h.mark, Mark::None);
+    // `max_distance` refuses the word, as in `hit_test`
+    let far = HitOptions { max_distance: 1.0, ..HitOptions::default() };
+    assert_eq!(p.hit_test(35.0, 15.0, &far), None);
+    assert_eq!(p.hit_test_letter(35.0, 15.0, &far), None);
+}
+
+#[test]
+fn marks_win_over_the_body_and_the_mark_drawn_last_wins() {
+    let p = overlap_page();
+    assert_eq!(p.geometry().table.len(), 12);
+    // inside piece 0, the lam's sukun and the ba's shaddah: the shaddah is drawn last
+    assert_eq!(letter_at(&p, 55.0, 15.0), Some(exact(0, 0, 4, 0, Mark::Shaddah, 0)));
+    // inside piece 0 and the sukun only: the lam's mark, over the ba's body
+    assert_eq!(letter_at(&p, 53.5, 13.5), Some(exact(0, 1, 3, 2, Mark::Sukun, 0)));
+    // inside piece 0 only
+    assert_eq!(letter_at(&p, 51.0, 11.0), Some(exact(0, 0, 10, 0, Mark::None, 0)));
+    assert_eq!(letter_at(&p, 45.0, 15.0), Some(exact(0, 1, 11, 2, Mark::None, 0)));
+    // the word mark moved to path 7
+    assert_eq!(letter_at(&p, 15.0, 5.0), Some(exact(1, NONE, 7, 3, Mark::WaqfJaizWaslAwla, 0)));
+}
+
+#[test]
+fn the_hit_does_not_follow_the_swap() {
+    let mut p = laid_letters_page();
+    let before: Vec<_> = grid().iter().map(|&(x, y)| letter_at(&p, x, y)).collect();
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    p.refresh_display();
+    assert!(is_swapped(&p));
+    let after: Vec<_> = grid().iter().map(|&(x, y)| letter_at(&p, x, y)).collect();
+    assert_eq!(before, after);
+    // never the cut path, whether it draws whole or as its pieces
+    assert!(after.iter().flatten().all(|h| h.path != 0));
+}
+
+#[test]
+fn the_letter_hit_takes_the_word_hit_tests_word() {
+    let o = HitOptions::default();
+    let opts = [
+        o,
+        HitOptions { prefer_exact: false, ..o },
+        HitOptions { gap_bias: 0.1, ..o },
+        HitOptions { max_distance: 2.0, ..o },
+    ];
+    for p in [letters_page(), letters_variant_page(), overlap_page()] {
+        let (mut exact_hits, mut near) = (0, 0);
+        for opt in &opts {
+            for (x, y) in grid() {
+                let word = p.hit_test(x, y, opt).map(|h| h.word).filter(|&w| w != NONE);
+                let letter = p.hit_test_letter(x, y, opt);
+                assert_eq!(letter.map(|h| h.word), word, "at ({x}, {y}) with {opt:?}");
+                let Some(h) = letter else { continue };
+                assert_eq!(h.line, p.hit_test(x, y, opt).unwrap().line);
+                if h.is_exact {
+                    exact_hits += 1;
+                    assert!(p.point_in_path(h.path, x, y), "an exact hit is inside its path at ({x}, {y})");
+                    assert!(p.letters.as_deref().unwrap().slot_of_path(h.path).is_none(), "never a cut path");
+                    assert_eq!(h.distance, 0.0);
+                } else {
+                    near += 1;
+                    assert_eq!(h.mark, Mark::None);
+                    assert!(h.letter != NONE && h.distance >= 0.0);
+                }
+            }
+        }
+        assert!(exact_hits > 0 && near > 0);
+    }
+}
+
+#[test]
+fn the_view_variant_goes_through_the_layout() {
+    let mut p = laid_letters_page();
+    let o = HitOptions::default();
+    let h = p.hit_test_letter_view(110.0, 30.0, &o).unwrap();
+    assert_eq!((h.word, h.letter, h.path, h.is_exact), (0, 0, 8, true));
+    // printed: every grid point in view px agrees with the word hit test, and maps to the
+    // page-unit letter hit
+    let l = p.current_layout().unwrap().clone();
+    for (x, y) in grid() {
+        let (vx, vy) = (l.offset_x + x * l.scale, l.offset_y + y * l.scale);
+        let word = p.hit_test_view(vx, vy, &o).map(|h| h.word).filter(|&w| w != NONE);
+        let letter = p.hit_test_letter_view(vx, vy, &o);
+        assert_eq!(letter.map(|h| h.word), word, "at view ({vx}, {vy})");
+    }
+    // reflowed
+    let spec = LayoutSpec {
+        viewport_w: 200.0,
+        viewport_h: 400.0,
+        reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+        ..Default::default()
+    };
+    let l = p.layout(&spec).clone();
+    let (vx, vy) = placed_point(&p, &l, 8, 55.0, 15.0);
+    let h = p.hit_test_letter_view(vx, vy, &o).unwrap();
+    assert_eq!((h.word, h.letter, h.path, h.at, h.is_exact), (0, 0, 8, 0, true));
+    let (vx, vy) = placed_point(&p, &l, 9, 45.0, 15.0);
+    assert_eq!(p.hit_test_letter_view(vx, vy, &o).map(|h| (h.letter, h.path)), Some((1, 9)));
+    let (vx, vy) = placed_point(&p, &l, 5, 15.0, 5.0);
+    assert_eq!(p.hit_test_letter_view(vx, vy, &o), Some(exact(1, NONE, 5, 3, Mark::WaqfJaizWaslAwla, 0)));
+    let (vx, vy) = placed_point(&p, &l, 6, 15.0, 55.0);
+    assert_eq!(p.hit_test_letter_view(vx, vy, &o), Some(exact(2, 0, 6, 0, Mark::None, 1)));
+    let mut seen = 0;
+    let mut y = -10.0;
+    while y <= l.content_h + 10.0 {
+        let mut x = -10.0;
+        while x <= l.content_w + 10.0 {
+            let word = p.hit_test_view(x, y, &o).map(|h| h.word).filter(|&w| w != NONE);
+            let letter = p.hit_test_letter_view(x, y, &o);
+            assert_eq!(letter.map(|h| h.word), word, "at reflowed view ({x}, {y})");
+            if let Some(h) = letter.filter(|h| h.is_exact) {
+                let line = p.data().words[h.word as usize].line_index as usize;
+                let (px, py) =
+                    l.word_placement(h.word, line).invert((x - l.offset_x) / l.scale, (y - l.offset_y) / l.scale);
+                assert!(p.point_in_path(h.path, px, py));
+                seen += 1;
+            }
+            x += 1.0;
+        }
+        y += 1.0;
+    }
+    assert!(seen > 0);
+}
+
+#[test]
+fn the_view_variant_with_no_layout_is_in_page_units() {
+    let p = letters_page();
+    assert!(p.current_layout().is_none());
+    for (x, y) in grid() {
+        let o = HitOptions::default();
+        assert_eq!(p.hit_test_letter_view(x, y, &o), p.hit_test_letter(x, y, &o));
+    }
+}
+
+#[test]
+fn no_layer_no_letter() {
+    let mut p = page();
+    let o = HitOptions::default();
+    assert!(grid().iter().all(|&(x, y)| p.hit_test_letter(x, y, &o).is_none()));
+    assert!(grid().iter().all(|&(x, y)| p.hit_test_letter_view(x, y, &o).is_none()));
+    p.layout(&printed());
+    assert!(grid().iter().all(|&(x, y)| p.hit_test_letter_view(x * 2.0, y * 2.0, &o).is_none()));
+    let q = page_without_layer();
+    assert_eq!(q.hit_test_letter(55.0, 15.0, &o), None);
+}
+
+#[test]
+fn a_decoration_or_no_word_is_no_letter() {
+    let mut data = letters_page_data();
+    let (path, bbox) = add_path(&mut data, &square(7000, 5000, 8000, 6000), PathKind::AyahMarkOrnament);
+    data.decorations.push(DecoRec {
+        kind: DecoKind::Other,
+        surah: 1,
+        ayah: 0,
+        text: NONE_U16,
+        first_path: path,
+        n_paths: 1,
+        line: 1,
+        bbox,
+    });
+    let mut p = Page::from_data(data).unwrap();
+    p.attach_letters(&encode_letters(&LetterData { n_page_paths: 9, ..letters_layer() })).unwrap();
+    let o = HitOptions::default();
+    let h = p.hit_test(75.0, 55.0, &o).unwrap();
+    assert_eq!((h.word, h.decoration, h.path), (NONE, 0, 8));
+    assert_eq!(p.hit_test_letter(75.0, 55.0, &o), None, "a decoration is no letter");
+    p.layout(&printed());
+    let l = p.current_layout().unwrap().clone();
+    let (vx, vy) = (l.offset_x + 75.0 * l.scale, l.offset_y + 55.0 * l.scale);
+    assert_eq!(p.hit_test_view(vx, vy, &o).map(|h| h.word), Some(NONE));
+    assert_eq!(p.hit_test_letter_view(vx, vy, &o), None);
+    // a point too far from every word is no word
+    let near = HitOptions { max_distance: 1.0, ..o };
+    assert_eq!(p.hit_test(50.0, 90.0, &near), None);
+    assert_eq!(p.hit_test_letter(50.0, 90.0, &near), None);
+}
+
+#[test]
+fn the_old_hit_test_is_unchanged() {
+    let with = letters_page();
+    let without = page_without_layer();
+    assert_eq!(with.hit_test_exact(55.0, 15.0), Some(HitExact { word: 0, path: 0, decoration: NONE }));
+    let o = HitOptions::default();
+    for (x, y) in grid() {
+        assert_eq!(with.hit_test_exact(x, y), without.hit_test_exact(x, y));
+        assert_eq!(with.hit_test(x, y, &o), without.hit_test(x, y, &o));
+        assert_eq!(with.hit_test_view(x, y, &o), without.hit_test_view(x, y, &o));
+    }
+}
+
+#[test]
+fn an_offset_past_the_text_is_reported_as_none() {
+    let mut p = letters_page();
+    p.attach_words_json(r#"{"1:1:2": {"qpc": "ل"}}"#.as_bytes()).unwrap();
+    // the ha (offset 2) and the waqf sign (offset 3) are past the text
+    assert_eq!(letter_at(&p, 15.0, 15.0), Some(exact(1, 1, 4, NONE, Mark::None, 0)));
+    assert_eq!(letter_at(&p, 15.0, 5.0), Some(exact(1, NONE, 5, NONE, Mark::WaqfJaizWaslAwla, 0)));
+    // a near hit reports its letter's checked offset too
+    let h = letter_at(&p, 15.0, 25.0).unwrap();
+    assert_eq!((h.letter, h.at, h.is_exact), (1, NONE, false));
+}
+
+#[test]
+fn any_point_is_safe() {
+    let mut pages = vec![letters_page(), overlap_page(), page()];
+    let odd = [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, f32::MAX, f32::MIN, 1e30, -1e30, 0.0];
+    let opts = [
+        HitOptions::default(),
+        HitOptions { max_distance: f32::NAN, gap_bias: f32::NAN, prefer_exact: false },
+        HitOptions { max_distance: -1.0, gap_bias: f32::INFINITY, prefer_exact: true },
+    ];
+    for round in 0..3 {
+        for p in &mut pages {
+            if round == 1 {
+                p.layout(&printed());
+            }
+            if round == 2 {
+                p.layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 3.0, ..Default::default() }), ..printed() });
+            }
+            for &x in &odd {
+                for &y in &odd {
+                    for o in &opts {
+                        let _ = p.hit_test_letter(x, y, o);
+                        let _ = p.hit_test_letter_view(x, y, o);
+                        let _ = p.hit_test_letter(x, 15.0, o);
+                        let _ = p.hit_test_letter_view(110.0, y, o);
+                    }
+                }
+            }
+        }
+    }
+}

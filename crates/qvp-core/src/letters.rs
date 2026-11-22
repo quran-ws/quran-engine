@@ -1,15 +1,15 @@
 //! The letter layer of a page: which paths draw which letter, the pieces cut from joined
-//! outlines, the letters a host reads back, the four letter selectors, the letter query, and
-//! the cut paths that draw their pieces.
+//! outlines, the letters a host reads back, the four letter selectors, the letter query, the
+//! cut paths that draw their pieces, and the letter under a point.
 //!
 //! A layer is optional. [`Page::attach_letters`] appends its pieces to the page's path
 //! table, after the page's own paths, so no page path changes its index. No word range
 //! holds a piece.
 use crate::defaults::MAX_LETTER_LAYER_BYTES;
 use crate::style::{PathAnim, PathCtx, Selector};
-use crate::{load, reflow, Page, PathGeom, Rgba, NONE};
+use crate::{load, reflow, HitOptions, Page, PathGeom, Rgba, NONE};
 use qvp_format::letters::{decode_letters, LetterData, MemberPath, NO_AT};
-use qvp_format::{cmds_bbox, Error, IBox, Mark, PageData, NONE_U16};
+use qvp_format::{cmds_bbox, Error, IBox, Mark, PageData, PathKind, NONE_U16};
 
 /// What part of a letter a selector or a query takes. `QVP_LETTER_PART_*`.
 ///
@@ -124,22 +124,32 @@ pub struct LetterMember {
     pub is_cut: bool,
 }
 
-/// The letter under a point.
+/// The letter under a point: what [`Page::hit_test_letter`] and
+/// [`Page::hit_test_letter_view`] return.
+///
+/// An exact hit (`is_exact` true) names the path whose outline holds the point: a page path,
+/// or a piece. A near hit (`is_exact` false) names the letter whose box is nearest the point,
+/// and `path` is then that letter's first body member.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LetterHit {
-    /// The word's index on the page.
+    /// The word's index on the page. Always the word that [`Page::hit_test`] reports.
     pub word: u32,
     /// The letter's index in its word. `NONE` for a word-level mark.
     pub letter: u32,
-    /// The path that was hit.
+    /// An exact hit: the path that holds the point. Never a cut path: its pieces are hit in
+    /// its place. A near hit: the letter's first body member.
     pub path: u32,
-    /// The checked offset of what was hit, `NONE` when there is none.
+    /// The checked offset of the path that was hit, or of the letter on a near hit. `NONE`
+    /// when there is none, or when it fails the text check.
     pub at: u32,
     /// The word's printed line index, as `Hit::line`.
     pub line: u32,
-    /// How far the point is from the letter, in page units. 0 inside it.
+    /// How far the point is from the letter's box, in page units. 0 on an exact hit, and 0
+    /// on a near hit inside the box but off the ink.
     pub distance: f32,
-    /// The mark of the path that was hit.
+    /// The mark of the path that was hit, as [`LetterMember::mark`] gives it. Body ink has
+    /// `Mark::None`, unless the page stores the body as a mark, such as a dagger alif. A near
+    /// hit has `Mark::None`.
     pub mark: Mark,
     /// True when the point is inside the path's outline. False when the hit is the nearest
     /// letter's box.
@@ -214,7 +224,6 @@ pub(crate) struct Letters {
     /// Per piece: its box, quantised.
     pub piece_box: Vec<IBox>,
     /// Per page word: the word's box with its pieces' boxes.
-    #[allow(dead_code)] // read by the letter hit test
     pub word_box: Vec<IBox>,
     /// The cut paths, ascending: (source path, first piece path, piece count).
     pub sources: Vec<(u32, u32, u32)>,
@@ -593,6 +602,142 @@ impl Page {
             }
         }
         found
+    }
+
+    /// The letter under a point in page units, and the mark when the point is on a mark.
+    ///
+    /// The word is the word [`Page::hit_test`] finds, with the same options: `max_distance`,
+    /// `gap_bias` and `prefer_exact` choose the word exactly as they do there. Inside that
+    /// word the engine always tests the outlines, whatever `prefer_exact` is:
+    ///
+    /// - A point inside the outline of a member, or of a word-level mark, is an exact hit.
+    ///   Ink the page stores as a mark wins over body ink, and of two paths of the same ink,
+    ///   the one drawn last wins. A mark is small and sits on or over a body, so a tap on it
+    ///   means the mark. A word-level mark gives `letter` `NONE`.
+    /// - A cut path is never hit: its pieces are. The pieces are tested whether the path
+    ///   draws whole or as its pieces now, so a hit does not change while colours move. Each
+    ///   path and piece is culled by its own box, and a piece can reach past its word's box.
+    /// - A point off every outline is a near hit: the letter whose box is nearest, with that
+    ///   distance, its first body member as `path`, its offset, and `Mark::None`.
+    ///
+    /// `None` with no layer, when the word hit test finds no word or a decoration, or when
+    /// the word has no letter to be near. The cost is that of [`Page::hit_test`] and a test of
+    /// the paths and pieces of one word, then a look at the boxes of its letters.
+    pub fn hit_test_letter(&self, x: f32, y: f32, opt: &HitOptions) -> Option<LetterHit> {
+        self.letters.as_deref()?;
+        let h = self.hit_test(x, y, opt)?;
+        self.letter_in_word(h.word, h.line, x, y)
+    }
+
+    /// The letter under a point in layout px, as the other `_view` hit tests take it: the
+    /// word is the one [`Page::hit_test_view`] finds, and the point goes back to page units
+    /// through the current layout's placement of that word, printed or reflowed. Then it is
+    /// [`Page::hit_test_letter`]. With no layout, the point is in page units, as
+    /// [`Page::hit_test_view`] takes it then.
+    pub fn hit_test_letter_view(&self, view_x: f32, view_y: f32, opt: &HitOptions) -> Option<LetterHit> {
+        self.letters.as_deref()?;
+        let h = self.hit_test_view(view_x, view_y, opt)?;
+        let (x, y) = match self.current_layout() {
+            None => (view_x, view_y),
+            Some(l) => {
+                let line = self.data.words.get(h.word as usize)?.line_index as usize;
+                let (x, y) = ((view_x - l.offset_x) / l.scale, (view_y - l.offset_y) / l.scale);
+                l.word_placement(h.word, line).invert(x, y)
+            }
+        };
+        self.letter_in_word(h.word, h.line, x, y)
+    }
+
+    /// The letter of word `w` under a point in page units: the exact pass over the word's
+    /// paths and pieces, then the nearest letter's box. `line` is the word hit's line.
+    fn letter_in_word(&self, w: u32, line: u32, x: f32, y: f32) -> Option<LetterHit> {
+        let lt = self.letters.as_deref()?;
+        let word = self.data.words.get(w as usize)?;
+        let q = self.quant();
+        let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
+        // the layer's word box holds every member's box, pieces included
+        if lt.word_box.get(w as usize).is_some_and(|b| b.contains(qx, qy)) {
+            // in reverse draw order, so the first mark found is the one drawn last. A body
+            // counts only when no mark holds the point
+            let mut body = None;
+            let first = word.first_path;
+            for p in (first..first + word.n_paths as u32).rev() {
+                let Some(c) = self.path_ctx.get(p as usize) else { continue };
+                // a cut path is hit as its pieces, which are drawn in its place
+                let (a, n) = c.letter.pieces;
+                let paths = if n > 0 { a..a + n } else { p..p + 1 };
+                for path in paths.rev() {
+                    let Some(pc) = self.path_ctx.get(path as usize) else { continue };
+                    if pc.letter.word != w {
+                        continue;
+                    }
+                    let is_mark = pc.kind != PathKind::Body;
+                    if !is_mark && body.is_some() {
+                        continue;
+                    }
+                    if !lt.path_box(&self.data, path).contains(qx, qy) || !self.point_in_path(path, x, y) {
+                        continue;
+                    }
+                    if is_mark {
+                        return Some(self.exact_letter_hit(path, line));
+                    }
+                    body = Some(path);
+                }
+            }
+            if let Some(path) = body {
+                return Some(self.exact_letter_hit(path, line));
+            }
+        }
+        // the nearest letter's box. The first letter wins a tie
+        let &(first, n) = lt.word_letters.get(w as usize)?;
+        let mut best: Option<(u32, f32)> = None;
+        for g in first..first + n {
+            let b = lt.letter_box[g as usize];
+            if b.is_empty() {
+                continue;
+            }
+            let dx = (b.x0 as f32 / q - x).max(x - b.x1 as f32 / q).max(0.0);
+            let dy = (b.y0 as f32 / q - y).max(y - b.y1 as f32 / q).max(0.0);
+            let d = (dx * dx + dy * dy).sqrt();
+            if best.is_none_or(|(_, bd)| d < bd) {
+                best = Some((g, d));
+            }
+        }
+        let (g, distance) = best?;
+        let l = &lt.data.letters[g as usize];
+        let slots = &lt.member_order[l.first_member as usize..l.first_member as usize + l.n_members as usize];
+        // the body members come first in the engine's order, and every letter has one
+        let path = slots
+            .iter()
+            .map(|&i| &lt.data.members[i as usize])
+            .find(|m| m.is_body)
+            .map_or(NONE, |m| lt.member_path(m.path));
+        Some(LetterHit {
+            word: w,
+            letter: g - first,
+            path,
+            at: offset(lt.checked(w, l.at)),
+            line,
+            distance,
+            mark: Mark::None,
+            is_exact: false,
+        })
+    }
+
+    /// An exact hit on `path`, a letter member or a word-level mark.
+    fn exact_letter_hit(&self, path: u32, line: u32) -> LetterHit {
+        let c = &self.path_ctx[path as usize];
+        let m = &c.letter;
+        LetterHit {
+            word: m.word,
+            letter: if m.letter == NONE { NONE } else { m.letter_in_word as u32 },
+            path,
+            at: offset(m.at),
+            line,
+            distance: 0.0,
+            mark: c.mark,
+            is_exact: true,
+        }
     }
 
     /// What is drawn for page path `path` now: its pieces, when it is a cut path that draws
