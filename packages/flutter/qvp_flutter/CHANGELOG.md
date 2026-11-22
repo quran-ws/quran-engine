@@ -21,6 +21,36 @@
   the default `maxDistance`, as its `hitTest` does.
 - `test/shared/letter_cases.dart` replays `conformance/scenarios/letters.json` on both
   backends.
+
+### Changed
+- Flutter: the `QvpBackend` interface has 13 new members for the letter layer, and a new
+  type, `QvpPageGeometry`. This is a source-breaking change for a class outside the package
+  that implements `QvpBackend`: it must add the members. An app that uses the package's own
+  backends needs no change.
+- An attach of a letter layer makes stale what the host read before it. The pointers that
+  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
+  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
+  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
+  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
+  `qvp_colors` does. On a page with no layer they do not.
+- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
+  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
+  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
+  An array that an app copied from them before an attach does not hold the pieces.
+
+### Removed
+
+### Fixed
+- Flutter: the styled pass of `QvpPageView` draws each styled entry of the draw list, in its
+  order and under its own placement. It drew each styled path once, at its first placement,
+  so a styled path that a reflowed layout draws twice, such as a sajdah line over two rows,
+  lost its second copy. The base ink and the styled pass now draw each entry of the draw list
+  once between them, and a hidden path not at all. Now every view draws only what the draw
+  list holds.
+
+## 0.9.0
+
+### Added
 - `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
   read a released drag, and `QvpPage.viewAnchor(view, word, nx, ny, toX, toY, viewportW,
   viewportH)` holds a point of a word on the screen across a new layout. The generated
@@ -56,20 +86,6 @@
   in Chrome. `test/qvp_flutter_test.dart` runs the same cases on the `dart:ffi` backend.
 
 ### Changed
-- Flutter: the `QvpBackend` interface has 13 new members for the letter layer, and a new
-  type, `QvpPageGeometry`. This is a source-breaking change for a class outside the package
-  that implements `QvpBackend`: it must add the members. An app that uses the package's own
-  backends needs no change.
-- An attach of a letter layer makes stale what the host read before it. The pointers that
-  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
-  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
-  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
-  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
-  `qvp_colors` does. On a page with no layer they do not.
-- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
-  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
-  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
-  An array that an app copied from them before an attach does not hold the pieces.
 - The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
   engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
   not agree (#134):
@@ -106,16 +122,22 @@
   layout Swift Package Manager needs. `QvpEngine.xcframework` moved from `ios/` and `macos/`
   to `ios/qvp_flutter/` and `macos/qvp_flutter/`, where the podspec and `Package.swift` both
   read it. `scripts/build-engine-ios.sh` copies it there. Run it again after you pull.
-
-### Removed
+- `layoutPrintedHeight` on a page dressed in a border answers the height of the whole page,
+  border included: the dressed box fitted to the viewport width, as `dressView` at scale 0
+  fits it. That is the height a host that scrolls the page gives its canvas, so a host can
+  plan a box for a bordered page before it sizes the canvas. With no padding the height is in
+  proportion to the width. An undressed page answers `contentH` as before.
+- Fill-height on a page dressed in a border fills the viewport with the border included:
+  `dressView(0, viewportW).height` is `viewportH`. Before, the text filled the viewport and the
+  border reached past it above and below. `layoutLineSpacingToFill` answers the same leading.
+- A printed layout of a dressed page narrows `cropLeft` and `cropRight` where a medallion
+  reaches past them, so the crop never cuts into a medallion. A medallion stays centred on
+  its printed ring. On page 50, four font markers reached about 1 unit past a crop measured
+  from the words.
+- `dress` and `undress` lay a printed page out again from its own spec, as they already did
+  for a reflowed page, because the crop and the fill now depend on the dress.
 
 ### Fixed
-- Flutter: the styled pass of `QvpPageView` draws each styled entry of the draw list, in its
-  order and under its own placement. It drew each styled path once, at its first placement,
-  so a styled path that a reflowed layout draws twice, such as a sajdah line over two rows,
-  lost its second copy. The base ink and the styled pass now draw each entry of the draw list
-  once between them, and a hidden path not at all. Now every view draws only what the draw
-  list holds.
 - A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's
@@ -148,6 +170,13 @@
   `fit_x`, `fit_y` place the content's own origin. The docs of the dress overflow in
   Kotlin, Swift and Dart told a host to fit the overflow itself. The engine's fit holds it
   already. The iOS `resetView()` docs said that the view fits the content height.
+- A page dressed without a border no longer grows its dressed box to the whole printed page.
+  The box is the laid-out page, so a crop is kept. Before, `dressView` at scale 0 shrank a
+  cropped page to show the cut margins, by about 3.5% on page 50. A reflowed page dressed
+  without a border is no longer pushed off to the left: on page 50 at zoom 1.8, `fitX` was
+  −170 px.
+- The XCFramework's macOS slice holds arm64 and x86_64. A Flutter macOS release build is
+  universal, and it failed to link against the arm64-only slice.
 
 ## 0.8.0
 

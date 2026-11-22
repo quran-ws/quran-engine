@@ -3,8 +3,11 @@
 //! fit, which holds the border, the border's left and right on screen at that fit, the dress
 //! overflow, the dress clamp of a view pushed past each edge, and the dress view for a host
 //! that scrolls the page: at scale 1 across the viewport's width and twice it, and at scale 0
-//! (fit to the width) across the viewport's width. A reflowed case keeps the border inside
-//! the viewport's width. Every wrapper's test suite replays them and compares.
+//! (fit to the width) across the viewport's width, and the printed height, which holds the
+//! border. A reflowed case keeps the border inside the viewport's width. One case is a reader
+//! that scrolls the page itself: no padding, the printed margins cropped to the ink and
+//! fill-height on, so the border fitted to the width fills the viewport's height. Every
+//! wrapper's test suite replays them and compares.
 //!
 //! The set is written next to the scenarios as hex, so a wrapper loads the same bytes. It is
 //! one filled and one stroked rectangle per kind, the shape of the ABI test's set: no
@@ -81,17 +84,30 @@ fn main() {
         line_art: 0,
         colors: vec![],
     };
-    let cases_in: [(f32, f32, f32); 4] =
-        [(390.0, 844.0, 0.0), (1024.0, 768.0, 0.0), (390.0, 844.0, 2.0), (390.0, 844.0, 3.0)];
+    // the printed margins a reader that crops to the ink cuts: the words' box, one unit out
+    let ink = page.crop_bounds(&Target::Page, 1.0, true).expect("page 042 has words");
+    let crop = (ink.x0, page.width() - ink.x1);
+    // (width, height, zoom, filled): a filled case has no padding, the crop and fill-height
+    let cases_in: [(f32, f32, f32, bool); 5] = [
+        (390.0, 844.0, 0.0, false),
+        (1024.0, 768.0, 0.0, false),
+        (390.0, 844.0, 2.0, false),
+        (390.0, 844.0, 3.0, false),
+        (390.0, 700.0, 0.0, true),
+    ];
     let mut cases = Vec::new();
-    for (w, h, zoom) in cases_in {
+    for (w, h, zoom, filled) in cases_in {
+        let (pad_y, pad_x) = if filled { (0.0, 0.0) } else { (24.0, 16.0) };
         let spec = LayoutSpec {
             viewport_w: w,
             viewport_h: h,
-            pad_top: 24.0,
-            pad_bottom: 24.0,
-            pad_left: 16.0,
-            pad_right: 16.0,
+            pad_top: pad_y,
+            pad_bottom: pad_y,
+            pad_left: pad_x,
+            pad_right: pad_x,
+            fill_height: filled,
+            crop_left: if filled { crop.0 } else { 0.0 },
+            crop_right: if filled { crop.1 } else { 0.0 },
             reflow: (zoom > 0.0).then(|| ReflowSpec { zoom, ..Default::default() }),
             ..Default::default()
         };
@@ -130,16 +146,23 @@ fn main() {
         let at = |x: f32| l.fit_x + l.fit_scale * (l.offset_x + x * l.scale);
         let border = (at(vb[0]), at(vb[0] + vb[2]));
         let reflow = if zoom > 0.0 { format!(", \"reflow\": {{\"zoom\": {zoom}}}") } else { String::new() };
+        let fill = if filled {
+            format!(", \"fillHeight\": true, \"cropLeft\": {}, \"cropRight\": {}", crop.0, crop.1)
+        } else {
+            String::new()
+        };
         cases.push(format!(
             concat!(
-                "    {{\"spec\": {{\"viewportW\": {}, \"viewportH\": {}, \"padTop\": 24, \"padBottom\": 24, \"padLeft\": 16, \"padRight\": 16{}}},\n",
+                "    {{\"spec\": {{\"viewportW\": {}, \"viewportH\": {}, \"padTop\": {}, \"padBottom\": {}, \"padLeft\": {}, \"padRight\": {}{}{}}},\n",
                 "     \"fit\": {{\"fitScale\": {}, \"fitX\": {}, \"fitY\": {}}},\n",
                 "     \"border\": [{}, {}],\n",
                 "     \"overflow\": [{}, {}, {}, {}],\n",
+                "     \"printedHeight\": {},\n",
                 "     \"clamps\": [\n       {}\n     ],\n",
                 "     \"dressViews\": [\n       {}\n     ]}}"
             ),
-            w, h, reflow, l.fit_scale, l.fit_x, l.fit_y, border.0, border.1, o.0, o.1, o.2, o.3, clamps.join(",\n       "),
+            w, h, pad_y, pad_y, pad_x, pad_x, fill, reflow, l.fit_scale, l.fit_x, l.fit_y, border.0, border.1, o.0, o.1, o.2,
+            o.3, page.printed_height(&spec), clamps.join(",\n       "),
             views.join(",\n       ")
         ));
     }

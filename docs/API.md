@@ -141,7 +141,7 @@ const L = page.layout({viewportW, viewportH, padTop, padBottom, padLeft, padRigh
 // L = {scale, offsetX, offsetY, contentW, contentH, lineSpacing, lineDy[], slots[], fitScale, fitX, fitY}
 page.layoutLineSpacingToFill(spec)   // the lineSpacing multiplier that fills the padded viewport of spec
 page.layoutWastedFraction(spec)      // the share of the padded viewport left empty at fit-to-width
-page.layoutPrintedHeight(spec)       // the page's height at the printed pitch: contentH before fill-height adds leading
+page.layoutPrintedHeight(spec)       // the page's height at the printed pitch: contentH before fill-height adds leading (with a border: the whole dressed page)
 page.grid                            // {lines, lineSpacing}: the mushaf's line count and the printed spacing
 page.lineSpacing                     // the printed line spacing of this page, in page units
 ```
@@ -155,8 +155,9 @@ the box is centred. A reflowed page is scrolled, not shrunk: `fitScale` is 1, th
 centred across the viewport, and its top is at the top of the viewport. `maxAspectSlack` bounds the content width to
 `viewportH·pageW/pageH·slack` so a landscape screen does not stretch the lines (0 = no
 bound; the examples use 1.15). `cropLeft`/`cropRight` cut the printed side margins (page
-units) so the ink spans the padded width. Wrappers compute none of this; the engine's
-answers for forty viewport cases are in `conformance/scenarios/layout.json`.
+units) so the ink spans the padded width. On a dressed page a crop never cuts into a
+medallion: a crop that would is narrowed to the medallion's edge. Wrappers compute none of
+this; the engine's answers for forty viewport cases are in `conformance/scenarios/layout.json`.
 
 **`bannerZoom` caps how big a surah name or a basmalah gets as the reader zooms in**, as a
 multiple of its PRINTED size. 0 (the default) leaves it uncapped: the drawing grows with the
@@ -1130,13 +1131,15 @@ drawn in layout space. `CanvasRenderer` does all of this.
 
 **A dressed page is bigger than its text.** `viewBox` is the page box the border grew, in
 page units, and `overflow` is how far the border reaches past the laid-out content on each
-side, in layout px. The layout's fit includes the dress: `fitScale`, `fitX` and `fitY` fit
+side, in layout px. Without a border, `viewBox` is the laid-out page (the cropped page, or
+a reflowed page's rows) and the overflow is zero: medallions and bands stay inside it. The
+layout's fit includes the dress: `fitScale`, `fitX` and `fitY` fit
 the content plus the overflow in the viewport, so a host that draws at the layout's fit shows
 the whole border with no arithmetic of its own. `fitX` and `fitY` still place the content's
 origin, and the overflow sits to their left and above them. A printed page shrinks to fit
 the dressed box and is never enlarged. A reflowed page keeps `fitScale` at 1 and puts the top
-of the border at the top of the viewport. `dress` and `undress` refit the current layout, and
-the web wrapper reads it again into `page.currentLayout`. To keep a pan inside the dressed
+of the border at the top of the viewport. `dress` and `undress` lay the current layout out
+again from its own spec, and the web wrapper reads it again into `page.currentLayout`. To keep a pan inside the dressed
 box, clamp with `page.dressClamp(view, viewportW, viewportH)` in place of
 `engine.viewClamp`: a drag then reaches the border's edges and never goes past them. A host
 that scrolls the page itself calls `page.dressView(scale, viewportW)`. It returns the view
@@ -1144,7 +1147,15 @@ that puts the dressed box's top at 0 and centres it across the viewport. It also
 box's `width` and `height`: the size to give the canvas. A `scale` of 0 asks the engine to fit
 the dressed box to `viewportW`. The scale is then `min(1, viewportW / dressed width)`, so the
 whole border fits across and the page is never enlarged. A reflowed dressed page needs no
-such step: the engine narrows its rows so the border fits across the viewport. A new
+such step: the engine narrows its rows so the border fits across the viewport.
+
+**Sizing a bordered page.** A host that scrolls the page itself plans its box with
+`layoutPrintedHeight(spec)`: on a page dressed in a border that is the dressed box fitted to
+`viewportW`, the height `dressView(0, viewportW)` gives the canvas. With no padding it is in
+proportion to the width. Under `fillHeight` a bordered page that fits fills `viewportH` with
+the border included: `dressView(0, viewportW).height` is `viewportH`. Its `contentH` is then the
+text alone, at the layout's scale before the border shrinks the page to the width, so size the
+canvas from `dressView`, never from `contentH`. A new
 layout re-places the dress and bumps `revision` (on every rebuild: a new dress, and every
 layout); a host that rasterises the layer keys its cache on that number.
 
@@ -1321,7 +1332,7 @@ function in the header has no row here, or a row names a function the header lac
 | layout | `qvp_zoom_level_candidates` | `page.zoomLevelCandidates(spec, nominal, band, floor)` | Return every zoom that the search weighs for one step, with its cost. |
 | layout | `qvp_layout_line_spacing_to_fill` | `page.layoutLineSpacingToFill(spec, max)` | Return the `lineSpacing` multiplier that fills the padded viewport of a spec when fitted to width. |
 | layout | `qvp_layout_wasted_fraction` | `page.layoutWastedFraction(spec)` | Return the share of the padded viewport of a spec left empty when the page is fitted to width. |
-| layout | `qvp_layout_printed_height` | `page.layoutPrintedHeight(spec)` | Return the page's height laid out for a spec at the printed pitch, in viewport px: `contentH` before fill-height adds any leading. |
+| layout | `qvp_layout_printed_height` | `page.layoutPrintedHeight(spec)` | Return the page's height laid out for a spec at the printed pitch, in viewport px: `contentH` before fill-height adds any leading. On a page dressed in a border, the dressed box fitted to the viewport width. |
 | layout | `qvp_word_bounds_view` | `page.wordBoundsView(i)` | Return a word's bounds in viewport pixels through the current layout. |
 | styles | `qvp_style_add` | `page.style(selector, colour, ms, layer)` | Add a colour rule for a selector on a layer; returns a handle, 0 for a bad selector. |
 | styles | `qvp_style_add_letters` | `page.styleLetters(query, colour, {ms, layer})` | Add one colour rule for the letters that a query finds. Returns a handle, or 0 for a bad query. |

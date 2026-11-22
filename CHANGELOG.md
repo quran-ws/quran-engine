@@ -112,6 +112,75 @@ All notable changes to the engine and its packages. The format follows
   got from the page before it is stale: geometry, colours, built paths and each array sized
   from the path count. In React Native, the letter hit tests take `DEFAULTS.TAP_DISTANCE` as
   the default `maxDistance`, as its `hitTest` does.
+- `qvp-convert` writes `w`, each word's number in the quran-text release, to
+  `NNN.words.json` when the page source is the words archive of `quran-svg-elements`
+  v2.0.0. An engine that does not know the field ignores it.
+
+### Changed
+- **Breaking.** Rust: the letter layer adds variants to two public enums and a field to one
+  public struct, so the next release is a minor version, 0.10.0. A downstream crate changes
+  these:
+  - `qvp_core::Selector` has five new variants: `Letter`, `LetterMark`, `LetterMarkNamed`,
+    `WordChars` and `Letters`. A `match` that lists every variant needs arms for them, or
+    a `_` arm.
+  - `qvp_format::Error` has four new variants: `NotLetterLayer`, `LetterLayerVersion`,
+    `OtherPage` and `Damaged`. A `match` that lists every variant needs arms for them, or a
+    `_` arm.
+  - `qvp_convert::WordText` has a new public field, `w: Option<u32>`, the word's number in
+    the `quran-text` release. A struct literal of `WordText` needs `w: None`, or
+    `..Default::default()`.
+- The page source is the words archive of `quran-svg-elements` v2.0.0. `scripts/sync-test-data.sh`
+  takes the archive name from the tag, so a tag before v2.0.0 still resolves. Upstream
+  lists ink fixes on six pages. Page data built from v2.0.0 has different mark paths on
+  pages 437, 470, 540 and 567. On pages 232 and 526, only the order of paths differs
+  (`docs/UPSTREAM-DATA-ISSUES.md`).
+- A data release built from v2.0.0 has a different `qpc` text in 4159 words. The words
+  index of `quran-svg-elements` v2.0.0 takes that text from the quran-text release. Do not
+  mix `qpc` strings or offsets from data built from an older source with those from v2.0.0
+  (`docs/UPSTREAM-DATA-ISSUES.md`).
+- `qvp.h` states three rules that hosts must follow. After a change of rules or state,
+  call `qvp_tick` before any call that reads colours, styled paths, the draw revision or the
+  draw list, or a transition starts at the time of the last tick. That was already how
+  `qvp_colors` worked, and the header now says so. Use a page from one thread at a time,
+  const calls included, because a const call can update the page's caches. Each frame, call
+  `qvp_tick`, then `qvp_colors` or `qvp_styled_paths`, then `qvp_layout_draw_revision`, then
+  `qvp_layout_draw_list` when the revision, the layout or the band changed.
+- An attach of a letter layer makes stale what the host read before it. The pointers that
+  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
+  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
+  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
+  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
+  `qvp_colors` does. On a page with no layer they do not.
+- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
+  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
+  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
+  An array that an app copied from them before an attach does not hold the pieces.
+- Flutter: the `QvpBackend` interface has 13 new members for the letter layer, and a new
+  type, `QvpPageGeometry`. This is a source-breaking change for a class outside the package
+  that implements `QvpBackend`: it must add the members. An app that uses the package's own
+  backends needs no change.
+- React Native: on a page with a letter layer, the module runs the letter calls, and every
+  query on that page, on the UI thread, in queue order. With a layer, the view's draw changes
+  the page, and the query thread must not call into it at the same time. A page with no layer
+  keeps its queries on the query thread, as before.
+
+### Removed
+
+### Fixed
+- Android: the styled pass of `QvpPageView` draws a styled path only where the engine's draw
+  list puts it. Before, it drew every styled path. It put a styled path that the list leaves
+  out, such as a page number under reflow, at its printed line, and it drew a path once when
+  the list holds it twice. `lastOverlayPaths` now counts the styled draws.
+- Flutter: the styled pass of `QvpPageView` draws each styled entry of the draw list, in its
+  order and under its own placement. It drew each styled path once, at its first placement,
+  so a styled path that a reflowed layout draws twice, such as a sajdah line over two rows,
+  lost its second copy. The base ink and the styled pass now draw each entry of the draw list
+  once between them, and a hidden path not at all. Now every view draws only what the draw
+  list holds.
+
+## [0.9.0] - 2026-11-22
+
+### Added
 - QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
   `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
   `QvpPassageWord.wordKey`, as Kotlin's.
@@ -173,23 +242,22 @@ All notable changes to the engine and its packages. The format follows
   simulator, once with Swift Package Manager and once with CocoaPods.
   `scripts/check-darwin-engine-symbols.sh` then checks that each app exports the engine. A
   `windows` job builds the example for Windows and checks that `qvp_ffi.dll` is bundled.
-- `qvp-convert` writes `w`, each word's number in the quran-text release, to
-  `NNN.words.json` when the page source is the words archive of `quran-svg-elements`
-  v2.0.0. An engine that does not know the field ignores it.
 
 ### Changed
-- **Breaking.** Rust: the letter layer adds variants to two public enums and a field to one
-  public struct, so the next release is a minor version, 0.9.0. A downstream crate changes
-  these:
-  - `qvp_core::Selector` has five new variants: `Letter`, `LetterMark`, `LetterMarkNamed`,
-    `WordChars` and `Letters`. A `match` that lists every variant needs arms for them, or
-    a `_` arm.
-  - `qvp_format::Error` has four new variants: `NotLetterLayer`, `LetterLayerVersion`,
-    `OtherPage` and `Damaged`. A `match` that lists every variant needs arms for them, or a
-    `_` arm.
-  - `qvp_convert::WordText` has a new public field, `w: Option<u32>`, the word's number in
-    the `quran-text` release. A struct literal of `WordText` needs `w: None`, or
-    `..Default::default()`.
+- `layoutPrintedHeight` on a page dressed in a border answers the height of the whole page,
+  border included: the dressed box fitted to the viewport width, as `dressView` at scale 0
+  fits it. That is the height a host that scrolls the page gives its canvas, so a host can
+  plan a box for a bordered page before it sizes the canvas. With no padding the height is in
+  proportion to the width. An undressed page answers `contentH` as before.
+- Fill-height on a page dressed in a border fills the viewport with the border included:
+  `dressView(0, viewportW).height` is `viewportH`. Before, the text filled the viewport and the
+  border reached past it above and below. `layoutLineSpacingToFill` answers the same leading.
+- A printed layout of a dressed page narrows `cropLeft` and `cropRight` where a medallion
+  reaches past them, so the crop never cuts into a medallion. A medallion stays centred on
+  its printed ring. On page 50, four font markers reached about 1 unit past a crop measured
+  from the words.
+- `dress` and `undress` lay a printed page out again from its own spec, as they already did
+  for a reflowed page, because the crop and the fill now depend on the dress.
 - React Native: `scripts/gen-rn-enums.py` also writes `ios/QvpRnCodes.swift`, and
   `scripts/check-parity.py` checks it. `scripts/sync-example-data.sh react-native` copies
   the pages to the iOS example too. The npm release job waits until the GitHub release serves
@@ -264,54 +332,19 @@ All notable changes to the engine and its packages. The format follows
   `lineDy` places a path on a reflowed page, where the words move and not the lines.
 - `scripts/build-engine-ios.sh` copies `QvpEngine.xcframework` into the Flutter plugin's
   `ios/qvp_flutter` and `macos/qvp_flutter`, one level below the old place.
-- The page source is the words archive of `quran-svg-elements` v2.0.0. `scripts/sync-test-data.sh`
-  takes the archive name from the tag, so a tag before v2.0.0 still resolves. Upstream
-  lists ink fixes on six pages. Page data built from v2.0.0 has different mark paths on
-  pages 437, 470, 540 and 567. On pages 232 and 526, only the order of paths differs
-  (`docs/UPSTREAM-DATA-ISSUES.md`).
-- A data release built from v2.0.0 has a different `qpc` text in 4159 words. The words
-  index of `quran-svg-elements` v2.0.0 takes that text from the quran-text release. Do not
-  mix `qpc` strings or offsets from data built from an older source with those from v2.0.0
-  (`docs/UPSTREAM-DATA-ISSUES.md`).
-- `qvp.h` states three rules that hosts must follow. After a change of rules or state,
-  call `qvp_tick` before any call that reads colours, styled paths, the draw revision or the
-  draw list, or a transition starts at the time of the last tick. That was already how
-  `qvp_colors` worked, and the header now says so. Use a page from one thread at a time,
-  const calls included, because a const call can update the page's caches. Each frame, call
-  `qvp_tick`, then `qvp_colors` or `qvp_styled_paths`, then `qvp_layout_draw_revision`, then
-  `qvp_layout_draw_list` when the revision, the layout or the band changed.
-- An attach of a letter layer makes stale what the host read before it. The pointers that
-  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
-  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
-  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
-  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
-  `qvp_colors` does. On a page with no layer they do not.
-- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
-  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
-  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
-  An array that an app copied from them before an attach does not hold the pieces.
-- Flutter: the `QvpBackend` interface has 13 new members for the letter layer, and a new
-  type, `QvpPageGeometry`. This is a source-breaking change for a class outside the package
-  that implements `QvpBackend`: it must add the members. An app that uses the package's own
-  backends needs no change.
-- React Native: on a page with a letter layer, the module runs the letter calls, and every
-  query on that page, on the UI thread, in queue order. With a layer, the view's draw changes
-  the page, and the query thread must not call into it at the same time. A page with no layer
-  keeps its queries on the query thread, as before.
-
-### Removed
 
 ### Fixed
-- Android: the styled pass of `QvpPageView` draws a styled path only where the engine's draw
-  list puts it. Before, it drew every styled path. It put a styled path that the list leaves
-  out, such as a page number under reflow, at its printed line, and it drew a path once when
-  the list holds it twice. `lastOverlayPaths` now counts the styled draws.
-- Flutter: the styled pass of `QvpPageView` draws each styled entry of the draw list, in its
-  order and under its own placement. It drew each styled path once, at its first placement,
-  so a styled path that a reflowed layout draws twice, such as a sajdah line over two rows,
-  lost its second copy. The base ink and the styled pass now draw each entry of the draw list
-  once between them, and a hidden path not at all. Now every view draws only what the draw
-  list holds.
+- A page dressed without a border no longer grows its dressed box to the whole printed page.
+  The box is the laid-out page, so a crop is kept. Before, `dressView` at scale 0 shrank a
+  cropped page to show the cut margins, by about 3.5% on page 50. A reflowed page dressed
+  without a border is no longer pushed off to the left: on page 50 at zoom 1.8, `fitX` was
+  −170 px.
+- `QvpCanvasController.relayout()` under `hostScrolls` also fits the view again when the page
+  is at rest. A crop, fill or box set after `page.dress(...)` moved a bordered page's fit, and
+  the view stayed where the last `resetView()` left it.
+- `QvpCanvasController.resetView()` takes up a layout the engine made for a dress, as
+  `relayout()` does, and both page views key their draw lists on the layout. Before, a host
+  that called only `resetView()` after a dress drew the ink with the old placements.
 - QvpKit: an index or count out of range no longer stops the program. Every call passes
   an Int to the C ABI as the parameter's unsigned width, cut from the Int as JNI's casts cut
   a jint on Android, and the engine answers: `wordLabel(-1)` is "", `findWord(-1, …)` is -1,
@@ -1303,7 +1336,9 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/quran-ws/quran-engine/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/quran-ws/quran-engine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/quran-ws/quran-engine/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/quran-ws/quran-engine/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/quran-ws/quran-engine/compare/v0.5.0...v0.6.0

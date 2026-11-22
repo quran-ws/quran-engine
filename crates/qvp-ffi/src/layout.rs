@@ -369,6 +369,8 @@ pub unsafe extern "C" fn qvp_layout_wasted_fraction(page: *const Page, spec: *co
 }
 /// The page's height laid out for `spec` at the printed pitch, in viewport px: `content_h` before
 /// fill-height adds any leading, padding included. What a host asks before it sizes the canvas.
+/// On a page dressed in a border it is the whole page, border included: the dressed box fitted
+/// to the viewport width, as `qvp_dress_view` at scale 0 fits it.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_layout_printed_height(page: *const Page, spec: *const QvpLayoutSpec) -> f32 {
     guard(|| (*page).printed_height(&layout_spec(spec)))

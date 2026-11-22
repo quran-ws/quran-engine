@@ -110,7 +110,8 @@ pub struct Dress {
     pub ops: Vec<u8>,
     pub pts: Vec<f32>,
     pub table: Vec<OrnamentDraw>,
-    /// `x, y, w, h` in page units: the page's own box, or the box the border grew it to.
+    /// `x, y, w, h` in page units: the laid-out page box, or the box the border grew it to.
+    /// Without a layout the laid-out page is the printed page.
     pub view_box: [f32; 4],
     pub ayah_mark: u32,
     pub surah_header: u32,
@@ -124,6 +125,9 @@ pub struct Dress {
     /// Bumped on every rebuild: a new dress, and every layout. A host caches the raster of this layer and this
     /// is what tells it the raster is stale.
     pub revision: u32,
+    /// The left and right ends of the medallions' ink in page units, where the print has the
+    /// rings: what a printed layout's crop leaves room for. `None` without medallions.
+    pub(crate) mark_reach: Option<(f32, f32)>,
     /// The style rules hiding the printed rings and bands, so undressing puts them back.
     pub(crate) hidden: Vec<Handle>,
     pub(crate) set: Option<Arc<OrnamentSet>>,
@@ -194,6 +198,169 @@ struct Palette {
     ink: Rgba,
 }
 
+/// How a border is mapped onto the page it goes around.
+enum FramePlace<'a> {
+    /// A frame that tiles: its corner and runs are drawn in a box `unit_w` by `unit_h` frame
+    /// units, and `tf` maps that box onto the page.
+    Tiled { slices: &'a Slices, tf: Tf, unit_w: f32, unit_h: f32 },
+    /// A frame with no slices: its whole drawing is stretched by `tf`, so that its slot lands on
+    /// the grown box.
+    Stretched { tf: Tf },
+}
+
+/// Where the border `o` goes around the laid-out page box `(left, top, width, height)`, in
+/// page units: how its drawing is mapped, and the box it grows the page to, `x, y, w, h`.
+///
+/// The border is drawn from this, the fill-height that makes room for it measures it, and
+/// reflow narrows its rows by it, so the three never disagree. A frame publishes its text area
+/// as its slot. Mapping the page box (plus the gap) onto that slot makes the band thickness
+/// follow at the mushaf's own proportions: one uniform scale, never a stretch. A frame without
+/// slices is stretched instead, so that its slot lands on the grown box exactly. `None` when the
+/// frame has no slot.
+fn place_frame<'a>(
+    o: &'a Ornament,
+    spec: &DressSpec,
+    laid: (f32, f32, f32, f32),
+) -> Option<(FramePlace<'a>, [f32; 4])> {
+    let slot = o.asset.slot?;
+    let (laid_left, laid_top, laid_w, laid_h) = laid;
+    let gap = spec.gap;
+    let (asset_w, asset_h) = (o.asset.width(), o.asset.height());
+    Some(match &o.slices {
+        Some(slices) => {
+            // A bigger border draws the frame's units bigger, so fewer motifs fit along each
+            // edge, and a smaller one more: the pattern scales as a whole and nothing is
+            // stretched. The margins grow with it; the slot stays on the grown page box. The
+            // bottom margin is the frame's own, not a copy of its top.
+            let size = if spec.page_frame_scale > 0.0 { spec.page_frame_scale } else { 1.0 };
+            let unit = (laid_w + 2.0 * gap) / slot[2].max(f32::EPSILON) * size; // page units per frame unit
+            let box_x = laid_left - gap - slot[0] * unit;
+            let box_y = laid_top - gap - slot[1] * unit;
+            let unit_w = (laid_w + 2.0 * gap) / unit + slot[0] + (asset_w - slot[0] - slot[2]);
+            let unit_h = (laid_h + 2.0 * gap) / unit + slot[1] + (asset_h - slot[1] - slot[3]);
+            let (box_w, box_h) = (unit_w * unit, unit_h * unit);
+            let tf = Tf::fit([0.0, 0.0, unit_w, unit_h], box_x, box_y, box_w, box_h, false);
+            (FramePlace::Tiled { slices, tf, unit_w, unit_h }, [box_x, box_y, box_w, box_h])
+        }
+        None => {
+            // two scales: the slot maps onto the grown box in both dimensions
+            let sx = (laid_w + 2.0 * gap) / slot[2].max(f32::EPSILON);
+            let sy = (laid_h + 2.0 * gap) / slot[3].max(f32::EPSILON);
+            let e = laid_left - gap - slot[0] * sx;
+            let f = laid_top - gap - slot[1] * sy;
+            let vb = o.asset.view_box;
+            let tf = Tf { a: sx, b: 0.0, c: 0.0, d: sy, e, f };
+            (FramePlace::Stretched { tf }, [e + vb[0] * sx, f + vb[1] * sy, asset_w * sx, asset_h * sy])
+        }
+    })
+}
+
+/// How far the box `vb` (page units) reaches past the content box `cw` by `ch` px, on each side,
+/// in px through a layout of `scale` and offsets `ox`, `oy`: `left, top, right, bottom`, each
+/// 0 or more.
+fn overflow_of(vb: [f32; 4], scale: f32, ox: f32, oy: f32, cw: f32, ch: f32) -> (f32, f32, f32, f32) {
+    (
+        (-(ox + vb[0] * scale)).max(0.0),
+        (-(oy + vb[1] * scale)).max(0.0),
+        (ox + (vb[0] + vb[2]) * scale - cw).max(0.0),
+        (oy + (vb[1] + vb[3]) * scale - ch).max(0.0),
+    )
+}
+
+/// The view that shows a dressed box at `scale` to a host that scrolls the page: the content
+/// `cw` by `ch` px plus the overflow `over` on each side, centred across `viewport_w` (at x = 0
+/// when wider), its top at y = 0. A `scale` of 0 or less fits the box to `viewport_w` and never
+/// enlarges it. Also the box's width and height at that scale.
+fn fit_across(cw: f32, ch: f32, over: (f32, f32, f32, f32), scale: f32, viewport_w: f32) -> (View, f32, f32) {
+    let (l, t, r, b) = over;
+    let scale = if scale > 0.0 {
+        scale
+    } else {
+        let full = cw + l + r;
+        if full > 0.0 && viewport_w > 0.0 {
+            (viewport_w / full).min(1.0)
+        } else {
+            1.0
+        }
+    };
+    let (w, h) = ((cw + l + r) * scale, (ch + t + b) * scale);
+    // the content's origin stands `(l, t)` inside the dressed box, `scale` times that on screen
+    let left = ((viewport_w - w) / 2.0).max(0.0);
+    (View { scale, offset_x: left + l * scale, offset_y: t * scale }, w, h)
+}
+
+/// The left and right ends of the ink one outline draws, in the units of `pts`: the exact
+/// extremes of its lines and curves, not of their control points.
+fn ink_x_extent(ops: &[u8], pts: &[f32]) -> (f32, f32) {
+    let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+    let mut add = |x: f32| {
+        lo = lo.min(x);
+        hi = hi.max(x);
+    };
+    // the extremes of a curve's x over 0 < t < 1, where its derivative is zero
+    let quad = |p0: f32, p1: f32, p2: f32, add: &mut dyn FnMut(f32)| {
+        let den = p0 - 2.0 * p1 + p2;
+        if den.abs() > f32::EPSILON {
+            let t = (p0 - p1) / den;
+            if t > 0.0 && t < 1.0 {
+                let u = 1.0 - t;
+                add(u * u * p0 + 2.0 * u * t * p1 + t * t * p2);
+            }
+        }
+    };
+    let cubic = |p0: f32, p1: f32, p2: f32, p3: f32, add: &mut dyn FnMut(f32)| {
+        // the derivative is a t² + b t + c
+        let (a, b, c) = (-p0 + 3.0 * p1 - 3.0 * p2 + p3, 2.0 * (p0 - 2.0 * p1 + p2), p1 - p0);
+        let mut at = |t: f32| {
+            if t > 0.0 && t < 1.0 {
+                let u = 1.0 - t;
+                add(u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3);
+            }
+        };
+        if a.abs() <= f32::EPSILON {
+            if b.abs() > f32::EPSILON {
+                at(-c / b);
+            }
+        } else {
+            let disc = b * b - 4.0 * a * c;
+            if disc >= 0.0 {
+                let s = disc.sqrt();
+                at((-b + s) / (2.0 * a));
+                at((-b - s) / (2.0 * a));
+            }
+        }
+    };
+    // the x of each point, in order: every op but a close carries one, two or three points
+    let xs: Vec<f32> = pts.iter().step_by(2).copied().collect();
+    let (mut i, mut x) = (0usize, 0.0f32);
+    for &op in ops {
+        let n = match op {
+            OP_MOVE | OP_LINE => 1,
+            OP_QUAD => 2,
+            OP_CUBIC => 3,
+            _ => 0,
+        };
+        let Some(p) = xs.get(i..i + n) else { break };
+        match *p {
+            [x1] => add(x1),
+            [x1, x2] => {
+                quad(x, x1, x2, &mut add);
+                add(x2);
+            }
+            [x1, x2, x3] => {
+                cubic(x, x1, x2, x3, &mut add);
+                add(x3);
+            }
+            _ => {}
+        }
+        if let Some(&last) = p.last() {
+            x = last;
+        }
+        i += n;
+    }
+    (lo, hi)
+}
+
 /// How much of a band's slot height a surah title may fill under reflow; the rest is air.
 const BAND_FILL: f32 = 0.9;
 
@@ -221,6 +388,24 @@ struct Builder<'a> {
 }
 
 impl<'a> Builder<'a> {
+    /// The left and right ends of the ink the draws from index `first` on put down, in the
+    /// units of their points, a stroke's half width included. `None` when they put down nothing.
+    fn ink_x_from(&self, first: usize) -> Option<(f32, f32)> {
+        let mut out: Option<(f32, f32)> = None;
+        for t in &self.out.table[first..] {
+            let ops = &self.out.ops[t.op_start as usize..(t.op_start + t.op_count) as usize];
+            let pts = &self.out.pts[t.pt_start as usize..(t.pt_start + t.pt_count) as usize];
+            let (lo, hi) = ink_x_extent(ops, pts);
+            if lo > hi {
+                continue;
+            }
+            let half = if t.flags & ODF_STROKE != 0 { t.stroke_width / 2.0 } else { 0.0 };
+            let (lo, hi) = (lo - half, hi + half);
+            out = Some(out.map_or((lo, hi), |(a, b)| (a.min(lo), b.max(hi))));
+        }
+        out
+    }
+
     /// Emit one asset's outlines through `tf`. `drop_slot` leaves out the transparent
     /// window, which a tiled frame must not keep.
     fn place(&mut self, asset: &Asset, pal: &Palette, kind: OrnamentKind, tf: &Tf, drop_slot: bool, placement: u32) {
@@ -410,28 +595,47 @@ impl Page {
     /// frame at: the gap, then the frame's own margin at the frame's unit. `None` when the
     /// page is not dressed in a border.
     pub(crate) fn frame_side_margins(&self, laid_w: f32) -> Option<(f32, f32)> {
+        let (o, spec) = self.dress_frame()?;
+        // the sides do not depend on the height, so any height measures them
+        let (_, vb) = place_frame(o, spec, (0.0, 0.0, laid_w, 0.0))?;
+        Some((-vb[0], vb[0] + vb[2] - laid_w))
+    }
+
+    /// The border this page is dressed in and the spec it was dressed with, or `None` when it
+    /// wears no border.
+    pub(crate) fn dress_frame(&self) -> Option<(&Ornament, &DressSpec)> {
         let d = self.dress.as_ref()?;
         let set = d.set.as_ref()?;
-        let spec = &d.spec;
-        if spec.page_frame == NONE {
+        if d.spec.page_frame == NONE {
             return None;
         }
-        let o = set.ornaments.get(spec.page_frame as usize).filter(|o| o.kind == OrnamentKind::PageFrame)?;
-        let slot = o.asset.slot?;
-        let gap = spec.gap;
-        let span = laid_w + 2.0 * gap;
-        let asset_w = o.asset.width();
-        let unit = span / slot[2].max(f32::EPSILON);
-        Some(match &o.slices {
-            Some(_) => {
-                let unit = unit * if spec.page_frame_scale > 0.0 { spec.page_frame_scale } else { 1.0 };
-                (gap + slot[0] * unit, gap + (asset_w - slot[0] - slot[2]) * unit)
-            }
-            None => {
-                let vb = o.asset.view_box;
-                (gap + (slot[0] - vb[0]) * unit, gap + (vb[0] + asset_w - slot[0] - slot[2]) * unit)
-            }
+        let o = set.ornaments.get(d.spec.page_frame as usize).filter(|o| o.kind == OrnamentKind::PageFrame)?;
+        Some((o, &d.spec))
+    }
+
+    /// The dressed box around the laid-out page box `laid` (`left, top, width, height`, page
+    /// units): the box the border grows the page to, or the laid-out page itself when the page
+    /// wears no border. `None` when the page is not dressed. Pure: a host's question about a
+    /// layout it has not made yet is answered from this.
+    pub(crate) fn dressed_box_for(&self, laid: (f32, f32, f32, f32)) -> Option<[f32; 4]> {
+        self.dress.as_ref()?;
+        Some(match self.dress_frame().and_then(|(o, spec)| place_frame(o, spec, laid)) {
+            Some((_, vb)) => vb,
+            None => [laid.0, laid.1, laid.2, laid.3],
         })
+    }
+
+    /// The crop a printed layout makes, `(left, right)` in page units: the host's, each 0 or
+    /// more, narrowed where a medallion reaches past it. A medallion is centred on its printed
+    /// ring and is often wider than the ring, so at the end of a line it can reach past a crop
+    /// the host measured from the words. The crop gives way rather than the medallion: moved
+    /// off its ring, the numeral inside it would be off centre.
+    pub(crate) fn dressed_crop(&self, left: f32, right: f32) -> (f32, f32) {
+        let (left, right) = (left.max(0.0), right.max(0.0));
+        match self.dress.as_ref().and_then(|d| d.mark_reach) {
+            Some((x0, x1)) => (left.min(x0.max(0.0)), right.min((self.width() - x1).max(0.0))),
+            None => (left, right),
+        }
     }
 
     /// The laid-out page box in page units: `(left, top, width, height)`. Without a
@@ -474,15 +678,14 @@ impl Page {
         true
     }
 
-    /// Bring the current layout up to date with a new dress, or with none. A reflowed layout
-    /// is made again from its own spec, because a band caps how far a title may grow and the
-    /// rows were broken before the band was there. A printed one only needs a new fit.
+    /// Bring the current layout up to date with a new dress, or with none: it is made again
+    /// from its own spec. A band caps how far a reflowed title may grow, and the rows were
+    /// broken before the band was there. On a printed page the crop gives way to the
+    /// medallions, and fill-height fills the box with the border too, so the scale and the
+    /// leading follow the dress.
     fn relayout_dressed(&mut self) {
-        match self.layout.as_ref().filter(|l| l.reflow.is_some()).map(|l| l.spec) {
-            Some(spec) => {
-                self.layout(&spec);
-            }
-            None => self.refit(),
+        if let Some(spec) = self.layout.as_ref().map(|l| l.spec) {
+            self.layout(&spec);
         }
     }
 
@@ -491,17 +694,11 @@ impl Page {
     /// page answers zeroes.
     pub fn dress_overflow(&self) -> (f32, f32, f32, f32) {
         let Some(d) = &self.dress else { return (0.0, 0.0, 0.0, 0.0) };
-        let vb = d.view_box;
         let (scale, ox, oy, cw, ch) = match &self.layout {
             Some(l) => (l.scale, l.offset_x, l.offset_y, l.content_w, l.content_h),
             None => (1.0, 0.0, 0.0, self.width(), self.height()),
         };
-        (
-            (-(ox + vb[0] * scale)).max(0.0),
-            (-(oy + vb[1] * scale)).max(0.0),
-            (ox + (vb[0] + vb[2]) * scale - cw).max(0.0),
-            (oy + (vb[1] + vb[3]) * scale - ch).max(0.0),
-        )
+        overflow_of(d.view_box, scale, ox, oy, cw, ch)
     }
 
     /// How far the dress draws over the content's top and below its bottom, in layout px: the
@@ -565,21 +762,26 @@ impl Page {
             Some(l) => (l.content_w, l.content_h),
             None => (self.width(), self.height()),
         };
-        let (l, t, r, b) = self.dress_overflow();
-        let scale = if scale > 0.0 {
-            scale
-        } else {
-            let full = cw + l + r;
-            if full > 0.0 && viewport_w > 0.0 {
-                (viewport_w / full).min(1.0)
-            } else {
-                1.0
-            }
-        };
-        let (w, h) = ((cw + l + r) * scale, (ch + t + b) * scale);
-        // the content's origin stands `(l, t)` inside the dressed box, `scale` times that on screen
-        let left = ((viewport_w - w) / 2.0).max(0.0);
-        (View { scale, offset_x: left + l * scale, offset_y: t * scale }, w, h)
+        fit_across(cw, ch, self.dress_overflow(), scale, viewport_w)
+    }
+
+    /// The height of the page a printed layout lays out: the content `content_h` px tall,
+    /// `content_w` px wide, whose laid-out page box is `laid` in page units, drawn at `scale`
+    /// px per page unit with its origin `ox` px from the left. On a dressed page that is the
+    /// dressed box fitted to `viewport_w` as [`Page::dress_view`] at scale 0 fits it: the height
+    /// a host that scrolls the page gives its canvas. An undressed page answers `content_h`.
+    pub(crate) fn dressed_height(
+        &self,
+        laid: (f32, f32, f32, f32),
+        scale: f32,
+        ox: f32,
+        content_w: f32,
+        content_h: f32,
+        viewport_w: f32,
+    ) -> f32 {
+        let Some(vb) = self.dressed_box_for(laid) else { return content_h };
+        let over = overflow_of(vb, scale, ox, 0.0, content_w, content_h);
+        fit_across(content_w, content_h, over, 0.0, viewport_w).2
     }
 
     /// Re-place the ornaments against the current layout. A layout that respaces the
@@ -608,8 +810,9 @@ impl Page {
 
     /// Put other ornaments on this page. Returns `None`, and leaves the page undressed,
     /// when an index is out of range, names an ornament of another kind, names a band or a
-    /// border with no slot, or every index is [`NONE`]. Replaces any previous dress. A reflowed page is laid out again from its
-    /// own spec, so a band holds its title at once; a printed page is refitted.
+    /// border with no slot, or every index is [`NONE`]. Replaces any previous dress. A laid-out
+    /// page is laid out again from its own spec, so a band holds its title at once, the crop
+    /// makes room for the medallions and fill-height fills the box with the border.
     pub fn dress(&mut self, set: &Arc<OrnamentSet>, spec: &DressSpec) -> Option<&Dress> {
         let was_dressed = self.take_dress();
         let Some(mut dress) = self.build_dress(set, spec) else {
@@ -657,14 +860,15 @@ impl Page {
         if [header, frame].iter().flatten().any(|(_, o)| o.asset.slot.is_none()) {
             return None;
         }
-        let pw = self.width();
-        let ph = self.height();
-        let (laid_left, laid_top, laid_w, laid_h) = self.laid_page_box();
+        let laid = self.laid_page_box();
+        let (laid_left, _, laid_w, _) = laid;
         let mut b = Builder {
             set,
             line_art: spec.line_art,
             out: Dress {
-                view_box: [0.0, 0.0, pw, ph],
+                // Without a border the dressed box is the laid-out page, never the printed
+                // sheet: a crop, or a reflowed row, is what the host shows.
+                view_box: [laid.0, laid.1, laid.2, laid.3],
                 ayah_mark: spec.ayah_mark,
                 surah_header: spec.surah_header,
                 page_frame: spec.page_frame,
@@ -678,57 +882,21 @@ impl Page {
         let mut column = laid_w;
         let mut column_left = laid_left;
 
-        // The border. A frame publishes its text area as its slot. Mapping the page box
-        // onto that slot makes the band thickness follow at the mushaf's own proportions:
-        // one uniform scale, never a stretch to the page box. The page the border goes
-        // around is the laid-out one, in both dimensions: under reflow a row is narrower
-        // than the printed page. A frame without slices is stretched instead, so that its
-        // slot lands on the grown box exactly.
+        // The border goes around the laid-out page, in both dimensions: under reflow a row is
+        // narrower than the printed page ([`place_frame`]).
         if let Some((oi, o)) = frame {
-            if let Some(slot) = o.asset.slot {
+            if let Some((placed, view_box)) = place_frame(o, spec, laid) {
                 let pal = palette(o, oi, spec);
-                let gap = spec.gap;
-                let unit = (laid_w + 2.0 * gap) / slot[2].max(f32::EPSILON); // page units per frame unit
-                let size = if spec.page_frame_scale > 0.0 { spec.page_frame_scale } else { 1.0 };
-                let (asset_w, asset_h) = (o.asset.width(), o.asset.height());
-                match &o.slices {
-                    Some(sl) => {
-                        // A bigger border draws the frame's units bigger, so fewer motifs fit
-                        // along each edge, and a smaller one more: the pattern scales as a
-                        // whole and nothing is stretched. The margins grow with it; the slot
-                        // stays on the grown page box. The bottom margin is the frame's own,
-                        // not a copy of its top.
-                        let unit = unit * size;
-                        let box_x = laid_left - gap - slot[0] * unit;
-                        let box_y = laid_top - gap - slot[1] * unit;
-                        let unit_w = (laid_w + 2.0 * gap) / unit + slot[0] + (asset_w - slot[0] - slot[2]);
-                        let unit_h = (laid_h + 2.0 * gap) / unit + slot[1] + (asset_h - slot[1] - slot[3]);
-                        let (box_w, box_h) = (unit_w * unit, unit_h * unit);
-                        let frame_tf = Tf::fit([0.0, 0.0, unit_w, unit_h], box_x, box_y, box_w, box_h, false);
-                        b.tile_frame(sl, &pal, &frame_tf, unit_w, unit_h);
-                        b.out.view_box = [box_x, box_y, box_w, box_h];
-                    }
-                    None => {
-                        // two scales: the slot maps onto the grown box in both dimensions
-                        let sx = (laid_w + 2.0 * gap) / slot[2].max(f32::EPSILON);
-                        let sy = (laid_h + 2.0 * gap) / slot[3].max(f32::EPSILON);
-                        let e = laid_left - gap - slot[0] * sx;
-                        let f = laid_top - gap - slot[1] * sy;
-                        let vb = o.asset.view_box;
-                        b.place(
-                            &o.asset,
-                            &pal,
-                            OrnamentKind::PageFrame,
-                            &Tf { a: sx, b: 0.0, c: 0.0, d: sy, e, f },
-                            false,
-                            NONE,
-                        );
+                match placed {
+                    FramePlace::Tiled { slices, tf, unit_w, unit_h } => b.tile_frame(slices, &pal, &tf, unit_w, unit_h),
+                    FramePlace::Stretched { tf } => {
+                        b.place(&o.asset, &pal, OrnamentKind::PageFrame, &tf, false, NONE);
                         b.out.frame_stretched = true;
-                        b.out.view_box = [e + vb[0] * sx, f + vb[1] * sy, asset_w * sx, asset_h * sy];
                     }
                 }
-                column = laid_w + 2.0 * gap;
-                column_left = laid_left - gap;
+                b.out.view_box = view_box;
+                column = laid_w + 2.0 * spec.gap;
+                column_left = laid_left - spec.gap;
             }
         }
 
@@ -774,6 +942,7 @@ impl Page {
         // slot centre on the ring's centre, so the numeral sits where the design leaves
         // room for it. Only the ring is replaced; the numeral is the print's own ink.
         if let Some((oi, o)) = mark {
+            let first = b.out.table.len();
             let pal = palette(o, oi, spec);
             let (scx, scy) = o.asset.slot_centre();
             for m in self.ayah_marks() {
@@ -797,6 +966,9 @@ impl Page {
                 b.place(&o.asset, &pal, OrnamentKind::AyahMark, &tf, false, self.placement_of_path(path));
                 b.out.n_ayah_marks += 1;
             }
+            // A medallion is placed on its printed ring, which no layout moves sideways on a
+            // printed page, so this is the same on every rebuild.
+            b.out.mark_reach = b.ink_x_from(first);
         }
         Some(b.out)
     }
@@ -1625,6 +1797,147 @@ mod tests {
         assert!(near(tr.2, r) && near(tr.1, v[1]), "{tr:?}");
         assert!(near(bl.0, v[0]) && near(bl.3, b), "{bl:?}");
         assert!(near(br.2, r) && near(br.3, b), "{br:?}");
+    }
+
+    /// A tall box with no padding, the shape of a reader that scrolls the page itself. The
+    /// synthetic page fits it at the printed pitch even on the mushaf's 15 line grid.
+    fn tall(fill: bool) -> LayoutSpec {
+        LayoutSpec { viewport_w: 200.0, viewport_h: 2400.0, fill_height: fill, ..Default::default() }
+    }
+
+    #[test]
+    fn fill_height_fills_the_box_with_the_border() {
+        let lines = page().0.data().lines.len() as u32;
+        for set in [set(), tiled_set(false)] {
+            // the short page on the mushaf's grid, and the same page as a full grid of its own
+            for grid_lines in [0, lines] {
+                for pad in [0.0, 12.0] {
+                    let spec = LayoutSpec { pad_top: pad, pad_bottom: pad, grid_lines, ..tall(true) };
+                    let (mut p, _, _) = page();
+                    p.dress(&set, &frame_only()).unwrap();
+                    let l = p.layout(&spec).clone();
+                    let (v, w, h) = p.dress_view(0.0, spec.viewport_w);
+                    let case = format!("grid {grid_lines} pad {pad}");
+                    assert!(near(w, 200.0) && (h - 2400.0).abs() < 1e-2, "{case}: {w} x {h}");
+                    assert!(
+                        near(l.fit_scale, v.scale),
+                        "{case}: the fit shows that box: {} vs {}",
+                        l.fit_scale,
+                        v.scale
+                    );
+                    // as shown, the text leaves room for the border above and below it
+                    let shown = l.content_h * v.scale;
+                    assert!(shown < 2400.0, "{case}: the text leaves room for the border: {shown}");
+                    // the spacing a host is told is the spacing the page is laid out with
+                    let told = p.line_spacing_to_fill(&spec, f32::INFINITY) * p.line_spacing();
+                    assert!(near(told, l.line_spacing), "{case}: {told} vs {}", l.line_spacing);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_bordered_page_too_tall_for_the_box_keeps_the_printed_pitch() {
+        let (mut p, _, _) = page();
+        p.dress(&tiled_set(false), &frame_only()).unwrap();
+        let spec = LayoutSpec { viewport_h: 150.0, ..tall(true) };
+        let l = p.layout(&spec).clone();
+        assert_eq!(l.line_spacing, p.line_spacing(), "no leading is added");
+        assert!(p.dress_view(0.0, spec.viewport_w).2 > 150.0);
+    }
+
+    #[test]
+    fn the_printed_height_holds_the_border() {
+        for set in [set(), tiled_set(false)] {
+            let (mut p, _, _) = page();
+            p.dress(&set, &frame_only()).unwrap();
+            let spec = tall(false);
+            // asked before the page is laid out for it, as a host planning a box asks
+            let want = p.printed_height(&spec);
+            p.layout(&spec);
+            let (_, _, h) = p.dress_view(0.0, spec.viewport_w);
+            assert!(near(h, want), "{h} vs {want}");
+            assert!(want > p.current_layout().unwrap().content_h * p.dress_view(0.0, 200.0).0.scale);
+            // in proportion to the width with no padding: a host shrinking a page to fit a box
+            // divides by it
+            let half = p.printed_height(&LayoutSpec { viewport_w: 100.0, ..spec });
+            assert!(near(2.0 * half, want), "{half} vs {want}");
+            // undressed, it is the content height again
+            p.undress();
+            assert!(near(p.printed_height(&spec), p.layout(&spec).content_h));
+        }
+    }
+
+    #[test]
+    fn a_crop_makes_room_for_the_medallions() {
+        let (mut p, _, _) = page();
+        // the medallion is 6 tall and 4.8 wide on the ring at x = 45: x 42.6 to 47.4
+        let spec = LayoutSpec { crop_left: 44.0, crop_right: 100.0 - 46.0, ..tall(false) };
+        p.layout(&spec);
+        p.dress(&set(), &DressSpec { surah_header: NONE, page_frame: NONE, ..all() }).unwrap();
+        let l = p.current_layout().unwrap().clone();
+        let d = p.dress_of().unwrap().clone();
+        let (left, right) = (l.laid_left, l.laid_left + l.laid_width);
+        for (i, t) in d.table.iter().enumerate() {
+            let half = t.stroke_width / 2.0;
+            let (x0, _, x1, _) = draw_box(&d, i);
+            assert!(x0 - half >= left - 1e-4 && x1 + half <= right + 1e-4, "{:?} in {left}..{right}", (x0, x1));
+        }
+        // the crop gives way only as far as the medallion reaches
+        let half = d.table.iter().map(|t| t.stroke_width / 2.0).fold(0.0, f32::max);
+        assert!(near(left, 42.6 - half) && near(right, 47.4 + half), "{left}..{right}");
+        // the medallion is still on its ring
+        let (x0, _, x1, _) = draw_box(&d, 0);
+        assert!(near((x0 + x1) / 2.0, 45.0));
+        // undressed, the host's crop is back
+        p.undress();
+        assert!(near(p.current_layout().unwrap().laid_left, 44.0));
+    }
+
+    #[test]
+    fn without_a_border_the_dressed_box_is_the_laid_out_page() {
+        let spec = LayoutSpec { crop_left: 8.0, crop_right: 8.0, ..tall(true) };
+        for reflow in [None, Some(ReflowSpec { zoom: 2.0, ..Default::default() })] {
+            let (mut p, _, _) = page();
+            p.dress(&set(), &DressSpec { page_frame: NONE, ..all() }).unwrap();
+            let l = p.layout(&LayoutSpec { reflow, ..spec }).clone();
+            let case = if reflow.is_some() { "reflowed" } else { "printed" };
+            assert_eq!(p.view_box(), [l.laid_left, l.laid_top, l.laid_width, l.laid_height], "{case}");
+            let o = p.dress_overflow();
+            assert!([o.0, o.1, o.2, o.3].iter().all(|v| near(*v, 0.0)), "{case}: {o:?}");
+            let (v, w, h) = p.dress_view(0.0, spec.viewport_w);
+            assert!(near(v.scale, 1.0) && near(w, l.content_w) && near(h, l.content_h), "{case}: {v:?} {w} {h}");
+            assert!(near(l.fit_x, 0.0), "{case}: the page is not pushed sideways: {}", l.fit_x);
+        }
+    }
+
+    #[test]
+    fn a_crop_and_a_dress_agree_in_either_order() {
+        let spec = LayoutSpec { crop_left: 44.0, ..tall(true) };
+        let dress = DressSpec { surah_header: NONE, ..all() };
+        let (mut a, _, _) = page();
+        a.layout(&spec);
+        a.dress(&tiled_set(false), &dress).unwrap();
+        let (mut b, _, _) = page();
+        b.dress(&tiled_set(false), &dress).unwrap();
+        b.layout(&spec);
+        let (la, lb) = (a.current_layout().unwrap(), b.current_layout().unwrap());
+        assert_eq!(
+            (la.scale, la.laid_left, la.line_spacing, la.fit_scale),
+            (lb.scale, lb.laid_left, lb.line_spacing, lb.fit_scale)
+        );
+        assert_eq!(a.view_box(), b.view_box());
+        assert_eq!(a.dress_view(0.0, 200.0), b.dress_view(0.0, 200.0));
+    }
+
+    #[test]
+    fn the_ink_extent_is_the_curve_s_not_its_control_points() {
+        // a quadratic from (0, 0) through the control point (10, 0) to (0, 10): x = 20 t (1 - t)
+        let (lo, hi) = ink_x_extent(&[OP_MOVE, OP_QUAD], &[0.0, 0.0, 10.0, 0.0, 0.0, 10.0]);
+        assert!(near(lo, 0.0) && near(hi, 5.0), "{lo} {hi}");
+        // a cubic from (0, 0) through (12, 0) and (12, 10) to (0, 10): x = 36 t (1 - t)
+        let (lo, hi) = ink_x_extent(&[OP_MOVE, OP_CUBIC, OP_CLOSE], &[0.0, 0.0, 12.0, 0.0, 12.0, 10.0, 0.0, 10.0]);
+        assert!(near(lo, 0.0) && near(hi, 9.0), "{lo} {hi}");
     }
 
     // ── the ink band of a dressed page (#182) ──

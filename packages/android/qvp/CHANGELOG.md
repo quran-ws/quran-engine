@@ -23,6 +23,37 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   got from the page before it is stale: geometry, colours, built paths and each array sized
   from the path count. In React Native, the letter hit tests take `DEFAULTS.TAP_DISTANCE` as
   the default `maxDistance`, as its `hitTest` does.
+
+### Changed
+- `qvp.h` states three rules that hosts must follow. After a change of rules or state,
+  call `qvp_tick` before any call that reads colours, styled paths, the draw revision or the
+  draw list, or a transition starts at the time of the last tick. That was already how
+  `qvp_colors` worked, and the header now says so. Use a page from one thread at a time,
+  const calls included, because a const call can update the page's caches. Each frame, call
+  `qvp_tick`, then `qvp_colors` or `qvp_styled_paths`, then `qvp_layout_draw_revision`, then
+  `qvp_layout_draw_list` when the revision, the layout or the band changed.
+- An attach of a letter layer makes stale what the host read before it. The pointers that
+  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
+  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
+  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
+  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
+  `qvp_colors` does. On a page with no layer they do not.
+- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
+  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
+  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
+  An array that an app copied from them before an attach does not hold the pieces.
+
+### Removed
+
+### Fixed
+- Android: the styled pass of `QvpPageView` draws a styled path only where the engine's draw
+  list puts it. Before, it drew every styled path. It put a styled path that the list leaves
+  out, such as a page number under reflow, at its printed line, and it drew a path once when
+  the list holds it twice. `lastOverlayPaths` now counts the styled draws.
+
+## [0.9.0] - 2026-11-22
+
+### Added
 - `QvpPage.ayahMarksView()`, `hitAreasView(gapBias)` and `wordBandsView(words, height, padX,
   padY)`: the viewport-px twins of `ayahMarks`, `hitAreas` and `wordBands`. Each answers
   through the current layout, so an app that draws its own overlay on a reflowed page reads
@@ -48,23 +79,6 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   a dressed page, and the web, Kotlin, Dart and Swift tests replay them (#134).
 
 ### Changed
-- `qvp.h` states three rules that hosts must follow. After a change of rules or state,
-  call `qvp_tick` before any call that reads colours, styled paths, the draw revision or the
-  draw list, or a transition starts at the time of the last tick. That was already how
-  `qvp_colors` worked, and the header now says so. Use a page from one thread at a time,
-  const calls included, because a const call can update the page's caches. Each frame, call
-  `qvp_tick`, then `qvp_colors` or `qvp_styled_paths`, then `qvp_layout_draw_revision`, then
-  `qvp_layout_draw_list` when the revision, the layout or the band changed.
-- An attach of a letter layer makes stale what the host read before it. The pointers that
-  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
-  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
-  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
-  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
-  `qvp_colors` does. On a page with no layer they do not.
-- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
-  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
-  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
-  An array that an app copied from them before an attach does not hold the pieces.
 - The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
   engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
   not agree (#134):
@@ -91,14 +105,22 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   that costs time, not pixels. Flutter and React Native need no change.
 - `QvpDressInfo.overflow` and its twins in every wrapper are documented in layout px, which
   is what the engine returns. The docs said viewport px (#182).
-
-### Removed
+- `layoutPrintedHeight` on a page dressed in a border answers the height of the whole page,
+  border included: the dressed box fitted to the viewport width, as `dressView` at scale 0
+  fits it. That is the height a host that scrolls the page gives its canvas, so a host can
+  plan a box for a bordered page before it sizes the canvas. With no padding the height is in
+  proportion to the width. An undressed page answers `contentH` as before.
+- Fill-height on a page dressed in a border fills the viewport with the border included:
+  `dressView(0, viewportW).height` is `viewportH`. Before, the text filled the viewport and the
+  border reached past it above and below. `layoutLineSpacingToFill` answers the same leading.
+- A printed layout of a dressed page narrows `cropLeft` and `cropRight` where a medallion
+  reaches past them, so the crop never cuts into a medallion. A medallion stays centred on
+  its printed ring. On page 50, four font markers reached about 1 unit past a crop measured
+  from the words.
+- `dress` and `undress` lay a printed page out again from its own spec, as they already did
+  for a reflowed page, because the crop and the fill now depend on the dress.
 
 ### Fixed
-- Android: the styled pass of `QvpPageView` draws a styled path only where the engine's draw
-  list puts it. Before, it drew every styled path. It put a styled path that the list leaves
-  out, such as a page number under reflow, at its printed line, and it drew a path once when
-  the list holds it twice. `lastOverlayPaths` now counts the styled draws.
 - A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's
@@ -114,6 +136,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   `fit_x`, `fit_y` place the content's own origin. The docs of the dress overflow in
   Kotlin, Swift and Dart told a host to fit the overflow itself. The engine's fit holds it
   already. The iOS `resetView()` docs said that the view fits the content height.
+- A page dressed without a border no longer grows its dressed box to the whole printed page.
+  The box is the laid-out page, so a crop is kept. Before, `dressView` at scale 0 shrank a
+  cropped page to show the cut margins, by about 3.5% on page 50. A reflowed page dressed
+  without a border is no longer pushed off to the left: on page 50 at zoom 1.8, `fitX` was
+  −170 px.
 
 ## [0.8.0] - 2026-11-04
 
