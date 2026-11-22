@@ -10,7 +10,12 @@ All notable changes to the engine and its packages. The format follows
 - The letter layer, an optional file per page (`NNN.qvl`) in the new `QVL1` format
   (`docs/FORMAT.md`). For each word it gives the letters, the page paths that draw each
   letter, and the pieces that the converter cut from an outline that joins several
-  letters. The page file does not change. The engine does not load the layer yet.
+  letters. The page file does not change. The engine does not load the layer yet. A layer
+  codes each piece against the page path it was cut from: runs of the path's segments,
+  parts of one segment that the decoder computes in integers, and cut lines between points
+  on the path. Its header names the page file it was built for by an FNV-1a digest, and a
+  reader refuses a layer for other bytes. The 604 layers take 8,257,673 bytes, 3,919,273
+  bytes after brotli at quality 11.
   `qvp-convert letters <letters_svg_dir> <words_svg_dir> <out_dir>` builds it from the
   letters archive of `quran-svg-elements` v2.0.0, and `QVP_SYNC=letters
   scripts/sync-test-data.sh` fetches that archive into `pages-letters/`. Two gates in

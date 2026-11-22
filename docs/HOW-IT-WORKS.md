@@ -59,7 +59,9 @@ that supplies its own frame sets `surahFrames: false`.
 The converter can also build a **letter layer** (`NNN.qvl`) from the letters archive of
 `quran-svg-elements`: for each word, its letters and the page paths that draw each one.
 Where one outline joins several letters, the layer holds the pieces that the converter
-cut from it. The layer is optional, and the page file does not change. The engine does
+cut from it. The layer is optional, and the page file does not change. A layer codes each
+piece against the page path it was cut from, so it is about a tenth of the size of the page
+file, and it names the page file it belongs to by a digest. The engine does
 not read the layer yet. `docs/DATA.md` says where the layer comes from and states its
 limits, and `docs/MEASURED.md` gives its size and what its ink gate measured.
 
