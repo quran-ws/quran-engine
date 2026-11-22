@@ -10,6 +10,7 @@
 
 pub mod atlas;
 pub mod codec;
+pub mod letters;
 pub mod ornaments;
 mod validate;
 

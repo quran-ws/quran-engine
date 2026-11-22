@@ -1,9 +1,10 @@
-# The page, atlas and ornament formats
+# The page, atlas, ornament and letter formats
 
-This page specifies the three binary formats the engine reads, byte by byte, so that a
+This page specifies the four binary formats the engine reads, byte by byte, so that a
 decoder can be written from it without the Rust source. The reference implementation is
 `crates/qvp-format/src/codec.rs` (pages), `crates/qvp-format/src/atlas.rs` (atlas) and
-`crates/qvp-format/src/ornaments.rs` (ornaments);
+`crates/qvp-format/src/ornaments.rs` (ornaments) and `crates/qvp-format/src/letters.rs`
+(letter layers);
 `conformance/qvp1-lite.hex` is a small page written by the encoder, and
 `web/lite.mjs` is a second decoder written against this specification.
 
@@ -207,6 +208,9 @@ The page format version is the u16 at offset 4. A reader rejects a version it do
 know. Changing the encoding means a new version, a full rerun of the identity gate over
 all 604 pages, and a new data release (`docs/standards/RELEASING.md`).
 
+`QVL1` has its own version, the u16 at offset 4 of a letter layer. It does not change
+with the page format version, and a change to one format does not change the other.
+
 ## QVO1: an ornament set
 
 An ornament set holds the ayah medallions, surah bands and page frames of other mushafs
@@ -245,3 +249,138 @@ straight runs are always mirrored, as the catalogue assembles them.
 **Path**: `part` varint, `flags` u8 (1 even-odd, 2 stroke), `stroke_width` zigzag in
 quantised asset units (0 when filled), `op_off` varint, `op_len` varint. A path's
 bounding box is derived at load.
+
+## QVL1: the letter layer of one page
+
+A letter layer holds the letters of the words of one page. For each letter it gives the
+character, the paths that draw it, and the marks of the letter. It also holds the marks
+that belong to a word and to no letter of it.
+
+Some page paths join several letters in one outline. The converter cuts such a path
+into pieces, and the layer stores the geometry of each piece. The page file does not
+change. The reference implementation is `crates/qvp-format/src/letters.rs`.
+
+A letter layer is a 32-byte header followed by four sections whose lengths the header
+gives. The sections follow the header back to back, in header order, and the file ends
+where the last section ends.
+
+### Header (32 bytes)
+
+| offset | size | field |
+|---|---|---|
+| 0 | 4 | magic `QVL1` |
+| 4 | u16 | format version, 1 |
+| 6 | u16 | `quant`, the quantisation factor of the page |
+| 8 | u16 | page number |
+| 10 | u16 | number of words in the page |
+| 12 | u32 | number of paths in the page |
+| 16 | u32 | byte length of the tables section |
+| 20 | u32 | byte length of the opcodes section |
+| 24 | u32 | byte length of the close indices and x deltas section |
+| 28 | u32 | byte length of the y deltas section |
+
+An offset (`at`) is a code-point offset in the word's `qpc` text. `0xFFFF` means that the
+source gives no offset.
+
+### Section 1: tables
+
+The section starts with four varint counts: letters, members, word marks and pieces.
+The four tables follow in that order.
+
+**Letters**, one record each, in word order and then in the order of the word's spelling:
+
+| field | coding |
+|---|---|
+| word | zigzag delta from the previous letter's word (from 0 for the first letter) |
+| `at` | varint |
+| text | varint: the Unicode code point of the letter's character |
+| member count | varint |
+| `more_at` count | varint |
+| `more_at` | one varint per offset: other characters that the letter's body also draws |
+
+The first member of a letter is the running total of the member counts before it.
+
+**Members**, stored column by column. A member is a path of a letter: its body ink or a
+mark of it.
+
+| column | coding |
+|---|---|
+| flags, for every member | u8 each: bit 0 body ink, bit 1 a piece, bit 2 a stored `at`. Bits 3 to 7 are 0. |
+| path, for every member | varint: with bit 1, a piece index. Without it, an index in the page's path table. |
+| `at`, for every member with bit 2 set | varint |
+
+When bit 2 is clear, the reader sets `at` itself: a body member takes its letter's `at`,
+and a mark takes `0xFFFF`. The writer sets bit 2 only when `at` differs from that value.
+
+**Word marks**, one record each, for a mark that belongs to a word and to no letter of it:
+
+| field | coding |
+|---|---|
+| word | zigzag delta from the previous word mark's word |
+| path | varint: an index in the page's path table |
+| `at` | `opt`: `at + 1`, 0 for `0xFFFF` |
+
+**Pieces**, one record each, in order of source:
+
+| field | coding |
+|---|---|
+| source | zigzag delta from the previous piece's source, in wrapping 32-bit arithmetic. The source is the page path that the converter cut the piece from. |
+| run length | varint: the number of drawing operations in the piece that are not a close |
+
+A piece takes the even-odd flag of its source path. The file does not store it.
+
+### Sections 2 to 4: the drawing operations
+
+Each piece contributes one run of drawing operations, in piece order. A piece's
+coordinates are absolute page coordinates, quantised by `quant`. The coding is the
+coding of QVP1 sections 2 to 5, with the pieces in place of the paths:
+
+- **Opcodes** (section 2): two bits per operation, four per byte, low bits first.
+- **Close indices and x deltas** (section 3): the close indices first, as a varint count
+  and then one varint delta per close. The x deltas follow them. The count makes the
+  close list end at a known byte, so the x deltas need no length of their own.
+- **Y deltas** (section 4).
+
+A piece's first point is a delta from the previous piece's first point. The first
+piece's first point is a delta from 0,0.
+
+### What a reader rejects
+
+The reference decoder returns an error for each of these, and a writer keeps them:
+
+- A magic other than `QVL1`, or a version other than 1.
+- A `quant` of 0.
+- A file shorter than the header or than the section lengths, or bytes after the last
+  section.
+- A count that its section cannot hold. A record takes at least 5 bytes (letter), 2
+  (member), 3 (word mark) and 2 (piece). A `more_at` offset and a close index each take
+  at least 1 byte.
+- A delta-coded field outside its type, or a varint that does not fit a u16 field.
+- A letter text that is not a Unicode scalar value.
+- Member counts that do not add up to the members count.
+- Member flags with a bit other than bits 0 to 2 set.
+- A piece member at or past the pieces count. A page member, a word mark's path or a
+  piece's source at or past the page's path count. A word at or past the page's word
+  count.
+- A tables section that the reader does not end on its last byte.
+- Run lengths that add up to more than four operations per opcode byte, or to more than
+  one per byte of the x deltas or of the y deltas. An opcodes section longer than the
+  run lengths need.
+- A coordinate with an absolute value of 2^30 quantised units or more.
+- A piece that does not start with a move.
+- A stream that does not end where its section ends, or a close index that names no
+  operation.
+
+These rules tie a layer to its page. `LetterData::check_against` checks them, and the
+converter and the engine call it:
+
+- The layer's page number, `quant`, path count and word count are those of the page.
+- Letters are in word order, and pieces in source order.
+- Each letter's first member is the running total of the member counts before it, and
+  the member counts add up to the members count.
+- Each letter has at least one body member.
+- A letter's page members, and a word mark's path, lie inside the path run of its word.
+- A piece's source lies inside the path run of the word of the letter that holds the
+  piece, and the source path has kind body.
+- A page path is a member of at most one letter, and is never both a member and a
+  source.
