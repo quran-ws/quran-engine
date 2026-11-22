@@ -389,3 +389,59 @@ pub(crate) fn letters_page() -> Page {
     p.attach_letters(&encode_letters(&letters_layer())).unwrap();
     p
 }
+
+/// A variant of [`letters_page_data`] for the parts and the order of a letter's marks.
+/// Word 2 is `ؤِ` (U+0624 0, U+0650 1) and gets two more paths at its end: path 8, a kasrah,
+/// and path 9, a hamzah sign. Paths 0 to 7 are as in the shared fixture.
+pub(crate) fn letters_variant_page_data() -> PageData {
+    let mut data = letters_page_data();
+    let (_, kasrah) = push_path(
+        &mut data.ops,
+        &mut data.paths,
+        &square(1400, 6200, 1600, 6400),
+        PathKind::Mark,
+        Mark::Kasrah,
+        Family::Diacritic,
+        PF_EVENODD,
+    );
+    let (_, hamzah) = push_path(
+        &mut data.ops,
+        &mut data.paths,
+        &square(1400, 4200, 1600, 4400),
+        PathKind::Mark,
+        Mark::Hamzah,
+        Family::Diacritic,
+        PF_EVENODD,
+    );
+    data.strings[2] = "ؤِ".to_string();
+    let w = &mut data.words[2];
+    w.n_paths = 4;
+    w.bbox.union(&kasrah);
+    w.bbox.union(&hamzah);
+    let bbox = w.bbox;
+    data.lines[1].bbox = bbox;
+    data.ayahs[1].bbox = bbox;
+    data
+}
+
+/// The layer of [`letters_variant_page_data`]. As [`letters_layer`], but the letter of word
+/// 2 is `ؤ` and stores its members as: body path 6 at 0, the omitted alif (path 7) with no
+/// offset, the kasrah (path 8) at 1, and the hamzah sign (path 9) at 0. Its marks are out of
+/// text order, one of them is at the letter's own offset, and one has no offset. The pieces
+/// are paths 10 and 11.
+pub(crate) fn letters_variant_layer() -> LetterData {
+    let mut layer = letters_layer();
+    layer.n_page_paths = 10;
+    layer.letters[4].text = 'ؤ';
+    layer.letters[4].n_members = 4;
+    layer.members.push(MemberRec { path: MemberPath::Page(8), at: 1, is_body: false });
+    layer.members.push(MemberRec { path: MemberPath::Page(9), at: 0, is_body: false });
+    layer
+}
+
+/// The variant page with its layer attached.
+pub(crate) fn letters_variant_page() -> Page {
+    let mut p = Page::from_data(letters_variant_page_data()).unwrap();
+    p.attach_letters(&encode_letters(&letters_variant_layer())).unwrap();
+    p
+}

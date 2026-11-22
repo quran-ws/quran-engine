@@ -30,19 +30,24 @@ pub enum Selector {
     Kind(PathKind),
     Deco(DecoKind),
     DecoIdx(u32),
-    /// A letter of a word: (word, letter index in the word, part). With no letter layer it
-    /// selects nothing.
+    /// A letter of a word: (word, letter index in the word, part). The parts go by offset
+    /// ([`LetterPart`]): `BodyAndDots` takes every member at the letter's own offset, so it
+    /// takes the same paths as `WordChars(word, at, at)` for that offset. With no letter
+    /// layer it selects nothing.
     Letter(u32, u16, LetterPart),
-    /// The nth mark of a letter: (word, letter, n). Marks count in member order, dots
-    /// included, and a body never counts.
+    /// The nth mark of a letter: (word, letter, n). The marks count in text order: by
+    /// offset, then in the layer's member order, and a mark with no offset comes last. Dots
+    /// count, and a body never counts. This is the order of the marks in
+    /// [`Page::letter_members`]. No part limits it: a hamzah sign at the letter's own offset
+    /// is still one of its marks.
     LetterMark(u32, u16, u16),
     /// Every member of a letter whose path has that mark: (word, letter, mark). A body that
-    /// the page stores as a mark counts. `Mark::None` selects nothing.
+    /// the page stores as a mark counts. No part limits it. `Mark::None` selects nothing.
     LetterMarkNamed(u32, u16, Mark),
     /// The ink of a word's `qpc` characters, by code-point offset: (word, from, to), both
-    /// ends in. A letter's offset takes its body and its dots, a mark's offset takes that
-    /// mark, and an extra offset the body draws takes the body. A character with no ink, or
-    /// a mark with no offset, is never taken.
+    /// ends in. An offset takes every member at that offset, and an extra offset the body
+    /// draws takes the body. A word-level mark is taken by its own offset. A character with
+    /// no ink, or a mark with no offset, is never taken.
     WordChars(u32, u16, u16),
     /// Letters by what they are: the rule [`Page::style_letters`] adds.
     Letters(LetterSelection),

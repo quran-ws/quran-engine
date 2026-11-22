@@ -410,10 +410,9 @@ fn a_letter_part_reads_from_its_code() {
     assert_eq!(LetterPart::from_u8(1), Some(LetterPart::BodyAndDots));
     assert_eq!(LetterPart::from_u8(2), Some(LetterPart::Marks));
     assert_eq!(LetterPart::from_u8(3), None);
-    assert!(LetterPart::BodyAndDots.takes(false, Category::LetterDot));
-    assert!(!LetterPart::Marks.takes(false, Category::LetterDot));
-    assert!(LetterPart::Marks.takes(false, Category::Harakah));
-    assert!(!LetterPart::Marks.takes(true, Category::None));
+    assert!(LetterPart::All.takes(true) && LetterPart::All.takes(false));
+    assert!(LetterPart::BodyAndDots.takes(true) && !LetterPart::BodyAndDots.takes(false));
+    assert!(LetterPart::Marks.takes(false) && !LetterPart::Marks.takes(true));
 }
 
 /// A geometry row as a comparable tuple.
@@ -1209,4 +1208,147 @@ fn a_new_layout_keeps_the_swap() {
     // a new layout keeps the swap
     p.layout(&LayoutSpec { viewport_w: 400.0, viewport_h: 400.0, ..Default::default() });
     assert_eq!(draws(&p), SWAPPED);
+}
+
+// ── fix round 1: parts by offset, marks in text order ──
+
+/// The paths a rule in `RED` takes on a page with a layer. The rule is removed after.
+fn taken(p: &mut Page, sel: Selector) -> Vec<u32> {
+    let h = p.style(sel, Paint::new(RED));
+    let v = reds(p);
+    p.remove_style(h);
+    v
+}
+
+#[test]
+fn parts_go_by_offset() {
+    let mut p = letters_variant_page();
+    // the hamzah sign (9) is at the letter's own offset: it is part of the letter's
+    // character, as the body is. The kasrah (8) is at another offset, the omitted alif (7)
+    // has none
+    assert_eq!(taken(&mut p, Selector::Letter(2, 0, LetterPart::BodyAndDots)), vec![6, 9]);
+    assert_eq!(taken(&mut p, Selector::Letter(2, 0, LetterPart::Marks)), vec![7, 8]);
+    assert_eq!(taken(&mut p, Selector::Letter(2, 0, LetterPart::All)), vec![6, 7, 8, 9]);
+    // the mark selectors are not limited by part
+    assert_eq!(taken(&mut p, Selector::LetterMarkNamed(2, 0, Mark::Hamzah)), vec![9]);
+    assert_eq!(taken(&mut p, Selector::LetterMark(2, 0, 0)), vec![9]);
+    let q = |part| query(Target::Page, None, Mark::Hamzah, part);
+    p.style_letters(LAYER_BASE, &q(LetterPart::BodyAndDots), Paint::new(RED));
+    assert_eq!(reds(&mut p), vec![6, 9]);
+    let mut r = letters_variant_page();
+    r.style_letters(LAYER_BASE, &q(LetterPart::Marks), Paint::new(RED));
+    assert_eq!(reds(&mut r), vec![7, 8]);
+    assert_eq!(r.find_letters(&q(LetterPart::Marks)), vec![(2, 0)]);
+}
+
+#[test]
+fn body_and_dots_is_what_the_letters_offset_takes() {
+    for mut p in [letters_page(), letters_variant_page()] {
+        let mut n = 0;
+        for w in 0..p.data().words.len() as u32 {
+            for l in 0..p.letter_count(w) {
+                let at = p.letter_info(w, l).unwrap().at;
+                assert_ne!(at, NONE);
+                let own = taken(&mut p, Selector::Letter(w, l as u16, LetterPart::BodyAndDots));
+                assert!(!own.is_empty());
+                assert_eq!(own, taken(&mut p, Selector::WordChars(w, at as u16, at as u16)), "word {w} letter {l}");
+                n += 1;
+            }
+        }
+        assert_eq!(n, 5);
+    }
+}
+
+#[test]
+fn a_letters_marks_are_in_text_order() {
+    let mut p = letters_variant_page();
+    // stored as 7 (no offset), 8 (at 1), 9 (at 0); in text order 9, 8, 7
+    assert_eq!(taken(&mut p, Selector::LetterMark(2, 0, 0)), vec![9]);
+    assert_eq!(taken(&mut p, Selector::LetterMark(2, 0, 1)), vec![8]);
+    assert_eq!(taken(&mut p, Selector::LetterMark(2, 0, 2)), vec![7]);
+    assert_eq!(taken(&mut p, Selector::LetterMark(2, 0, 3)), Vec::<u32>::new());
+    let paths: Vec<u32> = p.letter_members(2, 0).iter().map(|m| m.path).collect();
+    assert_eq!(paths, vec![6, 9, 8, 7], "the body first, then the marks in text order");
+    let ats: Vec<u32> = p.letter_members(2, 0).iter().map(|m| m.at).collect();
+    assert_eq!(ats, vec![0, 0, 1, NONE]);
+    // the layer's own data keeps its order
+    let lt = p.letters.as_deref().unwrap();
+    let stored: Vec<_> = lt.data.members[6..10].iter().map(|m| m.path).collect();
+    use qvp_format::letters::MemberPath::Page as P;
+    assert_eq!(stored, vec![P(6), P(7), P(8), P(9)]);
+    assert_eq!(p.path_letter(9), Some((0, 0)));
+    assert_eq!(p.path_letter(7), Some((0, NONE)));
+}
+
+#[test]
+fn letter_members_list_the_marks_as_letter_mark_counts_them() {
+    for mut p in [letters_page(), letters_variant_page()] {
+        for w in 0..p.data().words.len() as u32 {
+            for l in 0..p.letter_count(w) {
+                let members = p.letter_members(w, l);
+                let first_mark = members.iter().position(|m| !m.is_body).unwrap_or(members.len());
+                assert!(members[first_mark..].iter().all(|m| !m.is_body), "the bodies come first");
+                for (n, m) in members[first_mark..].iter().enumerate() {
+                    assert_eq!(taken(&mut p, Selector::LetterMark(w, l as u16, n as u16)), vec![m.path]);
+                }
+                let past = (members.len() - first_mark) as u16;
+                assert_eq!(taken(&mut p, Selector::LetterMark(w, l as u16, past)), Vec::<u32>::new());
+            }
+        }
+    }
+}
+
+#[test]
+fn a_query_takes_an_ayah_scope() {
+    let p = letters_page();
+    let find = |scope| p.find_letters(&query(scope, None, Mark::None, LetterPart::All));
+    assert_eq!(find(Target::Ayah(1, 2)), vec![(2, 0)]);
+    assert_eq!(find(Target::Ayah(1, 1)), vec![(0, 0), (0, 1), (1, 0), (1, 1)]);
+    assert_eq!(find(Target::Ayah(2, 1)), vec![]);
+    assert_eq!(find(Target::AyahRange(1, 1, 2)).len(), 5);
+    assert_eq!(find(Target::AyahRange(1, 2, 9)), vec![(2, 0)]);
+    assert_eq!(find(Target::AyahRange(1, 3, 9)), vec![]);
+    let mut q = letters_page();
+    q.style_letters(LAYER_BASE, &query(Target::Ayah(1, 1), Some('ل'), Mark::None, LetterPart::All), Paint::new(RED));
+    assert_eq!(reds(&mut q), vec![3, 9]);
+    let mut r = letters_page();
+    r.style_letters(LAYER_BASE, &query(Target::AyahRange(1, 2, 2), None, Mark::None, LetterPart::All), Paint::new(RED));
+    assert_eq!(reds(&mut r), vec![6, 7]);
+}
+
+#[test]
+fn letter_rules_follow_a_different_second_layer() {
+    // the first layer cuts path 0; the second does not, and has one letter fewer in word 0
+    let mut uncut = letters_layer();
+    uncut.pieces.clear();
+    uncut.members[0].path = qvp_format::letters::MemberPath::Page(0);
+    uncut.members.remove(3);
+    uncut.letters.remove(1);
+    for (l, first) in uncut.letters.iter_mut().zip([0, 3, 4, 5]) {
+        l.first_member = first;
+    }
+    let mut p = letters_page();
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    p.style(Selector::LetterMark(0, 0, 1), Paint::new(RED));
+    p.style(Selector::WordChars(0, 2, 2), Paint::new(RED));
+    p.style_letters(LAYER_BASE, &query(Target::Page, Some('ل'), Mark::None, LetterPart::All), Paint::new(RED));
+    assert_eq!(reds(&mut p), vec![2, 3, 9]);
+    p.attach_letters(&encode_letters(&uncut)).unwrap();
+    // word 0 has no letter 1 and no offset 2 now; the fathah is still mark 1 of the ba
+    assert_eq!(p.colors().len(), 8);
+    assert_eq!(reds(&mut p), vec![2, 3]);
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(reds(&mut p), vec![2, 3, 9]);
+
+    // on the variant page: a second layer that moves the hamzah sign off the letter's offset
+    // changes the parts and the mark order
+    let mut moved = letters_variant_layer();
+    moved.members[9].at = qvp_format::letters::NO_AT;
+    let mut v = letters_variant_page();
+    v.style(Selector::LetterMark(2, 0, 0), Paint::new(RED));
+    v.style(Selector::Letter(2, 0, LetterPart::BodyAndDots), Paint::new(RED));
+    assert_eq!(reds(&mut v), vec![6, 9]);
+    v.attach_letters(&encode_letters(&moved)).unwrap();
+    assert_eq!(reds(&mut v), vec![6, 8]);
+    assert_eq!(v.letter_members(2, 0).iter().map(|m| m.path).collect::<Vec<_>>(), vec![6, 8, 7, 9]);
 }

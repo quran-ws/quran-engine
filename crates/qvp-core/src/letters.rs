@@ -9,16 +9,23 @@ use crate::defaults::MAX_LETTER_LAYER_BYTES;
 use crate::style::{PathAnim, PathCtx, Selector};
 use crate::{load, reflow, Page, PathGeom, Rgba, NONE};
 use qvp_format::letters::{decode_letters, LetterData, MemberPath, NO_AT};
-use qvp_format::{cmds_bbox, Category, Error, IBox, Mark, PageData, NONE_U16};
+use qvp_format::{cmds_bbox, Error, IBox, Mark, PageData, NONE_U16};
 
 /// What part of a letter a selector or a query takes. `QVP_LETTER_PART_*`.
+///
+/// The parts go by offset, not by the kind of mark. The ink of the letter's own character
+/// is every member at the letter's own offset: the body, the dots, and a sign that is part
+/// of the code point, such as a hamzah sign, a hamzat al-wasl sign, or a dagger alif that
+/// the page stores as a mark. So `Letter(w, l, BodyAndDots)` takes the same paths as
+/// `WordChars(w, at, at)` for the letter's offset `at`, when that offset passes the text
+/// check. A mark with no offset is in `Marks`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LetterPart {
     /// Every member.
     All = 0,
-    /// The body and the dots (marks of category `LetterDot`).
+    /// Every member at the letter's own offset: the ink of the letter's own character.
     BodyAndDots = 1,
-    /// The marks, with the dots left out.
+    /// Every other member: the marks at another offset, and the marks with no offset.
     Marks = 2,
 }
 
@@ -33,13 +40,13 @@ impl LetterPart {
         }
     }
 
-    /// True when this part takes a member with this role and mark category.
-    pub(crate) fn takes(self, is_body: bool, category: Category) -> bool {
-        let dot = category == Category::LetterDot;
+    /// True when this part takes a member. `own` is true when the member's offset is its
+    /// letter's own offset.
+    pub(crate) fn takes(self, own: bool) -> bool {
         match self {
             LetterPart::All => true,
-            LetterPart::BodyAndDots => is_body || dot,
-            LetterPart::Marks => !is_body && !dot,
+            LetterPart::BodyAndDots => own,
+            LetterPart::Marks => !own,
         }
     }
 }
@@ -67,7 +74,7 @@ pub struct LetterSelection {
     pub text: Option<char>,
     /// A mark that one of the letter's members must carry. `Mark::None` takes any letter.
     pub mark: Mark,
-    /// The part of each letter found.
+    /// The part of each letter found. The parts go by offset: see [`LetterPart`].
     pub part: LetterPart,
 }
 
@@ -156,8 +163,11 @@ pub(crate) struct PathLetter {
     pub raw_at: u16,
     /// True for a body member.
     pub is_body: bool,
-    /// Index among the letter's members that are not body, in member order. `u16::MAX` for
-    /// a body member.
+    /// True for a member whose offset, as the layer stores it, is its letter's own offset:
+    /// the ink of the letter's own character. False for every other path.
+    pub own: bool,
+    /// Index among the letter's members that are not body, in text order: by offset, then
+    /// in the layer's member order, a mark with no offset last. `u16::MAX` for a body member.
     pub nth_letter_mark: u16,
     /// The page path a piece replaces. The path itself for every other path.
     pub source: u32,
@@ -176,6 +186,7 @@ impl PathLetter {
             at: NO_AT,
             raw_at: NO_AT,
             is_body: false,
+            own: false,
             nth_letter_mark: u16::MAX,
             source: i,
             pieces: (0, 0),
@@ -194,6 +205,12 @@ pub(crate) struct Letters {
     pub letter_box: Vec<IBox>,
     /// Per letter: the mark ids its members' paths carry, as a 256-bit set.
     pub letter_marks: Vec<[u64; 4]>,
+    /// The members of each letter in the order the engine reports them, as indices into
+    /// `data.members`, laid out as `data.members` is (a letter's slots start at its
+    /// `first_member`). The body members come first, in the layer's order, then the marks in
+    /// text order: by offset, then in the layer's order, a mark with no offset last. The
+    /// layer's own data keeps its order.
+    pub member_order: Vec<u32>,
     /// Per piece: its box, quantised.
     pub piece_box: Vec<IBox>,
     /// Per page word: the word's box with its pieces' boxes.
@@ -322,7 +339,7 @@ pub(crate) fn member_matches(lt: &Letters, sel: &Selector, c: &PathCtx) -> bool 
     // the word comes from the layer's letter or word mark, never from the path's context
     let of_letter = |w: u32, l: u16| m.letter != NONE && m.word == w && m.letter_in_word == l;
     match sel {
-        Selector::Letter(w, l, part) => of_letter(*w, *l) && part.takes(m.is_body, c.category),
+        Selector::Letter(w, l, part) => of_letter(*w, *l) && part.takes(m.own),
         Selector::LetterMark(w, l, n) => of_letter(*w, *l) && !m.is_body && m.nth_letter_mark == *n,
         Selector::LetterMarkNamed(w, l, mark) => of_letter(*w, *l) && *mark != Mark::None && c.mark == *mark,
         Selector::WordChars(w, from, to) => {
@@ -347,7 +364,7 @@ pub(crate) fn member_matches(lt: &Letters, sel: &Selector, c: &PathCtx) -> bool 
             m.letter != NONE
                 && q.words.binary_search(&m.word).is_ok()
                 && lt.letter_is(m.letter, q.text, q.mark)
-                && q.part.takes(m.is_body, c.category)
+                && q.part.takes(m.own)
         }
         _ => false,
     }
@@ -504,15 +521,19 @@ impl Page {
         })
     }
 
-    /// The paths of one letter, in the layer's member order. Empty with no layer, or for a
-    /// letter that does not exist.
+    /// The paths of one letter. The body members come first, in the layer's order. The
+    /// marks follow in text order: by offset, then in the layer's order, and a mark with no
+    /// offset comes last. So the nth mark in this list is the one that
+    /// `Selector::LetterMark(word, letter, n)` takes. Empty with no layer, or for a letter
+    /// that does not exist.
     pub fn letter_members(&self, word: u32, letter: u32) -> Vec<LetterMember> {
         let Some(lt) = self.letters.as_deref() else { return vec![] };
         let Some(g) = lt.letter_of(word, letter) else { return vec![] };
         let l = &lt.data.letters[g as usize];
-        lt.data.members[l.first_member as usize..l.first_member as usize + l.n_members as usize]
+        lt.member_order[l.first_member as usize..l.first_member as usize + l.n_members as usize]
             .iter()
-            .map(|m| {
+            .map(|&i| {
+                let m = &lt.data.members[i as usize];
                 let path = lt.member_path(m.path);
                 LetterMember {
                     path,
@@ -724,6 +745,7 @@ impl Page {
         let mut word_letters = vec![(0u32, 0u32); self.data.words.len()];
         let mut letter_box = Vec::with_capacity(data.letters.len());
         let mut letter_marks = Vec::with_capacity(data.letters.len());
+        let mut member_order: Vec<u32> = (0..data.members.len() as u32).collect();
         let path_box = |p: u32| -> IBox {
             if p < n {
                 self.data.paths[p as usize].bbox
@@ -739,8 +761,21 @@ impl Page {
             w.1 += 1;
             // below u16::MAX: `check_fits` caps the letters of one word
             let in_word = (g as u32 - w.0) as u16;
+            let (first, count) = (l.first_member as usize, l.n_members as usize);
+            // the bodies first in the layer's order, then the marks in text order. NO_AT is
+            // above every offset, so a mark with no offset sorts last, and the sort is stable
+            let order = &mut member_order[first..first + count];
+            order.sort_by_key(|&i| {
+                let m = &data.members[i as usize];
+                if m.is_body {
+                    (0u8, 0u16)
+                } else {
+                    (1, m.at)
+                }
+            });
             let (mut bb, mut marks, mut nth) = (IBox::EMPTY, [0u64; 4], 0u16);
-            for m in &data.members[l.first_member as usize..l.first_member as usize + l.n_members as usize] {
+            for &i in order.iter() {
+                let m = &data.members[i as usize];
                 let p = match m.path {
                     MemberPath::Page(p) => p,
                     MemberPath::Piece(i) => n + i,
@@ -758,6 +793,7 @@ impl Page {
                 c.letter.letter_in_word = in_word;
                 c.letter.raw_at = m.at;
                 c.letter.is_body = m.is_body;
+                c.letter.own = m.at == l.at;
                 // a letter has at most u16::MAX members and one of them is its body, so
                 // this count stays below u16::MAX
                 c.letter.nth_letter_mark = if m.is_body {
@@ -790,6 +826,7 @@ impl Page {
             word_letters,
             letter_box,
             letter_marks,
+            member_order,
             piece_box,
             word_box,
             sources,
