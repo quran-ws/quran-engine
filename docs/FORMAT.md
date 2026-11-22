@@ -356,6 +356,7 @@ The reference decoder returns an error for each of these, and a writer keeps the
   (member), 3 (word mark) and 2 (piece). A `more_at` offset and a close index each take
   at least 1 byte.
 - A delta-coded field outside its type, or a varint that does not fit a u16 field.
+- A word mark's `at + 1` that is not 0 and does not give an offset in 0 to 65534.
 - A letter text that is not a Unicode scalar value.
 - Member counts that do not add up to the members count.
 - Member flags with a bit other than bits 0 to 2 set.
@@ -365,22 +366,27 @@ The reference decoder returns an error for each of these, and a writer keeps the
 - A tables section that the reader does not end on its last byte.
 - Run lengths that add up to more than four operations per opcode byte, or to more than
   one per byte of the x deltas or of the y deltas. An opcodes section longer than the
-  run lengths need.
+  run lengths need. The reader does not check the unused 2-bit slots of the last opcode
+  byte.
 - A coordinate with an absolute value of 2^30 quantised units or more.
 - A piece that does not start with a move.
 - A stream that does not end where its section ends, or a close index that names no
   operation.
 
-These rules tie a layer to its page. `LetterData::check_against` checks them, and the
-converter and the engine call it:
+These rules tie a layer to its page. `LetterData::check_against` checks them. A reader
+calls it before it trusts a layer for a page. A layer that passes these checks decodes
+to the same layer that the writer encoded.
 
 - The layer's page number, `quant`, path count and word count are those of the page.
 - Letters are in word order, and pieces in source order.
 - Each letter's first member is the running total of the member counts before it, and
   the member counts add up to the members count.
 - Each letter has at least one body member.
+- Each piece starts with a move, and each of its coordinates has an absolute value below
+  2^30 quantised units.
+- Exactly one member uses each piece.
 - A letter's page members, and a word mark's path, lie inside the path run of its word.
 - A piece's source lies inside the path run of the word of the letter that holds the
   piece, and the source path has kind body.
-- A page path is a member of at most one letter, and is never both a member and a
-  source.
+- A page path has at most one role: a member of one letter, one word mark, or the
+  source of pieces. One path can be the source of several pieces.

@@ -81,6 +81,8 @@ pub struct PieceRec {
     pub cmds: Vec<Cmd>,
 }
 
+/// The letter layer of one page. `Default` gives `quant` 0, which the decoder rejects,
+/// so a caller that starts from it sets `quant`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LetterData {
     pub page: u16,
@@ -542,9 +544,11 @@ pub fn decode_letters(b: &[u8]) -> Result<LetterData, Error> {
 // ───────────────────────────── the page ─────────────────────────────
 
 impl LetterData {
-    /// Every rule that ties a layer to its page. Used by the converter and, in phase 3,
-    /// by the engine. `Corrupt` names a rule the layer breaks, `Bounds` an index outside
-    /// the range the rule allows.
+    /// Every rule that ties a layer to its page. A reader calls it before it trusts a
+    /// layer for a page. `Corrupt` names a rule the layer breaks, `Bounds` an index
+    /// outside the range the rule allows. A layer that passes round-trips through
+    /// `encode_letters` and `decode_letters`. The check is linear in the size of the
+    /// layer and of the page.
     pub fn check_against(&self, page: &PageData) -> Result<(), Error> {
         if page.header.page != self.page {
             return Err(Error::Corrupt("layer page"));
@@ -575,17 +579,30 @@ impl LetterData {
         if self.pieces.windows(2).any(|w| w[0].source > w[1].source) {
             return Err(Error::Corrupt("piece order"));
         }
+        // What the decoder needs to give a piece back unchanged: it starts with a move,
+        // and every point is inside the envelope.
+        for p in &self.pieces {
+            if !matches!(p.cmds.first(), Some(Cmd::MoveTo(..))) {
+                return Err(Error::Corrupt("piece start"));
+            }
+            let inside = |c: &Cmd| {
+                let (v, n) = cmd_coords(c);
+                v[..n].iter().all(|v| in_envelope(*v))
+            };
+            if !p.cmds.iter().all(inside) {
+                return Err(Error::Corrupt("coordinate range"));
+            }
+        }
         let word_range = |word: u16, what: &'static str| -> Result<std::ops::Range<u64>, Error> {
             let w = page.words.get(word as usize).ok_or(Error::Bounds(what))?;
             Ok(w.first_path as u64..w.first_path as u64 + w.n_paths as u64)
         };
-        let mut member_of = vec![false; page.paths.len()];
-        let mut is_source = vec![false; page.paths.len()];
+        // Each page path has at most one role. A path may be the source of several pieces.
+        let mut role = vec![Role::None; page.paths.len()];
         for p in &self.pieces {
-            if let Some(s) = is_source.get_mut(p.source as usize) {
-                *s = true;
-            }
+            *role.get_mut(p.source as usize).ok_or(Error::Bounds("piece source"))? = Role::Source;
         }
+        let mut piece_used = vec![false; self.pieces.len()];
         for l in &self.letters {
             let range = word_range(l.word, "letter word")?;
             let members = &self.members[l.first_member as usize..l.first_member as usize + l.n_members as usize];
@@ -598,32 +615,64 @@ impl LetterData {
                         if !range.contains(&(p as u64)) || p as usize >= page.paths.len() {
                             return Err(Error::Bounds("letter member"));
                         }
-                        if std::mem::replace(&mut member_of[p as usize], true) {
-                            return Err(Error::Corrupt("path in two letters"));
-                        }
-                        if is_source[p as usize] {
-                            return Err(Error::Corrupt("member and source"));
+                        match std::mem::replace(&mut role[p as usize], Role::Member) {
+                            Role::None => {}
+                            Role::Source => return Err(Error::Corrupt("member and source")),
+                            _ => return Err(Error::Corrupt("path in two letters")),
                         }
                     }
                     MemberPath::Piece(i) => {
-                        let piece = self.pieces.get(i as usize).ok_or(Error::Bounds("member piece"))?;
-                        let source = page.paths.get(piece.source as usize).ok_or(Error::Bounds("piece source"))?;
+                        let used = piece_used.get_mut(i as usize).ok_or(Error::Bounds("member piece"))?;
+                        if std::mem::replace(used, true) {
+                            return Err(Error::Corrupt("piece used twice"));
+                        }
+                        let piece = &self.pieces[i as usize];
                         if !range.contains(&(piece.source as u64)) {
                             return Err(Error::Bounds("piece source"));
                         }
-                        if source.kind != PathKind::Body {
+                        if page.paths[piece.source as usize].kind != PathKind::Body {
                             return Err(Error::Corrupt("piece source kind"));
                         }
                     }
                 }
             }
         }
+        // With every piece used once, the source checks above cover every piece.
+        if piece_used.iter().any(|u| !u) {
+            return Err(Error::Corrupt("piece unused"));
+        }
         for w in &self.word_marks {
-            if !word_range(w.word, "word mark word")?.contains(&(w.path as u64)) {
+            let range = word_range(w.word, "word mark word")?;
+            if !range.contains(&(w.path as u64)) || w.path as usize >= page.paths.len() {
                 return Err(Error::Bounds("word mark path"));
+            }
+            match std::mem::replace(&mut role[w.path as usize], Role::WordMark) {
+                Role::None => {}
+                Role::Source => return Err(Error::Corrupt("word mark and source")),
+                Role::Member => return Err(Error::Corrupt("word mark and member")),
+                Role::WordMark => return Err(Error::Corrupt("word mark twice")),
             }
         }
         Ok(())
+    }
+}
+
+/// The one role a page path can have in a layer.
+#[derive(Clone, Copy)]
+enum Role {
+    None,
+    Source,
+    Member,
+    WordMark,
+}
+
+/// The coordinates of one command, control points included.
+fn cmd_coords(c: &Cmd) -> ([i32; 6], usize) {
+    match *c {
+        Cmd::MoveTo(x, y) | Cmd::LineTo(x, y) => ([x, y, 0, 0, 0, 0], 2),
+        Cmd::QuadTo(x1, y1, x, y) => ([x1, y1, x, y, 0, 0], 4),
+        Cmd::CubicTo(x1, y1, x2, y2, x, y) => ([x1, y1, x2, y2, x, y], 6),
+        Cmd::Close => ([0; 6], 0),
     }
 }
 
@@ -780,14 +829,17 @@ mod tests {
     #[test]
     fn a_huge_count_does_not_allocate() {
         let bytes = encode_letters(&sample());
-        // The letters count is the first varint of the tables section, one byte here.
-        assert_eq!(bytes[HEADER_LEN], 3);
-        let mut patched = bytes[..HEADER_LEN].to_vec();
-        write_varint(&mut patched, u32::MAX);
-        patched.extend_from_slice(&bytes[HEADER_LEN + 1..]);
-        let tables = header_u32(&bytes, 16) + 4;
-        patched[16..20].copy_from_slice(&tables.to_le_bytes());
-        assert_eq!(decode_letters(&patched), Err(Error::Truncated("tables")));
+        // The four counts open the tables section, one byte each here.
+        assert_eq!(bytes[HEADER_LEN..HEADER_LEN + 4], [3, 5, 2, 2]);
+        for i in 0..4 {
+            let at = HEADER_LEN + i;
+            let mut patched = bytes[..at].to_vec();
+            write_varint(&mut patched, u32::MAX);
+            patched.extend_from_slice(&bytes[at + 1..]);
+            let tables = header_u32(&bytes, 16) + 4;
+            patched[16..20].copy_from_slice(&tables.to_le_bytes());
+            assert_eq!(decode_letters(&patched), Err(Error::Truncated("tables")), "count {i}");
+        }
     }
 
     #[test]
@@ -994,5 +1046,77 @@ mod tests {
         let mut d = sample();
         d.letters[2].word = 5;
         assert_eq!(d.check_against(&sample_page()), Err(Error::Bounds("letter word")));
+    }
+
+    /// Each piece shape that `decode_letters` cannot give back unchanged. `check_against`
+    /// rejects every one, so a layer that it accepts round-trips.
+    #[test]
+    fn check_against_rejects_every_piece_that_does_not_round_trip() {
+        let big = COORD_LIMIT as i32;
+        let cases: [(Vec<Cmd>, &str); 5] = [
+            (vec![Cmd::Close, Cmd::MoveTo(1200, 2000), Cmd::LineTo(1300, 2000)], "piece start"),
+            (vec![], "piece start"),
+            (vec![Cmd::LineTo(1200, 2000), Cmd::LineTo(1300, 2000)], "piece start"),
+            (vec![Cmd::Close], "piece start"),
+            (vec![Cmd::MoveTo(1200, 2000), Cmd::QuadTo(1250, big, 1300, 2000)], "coordinate range"),
+        ];
+        for (cmds, what) in cases {
+            let mut d = sample();
+            d.pieces[1].cmds = cmds.clone();
+            assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt(what)), "{cmds:?}");
+            assert_ne!(decode_letters(&encode_letters(&d)), Ok(d), "{cmds:?}");
+        }
+    }
+
+    #[test]
+    fn check_against_rejects_a_piece_no_member_uses() {
+        let mut d = sample();
+        d.pieces.push(PieceRec { source: 2, cmds: PIECE_A.to_vec() });
+        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("piece unused")));
+    }
+
+    #[test]
+    fn check_against_rejects_a_piece_two_members_use() {
+        let mut d = sample();
+        d.members[3].path = MemberPath::Piece(0);
+        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("piece used twice")));
+    }
+
+    #[test]
+    fn check_against_rejects_a_word_mark_that_is_a_member() {
+        let mut d = sample();
+        d.word_marks[0].path = 3;
+        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("word mark and member")));
+    }
+
+    #[test]
+    fn check_against_rejects_a_word_mark_that_is_a_source() {
+        let mut d = sample();
+        d.word_marks.insert(0, WordMarkRec { word: 0, path: 2, at: NO_AT });
+        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("word mark and source")));
+    }
+
+    #[test]
+    fn check_against_rejects_a_path_with_two_word_marks() {
+        let mut d = sample();
+        d.word_marks[1].path = 4;
+        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("word mark twice")));
+    }
+
+    /// A word whose path run ends past the path table: an index inside the run but past
+    /// the table is still out of bounds.
+    #[test]
+    fn check_against_rejects_a_path_past_the_page() {
+        let mut p = sample_page();
+        p.words[1].n_paths = 4;
+        let mut d = sample();
+        d.members[4].path = MemberPath::Page(6);
+        assert_eq!(d.check_against(&p), Err(Error::Bounds("letter member")));
+        let mut d = sample();
+        d.word_marks[1].path = 6;
+        assert_eq!(d.check_against(&p), Err(Error::Bounds("word mark path")));
+        let mut d = sample();
+        d.pieces[1].source = 6;
+        assert_eq!(d.check_against(&p), Err(Error::Bounds("piece source")));
     }
 }
