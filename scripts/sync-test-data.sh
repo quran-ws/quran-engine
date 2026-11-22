@@ -5,12 +5,12 @@
 #                 release on GitHub; needed by the ABI test and every wrapper test.
 #                 Each directory records its tag, and a tag that does not match is refetched.
 #                 A locally built dist/pages records no tag, so set QVP_KEEP_PAGES=1 to keep it.
-#   pages/ index/ the source SVG bundle from the quran-svg-elements release (hafs-kfgqpc);
+#   pages/ index/ the words archive of the quran-svg-elements release (hafs-kfgqpc);
 #                 needed by the identity gate.
 #
 # Environment:
 #   QVP_DATA_TAG   data release tag (default data-v0.5.0)
-#   QVP_SVG_TAG    quran-svg-elements release tag (default v1.1.2)
+#   QVP_SVG_TAG    quran-svg-elements release tag (default v2.0.0)
 #   QVP_KEEP_PAGES keep dist/pages as it is, whatever built it
 #   QVP_SYNC       what to fetch: `all` (default) or `pages`, which fetches the data release
 #                  and leaves pages/ and index/ alone. A job that reads dist/pages only,
@@ -82,8 +82,13 @@ if [ "$sync" = pages ]; then
   exit 0
 fi
 
-svg_tag="${QVP_SVG_TAG:-v1.1.2}"
-svg_asset="quran-svg-elements-hafs-kfgqpc.tar.gz"
+svg_tag="${QVP_SVG_TAG:-v2.0.0}"
+# From v2.0.0 a release holds two archives, words and letters. The pages are built from
+# the words archive. A release before v2.0.0 holds one archive, which has word pages.
+case "$svg_tag" in
+  v0.*|v1.*) svg_asset="quran-svg-elements-hafs-kfgqpc.tar.gz" ;;
+  *)         svg_asset="quran-svg-elements-hafs-kfgqpc-words.tar.gz" ;;
+esac
 svg_base="https://github.com/quran-ws/quran-svg-elements/releases/download/$svg_tag"
 
 if [ -f pages/001.svg ] && [ -d index/by-page ] && [ "$(cat pages/.tag 2>/dev/null)" = "$svg_tag" ]; then

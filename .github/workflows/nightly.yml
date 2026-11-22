@@ -23,11 +23,11 @@ jobs:
             dist/pages
             pages
             index
-          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ vars.QVP_SVG_TAG || 'v1.1.2' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ vars.QVP_SVG_TAG || 'v2.0.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
       - name: Fetch test data
         env:
           QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
-          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v2.0.0' }}
         run: scripts/sync-test-data.sh
       - name: All pages
         run: QVP_REQUIRE_DATA=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity -- --nocapture
@@ -49,7 +49,7 @@ jobs:
       - name: Fetch page data
         env:
           QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
-          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v1.1.2' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v2.0.0' }}
         run: scripts/sync-test-data.sh
       - name: Run
         run: cargo run -p qvp-core --profile dist --example bench -- dist/pages/042.qvp | tee bench.txt
