@@ -71,6 +71,15 @@ abstract final class QvpDecorationKind {
       other = 255;
 }
 
+/// `QVP_LETTER_PART_*`: what part of a letter a letter selector ([Sel.letter]) or a letter
+/// query ([QvpLetterQuery]) takes.
+abstract final class QvpLetterPart {
+  /// The parts. [all] takes every member of the letter. [bodyAndDots] takes each member at
+  /// the letter's own offset: the body, its dots, and a sign that is part of the code point,
+  /// such as a hamzah. [marks] takes every other member.
+  static const int all = 0, bodyAndDots = 1, marks = 2;
+}
+
 /// `QVP_FORM_*` — text forms. Strings 'rasmUthmani' | 'rasmImlai' | 'qpc' | 'rasm' | 'search' are accepted everywhere a form is.
 abstract final class QvpForm {
   /// The forms: [rasmUthmani] is the text of record, in the page file. [rasmImlai], [qpc],
@@ -362,6 +371,29 @@ abstract final class Sel {
 
   /// Every path of decoration [i], by its index in [QvpPage.decorations].
   static QvpSelector decorationIndex(int i) => QvpSelector(15, i);
+
+  // The letter selectors read the page's letter layer ([QvpPage.attachLetters]). With no
+  // layer they select nothing, and a rule added before the layer takes it when it comes.
+
+  /// A part ([QvpLetterPart]) of letter [l] of word [w]. A part above 2 is a bad selector.
+  static QvpSelector letter(int w, int l, [int part = QvpLetterPart.all]) =>
+      QvpSelector(16, w, l, part);
+
+  /// The [n]th mark of letter [l] of word [w], from 0, in text order. Dots count; a body
+  /// never does.
+  static QvpSelector letterMark(int w, int l, int n) =>
+      QvpSelector(17, w, l, n);
+
+  /// Every member of letter [l] of word [w] whose path has the mark [mark], an id or a name.
+  /// A body that the page stores as a mark, such as an omitted alif, counts.
+  static QvpSelector letterMarkNamed(int w, int l, Object mark) =>
+      QvpSelector(18, w, l, QvpMark.id(mark));
+
+  /// The ink of the qpc characters of word [w] from code-point offset [from] to [to], both
+  /// included, a word-level mark included. Leave out [to] for one character. [from] above
+  /// [to] is a bad selector.
+  static QvpSelector wordChars(int w, int from, [int? to]) =>
+      QvpSelector(19, w, from, to ?? from);
 }
 
 /// What resolves to a word list (`QvpTarget`, `QVP_TARGET_*`). Build with [T]
@@ -470,6 +502,57 @@ abstract final class T {
 
   /// The words from index [a] to index [b], both included, in either order.
   static QvpTarget range(int a, int b) => QvpTarget(7, a: a, b: b);
+}
+
+/// Letters by what they are (`QvpLetterQuery`), for [QvpPage.findLetters] and
+/// [QvpPage.styleLetters]: the letters in [scope] that are one character, carry one mark, or
+/// both.
+@immutable
+final class QvpLetterQuery {
+  /// [scope] takes anything a target takes: a [QvpTarget], a string such as 'page' or
+  /// '2:255', or a `List<int>` of word indices. [text] is a one-character string or a code
+  /// point; 0 takes any letter. [mark] is a mark id or name that one of the letter's members
+  /// carries; 0 takes any. [part] ([QvpLetterPart]) is what of each letter a style rule takes;
+  /// it does not filter [QvpPage.findLetters].
+  const QvpLetterQuery({
+    this.scope = 'page',
+    this.text = 0,
+    this.mark = 0,
+    this.part = QvpLetterPart.all,
+  });
+
+  /// The words to look in.
+  final Object scope;
+
+  /// The letter's character: a one-character string or a code point. 0 takes any letter.
+  final Object text;
+
+  /// A mark id or name. 0 takes any.
+  final Object mark;
+
+  /// A [QvpLetterPart] code.
+  final int part;
+
+  /// [scope] as a [QvpTarget].
+  QvpTarget get target => QvpTarget.of(scope);
+
+  /// [text] as a code point. Throws an [ArgumentError] for a string that is not one character.
+  int get codePoint {
+    final t = text;
+    if (t is int) return t;
+    final runes = (t as String).runes;
+    if (runes.length != 1) {
+      throw ArgumentError.value(
+        t,
+        'text',
+        'a letter query takes one character',
+      );
+    }
+    return runes.first;
+  }
+
+  /// [mark] as a mark id.
+  int get markId => QvpMark.id(mark);
 }
 
 // ───────────── records ─────────────
@@ -660,6 +743,158 @@ final class QvpHit {
   @override
   String toString() =>
       'QvpHit(word: $word, path: $path, decoration: $decoration, line: $line, distance: $distance, isExact: $isExact)';
+}
+
+/// One path of a letter ([QvpPage.letterMembers]): a page path, or a piece cut from an
+/// outline that joins letters, at an index past the page's own paths. Draw it with the
+/// page's geometry and colours, as any other path.
+@immutable
+final class QvpLetterMember {
+  /// The backend fills one from `qvp_letter_members`.
+  const QvpLetterMember({
+    required this.path,
+    required this.at,
+    required this.mark,
+    required this.isBody,
+    required this.isCut,
+  });
+
+  /// The path index.
+  final int path;
+
+  /// The path's qpc code-point offset, -1 when none. A body and its dots carry the letter's.
+  final int at;
+
+  /// The mark id of the path ([QvpMark]); 0 for body ink and for a piece.
+  final int mark;
+
+  /// True for a body member of the letter.
+  final bool isBody;
+
+  /// True for a piece cut from an outline that joins letters.
+  final bool isCut;
+
+  @override
+  bool operator ==(Object other) =>
+      other is QvpLetterMember &&
+      other.path == path &&
+      other.at == at &&
+      other.mark == mark &&
+      other.isBody == isBody &&
+      other.isCut == isCut;
+
+  @override
+  int get hashCode => Object.hash(path, at, mark, isBody, isCut);
+
+  @override
+  String toString() =>
+      'QvpLetterMember(path: $path, at: $at, mark: $mark, isBody: $isBody, isCut: $isCut)';
+}
+
+/// One letter of a word ([QvpPage.letter], [QvpPage.letters]), with its members.
+@immutable
+final class QvpLetter {
+  /// The backend fills one from `qvp_letter_info` and `qvp_letter_members`.
+  const QvpLetter({
+    required this.word,
+    required this.index,
+    required this.at,
+    required this.codePoint,
+    required this.nMembers,
+    required this.nMarks,
+    required this.moreAt,
+    required this.nMoreAt,
+    required this.x0,
+    required this.y0,
+    required this.x1,
+    required this.y1,
+    required this.hasInk,
+    required this.members,
+  });
+
+  /// The word, and the letter's index in it.
+  final int word, index;
+
+  /// The letter's qpc code-point offset in its word, -1 when none.
+  final int at;
+
+  /// The letter's character, as a code point.
+  final int codePoint;
+
+  /// How many members the letter has, and how many of them are not body, dots included.
+  final int nMembers, nMarks;
+
+  /// The first other offset the body draws, such as a kashida, -1 when none, and how many
+  /// such offsets there are. [QvpPage.letterAtOffset] gives the letter of each one.
+  final int moreAt, nMoreAt;
+
+  /// The letter's box in page units: the union of its members' boxes. A piece can reach past
+  /// its word's box.
+  final double x0, y0, x1, y1;
+
+  /// False when no member has an outline.
+  final bool hasInk;
+
+  /// The paths of the letter, in the engine's order: the bodies first, then the marks in text
+  /// order.
+  final List<QvpLetterMember> members;
+
+  /// The letter's character, as a string.
+  String get text => String.fromCharCode(codePoint);
+
+  /// The members that are not body, in text order: `marks[n]` is what
+  /// `Sel.letterMark(word, index, n)` takes.
+  List<QvpLetterMember> get marks => [
+    for (final m in members)
+      if (!m.isBody) m,
+  ];
+
+  @override
+  String toString() =>
+      'QvpLetter(word: $word, index: $index, at: $at, text: $text, members: $members)';
+}
+
+/// The letter under a point ([QvpPage.hitTestLetter]). Indices are -1 when absent.
+@immutable
+final class QvpLetterHit {
+  /// The backend fills one from `qvp_hit_test_letter`, and the page adds [wordKey].
+  const QvpLetterHit({
+    required this.word,
+    required this.letter,
+    required this.path,
+    required this.at,
+    required this.line,
+    required this.distance,
+    required this.mark,
+    required this.isExact,
+    required this.isBody,
+    this.wordKey,
+  });
+
+  /// The word, the letter's index in it (-1 for a word-level mark), the path hit, its qpc
+  /// offset, and the word's printed line index.
+  final int word, letter, path, at, line;
+
+  /// 0 on ink and in a letter's counter; otherwise the distance to the letter's box, in page
+  /// units.
+  final double distance;
+
+  /// The mark id of the path hit: 0 for body ink and a near hit, the mark's id for a body
+  /// that the page stores as a mark.
+  final int mark;
+
+  /// True when the point is on the ink of [path].
+  final bool isExact;
+
+  /// True when [path] is a body member of its letter.
+  final bool isBody;
+
+  /// `surah:ayah:word` of [word].
+  final String? wordKey;
+
+  @override
+  String toString() =>
+      'QvpLetterHit(word: $word, letter: $letter, path: $path, at: $at, line: $line, distance: $distance, mark: $mark, isExact: $isExact, isBody: $isBody)';
 }
 
 /// Options of the gap-aware hit test.

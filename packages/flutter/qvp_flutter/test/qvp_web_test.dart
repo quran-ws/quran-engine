@@ -5,8 +5,9 @@
 //
 // Engine: assets/js/qvp.js and assets/wasm/qvp_ffi.wasm, the two files the package bundles
 // (build them with scripts/sync-flutter-web-engine.sh).
-// Data: <repo>/dist/pages/042.qvp, 042.words.json, atlas.qva and
-// <repo>/conformance/scenarios/layout.json.
+// Data: <repo>/dist/pages/042.qvp, 042.words.json, atlas.qva,
+// <repo>/conformance/scenarios/layout.json and letters.json, and the hex fixtures that
+// letters.json names in <repo>/conformance/.
 //
 // The browser test server serves no package assets, and a browser cannot read the disk. So
 // a hybrid isolate on the Dart VM reads the files and sends them over a channel. The test
@@ -22,8 +23,11 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvp_flutter/qvp_flutter.dart';
+// WebPageHandle: the replay reaches one wasm export qvp.js leaves out
+import 'package:qvp_flutter/src/backend/qvp_backend_web.dart';
 
 import 'shared/api_cases.dart';
+import 'shared/letter_cases.dart';
 
 /// Runs on the Dart VM. Sends {name: base64 or null} for each file the test reads. The
 /// working directory is the package; the repository is QVP_REPO or three levels up.
@@ -42,7 +46,20 @@ void hybridMain(StreamChannel<Object?> channel) {
     '042.words.json': '$repo/dist/pages/042.words.json',
     'atlas.qva': '$repo/dist/pages/atlas.qva',
     'layout.json': '$repo/conformance/scenarios/layout.json',
+    'letters.json': '$repo/conformance/scenarios/letters.json',
   };
+  // the hex fixtures letters.json names, as text
+  final letters = File(files['letters.json']!);
+  if (letters.existsSync()) {
+    final fixtures =
+        (jsonDecode(letters.readAsStringSync()) as Map)['fixtures'] as Map;
+    for (final f in fixtures.values) {
+      for (final k in ['page', 'letters']) {
+        final name = (f as Map)[k] as String;
+        files[name] = '$repo/conformance/$name';
+      }
+    }
+  }
   channel.sink.add({
     for (final e in files.entries)
       e.key: File(e.value).existsSync()
@@ -106,4 +123,22 @@ void main() {
       layoutScenarios: utf8.decode(need('layout.json')),
     ),
   );
+
+  letterCases(() {
+    final scenario = utf8.decode(need('letters.json'));
+    return LetterFixture(
+      engine: engine,
+      scenario: scenario,
+      hex: {for (final f in letterHexFiles(scenario)) f: utf8.decode(need(f))},
+      // qvp.js leaves qvp_mask_transition out (a declared gap): call the wasm export
+      maskTransition: (p, ms) {
+        final js = (p.handle as WebPageHandle).js;
+        ((js['e'] as JSObject)['ex'] as JSObject).callMethod(
+          'qvp_mask_transition'.toJS,
+          js['h'],
+          ms.toJS,
+        );
+      },
+    );
+  });
 }

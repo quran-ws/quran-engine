@@ -10,7 +10,7 @@ import 'types.dart';
 export 'atlas.dart';
 export 'backend/qvp_backend.dart';
 export 'ornaments.dart';
-export 'page.dart' hide pageClock;
+export 'page.dart' hide pageClock, pageHasLetters;
 export 'passage.dart';
 export 'types.dart';
 

@@ -1,6 +1,22 @@
 ## Unreleased
 
 ### Added
+- `QvpPage.attachLetters(bytes)` attaches the page's letter layer (`NNN.qvl`). The layer's
+  pieces join the path table after the page's own paths, so `nPaths`, `ops`, `pts`, `table`
+  and `colors()` grow. It returns false, and changes nothing, when the engine refuses the
+  file. `hasLetters`, `letterCount`, `letter`, `letters`, `letterMembers`, `pathLetter` and
+  `letterAtOffset` read the layer. `QvpLetter`, `QvpLetterMember` and `QvpLetterHit` carry
+  what the engine answers.
+- `Sel.letter`, `Sel.letterMark`, `Sel.letterMarkNamed` and `Sel.wordChars` select a letter,
+  a mark of a letter and a range of a word's qpc characters. `QvpLetterPart` names the parts.
+  `QvpLetterQuery` with `findLetters` and `styleLetters` finds and colours letters by
+  character, mark and part.
+- `hitTestLetter` and `hitTestLetterView` give the letter or mark under a point.
+- `layoutDrawRevision()` counts up when the draw list changes with no layout change.
+  `QvpPageView` reads it after the styled paths on a page with a letter layer, and keys its
+  draw list and base ink on the list. A page with no layer makes no extra call.
+- `test/shared/letter_cases.dart` replays `conformance/scenarios/letters.json` on both
+  backends.
 - `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
   read a released drag, and `QvpPage.viewAnchor(view, word, nx, ny, toX, toY, viewportW,
   viewportH)` holds a point of a word on the screen across a new layout. The generated
@@ -76,6 +92,11 @@
 ### Removed
 
 ### Fixed
+- The styled pass of `QvpPageView` draws each styled entry of the draw list, in its order and
+  under its own placement. It drew each styled path once, at its first placement, so a styled
+  path that a reflowed layout draws twice, such as a sajdah line over two rows, lost its
+  second copy. The base ink and the styled pass now draw each entry of the draw list once
+  between them, and a hidden path not at all.
 - A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's

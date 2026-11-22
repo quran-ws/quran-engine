@@ -313,6 +313,29 @@ class QvpBindings {
   late final _atlasSurahCount = _atlasSurahCountPtr
       .asFunction<int Function(ffi.Pointer<QvpAtlasC>)>();
 
+  int attachLetters(
+    ffi.Pointer<QvpPageC> arg0,
+    ffi.Pointer<ffi.Uint8> bytes,
+    int len,
+  ) {
+    return _attachLetters(arg0, bytes, len);
+  }
+
+  late final _attachLettersPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int32 Function(
+            ffi.Pointer<QvpPageC>,
+            ffi.Pointer<ffi.Uint8>,
+            ffi.Uint32,
+          )
+        >
+      >('qvp_attach_letters');
+  late final _attachLetters = _attachLettersPtr
+      .asFunction<
+        int Function(ffi.Pointer<QvpPageC>, ffi.Pointer<ffi.Uint8>, int)
+      >();
+
   int attachWords(
     ffi.Pointer<QvpPageC> arg0,
     ffi.Pointer<ffi.Uint8> json,
@@ -824,6 +847,36 @@ class QvpBindings {
   late final _familyName = _familyNamePtr
       .asFunction<void Function(int, ffi.Pointer<QvpStrC>)>();
 
+  int findLetters(
+    ffi.Pointer<QvpPageC> arg0,
+    ffi.Pointer<QvpLetterQueryC> arg1,
+    ffi.Pointer<ffi.Uint32> out,
+    int cap,
+  ) {
+    return _findLetters(arg0, arg1, out, cap);
+  }
+
+  late final _findLettersPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Uint32 Function(
+            ffi.Pointer<QvpPageC>,
+            ffi.Pointer<QvpLetterQueryC>,
+            ffi.Pointer<ffi.Uint32>,
+            ffi.Uint32,
+          )
+        >
+      >('qvp_find_letters');
+  late final _findLetters = _findLettersPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<QvpPageC>,
+          ffi.Pointer<QvpLetterQueryC>,
+          ffi.Pointer<ffi.Uint32>,
+          int,
+        )
+      >();
+
   int findWord(ffi.Pointer<QvpPageC> arg0, int surah, int ayah, int word) {
     return _findWord(arg0, surah, ayah, word);
   }
@@ -875,6 +928,17 @@ class QvpBindings {
       >('qvp_has_form');
   late final _hasForm = _hasFormPtr
       .asFunction<int Function(ffi.Pointer<QvpPageC>, int)>();
+
+  int hasLetters(ffi.Pointer<QvpPageC> arg0) {
+    return _hasLetters(arg0);
+  }
+
+  late final _hasLettersPtr =
+      _lookup<ffi.NativeFunction<ffi.Uint8 Function(ffi.Pointer<QvpPageC>)>>(
+        'qvp_has_letters',
+      );
+  late final _hasLetters = _hasLettersPtr
+      .asFunction<int Function(ffi.Pointer<QvpPageC>)>();
 
   int highlightAdd(
     ffi.Pointer<QvpPageC> arg0,
@@ -1201,6 +1265,72 @@ class QvpBindings {
         )
       >();
 
+  int hitTestLetter(
+    ffi.Pointer<QvpPageC> arg0,
+    double x,
+    double y,
+    ffi.Pointer<QvpHitOptionsC> opt,
+    ffi.Pointer<QvpLetterHitC> out,
+  ) {
+    return _hitTestLetter(arg0, x, y, opt, out);
+  }
+
+  late final _hitTestLetterPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<QvpPageC>,
+            ffi.Float,
+            ffi.Float,
+            ffi.Pointer<QvpHitOptionsC>,
+            ffi.Pointer<QvpLetterHitC>,
+          )
+        >
+      >('qvp_hit_test_letter');
+  late final _hitTestLetter = _hitTestLetterPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<QvpPageC>,
+          double,
+          double,
+          ffi.Pointer<QvpHitOptionsC>,
+          ffi.Pointer<QvpLetterHitC>,
+        )
+      >();
+
+  int hitTestLetterView(
+    ffi.Pointer<QvpPageC> arg0,
+    double viewX,
+    double viewY,
+    ffi.Pointer<QvpHitOptionsC> opt,
+    ffi.Pointer<QvpLetterHitC> out,
+  ) {
+    return _hitTestLetterView(arg0, viewX, viewY, opt, out);
+  }
+
+  late final _hitTestLetterViewPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<QvpPageC>,
+            ffi.Float,
+            ffi.Float,
+            ffi.Pointer<QvpHitOptionsC>,
+            ffi.Pointer<QvpLetterHitC>,
+          )
+        >
+      >('qvp_hit_test_letter_view');
+  late final _hitTestLetterView = _hitTestLetterViewPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<QvpPageC>,
+          double,
+          double,
+          ffi.Pointer<QvpHitOptionsC>,
+          ffi.Pointer<QvpLetterHitC>,
+        )
+      >();
+
   int hitTestView(
     ffi.Pointer<QvpPageC> arg0,
     double viewX,
@@ -1319,6 +1449,17 @@ class QvpBindings {
           int,
         )
       >();
+
+  int layoutDrawRevision(ffi.Pointer<QvpPageC> arg0) {
+    return _layoutDrawRevision(arg0);
+  }
+
+  late final _layoutDrawRevisionPtr =
+      _lookup<ffi.NativeFunction<ffi.Uint32 Function(ffi.Pointer<QvpPageC>)>>(
+        'qvp_layout_draw_revision',
+      );
+  late final _layoutDrawRevision = _layoutDrawRevisionPtr
+      .asFunction<int Function(ffi.Pointer<QvpPageC>)>();
 
   int layoutGroups(
     ffi.Pointer<QvpPageC> arg0,
@@ -1582,6 +1723,107 @@ class QvpBindings {
       >('qvp_layout_word_row');
   late final _layoutWordRow = _layoutWordRowPtr
       .asFunction<int Function(ffi.Pointer<QvpPageC>, int)>();
+
+  int letterAtOffset(
+    ffi.Pointer<QvpPageC> arg0,
+    int word,
+    int at,
+    ffi.Pointer<ffi.Uint32> outLetter,
+  ) {
+    return _letterAtOffset(arg0, word, at, outLetter);
+  }
+
+  late final _letterAtOffsetPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<QvpPageC>,
+            ffi.Uint32,
+            ffi.Uint32,
+            ffi.Pointer<ffi.Uint32>,
+          )
+        >
+      >('qvp_letter_at_offset');
+  late final _letterAtOffset = _letterAtOffsetPtr
+      .asFunction<
+        int Function(ffi.Pointer<QvpPageC>, int, int, ffi.Pointer<ffi.Uint32>)
+      >();
+
+  int letterCount(ffi.Pointer<QvpPageC> arg0, int word) {
+    return _letterCount(arg0, word);
+  }
+
+  late final _letterCountPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Uint32 Function(ffi.Pointer<QvpPageC>, ffi.Uint32)
+        >
+      >('qvp_letter_count');
+  late final _letterCount = _letterCountPtr
+      .asFunction<int Function(ffi.Pointer<QvpPageC>, int)>();
+
+  int letterInfo(
+    ffi.Pointer<QvpPageC> arg0,
+    int word,
+    int letter,
+    ffi.Pointer<QvpLetterInfoC> out,
+  ) {
+    return _letterInfo(arg0, word, letter, out);
+  }
+
+  late final _letterInfoPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<QvpPageC>,
+            ffi.Uint32,
+            ffi.Uint32,
+            ffi.Pointer<QvpLetterInfoC>,
+          )
+        >
+      >('qvp_letter_info');
+  late final _letterInfo = _letterInfoPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<QvpPageC>,
+          int,
+          int,
+          ffi.Pointer<QvpLetterInfoC>,
+        )
+      >();
+
+  int letterMembers(
+    ffi.Pointer<QvpPageC> arg0,
+    int word,
+    int letter,
+    ffi.Pointer<QvpLetterMemberC> out,
+    int cap,
+  ) {
+    return _letterMembers(arg0, word, letter, out, cap);
+  }
+
+  late final _letterMembersPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Uint32 Function(
+            ffi.Pointer<QvpPageC>,
+            ffi.Uint32,
+            ffi.Uint32,
+            ffi.Pointer<QvpLetterMemberC>,
+            ffi.Uint32,
+          )
+        >
+      >('qvp_letter_members');
+  late final _letterMembers = _letterMembersPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<QvpPageC>,
+          int,
+          int,
+          ffi.Pointer<QvpLetterMemberC>,
+          int,
+        )
+      >();
 
   int lineBands(
     ffi.Pointer<QvpPageC> arg0,
@@ -2337,6 +2579,36 @@ class QvpBindings {
         )
       >();
 
+  int pathLetter(
+    ffi.Pointer<QvpPageC> arg0,
+    int path,
+    ffi.Pointer<ffi.Uint32> outLetter,
+    ffi.Pointer<ffi.Uint32> outAt,
+  ) {
+    return _pathLetter(arg0, path, outLetter, outAt);
+  }
+
+  late final _pathLetterPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<QvpPageC>,
+            ffi.Uint32,
+            ffi.Pointer<ffi.Uint32>,
+            ffi.Pointer<ffi.Uint32>,
+          )
+        >
+      >('qvp_path_letter');
+  late final _pathLetter = _pathLetterPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<QvpPageC>,
+          int,
+          ffi.Pointer<ffi.Uint32>,
+          ffi.Pointer<ffi.Uint32>,
+        )
+      >();
+
   int reciteMap(
     ffi.Pointer<QvpPageC> arg0,
     int surah,
@@ -2703,6 +2975,39 @@ class QvpBindings {
           ffi.Pointer<QvpPageC>,
           int,
           ffi.Pointer<QvpSelectorC>,
+          int,
+          int,
+        )
+      >();
+
+  int styleAddLetters(
+    ffi.Pointer<QvpPageC> arg0,
+    int layer,
+    ffi.Pointer<QvpLetterQueryC> arg2,
+    int rgba,
+    int transitionMs,
+  ) {
+    return _styleAddLetters(arg0, layer, arg2, rgba, transitionMs);
+  }
+
+  late final _styleAddLettersPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Uint32 Function(
+            ffi.Pointer<QvpPageC>,
+            ffi.Int32,
+            ffi.Pointer<QvpLetterQueryC>,
+            ffi.Uint32,
+            ffi.Uint32,
+          )
+        >
+      >('qvp_style_add_letters');
+  late final _styleAddLetters = _styleAddLettersPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<QvpPageC>,
+          int,
+          ffi.Pointer<QvpLetterQueryC>,
           int,
           int,
         )
@@ -4737,6 +5042,158 @@ final class QvpLayoutSpecC extends ffi.Struct {
     ..ref.reflowRelax = reflowRelax
     ..ref.bannerZoom = bannerZoom
     ..ref.surahFrames = surahFrames;
+}
+
+final class QvpLetterHitC extends ffi.Struct {
+  @ffi.Uint32()
+  external int word;
+
+  @ffi.Uint32()
+  external int letter;
+
+  @ffi.Uint32()
+  external int path;
+
+  @ffi.Uint32()
+  external int at;
+
+  @ffi.Uint32()
+  external int line;
+
+  @ffi.Float()
+  external double distance;
+
+  @ffi.Uint8()
+  external int mark;
+
+  @ffi.Uint8()
+  external int isExact;
+
+  @ffi.Uint8()
+  external int isBody;
+
+  @ffi.Uint8()
+  external int pad;
+
+  static ffi.Pointer<QvpLetterHitC> $allocate(
+    ffi.Allocator $allocator, {
+    required int word,
+    required int letter,
+    required int path,
+    required int at,
+    required int line,
+    required double distance,
+    required int mark,
+    required int isExact,
+    required int isBody,
+    required int pad,
+  }) => $allocator<QvpLetterHitC>()
+    ..ref.word = word
+    ..ref.letter = letter
+    ..ref.path = path
+    ..ref.at = at
+    ..ref.line = line
+    ..ref.distance = distance
+    ..ref.mark = mark
+    ..ref.isExact = isExact
+    ..ref.isBody = isBody
+    ..ref.pad = pad;
+}
+
+final class QvpLetterInfoC extends ffi.Struct {
+  @ffi.Uint32()
+  external int word;
+
+  @ffi.Uint32()
+  external int index;
+
+  @ffi.Uint32()
+  external int at;
+
+  @ffi.Uint32()
+  external int text;
+
+  @ffi.Uint32()
+  external int nMembers;
+
+  @ffi.Uint32()
+  external int nMarks;
+
+  @ffi.Uint32()
+  external int moreAt;
+
+  @ffi.Uint32()
+  external int nMoreAt;
+
+  @ffi.Float()
+  external double x0;
+
+  @ffi.Float()
+  external double y0;
+
+  @ffi.Float()
+  external double x1;
+
+  @ffi.Float()
+  external double y1;
+
+  @ffi.Uint8()
+  external int hasInk;
+
+  @ffi.Array.multi([3])
+  external ffi.Array<ffi.Uint8> pad;
+}
+
+final class QvpLetterMemberC extends ffi.Struct {
+  @ffi.Uint32()
+  external int path;
+
+  @ffi.Uint32()
+  external int at;
+
+  @ffi.Uint8()
+  external int mark;
+
+  @ffi.Uint8()
+  external int isBody;
+
+  @ffi.Uint8()
+  external int isCut;
+
+  @ffi.Uint8()
+  external int pad;
+
+  static ffi.Pointer<QvpLetterMemberC> $allocate(
+    ffi.Allocator $allocator, {
+    required int path,
+    required int at,
+    required int mark,
+    required int isBody,
+    required int isCut,
+    required int pad,
+  }) => $allocator<QvpLetterMemberC>()
+    ..ref.path = path
+    ..ref.at = at
+    ..ref.mark = mark
+    ..ref.isBody = isBody
+    ..ref.isCut = isCut
+    ..ref.pad = pad;
+}
+
+final class QvpLetterQueryC extends ffi.Struct {
+  external QvpTargetC scope;
+
+  @ffi.Uint32()
+  external int text;
+
+  @ffi.Uint8()
+  external int mark;
+
+  @ffi.Uint8()
+  external int part;
+
+  @ffi.Array.multi([2])
+  external ffi.Array<ffi.Uint8> pad;
 }
 
 final class QvpLineBandC extends ffi.Struct {

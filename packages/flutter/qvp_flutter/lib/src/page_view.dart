@@ -16,7 +16,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'engine.dart';
-import 'page.dart' show pageClock;
+import 'page.dart' show pageClock, pageHasLetters;
+import 'styled_draws.dart';
 
 /// Layout parameters of [QvpPageView] (viewport size is taken from the widget's constraints).
 /// Spacing only opens up: `lineSpacing` < 1 is clamped by the engine.
@@ -786,9 +787,12 @@ class _InkKey {
     this.bandH,
     this.styled,
     this.surahFrames,
+    this.draws,
   );
 
-  final int page, ink, bandH, styled;
+  /// [styled] is [_InkCache.styledKey] and [draws] the [_DrawList.hash] of what the recording
+  /// drew.
+  final int page, ink, bandH, styled, draws;
   final double? scale, offsetX, offsetY;
   final double top;
   final bool surahFrames;
@@ -803,6 +807,7 @@ class _InkKey {
     int bandH,
     int styled,
     bool surahFrames,
+    int draws,
   ) =>
       page == this.page &&
       ink == this.ink &&
@@ -812,7 +817,8 @@ class _InkKey {
       top == this.top &&
       bandH == this.bandH &&
       styled == this.styled &&
-      surahFrames == this.surahFrames;
+      surahFrames == this.surahFrames &&
+      draws == this.draws;
 
   @override
   bool operator ==(Object other) =>
@@ -827,6 +833,7 @@ class _InkKey {
         bandH,
         styled,
         surahFrames,
+        draws,
       );
 
   @override
@@ -840,6 +847,7 @@ class _InkKey {
     bandH,
     styled,
     surahFrames,
+    draws,
   );
 }
 
@@ -903,33 +911,37 @@ class _DrawList {
   _DrawList({
     required this.draws,
     required this.places,
-    required this.ofPath,
     required this.page,
+    required this.revision,
     required this.top,
     required this.bandH,
     required this.contentH,
     required this.scale,
     required this.offsetX,
     required this.offsetY,
-  });
+  }) : hash = drawListHash(draws);
 
   final List<QvpDraw> draws;
   final List<QvpPlacement> places;
-  final Map<int, int> ofPath;
 
-  /// What the list was read for: the page, the band and the layout's place.
-  final int page;
+  /// [drawListHash] of [draws].
+  final int hash;
+
+  /// What the list was read for: the page, its draw revision, the band and the layout's place.
+  final int page, revision;
   final double top, bandH, contentH;
   final double? scale, offsetX, offsetY;
 
   bool matches(
     int page,
+    int revision,
     double top,
     double bandH,
     double contentH,
     QvpLayout? l,
   ) =>
       page == this.page &&
+      revision == this.revision &&
       top == this.top &&
       bandH == this.bandH &&
       contentH == this.contentH &&
@@ -1026,6 +1038,9 @@ class _InkCache {
       math.max(l.contentH, 1.0).toInt(),
       1,
       surahFrames,
+      // the recording below draws every path of the list, so a page with no letter layer, or
+      // one whose letters are all one colour, keys it on the same list as a frame does
+      drawListHash(page.layoutDrawList()),
     );
     if (getGlobalInk(key) != null) return;
 
@@ -1080,22 +1095,20 @@ class _InkCache {
     double contentH,
   ) {
     final kept = _drawList;
-    if (kept != null && kept.matches(page.page, top, bandH, contentH, l)) {
+    final revision = drawRevision;
+    if (kept != null &&
+        kept.matches(page.page, revision, top, bandH, contentH, l)) {
       return kept;
     }
     final draws = top == 0.0 && bandH >= contentH
         ? page.layoutDrawList()
         : page.layoutDrawList(bandTop: top, bandBottom: top + bandH);
     final places = page.layoutPlacements();
-    final ofPath = <int, int>{};
-    for (var i = 0; i < draws.length; i++) {
-      ofPath.putIfAbsent(draws[i].path, () => draws[i].placement);
-    }
     return _drawList = _DrawList(
       draws: draws,
       places: places,
-      ofPath: ofPath,
       page: page.page,
+      revision: revision,
       top: top,
       bandH: bandH,
       contentH: contentH,
@@ -1113,8 +1126,35 @@ class _InkCache {
   /// Paths off the default ink, their colours, and a hash of which paths they are: the
   /// base ink leaves them out, so the key of its recording holds the hash.
   List<QvpStyledPath> styled = const [];
-  List<Color> styledColors = const [];
   int styledKey = 1;
+
+  /// The page's draw revision, read after the styled paths, as the header orders it. It stays
+  /// 0 on a page with no letter layer, which the engine answers there too, so such a page makes
+  /// no call for it.
+  int drawRevision = 0;
+
+  /// The styled draws of the last frame, and the draw list and styled paths they were made
+  /// from.
+  List<StyledDraw> styledDrawList = const [];
+  List<Color> styledDrawColors = const [];
+  List<QvpDraw>? _styledDrawsOf;
+  List<QvpStyledPath>? _styledDrawsFor;
+
+  /// The entries of [list] that the styled pass draws over the base ink, for the styled paths
+  /// of the last [read]. Made again only when the list or the styled paths change.
+  List<StyledDraw> styledDrawsFor(_DrawList list) {
+    if (!identical(list.draws, _styledDrawsOf) ||
+        !identical(styled, _styledDrawsFor)) {
+      styledDrawList = styledDraws(list.draws, styled);
+      styledDrawColors = [
+        for (final d in styledDrawList) QvpColor.toColor(d.color),
+      ];
+      _styledDrawsOf = list.draws;
+      _styledDrawsFor = styled;
+    }
+    return styledDrawList;
+  }
+
   QvpDressInfo? dress;
   final _BoxLayer bands = _BoxLayer(), masks = _BoxLayer();
 
@@ -1136,7 +1176,8 @@ class _InkCache {
         key = 31 * key + styled[i].path;
       }
       styledKey = key;
-      styledColors = [for (final s in styled) QvpColor.toColor(s.color)];
+      // the header's order: the styled paths, then the draw revision, then the draw list
+      drawRevision = pageHasLetters(page) ? page.layoutDrawRevision() : 0;
       bands.set(page.highlightBoxesView());
     }
     if (changed) {
@@ -1427,6 +1468,7 @@ class _QvpPainter extends CustomPainter {
           bandH.toInt(),
           styledKey,
           surahFrames,
+          q.hash,
         )) {
       cache.basePaths = held.paths;
     } else {
@@ -1440,6 +1482,7 @@ class _QvpPainter extends CustomPainter {
         bandH.toInt(),
         styledKey,
         surahFrames,
+        q.hash,
       );
       final kept = _InkCache.getGlobalInk(key);
       if (kept != null) {
@@ -1510,16 +1553,18 @@ class _QvpPainter extends CustomPainter {
       canvas.restore();
     }
 
-    // 3. styled paths, placed the same way the ink under them was: by the group the engine put
-    // the path in, which is the only answer that holds once a page has reflowed.
+    // 3. styled paths: each draw-list entry of a styled path, in the list's order, under its own
+    // placement, as the base ink leaves it out. A path the layout draws twice is drawn twice,
+    // and a path the list does not hold is not drawn.
+    var overlayPaths = 0;
     if (styled.isNotEmpty) {
-      final colors = cache.styledColors;
+      final styledDraws = cache.styledDrawsFor(q);
+      final colors = cache.styledDrawColors;
+      overlayPaths = styledDraws.length;
       var cur = -1, open = false;
-      for (var i = 0; i < styled.length; i++) {
-        final s = styled[i];
-        if ((s.color & 0xff) == 0) continue;
-        final pi = q.ofPath[s.path];
-        if (pi == null || pi < 0) continue;
+      for (var i = 0; i < styledDraws.length; i++) {
+        final s = styledDraws[i];
+        final pi = s.placement;
         if (pi != cur) {
           if (open) canvas.restore();
           canvas.save();
@@ -1541,7 +1586,7 @@ class _QvpPainter extends CustomPainter {
     cache.masks.draw(canvas, _boxPaint, view);
     sw.stop();
     cache.overlayMs = sw.elapsedMicroseconds / 1000;
-    cache.overlayPaths = styled.length;
+    cache.overlayPaths = overlayPaths;
     cache.bandCount = cache.bands.boxes;
   }
 

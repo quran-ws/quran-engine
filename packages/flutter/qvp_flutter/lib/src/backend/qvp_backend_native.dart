@@ -97,6 +97,10 @@ class QvpNativeBackend implements QvpBackend {
     _passageLayout = pffi.calloc<QvpPassageLayoutC>();
     _ornament = pffi.calloc<QvpOrnamentC>();
     _dressColors = pffi.calloc<ffi.Uint32>(16 * 3);
+    _letterInfo = pffi.calloc<QvpLetterInfoC>();
+    _letterHit = pffi.calloc<QvpLetterHitC>();
+    _letterQuery = pffi.calloc<QvpLetterQueryC>();
+    _outU32 = pffi.calloc<ffi.Uint32>(2);
   }
 
   static ffi.DynamicLibrary resolveLibrary({String? path}) {
@@ -171,6 +175,10 @@ class QvpNativeBackend implements QvpBackend {
   late final ffi.Pointer<QvpPassageLayoutC> _passageLayout;
   late final ffi.Pointer<QvpOrnamentC> _ornament;
   late final ffi.Pointer<ffi.Uint32> _dressColors;
+  late final ffi.Pointer<QvpLetterInfoC> _letterInfo;
+  late final ffi.Pointer<QvpLetterHitC> _letterHit;
+  late final ffi.Pointer<QvpLetterQueryC> _letterQuery;
+  late final ffi.Pointer<ffi.Uint32> _outU32;
   bool _disposed = false;
 
   /// Throws once [dispose] has run. [dispose] frees the scratch buffers and the out structs
@@ -480,6 +488,7 @@ class QvpNativeBackend implements QvpBackend {
     if (_disposed) return;
     _disposed = true;
     _freeTarget(_target);
+    _freeTarget(_letterQuery.cast<QvpTargetC>());
     _freeTheme(_theme);
     for (final p in <ffi.Pointer>[
       _scratch,
@@ -510,6 +519,10 @@ class QvpNativeBackend implements QvpBackend {
       _passageLayout,
       _ornament,
       _dressColors,
+      _letterInfo,
+      _letterHit,
+      _letterQuery,
+      _outU32,
     ]) {
       pffi.calloc.free(p);
     }
@@ -523,8 +536,7 @@ class QvpNativeBackend implements QvpBackend {
     if (h == ffi.nullptr) throw const FormatException('qvp_page_load failed');
     b.pageInfo(h, _pageInfo);
     final i = _pageInfo.ref;
-    b.geometry(h, _geom);
-    final g = _geom.ref;
+    final g = _readGeometry(h);
     return (
       NativePageHandle(h),
       QvpPageData(
@@ -535,11 +547,11 @@ class QvpNativeBackend implements QvpBackend {
         nLines: i.nLines,
         nAyahs: i.nAyahs,
         nWords: i.nWords,
-        nPaths: i.nPaths,
+        nPaths: g.nPaths,
         nDecorations: i.nDecorations,
-        ops: Uint8List.fromList(g.ops.asTypedList(g.opsLen)),
-        pts: Float32List.fromList(g.pts.asTypedList(g.ptsLen)),
-        table: Uint32List.fromList(g.table.asTypedList(g.nPaths * 8)),
+        ops: g.ops,
+        pts: g.pts,
+        table: g.table,
         words: List.generate(i.nWords, (w) => _readWord(h, w), growable: false),
         ayahs: List.generate(i.nAyahs, (a) => _readAyah(h, a), growable: false),
         lines: List.generate(i.nLines, (l) => _readLine(h, l), growable: false),
@@ -551,6 +563,25 @@ class QvpNativeBackend implements QvpBackend {
       ),
     );
   }
+
+  /// Copies the path count and the geometry out of the engine. The count comes from
+  /// `qvp_page_info`, which counts a letter layer's pieces, as the geometry does.
+  QvpPageGeometry _readGeometry(ffi.Pointer<QvpPageC> h) {
+    b.pageInfo(h, _pageInfo);
+    final n = _pageInfo.ref.nPaths;
+    b.geometry(h, _geom);
+    final g = _geom.ref;
+    return QvpPageGeometry(
+      nPaths: n,
+      ops: Uint8List.fromList(g.ops.asTypedList(g.opsLen)),
+      pts: Float32List.fromList(g.pts.asTypedList(g.ptsLen)),
+      table: Uint32List.fromList(g.table.asTypedList(g.nPaths * 8)),
+    );
+  }
+
+  @override
+  QvpPageGeometry pageGeometry(PageHandle handle) =>
+      _readGeometry(_page(handle));
 
   @override
   void pageFree(PageHandle handle) {
@@ -903,6 +934,196 @@ class QvpNativeBackend implements QvpBackend {
   bool hasForm(PageHandle handle, int form) =>
       b.hasForm(_page(handle), form) != 0;
 
+  // ── Letters ──
+
+  static int _none(int v) => v == qvpNone ? -1 : v;
+
+  /// -1 and every other negative index as `QVP_NONE`.
+  static int _index(int v) => v < 0 ? qvpNone : v;
+
+  @override
+  bool attachLetters(PageHandle handle, List<int> bytes) =>
+      _withBytes(bytes, (p, n) => b.attachLetters(_page(handle), p, n)) == 0;
+
+  @override
+  bool hasLetters(PageHandle handle) => b.hasLetters(_page(handle)) != 0;
+
+  @override
+  int letterCount(PageHandle handle, int word) =>
+      b.letterCount(_page(handle), _index(word));
+
+  @override
+  QvpLetter? letterInfo(PageHandle handle, int word, int letter) {
+    final h = _page(handle);
+    if (b.letterInfo(h, _index(word), _index(letter), _letterInfo) == 0) {
+      return null;
+    }
+    final i = _letterInfo.ref;
+    // copy every field before the members call
+    final at = _none(i.at),
+        codePoint = i.text,
+        nMembers = i.nMembers,
+        nMarks = i.nMarks,
+        moreAt = _none(i.moreAt),
+        nMoreAt = i.nMoreAt,
+        x0 = i.x0,
+        y0 = i.y0,
+        x1 = i.x1,
+        y1 = i.y1,
+        hasInk = i.hasInk != 0,
+        w = i.word,
+        index = i.index;
+    return QvpLetter(
+      word: w,
+      index: index,
+      at: at,
+      codePoint: codePoint,
+      nMembers: nMembers,
+      nMarks: nMarks,
+      moreAt: moreAt,
+      nMoreAt: nMoreAt,
+      x0: x0,
+      y0: y0,
+      x1: x1,
+      y1: y1,
+      hasInk: hasInk,
+      members: letterMembers(handle, word, letter),
+    );
+  }
+
+  @override
+  List<QvpLetterMember> letterMembers(
+    PageHandle handle,
+    int word,
+    int letter,
+  ) => _readArray<QvpLetterMemberC, QvpLetterMember>(
+    ffi.sizeOf<QvpLetterMemberC>(),
+    (out, cap) =>
+        b.letterMembers(_page(handle), _index(word), _index(letter), out, cap),
+    (ptr, i) {
+      final m = ptr[i];
+      return QvpLetterMember(
+        path: m.path,
+        at: _none(m.at),
+        mark: m.mark,
+        isBody: m.isBody != 0,
+        isCut: m.isCut != 0,
+      );
+    },
+  );
+
+  @override
+  ({int letter, int at})? pathLetter(PageHandle handle, int path) {
+    final h = _page(handle);
+    if (b.pathLetter(h, _index(path), _outU32, _outU32 + 1) == 0) return null;
+    return (letter: _none(_outU32[0]), at: _none(_outU32[1]));
+  }
+
+  @override
+  int? letterAtOffset(PageHandle handle, int word, int at) {
+    final h = _page(handle);
+    if (b.letterAtOffset(h, _index(word), _index(at), _outU32) == 0) {
+      return null;
+    }
+    return _outU32[0];
+  }
+
+  /// Runs [f] with the letter query written, its scope's word list valid for the call.
+  R _withLetterQuery<R>(
+    PageHandle handle,
+    QvpLetterQuery q,
+    R Function(ffi.Pointer<QvpLetterQueryC> p) f,
+  ) {
+    // the scope is the struct's first field
+    final scope = _letterQuery.cast<QvpTargetC>();
+    final text = q.codePoint, mark = q.markId;
+    _writeTarget(scope, q.target, handle);
+    try {
+      final r = _letterQuery.ref;
+      r.text = text;
+      r.mark = mark;
+      r.part = q.part;
+      r.pad[0] = 0;
+      r.pad[1] = 0;
+      return f(_letterQuery);
+    } finally {
+      _freeTarget(scope);
+    }
+  }
+
+  @override
+  List<({int word, int letter})> findLetters(
+    PageHandle handle,
+    QvpLetterQuery query,
+  ) => _withLetterQuery(
+    handle,
+    query,
+    (q) => _readU32Records(
+      2,
+      (p, cap) => b.findLetters(_page(handle), q, p, cap),
+      (p, i) => (word: p[i * 2], letter: p[i * 2 + 1]),
+    ),
+  );
+
+  @override
+  int styleLetters(
+    PageHandle handle,
+    QvpLetterQuery query,
+    int color, {
+    int ms = 0,
+    int layer = 0,
+  }) => _withLetterQuery(
+    handle,
+    query,
+    (q) => b.styleAddLetters(_page(handle), layer, q, color, ms),
+  );
+
+  QvpLetterHit _readLetterHit(QvpLetterHitC h) => QvpLetterHit(
+    word: _none(h.word),
+    letter: _none(h.letter),
+    path: _none(h.path),
+    at: _none(h.at),
+    line: _none(h.line),
+    distance: h.distance,
+    mark: h.mark,
+    isExact: h.isExact != 0,
+    isBody: h.isBody != 0,
+  );
+
+  ffi.Pointer<QvpHitOptionsC> _letterHitOptions(QvpHitOptions? o) {
+    if (o == null) return ffi.nullptr;
+    _writeHitOptions(_hitOpt, o);
+    return _hitOpt;
+  }
+
+  @override
+  QvpLetterHit? hitTestLetter(
+    PageHandle handle,
+    double x,
+    double y,
+    QvpHitOptions? options,
+  ) {
+    final h = _page(handle);
+    final opt = _letterHitOptions(options);
+    return b.hitTestLetter(h, x, y, opt, _letterHit) == 0
+        ? null
+        : _readLetterHit(_letterHit.ref);
+  }
+
+  @override
+  QvpLetterHit? hitTestLetterView(
+    PageHandle handle,
+    double viewX,
+    double viewY,
+    QvpHitOptions? options,
+  ) {
+    final h = _page(handle);
+    final opt = _letterHitOptions(options);
+    return b.hitTestLetterView(h, viewX, viewY, opt, _letterHit) == 0
+        ? null
+        : _readLetterHit(_letterHit.ref);
+  }
+
   // ── Hit testing ──
 
   @override
@@ -1130,6 +1351,10 @@ class QvpNativeBackend implements QvpBackend {
       (p, i) => QvpDraw(p[i * 2], p[i * 2 + 1]),
     );
   }
+
+  @override
+  int layoutDrawRevision(PageHandle handle) =>
+      b.layoutDrawRevision(_page(handle));
 
   @override
   List<QvpPlacement> layoutPlacements(PageHandle handle) {
