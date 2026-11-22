@@ -42,8 +42,11 @@ for check in "$@"; do
       cargo test --workspace --release
       ;;
     gates)
-      step "data gates: identity (8 pages), line shift, zoom control, passages, ABI, conformance, zoom steps, web replays"
+      step "data gates: identity (8 pages), letter layer (8 pages), line shift, zoom control, passages, ABI, conformance, zoom steps, web replays"
       QVP_REQUIRE_DATA=1 cargo test -p qvp-convert --release --test identity
+      # Not QVP_REQUIRE_LETTERS: this gate skips when pages-letters/ is missing, as it is
+      # unless QVP_SYNC=letters fetched it.
+      cargo test -p qvp-convert --release --test letters
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test line_shift
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test zoom_control
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test passage

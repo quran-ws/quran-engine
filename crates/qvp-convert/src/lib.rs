@@ -1,6 +1,7 @@
 pub mod affine;
 pub mod atlas;
 pub mod json;
+pub mod letter_page;
 pub mod letters;
 pub mod ornaments;
 pub mod qvp2svg;
