@@ -53,6 +53,57 @@ asset units, too close to see, but they are an approximation, not the source cur
 released set this applies to four ayah markers, `font-012` in the extralight, light,
 regular-black and thin weights.
 
+## The letter layer
+
+`NNN.qvl` is the letter layer of page `NNN`, in the QVL1 format (`docs/FORMAT.md`). It is
+optional: a page file is complete without it. For each word of the page it gives the
+letters, the page paths that draw each letter, and the marks of each letter. Some page
+paths join several letters in one outline. For those, the layer holds pieces: parts of the
+outline that the converter cut out, one for each letter. The page file does not change.
+
+The data release described on this page does not include the layer. Build it with:
+
+```sh
+QVP_SYNC=letters scripts/sync-test-data.sh   # what the default sync fetches, then pages-letters/
+cargo run -p qvp-convert --release -- letters pages-letters pages dist/letters
+```
+
+The source is the letters archive of the same `quran-svg-elements` release, which holds
+the same pages as the words archive with every word divided into letters. The page ink
+still comes from the words archive. The layer only says which part of that ink draws
+which letter.
+
+Two gates check each layer (`crates/qvp-convert/tests/letters.rs`). The structure gate
+checks that every path of every word has exactly one role and that the letter count is
+the count of the archive's index. The ink gate draws the page from the
+pieces and compares it with the page (`docs/MEASURED.md`). It proves that the two drawings
+differ only at the cuts, and less than the identity gate allows. It does not prove that a
+cut falls where a calligrapher would put it. It does not say whether a reader can see a
+seam.
+
+Quran.ws did not measure where a joined outline divides between two letters. That
+division is the output of DigitalKhatt's `medinamushafanalyzer`
+(<https://github.com/DigitalKhatt/medinamushafanalyzer>) at commit `056191f`, the work of
+DigitalKhatt (Amine Anane), published under the MIT licence, Copyright (c) 2023-2026
+Digitalkhatt. `quran-svg-elements` uses it with the author's agreement. Its `NOTICE.md`
+asks whoever republishes the letters archive to carry this line next to the Quran.ws
+attribution:
+
+```
+Letter division by DigitalKhatt medinamushafanalyzer (commit 056191f),
+MIT licence. https://github.com/DigitalKhatt/medinamushafanalyzer
+```
+
+`quran-svg-elements` states these limits of the division in section 10.10 of its
+`schema/FORMAT.md`:
+
+- It quotes no accuracy figure, because it measured none. Where a cut falls inside a
+  connecting stroke is the analyzer's convention, not a fact of the print.
+- The edge of a cut letter can differ from the artwork by less than 0.0125 units. `quran-svg-elements`
+  says to use the words archive for a print-exact outline.
+- Two pieces of one outline meet edge to edge. When a renderer draws them apart, the antialiased
+  pixels on the cut can be lighter than on the word page. The ink is the same.
+
 ## How it is built
 
 ```sh

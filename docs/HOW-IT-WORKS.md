@@ -56,6 +56,13 @@ individual or combined QVP and SVG files, or one WOFF2 font. The same engine tha
 page loads the QVP forms. The page file still owns the frame. Printed layouts render it by default; a host
 that supplies its own frame sets `surahFrames: false`.
 
+The converter can also build a **letter layer** (`NNN.qvl`) from the letters archive of
+`quran-svg-elements`: for each word, its letters and the page paths that draw each one.
+Where one outline joins several letters, the layer holds the pieces that the converter
+cut from it. The layer is optional, and the page file does not change. The engine does
+not read the layer yet. `docs/DATA.md` says where the layer comes from and states its
+limits, and `docs/MEASURED.md` gives its size and what its ink gate measured.
+
 ## Load, draw, tap
 
 The whole common case in the reference web wrapper:

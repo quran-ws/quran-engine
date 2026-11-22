@@ -78,6 +78,63 @@ The reason for the engine is not this table. It is that a fully split page is
 hundreds of kilobytes of vector paths, and a phone cannot hold 604 of them in a
 DOM and stay responsive.
 
+## The letter layer
+
+The letter layer (`NNN.qvl`, `docs/FORMAT.md`) is an optional file per page. It gives the
+letters of each word and the paths that draw each letter. `docs/DATA.md` says where it
+comes from and what its limits are. The figures below are for the 604 layers that
+`qvp-convert letters` builds from the letters archive of `quran-svg-elements` v2.0.0. For
+scale, the table also gives the 604 page files that `qvp-convert batch` builds from the
+words archive of the same release.
+
+| | `NNN.qvl`, 604 files | `NNN.qvp`, 604 files |
+|---|---|---|
+| raw | 37,200,857 B | 81,218,231 B |
+| each file after `gzip -9`, summed | 30,001,948 B | 41,632,217 B |
+| smallest file | page 001, 16,045 B | page 001, 37,486 B |
+| largest file | page 552, 81,582 B | page 552, 170,465 B |
+
+The layers hold 333,220 letters and 261,953 pieces. A piece is a part of a joined outline
+that the converter cut out for one letter. The pieces come from 89,853 page paths. Raw,
+the layers are 45.8% of the size of the page files. After `gzip -9` they are 72.1%,
+because gzip makes a layer only 19.4% smaller and a page file 48.7% smaller. This page
+gives no brotli figure: the machine that measured the files had no `brotli`.
+
+```sh
+cargo run -p qvp-convert --release -- letters pages-letters pages dist/letters
+cargo run -p qvp-convert --release -- batch pages <pages_dir>
+cat dist/letters/*.qvl | wc -c
+t=0; for f in dist/letters/*.qvl; do t=$((t + $(gzip -9 -n -c "$f" | wc -c))); done; echo $t
+stat -c '%s %n' dist/letters/*.qvl | sort -n | sed -n '1p;$p'
+```
+
+Repeat the last three commands with `<pages_dir>/*.qvp` for the page column. On an Intel
+Core i9-13900 with 32 threads, the subcommand built all 604 layers in 1.00 s to 2.58 s
+wall clock over six runs, with the binary already built.
+
+The ink gate (`cargo test -p qvp-convert --release --test letters ink`, with
+`QVP_REQUIRE_LETTERS=1 QVP_TEST_ALL=1` for all pages) draws each page twice from its
+pieces and compares it with the page. It uses the metric of the identity gate: a 4×
+render, a pixel differs when its alpha differs by more than 48, and a page fails when more
+than 0.05% of its pixels differ. That is 1,518 of 3,036,000 pixels.
+
+| measure | pages over the limit | differing pixels, 604 pages | worst page |
+|---|---|---|---|
+| each piece as its own path (asserted) | 0 | 350,588 | 516 and 552, 765 px (0.0252%) |
+| the pieces of one path as one path (reported) | 0 | 4,196 | 022, 20 px |
+
+When each piece is its own path, 346,601 differing pixels (98.9%) are within 1.5 px of a
+cut. The other 3,987 are near an edge that a cut made again, and none are elsewhere. The
+worst page uses half of what the gate allows. When the pieces of one path are one path,
+only 269 differing pixels are near a cut, because the seam at the cuts is gone.
+
+The gate also compares areas. For each of the 89,853 cut paths, it takes the absolute
+difference between the area of the path and the area of its pieces. The sum of these
+differences is 1,466.9 square units, 0.0244% of the 6,003,600 square units of the paths.
+`quran-svg-elements` states that the edge of a cut piece is less than 0.0125 units from
+the artwork. That limit bounds the area difference of each path, and each difference is
+at most 0.438 of its bound. With 32 threads the gate took 4.8 s for 604 pages.
+
 ## Known rough edges
 
 - `surahs()` returns a `bannerDecoration` field that `docs/API.md` does not list; it
