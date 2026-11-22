@@ -114,7 +114,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     /** Attach the layer a URI names. The bytes are read on the query thread. True when the engine took it. */
     @ReactMethod fun attachLetters(tag: Int, uri: String, promise: Promise) = queue(promise) {
         val bytes = try { QvpRnBytes.read(ctx, uri) } catch (e: Exception) { promise.reject("qvp", e.message ?: e.toString(), e); return@queue }
-        onUiAndWait(tag, promise) { v, p -> v.attachLetters(p, bytes) }
+        onUiAndWait(tag, promise) { v, p -> v.attachLetters(p, bytes, uri) }
     }
     @ReactMethod fun hasLetters(tag: Int, promise: Promise) = inOrder(tag, promise) { _, p -> p.hasLetters() }
     @ReactMethod fun letters(tag: Int, word: Int, promise: Promise) = inOrder(tag, promise) { _, p -> p.letters(word).map { Marshal.letter(it) } }

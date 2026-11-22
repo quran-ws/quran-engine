@@ -588,6 +588,7 @@ export const Qvp = {
   /** Attach the page's letter layer from a URI (the same schemes as `pageUri`). True when the engine took it; false
    * when it refused it, and then nothing changed. The pieces cut from joined outlines become paths after the page's own. */
   attachLetters: (tag: number, uri: string): Promise<boolean> => M.attachLetters(tag, uri),
+  /** True when the page in view has a letter layer: the `lettersUri` prop or `attachLetters` attached one the engine took. */
   hasLetters: (tag: number): Promise<boolean> => M.hasLetters(tag),
   /** Every letter of a word, in the word's order, with its members and marks. Empty with no layer. */
   letters: (tag: number, word: number): Promise<Letter[]> => M.letters(tag, word),
@@ -597,7 +598,8 @@ export const Qvp = {
   letterAtOffset: (tag: number, word: number, at: number): Promise<number | null> => M.letterAtOffset(tag, word, at),
   /** The letters the query finds, in word order and then letter order. */
   findLetters: (tag: number, query: LetterQuery): Promise<{ word: number; letter: number }[]> => M.findLetters(tag, query),
-  /** The letter or mark under a point in page units; null with no layer, or when the point finds no word. */
+  /** The letter or mark under a point in page units; null with no layer, or when the point finds no word. A
+   * `maxDistance` left out is `DEFAULTS.TAP_DISTANCE`, as in `hitTest`; 0 has no bound. */
   hitTestLetter: (tag: number, x: number, y: number, opts?: HitOptions): Promise<LetterHit | null> => M.hitTestLetter(tag, x, y, opts ?? null),
   /** The same for a point in view dp (points on iOS), as `hitTestView` takes it. */
   hitTestLetterView: (tag: number, x: number, y: number, opts?: HitOptions): Promise<LetterHit | null> => M.hitTestLetterView(tag, x, y, opts ?? null),

@@ -112,6 +112,13 @@ final class QvpRnPageView: UIView {
         inner.setNeedsDisplay()
         return ok
     }
+    /// The module's attach of the layer `uri` names, on the main thread. On success `uri` is the
+    /// applied `lettersUri`, so the prop set back to an earlier value attaches that one again.
+    func attachLetters(_ p: QvpPage, _ bytes: Data, uri: String) -> Bool {
+        let ok = attachLetters(p, bytes)
+        if ok { appliedLetters = uri }
+        return ok
+    }
     var loadMs: Double { state.load.ms }
     var pageBytes: Int { state.load.bytes }
 

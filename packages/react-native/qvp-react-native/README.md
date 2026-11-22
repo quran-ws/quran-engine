@@ -216,6 +216,9 @@ await qvp.attachLetters('asset://pages/042.qvl');    // when you do not use the 
 - A letter query takes `scope` (a target, the page when left out), `letter` (one character)
   or `text` (a code point), `mark` (a name or an id) and `part` (`LETTER_PART`). A field left
   out matches any letter. `part` does not filter `findLetters`.
+- `hitTestLetter` and `hitTestLetterView` take the options of `hitTest`. As in `hitTest`, a
+  `maxDistance` that you leave out is `DEFAULTS.TAP_DISTANCE`, so a tap far from every word
+  finds nothing. The other wrappers have no limit by default. Pass 0 for no limit.
 - A rule with `letters` takes the layer that is attached when the rules run. A rule added
   before the layer selects nothing until the layer comes.
 - The native view keys its draw list on the engine's draw revision. A page with no layer

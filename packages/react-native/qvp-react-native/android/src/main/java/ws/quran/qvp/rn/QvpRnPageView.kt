@@ -53,6 +53,10 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
      * first, since the attach grows the page's path table. The view draws the pieces next frame. */
     fun attachLetters(p: QvpPage, bytes: ByteArray): Boolean =
         lock.write { p.attachLetters(bytes).also { if (it) lettersOn = p } }.also { inner.invalidate() }
+    /** The module's attach of the layer [uri] names, on the UI thread. On success [uri] is the
+     * applied `lettersUri`, so the prop set back to an earlier value attaches that one again. */
+    fun attachLetters(p: QvpPage, bytes: ByteArray, uri: String): Boolean =
+        attachLetters(p, bytes).also { if (it) appliedLetters = uri }
     /** Attach a words sidecar. Queries in progress finish first, and the word records built
      * before it are dropped, since the forms they hold have changed. */
     fun attachWords(p: QvpPage, json: String): Int = lock.write { p.attachWords(json).also { dropWords() } }

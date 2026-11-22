@@ -167,7 +167,7 @@ final class QvpModule: NSObject {
             let bytes: Data
             do { bytes = try QvpRnBytes.read(uri) } catch { reject("qvp", error.localizedDescription, error); return }
             DispatchQueue.main.sync {
-                self.settle(resolve, reject) { let v = try self.view(tag); return v.attachLetters(try self.loaded(v, tag), bytes) }
+                self.settle(resolve, reject) { let v = try self.view(tag); return v.attachLetters(try self.loaded(v, tag), bytes, uri: uri) }
             }
         }
     }

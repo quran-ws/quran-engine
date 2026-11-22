@@ -300,6 +300,30 @@ console.log(`ok  ${S.sequences.length} letter sequences replay as the engine say
   assert.deepEqual(whole.list, [0, 1, 2, 3, 4, 5, 6, 7], 'the cut path draws whole')
   assert.deepEqual(whole.overlay, [0, 1, 2])
   p.free()
+  // Two pages of one page number at one draw revision, one with the cut path swapped for its
+  // pieces: the same renderer gives each its own draw list and its own base ink.
+  const swappedPage = bare('letters'), wholePage = bare('letters')
+  assert.equal(swappedPage.attachLetters(layerOf('letters')), true)
+  swappedPage.style(Sel.letter(0, 1), S.red)
+  // a second attach moves the revision as the swap does, so both pages are at one revision
+  assert.equal(wholePage.attachLetters(layerOf('letters')), true)
+  assert.equal(wholePage.attachLetters(layerOf('letters')), true)
+  const shared = new CanvasRenderer(canvas(200, 200))
+  const drawn = page => {
+    page.layout(S.layouts.printed)
+    page.tick(0)
+    shared.draw(page, view, 1)
+    return { list: pairs(shared.list).map(([i]) => i), base: shared.stats.basePaths, revision: page.layoutDrawRevision() }
+  }
+  const first = drawn(swappedPage), second = drawn(wholePage), third = drawn(swappedPage)
+  assert.equal(first.revision, second.revision, 'the two pages are at one draw revision')
+  assert.equal(swappedPage.page, wholePage.page, 'the two pages have one page number')
+  assert.deepEqual(first.list, [8, 9, 1, 2, 3, 4, 5, 6, 7], 'the swapped page draws its pieces')
+  assert.deepEqual(second.list, [0, 1, 2, 3, 4, 5, 6, 7], 'the other page gets its own list')
+  assert.equal(second.base, 8, 'and its own base ink')
+  assert.deepEqual(third.list, first.list, 'and back again')
+  swappedPage.free()
+  wholePage.free()
   globalThis.document = had.document
   globalThis.Path2D = had.Path2D
   console.log('ok  CanvasRenderer draws the pieces after an attach and follows the draw revision')

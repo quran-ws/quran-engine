@@ -1323,7 +1323,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.canvas = canvas; this.ctx = canvas.getContext('2d');
       this.base = document.createElement('canvas'); this.baseKey = '';
       // the engine's draw list for the band in hand, kept until the band moves
-      this.list = null; this.places = null; this.listKey = '';
+      this.list = null; this.places = null; this.listKey = ''; this.listPage = null;
       /// How much ink to keep ready at once: a page that fits is drawn once and scrolling never
       /// draws again. About 17 MB for a page of this mushaf at the first zoom step.
       this.inkBudget = 64 << 20;
@@ -1456,11 +1456,15 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       // The engine says what is drawn and where: each path once under its placement, again for
       // every row a decoration repeats over, and nothing for a path this layout leaves out. It
       // is asked once per band, not once per frame: a scroll inside the band changes neither.
-      const listKey = `${page.page}|${cullTop.toFixed(1)}|${cullBottom.toFixed(1)}|${L.scale}|${L.rows}|${L.contentH}|${revision}`;
-      if (listKey !== this.listKey) {
+      // The list is the page object's own: another page of the same number, at the same draw
+      // revision, can draw a cut path whole where this one draws its pieces.
+      const listKey = `${cullTop.toFixed(1)}|${cullBottom.toFixed(1)}|${L.scale}|${L.rows}|${L.contentH}|${revision}`;
+      if (page !== this.listPage || listKey !== this.listKey) {
         this.list = page.layoutDrawList(cullTop, cullBottom);
         this.places = page.layoutPlacements();
-        this.listKey = listKey;
+        this.listPage = page; this.listKey = listKey;
+        // the base ink is drawn from the list, so a new list draws it again
+        this.baseKey = null;
       }
       const list = this.list, places = this.places;
       const setPlace = (c, g, v = view) => {

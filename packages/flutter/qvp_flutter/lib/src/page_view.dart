@@ -791,7 +791,7 @@ class _InkKey {
   );
 
   /// [styled] is [_InkCache.styledKey] and [draws] the [_DrawList.hash] of what the recording
-  /// drew.
+  /// drew, or 0 on a page with no letter layer, whose list follows its layout alone.
   final int page, ink, bandH, styled, draws;
   final double? scale, offsetX, offsetY;
   final double top;
@@ -1028,6 +1028,11 @@ class _InkCache {
     final l = page.currentLayout;
     if (l == null) return;
     final ink = inkColor != null ? rgba(inkColor) : page.defaultInk;
+    // With a letter layer the draw list is in the key, since it can change while the layout
+    // stays, and one list serves the key and the recording. With none the list follows the
+    // layout alone, so the key holds 0, as a frame's does, and a page the cache holds asks the
+    // engine for nothing, as before letters.
+    var draws = pageHasLetters(page) ? page.layoutDrawList() : null;
     final key = _InkKey(
       page.page,
       ink,
@@ -1038,9 +1043,8 @@ class _InkCache {
       math.max(l.contentH, 1.0).toInt(),
       1,
       surahFrames,
-      // the recording below draws every path of the list, so a page with no letter layer, or
-      // one whose letters are all one colour, keys it on the same list as a frame does
-      drawListHash(page.layoutDrawList()),
+      // the recording below draws every path of the list, so it is keyed as a frame is
+      draws == null ? 0 : drawListHash(draws),
     );
     if (getGlobalInk(key) != null) return;
 
@@ -1049,7 +1053,7 @@ class _InkCache {
     final paint = ui.Paint()
       ..color = QvpColor.toColor(ink)
       ..isAntiAlias = true;
-    final draws = page.layoutDrawList();
+    draws ??= page.layoutDrawList();
     final places = page.layoutPlacements();
     var cur = -1, open = false;
     for (final d in draws) {
@@ -1455,6 +1459,8 @@ class _QvpPainter extends CustomPainter {
     // picture in hand keeps it without asking the global cache.
     final styledKey = cache.styledKey;
     final q = cache.getDrawList(page, l, top, bandH, contentH);
+    // the list is in the key only with a letter layer, as in [_InkCache.prepare]
+    final drawsKey = pageHasLetters(page) ? q.hash : 0;
     final held = cache.entry;
     if (held != null &&
         !held.disposed &&
@@ -1468,7 +1474,7 @@ class _QvpPainter extends CustomPainter {
           bandH.toInt(),
           styledKey,
           surahFrames,
-          q.hash,
+          drawsKey,
         )) {
       cache.basePaths = held.paths;
     } else {
@@ -1482,7 +1488,7 @@ class _QvpPainter extends CustomPainter {
         bandH.toInt(),
         styledKey,
         surahFrames,
-        q.hash,
+        drawsKey,
       );
       final kept = _InkCache.getGlobalInk(key);
       if (kept != null) {

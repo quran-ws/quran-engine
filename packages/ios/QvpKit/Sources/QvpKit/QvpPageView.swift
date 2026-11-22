@@ -639,7 +639,12 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         // drag inside the band changes nothing.
         // the ornament layer is drawn into the band, so its revision is part of the key
         let dress = p === page ? p.dressInfo() : nil
-        let key = "\(p.pageNo)|\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(z.zoom)|\(l.rows)|\(dress?.revision ?? -1)|\(drawRevision)"
+        // The cache is shared by every page instance of one number, so a page reloaded or
+        // prepared again finds its ink. With a letter layer, another instance at the same draw
+        // revision can draw a cut path whole where this one draws its pieces: key it on the
+        // instance too. A page with no layer keeps the key it had.
+        let instance = p.lettersAttached ? "@\(UInt(bitPattern: ObjectIdentifier(p)))" : ""
+        let key = "\(p.pageNo)\(instance)|\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(z.zoom)|\(l.rows)|\(dress?.revision ?? -1)|\(drawRevision)"
         if reuse, let kept = cachedInk(key) { return (key, kept) }
 
         let t0 = CACurrentMediaTime()
