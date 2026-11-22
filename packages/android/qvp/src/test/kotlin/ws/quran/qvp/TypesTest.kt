@@ -60,6 +60,54 @@ class TypesTest {
         assertThrows(IllegalArgumentException::class.java) { Target.parse("not-a-target") }
     }
 
+    /** The letter selectors carry the header's ids (QVP_SELECTOR_LETTER 16 to WORD_CHARS 19) and
+     * their arguments in the order qvp_jni.c reads them: {selector, a, b, c}. */
+    @Test
+    fun letterSelectorsCarryTheHeaderIds() {
+        assertArrayEquals(intArrayOf(16, 3, 1, 0), Selector.letter(3, 1).arr)
+        assertArrayEquals(intArrayOf(16, 3, 1, 2), Selector.letter(3, 1, QvpLetterPart.MARKS).arr)
+        assertArrayEquals(intArrayOf(17, 3, 1, 4), Selector.letterMark(3, 1, 4).arr)
+        assertArrayEquals(intArrayOf(18, 3, 1, 16), Selector.letterMarkNamed(3, 1, 16).arr)
+        assertArrayEquals(intArrayOf(19, 3, 0, 2), Selector.wordChars(3, 0, 2).arr)
+        // QVP_NONE goes in as -1, which the bridge passes on as 0xFFFFFFFF
+        assertArrayEquals(intArrayOf(19, 0, -1, -1), Selector.wordChars(0, -1, -1).arr)
+        assertEquals(listOf(0, 1, 2), listOf(QvpLetterPart.ALL, QvpLetterPart.BODY_AND_DOTS, QvpLetterPart.MARKS))
+    }
+
+    /** A query reaches the bridge as {text, mark, part}, then the scope's target record. */
+    @Test
+    fun letterQueryRecordMatchesTheBridge() {
+        assertArrayEquals(intArrayOf(0, 0, 0, 0, 0, 0, 0), QvpLetterQuery().ints())
+        assertArrayEquals(intArrayOf(0x644, 16, 1, 1, 2, 0, 0), QvpLetterQuery(Target.word(2), 0x644, 16, QvpLetterPart.BODY_AND_DOTS).ints())
+        assertArrayEquals(intArrayOf(0, 0, 2, 2, 0, 0, 0, 1, 1, 5), QvpLetterQuery(Target.words(intArrayOf(1, 1, 5)), part = QvpLetterPart.MARKS).ints())
+        assertArrayEquals(intArrayOf(0, 255, 0, 4, 1, 1, 2), QvpLetterQuery(Target.ayahRange(1, 1, 2), mark = 255).ints())
+        // a letter given as a character goes in as its code point; no mark name needs the engine here
+        assertArrayEquals(intArrayOf(0x1F600, 0, 0, 0, 0, 0, 0), QvpLetterQuery.of(letter = "\uD83D\uDE00").ints())
+        assertArrayEquals(intArrayOf(0x644, 0, 0, 0, 0, 0, 0), QvpLetterQuery.of(letter = "\u0644").ints())
+    }
+
+    /** The bridge's letter records map to the friendly types field by field: a swap of two fields
+     * shows here without a device. */
+    @Test
+    fun letterRecordsMatchTheBridge() {
+        val names = mapOf(0 to "", 1 to "fathah", 12 to "omitted_alif", 16 to "dot")
+        val name = { m: Int -> names.getValue(m) }
+        val bits = { f: Float -> f.toRawBits() }
+        val members = QvpLetterMember.list(intArrayOf(8, 0, 0, 1, 1, 1, 0, 16, 0, 0, 2, 1, 1, 0, 0, 7, -1, 12, 0, 0), name)
+        assertEquals(listOf(QvpLetterMember(8, 0, 0, "", isBody = true, isCut = true),
+                            QvpLetterMember(1, 0, 16, "dot", isBody = false, isCut = false),
+                            QvpLetterMember(2, 1, 1, "fathah", isBody = false, isCut = false),
+                            QvpLetterMember(7, -1, 12, "omitted_alif", isBody = false, isCut = false)), members)
+        val letter = QvpLetter.of(intArrayOf(4, 1, 2, 0x628, 4, 3, 5, 1, bits(50f), bits(6f), bits(60.5f), bits(24f), 1), members)
+        assertEquals(QvpLetter(4, 1, 2, 0x628, "\u0628", 5, 1, 4, 3, 50f, 6f, 60.5f, 24f, true, members), letter)
+        assertEquals(listOf(1, 2, 7), letter.marks.map { it.path })
+        assertEquals(false, QvpLetter.of(intArrayOf(0, 0, -1, 0x648, 0, 0, -1, 0, 0, 0, 0, 0, 0), emptyList()).hasInk)
+        val hit = QvpLetterHit.of(intArrayOf(2, -1, 5, 3, 1, bits(0.25f), 12, 0, 1), name)
+        assertEquals(QvpLetterHit(2, -1, 5, 3, 1, 0.25f, 12, "omitted_alif", isExact = false, isBody = true), hit)
+        assertEquals(QvpLetterHit(0, 0, 8, 0, 0, 0f, 0, "", isExact = true, isBody = false),
+                     QvpLetterHit.of(intArrayOf(0, 0, 8, 0, 0, 0, 0, 1, 0), name))
+    }
+
     /** The record the JNI bridge reads a passage spec from, in the order qvp_jni.c states. */
     @Test
     fun passageSpecRecordMatchesTheBridge() {

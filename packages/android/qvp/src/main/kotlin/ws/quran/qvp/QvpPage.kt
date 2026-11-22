@@ -67,10 +67,18 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     val isClosed: Boolean get() = !isOpen
 
     val width: Float; val height: Float; val pageNo: Int
-    val nLines: Int; val nAyahs: Int; val nWords: Int; val nPaths: Int; val nDecorations: Int
-    val ops: ByteArray; val pts: FloatArray
+    val nLines: Int; val nAyahs: Int; val nWords: Int; val nDecorations: Int
+    /** The paths of the page, a letter layer's pieces included: [attachLetters] adds them after
+     * the page's own paths, so the count grows then and no index below it changes. */
+    var nPaths: Int; private set
+    /** The geometry of every path. [attachLetters] replaces these arrays: read them again after it. */
+    var ops: ByteArray; private set
+    /** The points of every path, x and y in turn, in page units. */
+    var pts: FloatArray; private set
     /** stride 8 per path: opStart, opCount, ptStart, ptCount, flags, word, line, extra */
-    val table: IntArray
+    var table: IntArray; private set
+    /** The page's own path count, before any letter layer. A path below it never changes. */
+    private val pagePaths: Int
     val words: List<QvpWord>; val ayahs: List<QvpAyah>; val lines: List<QvpLine>; val decorations: List<QvpDecoration>
     val lineSpacing: Float
     var currentLayout: QvpLayout? = null; private set
@@ -84,10 +92,14 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     internal var clockRevision = 0; private set
     private var clockMoving = false
     private fun touch() { revision++ }
+    /** True once a letter layer is attached: the view then reads the draw revision each time it
+     * reads the colours. The engine keeps the layer from then on. */
+    internal var letterLayer = false; private set
 
     init {
         val i = QvpNative.pageInfo(h)
         width = i[0]; height = i[1]; pageNo = i[2].toInt(); nLines = i[3].toInt(); nAyahs = i[4].toInt(); nWords = i[5].toInt(); nPaths = i[6].toInt(); nDecorations = i[7].toInt()
+        pagePaths = nPaths
         ops = QvpNative.geomOps(h); pts = QvpNative.geomPts(h); table = QvpNative.geomTable(h)
         words = List(nWords) { k -> val v = QvpNative.wordInfo(h, k)!!; QvpWord(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4].toInt(), v[5].toInt(), v[6], v[7], v[8], v[9], QvpNative.wordText(h, k) ?: "", v[10].toInt(), v[11].toInt()) }
         ayahs = List(nAyahs) { k -> val v = QvpNative.ayahInfo(h, k)!!; QvpAyah(k, v[0].toInt(), v[1].toInt(), v[2].toInt(), v[3].toInt(), v[4].toInt(), v[5].toInt(), v[6].toInt(), v[7].toInt(), v[8].toInt(), v[9], v[10], v[11], v[12]) }
@@ -222,10 +234,61 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
         return List(v.size / 3) { k -> val w = v[k * 3]; QvpMatch(w, v[k * 3 + 1], v[k * 3 + 2] != 0, wordKey(w), words[w].text) }
     }
     fun citation(ws: IntArray): String = QvpNative.citation(h, ws)
-    /** attach a words sidecar ({"s:a:w": {"rasmImlai","qpc","rasm","search"}}); returns words updated, -1 on bad JSON */
-    fun attachWords(json: ByteArray): Int = QvpNative.attachWords(h, json)
+    /** attach a words sidecar ({"s:a:w": {"rasmImlai","qpc","rasm","search"}}); returns words updated, -1 on bad JSON.
+     * With a letter layer, the sidecar checks the letters' offsets, so the colours are read again. */
+    fun attachWords(json: ByteArray): Int = QvpNative.attachWords(h, json).also { if (letterLayer) touch() }
     fun attachWords(json: String) = attachWords(json.toByteArray())
     fun hasForm(form: Form) = QvpNative.hasForm(h, form.id)
+
+    // ── letters: the optional letter layer (NNN.qvl) ──
+    /**
+     * Attach the page's letter layer. True when the engine took it. The layer appends the pieces
+     * cut from joined outlines after the page's own paths, so [nPaths], [ops], [pts], [table] and
+     * the length of [colors] grow; this reads them again. A second attach replaces the first, and
+     * every rule stays and takes the new layer. False when the engine refused the bytes (another
+     * page's layer, a file that does not decode, a file over 1 MiB): then nothing changes.
+     */
+    fun attachLetters(bytes: ByteArray): Boolean {
+        if (QvpNative.attachLetters(h, bytes) != 0) return false
+        readGeometry()
+        letterLayer = true
+        touch()
+        return true
+    }
+    /** Read the geometry again after an attach. Built paths of the page's own paths stay: no
+     * index below [pagePaths] changes. A piece is built again the next time it is drawn, since a
+     * second attach can put other pieces at the same index. */
+    private fun readGeometry() {
+        nPaths = QvpNative.pageInfo(h)[6].toInt()
+        ops = QvpNative.geomOps(h); pts = QvpNative.geomPts(h); table = QvpNative.geomTable(h)
+        val built = lazyPaths ?: return
+        val keep = minOf(pagePaths, built.size)
+        lazyPaths = Array(nPaths) { if (it < keep) built[it] else LAZY }
+    }
+    /** True when a letter layer is attached. */
+    fun hasLetters(): Boolean = QvpNative.hasLetters(h)
+    /** The letters of word [word]: 0 with no layer. */
+    fun letterCount(word: Int): Int = QvpNative.letterCount(h, word)
+    /** Letter [index] of word [word], with its members, or null when there is no such letter. */
+    fun letter(word: Int, index: Int): QvpLetter? =
+        QvpNative.letterInfo(h, word, index)?.let { QvpLetter.of(it, letterMembers(word, index)) }
+    /** Every letter of word [word], in the word's order. Empty with no layer. */
+    fun letters(word: Int): List<QvpLetter> = List(letterCount(word)) { letter(word, it)!! }
+    /** The paths of a letter: the bodies first, then the marks in text order. */
+    fun letterMembers(word: Int, index: Int): List<QvpLetterMember> =
+        QvpLetterMember.list(QvpNative.letterMembers(h, word, index), QvpEngine::markName)
+    /** The letter role of a path: a letter's member, a piece included, or a word-level mark
+     * (letter -1). Null for a cut path, a path with no letter role, or no layer. */
+    fun pathLetter(path: Int): QvpPathLetter? = QvpNative.pathLetter(h, path)?.let { QvpPathLetter(it[0], it[1]) }
+    /** The letter of word [word] that draws the character at code-point offset [at] (its own or
+     * a kashida it draws) or holds a mark there. Null when no letter has it. */
+    fun letterAtOffset(word: Int, at: Int): Int? = QvpNative.letterAtOffset(h, word, at).let { if (it == NONE) null else it }
+    /** The letters the query finds, as (word, letter index) pairs, in word order and then letter
+     * order. The query's part does not filter. Empty for a bad query or no layer. */
+    fun findLetters(query: QvpLetterQuery): List<Pair<Int, Int>> {
+        val v = QvpNative.findLetters(h, query.ints())
+        return List(v.size / 2) { v[it * 2] to v[it * 2 + 1] }
+    }
 
     // ── metadata ──
     fun surahs(): List<QvpSurah> = List(QvpNative.surahCount(h)) { i -> val n = QvpNative.surahNums(h, i)!!; val s = QvpNative.surahNames(h, i)!!
@@ -271,6 +334,13 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** The same partition in viewport px through the current layout. Not [hitAreas] transformed:
      *  a reflowed row's words have other neighbours than a printed line's, so the engine computes it again. */
     fun hitAreasView(gapBias: Float = QvpDefaults.GAP_BIAS): List<QvpHitArea> = readAreas(QvpNative.hitAreasView(h, gapBias))
+    /** The letter or mark under a point, in page units. Null with no layer, or when the point is
+     * off ink, outside a counter and finds no word within the options. */
+    fun hitTestLetter(x: Float, y: Float, o: QvpHitOptions = QvpHitOptions()): QvpLetterHit? =
+        QvpNative.hitTestLetter(h, x, y, o.maxDistance, o.gapBias, o.preferExact)?.let { QvpLetterHit.of(it, QvpEngine::markName) }
+    /** The same, in viewport px through the current layout, printed or reflowed. */
+    fun hitTestLetterView(viewX: Float, viewY: Float, o: QvpHitOptions = QvpHitOptions()): QvpLetterHit? =
+        QvpNative.hitTestLetterView(h, viewX, viewY, o.maxDistance, o.gapBias, o.preferExact)?.let { QvpLetterHit.of(it, QvpEngine::markName) }
     private fun readAreas(v: FloatArray): List<QvpHitArea> = List(v.size / 10) { k -> val o = k * 10; QvpHitArea(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9]) }
 
     // ── layout ──
@@ -360,6 +430,11 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
         val v = QvpNative.layoutDrawList(h, band?.first ?: 0f, band?.second ?: 0f)
         return (0 until v.size / 2).map { QvpDraw(v[it * 2], v[it * 2 + 1]) }
     }
+    /** Counts up when the draw list can change while the layout and the band stay the same: a
+     * letter layer is attached, or a cut path starts or stops drawing as its pieces. 0 on a page
+     * with no layer. Key a kept draw list on it. Per frame: [tick], then [colors] or
+     * [styledPaths], then this, then [layoutDrawList] when it, the layout or the band changed. */
+    fun layoutDrawRevision(): Int = QvpNative.layoutDrawRevision(h)
     /** What a draw list's placement indexes: every group, then every repeat. */
     fun layoutPlacements(): List<QvpPlacement> {
         val v = QvpNative.layoutPlacements(h)
@@ -377,6 +452,11 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     // ── styles (handles undo exactly) ──
     fun style(sel: Selector, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAdd(h, layer, sel.arr, rgba, transitionMs).also { touch() }
     fun styleTarget(t: Target, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int = QvpNative.styleAddTarget(h, layer, t.arr, rgba, transitionMs).also { touch() }
+    /** One rule for the letters the query finds, and the query's part of each. The scope resolves
+     * to words now; the rest takes the letter layer each time the rules run, so with no layer the
+     * rule waits for one. 0 for a bad query (a part above 2, a text that is no Unicode scalar). */
+    fun styleLetters(query: QvpLetterQuery, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int =
+        QvpNative.styleAddLetters(h, layer, query.ints(), rgba, transitionMs).also { touch() }
     fun removeStyle(handle: Int) = QvpNative.styleRemove(h, handle).also { touch() }
     fun recolorStyle(handle: Int, rgba: Int, transitionMs: Int = 0) = QvpNative.styleRecolor(h, handle, rgba, transitionMs).also { touch() }
     fun hide(sel: Selector): Int = QvpNative.hide(h, sel.arr).also { touch() }

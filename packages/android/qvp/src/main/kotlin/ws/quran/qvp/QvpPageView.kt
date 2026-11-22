@@ -127,6 +127,8 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private var styled = IntArray(0)
     private var styledOn = BooleanArray(0)
     private var styledKey = 1
+    /** The engine's draw revision, read with the colours: 0 on a page with no letter layer. */
+    private var drawRevision = 0
     private var dressNow: QvpDressInfo? = null
     private val highlightLayer = BoxLayer()
     private val maskLayer = BoxLayer()
@@ -471,7 +473,10 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
      */
     private fun readFrame(p: QvpPage) {
         val fresh = p !== readPage
-        if (fresh) { readPage = p; styled = IntArray(0); styledOn = BooleanArray(p.nPaths) }
+        if (fresh) { readPage = p; styled = IntArray(0); styledOn = BooleanArray(p.nPaths); drawRevision = 0 }
+        // A letter layer attached since the last frame grew the path table: the flags start again
+        // at its new size. The attach moved the page's revision, so the colours are read below.
+        if (styledOn.size != p.nPaths) { styled = IntArray(0); styledOn = BooleanArray(p.nPaths) }
         val changed = fresh || p.revision != readRevision
         if (changed || p.clockRevision != readClock) {
             var i = 0
@@ -480,6 +485,11 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             var key = 1; i = 0
             while (i < styled.size) { styledOn[styled[i]] = true; key = 31 * key + styled[i]; i += 2 }
             styledKey = key
+            // After the colours, as the engine asks: with a layer the draw list can change while
+            // the layout and the band stay, and the revision says when. A page with no layer has
+            // none, so it makes no call here. Only a rule or the clock moves the revision, and
+            // both bring the frame here.
+            drawRevision = if (p.letterLayer) p.layoutDrawRevision() else 0
             highlightLayer.set(p.highlightBoxRecords(), rect)
         }
         if (changed) {
@@ -502,15 +512,16 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     /** What the layout in hand draws and where, read once per band rather than once a frame.
      * Asking the engine on every frame — and once per styled path — was most of what a scroll
      * was spending its time on. */
-    private class DrawList(val draws: List<QvpDraw>, val places: List<QvpPlacement>, val key: InkKey, private val nPaths: Int) {
+    private class DrawList(val draws: List<QvpDraw>, val places: List<QvpPlacement>, val key: InkKey, nPaths: Int) {
         private var styledFrom: IntArray? = null
-        private var styledTriples = IntArray(0)
+        private val styledDraws = StyledDraws(draws, nPaths)
 
-        /** The draws of the styled pass, from [styledDraws]. The engine's draw list says what to
-         * draw and where. The view keeps the triples until the styled paths or the list change. */
-        fun styledNow(styled: IntArray): IntArray {
-            if (styled !== styledFrom) { styledTriples = styledDraws(draws, styled, nPaths); styledFrom = styled }
-            return styledTriples
+        /** The draws of the styled pass, from [StyledDraws]: the first `size` ints of its
+         * triples. The engine's draw list says what to draw and where. The view keeps the triples
+         * until the styled paths or the list change, and a fade fills the same buffers each frame. */
+        fun styledNow(styled: IntArray): StyledDraws {
+            if (styled !== styledFrom) { styledDraws.update(styled); styledFrom = styled }
+            return styledDraws
         }
     }
     private var drawList: DrawList? = null
@@ -552,7 +563,7 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         if (l !== hashedLayout) { hashedLayout = l; lineDyHash = l.lineDy.contentHashCode() }
         // The key holds where the band starts, never where the reader has scrolled to, so a drag
         // inside the band is one blit and nothing is drawn again.
-        probe.set(p.pageNo, viewScale, viewOx, top, ink, l.lineSpacing, lineDyHash, styledKey, width, bandPx, zoom.zoom, l.rows, dressed?.revision ?: 0)
+        probe.set(p.pageNo, viewScale, viewOx, top, ink, l.lineSpacing, lineDyHash, styledKey, width, bandPx, zoom.zoom, l.rows, dressed?.revision ?: 0, drawRevision)
         if (TRACE) android.util.Log.i("QVPTRACE", "band top=$top h=$bandH px=$bandPx contentH=${l.contentH * viewScale} viewOy=$viewOy viewScale=$viewScale height=$height rows=${l.rows}")
         if (paperColor != Color.TRANSPARENT) {
             // the paper runs under the border of a dressed page too
@@ -598,17 +609,18 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val t1 = System.nanoTime()
         val q = drawListNow(probe)
         val places = q.places
-        val triples = q.styledNow(styled)
+        val styledDraws = q.styledNow(styled)
+        val triples = styledDraws.triples
         var cur = -1; var i = 0
         canvas.save()
-        while (i < triples.size) {
+        while (i < styledDraws.size) {
             val pi = triples[i]; val g = triples[i + 1]; val col = triples[i + 2]; i += 3
             if (g != cur) { canvas.restore(); canvas.save(); canvas.concat(placementMatrix(places.getOrElse(g) { QvpPlacement.IDENTITY })); cur = g }
             paint.color = QvpColor.argb(col); canvas.drawPath(p.path(pi), paint)
         }
         canvas.restore()
         maskLayer.draw(canvas, paint, viewScale, viewOx, viewOy)
-        lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = triples.size / 3; lastBands = highlightLayer.boxes
+        lastOverlayMs = (System.nanoTime() - t1) / 1e6; lastOverlayPaths = styledDraws.size / 3; lastBands = highlightLayer.boxes
         if (moving) { animating = true; Choreographer.getInstance().postFrameCallback(frameCb) }
     }
 
@@ -686,11 +698,12 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
      * does, so -0 and 0 differ, as their text did in the string key before. */
     private data class InkKey(var page: Int = 0, var scale: Float = 0f, var offsetX: Float = 0f, var top: Float = 0f, var ink: Int = 0,
                               var lineSpacing: Float = 0f, var lineDy: Int = 0, var styled: Int = 0, var width: Int = 0, var bandPx: Int = 0,
-                              var zoom: Float = 0f, var rows: Int = 0, var dress: Int = 0) {
+                              var zoom: Float = 0f, var rows: Int = 0, var dress: Int = 0, var drawRevision: Int = 0) {
         fun set(page: Int, scale: Float, offsetX: Float, top: Float, ink: Int, lineSpacing: Float, lineDy: Int, styled: Int, width: Int,
-                bandPx: Int, zoom: Float, rows: Int, dress: Int) {
+                bandPx: Int, zoom: Float, rows: Int, dress: Int, drawRevision: Int) {
             this.page = page; this.scale = scale; this.offsetX = offsetX; this.top = top; this.ink = ink; this.lineSpacing = lineSpacing
             this.lineDy = lineDy; this.styled = styled; this.width = width; this.bandPx = bandPx; this.zoom = zoom; this.rows = rows; this.dress = dress
+            this.drawRevision = drawRevision
         }
     }
 

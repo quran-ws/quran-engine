@@ -27,3 +27,11 @@ Cover the Kotlin SDK, and the Flutter and React Native packages, which build on 
   `packages/flutter/qvp_flutter` and commit the result. ffigen needs libclang: Xcode or the
   Command Line Tools on macOS, `libclang-dev` on Linux. `scripts/check-flutter-bindings.sh`
   fails when the committed file and the header differ.
+- A letter layer grows the path table: `QvpPage.attachLetters` reads `nPaths`, `ops`, `pts`
+  and `table` again. Size a per-path array from `page.nPaths` when it is used, never once at
+  load. `QvpPageView` reads `layoutDrawRevision()` after the styled paths, and only on a page
+  with a layer.
+- Everything in this package calls the engine on the thread that owns the view. `QvpPage`
+  has no lock. With a layer, `layoutDrawList` and `layoutDrawRevision` change the page's
+  style state, so a host with a second thread (the React Native module) holds its write lock
+  around them, or runs them on the same thread as every other page call.

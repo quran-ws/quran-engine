@@ -127,6 +127,103 @@ class Selector private constructor(internal val arr: IntArray) {
         fun decoration(k: Int) = Selector(intArrayOf(14, k, 0, 0))
         /** Every path of one decoration, by its index on the page. */
         fun decorationIndex(i: Int) = Selector(intArrayOf(15, i, 0, 0))
+        /** A letter of word [w], by its index in the word, and which [part] of it ([QvpLetterPart]).
+         * The letter selectors read the letter layer ([QvpPage.attachLetters]). With no layer they
+         * select nothing, and the rule takes the layer when it comes. */
+        fun letter(w: Int, letter: Int, part: Int = QvpLetterPart.ALL) = Selector(intArrayOf(16, w, letter, part))
+        /** The nth mark of a letter, in text order, counting from 0. Dots count; a body never does. */
+        fun letterMark(w: Int, letter: Int, nth: Int) = Selector(intArrayOf(17, w, letter, nth))
+        /** Every member of a letter whose path has this mark, by its name. A body that the page
+         * stores as a mark counts too. */
+        fun letterMarkNamed(w: Int, letter: Int, mark: String) = letterMarkNamed(w, letter, markId(mark))
+        /** The same, by the mark's id. 0 selects nothing. */
+        fun letterMarkNamed(w: Int, letter: Int, markId: Int) = Selector(intArrayOf(18, w, letter, markId))
+        /** The ink of the `qpc` characters [from] to [to] of word [w], both included, by
+         * code-point offset. A word-level mark counts. [from] after [to] is a bad selector. */
+        fun wordChars(w: Int, from: Int, to: Int) = Selector(intArrayOf(19, w, from, to))
+    }
+}
+
+/** What part of a letter a selector or a query takes (QVP_LETTER_PART_*). [BODY_AND_DOTS] is
+ * every member at the letter's own offset, the same paths as [Selector.wordChars] of that
+ * offset; [MARKS] is every other member. */
+object QvpLetterPart { const val ALL = 0; const val BODY_AND_DOTS = 1; const val MARKS = 2 }
+
+/** One path of a letter: a page path, or a piece cut from a joined outline ([isCut]), at an
+ * index past the page's own paths. [at] is its code-point offset in the word's `qpc` text, -1
+ * when it has none. [mark] is the mark id of the path and [markName] its name; body ink has 0
+ * and the name "". */
+data class QvpLetterMember(val path: Int, val at: Int, val mark: Int, val markName: String, val isBody: Boolean, val isCut: Boolean) {
+    internal companion object {
+        /** The members from the bridge's record, 5 ints each: path, at, mark, isBody, isCut. */
+        fun list(v: IntArray, name: (Int) -> String): List<QvpLetterMember> = List(v.size / 5) { k ->
+            val o = k * 5
+            QvpLetterMember(v[o], v[o + 1], v[o + 2], name(v[o + 2]), v[o + 3] != 0, v[o + 4] != 0)
+        }
+    }
+}
+
+/**
+ * One letter of a word, from the letter layer. [index] is the letter's index in its word, [at]
+ * its code-point offset in the word's `qpc` text, [text] its code point and [character] the
+ * same as a string. [moreAt] is the first other offset its body draws (a kashida), -1 when
+ * none, and [nMoreAt] counts them. The box is in page units: the union of its members' boxes.
+ * [hasInk] is false when no member has an outline. [members] holds the bodies first, then the
+ * marks in text order, as the engine gives them; [marks] holds the marks alone, so `marks[n]`
+ * is the path [Selector.letterMark] `n` takes.
+ */
+data class QvpLetter(val word: Int, val index: Int, val at: Int, val text: Int, val character: String, val moreAt: Int, val nMoreAt: Int,
+                     val nMembers: Int, val nMarks: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float, val hasInk: Boolean,
+                     val members: List<QvpLetterMember>) {
+    /** The members that are not body, dots included, in text order. */
+    val marks: List<QvpLetterMember> = members.filter { !it.isBody }
+
+    internal companion object {
+        /** The letter from the bridge's record, 13 ints: word, index, at, text, nMembers, nMarks,
+         * moreAt, nMoreAt, x0, y0, x1, y1 (float bits), hasInk; and its members. */
+        fun of(v: IntArray, members: List<QvpLetterMember>): QvpLetter =
+            QvpLetter(v[0], v[1], v[2], v[3], String(Character.toChars(v[3])), v[6], v[7], v[4], v[5],
+                      Float.fromBits(v[8]), Float.fromBits(v[9]), Float.fromBits(v[10]), Float.fromBits(v[11]), v[12] != 0, members)
+    }
+}
+
+/** What role a path has in the letter layer ([QvpPage.pathLetter]): the letter's index in the
+ * path's word, -1 for a word-level mark, and the path's offset, -1 when none. */
+data class QvpPathLetter(val letter: Int, val at: Int)
+
+/**
+ * The letter under a point ([QvpPage.hitTestLetter]). [letter] is its index in [word], -1 for a
+ * word-level mark. [isExact] is true when the point is on ink; then [distance] is 0. A near hit
+ * names the letter's first body member as [path], and [distance] is the distance to the
+ * letter's box in page units. [at] is the offset of the path hit or of the letter, -1 when none.
+ * [mark] is the mark id of the path hit and [markName] its name. [isBody] is true when the path
+ * is a body member of its letter.
+ */
+data class QvpLetterHit(val word: Int, val letter: Int, val path: Int, val at: Int, val line: Int, val distance: Float,
+                        val mark: Int, val markName: String, val isExact: Boolean, val isBody: Boolean) {
+    internal companion object {
+        /** The hit from the bridge's record, 9 ints: word, letter, path, at, line, distance (float
+         * bits), mark, isExact, isBody. */
+        fun of(v: IntArray, name: (Int) -> String): QvpLetterHit =
+            QvpLetterHit(v[0], v[1], v[2], v[3], v[4], Float.fromBits(v[5]), v[6], name(v[6]), v[7] != 0, v[8] != 0)
+    }
+}
+
+/**
+ * Letters by what they are ([QvpPage.findLetters], [QvpPage.styleLetters]). [scope] is the words
+ * to look in. [text] is a code point, 0 for any letter. [mark] is a mark id that one of the
+ * letter's members must carry, 0 for any. [part] ([QvpLetterPart]) is what of each letter a rule
+ * takes; it does not filter [QvpPage.findLetters].
+ */
+data class QvpLetterQuery(val scope: Target = Target.page(), val text: Int = 0, val mark: Int = 0, val part: Int = QvpLetterPart.ALL) {
+    /** The record the bridge reads: {text, mark, part}, then the scope's target record. */
+    internal fun ints(): IntArray = intArrayOf(text, mark, part) + scope.arr
+
+    companion object {
+        /** A query by a letter and a mark name: [letter] is one character (its first code point),
+         * null for any; [mark] a mark name, null for any. */
+        fun of(scope: Target = Target.page(), letter: String? = null, mark: String? = null, part: Int = QvpLetterPart.ALL) =
+            QvpLetterQuery(scope, letter?.codePointAt(0) ?: 0, mark?.let { markId(it) } ?: 0, part)
     }
 }
 

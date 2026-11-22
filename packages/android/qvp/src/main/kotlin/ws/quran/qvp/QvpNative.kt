@@ -48,6 +48,18 @@ internal object QvpNative {
     @JvmStatic external fun citation(h: Long, words: IntArray): String
     @JvmStatic external fun attachWords(h: Long, json: ByteArray): Int
     @JvmStatic external fun hasForm(h: Long, form: Int): Boolean
+    // letters: the optional letter layer. A letter answers 13 ints {word, index, at, text, nMembers,
+    // nMarks, moreAt, nMoreAt, x0, y0, x1, y1 (float bits), hasInk}, a member 5 {path, at, mark,
+    // isBody, isCut}, a letter hit 9 {word, letter, path, at, line, distance (float bits), mark,
+    // isExact, isBody}. A query goes in as {text, mark, part, target, a, b, c, words...}. -1 is QVP_NONE.
+    @JvmStatic external fun attachLetters(h: Long, bytes: ByteArray): Int
+    @JvmStatic external fun hasLetters(h: Long): Boolean
+    @JvmStatic external fun letterCount(h: Long, w: Int): Int
+    @JvmStatic external fun letterInfo(h: Long, w: Int, letter: Int): IntArray?
+    @JvmStatic external fun letterMembers(h: Long, w: Int, letter: Int): IntArray
+    @JvmStatic external fun pathLetter(h: Long, path: Int): IntArray?
+    @JvmStatic external fun letterAtOffset(h: Long, w: Int, at: Int): Int
+    @JvmStatic external fun findLetters(h: Long, query: IntArray): IntArray
     // hit testing
     @JvmStatic external fun hitTestExact(h: Long, x: Float, y: Float): FloatArray?
     @JvmStatic external fun hitTestExactView(h: Long, x: Float, y: Float): FloatArray?
@@ -56,6 +68,8 @@ internal object QvpNative {
     @JvmStatic external fun lineBands(h: Long): FloatArray
     @JvmStatic external fun hitAreas(h: Long, gapBias: Float): FloatArray
     @JvmStatic external fun hitAreasView(h: Long, gapBias: Float): FloatArray
+    @JvmStatic external fun hitTestLetter(h: Long, x: Float, y: Float, maxDistance: Float, gapBias: Float, preferExact: Boolean): IntArray?
+    @JvmStatic external fun hitTestLetterView(h: Long, x: Float, y: Float, maxDistance: Float, gapBias: Float, preferExact: Boolean): IntArray?
     // layout
     @JvmStatic external fun layout(h: Long, spec: FloatArray): FloatArray
     @JvmStatic external fun layoutLineSpacingToFill(h: Long, spec: FloatArray, max: Float): Float
@@ -89,6 +103,7 @@ internal object QvpNative {
     @JvmStatic external fun reflowMaxZoom(h: Long, spec: FloatArray): Float
     // a reflowed page: where the ink went
     @JvmStatic external fun layoutDrawList(h: Long, bandTop: Float, bandBottom: Float): IntArray
+    @JvmStatic external fun layoutDrawRevision(h: Long): Int
     @JvmStatic external fun layoutPlacements(h: Long): FloatArray
     @JvmStatic external fun layoutGroups(h: Long): FloatArray
     @JvmStatic external fun layoutPathGroups(h: Long): IntArray
@@ -102,6 +117,7 @@ internal object QvpNative {
     // styles
     @JvmStatic external fun styleAdd(h: Long, layer: Int, sel: IntArray, rgba: Int, ms: Int): Int
     @JvmStatic external fun styleAddTarget(h: Long, layer: Int, target: IntArray, rgba: Int, ms: Int): Int
+    @JvmStatic external fun styleAddLetters(h: Long, layer: Int, query: IntArray, rgba: Int, ms: Int): Int
     @JvmStatic external fun styleRemove(h: Long, handle: Int): Int
     @JvmStatic external fun styleRecolor(h: Long, handle: Int, rgba: Int, ms: Int): Int
     @JvmStatic external fun styleClear(h: Long)

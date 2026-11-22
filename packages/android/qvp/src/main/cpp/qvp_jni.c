@@ -58,6 +58,19 @@ static QvpSelector sel_in(JNIEnv* env, jintArray arr) {
     jint v[4] = {0, 0, 0, 0}; (*env)->GetIntArrayRegion(env, arr, 0, 4, v);
     QvpSelector s = { (uint8_t)v[0], (uint32_t)v[1], (uint32_t)v[2], (uint32_t)v[3] }; return s;
 }
+/* letter query IntArray: {text, mark, part, target, a, b, c, words...}. The scope's words point into
+   the array's elements, so query_done releases them after the call. */
+typedef struct { QvpLetterQuery q; jint* buf; jintArray arr; } QueryIn;
+static QueryIn query_in(JNIEnv* env, jintArray arr) {
+    QueryIn qi; memset(&qi, 0, sizeof qi); qi.arr = arr;
+    jsize n = (*env)->GetArrayLength(env, arr);
+    qi.buf = (*env)->GetIntArrayElements(env, arr, NULL);
+    qi.q.text = (uint32_t)qi.buf[0]; qi.q.mark = (uint8_t)qi.buf[1]; qi.q.part = (uint8_t)qi.buf[2];
+    qi.q.scope.target = (uint8_t)qi.buf[3]; qi.q.scope.a = (uint32_t)qi.buf[4]; qi.q.scope.b = (uint32_t)qi.buf[5]; qi.q.scope.c = (uint32_t)qi.buf[6];
+    qi.q.scope.words = (const uint32_t*)(qi.buf + 7); qi.q.scope.n_words = n > 7 ? (uint32_t)(n - 7) : 0;
+    return qi;
+}
+static void query_done(JNIEnv* env, QueryIn* qi) { (*env)->ReleaseIntArrayElements(env, qi->arr, qi->buf, JNI_ABORT); }
 /* style ints {mode, height, ink, band, ms, layer}; floats {padX, padY, radius, seam} */
 static QvpHighlightStyle hl_in(JNIEnv* env, jintArray ii, jfloatArray ff) {
     jint v[6]; jfloat f[4]; (*env)->GetIntArrayRegion(env, ii, 0, 6, v); (*env)->GetFloatArrayRegion(env, ff, 0, 4, f);
@@ -227,6 +240,48 @@ jint FN(attachWords)(JNIEnv* env, jclass c, jlong h, jbyteArray json) {
 }
 jboolean FN(hasForm)(JNIEnv* env, jclass c, jlong h, jint form) { return qvp_has_form(PG(h), (uint8_t)form) ? JNI_TRUE : JNI_FALSE; }
 
+/* ───────── letters ───────── */
+/* Each struct is read field by field, so the 32-bit and the 64-bit ABIs are right as the header lays them out.
+   QVP_NONE reaches the JVM as -1. */
+jint FN(attachLetters)(JNIEnv* env, jclass c, jlong h, jbyteArray bytes) {
+    jsize n = (*env)->GetArrayLength(env, bytes); jbyte* p = (*env)->GetByteArrayElements(env, bytes, NULL);
+    jint r = qvp_attach_letters(PG(h), (const uint8_t*)p, (uint32_t)n); (*env)->ReleaseByteArrayElements(env, bytes, p, JNI_ABORT); return r;
+}
+jboolean FN(hasLetters)(JNIEnv* env, jclass c, jlong h) { return qvp_has_letters(PG(h)) ? JNI_TRUE : JNI_FALSE; }
+jint FN(letterCount)(JNIEnv* env, jclass c, jlong h, jint w) { return (jint)qvp_letter_count(PG(h), (uint32_t)w); }
+/* {word, index, at, text, nMembers, nMarks, moreAt, nMoreAt, x0, y0, x1, y1 (float bits), hasInk}; null when there is no such letter */
+jintArray FN(letterInfo)(JNIEnv* env, jclass c, jlong h, jint w, jint l) {
+    QvpLetterInfo i; if (!qvp_letter_info(PG(h), (uint32_t)w, (uint32_t)l, &i)) return NULL;
+    jint v[13] = { (jint)i.word, (jint)i.index, (jint)i.at, (jint)i.text, (jint)i.n_members, (jint)i.n_marks, (jint)i.more_at, (jint)i.n_more_at,
+                   ibits(i.x0), ibits(i.y0), ibits(i.x1), ibits(i.y1), (jint)i.has_ink };
+    return ints(env, v, 13);
+}
+/* 5 per member: path, at, mark, isBody, isCut */
+jintArray FN(letterMembers)(JNIEnv* env, jclass c, jlong h, jint w, jint l) {
+    COLLECT(QvpLetterMember, 32, m, n, qvp_letter_members(PG(h), (uint32_t)w, (uint32_t)l, m, cap));
+    jint* v = (jint*)malloc((n ? n : 1) * 5 * sizeof(jint));
+    for (uint32_t i = 0; i < n; i++) { jint* o = v + i * 5; o[0] = (jint)m[i].path; o[1] = (jint)m[i].at; o[2] = (jint)m[i].mark; o[3] = (jint)m[i].is_body; o[4] = (jint)m[i].is_cut; }
+    jintArray a = ints(env, v, n * 5); free(v); COLLECT_END(m); return a;
+}
+/* {letter, at}; null when the path has no letter role */
+jintArray FN(pathLetter)(JNIEnv* env, jclass c, jlong h, jint path) {
+    uint32_t letter = QVP_NONE, at = QVP_NONE;
+    if (!qvp_path_letter(PG(h), (uint32_t)path, &letter, &at)) return NULL;
+    jint v[2] = { (jint)letter, (jint)at }; return ints(env, v, 2);
+}
+/* the letter's index, -1 when no letter has that offset */
+jint FN(letterAtOffset)(JNIEnv* env, jclass c, jlong h, jint w, jint at) {
+    uint32_t letter = QVP_NONE;
+    return qvp_letter_at_offset(PG(h), (uint32_t)w, (uint32_t)at, &letter) ? (jint)letter : -1;
+}
+/* {word, letter} pairs */
+jintArray FN(findLetters)(JNIEnv* env, jclass c, jlong h, jintArray query) {
+    QueryIn qi = query_in(env, query);
+    COLLECT(uint32_t, 512, out, n, qvp_find_letters(PG(h), &qi.q, out, cap / 2) * 2);
+    query_done(env, &qi);
+    jintArray a = ints(env, (const jint*)out, (jsize)n); COLLECT_END(out); return a;
+}
+
 /* ───────── hit testing ───────── */
 /* {word(-1), path(-1), decoration(-1), line, distance, is_exact}: the one hit shape for every hit test */
 static jfloatArray hit_out(JNIEnv* env, int ok, QvpHit* h) {
@@ -252,6 +307,18 @@ static jfloatArray hit_areas(JNIEnv* env, jlong h, jfloat gapBias, int view) {
 }
 jfloatArray FN(hitAreas)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) { return hit_areas(env, h, gapBias, 0); }
 jfloatArray FN(hitAreasView)(JNIEnv* env, jclass c, jlong h, jfloat gapBias) { return hit_areas(env, h, gapBias, 1); }
+/* {word, letter(-1), path, at(-1), line, distance (float bits), mark, isExact, isBody}; null when there is no hit */
+static jintArray letter_hit_out(JNIEnv* env, int ok, const QvpLetterHit* r) {
+    if (!ok) return NULL;
+    jint v[9] = { (jint)r->word, (jint)r->letter, (jint)r->path, (jint)r->at, (jint)r->line, ibits(r->distance), (jint)r->mark, (jint)r->is_exact, (jint)r->is_body };
+    return ints(env, v, 9);
+}
+jintArray FN(hitTestLetter)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y, jfloat maxDist, jfloat gapBias, jboolean preferExact) {
+    QvpHitOptions o = { maxDist, gapBias, preferExact ? 1u : 0u }; QvpLetterHit r; return letter_hit_out(env, qvp_hit_test_letter(PG(h), x, y, &o, &r), &r);
+}
+jintArray FN(hitTestLetterView)(JNIEnv* env, jclass c, jlong h, jfloat x, jfloat y, jfloat maxDist, jfloat gapBias, jboolean preferExact) {
+    QvpHitOptions o = { maxDist, gapBias, preferExact ? 1u : 0u }; QvpLetterHit r; return letter_hit_out(env, qvp_hit_test_letter_view(PG(h), x, y, &o, &r), &r);
+}
 
 /* ───────── layout ───────── */
 /* spec {vw, vh, padTop, padBottom, padLeft, padRight, lineSpacing, fillHeight, gridLines, cropLeft,
@@ -401,6 +468,8 @@ jintArray FN(layoutDrawList)(JNIEnv* env, jclass c, jlong h, jfloat top, jfloat 
     qvp_layout_draw_list(PG(h), top, bottom, v, n);
     jintArray a = ints(env, (const jint*)v, (jsize)(n * 2)); free(v); return a;
 }
+/* counts up when the draw list can change with the same layout and band; 0 on a page with no letter layer */
+jint FN(layoutDrawRevision)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_layout_draw_revision(PG(h)); }
 /* what a draw list's placement indexes: {dx, dy, kx, ky} each */
 jfloatArray FN(layoutPlacements)(JNIEnv* env, jclass c, jlong h) {
     uint32_t n = qvp_layout_placements(PG(h), NULL, 0);
@@ -483,6 +552,7 @@ jfloatArray FN(wordBoundsView)(JNIEnv* env, jclass c, jlong h, jint i) { float v
 /* ───────── styles ───────── */
 jint FN(styleAdd)(JNIEnv* env, jclass c, jlong h, jint layer, jintArray sel, jint rgba, jint ms) { QvpSelector s = sel_in(env, sel); return (jint)qvp_style_add(PG(h), layer, &s, (uint32_t)rgba, (uint32_t)ms); }
 jint FN(styleAddTarget)(JNIEnv* env, jclass c, jlong h, jint layer, jintArray t, jint rgba, jint ms) { TargetIn ti = target_in(env, t); jint r = (jint)qvp_style_add_target(PG(h), layer, &ti.t, (uint32_t)rgba, (uint32_t)ms); target_done(env, &ti); return r; }
+jint FN(styleAddLetters)(JNIEnv* env, jclass c, jlong h, jint layer, jintArray query, jint rgba, jint ms) { QueryIn qi = query_in(env, query); jint r = (jint)qvp_style_add_letters(PG(h), layer, &qi.q, (uint32_t)rgba, (uint32_t)ms); query_done(env, &qi); return r; }
 jint FN(styleRemove)(JNIEnv* env, jclass c, jlong h, jint handle) { return (jint)qvp_style_remove(PG(h), (uint32_t)handle); }
 jint FN(styleRecolor)(JNIEnv* env, jclass c, jlong h, jint handle, jint rgba, jint ms) { return (jint)qvp_style_recolor(PG(h), (uint32_t)handle, (uint32_t)rgba, (uint32_t)ms); }
 void FN(styleClear)(JNIEnv* env, jclass c, jlong h) { qvp_style_clear(PG(h)); }

@@ -5,6 +5,17 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- The letter layer in Kotlin. `QvpPage.attachLetters(bytes)` attaches a page's `.qvl` file
+  and reads the geometry again, since the pieces grow the path table. `hasLetters()`,
+  `letterCount(word)`, `letters(word)`, `letter(word, index)`, `letterMembers(word, index)`,
+  `pathLetter(path)`, `letterAtOffset(word, at)` and `findLetters(query)` read it.
+  `styleLetters(query, rgba)` colours the letters a `QvpLetterQuery` finds.
+  `hitTestLetter(x, y)` and `hitTestLetterView(x, y)` give the letter or mark under a point.
+  `layoutDrawRevision()` counts up when the draw list changes with the same layout. New
+  selectors: `Selector.letter`, `letterMark`, `letterMarkNamed` and `wordChars`. New types:
+  `QvpLetterPart`, `QvpLetter`, `QvpLetterMember`, `QvpPathLetter`, `QvpLetterHit` and
+  `QvpLetterQuery`. `QvpPageView` keys its draw list on the revision and sizes its per-path
+  flags after an attach. On a page with no layer it makes no new call.
 - `QvpPage.ayahMarksView()`, `hitAreasView(gapBias)` and `wordBandsView(words, height, padX,
   padY)`: the viewport-px twins of `ayahMarks`, `hitAreas` and `wordBands`. Each answers
   through the current layout, so an app that draws its own overlay on a reflowed page reads
