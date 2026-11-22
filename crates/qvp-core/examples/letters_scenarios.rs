@@ -39,11 +39,10 @@ const WORDS: &str = r#"{"1:1:2": {"qpc": "لـ"}, "1:2:1": {"qpc": "وا"}}"#;
 const GARBAGE: [u8; 12] = [0x51, 0x56, 0x4c, 0x31, 0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3];
 
 /// The bytes of a letter layer, as a wrapper attaches them. This is the only call of the
-/// encoder in this file. When the encoder takes the page as a second argument, the line in
-/// this function's body is the one line to change.
+/// encoder in this file. The layer is encoded against `page`, the data its page file is
+/// written from.
 fn layer_bytes(page: &PageData, layer: &LetterData) -> Vec<u8> {
-    let _ = page;
-    qvp_format::letters::encode_letters(layer)
+    qvp_format::letters::encode_letters(layer, page).expect("the scenario's layer encodes")
 }
 
 // ── the symbols the scenario exercises ──

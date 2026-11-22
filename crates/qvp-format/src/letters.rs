@@ -6,29 +6,48 @@
 //! cuts it, and this file holds the pieces. The page file does not change.
 //!
 //! The file follows the conventions of `codec.rs`: a fixed header with section lengths,
-//! struct-of-arrays tables in varints and zigzag deltas, and the drawing operations of the
-//! pieces in the same four streams as a page's runs. `docs/FORMAT.md` specifies it.
+//! and tables in varints and zigzag deltas. A piece is coded against its source path in
+//! the page (`pieces.rs`), so decoding a layer needs its page. `docs/FORMAT.md` specifies
+//! the file.
+
+mod pieces;
 
 use crate::{read_varint, unzigzag, write_varint, zigzag, Cmd, Error, PageData, PathKind, COORD_LIMIT, PF_GLYPH};
+use pieces::{decode_pieces, encode_pieces, Reader, Streams, N_STREAMS};
 
 pub const LETTERS_MAGIC: &[u8; 4] = b"QVL1";
 pub const LETTERS_VERSION: u16 = 1;
 /// "No offset" for a member or a word-level mark.
 pub const NO_AT: u16 = 0xFFFF;
 
-/// magic(4) + version, quant, page, word count(8) + path count(4) + four section lengths(16).
-const HEADER_LEN: usize = 32;
+/// magic(4) + version, quant, page, word count(8) + path count(4) + ten section
+/// lengths(40).
+const HEADER_LEN: usize = 56;
+/// The tables section, then the geometry sections.
+const N_SECTIONS: usize = 1 + N_STREAMS;
 
-/// Member flags: bit 0 body ink, bit 1 the path is a piece, bit 2 `at` is stored.
+/// Member flags: bit 0 body ink, bit 1 the path is a piece, bits 2 to 4 how `at` is coded.
 const MF_BODY: u8 = 1;
 const MF_PIECE: u8 = 2;
-const MF_AT: u8 = 4;
+const MF_AT_SHIFT: u8 = 2;
+/// The `at` code of a member: 0 the default, 1 to 5 the letter's offset plus 0 to 4, 7
+/// stored. 6 is not used.
+const AT_DEFAULT: u8 = 0;
+const AT_STORED: u8 = 7;
 
-/// The fewest bytes one record of each table takes, in table order: letters (five
-/// varints), members (a flags byte and a varint), word marks (three varints), pieces (two
-/// varints). A count whose records cannot fit in the tables section is rejected before
-/// anything is allocated for it.
-const MIN_RECORD_BYTES: [u64; 4] = [5, 2, 3, 2];
+/// Letter header bits: 0 to 2 the member count less one (7: stored), 3 the next word, 4
+/// `more_at` follows, 5 and 6 how `at` is coded (3: stored), 7 a stored word delta.
+const LH_MEMBERS: u8 = 7;
+const LH_NEXT_WORD: u8 = 8;
+const LH_MORE_AT: u8 = 16;
+const LH_AT_SHIFT: u8 = 5;
+const LH_WORD: u8 = 128;
+
+/// The fewest bytes one record of each table takes, in table order: letters (a header
+/// byte and an alphabet index), members (a flags byte and a path delta), word marks
+/// (three varints), pieces (an operation count). A count whose records cannot fit in the
+/// tables section is rejected before anything is allocated for it.
+const MIN_RECORD_BYTES: [u64; 4] = [2, 2, 3, 1];
 
 /// Which path a member is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,6 +150,18 @@ fn default_at(is_body: bool, letter_at: u16) -> u16 {
     }
 }
 
+/// How a member's `at` is coded: the default, the letter's offset plus 0 to 4 for a mark,
+/// or stored.
+fn member_at_code(m: &MemberRec, letter_at: u16) -> u8 {
+    if m.at == default_at(m.is_body, letter_at) {
+        AT_DEFAULT
+    } else if !m.is_body && letter_at != NO_AT && m.at >= letter_at && m.at - letter_at <= 4 {
+        (m.at - letter_at) as u8 + 1
+    } else {
+        AT_STORED
+    }
+}
+
 /// The offset of the letter that holds each member, `NO_AT` for a member no letter holds.
 fn letter_at_of_members(letters: &[LetterRec], n_members: usize) -> Vec<u16> {
     let mut out = Vec::with_capacity(n_members);
@@ -150,10 +181,18 @@ struct Rd<'a> {
 }
 impl<'a> Rd<'a> {
     fn vi(&mut self, what: &'static str) -> Result<u32, Error> {
-        read_varint(self.b, &mut self.pos).map_err(|_| Error::Truncated(what))
+        read_varint(self.b, &mut self.pos).map_err(|e| match e {
+            Error::Truncated(_) => Error::Truncated(what),
+            e => e,
+        })
     }
     fn zv(&mut self, what: &'static str) -> Result<i32, Error> {
         Ok(unzigzag(self.vi(what)?))
+    }
+    fn u8(&mut self, what: &'static str) -> Result<u8, Error> {
+        let v = *self.b.get(self.pos).ok_or(Error::Truncated(what))?;
+        self.pos += 1;
+        Ok(v)
     }
     /// A varint that must fit a `u16` field.
     fn u16(&mut self, what: &'static str) -> Result<u16, Error> {
@@ -165,165 +204,20 @@ impl<'a> Rd<'a> {
         *acc = u16::try_from(v).map_err(|_| Error::Corrupt(what))?;
         Ok(*acc)
     }
+    /// A zigzag delta added to a running `u32` value in wrapping arithmetic, so that every
+    /// pair of values has a delta.
+    fn step_u32(&mut self, acc: &mut u32, what: &'static str) -> Result<u32, Error> {
+        *acc = acc.wrapping_add(self.zv(what)? as u32);
+        Ok(*acc)
+    }
     fn left(&self) -> usize {
         self.b.len() - self.pos
     }
 }
 
-// ───────────────────────────── encode ─────────────────────────────
+// ───────────────────────────── the header ─────────────────────────────
 
-/// Encode a letter layer. `decode_letters` gives back the same `LetterData` for every
-/// layer that `check_against` accepts.
-pub fn encode_letters(d: &LetterData) -> Vec<u8> {
-    // ── tables ──
-    let mut t: Vec<u8> = Vec::with_capacity(d.letters.len() * 6 + d.members.len() * 3 + 64);
-    for n in [d.letters.len(), d.members.len(), d.word_marks.len(), d.pieces.len()] {
-        vi(&mut t, n as u32);
-    }
-    let mut pw = 0u16;
-    for l in &d.letters {
-        zv(&mut t, l.word as i32 - pw as i32);
-        pw = l.word;
-        vi(&mut t, l.at as u32);
-        vi(&mut t, l.text as u32);
-        vi(&mut t, l.n_members as u32);
-        vi(&mut t, l.more_at.len() as u32);
-        for a in &l.more_at {
-            vi(&mut t, *a as u32);
-        }
-    }
-    // members, column by column
-    let letter_at = letter_at_of_members(&d.letters, d.members.len());
-    let stores_at = |i: usize, m: &MemberRec| m.at != default_at(m.is_body, letter_at[i]);
-    for (i, m) in d.members.iter().enumerate() {
-        let mut f = 0u8;
-        if m.is_body {
-            f |= MF_BODY;
-        }
-        if matches!(m.path, MemberPath::Piece(_)) {
-            f |= MF_PIECE;
-        }
-        if stores_at(i, m) {
-            f |= MF_AT;
-        }
-        t.push(f);
-    }
-    for m in &d.members {
-        match m.path {
-            MemberPath::Page(p) | MemberPath::Piece(p) => vi(&mut t, p),
-        }
-    }
-    for (i, m) in d.members.iter().enumerate() {
-        if stores_at(i, m) {
-            vi(&mut t, m.at as u32);
-        }
-    }
-    let mut pw = 0u16;
-    for w in &d.word_marks {
-        zv(&mut t, w.word as i32 - pw as i32);
-        pw = w.word;
-        vi(&mut t, w.path);
-        vi(&mut t, opt(w.at));
-    }
-    // Sources are u32: the delta wraps, so every pair of values round-trips.
-    let mut ps = 0u32;
-    for p in &d.pieces {
-        zv(&mut t, p.source.wrapping_sub(ps) as i32);
-        ps = p.source;
-        vi(&mut t, p.cmds.iter().filter(|c| !matches!(c, Cmd::Close)).count() as u32);
-    }
-
-    // ── drawing operations, coded as `codec.rs` codes the runs of a page ──
-    let (mut opbits, mut zs, mut xs, mut ys) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-    let mut z_at: Vec<u32> = Vec::new();
-    let (mut bit, mut acc) = (0u32, 0u8);
-    let mut n_ops_total: u32 = 0;
-    let mut push_op = |code: u8, opbits: &mut Vec<u8>| {
-        acc |= code << (bit * 2);
-        bit += 1;
-        if bit == 4 {
-            opbits.push(acc);
-            acc = 0;
-            bit = 0;
-        }
-    };
-    let (mut cx, mut cy) = (0i32, 0i32);
-    for piece in &d.pieces {
-        let mut put = |pts: &[(i32, i32)], cx: &mut i32, cy: &mut i32| {
-            for &(x, y) in pts {
-                zv(&mut xs, x.wrapping_sub(*cx));
-                zv(&mut ys, y.wrapping_sub(*cy));
-                *cx = x;
-                *cy = y;
-            }
-        };
-        for c in &piece.cmds {
-            match *c {
-                Cmd::MoveTo(x, y) => {
-                    push_op(0, &mut opbits);
-                    put(&[(x, y)], &mut cx, &mut cy);
-                }
-                Cmd::LineTo(x, y) => {
-                    push_op(1, &mut opbits);
-                    put(&[(x, y)], &mut cx, &mut cy);
-                }
-                Cmd::QuadTo(x1, y1, x, y) => {
-                    push_op(2, &mut opbits);
-                    put(&[(x1, y1), (x, y)], &mut cx, &mut cy);
-                }
-                Cmd::CubicTo(x1, y1, x2, y2, x, y) => {
-                    push_op(3, &mut opbits);
-                    put(&[(x1, y1), (x2, y2), (x, y)], &mut cx, &mut cy);
-                }
-                // A close carries no point. Record where it sits so that it can be put back.
-                Cmd::Close => z_at.push(n_ops_total),
-            }
-            if !matches!(c, Cmd::Close) {
-                n_ops_total += 1;
-            }
-        }
-        // The next piece's deltas start from this piece's first point, not its last.
-        if let Some(&Cmd::MoveTo(x, y)) = piece.cmds.first() {
-            cx = x;
-            cy = y;
-        }
-    }
-    if bit != 0 {
-        opbits.push(acc);
-    }
-    // The close indices, then the x deltas, in one section.
-    vi(&mut zs, z_at.len() as u32);
-    let mut prev = 0u32;
-    for z in &z_at {
-        vi(&mut zs, z - prev);
-        prev = *z;
-    }
-    zs.extend_from_slice(&xs);
-
-    // ── header ──
-    let mut o = Vec::with_capacity(HEADER_LEN + t.len() + opbits.len() + zs.len() + ys.len());
-    o.extend_from_slice(LETTERS_MAGIC);
-    for v in [LETTERS_VERSION, d.quant, d.page, d.n_page_words] {
-        o.extend_from_slice(&v.to_le_bytes());
-    }
-    o.extend_from_slice(&d.n_page_paths.to_le_bytes());
-    for len in [t.len(), opbits.len(), zs.len(), ys.len()] {
-        o.extend_from_slice(&(len as u32).to_le_bytes());
-    }
-    debug_assert_eq!(o.len(), HEADER_LEN);
-    for s in [&t, &opbits, &zs, &ys] {
-        o.extend_from_slice(s);
-    }
-    o
-}
-
-// ───────────────────────────── decode ─────────────────────────────
-
-/// Decode a letter layer. A file that fails any check in `docs/FORMAT.md`'s "What a
-/// reader rejects" is an error: `Bounds` for an index past its table, `Truncated` for a
-/// count or a run that its section cannot hold, `Corrupt` for a value outside its field.
-/// The rules that tie a layer to its page are in [`LetterData::check_against`].
-pub fn decode_letters(b: &[u8]) -> Result<LetterData, Error> {
+fn check_magic(b: &[u8]) -> Result<(), Error> {
     if b.len() < 6 || &b[0..4] != LETTERS_MAGIC {
         return Err(Error::BadMagic);
     }
@@ -334,13 +228,173 @@ pub fn decode_letters(b: &[u8]) -> Result<LetterData, Error> {
     if b.len() < HEADER_LEN {
         return Err(Error::Truncated("header"));
     }
+    Ok(())
+}
+
+// ───────────────────────────── encode ─────────────────────────────
+
+/// Encode a letter layer for `page`.
+///
+/// It is an error when a piece cannot be coded against the page: the pieces are not in
+/// source order, a source is not an inline path of the page, a source path's commands do
+/// not decode, or a piece does not start with a move or has a point outside the envelope.
+/// `check_against` rejects each of these, so every layer that it accepts encodes, and
+/// `decode_letters` gives that layer back.
+pub fn encode_letters(d: &LetterData, page: &PageData) -> Result<Vec<u8>, Error> {
+    let mut geo = Streams::default();
+    let runs = encode_pieces(page, &d.pieces, &mut geo)?;
+
+    // ── tables ──
+    let mut t: Vec<u8> = Vec::with_capacity(d.letters.len() * 3 + d.members.len() * 3 + 64);
+    for n in [d.letters.len(), d.members.len(), d.word_marks.len(), d.pieces.len()] {
+        vi(&mut t, n as u32);
+    }
+    // the page alphabet: each character once, in code-point order
+    let mut alphabet: Vec<char> = d.letters.iter().map(|l| l.text).collect();
+    alphabet.sort_unstable();
+    alphabet.dedup();
+    vi(&mut t, alphabet.len() as u32);
+    let mut prev = 0u32;
+    for c in &alphabet {
+        vi(&mut t, *c as u32 - prev);
+        prev = *c as u32;
+    }
+    let (mut pw, mut prev_at) = (0u16, None::<u16>);
+    for l in &d.letters {
+        let wd = l.word as i32 - pw as i32;
+        if wd != 0 {
+            prev_at = None;
+        }
+        pw = l.word;
+        let a = match prev_at {
+            Some(p) => l.at as i64 - p as i64 - 1,
+            None => l.at as i64,
+        };
+        prev_at = Some(l.at);
+        let at_code = if (0..=2).contains(&a) { a as u8 } else { 3 };
+        let n = l.n_members;
+        let mut h = if (1..=7).contains(&n) { (n - 1) as u8 } else { LH_MEMBERS };
+        h |= at_code << LH_AT_SHIFT;
+        match wd {
+            0 => {}
+            1 => h |= LH_NEXT_WORD,
+            _ => h |= LH_WORD,
+        }
+        if !l.more_at.is_empty() {
+            h |= LH_MORE_AT;
+        }
+        t.push(h);
+        if h & LH_WORD != 0 {
+            zv(&mut t, wd);
+        }
+        if h & LH_MEMBERS == LH_MEMBERS {
+            vi(&mut t, n as u32);
+        }
+        if at_code == 3 {
+            vi(&mut t, l.at as u32);
+        }
+        if !l.more_at.is_empty() {
+            vi(&mut t, l.more_at.len() as u32);
+            for a in &l.more_at {
+                vi(&mut t, *a as u32);
+            }
+        }
+        vi(&mut t, alphabet.binary_search(&l.text).expect("the letter's character") as u32);
+    }
+    // members, column by column
+    let letter_at = letter_at_of_members(&d.letters, d.members.len());
+    let codes: Vec<u8> = d.members.iter().zip(&letter_at).map(|(m, la)| member_at_code(m, *la)).collect();
+    for (m, code) in d.members.iter().zip(&codes) {
+        let mut f = code << MF_AT_SHIFT;
+        if m.is_body {
+            f |= MF_BODY;
+        }
+        if matches!(m.path, MemberPath::Piece(_)) {
+            f |= MF_PIECE;
+        }
+        t.push(f);
+    }
+    // a page path from the previous page path, a piece from the one after the previous piece
+    let (mut prev_page, mut next_piece) = (0u32, 0u32);
+    for m in &d.members {
+        match m.path {
+            MemberPath::Page(p) => {
+                zv(&mut t, p.wrapping_sub(prev_page) as i32);
+                prev_page = p;
+            }
+            MemberPath::Piece(p) => {
+                zv(&mut t, p.wrapping_sub(next_piece) as i32);
+                next_piece = p.wrapping_add(1);
+            }
+        }
+    }
+    for (m, code) in d.members.iter().zip(&codes) {
+        if *code == AT_STORED {
+            vi(&mut t, m.at as u32);
+        }
+    }
+    let (mut pw, mut pp) = (0u16, 0u32);
+    for w in &d.word_marks {
+        zv(&mut t, w.word as i32 - pw as i32);
+        pw = w.word;
+        zv(&mut t, w.path.wrapping_sub(pp) as i32);
+        pp = w.path;
+        vi(&mut t, opt(w.at));
+    }
+    // the pieces as groups of one source, in source order
+    let mut groups: Vec<(u32, u32)> = Vec::new();
+    for p in &d.pieces {
+        match groups.last_mut() {
+            Some(g) if g.0 == p.source => g.1 += 1,
+            _ => groups.push((p.source, 1)),
+        }
+    }
+    vi(&mut t, groups.len() as u32);
+    for (i, (s, n)) in groups.iter().enumerate() {
+        // `encode_pieces` checked the order, so each source is above the one before
+        let v = if i == 0 { *s } else { s - groups[i - 1].0 - 1 };
+        vi(&mut t, v);
+        vi(&mut t, n - 1);
+    }
+    for r in &runs {
+        vi(&mut t, *r);
+    }
+
+    // ── header ──
+    let sections: Vec<&Vec<u8>> = std::iter::once(&t).chain(geo.s.iter()).collect();
+    let mut o = Vec::with_capacity(HEADER_LEN + sections.iter().map(|s| s.len()).sum::<usize>());
+    o.extend_from_slice(LETTERS_MAGIC);
+    for v in [LETTERS_VERSION, d.quant, d.page, d.n_page_words] {
+        o.extend_from_slice(&v.to_le_bytes());
+    }
+    o.extend_from_slice(&d.n_page_paths.to_le_bytes());
+    for s in &sections {
+        o.extend_from_slice(&(s.len() as u32).to_le_bytes());
+    }
+    debug_assert_eq!(o.len(), HEADER_LEN);
+    for s in &sections {
+        o.extend_from_slice(s);
+    }
+    Ok(o)
+}
+
+// ───────────────────────────── decode ─────────────────────────────
+
+/// Decode a letter layer against its page. A file that fails any check in
+/// `docs/FORMAT.md`'s "What a reader rejects" is an error: `Bounds` for an index past its
+/// table, `Truncated` for a count or a run that its section cannot hold, `Corrupt` for a
+/// value outside its field. A page with another page number, `quant`, path count or word
+/// count than the header's is `Corrupt`. A reader calls [`LetterData::check_against`] on
+/// the result.
+pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
+    check_magic(b)?;
     let u16a = |at: usize| u16::from_le_bytes([b[at], b[at + 1]]);
     let u32a = |at: usize| u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]);
-    let (quant, page, n_page_words, n_page_paths) = (u16a(6), u16a(8), u16a(10), u32a(12));
+    let (quant, page_no, n_page_words, n_page_paths) = (u16a(6), u16a(8), u16a(10), u32a(12));
     if quant == 0 {
         return Err(Error::Corrupt("quant"));
     }
-    let mut sec: [&[u8]; 4] = [&[]; 4];
+    let mut sec: [&[u8]; N_SECTIONS] = [&[]; N_SECTIONS];
     let mut at = HEADER_LEN;
     for (i, s) in sec.iter_mut().enumerate() {
         let end = at.checked_add(u32a(16 + i * 4) as usize).ok_or(Error::Truncated("section"))?;
@@ -350,10 +404,22 @@ pub fn decode_letters(b: &[u8]) -> Result<LetterData, Error> {
     if at != b.len() {
         return Err(Error::Corrupt("trailing bytes"));
     }
-    let [s_tables, s_ops, s_zx, s_y] = sec;
+    // The pieces are coded against the page's paths: the page must be the layer's page.
+    if page.header.page != page_no {
+        return Err(Error::Corrupt("layer page"));
+    }
+    if page.header.quant != quant {
+        return Err(Error::Corrupt("layer quant"));
+    }
+    if page.paths.len() as u64 != n_page_paths as u64 {
+        return Err(Error::Corrupt("layer path count"));
+    }
+    if page.words.len() as u64 != n_page_words as u64 {
+        return Err(Error::Corrupt("layer word count"));
+    }
 
     // ── tables ──
-    let mut t = Rd { b: s_tables, pos: 0 };
+    let mut t = Rd { b: sec[0], pos: 0 };
     let mut counts = [0usize; 4];
     for c in counts.iter_mut() {
         *c = t.vi("counts")? as usize;
@@ -364,28 +430,69 @@ pub fn decode_letters(b: &[u8]) -> Result<LetterData, Error> {
     }
     let [n_letters, n_members, n_word_marks, n_pieces] = counts;
 
+    // Each character takes at least one byte of what is left.
+    let n_alpha = t.vi("alphabet")? as usize;
+    if n_alpha > t.left() {
+        return Err(Error::Truncated("alphabet"));
+    }
+    let mut alphabet = Vec::with_capacity(n_alpha);
+    let mut code = 0u32;
+    for _ in 0..n_alpha {
+        code = code.checked_add(t.vi("alphabet")?).ok_or(Error::Corrupt("alphabet"))?;
+        alphabet.push(char::from_u32(code).ok_or(Error::Corrupt("alphabet"))?);
+    }
+
     let mut letters = Vec::with_capacity(n_letters);
-    let mut pw = 0u16;
+    let (mut pw, mut prev_at) = (0u16, None::<u16>);
     let mut first_member: u64 = 0;
-    for _ in 0..n_letters {
-        let word = t.step_u16(&mut pw, "letter word")?;
+    for i in 0..n_letters {
+        let h = t.u8("letter")?;
+        let mut word = pw;
+        match (h & LH_WORD != 0, h & LH_NEXT_WORD != 0) {
+            (true, true) => return Err(Error::Corrupt("letter header")),
+            (true, false) => {
+                t.step_u16(&mut word, "letter word")?;
+            }
+            (false, true) => word = pw.checked_add(1).ok_or(Error::Corrupt("letter word"))?,
+            (false, false) => {}
+        }
         if word >= n_page_words {
             return Err(Error::Bounds("letter word"));
         }
+        if i == 0 || word != pw {
+            prev_at = None;
+        }
+        pw = word;
+        let n = match h & LH_MEMBERS {
+            LH_MEMBERS => t.u16("letter members")?,
+            c => c as u16 + 1,
+        };
         // A letter always has an offset: `NO_AT` is outside the field, as it is for a
         // word mark's stored `at + 1`.
-        let at = t.u16("letter at").and_then(|a| if a == NO_AT { Err(Error::Corrupt("letter at")) } else { Ok(a) })?;
-        let text = char::from_u32(t.vi("letter text")?).ok_or(Error::Corrupt("letter text"))?;
-        let n = t.u16("letter members")?;
-        let n_more = t.vi("more_at")? as usize;
-        // Each offset takes at least one byte of what is left.
-        if n_more > t.left() {
-            return Err(Error::Truncated("more_at"));
+        let at = match (h >> LH_AT_SHIFT) & 3 {
+            3 => t.u16("letter at")?,
+            c => match prev_at {
+                Some(p) => p.checked_add(1 + c as u16).ok_or(Error::Corrupt("letter at"))?,
+                None => c as u16,
+            },
+        };
+        if at == NO_AT {
+            return Err(Error::Corrupt("letter at"));
         }
-        let mut more_at = Vec::with_capacity(n_more);
-        for _ in 0..n_more {
-            more_at.push(t.u16("more_at")?);
+        prev_at = Some(at);
+        let mut more_at = Vec::new();
+        if h & LH_MORE_AT != 0 {
+            let n_more = t.vi("more_at")? as usize;
+            // Each offset takes at least one byte of what is left.
+            if n_more > t.left() {
+                return Err(Error::Truncated("more_at"));
+            }
+            more_at.reserve_exact(n_more);
+            for _ in 0..n_more {
+                more_at.push(t.u16("more_at")?);
+            }
         }
+        let text = *alphabet.get(t.vi("letter text")? as usize).ok_or(Error::Bounds("letter text"))?;
         // At most n_letters × 65535: it fits a u64 and, below n_members, a u32.
         let first = u32::try_from(first_member).map_err(|_| Error::Corrupt("member count"))?;
         letters.push(LetterRec { word, at, text, more_at, first_member: first, n_members: n });
@@ -396,20 +503,24 @@ pub fn decode_letters(b: &[u8]) -> Result<LetterData, Error> {
     }
 
     // Members: the flags column, then the path column, then the stored offsets.
-    let flags = t.b.get(t.pos..t.pos + n_members).ok_or(Error::Truncated("member flags"))?;
-    t.pos += n_members;
-    if flags.iter().any(|f| f & !(MF_BODY | MF_PIECE | MF_AT) != 0) {
+    let end = t.pos.checked_add(n_members).ok_or(Error::Truncated("member flags"))?;
+    let flags = t.b.get(t.pos..end).ok_or(Error::Truncated("member flags"))?;
+    t.pos = end;
+    if flags.iter().any(|f| f >> 5 != 0 || (f >> MF_AT_SHIFT) & 7 == 6) {
         return Err(Error::Corrupt("member flags"));
     }
     let mut members = Vec::with_capacity(n_members);
+    let (mut prev_page, mut next_piece) = (0u32, 0u32);
     for f in flags {
-        let v = t.vi("member path")?;
         let path = if f & MF_PIECE != 0 {
+            let v = t.step_u32(&mut next_piece, "member path")?;
             if v as usize >= n_pieces {
                 return Err(Error::Bounds("member piece"));
             }
+            next_piece = v + 1;
             MemberPath::Piece(v)
         } else {
+            let v = t.step_u32(&mut prev_page, "member path")?;
             if v >= n_page_paths {
                 return Err(Error::Bounds("member page path"));
             }
@@ -418,18 +529,22 @@ pub fn decode_letters(b: &[u8]) -> Result<LetterData, Error> {
         members.push(MemberRec { path, at: NO_AT, is_body: f & MF_BODY != 0 });
     }
     let letter_at = letter_at_of_members(&letters, n_members);
-    for (i, (m, f)) in members.iter_mut().zip(flags).enumerate() {
-        m.at = if f & MF_AT != 0 { t.u16("member at")? } else { default_at(m.is_body, letter_at[i]) };
+    for ((m, f), la) in members.iter_mut().zip(flags).zip(letter_at) {
+        m.at = match (f >> MF_AT_SHIFT) & 7 {
+            AT_DEFAULT => default_at(m.is_body, la),
+            AT_STORED => t.u16("member at")?,
+            c => la.checked_add(c as u16 - 1).ok_or(Error::Corrupt("member at"))?,
+        };
     }
 
     let mut word_marks = Vec::with_capacity(n_word_marks);
-    let mut pw = 0u16;
+    let (mut pw, mut pp) = (0u16, 0u32);
     for _ in 0..n_word_marks {
         let word = t.step_u16(&mut pw, "word mark word")?;
         if word >= n_page_words {
             return Err(Error::Bounds("word mark word"));
         }
-        let path = t.vi("word mark path")?;
+        let path = t.step_u32(&mut pp, "word mark path")?;
         if path >= n_page_paths {
             return Err(Error::Bounds("word mark path"));
         }
@@ -440,107 +555,59 @@ pub fn decode_letters(b: &[u8]) -> Result<LetterData, Error> {
         word_marks.push(WordMarkRec { word, path, at });
     }
 
-    let mut sources = Vec::with_capacity(n_pieces);
-    let mut run_lens = Vec::with_capacity(n_pieces);
-    let mut ps = 0u32;
-    for _ in 0..n_pieces {
-        ps = ps.wrapping_add(t.zv("piece source")? as u32);
-        if ps >= n_page_paths {
+    // Groups: each takes at least two bytes, and holds at least one piece.
+    let n_groups = t.vi("piece groups")? as usize;
+    if n_groups > n_pieces || n_groups as u64 * 2 > t.left() as u64 {
+        return Err(Error::Truncated("piece groups"));
+    }
+    let mut groups: Vec<(u32, u32)> = Vec::with_capacity(n_groups);
+    let mut in_groups = 0u64;
+    for i in 0..n_groups {
+        let v = t.vi("piece source")?;
+        let source = match groups.last() {
+            None => v,
+            Some(g) => g.0.checked_add(1).and_then(|s| s.checked_add(v)).ok_or(Error::Corrupt("piece source"))?,
+        };
+        if source >= n_page_paths {
             return Err(Error::Bounds("piece source"));
         }
-        sources.push(ps);
-        run_lens.push(t.vi("piece run")?);
+        let n = t.vi("piece group")? as u64 + 1;
+        in_groups += n;
+        if in_groups > n_pieces as u64 || (i + 1 == n_groups && in_groups != n_pieces as u64) {
+            return Err(Error::Corrupt("piece count"));
+        }
+        groups.push((source, n as u32));
+    }
+    if n_groups == 0 && n_pieces != 0 {
+        return Err(Error::Corrupt("piece count"));
+    }
+    let mut runs = Vec::with_capacity(n_pieces);
+    for _ in 0..n_pieces {
+        runs.push(t.vi("piece operations")?);
     }
     // The tables are one varint run: the reader must land exactly on the section's end.
     if t.pos != t.b.len() {
         return Err(Error::Corrupt("tables"));
     }
 
-    // ── drawing operations ──
-    let mut zr = Rd { b: s_zx, pos: 0 };
-    let n_z = zr.vi("close indices")? as usize;
-    // Each close index takes at least one byte of its section.
-    if n_z > zr.left() {
-        return Err(Error::Truncated("close indices"));
+    // ── pieces ──
+    // Each operation takes half a byte of the operations section, so the section bounds
+    // the runs before any piece is sized from them.
+    let ops = sec[1].len() as u64;
+    let total: u64 = runs.iter().map(|n| *n as u64).sum();
+    if total > ops * 2 {
+        return Err(Error::Truncated("operations"));
     }
-    let mut z_next: Vec<u32> = Vec::with_capacity(n_z);
-    let mut acc = 0u32;
-    for _ in 0..n_z {
-        acc = acc.checked_add(zr.vi("close indices")?).ok_or(Error::Corrupt("close indices"))?;
-        z_next.push(acc);
+    if ops != total.div_ceil(2) {
+        return Err(Error::Corrupt("operations"));
     }
-    let s_x = &s_zx[zr.pos..];
-    // Every operation takes a quarter of an opcode byte and at least one byte of x and of
-    // y, so the sections bound the run lengths before any buffer is sized from them.
-    let total: u64 = run_lens.iter().map(|n| *n as u64).sum();
-    if total > s_ops.len() as u64 * 4 || total > s_x.len() as u64 || total > s_y.len() as u64 {
-        return Err(Error::Truncated("opcodes"));
-    }
-    if s_ops.len() as u64 != total.div_ceil(4) {
-        return Err(Error::Corrupt("opcodes"));
-    }
-    let mut xr = Rd { b: s_x, pos: 0 };
-    let mut yr = Rd { b: s_y, pos: 0 };
-    let (mut op_i, mut seen, mut z_i) = (0usize, 0u32, 0usize);
-    let (mut cx, mut cy) = (0i32, 0i32);
-    let mut pieces = Vec::with_capacity(n_pieces);
-    for (source, n_ops) in sources.into_iter().zip(run_lens) {
-        let mut cmds = Vec::with_capacity(n_ops as usize);
-        for _ in 0..n_ops {
-            // The opcode section holds total / 4 bytes, checked above.
-            let code = (s_ops[op_i / 4] >> ((op_i % 4) * 2)) & 3;
-            op_i += 1;
-            let mut pt = || -> Result<(i32, i32), Error> {
-                cx = cx.checked_add(xr.zv("x")?).ok_or(Error::Corrupt("coordinate overflow"))?;
-                cy = cy.checked_add(yr.zv("y")?).ok_or(Error::Corrupt("coordinate overflow"))?;
-                if !in_envelope(cx) || !in_envelope(cy) {
-                    return Err(Error::Corrupt("coordinate range"));
-                }
-                Ok((cx, cy))
-            };
-            cmds.push(match code {
-                0 => {
-                    let (x, y) = pt()?;
-                    Cmd::MoveTo(x, y)
-                }
-                1 => {
-                    let (x, y) = pt()?;
-                    Cmd::LineTo(x, y)
-                }
-                2 => {
-                    let (x1, y1) = pt()?;
-                    let (x, y) = pt()?;
-                    Cmd::QuadTo(x1, y1, x, y)
-                }
-                _ => {
-                    let (x1, y1) = pt()?;
-                    let (x2, y2) = pt()?;
-                    let (x, y) = pt()?;
-                    Cmd::CubicTo(x1, y1, x2, y2, x, y)
-                }
-            });
-            seen += 1;
-            while z_i < z_next.len() && z_next[z_i] == seen {
-                cmds.push(Cmd::Close);
-                z_i += 1;
-            }
-        }
-        // A piece is ink: it starts with a move, which the next piece's deltas start from.
-        match cmds.first() {
-            Some(&Cmd::MoveTo(x, y)) => {
-                cx = x;
-                cy = y;
-            }
-            _ => return Err(Error::Corrupt("piece start")),
-        }
-        pieces.push(PieceRec { source, cmds });
-    }
-    // The streams end together, and every close index named an operation.
-    if xr.pos != s_x.len() || yr.pos != s_y.len() || z_i != z_next.len() {
-        return Err(Error::Corrupt("coordinates"));
-    }
+    let mut geo: [&[u8]; N_STREAMS] = [&[]; N_STREAMS];
+    geo.copy_from_slice(&sec[1..]);
+    let mut r = Reader::new(geo);
+    let pieces = decode_pieces(page, &groups, &runs, &mut r)?;
+    r.finish()?;
 
-    Ok(LetterData { page, quant, n_page_paths, n_page_words, letters, members, word_marks, pieces })
+    Ok(LetterData { page: page_no, quant, n_page_paths, n_page_words, letters, members, word_marks, pieces })
 }
 
 // ───────────────────────────── the page ─────────────────────────────
@@ -715,486 +782,4 @@ fn cmd_coords(c: &Cmd) -> ([i32; 6], usize) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{Family, Header, IBox, Mark, PageData, PathKind, PathRec, WordRec, VERSION};
-
-    const PIECE_A: [Cmd; 4] = [Cmd::MoveTo(1000, 2000), Cmd::LineTo(1100, 2050), Cmd::LineTo(1050, 2100), Cmd::Close];
-    const PIECE_B: [Cmd; 4] = [
-        Cmd::MoveTo(1200, 2000),
-        Cmd::QuadTo(1250, 1950, 1300, 2000),
-        Cmd::CubicTo(1310, 2010, 1290, 2040, 1200, 2050),
-        Cmd::Close,
-    ];
-
-    /// A page of 2 words and 6 paths. Word 0 holds paths 0 to 2, word 1 paths 3 to 5.
-    fn sample() -> LetterData {
-        let body = |path, at| MemberRec { path, at, is_body: true };
-        let mark = |path, at| MemberRec { path, at, is_body: false };
-        LetterData {
-            page: 7,
-            quant: 100,
-            n_page_paths: 6,
-            n_page_words: 2,
-            letters: vec![
-                LetterRec { word: 0, at: 0, text: 'ب', more_at: vec![], first_member: 0, n_members: 2 },
-                LetterRec { word: 0, at: 2, text: 'ل', more_at: vec![], first_member: 2, n_members: 2 },
-                LetterRec { word: 1, at: 0, text: 'ل', more_at: vec![3], first_member: 4, n_members: 1 },
-            ],
-            members: vec![
-                body(MemberPath::Page(0), 0),
-                mark(MemberPath::Page(1), 1),
-                body(MemberPath::Piece(0), 2),
-                body(MemberPath::Piece(1), 2),
-                body(MemberPath::Page(3), 0),
-            ],
-            word_marks: vec![WordMarkRec { word: 1, path: 4, at: NO_AT }, WordMarkRec { word: 1, path: 5, at: 5 }],
-            pieces: vec![
-                PieceRec { source: 2, cmds: PIECE_A.to_vec() },
-                PieceRec { source: 2, cmds: PIECE_B.to_vec() },
-            ],
-        }
-    }
-
-    /// The page `sample` belongs to: only the fields `check_against` reads are set.
-    fn sample_page() -> PageData {
-        let path = |kind| PathRec {
-            kind,
-            mark: Mark::None,
-            family: Family::None,
-            flags: 0,
-            ox: 0,
-            oy: 0,
-            op_off: 0,
-            op_len: 0,
-            bbox: IBox::EMPTY,
-        };
-        let word = |first_path, n_paths| WordRec { first_path, n_paths, ..WordRec::default() };
-        PageData {
-            header: Header { version: VERSION, quant: 100, page: 7, flags: 0, width: 345.0, height: 550.0 },
-            lines: vec![],
-            ayahs: vec![],
-            words: vec![word(0, 3), word(3, 3)],
-            paths: vec![
-                path(PathKind::Body),
-                path(PathKind::Mark),
-                path(PathKind::Body),
-                path(PathKind::Body),
-                path(PathKind::Mark),
-                path(PathKind::Mark),
-            ],
-            decorations: vec![],
-            glyphs: vec![],
-            insts: vec![],
-            ops: vec![],
-            strings: vec![],
-        }
-    }
-
-    /// Set every letter's `first_member` to the running total of `n_members`.
-    fn renumber(d: &mut LetterData) {
-        let mut first = 0u32;
-        for l in &mut d.letters {
-            l.first_member = first;
-            first += l.n_members as u32;
-        }
-    }
-
-    fn header_u32(b: &[u8], at: usize) -> u32 {
-        u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
-    }
-
-    #[test]
-    fn round_trip() {
-        let d = sample();
-        assert_eq!(decode_letters(&encode_letters(&d)), Ok(d));
-    }
-
-    #[test]
-    fn a_body_member_with_its_own_offset_round_trips() {
-        let mut d = sample();
-        d.members[0].at = 9;
-        d.members[2].at = NO_AT;
-        assert_eq!(decode_letters(&encode_letters(&d)), Ok(d));
-    }
-
-    #[test]
-    fn empty_layer_round_trips() {
-        let d = LetterData { page: 1, quant: 100, n_page_paths: 0, n_page_words: 0, ..LetterData::default() };
-        let bytes = encode_letters(&d);
-        assert_eq!(bytes.len(), HEADER_LEN + 5);
-        assert_eq!(decode_letters(&bytes), Ok(d));
-    }
-
-    #[test]
-    fn rejects_bad_magic() {
-        let mut bytes = encode_letters(&sample());
-        bytes[3] = b'2';
-        assert_eq!(decode_letters(&bytes), Err(Error::BadMagic));
-        assert_eq!(decode_letters(b"QV"), Err(Error::BadMagic));
-    }
-
-    #[test]
-    fn rejects_bad_version() {
-        let mut bytes = encode_letters(&sample());
-        bytes[4] = 2;
-        assert_eq!(decode_letters(&bytes), Err(Error::BadVersion(2)));
-    }
-
-    #[test]
-    fn rejects_a_zero_quant() {
-        let mut bytes = encode_letters(&sample());
-        bytes[6] = 0;
-        bytes[7] = 0;
-        assert_eq!(decode_letters(&bytes), Err(Error::Corrupt("quant")));
-    }
-
-    #[test]
-    fn rejects_trailing_bytes() {
-        let mut bytes = encode_letters(&sample());
-        bytes.push(0);
-        assert_eq!(decode_letters(&bytes), Err(Error::Corrupt("trailing bytes")));
-    }
-
-    #[test]
-    fn every_truncation_is_an_error() {
-        let bytes = encode_letters(&sample());
-        for n in 0..bytes.len() {
-            assert!(decode_letters(&bytes[..n]).is_err(), "{n} of {} bytes", bytes.len());
-        }
-    }
-
-    #[test]
-    fn a_huge_count_does_not_allocate() {
-        let bytes = encode_letters(&sample());
-        // The four counts open the tables section, one byte each here.
-        assert_eq!(bytes[HEADER_LEN..HEADER_LEN + 4], [3, 5, 2, 2]);
-        for i in 0..4 {
-            let at = HEADER_LEN + i;
-            let mut patched = bytes[..at].to_vec();
-            write_varint(&mut patched, u32::MAX);
-            patched.extend_from_slice(&bytes[at + 1..]);
-            let tables = header_u32(&bytes, 16) + 4;
-            patched[16..20].copy_from_slice(&tables.to_le_bytes());
-            assert_eq!(decode_letters(&patched), Err(Error::Truncated("tables")), "count {i}");
-        }
-    }
-
-    #[test]
-    fn a_huge_more_at_count_does_not_allocate() {
-        let mut d = sample();
-        d.letters[2].more_at = vec![0x7F; 1];
-        let bytes = encode_letters(&d);
-        let tables_end = HEADER_LEN + header_u32(&bytes, 16) as usize;
-        // The more_at count of the last letter is 1, then its one offset 0x7F.
-        let at = (HEADER_LEN..tables_end).find(|&i| bytes[i] == 1 && bytes[i + 1] == 0x7F).unwrap();
-        let mut patched = bytes[..at].to_vec();
-        write_varint(&mut patched, u32::MAX);
-        patched.extend_from_slice(&bytes[at + 1..]);
-        let tables = header_u32(&bytes, 16) + 4;
-        patched[16..20].copy_from_slice(&tables.to_le_bytes());
-        assert_eq!(decode_letters(&patched), Err(Error::Truncated("more_at")));
-    }
-
-    #[test]
-    fn rejects_a_member_count_that_differs_from_the_members_table() {
-        let mut d = sample();
-        d.letters[2].n_members = 2;
-        assert_eq!(decode_letters(&encode_letters(&d)), Err(Error::Corrupt("member count")));
-    }
-
-    #[test]
-    fn rejects_out_of_range_indices() {
-        let decoded = |f: fn(&mut LetterData)| {
-            let mut d = sample();
-            f(&mut d);
-            decode_letters(&encode_letters(&d))
-        };
-        assert_eq!(decoded(|d| d.members[0].path = MemberPath::Page(6)), Err(Error::Bounds("member page path")));
-        assert_eq!(decoded(|d| d.members[2].path = MemberPath::Piece(2)), Err(Error::Bounds("member piece")));
-        assert_eq!(decoded(|d| d.pieces[1].source = 6), Err(Error::Bounds("piece source")));
-        assert_eq!(decoded(|d| d.letters[2].word = 2), Err(Error::Bounds("letter word")));
-        assert_eq!(decoded(|d| d.word_marks[1].word = 2), Err(Error::Bounds("word mark word")));
-        assert_eq!(decoded(|d| d.word_marks[1].path = 6), Err(Error::Bounds("word mark path")));
-    }
-
-    #[test]
-    fn rejects_a_surrogate_as_text() {
-        let mut d = sample();
-        d.letters[1].text = '\u{D7FF}';
-        let mut bytes = encode_letters(&d);
-        // 0xD7FF is the varint FF AF 03; 0xD800 is 80 B0 03, the same length.
-        let at = (HEADER_LEN..bytes.len() - 2).find(|&i| bytes[i..i + 3] == [0xFF, 0xAF, 0x03]).unwrap();
-        bytes[at..at + 3].copy_from_slice(&[0x80, 0xB0, 0x03]);
-        assert_eq!(decode_letters(&bytes), Err(Error::Corrupt("letter text")));
-    }
-
-    #[test]
-    fn rejects_unknown_member_flags() {
-        let bytes = encode_letters(&sample());
-        // The flags column of the sample: body, mark with an offset, two piece bodies, body.
-        let tables_end = HEADER_LEN + header_u32(&bytes, 16) as usize;
-        let flags_at = (HEADER_LEN..tables_end - 4)
-            .find(|&i| bytes[i..i + 5] == [1, 4, 3, 3, 1])
-            .expect("the flags column of the sample");
-        let mut patched = bytes.clone();
-        patched[flags_at] |= 0x08;
-        assert_eq!(decode_letters(&patched), Err(Error::Corrupt("member flags")));
-    }
-
-    #[test]
-    fn rejects_a_coordinate_out_of_range() {
-        let mut d = sample();
-        d.pieces[0].cmds[1] = Cmd::LineTo(COORD_LIMIT as i32, 2050);
-        assert_eq!(decode_letters(&encode_letters(&d)), Err(Error::Corrupt("coordinate range")));
-    }
-
-    #[test]
-    fn rejects_a_piece_that_does_not_start_with_a_move() {
-        let mut d = sample();
-        d.pieces[1].cmds[0] = Cmd::LineTo(1200, 2000);
-        assert_eq!(decode_letters(&encode_letters(&d)), Err(Error::Corrupt("piece start")));
-    }
-
-    #[test]
-    fn every_byte_flip_is_an_error_or_a_valid_layer() {
-        let bytes = encode_letters(&sample());
-        for at in 0..bytes.len() {
-            let mut flipped = bytes.clone();
-            flipped[at] = 0xFF;
-            if let Ok(d) = decode_letters(&flipped) {
-                // What decodes, encodes again to bytes that decode to the same layer.
-                assert_eq!(decode_letters(&encode_letters(&d)), Ok(d), "byte {at}");
-            }
-        }
-    }
-
-    #[test]
-    fn random_mutations_never_panic() {
-        let bytes = encode_letters(&sample());
-        crate::testing::each_mutation(&bytes, 4000, |at, value, b| {
-            if let Ok(d) = decode_letters(b) {
-                assert_eq!(decode_letters(&encode_letters(&d)), Ok(d), "byte {at} set to {value}");
-            }
-        });
-    }
-
-    #[test]
-    fn check_against_accepts_the_sample() {
-        assert_eq!(sample().check_against(&sample_page()), Ok(()));
-    }
-
-    #[test]
-    fn check_against_rejects_a_different_page() {
-        let checked = |f: fn(&mut PageData)| {
-            let mut p = sample_page();
-            f(&mut p);
-            sample().check_against(&p)
-        };
-        assert_eq!(checked(|p| p.header.page = 8), Err(Error::Corrupt("layer page")));
-        assert_eq!(checked(|p| p.header.quant = 10), Err(Error::Corrupt("layer quant")));
-        assert_eq!(checked(|p| p.paths.truncate(5)), Err(Error::Corrupt("layer path count")));
-        assert_eq!(checked(|p| p.words.truncate(1)), Err(Error::Corrupt("layer word count")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_member_outside_its_word() {
-        let mut d = sample();
-        d.members[1].path = MemberPath::Page(4);
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Bounds("letter member")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_word_mark_outside_its_word() {
-        let mut d = sample();
-        d.word_marks[0].path = 1;
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Bounds("word mark path")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_piece_cut_from_another_word() {
-        let mut d = sample();
-        d.pieces[0].source = 3;
-        d.pieces[1].source = 3;
-        d.members[4].path = MemberPath::Page(5);
-        d.word_marks.pop();
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Bounds("piece source")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_piece_cut_from_a_mark() {
-        let mut p = sample_page();
-        p.paths[2].kind = PathKind::Mark;
-        assert_eq!(sample().check_against(&p), Err(Error::Corrupt("piece source kind")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_path_in_two_letters() {
-        let mut d = sample();
-        d.letters.insert(2, LetterRec { word: 0, at: 3, text: 'ا', more_at: vec![], first_member: 0, n_members: 1 });
-        d.members.insert(4, MemberRec { path: MemberPath::Page(0), at: 3, is_body: true });
-        renumber(&mut d);
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("path in two letters")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_path_that_is_a_member_and_a_source() {
-        let mut d = sample();
-        d.members[1].path = MemberPath::Page(2);
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("member and source")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_letter_with_no_body() {
-        let mut d = sample();
-        d.members[0].is_body = false;
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("letter without body")));
-    }
-
-    #[test]
-    fn check_against_rejects_unsorted_letters() {
-        let mut d = sample();
-        d.letters.swap(1, 2);
-        renumber(&mut d);
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("letter order")));
-    }
-
-    #[test]
-    fn check_against_rejects_unsorted_pieces() {
-        let mut d = sample();
-        d.pieces[1].source = 0;
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("piece order")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_member_range_that_does_not_add_up() {
-        let mut d = sample();
-        d.letters[1].first_member = 3;
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("first member")));
-        let mut d = sample();
-        d.members.pop();
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("member count")));
-    }
-
-    #[test]
-    fn check_against_rejects_indices_past_the_tables() {
-        let mut d = sample();
-        d.members[2].path = MemberPath::Piece(9);
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Bounds("member piece")));
-        let mut d = sample();
-        d.letters[2].word = 5;
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Bounds("letter word")));
-    }
-
-    /// Each piece shape that `decode_letters` cannot give back unchanged. `check_against`
-    /// rejects every one, so a layer that it accepts round-trips.
-    #[test]
-    fn check_against_rejects_every_piece_that_does_not_round_trip() {
-        let big = COORD_LIMIT as i32;
-        let cases: [(Vec<Cmd>, &str); 5] = [
-            (vec![Cmd::Close, Cmd::MoveTo(1200, 2000), Cmd::LineTo(1300, 2000)], "piece start"),
-            (vec![], "piece start"),
-            (vec![Cmd::LineTo(1200, 2000), Cmd::LineTo(1300, 2000)], "piece start"),
-            (vec![Cmd::Close], "piece start"),
-            (vec![Cmd::MoveTo(1200, 2000), Cmd::QuadTo(1250, big, 1300, 2000)], "coordinate range"),
-        ];
-        for (cmds, what) in cases {
-            let mut d = sample();
-            d.pieces[1].cmds = cmds.clone();
-            assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt(what)), "{cmds:?}");
-            assert_ne!(decode_letters(&encode_letters(&d)), Ok(d), "{cmds:?}");
-        }
-    }
-
-    #[test]
-    fn check_against_rejects_a_piece_no_member_uses() {
-        let mut d = sample();
-        d.pieces.push(PieceRec { source: 2, cmds: PIECE_A.to_vec() });
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("piece unused")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_piece_two_members_use() {
-        let mut d = sample();
-        d.members[3].path = MemberPath::Piece(0);
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("piece used twice")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_word_mark_that_is_a_member() {
-        let mut d = sample();
-        d.word_marks[0].path = 3;
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("word mark and member")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_word_mark_that_is_a_source() {
-        let mut d = sample();
-        d.word_marks.insert(0, WordMarkRec { word: 0, path: 2, at: NO_AT });
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("word mark and source")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_path_with_two_word_marks() {
-        let mut d = sample();
-        d.word_marks[1].path = 4;
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("word mark twice")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_word_path_with_no_role() {
-        let mut d = sample();
-        d.word_marks.pop();
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("path without role")));
-        // A page path outside every word needs no role.
-        let mut p = sample_page();
-        p.words[1].n_paths = 2;
-        let mut d = sample();
-        d.word_marks.pop();
-        assert_eq!(d.check_against(&p), Ok(()));
-    }
-
-    #[test]
-    fn check_against_rejects_letters_out_of_spelling_order() {
-        let mut d = sample();
-        d.letters[1].at = 0;
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("letter at order")));
-        let mut d = sample();
-        d.letters.swap(0, 1);
-        renumber(&mut d);
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("letter at order")));
-    }
-
-    #[test]
-    fn rejects_a_letter_with_no_offset() {
-        let mut d = sample();
-        d.letters[0].at = NO_AT;
-        d.members[0].at = 0;
-        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("letter at")));
-        assert_eq!(decode_letters(&encode_letters(&d)), Err(Error::Corrupt("letter at")));
-    }
-
-    #[test]
-    fn check_against_rejects_a_piece_cut_from_a_glyph_instance() {
-        let mut p = sample_page();
-        p.paths[2].flags = PF_GLYPH;
-        assert_eq!(sample().check_against(&p), Err(Error::Corrupt("piece source glyph")));
-    }
-
-    /// A word whose path run ends past the path table: an index inside the run but past
-    /// the table is still out of bounds.
-    #[test]
-    fn check_against_rejects_a_path_past_the_page() {
-        let mut p = sample_page();
-        p.words[1].n_paths = 4;
-        let mut d = sample();
-        d.members[4].path = MemberPath::Page(6);
-        assert_eq!(d.check_against(&p), Err(Error::Bounds("letter member")));
-        let mut d = sample();
-        d.word_marks[1].path = 6;
-        assert_eq!(d.check_against(&p), Err(Error::Bounds("word mark path")));
-        let mut d = sample();
-        d.pieces[1].source = 6;
-        assert_eq!(d.check_against(&p), Err(Error::Bounds("piece source")));
-    }
-}
+mod tests;

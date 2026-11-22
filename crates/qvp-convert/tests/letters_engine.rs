@@ -143,7 +143,7 @@ fn have_letters() -> bool {
 
 /// The bytes the engine attaches. One place, so a change of the layer's encoding is one line.
 fn layer_bytes(lp: &LetterPage) -> Vec<u8> {
-    encode_letters(&lp.data)
+    encode_letters(&lp.data, &lp.page).expect("the converter's layer encodes")
 }
 
 /// What the tests need of one page, built once for all of them.

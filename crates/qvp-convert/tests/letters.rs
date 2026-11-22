@@ -79,7 +79,12 @@ fn check(page: &str) -> Result<Counts, String> {
     if !lp.warnings.is_empty() {
         return Err(format!("page {page}: warnings: {:?}", lp.warnings));
     }
-    if decode_letters(&encode_letters(d)).as_ref() != Ok(d) {
+    // The codec gives every piece back bit for bit: it codes the pieces against the page.
+    let again = encode_letters(d, &lp.page).map_err(|e| format!("page {page}: encode: {e:?}"))?;
+    if again != lp.bytes {
+        return Err(format!("page {page}: a second encoding gives other bytes"));
+    }
+    if decode_letters(&lp.bytes, &lp.page).as_ref() != Ok(d) {
         return Err(format!("page {page}: the layer does not round-trip"));
     }
     d.check_against(&lp.page).map_err(|e| format!("page {page}: check_against: {e:?}"))?;

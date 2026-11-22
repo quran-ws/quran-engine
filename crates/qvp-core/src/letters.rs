@@ -501,7 +501,7 @@ impl Page {
         if bytes.len() > MAX_LETTER_LAYER_BYTES {
             return Err(Error::Bounds("letter layer size"));
         }
-        let data = decode_letters(bytes)?;
+        let data = decode_letters(bytes, &self.data)?;
         data.check_against(&self.data)?;
         if word_runs_overlap(&self.data) {
             return Err(Error::Corrupt("overlapping word runs"));

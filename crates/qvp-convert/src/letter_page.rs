@@ -100,8 +100,9 @@ pub fn letter_page(
         .map_err(|e| e.strip_prefix(&prefix).map(str::to_owned).unwrap_or(e))?;
     let mut warnings = c.report.warnings;
     warnings.extend(lc.warnings);
-    let bytes = encode_letters(&lc.data);
-    if decode_letters(&bytes).as_ref() != Ok(&lc.data) {
+    // The header takes the digest of the page file that `batch` writes for this page.
+    let bytes = encode_letters(&lc.data, &c.page).map_err(|e| format!("the letter layer does not encode: {e}"))?;
+    if decode_letters(&bytes, &c.page).as_ref() != Ok(&lc.data) {
         return Err("the letter layer does not decode to the data it encodes".into());
     }
     Ok(LetterPage { page: c.page, data: lc.data, bytes, index_letters, warnings })

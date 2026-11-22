@@ -1033,8 +1033,8 @@ fn letters_layer() -> LetterData {
 
 /// The bytes of a layer for a page. The one place the test encodes a layer, so a change to
 /// the encoder's signature is a change to this line.
-fn layer_bytes(_page: &PageData, layer: &LetterData) -> Vec<u8> {
-    encode_letters(layer)
+fn layer_bytes(page: &PageData, layer: &LetterData) -> Vec<u8> {
+    encode_letters(layer, page).unwrap()
 }
 
 /// The letter fixture's page, loaded through the ABI, with no layer, and the layer's bytes.

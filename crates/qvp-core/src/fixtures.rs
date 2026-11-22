@@ -386,7 +386,7 @@ pub(crate) fn letters_layer() -> LetterData {
 /// The letter fixture's page with its layer attached.
 pub(crate) fn letters_page() -> Page {
     let mut p = Page::from_data(letters_page_data()).unwrap();
-    p.attach_letters(&encode_letters(&letters_layer())).unwrap();
+    p.attach_letters(&encode_letters(&letters_layer(), &letters_page_data()).unwrap()).unwrap();
     p
 }
 
@@ -441,8 +441,10 @@ pub(crate) fn letters_variant_layer() -> LetterData {
 
 /// The variant page with its layer attached.
 pub(crate) fn letters_variant_page() -> Page {
-    let mut p = Page::from_data(letters_variant_page_data()).unwrap();
-    p.attach_letters(&encode_letters(&letters_variant_layer())).unwrap();
+    let data = letters_variant_page_data();
+    let layer = encode_letters(&letters_variant_layer(), &data).unwrap();
+    let mut p = Page::from_data(data).unwrap();
+    p.attach_letters(&layer).unwrap();
     p
 }
 
@@ -490,8 +492,10 @@ pub(crate) fn settled(data: PageData) -> PageData {
 
 /// The page of `data`, settled, with `layer` attached.
 pub(crate) fn attached(data: PageData, layer: &LetterData) -> Page {
-    let mut p = Page::from_data(settled(data)).unwrap();
-    p.attach_letters(&encode_letters(layer)).unwrap();
+    let data = settled(data);
+    let bytes = encode_letters(layer, &data).unwrap();
+    let mut p = Page::from_data(data).unwrap();
+    p.attach_letters(&bytes).unwrap();
     p
 }
 
@@ -557,8 +561,9 @@ pub(crate) fn overlap_fixture() -> (PageData, LetterData) {
 /// The page of [`overlap_fixture`] with its layer attached.
 pub(crate) fn overlap_page() -> Page {
     let (data, layer) = overlap_fixture();
+    let bytes = encode_letters(&layer, &data).unwrap();
     let mut p = Page::from_data(data).unwrap();
-    p.attach_letters(&encode_letters(&layer)).unwrap();
+    p.attach_letters(&bytes).unwrap();
     p
 }
 

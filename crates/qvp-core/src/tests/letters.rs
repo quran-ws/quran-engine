@@ -3,12 +3,18 @@ use super::*;
 use crate::letters::*;
 use crate::letters::{check_fits, word_runs_overlap};
 use qvp_format::letters::{encode_letters, LetterData, PieceRec};
+use qvp_format::PageData;
 
 const RED: Rgba = 0xff0000ff;
 const BLUE: Rgba = 0x0000ffff;
 
 fn layer_bytes() -> Vec<u8> {
-    encode_letters(&letters_layer())
+    layer_for(&letters_layer(), &letters_page_data())
+}
+
+/// A layer encoded against `data`, the page it is built for.
+fn layer_for(layer: &LetterData, data: &PageData) -> Vec<u8> {
+    encode_letters(layer, data).unwrap()
 }
 
 fn page_without_layer() -> Page {
@@ -146,7 +152,7 @@ fn a_bad_layer_is_refused_and_the_old_one_kept() {
         assert_eq!(p.draw_revision(), 1);
     };
     let other = LetterData { page: 2, ..letters_layer() };
-    assert!(p.attach_letters(&encode_letters(&other)).is_err());
+    assert!(p.attach_letters(&layer_for(&other, &letters_page_data())).is_err());
     check(&mut p);
     let big = vec![0u8; defaults::MAX_LETTER_LAYER_BYTES + 1];
     assert_eq!(p.attach_letters(&big), Err(Error::Bounds("letter layer size")));
@@ -183,7 +189,7 @@ fn a_second_attach_replaces_the_first() {
     for (l, first) in uncut.letters.iter_mut().zip([0, 3, 4, 5]) {
         l.first_member = first;
     }
-    p.attach_letters(&encode_letters(&uncut)).unwrap();
+    p.attach_letters(&layer_for(&uncut, &letters_page_data())).unwrap();
     assert_eq!(p.geometry().table.len(), 8);
     assert_eq!(p.colors().len(), 8);
     assert_eq!(p.letter_count(0), 1);
@@ -221,8 +227,9 @@ fn without_qpc_offsets_are_used_as_stored() {
     for w in &mut data.words {
         w.qpc = NONE_U16;
     }
+    let layer = layer_for(&letters_layer(), &data);
     let mut p = Page::from_data(data).unwrap();
-    p.attach_letters(&layer_bytes()).unwrap();
+    p.attach_letters(&layer).unwrap();
     assert_eq!(p.path_letter(5), Some((NONE, 3)));
     assert_eq!(p.letter_at_offset(1, 1), Some(0));
     // a sidecar with other forms only leaves them unchecked
@@ -432,7 +439,7 @@ fn a_page_with_no_layer_behaves_as_before() {
     let mut b = Page::load(&bytes).unwrap();
     let layer = layer_bytes();
     assert!(b.attach_letters(&layer[..layer.len() - 1]).is_err());
-    assert!(b.attach_letters(&encode_letters(&LetterData { page: 2, ..letters_layer() })).is_err());
+    assert!(b.attach_letters(&layer_for(&LetterData { page: 2, ..letters_layer() }, &letters_page_data())).is_err());
     assert!(b.attach_letters(b"not a layer").is_err());
     assert!(!b.has_letters());
     assert_eq!(b.draw_revision(), 0);
@@ -469,10 +476,11 @@ fn a_page_whose_word_runs_overlap_takes_no_layer() {
     let mut data = letters_page_data();
     data.words[1].first_path = 2;
     data.words[1].n_paths = 4;
+    let layer = layer_for(&letters_layer(), &data);
     let mut p = Page::from_data(data).unwrap();
     assert!(letters_layer().check_against(p.data()).is_ok(), "the format allows it");
     assert!(word_runs_overlap(p.data()));
-    assert_eq!(p.attach_letters(&layer_bytes()), Err(Error::Corrupt("overlapping word runs")));
+    assert_eq!(p.attach_letters(&layer), Err(Error::Corrupt("overlapping word runs")));
     assert!(!p.has_letters());
     assert_eq!(p.geometry().table.len(), 8);
     assert!(!word_runs_overlap(&letters_page_data()));
@@ -528,7 +536,7 @@ fn a_second_attach_can_add_pieces() {
     more.pieces.push(PieceRec { source: 3, cmds: square(2000, 1000, 3000, 2000) });
     let mut p = letters_page();
     p.style(Selector::Word(1), Paint::new(RED));
-    p.attach_letters(&encode_letters(&more)).unwrap();
+    p.attach_letters(&layer_for(&more, &letters_page_data())).unwrap();
     assert_eq!(p.geometry().table.len(), 11);
     assert_eq!(p.colors().len(), 11);
     assert_eq!(p.colors()[10], RED, "the new piece takes its word's rule");
@@ -554,8 +562,9 @@ fn a_letter_drawn_off_the_page_has_no_ink() {
     // head is: its paths have no outline, and neither does a piece cut there
     let mut data = letters_page_data();
     data.header.height = 45.0;
+    let layer = layer_for(&letters_layer(), &data);
     let mut p = Page::from_data(data).unwrap();
-    p.attach_letters(&layer_bytes()).unwrap();
+    p.attach_letters(&layer).unwrap();
     assert!(!p.letter_info(2, 0).unwrap().has_ink);
     assert!(p.letter_info(0, 0).unwrap().has_ink);
 }
@@ -563,8 +572,9 @@ fn a_letter_drawn_off_the_page_has_no_ink() {
 #[test]
 fn a_decoration_keeps_its_own_group_beside_the_pieces() {
     let (data, layer) = letters_decoration_fixture();
+    let layer = layer_for(&layer, &data);
     let mut p = Page::from_data(data).unwrap();
-    p.attach_letters(&encode_letters(&layer)).unwrap();
+    p.attach_letters(&layer).unwrap();
     assert_eq!(p.geometry().table.len(), 11);
     assert_eq!(p.path_deco(8), 0);
     assert_eq!(p.path_letter(8), None, "a decoration path has no letter");
@@ -645,11 +655,11 @@ fn a_named_mark_takes_a_body_stored_as_a_mark() {
     let mut layer = letters_layer();
     layer.members[7].is_body = true;
     let mut p = page_without_layer();
-    p.attach_letters(&encode_letters(&layer)).unwrap();
+    p.attach_letters(&layer_for(&layer, &letters_page_data())).unwrap();
     p.style(Selector::LetterMarkNamed(2, 0, Mark::OmittedAlif), Paint::new(RED));
     assert_eq!(reds(&mut p), vec![7]);
     let mut q = page_without_layer();
-    q.attach_letters(&encode_letters(&layer)).unwrap();
+    q.attach_letters(&layer_for(&layer, &letters_page_data())).unwrap();
     q.style(Selector::LetterMark(2, 0, 0), Paint::new(RED));
     assert_eq!(reds(&mut q), Vec::<u32>::new(), "a body is no nth mark");
 }
@@ -1062,7 +1072,7 @@ fn a_band_keeps_the_piece_that_reaches_past_its_source() {
     let mut low = letters_layer();
     low.pieces[1].cmds = square(3900, 1000, 5000, 2600);
     let mut p = page_without_layer();
-    p.attach_letters(&encode_letters(&low)).unwrap();
+    p.attach_letters(&layer_for(&low, &letters_page_data())).unwrap();
     p.layout(&printed());
     // page y 21 to 25: the dot under the ba (y 22 to 24) and the low piece, nothing else
     let band = (42.0, 50.0);
@@ -1189,7 +1199,7 @@ fn a_swap_survives_every_change_of_state() {
         l.first_member = first;
     }
     let rev = p.draw_revision();
-    p.attach_letters(&encode_letters(&uncut)).unwrap();
+    p.attach_letters(&layer_for(&uncut, &letters_page_data())).unwrap();
     assert_eq!(draws(&p), PLAIN);
     assert!(p.draw_revision() != rev);
     assert!(!is_swapped(&p));
@@ -1331,7 +1341,7 @@ fn letter_rules_follow_a_different_second_layer() {
     p.style(Selector::WordChars(0, 2, 2), Paint::new(RED));
     p.style_letters(LAYER_BASE, &query(Target::Page, Some('ل'), Mark::None, LetterPart::All), Paint::new(RED));
     assert_eq!(reds(&mut p), vec![2, 3, 9]);
-    p.attach_letters(&encode_letters(&uncut)).unwrap();
+    p.attach_letters(&layer_for(&uncut, &letters_page_data())).unwrap();
     // word 0 has no letter 1 and no offset 2 now; the fathah is still mark 1 of the ba
     assert_eq!(p.colors().len(), 8);
     assert_eq!(reds(&mut p), vec![2, 3]);
@@ -1346,7 +1356,7 @@ fn letter_rules_follow_a_different_second_layer() {
     v.style(Selector::LetterMark(2, 0, 0), Paint::new(RED));
     v.style(Selector::Letter(2, 0, LetterPart::BodyAndDots), Paint::new(RED));
     assert_eq!(reds(&mut v), vec![6, 9]);
-    v.attach_letters(&encode_letters(&moved)).unwrap();
+    v.attach_letters(&layer_for(&moved, &letters_variant_page_data())).unwrap();
     assert_eq!(reds(&mut v), vec![6, 8]);
     assert_eq!(v.letter_members(2, 0).iter().map(|m| m.path).collect::<Vec<_>>(), vec![6, 8, 7, 9]);
 }
@@ -1780,8 +1790,9 @@ fn no_layer_no_letter() {
 #[test]
 fn a_decoration_or_no_word_is_no_letter() {
     let (data, layer) = letters_decoration_fixture();
+    let layer = layer_for(&layer, &data);
     let mut p = Page::from_data(data).unwrap();
-    p.attach_letters(&encode_letters(&layer)).unwrap();
+    p.attach_letters(&layer).unwrap();
     let o = HitOptions::default();
     let h = p.hit_test(75.0, 55.0, &o).unwrap();
     assert_eq!((h.word, h.decoration, h.path), (NONE, 0, 8));
