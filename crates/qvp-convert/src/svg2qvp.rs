@@ -25,6 +25,8 @@ pub struct WordText {
     pub qpc: String,
     pub rasm: String,
     pub search: String,
+    /// The word's number in the quran-text release (`data-w`). Not a key: its numbering has gaps.
+    pub w: Option<u32>,
 }
 
 pub struct Converted {
@@ -292,6 +294,7 @@ impl<'a> Ctx<'a> {
             qpc: n.attribute("data-qpc").unwrap_or("").to_owned(),
             rasm: n.attribute("data-rasm").unwrap_or("").to_owned(),
             search: n.attribute("data-search").unwrap_or("").to_owned(),
+            w: n.attribute("data-w").and_then(|s| s.parse().ok()),
         });
         let text = if rasm_uthmani.is_empty() { NONE_U16 } else { self.intern(rasm_uthmani) };
         // Dev-profile pages carry the derived forms inline; production pages do not,
