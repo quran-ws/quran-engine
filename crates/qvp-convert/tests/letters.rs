@@ -264,8 +264,10 @@ fn a_run_leaves_no_stale_file() {
 //    `EDGE` and `MAX_AREA_RATIO`. The allowance counts only the remade outline edges, the
 //    new segments near the source outline. Every other new segment that a piece draws once
 //    is a cut side, and it must have a partner: a side of another piece along it (see
-//    `partner_limit`). The gate also asserts what a sum of signed areas rests on: a
-//    subpath nested inside another winds against it (see `nesting`).
+//    `partner_limit`). A new segment that the pieces draw twice is a cut where two pieces
+//    meet, and they must run it once in each direction (see `Split::same_way`): a copy of
+//    a piece runs it twice the same way. The gate also asserts what a sum of signed areas
+//    rests on: a subpath nested inside another winds against it (see `nesting`).
 //
 // Run all 604:  QVP_REQUIRE_LETTERS=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test letters ink
 // The mutation sweep of the area check runs only with QVP_LETTERS_SWEEP=1.
@@ -452,11 +454,18 @@ enum Seg {
 /// The segments of a path. A subpath that does not return to its start gets the closing
 /// line that the fill draws. A segment of zero length is left out.
 fn segments(cmds: &[Cmd]) -> Vec<Seg> {
+    directed(cmds).into_iter().map(|(s, _)| s).collect()
+}
+
+/// The segments of a path, each with the way the path runs it: true when it runs from the
+/// first end of the `Seg` to the second, false when it runs back. A segment whose two ends
+/// are one point reads as true.
+fn directed(cmds: &[Cmd]) -> Vec<(Seg, bool)> {
     let mut out = vec![];
     let (mut cur, mut first) = ((0, 0), (0, 0));
-    let close = |out: &mut Vec<Seg>, cur: (i32, i32), first: (i32, i32)| {
+    let close = |out: &mut Vec<(Seg, bool)>, cur: (i32, i32), first: (i32, i32)| {
         if cur != first {
-            out.push(Seg::Line(cur.min(first), cur.max(first)));
+            out.push((Seg::Line(cur.min(first), cur.max(first)), cur < first));
         }
     };
     for c in cmds {
@@ -467,21 +476,25 @@ fn segments(cmds: &[Cmd]) -> Vec<Seg> {
             }
             Cmd::LineTo(x, y) => {
                 if cur != (x, y) {
-                    out.push(Seg::Line(cur.min((x, y)), cur.max((x, y))));
+                    out.push((Seg::Line(cur.min((x, y)), cur.max((x, y))), cur < (x, y)));
                 }
                 cur = (x, y);
             }
             Cmd::QuadTo(x1, y1, x, y) => {
                 let (p0, p1) = (cur, (x, y));
-                out.push(if p0 <= p1 { Seg::Quad(p0, (x1, y1), p1) } else { Seg::Quad(p1, (x1, y1), p0) });
+                out.push(if p0 <= p1 {
+                    (Seg::Quad(p0, (x1, y1), p1), true)
+                } else {
+                    (Seg::Quad(p1, (x1, y1), p0), false)
+                });
                 cur = p1;
             }
             Cmd::CubicTo(x1, y1, x2, y2, x, y) => {
                 let (p0, p1) = (cur, (x, y));
                 out.push(if p0 <= p1 {
-                    Seg::Cubic(p0, (x1, y1), (x2, y2), p1)
+                    (Seg::Cubic(p0, (x1, y1), (x2, y2), p1), true)
                 } else {
-                    Seg::Cubic(p1, (x2, y2), (x1, y1), p0)
+                    (Seg::Cubic(p1, (x2, y2), (x1, y1), p0), false)
                 });
                 cur = p1;
             }
@@ -512,13 +525,26 @@ struct Split {
     /// The first segment that the pieces draw more often than a cover of the source can: a
     /// source segment more often than the source draws it, or a new segment more than twice.
     extra: Option<String>,
+    /// The cuts that the pieces draw twice in the same direction, with the two pieces that
+    /// draw them. Two pieces that meet along a cut each hold their ink on the same side of
+    /// their own outline, so they run the cut in opposite directions. A copy of a piece
+    /// runs it in the same direction.
+    same_way: Vec<(Seg, usize, usize)>,
+    /// The cuts that the pieces draw twice, once in each direction.
+    opposite: usize,
+    /// The source segments that the pieces draw as often as the source does, and of those,
+    /// how many the pieces run another way than the source.
+    kept: usize,
+    kept_turned: usize,
 }
 
 /// One source and what the split of its pieces needs of it: how often it draws each
 /// segment, and its outline flattened into a grid.
 struct Source {
     quant: u16,
-    in_src: HashMap<Seg, usize>,
+    /// Per segment: how often the source draws it, and how many of those run forward (see
+    /// `directed`).
+    in_src: HashMap<Seg, (usize, usize)>,
     outline: Grid,
     /// Whether a segment lies within `near_limit` of the outline. It does not depend on the
     /// pieces, so the mutation test asks it once per segment.
@@ -527,10 +553,11 @@ struct Source {
 
 impl Source {
     fn new(src: &[Cmd], quant: u16) -> Self {
-        let mut in_src: HashMap<Seg, usize> = HashMap::new();
+        let mut in_src: HashMap<Seg, (usize, usize)> = HashMap::new();
         let mut outline = Grid::default();
-        for s in segments(src) {
-            *in_src.entry(s).or_default() += 1;
+        for (s, fwd) in directed(src) {
+            let e = in_src.entry(s).or_default();
+            *e = (e.0 + 1, e.1 + fwd as usize);
             outline.add(&flatten(&s, quant), 0);
         }
         Source { quant, in_src, outline, near: Default::default() }
@@ -549,32 +576,65 @@ impl Source {
     /// Split the segments of the pieces. A segment counts once for each time a path draws
     /// it.
     fn split(&self, run: &[PieceRec]) -> Split {
-        // Per segment: how often the pieces draw it, and the last piece that draws it.
-        let mut count: HashMap<Seg, (usize, usize)> = HashMap::new();
+        /// Per segment: how often the pieces draw it, how many of those run forward, and the
+        /// first and the last piece that draw it.
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        struct Drawn {
+            n: usize,
+            fwd: usize,
+            first: usize,
+            last: usize,
+        }
+        let mut count: HashMap<Seg, Drawn> = HashMap::new();
         for (k, p) in run.iter().enumerate() {
-            for s in segments(&p.cmds) {
-                let e = count.entry(s).or_default();
-                *e = (e.0 + 1, k);
+            for (s, fwd) in directed(&p.cmds) {
+                let e = count.entry(s).or_insert(Drawn { n: 0, fwd: 0, first: k, last: k });
+                (e.n, e.fwd, e.last) = (e.n + 1, e.fwd + fwd as usize, k);
             }
         }
-        let mut all: Vec<(Seg, (usize, usize))> = count.into_iter().collect();
+        let mut all: Vec<(Seg, Drawn)> = count.into_iter().collect();
         all.sort();
-        let mut out = Split { cuts: vec![], edges: vec![], sides: vec![], alone: vec![], extra: None };
+        let mut out = Split {
+            cuts: vec![],
+            edges: vec![],
+            sides: vec![],
+            alone: vec![],
+            extra: None,
+            same_way: vec![],
+            opposite: 0,
+            kept: 0,
+            kept_turned: 0,
+        };
         let mut side_of = vec![];
-        for (s, (n, k)) in all {
-            let limit = self.in_src.get(&s).copied().unwrap_or(2);
-            if n > limit && out.extra.is_none() {
-                out.extra =
-                    Some(format!("the pieces draw a segment {n} times, a cover of the source draws it {limit} times"));
+        for (s, d) in all {
+            let in_src = self.in_src.get(&s).copied();
+            let limit = in_src.map_or(2, |c| c.0);
+            if d.n > limit && out.extra.is_none() {
+                out.extra = Some(format!(
+                    "the pieces draw a segment {} times, a cover of the source draws it {limit} times",
+                    d.n
+                ));
             }
-            match (self.in_src.contains_key(&s), n) {
-                (true, _) => {}
-                (false, 1) if self.near(&s) => out.edges.push(s),
-                (false, 1) => {
-                    out.sides.push(s);
-                    side_of.push(k);
+            match (in_src, d.n) {
+                (Some((n, fwd)), _) => {
+                    if d.n == n {
+                        out.kept += 1;
+                        out.kept_turned += (d.fwd != fwd) as usize;
+                    }
                 }
-                (false, _) => out.cuts.push(s),
+                (None, 1) if self.near(&s) => out.edges.push(s),
+                (None, 1) => {
+                    out.sides.push(s);
+                    side_of.push(d.last);
+                }
+                (None, n) => {
+                    if n == 2 && d.fwd == 1 {
+                        out.opposite += 1;
+                    } else if n == 2 {
+                        out.same_way.push((s, d.first, d.last));
+                    }
+                    out.cuts.push(s)
+                }
             }
         }
         if !out.sides.is_empty() {
@@ -916,8 +976,9 @@ fn subpaths(cmds: &[Cmd]) -> Vec<Subpath> {
 /// centroid of its outline points and four of its points, a quarter of the way apart. A
 /// point within one quantised unit of `poly` is left out: two subpaths that touch share
 /// points, and for such a point the even-odd test can go either way. The answer is the
-/// majority of the points left.
-fn held_by(s: &[(f64, f64)], poly: &[(f64, f64)]) -> bool {
+/// majority of the points left, or `None` when no majority exists: every point is left
+/// out, or the points left split evenly.
+fn held_by(s: &[(f64, f64)], poly: &[(f64, f64)]) -> Option<bool> {
     let n = s.len();
     let c = s.iter().fold((0.0, 0.0), |m, p| (m.0 + p.0 / n as f64, m.1 + p.1 / n as f64));
     let (mut yes, mut no) = (0, 0);
@@ -940,41 +1001,58 @@ fn held_by(s: &[(f64, f64)], poly: &[(f64, f64)]) -> bool {
             no += 1;
         }
     }
-    yes > no
+    (yes != no).then_some(yes > no)
 }
 
 /// For each subpath nested inside another: whether it winds against the smallest subpath
 /// that holds it. The sum of signed areas counts ink only when it does. A full test of
 /// containment is costly, so the test is a cheap one: the box of the inner subpath lies in
 /// the box of the outer, and most of a few points of the inner lie inside the outer's
-/// flattened outline (`held_by`). Returns the count that winds against and the count that winds with.
-fn nesting(cmds: &[Cmd]) -> (usize, usize) {
+/// flattened outline (`held_by`). Returns the count that winds against, the count that
+/// winds with, and the count of undecided subpaths. A subpath is undecided when `held_by`
+/// gives no answer for a possible holder that is smaller than the holder found, or when
+/// it finds no holder. Such a subpath can be counted against the wrong holder, or not at
+/// all.
+fn nesting(cmds: &[Cmd]) -> (usize, usize, usize) {
     let subs = subpaths(cmds);
-    let (mut against, mut with) = (0, 0);
+    let (mut against, mut with, mut undecided) = (0, 0, 0);
     for (i, s) in subs.iter().enumerate() {
         if s.area == 0.0 {
             continue;
         }
-        let parent = subs
-            .iter()
-            .enumerate()
-            .filter(|(j, o)| {
-                *j != i
-                    && o.area.abs() > s.area.abs()
-                    && o.lo.0 <= s.lo.0
-                    && o.lo.1 <= s.lo.1
-                    && o.hi.0 >= s.hi.0
-                    && o.hi.1 >= s.hi.1
-                    && held_by(&s.poly, &o.poly)
-            })
-            .min_by(|a, b| a.1.area.abs().total_cmp(&b.1.area.abs()));
+        // The holders that the boxes allow, each with the answer of `held_by`.
+        let mut parent: Option<&Subpath> = None;
+        let mut open: Option<f64> = None;
+        for (j, o) in subs.iter().enumerate() {
+            if j == i
+                || o.area.abs() <= s.area.abs()
+                || o.lo.0 > s.lo.0
+                || o.lo.1 > s.lo.1
+                || o.hi.0 < s.hi.0
+                || o.hi.1 < s.hi.1
+            {
+                continue;
+            }
+            match held_by(&s.poly, &o.poly) {
+                Some(true) => {
+                    if parent.is_none_or(|p| o.area.abs() < p.area.abs()) {
+                        parent = Some(o);
+                    }
+                }
+                Some(false) => {}
+                None => open = Some(open.map_or(o.area.abs(), |a: f64| a.min(o.area.abs()))),
+            }
+        }
+        if open.is_some_and(|a| parent.is_none_or(|p| a < p.area.abs())) {
+            undecided += 1;
+        }
         match parent {
-            Some((_, o)) if o.area.signum() == s.area.signum() => with += 1,
+            Some(o) if o.area.signum() == s.area.signum() => with += 1,
             Some(_) => against += 1,
             None => {}
         }
     }
-    (against, with)
+    (against, with, undecided)
 }
 
 /// The area check of one source, in page units.
@@ -987,11 +1065,8 @@ struct SourceArea {
     sum_abs: f64,
     /// L: the control-polygon length of the remade outline edges.
     len: f64,
-    /// The cut sides with no partner, with the piece that draws each.
-    alone: Vec<(Seg, usize)>,
-    /// The number of cut sides.
-    n_sides: usize,
-    extra: Option<String>,
+    /// The segments of the pieces, split (see `Split`).
+    split: Split,
 }
 
 impl SourceArea {
@@ -1004,9 +1079,7 @@ impl SourceArea {
             sum: areas.iter().sum(),
             sum_abs: areas.iter().map(|a| a.abs()).sum(),
             len: s.edges.iter().map(polygon_len).sum::<f64>() / q,
-            alone: s.alone,
-            n_sides: s.sides.len(),
-            extra: s.extra,
+            split: s,
         }
     }
     /// A difference in units of `EDGE` × L. A difference with no remade edge to explain it
@@ -1049,15 +1122,25 @@ impl SourceArea {
                 self.ratio_b()
             ));
         }
-        why.extend(self.extra.clone());
+        why.extend(self.split.extra.clone());
         (!why.is_empty()).then(|| why.join("; "))
     }
-    /// Why the source fails the area check or the partner rule, or `None`.
+    /// Why the cuts of the source break the direction rule, or `None`.
+    fn direction_failure(&self) -> Option<String> {
+        let (s, x, y) = self.split.same_way.first()?;
+        Some(format!(
+            "{} cuts drawn twice the same way, the first by pieces {x} and {y}: {s:?}",
+            self.split.same_way.len()
+        ))
+    }
+    /// Why the source fails the area check, the partner rule or the direction rule, or
+    /// `None`.
     fn failure(&self) -> Option<String> {
         let mut why: Vec<String> = self.area_failure().into_iter().collect();
-        if let Some((s, k)) = self.alone.first() {
-            why.push(format!("{} cut sides with no partner, the first of piece {k}: {s:?}", self.alone.len()));
+        if let Some((s, k)) = self.split.alone.first() {
+            why.push(format!("{} cut sides with no partner, the first of piece {k}: {s:?}", self.split.alone.len()));
         }
+        why.extend(self.direction_failure());
         (!why.is_empty()).then(|| why.join("; "))
     }
 }
@@ -1118,18 +1201,33 @@ struct Area {
     worst_partner_path: u32,
     /// Each cut side with no partner: its source, its word, its piece, its distance.
     alone: Vec<Alone>,
+    /// Cuts drawn twice: once in each direction, and twice the same way.
+    opposite: usize,
+    same_way: usize,
+    /// Source segments that the pieces draw as often as the source, the count of those
+    /// that the pieces run another way than the source, and one line for each source that
+    /// has such a segment. The gate reports these and does not assert them.
+    kept: usize,
+    kept_turned_n: usize,
+    kept_turned: Vec<String>,
     /// Nested subpaths, in sources and pieces, that wind against their holder and with it.
     nested_against: usize,
+    /// Nested subpaths for which the check gives no answer (see `nesting`).
+    nested_undecided: usize,
     nested_with: Vec<String>,
     /// One line for each source that fails.
     failures: Vec<String>,
 }
 
-fn areas(name: &str, page: &PageData, pieces: &[PieceRec]) -> Result<Area, String> {
+/// The area check of every source of a page. `letter_of` gives the letter of each piece.
+fn areas(name: &str, page: &PageData, pieces: &[PieceRec], letter_of: &[u32]) -> Result<Area, String> {
     let mut a = Area { known: vec![0; KNOWN_LEFT_OUT.len()], ..Area::default() };
     let quant = page.header.quant;
     let q2 = (quant as f64).powi(2);
+    let mut first = 0;
     for run in pieces.chunk_by(|a, b| a.source == b.source) {
+        let off = first;
+        first += run.len();
         let path = run[0].source;
         let src_cmds = cmds_of(name, page, path)?;
         let source = Source::new(&src_cmds, quant);
@@ -1149,18 +1247,37 @@ fn areas(name: &str, page: &PageData, pieces: &[PieceRec]) -> Result<Area, Strin
         for (what, cmds) in std::iter::once(("the source".to_owned(), &src_cmds))
             .chain(run.iter().enumerate().map(|(k, p)| (format!("piece {k}"), &p.cmds)))
         {
-            let (against, with) = nesting(cmds);
+            let (against, with, undecided) = nesting(cmds);
             a.nested_against += against;
+            a.nested_undecided += undecided;
             if with > 0 {
                 a.nested_with.push(format!("{at}: {what}: {with} nested subpaths wind with their holder"));
             }
         }
 
         // The partner rule: measure every cut side, for the report.
-        a.sides += s.n_sides;
-        a.sources_with_sides += (s.n_sides > 0) as usize;
-        if s.n_sides > 0 {
-            let split = source.split(run);
+        let split = &s.split;
+        a.opposite += split.opposite;
+        // The direction rule: one line for each cut drawn twice the same way.
+        a.same_way += split.same_way.len();
+        for (seg, x, y) in &split.same_way {
+            let how = if x == y {
+                "one piece".to_owned()
+            } else if letter_of[off + x] == letter_of[off + y] {
+                format!("pieces {x} and {y} of one letter")
+            } else {
+                format!("pieces {x} and {y} of letters {} and {}", letter_of[off + x], letter_of[off + y])
+            };
+            a.failures.push(format!("{at}: {how} draw a cut twice the same way: {seg:?}"));
+        }
+        a.kept += split.kept;
+        a.kept_turned_n += split.kept_turned;
+        if split.kept_turned > 0 {
+            a.kept_turned.push(format!("{at}: {} source segments run another way", split.kept_turned));
+        }
+        a.sides += split.sides.len();
+        a.sources_with_sides += !split.sides.is_empty() as usize;
+        if !split.sides.is_empty() {
             let grid = pieces_grid(run, quant);
             let mut side_piece: HashMap<Seg, usize> = HashMap::new();
             for (k, p) in run.iter().enumerate() {
@@ -1187,9 +1304,11 @@ fn areas(name: &str, page: &PageData, pieces: &[PieceRec]) -> Result<Area, Strin
         if known.is_none() && s.ratio_b() > a.worst_b {
             (a.worst_b, a.worst_b_path) = (s.ratio_b(), path);
         }
-        if let Some((seg, k)) = s.alone.first() {
-            a.failures
-                .push(format!("{at}: {} cut sides with no partner, the first of piece {k}: {seg:?}", s.alone.len()));
+        if let Some((seg, k)) = split.alone.first() {
+            a.failures.push(format!(
+                "{at}: {} cut sides with no partner, the first of piece {k}: {seg:?}",
+                split.alone.len()
+            ));
         }
         match (s.area_failure(), known) {
             (None, None) => {}
@@ -1197,7 +1316,7 @@ fn areas(name: &str, page: &PageData, pieces: &[PieceRec]) -> Result<Area, Strin
             (None, Some(_)) => a.failures.push(format!("{at}: passes; remove it from KNOWN_LEFT_OUT")),
             (Some(why), Some(i)) => {
                 let left_out = KNOWN_LEFT_OUT[i].2;
-                if s.extra.is_some() || (d * q2 - left_out).abs() > ROUNDING * q2 {
+                if split.extra.is_some() || (d * q2 - left_out).abs() > ROUNDING * q2 {
                     a.failures.push(format!("{at}: {why}; KNOWN_LEFT_OUT expects {left_out} quantum squares"));
                 } else {
                     a.known[i] += 1;
@@ -1245,6 +1364,14 @@ fn ink_page(page: &str, images: bool) -> Result<Ink, String> {
     let base = render(page, svg(&lp.page)?.as_bytes())?;
     let (sw_pm, fu_pm) = (render(page, svg(&swapped)?.as_bytes())?, render(page, svg(&fused)?.as_bytes())?);
     let (cuts, edges) = new_segments(page, &lp.page, &d.pieces)?;
+    let mut letter_of = vec![u32::MAX; d.pieces.len()];
+    for (i, l) in d.letters.iter().enumerate() {
+        for m in &d.members[l.first_member as usize..l.first_member as usize + l.n_members as usize] {
+            if let MemberPath::Piece(p) = m.path {
+                letter_of[p as usize] = i as u32;
+            }
+        }
+    }
     let (w, h) = (base.width(), base.height());
     let masks = (&mask(&lp.page, &cuts, w, h), &mask(&lp.page, &edges, w, h));
     let (sw, _) = compare(page, &base, &sw_pm, masks, false)?;
@@ -1262,7 +1389,7 @@ fn ink_page(page: &str, images: bool) -> Result<Ink, String> {
         page: page.to_owned(),
         swapped: sw,
         fused: fu,
-        area: areas(page, &lp.page, &d.pieces)?,
+        area: areas(page, &lp.page, &d.pieces, &letter_of)?,
         n_cuts: cuts.len(),
         n_edges: edges.len(),
     })
@@ -1397,7 +1524,23 @@ fn ink() {
     }
     let against: usize = rows.iter().map(|r| r.area.nested_against).sum();
     let with: Vec<&String> = rows.iter().flat_map(|r| &r.area.nested_with).collect();
-    println!("nesting: {against} nested subpaths wind against their holder, {} with it", with.len());
+    let undecided: usize = rows.iter().map(|r| r.area.nested_undecided).sum();
+    println!(
+        "nesting: {against} nested subpaths wind against their holder, {} with it, {undecided} undecided",
+        with.len()
+    );
+    let opposite: usize = rows.iter().map(|r| r.area.opposite).sum();
+    let same_way: usize = rows.iter().map(|r| r.area.same_way).sum();
+    let kept: usize = rows.iter().map(|r| r.area.kept).sum();
+    let kept_turned: Vec<&String> = rows.iter().flat_map(|r| &r.area.kept_turned).collect();
+    let kept_turned_n: usize = rows.iter().map(|r| r.area.kept_turned_n).sum();
+    println!(
+        "direction: {opposite} cuts drawn once each way, {same_way} drawn twice the same way; {kept} source segments drawn as often as the source, {kept_turned_n} of them run another way, in {} sources",
+        kept_turned.len()
+    );
+    for w in kept_turned.iter().take(20) {
+        println!("  turned: {w}");
+    }
 
     let mut area_failures: Vec<String> = rows.iter().flat_map(|r| r.area.failures.iter().cloned()).collect();
     area_failures.extend(with.iter().map(|w| w.to_string()));
@@ -1436,9 +1579,9 @@ fn ink() {
 ///
 /// With `QVP_LETTERS_SWEEP=1`, every piece of every source then gets each change, and the
 /// test prints how many pass. A change that moves less ink than the allowance of its
-/// source (`EDGE` × L) can pass unless the segment count or the partner rule sees it, so
-/// the test does not assert that sweep. The sweep takes most of the test's time, so it
-/// runs only when asked.
+/// source (`EDGE` × L) can pass unless the segment count, the partner rule or the
+/// direction rule sees it, so the test does not assert that sweep. The sweep takes most of
+/// the test's time, so it runs only when asked.
 #[test]
 fn the_area_check_catches_a_lost_or_extra_piece() {
     if !have_letters() {
@@ -1447,7 +1590,7 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
     const NAMES: [&str; 3] = ["lost", "doubled", "replaced"];
     let sweep = std::env::var("QVP_LETTERS_SWEEP").is_ok();
     /// Per change in the sweep: made, caught by (a), by (b), by the segment count, by the
-    /// partner rule, and caught by none, with the most ink, in page units squared, that
+    /// partner rule, by the direction rule, and caught by none, with the most ink, in page units squared, that
     /// such a change moves.
     #[derive(Default, Clone, Copy)]
     struct Row {
@@ -1456,6 +1599,7 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
         b: usize,
         segments: usize,
         partner: usize,
+        direction: usize,
         none: usize,
         largest_missed: f64,
     }
@@ -1531,8 +1675,9 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
                     row.made += 1;
                     row.a += (s.ratio_a() > MAX_AREA_RATIO) as usize;
                     row.b += (s.ratio_b() > MAX_AREA_RATIO) as usize;
-                    row.segments += s.extra.is_some() as usize;
-                    row.partner += !s.alone.is_empty() as usize;
+                    row.segments += s.split.extra.is_some() as usize;
+                    row.partner += !s.split.alone.is_empty() as usize;
+                    row.direction += s.direction_failure().is_some() as usize;
                     if s.failure().is_none() {
                         row.none += 1;
                         row.largest_missed = row.largest_missed.max((s.sum - before.sum).abs());
@@ -1555,6 +1700,7 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
                     sum.b += add.b;
                     sum.segments += add.segments;
                     sum.partner += add.partner;
+                    sum.direction += add.direction;
                     sum.none += add.none;
                     sum.largest_missed = sum.largest_missed.max(add.largest_missed);
                 }
@@ -1565,8 +1711,8 @@ fn the_area_check_catches_a_lost_or_extra_piece() {
     if sweep {
         for (name, r) in NAMES.iter().zip(total) {
             println!(
-                "{name:>8}: {} changes; (a) catches {}, (b) {}, the segment count {}, the partner rule {}; {} pass, moving at most {:.4} units²",
-                r.made, r.a, r.b, r.segments, r.partner, r.none, r.largest_missed
+                "{name:>8}: {} changes; (a) catches {}, (b) {}, the segment count {}, the partner rule {}, the direction rule {}; {} pass, moving at most {:.4} units²",
+                r.made, r.a, r.b, r.segments, r.partner, r.direction, r.none, r.largest_missed
             );
         }
     }
