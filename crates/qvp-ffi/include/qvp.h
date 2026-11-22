@@ -9,6 +9,9 @@
  *  - array outputs take (out, cap) and return the TOTAL count (may exceed cap: call again bigger)
  *  - coordinates are page units (viewBox space, y down) unless the name says "view" (viewport px
  *    through the current layout: view_x = offset_x + x*scale ; view_y = offset_y + (y + dy[line])*scale)
+ *  - threads: use a page from one thread at a time. A call that takes a const QvpPage* can still update
+ *    the page's caches (the draw list, pending rule changes), so two threads must not call into one page at
+ *    once, not even with const calls. Different pages can be used on different threads.
  */
 #ifndef QVP_H
 #define QVP_H
@@ -69,7 +72,21 @@ enum { QVP_SEARCH_INCLUDES = 0, QVP_SEARCH_EXACT, QVP_SEARCH_PREFIX };
 enum { QVP_ARABIC_STRIP = 0, QVP_ARABIC_FOLD, QVP_ARABIC_NORMALIZE, QVP_ARABIC_LOOSE, QVP_ARABIC_SEARCH_KEY };
 enum { QVP_TARGET_PAGE = 0, QVP_TARGET_WORD, QVP_TARGET_WORDS, QVP_TARGET_AYAH, QVP_TARGET_AYAH_RANGE, QVP_TARGET_LINE, QVP_TARGET_SURAH, QVP_TARGET_RANGE };
 enum { QVP_SELECTOR_PAGE = 0, QVP_SELECTOR_PATH, QVP_SELECTOR_WORD_PATH, QVP_SELECTOR_WORD_MARK, QVP_SELECTOR_WORD_MARK_NAMED, QVP_SELECTOR_WORD_BODY, QVP_SELECTOR_WORD_MARKS,
-       QVP_SELECTOR_WORD, QVP_SELECTOR_AYAH, QVP_SELECTOR_LINE, QVP_SELECTOR_MARK, QVP_SELECTOR_CATEGORY, QVP_SELECTOR_FAMILY, QVP_SELECTOR_KIND, QVP_SELECTOR_DECORATION, QVP_SELECTOR_DECORATION_INDEX };
+       QVP_SELECTOR_WORD, QVP_SELECTOR_AYAH, QVP_SELECTOR_LINE, QVP_SELECTOR_MARK, QVP_SELECTOR_CATEGORY, QVP_SELECTOR_FAMILY, QVP_SELECTOR_KIND, QVP_SELECTOR_DECORATION, QVP_SELECTOR_DECORATION_INDEX,
+       QVP_SELECTOR_LETTER, QVP_SELECTOR_LETTER_MARK, QVP_SELECTOR_LETTER_MARK_NAMED, QVP_SELECTOR_WORD_CHARS };
+/* The letter selectors read a letter layer (qvp_attach_letters). With no layer they select nothing, and a rule
+   added before the layer takes it when it comes. A cut path is taken only when every one of its pieces is.
+   LETTER: a word, b the letter's index in the word, c a part (QVP_LETTER_PART_*; c > 2 is a bad selector).
+   LETTER_MARK: a word, b a letter, c the nth mark of the letter in text order (dots count; a body never does).
+   LETTER_MARK_NAMED: a word, b a letter, c a mark id: every member whose path has that mark, a body the page stores
+     as a mark included. 0, or an id above 255, selects nothing.
+   WORD_CHARS: a word, b and c the first and last qpc code-point offset, both included (b > c is a bad selector; an
+     offset above 0xFFFE counts as 0xFFFE): every path that draws one of those characters, a word-level mark included.
+   A word or a letter past the page selects nothing, as QVP_SELECTOR_WORD does. */
+/* what part of a letter a selector or a query takes. BODY_AND_DOTS: every member at the letter's own offset (the
+   body, its dots, a sign that is part of the code point such as a hamzah); the same paths as WORD_CHARS(w, at, at).
+   MARKS: every other member, a mark with no offset included. */
+enum { QVP_LETTER_PART_ALL = 0, QVP_LETTER_PART_BODY_AND_DOTS, QVP_LETTER_PART_MARKS };
 enum { QVP_HIGHLIGHT_INK = 0, QVP_HIGHLIGHT_BAND, QVP_HIGHLIGHT_BOTH };
 enum { QVP_BAND_LINE_SPACING = 0, QVP_BAND_INK };
 enum { QVP_BREAKS_GREEDY = 0, QVP_BREAKS_EVEN, QVP_BREAKS_FITTED, QVP_BREAKS_PRINTED };
@@ -95,6 +112,7 @@ enum { QVP_LINE_ART_AYAH_MARK = 1, QVP_LINE_ART_SURAH_HEADER = 2, QVP_LINE_ART_P
    34 ishmam, 35 imalah, 255 unknown */
 
 /* structs ------------------------------------------------------------------------------- */
+/* n_paths counts a letter layer's pieces after the page's own paths, as QvpGeometry.n_paths does */
 typedef struct { float width, height; uint32_t page, n_lines, n_ayahs, n_words, n_paths, n_decorations; } QvpPageInfo;
 /* table: n_paths × 8 uint32: op_start, op_count, pt_start, pt_count, flags, word, line, extra
    flags = kind | mark<<8 | family<<16 | (evenodd?1:0)<<24 | (glyph_instance?2:0)<<24
@@ -138,6 +156,29 @@ typedef struct { uint32_t lines; float line_spacing; } QvpGrid;
 typedef struct { float scale, offset_x, offset_y, content_w, content_h, line_spacing; uint32_t n_lines; const float* lines; /* n_lines × {dy, slot_top, slot_bottom}; the rows when reflowed */ float fit_scale, fit_x, fit_y; uint32_t reflowed, n_rows; } QvpLayout;
 typedef struct { uint8_t target /* QVP_TARGET_* */; uint32_t a, b, c; const uint32_t* words; uint32_t n_words; } QvpTarget;
 typedef struct { uint8_t selector /* QVP_SELECTOR_* */; uint32_t a, b, c; } QvpSelector;
+/* one letter of a word (qvp_letter_info). index: the letter's index in its word. at: the letter's qpc code-point
+   offset. more_at: the first other offset its body draws (the kashida of 2:97:5), QVP_NONE when none; n_more_at counts
+   them. n_marks: the members that are not body, dots included. The box is in page units: the union of the members'
+   boxes, and a piece can reach past its word's box. has_ink 0: no member has an outline (ink drawn off the page). */
+typedef struct { uint32_t word, index, at, text /* code point */, n_members, n_marks, more_at, n_more_at;
+                 float x0, y0, x1, y1; uint8_t has_ink, _pad[3]; } QvpLetterInfo;
+/* one path of a letter (qvp_letter_members): a page path, or a piece (is_cut 1) at an index past the page's own
+   paths. at: its offset, QVP_NONE when none; a body and its dots carry the letter's. mark: the mark id of the path; a
+   piece has its source's, 0. */
+typedef struct { uint32_t path, at; uint8_t mark, is_body, is_cut, _pad; } QvpLetterMember;
+/* the letter under a point (qvp_hit_test_letter). word: the word qvp_hit_test finds with the same options. letter:
+   the index in the word, QVP_NONE for a word-level mark. line: the word's printed line index.
+   is_exact 1: the point is inside the outline of path, and distance is 0. A cut path is never path: its pieces are.
+     Ink the page stores as a mark wins over body ink, and of two of the same ink, the one drawn last wins.
+   is_exact 0: the point is off the word's ink. The letter is the one whose box is nearest, path is its first body
+     member, distance is the distance to its box in page units (0 inside the box), and mark is 0.
+   at: the offset of the path hit, or of the letter; QVP_NONE when none. mark: the mark id of the path hit. Body ink has
+   0, but a body the page stores as a mark (a dagger alif, mark 12) has that mark's id. */
+typedef struct { uint32_t word, letter, path, at, line; float distance; uint8_t mark, is_exact, _pad[2]; } QvpLetterHit;
+/* letters by what they are (qvp_find_letters, qvp_style_add_letters). scope: the words to look in. text: a code
+   point, 0 = any letter. mark: a mark id that one of the letter's members must carry, 0 = any. part:
+   QVP_LETTER_PART_*, what of each letter a rule takes; it does not filter qvp_find_letters. */
+typedef struct { QvpTarget scope; uint32_t text; uint8_t mark, part, _pad[2]; } QvpLetterQuery;
 typedef struct { uint8_t mode, height; uint32_t ink, band; float pad_x, pad_y, radius, seam; uint32_t transition_ms; int32_t layer; } QvpHighlightStyle;
 typedef struct { uint32_t ink, diacritics, dots, waqf, sifr, ayah_mark, numeral, headers, transition_ms; const uint32_t* marks /* (mark,colour) pairs */; uint32_t n_marks; } QvpTheme;
 typedef struct { uint16_t number, ayah_count; uint8_t has_banner, has_basmalah, place /* 0 makkah 1 madinah */, _pad; uint32_t banner_decoration; QvpStr arabic, latin, english; } QvpSurah;
@@ -172,7 +213,7 @@ void     qvp_dealloc(uint8_t* p, size_t len);
 QvpPage* qvp_page_load(const uint8_t* bytes, size_t len);              /* NULL on error; bytes are copied */
 void     qvp_page_free(QvpPage*);
 void     qvp_page_info(const QvpPage*, QvpPageInfo* out);
-void     qvp_geometry(const QvpPage*, QvpGeometry* out);               /* pointers live as long as the page */
+void     qvp_geometry(const QvpPage*, QvpGeometry* out);               /* pointers live as long as the page, or until qvp_attach_letters returns 0 */
 int      qvp_word_info(const QvpPage*, uint32_t index, QvpWordInfo* out);
 int      qvp_word_form(const QvpPage*, uint32_t index, uint8_t form, QvpStr* out);
 int      qvp_ayah_info(const QvpPage*, uint32_t index, QvpAyahInfo* out);
@@ -207,11 +248,49 @@ void     qvp_citation(const QvpPage*, const uint32_t* words, uint32_t n, QvpStr*
 int32_t  qvp_attach_words(QvpPage*, const uint8_t* json, uint32_t len);   /* sidecar {"s:a:w": {"rasm_uthmani","rasm_imlai","qpc","rasm","search"}} → words updated, -1 = bad JSON */
 uint8_t  qvp_has_form(const QvpPage*, uint8_t form);
 
+/* letters: the optional letter layer of a page (NNN.qvl, docs/FORMAT.md "QVL1") ------------- */
+/* A layer names the letters of each word, the paths that draw each letter, and the pieces cut from an outline that
+   joins letters. Attaching appends the P pieces to the path table after the page's own N paths, as paths N to
+   N + P - 1: no page path changes its index, and no word range (QvpWordInfo.first_path, n_paths) holds a piece. A cut
+   path draws as its pieces only while one of them differs from it in colour (qvp_layout_draw_list).
+   Offsets (at, more_at) are code-point offsets in the word's qpc text. With a words sidecar that gives the word's qpc,
+   an offset at or past its length counts as none (QVP_NONE). With no sidecar, offsets are used as stored.
+   With no layer, or a NULL page, every call below answers 0 and writes nothing; so does an index out of range. The
+   array calls return the count with a NULL out or cap 0 and write nothing. Every other out-pointer may be NULL. */
+int32_t  qvp_attach_letters(QvpPage*, const uint8_t* bytes, uint32_t len);   /* 0: attached; the bytes are copied */
+/* -1: a NULL page or NULL bytes, a file that does not decode, the layer of another page (page number, quant, path or
+   word count differ), a file over 1 MiB, or a page whose words share paths. On -1 nothing changes: the page keeps the
+   layer it had, and every pointer and count stays valid. A second attach replaces the first, and the rules stay and
+   take the new layer. After a 0, read these again: qvp_geometry (its pointers and n_paths), qvp_colors (its pointer and
+   length), qvp_page_info.n_paths, qvp_layout_path_groups, a cached draw list (qvp_layout_draw_revision counts up), and
+   any per-path array the host sized from n_paths. The pointers qvp_geometry and qvp_colors returned before are invalid. */
+uint8_t  qvp_has_letters(const QvpPage*);                                   /* 1 when a layer is attached */
+uint32_t qvp_letter_count(const QvpPage*, uint32_t word);                   /* the word's letters */
+int      qvp_letter_info(const QvpPage*, uint32_t word, uint32_t letter /* index in the word */, QvpLetterInfo* out);   /* 0 = no such letter */
+uint32_t qvp_letter_members(const QvpPage*, uint32_t word, uint32_t letter, QvpLetterMember* out, uint32_t cap);
+/* the bodies first, then the marks in text order: by offset, and a mark with no offset last. So the nth mark here is
+   the one QVP_SELECTOR_LETTER_MARK n takes. */
+int      qvp_path_letter(const QvpPage*, uint32_t path, uint32_t* out_letter, uint32_t* out_at);
+/* 1: path is a member of a letter (a page path or a piece), or a word-level mark (letter QVP_NONE); the word is the
+   path's word in the geometry table. at: its offset, QVP_NONE when none. 0: a cut path, a path with no letter role (a
+   decoration), a path past the table. */
+int      qvp_letter_at_offset(const QvpPage*, uint32_t word, uint32_t at, uint32_t* out_letter);
+/* the letter that draws the character at that offset (its own or a more_at) or holds a mark at it. 0: no letter has it,
+   a word-level mark's offset, QVP_NONE. */
+uint32_t qvp_find_letters(const QvpPage*, const QvpLetterQuery*, uint32_t* out /* n × {word, letter} */, uint32_t cap /* pairs */);
+/* in word order, then letter order; the query's text and mark filter, its part does not. 0: a NULL query, part > 2,
+   or a text that is not a Unicode scalar value (a surrogate, above 0x10FFFF). */
+
 /* hit testing --------------------------------------------------------------------------- */
 int      qvp_hit_test(const QvpPage*, float x, float y, const QvpHitOptions* opt /* NULL ok */, QvpHit* out);       /* gap-aware, page units */
 int      qvp_hit_test_view(const QvpPage*, float view_x, float view_y, const QvpHitOptions* opt, QvpHit* out);       /* gap-aware, viewport px */
 int      qvp_hit_test_exact(const QvpPage*, float x, float y, QvpHit* out);                                /* outline, else box; no gap; page units */
 int      qvp_hit_test_exact_view(const QvpPage*, float view_x, float view_y, QvpHit* out);                         /* outline, else box; no gap; viewport px */
+int      qvp_hit_test_letter(const QvpPage*, float x, float y, const QvpHitOptions* opt /* NULL ok */, QvpLetterHit* out);   /* the letter or mark under a point, page units */
+int      qvp_hit_test_letter_view(const QvpPage*, float view_x, float view_y, const QvpHitOptions* opt, QvpLetterHit* out);   /* the same, viewport px */
+/* 0: no layer, no word under the point within opt's max_distance, or a decoration. A tap between words gives the
+   nearest letter of the word qvp_hit_test picks, which can be far: check is_exact. The hit does not follow the colours:
+   the pieces of a cut path are tested whether it draws whole or as its pieces. */
 uint32_t qvp_line_bands(const QvpPage*, QvpLineBand* out, uint32_t cap);
 uint32_t qvp_hit_areas(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);
 uint32_t qvp_hit_areas_view(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);   /* the same, in viewport px; a reflowed page's rows */
@@ -250,6 +329,16 @@ uint32_t qvp_layout_repeats(const QvpPage*, float* out /* n × {first_path, n_pa
 uint32_t qvp_layout_path_groups(const QvpPage*, uint32_t* out, uint32_t cap);    /* the group of every path; empty unless reflowed */
 uint32_t qvp_layout_omitted_paths(const QvpPage*, uint32_t* out, uint32_t cap);  /* paths this layout does not draw (sheet furniture and a native surah frame when reflowed) */
 uint32_t qvp_layout_draw_list(const QvpPage*, float band_top, float band_bottom /* <= top = the whole page */, uint32_t* out /* n × {path, placement} */, uint32_t cap);   /* everything this layout draws inside a band of it, in drawing order: one loop draws any page */
+/* With a letter layer, a cut path whose pieces differ in colour is listed as its pieces, in its place and under its
+   placement, and never with them. This call and qvp_layout_draw_revision apply pending rule changes first, as
+   qvp_colors does, so they answer for every change made so far, in whatever order a host calls them. */
+uint32_t qvp_layout_draw_revision(const QvpPage*);
+/* Counts up, and wraps, when the draw list can change while the layout and the band stay the same: a letter layer is
+   attached, or a cut path starts or stops drawing its pieces. It never stays the same when the drawn set changes. It
+   can count up with no visible change, such as a second attach of the same layer or a swap outside the band. Colours
+   that move leave it alone, and it stays 0 on a page with no layer. Key a cached draw list on it, the layout and the band.
+   Per frame: qvp_tick, then qvp_colors or qvp_styled_paths, then qvp_layout_draw_revision, then qvp_layout_draw_list
+   when the revision, the layout or the band changed. */
 /* Which band of the current layout to keep drawn: the whole page when it fits, otherwise two screens around the reader. Its top
    moves in steps (with under 2 px of slack it follows the reader), so a pan inside one step redraws nothing and a pan across
    one moves the band by one step. Pass top and top + height to qvp_layout_draw_list.
@@ -283,7 +372,12 @@ float    qvp_layout_printed_height(const QvpPage*, const QvpLayoutSpec*);       
 int      qvp_word_bounds_view(const QvpPage*, uint32_t word_index, float out[4]);
 
 /* styles: layered rules, handles undo exactly ------------------------------------------ */
-uint32_t qvp_style_add(QvpPage*, int32_t layer, const QvpSelector*, uint32_t rgba, uint32_t transition_ms);   /* → handle (0 = bad selector) */
+uint32_t qvp_style_add(QvpPage*, int32_t layer, const QvpSelector*, uint32_t rgba, uint32_t transition_ms);   /* → handle (0 = bad selector: an unknown id, QVP_SELECTOR_LETTER with c > 2, QVP_SELECTOR_WORD_CHARS with b > c) */
+uint32_t qvp_style_add_letters(QvpPage*, int32_t layer, const QvpLetterQuery*, uint32_t rgba, uint32_t transition_ms);
+/* → one handle for one rule that takes the letters the query finds, and the query's part of each. 0: a NULL query,
+   part > 2, or a text that is not a Unicode scalar value. The scope resolves to words now; the rest is matched against
+   the layer each time the rules run, so with no layer the rule selects nothing until one is attached, and it takes a
+   second layer too. */
 uint32_t qvp_style_add_target(QvpPage*, int32_t layer, const QvpTarget*, uint32_t rgba, uint32_t transition_ms);
 uint32_t qvp_style_remove(QvpPage*, uint32_t handle);                       /* rules removed */
 uint32_t qvp_style_recolor(QvpPage*, uint32_t handle, uint32_t rgba, uint32_t transition_ms);
@@ -296,8 +390,8 @@ uint32_t qvp_style_handles(const QvpPage*, uint32_t* out, uint32_t cap);
 
 /* clock & display list ------------------------------------------------------------------ */
 uint8_t  qvp_tick(QvpPage*, double now_ms);                                 /* 1 while animating: keep drawing frames */
-const uint32_t* qvp_colors(QvpPage*);                                       /* n_paths colours (current, mid-transition) */
-uint32_t qvp_styled_paths(QvpPage*, uint32_t* out_pairs, uint32_t cap);          /* (path, colour) pairs ≠ default ink */
+const uint32_t* qvp_colors(QvpPage*);                                       /* n_paths colours (current, mid-transition), a letter layer's pieces included; valid until qvp_attach_letters returns 0 */
+uint32_t qvp_styled_paths(QvpPage*, uint32_t* out_pairs, uint32_t cap);          /* (path, colour) pairs ≠ default ink; leaves out what the draw list cannot hold now: a cut path drawn as its pieces, a piece whose path is drawn whole */
 uint32_t qvp_color_of(QvpPage*, uint32_t path);
 
 /* highlights: ink and/or animated bands ------------------------------------------------- */
@@ -341,7 +435,7 @@ void     qvp_reveal_stop(QvpPage*);
 
 /* crop ---------------------------------------------------------------------------------- */
 int      qvp_crop_bounds(const QvpPage*, const QvpTarget*, float pad, uint8_t keep_ayah_marks, QvpCropBounds* out);
-int      qvp_crop_svg(QvpPage*, const QvpTarget*, float pad, uint8_t keep_ayah_marks, uint32_t background, QvpStr* out);
+int      qvp_crop_svg(QvpPage*, const QvpTarget*, float pad, uint8_t keep_ayah_marks, uint32_t background, QvpStr* out);   /* a cut path drawn as its pieces writes its pieces */
 
 /* dress: another mushaf's ornaments (ornaments.qvo from the converter) ------------------- */
 QvpOrnaments* qvp_ornaments_load(const uint8_t* bytes, size_t len);   /* NULL on error; the bytes are copied */

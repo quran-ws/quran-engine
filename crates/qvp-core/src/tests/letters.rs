@@ -1016,13 +1016,22 @@ fn the_pieces_stay_until_the_fade_ends() {
 }
 
 #[test]
-fn a_rule_added_before_the_draw_list_counts() {
+fn the_draw_list_holds_the_rules_as_of_the_last_refresh() {
+    // The Rust draw list takes `&self`, so it cannot apply a pending rule: it answers for the
+    // last refresh, and a host refreshes first. The C draw-list call refreshes itself
+    // (crates/qvp-ffi/tests/abi.rs, `the_draw_list_answers_for_every_rule_so_far`).
     let mut p = laid_letters_page();
     assert_eq!(draws(&p), PLAIN);
+    let revision = p.draw_revision();
     p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
-    // no colour read first: the pending rule applies here
+    assert_eq!(draws(&p), PLAIN, "no refresh yet: the rule is pending");
+    assert_eq!(p.draw_revision(), revision);
+    // no colour read first: the refresh alone applies the rule
     p.refresh_display();
     assert_eq!(draws(&p), SWAPPED);
+    assert_eq!(p.draw_revision(), revision.wrapping_add(1));
+    p.refresh_display();
+    assert_eq!(p.draw_revision(), revision.wrapping_add(1), "a refresh with nothing pending changes nothing");
 }
 
 #[test]

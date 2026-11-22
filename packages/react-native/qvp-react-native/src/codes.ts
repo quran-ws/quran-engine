@@ -30,4 +30,8 @@ export const SELECTOR = {
   kind: 13,
   decoration: 14,
   decorationIndex: 15,
+  letter: 16,
+  letterMark: 17,
+  letterMarkNamed: 18,
+  wordChars: 19,
 } as const;

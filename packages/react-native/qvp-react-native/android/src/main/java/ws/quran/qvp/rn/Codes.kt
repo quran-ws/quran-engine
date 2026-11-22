@@ -29,6 +29,10 @@ object Codes {
     const val SELECTOR_KIND = 13
     const val SELECTOR_DECORATION = 14
     const val SELECTOR_DECORATION_INDEX = 15
+    const val SELECTOR_LETTER = 16
+    const val SELECTOR_LETTER_MARK = 17
+    const val SELECTOR_LETTER_MARK_NAMED = 18
+    const val SELECTOR_WORD_CHARS = 19
     /** QVP_SELECTOR_*: the kind of a selector, by name. */
-    val SELECTORS: Map<String, Int> = mapOf("page" to SELECTOR_PAGE, "path" to SELECTOR_PATH, "wordPath" to SELECTOR_WORD_PATH, "wordMark" to SELECTOR_WORD_MARK, "wordMarkNamed" to SELECTOR_WORD_MARK_NAMED, "wordBody" to SELECTOR_WORD_BODY, "wordMarks" to SELECTOR_WORD_MARKS, "word" to SELECTOR_WORD, "ayah" to SELECTOR_AYAH, "line" to SELECTOR_LINE, "mark" to SELECTOR_MARK, "category" to SELECTOR_CATEGORY, "family" to SELECTOR_FAMILY, "kind" to SELECTOR_KIND, "decoration" to SELECTOR_DECORATION, "decorationIndex" to SELECTOR_DECORATION_INDEX)
+    val SELECTORS: Map<String, Int> = mapOf("page" to SELECTOR_PAGE, "path" to SELECTOR_PATH, "wordPath" to SELECTOR_WORD_PATH, "wordMark" to SELECTOR_WORD_MARK, "wordMarkNamed" to SELECTOR_WORD_MARK_NAMED, "wordBody" to SELECTOR_WORD_BODY, "wordMarks" to SELECTOR_WORD_MARKS, "word" to SELECTOR_WORD, "ayah" to SELECTOR_AYAH, "line" to SELECTOR_LINE, "mark" to SELECTOR_MARK, "category" to SELECTOR_CATEGORY, "family" to SELECTOR_FAMILY, "kind" to SELECTOR_KIND, "decoration" to SELECTOR_DECORATION, "decorationIndex" to SELECTOR_DECORATION_INDEX, "letter" to SELECTOR_LETTER, "letterMark" to SELECTOR_LETTER_MARK, "letterMarkNamed" to SELECTOR_LETTER_MARK_NAMED, "wordChars" to SELECTOR_WORD_CHARS)
 }

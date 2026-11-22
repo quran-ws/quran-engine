@@ -229,6 +229,7 @@ pub struct QvpLayout {
 
 /// kind: 0 Page, 1 Word(a), 2 Words(words,n), 3 Ayah(a,b), 4 AyahRange(a,b,c), 5 Line(a), 6 Surah(a), 7 Range(a,b)
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct QvpTarget {
     pub target: u8,
     pub a: u32,
@@ -240,7 +241,8 @@ pub struct QvpTarget {
 
 /// kind: 0 Page, 1 Path(a), 2 WordPath(a,b), 3 WordMark(a,b), 4 WordMarkNamed(a, mark b, nth c),
 /// 5 WordBody(a), 6 WordMarks(a), 7 Word(a), 8 Ayah(a,b), 9 Line(a), 10 Mark(a), 11 Category(a),
-/// 12 Family(a), 13 Kind(a), 14 Deco(a), 15 DecoIdx(a)
+/// 12 Family(a), 13 Kind(a), 14 Deco(a), 15 DecoIdx(a), 16 Letter(a, letter b, part c),
+/// 17 LetterMark(a, letter b, nth c), 18 LetterMarkNamed(a, letter b, mark c), 19 WordChars(a, from b, to c)
 #[repr(C)]
 pub struct QvpSelector {
     pub selector: u8,
@@ -248,6 +250,82 @@ pub struct QvpSelector {
     pub b: u32,
     pub c: u32,
 }
+
+/// One letter of a word (`qvp_letter_info`). Offsets are `QVP_NONE` when absent. 52 bytes on
+/// every target, with no implicit padding.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct QvpLetterInfo {
+    pub word: u32,
+    pub index: u32,
+    pub at: u32,
+    /// the letter's code point
+    pub text: u32,
+    pub n_members: u32,
+    pub n_marks: u32,
+    /// the first other offset the body draws
+    pub more_at: u32,
+    pub n_more_at: u32,
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+    pub has_ink: u8,
+    pub _pad: [u8; 3],
+}
+
+/// One path of a letter (`qvp_letter_members`). 12 bytes, no implicit padding.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct QvpLetterMember {
+    pub path: u32,
+    pub at: u32,
+    pub mark: u8,
+    pub is_body: u8,
+    pub is_cut: u8,
+    pub _pad: u8,
+}
+
+/// The letter under a point (`qvp_hit_test_letter`). 28 bytes, no implicit padding.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct QvpLetterHit {
+    pub word: u32,
+    pub letter: u32,
+    pub path: u32,
+    pub at: u32,
+    pub line: u32,
+    pub distance: f32,
+    pub mark: u8,
+    pub is_exact: u8,
+    pub _pad: [u8; 2],
+}
+
+/// Letters by what they are (`qvp_find_letters`, `qvp_style_add_letters`). 40 bytes on a
+/// 64-bit target and 32 on wasm32, as `QvpTarget` is 32 or 24.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct QvpLetterQuery {
+    pub scope: QvpTarget,
+    /// a code point; 0 = any letter
+    pub text: u32,
+    /// a mark id the letter must carry; 0 = any
+    pub mark: u8,
+    /// `QVP_LETTER_PART_*`
+    pub part: u8,
+    pub _pad: [u8; 2],
+}
+
+// The letter structs have no implicit padding, so no byte the engine leaves unwritten crosses the
+// ABI. Checked when each target builds, wasm32 included; tests/abi.rs checks every offset.
+const _: () = {
+    use std::mem::size_of;
+    assert!(size_of::<QvpLetterInfo>() == 52);
+    assert!(size_of::<QvpLetterMember>() == 12);
+    assert!(size_of::<QvpLetterHit>() == 28);
+    assert!(size_of::<QvpLetterQuery>() == size_of::<QvpTarget>() + 8);
+    assert!(size_of::<QvpTarget>() == if cfg!(target_pointer_width = "64") { 32 } else { 24 });
+};
 
 #[repr(C)]
 pub struct QvpHighlightStyle {

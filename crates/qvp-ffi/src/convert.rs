@@ -41,7 +41,38 @@ pub(crate) unsafe fn selector(s: *const QvpSelector) -> Option<Selector> {
         13 => Selector::Kind(PathKind::from_u8(s.a as u8)),
         14 => Selector::Deco(DecoKind::from_u8(s.a as u8)),
         15 => Selector::DecoIdx(s.a),
+        // A letter index or an nth mark past u16 clamps to u16::MAX, which no letter has.
+        16 => Selector::Letter(s.a, clamp16(s.b), LetterPart::from_u8(u8::try_from(s.c).ok()?)?),
+        17 => Selector::LetterMark(s.a, clamp16(s.b), clamp16(s.c)),
+        // A mark id past u8 is no mark: Mark::None selects nothing.
+        18 => Selector::LetterMarkNamed(s.a, clamp16(s.b), u8::try_from(s.c).map_or(Mark::None, Mark::from_u8)),
+        // Both ends are in. An offset past 0xFFFE clamps to it, since 0xFFFF is "no offset".
+        19 if s.b > s.c => return None,
+        19 => Selector::WordChars(s.a, s.b.min(0xFFFE) as u16, s.c.min(0xFFFE) as u16),
         _ => return None,
+    })
+}
+
+fn clamp16(v: u32) -> u16 {
+    v.min(u16::MAX as u32) as u16
+}
+
+/// The header's letter query as the core's. `None` for a NULL query, a part past
+/// `QVP_LETTER_PART_MARKS`, or a `text` that is not a Unicode scalar value. A `text` of 0 is any
+/// letter, and a `mark` of 0 is any mark.
+pub(crate) unsafe fn letter_query(q: *const QvpLetterQuery) -> Option<LetterQuery> {
+    if q.is_null() {
+        return None;
+    }
+    let q = &*q;
+    Some(LetterQuery {
+        scope: target(&q.scope),
+        text: match q.text {
+            0 => None,
+            t => Some(char::from_u32(t)?),
+        },
+        mark: Mark::from_u8(q.mark),
+        part: LetterPart::from_u8(q.part)?,
     })
 }
 

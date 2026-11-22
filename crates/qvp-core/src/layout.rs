@@ -632,17 +632,21 @@ impl Page {
     /// a letter layer is attached, or a cut path starts or stops drawing its pieces. It starts
     /// at 0 and wraps. A host that keeps a draw list keys it on this number too.
     ///
-    /// It never changes on a frame where the drawn set stays the same, so colours that move
-    /// leave it alone. On a page with no letter layer it stays 0, and a host that never
-    /// attaches one need not read it.
+    /// It never stays the same when the drawn set changes. It can count up with no visible
+    /// change: a second attach of the same layer, or a swap outside the band a host draws.
+    /// Colours that move leave it alone. On a page with no letter layer it stays 0, and a
+    /// host that never attaches one need not read it. Like the draw list, it answers as of the
+    /// last refresh: see [`Page::refresh_display`].
     pub fn draw_revision(&self) -> u32 {
         self.draw_revision
     }
 
     /// Apply pending rule changes to the colours, the targets and the cut paths that draw
     /// their pieces. Every call that reads colours, and [`Page::tick`], does it first. The
-    /// draw list takes the page as it is, so a host that adds a rule and asks for the draw
-    /// list before anything else calls this first.
+    /// draw list and [`Page::draw_revision`] take `&self` and answer for the page as it is, so
+    /// a Rust host that adds a rule and asks for either before anything else calls this
+    /// first. The C calls `qvp_layout_draw_list` and `qvp_layout_draw_revision` call it
+    /// themselves. It does nothing when no rule or state changed since the last refresh.
     pub fn refresh_display(&mut self) {
         self.refresh_targets();
     }

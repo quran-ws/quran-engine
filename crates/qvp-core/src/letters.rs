@@ -15,7 +15,7 @@ use qvp_format::{cmds_bbox, Error, IBox, Mark, PageData, PathKind, NONE_U16};
 ///
 /// The parts go by offset, not by the kind of mark. The ink of the letter's own character
 /// is every member at the letter's own offset: the body, the dots, and a sign that is part
-/// of the code point, such as a hamzah sign, a hamzat al-wasl sign, or a dagger alif that
+/// of the code point, such as a hamzah sign, a `hamzat_al_wasl` sign, or a dagger alif that
 /// the page stores as a mark. So `Letter(w, l, BodyAndDots)` takes the same paths as
 /// `WordChars(w, at, at)` for the letter's offset `at`, when that offset passes the text
 /// check. A mark with no offset is in `Marks`.
