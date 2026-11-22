@@ -127,6 +127,10 @@ pub struct LetterHit {
 /// The letter facts of one path, inside its `PathCtx`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PathLetter {
+    /// The word of the letter or the word mark that holds this path, as the layer says it.
+    /// For a cut path, the word of its pieces' letters. `NONE` when the path has no role.
+    /// Every letter call takes a member's word from here, never from the path's own context.
+    pub word: u32,
     /// Index into `Letters::data.letters`. `NONE` when the path is no letter's member.
     pub letter: u32,
     /// The letter's index inside its word. `u16::MAX` when there is none.
@@ -153,6 +157,7 @@ impl PathLetter {
     /// A path with no letter role.
     pub(crate) fn page_path(i: u32) -> PathLetter {
         PathLetter {
+            word: NONE,
             letter: NONE,
             letter_in_word: u16::MAX,
             at: NO_AT,
@@ -274,6 +279,58 @@ fn offset(at: u16) -> u32 {
     }
 }
 
+/// True when a page path lies in the runs of two words. The page format allows it, and a
+/// letter layer could then give a path to a letter of one word while its context names the
+/// other.
+pub(crate) fn word_runs_overlap(page: &PageData) -> bool {
+    let mut owned = vec![false; page.paths.len()];
+    for w in &page.words {
+        let first = w.first_path as usize;
+        for p in first..first.saturating_add(w.n_paths as usize) {
+            match owned.get_mut(p) {
+                Some(o) if *o => return true,
+                Some(o) => *o = true,
+                // `PageData::validate` keeps every run inside the table
+                None => return true,
+            }
+        }
+    }
+    false
+}
+
+/// Refuse a layer whose counts do not fit the indices the engine keeps them in. `n_paths`,
+/// `ops` and `pts` are the page's own path count and geometry lengths. After this passes,
+/// every narrowing cast in [`Page::attach_letters`] is in range.
+pub(crate) fn check_fits(data: &LetterData, n_paths: usize, ops: usize, pts: usize) -> Result<(), Error> {
+    // a path index is a u32 and NONE is reserved
+    if n_paths as u64 + data.pieces.len() as u64 >= NONE as u64 {
+        return Err(Error::Bounds("letter layer pieces"));
+    }
+    // a letter's index in its word is a u16 and u16::MAX means none
+    // (the letters of one word are next to each other: `check_against` keeps them in word
+    // order), and a letter index is a u32 and NONE is reserved
+    if data.letters.len() as u64 >= NONE as u64 {
+        return Err(Error::Bounds("letter count"));
+    }
+    let mut run: Option<(u16, u64)> = None;
+    for l in &data.letters {
+        let n = match run {
+            Some((w, n)) if w == l.word => n + 1,
+            _ => 1,
+        };
+        if n > u16::MAX as u64 {
+            return Err(Error::Bounds("letters in a word"));
+        }
+        run = Some((l.word, n));
+    }
+    // the geometry table holds u32 offsets: a command adds at most one op and six floats
+    let cmds: u64 = data.pieces.iter().map(|p| p.cmds.len() as u64).sum();
+    if ops as u64 + cmds > u32::MAX as u64 || pts as u64 + cmds * 6 > u32::MAX as u64 {
+        return Err(Error::Bounds("letter layer geometry"));
+    }
+    Ok(())
+}
+
 impl Page {
     /// Attach a letter layer (`NNN.qvl`). The layer's pieces are appended to the path
     /// table after the page's own paths, and every rule is evaluated again.
@@ -282,12 +339,27 @@ impl Page {
     /// file that does not decode, or that belongs to another page, is refused too. On an
     /// error the page stays as it was, with the layer it had. A second attach replaces the
     /// first: its pieces are dropped and the new ones start at the same index.
+    ///
+    /// A page whose word path runs overlap takes no layer: the attach returns
+    /// `Corrupt("overlapping word runs")`, so every path of a word belongs to one word only.
+    /// A layer whose counts do not fit the engine's indices is refused too.
+    ///
+    /// An attach makes stale what was read before it: the geometry, the colours, and a
+    /// [`crate::Layout`] cloned before it, which keeps the old path groups.
     pub fn attach_letters(&mut self, bytes: &[u8]) -> Result<(), Error> {
         if bytes.len() > MAX_LETTER_LAYER_BYTES {
             return Err(Error::Bounds("letter layer size"));
         }
         let data = decode_letters(bytes)?;
         data.check_against(&self.data)?;
+        if word_runs_overlap(&self.data) {
+            return Err(Error::Corrupt("overlapping word runs"));
+        }
+        let (n, ops, pts) = match self.letters.as_deref() {
+            Some(lt) => (lt.first_piece as usize, lt.page_ops, lt.page_pts),
+            None => (self.data.paths.len(), self.geom.ops.len(), self.geom.pts.len()),
+        };
+        check_fits(&data, n, ops, pts)?;
         // nothing of the page has changed up to here, and nothing below can fail
         self.drop_letters();
         self.install_letters(data);
@@ -356,8 +428,8 @@ impl Page {
         self.letters.as_deref()?;
         let c = self.path_ctx.get(path as usize)?;
         // every path of a word has a role once the layer is checked: a member, a word
-        // mark, or a cut path
-        if c.word == NONE || c.letter.pieces.1 > 0 {
+        // mark, or a cut path. A decoration path has none.
+        if c.letter.word == NONE || c.letter.pieces.1 > 0 {
             return None;
         }
         let letter = if c.letter.letter == NONE { NONE } else { c.letter.letter_in_word as u32 };
@@ -399,7 +471,7 @@ impl Page {
             })
             .collect();
         for c in &mut self.path_ctx {
-            c.letter.at = if c.word == NONE { NO_AT } else { lt.checked(c.word, c.letter.raw_at) };
+            c.letter.at = if c.letter.word == NONE { NO_AT } else { lt.checked(c.letter.word, c.letter.raw_at) };
         }
     }
 
@@ -422,6 +494,11 @@ impl Page {
     }
 
     /// Append the pieces of a checked layer and index its letters.
+    ///
+    /// The casts to u32 and u16 below are in range: `check_against` and `check_fits` have
+    /// passed. The page's path count is the layer's `n_page_paths`, a u32. Paths, pieces and
+    /// letters stay below `NONE`, the geometry buffers below `u32::MAX`, and a word holds at
+    /// most `u16::MAX` letters, so a letter's index in its word stays below `u16::MAX`.
     fn install_letters(&mut self, data: LetterData) {
         let n = self.data.paths.len() as u32;
         let (page_ops, page_pts) = (self.geom.ops.len(), self.geom.pts.len());
@@ -500,6 +577,7 @@ impl Page {
                 w.0 = g as u32;
             }
             w.1 += 1;
+            // below u16::MAX: `check_fits` caps the letters of one word
             let in_word = (g as u32 - w.0) as u16;
             let (mut bb, mut marks, mut nth) = (IBox::EMPTY, [0u64; 4], 0u16);
             for m in &data.members[l.first_member as usize..l.first_member as usize + l.n_members as usize] {
@@ -513,10 +591,15 @@ impl Page {
                     let id = c.mark as u8 as usize;
                     marks[id / 64] |= 1 << (id % 64);
                 }
+                // the word of the letter, which a page whose runs overlap could make
+                // differ from `c.word`; `attach_letters` refuses such a page
+                c.letter.word = l.word as u32;
                 c.letter.letter = g as u32;
                 c.letter.letter_in_word = in_word;
                 c.letter.raw_at = m.at;
                 c.letter.is_body = m.is_body;
+                // a letter has at most u16::MAX members and one of them is its body, so
+                // this count stays below u16::MAX
                 c.letter.nth_letter_mark = if m.is_body {
                     u16::MAX
                 } else {
@@ -528,11 +611,16 @@ impl Page {
             letter_marks.push(marks);
         }
         for wm in &data.word_marks {
-            self.path_ctx[wm.path as usize].letter.raw_at = wm.at;
+            let c = &mut self.path_ctx[wm.path as usize].letter;
+            c.word = wm.word as u32;
+            c.raw_at = wm.at;
         }
+        // a piece's word is the word of the letter that holds it: every piece is a member
         let mut word_box: Vec<IBox> = self.data.words.iter().map(|w| w.bbox).collect();
-        for (piece, bb) in data.pieces.iter().zip(&piece_box) {
-            word_box[self.path_ctx[piece.source as usize].word as usize].union(bb);
+        for (i, (piece, bb)) in data.pieces.iter().zip(&piece_box).enumerate() {
+            let w = self.path_ctx[n as usize + i].letter.word;
+            self.path_ctx[piece.source as usize].letter.word = w;
+            word_box[w as usize].union(bb);
         }
 
         let swapped = vec![false; sources.len()];

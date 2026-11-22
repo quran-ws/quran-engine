@@ -341,7 +341,7 @@ pub(crate) fn letters_page_data() -> PageData {
 }
 
 /// The layer of [`letters_page_data`]: path 0 cut into two pieces, five letters, one word
-/// mark. It passes `check_against` on that page.
+/// mark. It passes `check_against` on that page. Piece 1 reaches past its word's box.
 pub(crate) fn letters_layer() -> LetterData {
     let letter = |word: u16, at: u16, text: char, more_at: Vec<u16>, first_member: u32, n_members: u16| LetterRec {
         word,
@@ -377,7 +377,8 @@ pub(crate) fn letters_layer() -> LetterData {
         word_marks: vec![WordMarkRec { word: 1, path: 5, at: 3 }],
         pieces: vec![
             PieceRec { source: 0, cmds: square(5000, 1000, 6000, 2000) },
-            PieceRec { source: 0, cmds: square(4000, 1000, 5000, 2000) },
+            // the lam's tail reaches one unit past its word's box, as a real piece can
+            PieceRec { source: 0, cmds: square(3900, 1000, 5000, 2000) },
         ],
     }
 }

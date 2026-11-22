@@ -787,6 +787,9 @@ impl Page {
             r.fill_rect(b.x0, b.y0, b.x1, b.y1, b.radius, b.color);
         }
         self.colors();
+        // This walks the table in order, so a piece would come after every page path. Once a
+        // cut path can draw its pieces, draw them in its place, in draw-list order, not at
+        // the end of the table.
         for (i, g) in self.geom.table.iter().enumerate() {
             let c = self.colors[i];
             // a letter layer's piece is drawn only in place of its cut path

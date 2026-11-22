@@ -1,7 +1,8 @@
 //! The letter layer: attaching it, the pieces it appends, and reading its letters.
 use super::*;
 use crate::letters::*;
-use qvp_format::letters::{encode_letters, LetterData};
+use crate::letters::{check_fits, word_runs_overlap};
+use qvp_format::letters::{encode_letters, LetterData, PieceRec};
 
 const RED: Rgba = 0xff0000ff;
 const BLUE: Rgba = 0x0000ffff;
@@ -43,7 +44,7 @@ fn attaching_appends_the_pieces() {
     let (row0, row8) = (p.geometry().table[0], p.geometry().table[8]);
     assert_eq!((row8.flags, row8.word, row8.line, row8.extra), (row0.flags, 0, 0, row0.extra));
     assert_eq!(points(&p, 8), vec![(50.0, 10.0), (60.0, 10.0), (60.0, 20.0), (50.0, 20.0)]);
-    assert_eq!(points(&p, 9), vec![(40.0, 10.0), (50.0, 10.0), (50.0, 20.0), (40.0, 20.0)]);
+    assert_eq!(points(&p, 9), vec![(39.0, 10.0), (50.0, 10.0), (50.0, 20.0), (39.0, 20.0)]);
     assert_eq!(p.path_deco(8), NONE);
     assert_eq!(p.path_deco(9), NONE);
 }
@@ -88,7 +89,7 @@ fn letters_read_back() {
     let lam = p.letter_info(1, 0).unwrap();
     assert_eq!((lam.text, lam.more_at.clone()), ('ل', vec![1]));
     let lam0 = p.letter_info(0, 1).unwrap();
-    assert_eq!((lam0.at, lam0.x0, lam0.y0, lam0.x1, lam0.y1), (2, 40.0, 10.0, 50.0, 20.0), "a piece's own box");
+    assert_eq!((lam0.at, lam0.x0, lam0.y0, lam0.x1, lam0.y1), (2, 39.0, 10.0, 50.0, 20.0), "a piece's own box");
     assert_eq!(p.letter_info(0, 2), None);
     assert_eq!(p.letter_info(3, 0), None);
 }
@@ -378,7 +379,14 @@ fn the_letter_index_holds_the_boxes_and_the_cuts() {
     assert_eq!(lt.slot_of[0], 0);
     assert!(lt.slot_of[1..].iter().all(|&s| s == NONE));
     assert_eq!(lt.piece_box[0], IBox { x0: 5000, y0: 1000, x1: 6000, y1: 2000 });
-    assert_eq!(lt.word_box[0], p.data().words[0].bbox);
+    // piece 1 reaches past its word's box: its own box and its letter's hold it, the page's
+    // word box does not, and the layer's word box does
+    let (piece, word) = (lt.piece_box[1], p.data().words[0].bbox);
+    assert_eq!(piece.x0, 3900);
+    assert!(word.x0 > piece.x0);
+    assert_eq!(lt.letter_box[1], piece);
+    assert_eq!(lt.word_box[0], IBox { x0: 3900, ..word });
+    assert_eq!(lt.word_box[1], p.data().words[1].bbox);
     assert_eq!(lt.path_box(p.data(), 9), lt.piece_box[1]);
     assert_eq!(lt.path_box(p.data(), 1), p.data().paths[1].bbox);
     assert!(lt.letter_has_mark(0, Mark::Dot) && lt.letter_has_mark(0, Mark::Fathah));
@@ -408,13 +416,177 @@ fn a_letter_part_reads_from_its_code() {
     assert!(!LetterPart::Marks.takes(true, Category::None));
 }
 
+/// A geometry row as a comparable tuple.
+type Row = (u32, u32, u32, u32, u32, u32, u32, u32);
+
+fn rows(p: &Page) -> Vec<Row> {
+    let t = &p.geometry().table;
+    t.iter().map(|g| (g.op_start, g.op_count, g.pt_start, g.pt_count, g.flags, g.word, g.line, g.extra)).collect()
+}
+
 #[test]
 fn a_page_with_no_layer_behaves_as_before() {
-    // the fixture page with no layer: same counts, colours and draw list as any page
-    let mut p = page_without_layer();
-    p.style(Selector::Word(0), Paint::new(RED));
-    assert_eq!(p.colors().len(), 8);
-    assert_eq!(p.styled_paths().len(), 3);
-    p.refresh_display();
-    assert_eq!(p.draw_revision(), 0);
+    // two pages from the same bytes: one never touches the letter API, the other had a
+    // layer refused three times
+    let bytes = encode(&letters_page_data());
+    let mut a = Page::load(&bytes).unwrap();
+    let mut b = Page::load(&bytes).unwrap();
+    let layer = layer_bytes();
+    assert!(b.attach_letters(&layer[..layer.len() - 1]).is_err());
+    assert!(b.attach_letters(&encode_letters(&LetterData { page: 2, ..letters_layer() })).is_err());
+    assert!(b.attach_letters(b"not a layer").is_err());
+    assert!(!b.has_letters());
+    assert_eq!(b.draw_revision(), 0);
+    for p in [&mut a, &mut b] {
+        p.style(Selector::Word(0), Paint::new(RED));
+        p.style(Selector::WordMark(1, 0), Paint::fade(BLUE, 400));
+        p.tick(0.0);
+        p.tick(100.0);
+    }
+    assert_eq!(rows(&a), rows(&b));
+    assert_eq!(a.geometry().ops, b.geometry().ops);
+    assert_eq!(a.geometry().pts, b.geometry().pts);
+    assert_eq!(a.colors(), b.colors());
+    assert_eq!(a.styled_paths(), b.styled_paths());
+    assert_eq!(a.hit_test_exact(55.0, 15.0), b.hit_test_exact(55.0, 15.0));
+    assert_eq!(a.hit_test_exact(15.0, 55.0), b.hit_test_exact(15.0, 55.0));
+    let printed = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    let reflowed = LayoutSpec { reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }), ..printed };
+    for spec in [printed, reflowed] {
+        let (la, lb) = (a.layout(&spec).clone(), b.layout(&spec).clone());
+        assert_eq!(la, lb);
+        assert_eq!(&la.path_group[..], &lb.path_group[..]);
+        assert_eq!(a.layout_draw_list(), b.layout_draw_list());
+        assert_eq!(a.layout_draw_list_in(Some((0.0, 60.0))), b.layout_draw_list_in(Some((0.0, 60.0))));
+        assert_eq!(a.hit_test_exact_view(110.0, 30.0), b.hit_test_exact_view(110.0, 30.0));
+    }
+    assert_eq!(b.colors().len(), 8);
+    assert_eq!(b.draw_revision(), 0);
+}
+
+#[test]
+fn a_page_whose_word_runs_overlap_takes_no_layer() {
+    // word 1 starts at path 2, so path 2 sits in the runs of words 0 and 1
+    let mut data = letters_page_data();
+    data.words[1].first_path = 2;
+    data.words[1].n_paths = 4;
+    let mut p = Page::from_data(data).unwrap();
+    assert!(letters_layer().check_against(p.data()).is_ok(), "the format allows it");
+    assert!(word_runs_overlap(p.data()));
+    assert_eq!(p.attach_letters(&layer_bytes()), Err(Error::Corrupt("overlapping word runs")));
+    assert!(!p.has_letters());
+    assert_eq!(p.geometry().table.len(), 8);
+    assert!(!word_runs_overlap(&letters_page_data()));
+}
+
+#[test]
+fn a_members_word_is_its_letters_word() {
+    let p = letters_page();
+    let word = |i: usize| p.path_ctx[i].letter.word;
+    // members, a word mark, a cut path and its pieces each carry the layer's word
+    assert_eq!((0..10).map(word).collect::<Vec<_>>(), vec![0, 0, 0, 1, 1, 1, 2, 2, 0, 0]);
+    let lt = p.letters.as_deref().unwrap();
+    for (w, &(first, n)) in lt.word_letters.iter().enumerate() {
+        for g in first..first + n {
+            let l = &lt.data.letters[g as usize];
+            assert_eq!(l.word as usize, w);
+            for m in p.letter_members(w as u32, g - first) {
+                assert_eq!(word(m.path as usize), w as u32);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_layer_whose_counts_do_not_fit_is_refused() {
+    let base = letters_layer();
+    assert_eq!(check_fits(&base, 8, 0, 0), Ok(()));
+    let one_word = |n: usize| LetterData {
+        letters: (0..n)
+            .map(|i| qvp_format::letters::LetterRec {
+                word: 0,
+                at: i as u16,
+                text: 'ب',
+                more_at: vec![],
+                first_member: 0,
+                n_members: 0,
+            })
+            .collect(),
+        ..letters_layer()
+    };
+    assert_eq!(check_fits(&one_word(u16::MAX as usize), 8, 0, 0), Ok(()));
+    assert_eq!(check_fits(&one_word(u16::MAX as usize + 1), 8, 0, 0), Err(Error::Bounds("letters in a word")));
+    assert_eq!(check_fits(&base, NONE as usize - 2, 0, 0), Err(Error::Bounds("letter layer pieces")));
+    assert_eq!(check_fits(&base, 8, u32::MAX as usize - 5, 0), Err(Error::Bounds("letter layer geometry")));
+    assert_eq!(check_fits(&base, 8, 0, u32::MAX as usize - 5), Err(Error::Bounds("letter layer geometry")));
+}
+
+#[test]
+fn a_second_attach_can_add_pieces() {
+    // the lam of word 1 (path 3) is cut too: three pieces in place of two
+    let mut more = letters_layer();
+    more.members[4].path = qvp_format::letters::MemberPath::Piece(2);
+    more.pieces.push(PieceRec { source: 3, cmds: square(2000, 1000, 3000, 2000) });
+    let mut p = letters_page();
+    p.style(Selector::Word(1), Paint::new(RED));
+    p.attach_letters(&encode_letters(&more)).unwrap();
+    assert_eq!(p.geometry().table.len(), 11);
+    assert_eq!(p.colors().len(), 11);
+    assert_eq!(p.colors()[10], RED, "the new piece takes its word's rule");
+    assert_eq!(points(&p, 10), vec![(20.0, 10.0), (30.0, 10.0), (30.0, 20.0), (20.0, 20.0)]);
+    assert_eq!(p.path_letter(3), None);
+    assert_eq!(p.path_letter(10), Some((0, 0)));
+    assert_eq!(
+        p.letter_members(1, 0)[0],
+        LetterMember { path: 10, at: 0, mark: Mark::None, is_body: true, is_cut: true }
+    );
+    assert_eq!(p.letters.as_deref().unwrap().sources, vec![(0, 8, 2), (3, 10, 1)]);
+    assert_eq!(p.path_deco(10), NONE);
+    // and back to two
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(p.geometry().table.len(), 10);
+    assert_eq!(p.path_letter(3), Some((0, 0)));
+    assert_eq!(p.path_ctx[3].letter.pieces, (0, 0));
+}
+
+#[test]
+fn a_letter_drawn_off_the_page_has_no_ink() {
+    // a page 45 units tall leaves word 2 (y 46 to 60) outside the viewBox, as p17's running
+    // head is: its paths have no outline, and neither does a piece cut there
+    let mut data = letters_page_data();
+    data.header.height = 45.0;
+    let mut p = Page::from_data(data).unwrap();
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert!(!p.letter_info(2, 0).unwrap().has_ink);
+    assert!(p.letter_info(0, 0).unwrap().has_ink);
+}
+
+#[test]
+fn a_decoration_keeps_its_own_group_beside_the_pieces() {
+    let mut data = letters_page_data();
+    let (path, bbox) = add_path(&mut data, &square(7000, 5000, 8000, 6000), PathKind::AyahMarkOrnament);
+    data.decorations.push(DecoRec {
+        kind: DecoKind::Other,
+        surah: 1,
+        ayah: 0,
+        text: NONE_U16,
+        first_path: path,
+        n_paths: 1,
+        line: 1,
+        bbox,
+    });
+    let mut p = Page::from_data(data).unwrap();
+    p.attach_letters(&encode_letters(&LetterData { n_page_paths: 9, ..letters_layer() })).unwrap();
+    assert_eq!(p.geometry().table.len(), 11);
+    assert_eq!(p.path_deco(8), 0);
+    assert_eq!(p.path_letter(8), None, "a decoration path has no letter");
+    let groups = crate::reflow::path_groups(&p);
+    assert_eq!(&groups[..], &[0, 0, 0, 1, 1, 1, 2, 2, 3, 0, 0], "words, the decoration after them, then the pieces");
+    let spec = LayoutSpec {
+        viewport_w: 200.0,
+        viewport_h: 400.0,
+        reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+        ..Default::default()
+    };
+    assert_eq!(&p.layout(&spec).path_group[..], &groups[..]);
 }
