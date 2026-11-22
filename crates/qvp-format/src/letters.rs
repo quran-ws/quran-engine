@@ -12,7 +12,7 @@
 
 mod pieces;
 
-use crate::{read_varint, unzigzag, write_varint, zigzag, Cmd, Error, PageData, PathKind, COORD_LIMIT, PF_GLYPH};
+use crate::{unzigzag, write_varint, zigzag, Cmd, Error, PageData, PathKind, COORD_LIMIT, PF_GLYPH};
 use pieces::{decode_pieces, encode_pieces, Reader, Streams, N_STREAMS};
 
 pub const LETTERS_MAGIC: &[u8; 4] = b"QVL1";
@@ -25,6 +25,8 @@ pub const NO_AT: u16 = 0xFFFF;
 const HEADER_LEN: usize = 64;
 /// Where the page digest sits in the header.
 const DIGEST_AT: usize = 16;
+/// Where the ten section lengths start in the header.
+const LENGTHS_AT: usize = 24;
 /// The tables section, then the geometry sections.
 const N_SECTIONS: usize = 1 + N_STREAMS;
 
@@ -174,6 +176,26 @@ fn letter_at_of_members(letters: &[LetterRec], n_members: usize) -> Vec<u16> {
     }
     out.resize(n_members, NO_AT);
     out
+}
+
+/// A varint of at most 32 bits: at most five bytes, the fifth at most 0x0F. A longer
+/// varint, or a fifth byte with more bits, is an error, so two different byte runs never
+/// read as one value by losing bits. A varint with more bytes than it needs is accepted,
+/// as QVP1 accepts it.
+fn read_varint(b: &[u8], pos: &mut usize) -> Result<u32, Error> {
+    let mut v: u32 = 0;
+    for i in 0..5 {
+        let x = *b.get(*pos).ok_or(Error::Truncated("varint"))?;
+        *pos += 1;
+        if i == 4 && x > 0x0F {
+            break;
+        }
+        v |= ((x & 0x7F) as u32) << (7 * i);
+        if x & 0x80 == 0 {
+            return Ok(v);
+        }
+    }
+    Err(Error::Corrupt("varint too long"))
 }
 
 /// A reader over one section. It cannot read past the section's end.
@@ -440,7 +462,7 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
     let mut sec: [&[u8]; N_SECTIONS] = [&[]; N_SECTIONS];
     let mut at = HEADER_LEN;
     for (i, s) in sec.iter_mut().enumerate() {
-        let end = at.checked_add(u32a(24 + i * 4) as usize).ok_or(Error::Truncated("section"))?;
+        let end = at.checked_add(u32a(LENGTHS_AT + i * 4) as usize).ok_or(Error::Truncated("section"))?;
         *s = b.get(at..end).ok_or(Error::Truncated("section"))?;
         at = end;
     }
@@ -480,12 +502,18 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
     }
     let mut alphabet = Vec::with_capacity(n_alpha);
     let mut code = 0u32;
-    for _ in 0..n_alpha {
-        code = code.checked_add(t.vi("alphabet")?).ok_or(Error::Corrupt("alphabet"))?;
+    for i in 0..n_alpha {
+        // The characters rise: each after the first is at least one above the one before.
+        let d = t.vi("alphabet")?;
+        if i > 0 && d == 0 {
+            return Err(Error::Corrupt("alphabet"));
+        }
+        code = code.checked_add(d).ok_or(Error::Corrupt("alphabet"))?;
         alphabet.push(char::from_u32(code).ok_or(Error::Corrupt("alphabet"))?);
     }
 
     let mut letters = Vec::with_capacity(n_letters);
+    let mut used = vec![false; n_alpha];
     let (mut pw, mut prev_at) = (0u16, None::<u16>);
     let mut first_member: u64 = 0;
     for i in 0..n_letters {
@@ -495,6 +523,10 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
             (true, true) => return Err(Error::Corrupt("letter header")),
             (true, false) => {
                 t.step_u16(&mut word, "letter word")?;
+                // a delta of 0 or 1 has its own code
+                if word == pw || Some(word) == pw.checked_add(1) {
+                    return Err(Error::Corrupt("letter header"));
+                }
             }
             (false, true) => word = pw.checked_add(1).ok_or(Error::Corrupt("letter word"))?,
             (false, false) => {}
@@ -506,14 +538,26 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
             prev_at = None;
         }
         pw = word;
+        // A stored member count is the count itself, 8 and above: 1 to 7 have their own
+        // codes, and a letter with no member has no body.
         let n = match h & LH_MEMBERS {
-            LH_MEMBERS => t.u16("letter members")?,
+            LH_MEMBERS => t.u16("letter members").and_then(|n| match n {
+                0..=7 => Err(Error::Corrupt("letter members")),
+                n => Ok(n),
+            })?,
             c => c as u16 + 1,
         };
         // A letter always has an offset: `NO_AT` is outside the field, as it is for a
         // word mark's stored `at + 1`.
         let at = match (h >> LH_AT_SHIFT) & 3 {
-            3 => t.u16("letter at")?,
+            3 => {
+                let at = t.u16("letter at")?;
+                // an `at` that a code of 0 to 2 gives is not stored
+                if (0..=2).contains(&prev_at.map_or(at as i64, |p| at as i64 - p as i64 - 1)) {
+                    return Err(Error::Corrupt("letter at"));
+                }
+                at
+            }
             c => match prev_at {
                 Some(p) => p.checked_add(1 + c as u16).ok_or(Error::Corrupt("letter at"))?,
                 None => c as u16,
@@ -526,7 +570,10 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
         let mut more_at = Vec::new();
         if h & LH_MORE_AT != 0 {
             let n_more = t.vi("more_at")? as usize;
-            // Each offset takes at least one byte of what is left.
+            // Bit 4 means at least one offset. Each takes at least one byte of what is left.
+            if n_more == 0 {
+                return Err(Error::Corrupt("more_at"));
+            }
             if n_more > t.left() {
                 return Err(Error::Truncated("more_at"));
             }
@@ -535,7 +582,9 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
                 more_at.push(t.u16("more_at")?);
             }
         }
-        let text = *alphabet.get(t.vi("letter text")? as usize).ok_or(Error::Bounds("letter text"))?;
+        let ti = t.vi("letter text")? as usize;
+        let text = *alphabet.get(ti).ok_or(Error::Bounds("letter text"))?;
+        used[ti] = true;
         // At most n_letters × 65535: it fits a u64 and, below n_members, a u32.
         let first = u32::try_from(first_member).map_err(|_| Error::Corrupt("member count"))?;
         letters.push(LetterRec { word, at, text, more_at, first_member: first, n_members: n });
@@ -543,6 +592,10 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
     }
     if first_member != n_members as u64 {
         return Err(Error::Corrupt("member count"));
+    }
+    // The alphabet holds the characters of the letters and no other.
+    if used.iter().any(|u| !u) {
+        return Err(Error::Corrupt("alphabet"));
     }
 
     // Members: the flags column, then the path column, then the stored offsets.
@@ -573,11 +626,16 @@ pub fn decode_letters(b: &[u8], page: &PageData) -> Result<LetterData, Error> {
     }
     let letter_at = letter_at_of_members(&letters, n_members);
     for ((m, f), la) in members.iter_mut().zip(flags).zip(letter_at) {
-        m.at = match (f >> MF_AT_SHIFT) & 7 {
+        let code = (f >> MF_AT_SHIFT) & 7;
+        m.at = match code {
             AT_DEFAULT => default_at(m.is_body, la),
             AT_STORED => t.u16("member at")?,
             c => la.checked_add(c as u16 - 1).ok_or(Error::Corrupt("member at"))?,
         };
+        // Each `at` has one code: the one the writer gives it.
+        if member_at_code(m, la) != code {
+            return Err(Error::Corrupt("member at"));
+        }
     }
 
     let mut word_marks = Vec::with_capacity(n_word_marks);
@@ -826,3 +884,5 @@ fn cmd_coords(c: &Cmd) -> ([i32; 6], usize) {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod vectors;

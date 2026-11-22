@@ -10,8 +10,9 @@
 //! same commands. `docs/FORMAT.md` specifies every operation, the order of the state
 //! changes, and the arithmetic.
 
+use super::read_varint;
 use super::PieceRec;
-use crate::{read_varint, unzigzag, write_varint, zigzag, Cmd, Error, PageData, COORD_LIMIT, PF_GLYPH};
+use crate::{unzigzag, write_varint, zigzag, Cmd, Error, PageData, COORD_LIMIT, PF_GLYPH};
 // The opcodes of a page path's run in a decoded page (`PageData::ops`).
 use crate::{OP_CLOSE as V1_CLOSE, OP_CUBIC as V1_CUBIC, OP_LINE as V1_LINE, OP_MOVE as V1_MOVE, OP_QUAD as V1_QUAD};
 use std::collections::HashMap;
@@ -239,10 +240,16 @@ impl Group {
                 s.sub_len = n;
             }
         };
+        // A source that has commands starts with a move: a command before the first move
+        // would have no start point.
+        if ops.first().is_some_and(|&op| op != V1_MOVE) {
+            return Err(Error::Corrupt("source start"));
+        }
         let (mut pos, mut at) = (0usize, (p.ox, p.oy));
         let mut pt = |pos: &mut usize| -> Result<P, Error> {
-            let dx = unzigzag(read_varint(ops, pos)?);
-            let dy = unzigzag(read_varint(ops, pos)?);
+            // the page's own opcode run, read as QVP1 reads it
+            let dx = unzigzag(crate::read_varint(ops, pos)?);
+            let dy = unzigzag(crate::read_varint(ops, pos)?);
             at.0 = at.0.checked_add(dx).ok_or(Error::Corrupt("coordinate overflow"))?;
             at.1 = at.1.checked_add(dy).ok_or(Error::Corrupt("coordinate overflow"))?;
             if !in_envelope(at) {
@@ -374,7 +381,11 @@ impl<'a> Reader<'a> {
             0 => 0,
             1 => 1,
             2 => -1,
-            _ => self.zv(CORR_ESC, "corrections")?,
+            // a large correction is one that codes 0 to 2 cannot give
+            _ => match self.zv(CORR_ESC, "corrections")? {
+                -1..=1 => return Err(Error::Corrupt("corrections")),
+                v => v,
+            },
         })
     }
     /// A point from the delta streams, relative to `from`.

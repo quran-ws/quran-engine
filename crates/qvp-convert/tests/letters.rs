@@ -80,12 +80,14 @@ fn check(page: &str) -> Result<Counts, String> {
         return Err(format!("page {page}: warnings: {:?}", lp.warnings));
     }
     // The codec gives every piece back bit for bit: it codes the pieces against the page.
-    let again = encode_letters(d, &lp.page).map_err(|e| format!("page {page}: encode: {e:?}"))?;
-    if again != lp.bytes {
-        return Err(format!("page {page}: a second encoding gives other bytes"));
-    }
-    if decode_letters(&lp.bytes, &lp.page).as_ref() != Ok(d) {
+    // And the file is in its one coding: encoding the decoded layer again gives its bytes.
+    let decoded = decode_letters(&lp.bytes, &lp.page).map_err(|e| format!("page {page}: decode: {e:?}"))?;
+    if &decoded != d {
         return Err(format!("page {page}: the layer does not round-trip"));
+    }
+    let again = encode_letters(&decoded, &lp.page).map_err(|e| format!("page {page}: encode: {e:?}"))?;
+    if again != lp.bytes {
+        return Err(format!("page {page}: encoding the decoded layer gives other bytes"));
     }
     // The header names the page file that `batch` writes, and that file reads back to the
     // same bytes, so a page loaded from it has the digest the layer names.

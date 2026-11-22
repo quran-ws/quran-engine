@@ -1011,3 +1011,80 @@ fn check_against_rejects_a_path_past_the_page() {
     d.pieces[1].source = 6;
     assert_eq!(d.check_against(&p), Err(Error::Bounds("piece source")));
 }
+
+/// Replace `remove` bytes at offset `at` of the tables section with `insert`, and fix the
+/// section's length.
+fn splice_tables(b: &[u8], at: usize, remove: usize, insert: &[u8]) -> Vec<u8> {
+    let t = sections(b)[0].0 + at;
+    let mut out = b[..t].to_vec();
+    out.extend_from_slice(insert);
+    out.extend_from_slice(&b[t + remove..]);
+    let f = LENGTHS_AT;
+    let len = header_u32(b, f) as usize + insert.len() - remove;
+    out[f..f + 4].copy_from_slice(&(len as u32).to_le_bytes());
+    out
+}
+
+/// The tables of `sample`, byte by byte: counts 0 to 3; the alphabet 4 to 7 (2, then 0x628
+/// and 0x1C); letters 8 and 9 (header 0x01, text 0), 10 and 11 (0x21, 1), 12 to 15 (0x18,
+/// one `more_at` of 3, text 1); member flags 16 to 20; member paths 21 to 25; word marks
+/// 26 to 31; the group 32 to 34; the operation counts 35 and 36.
+#[test]
+fn rejects_tables_that_are_not_canonical() {
+    let b = enc(&sample());
+    assert_eq!(&b[sections(&b)[0].0..][..21], &[3, 5, 2, 2, 2, 168, 12, 28, 1, 0, 33, 1, 24, 1, 3, 1, 1, 8, 3, 3, 1]);
+    let cases: [(usize, usize, &[u8], &str); 9] = [
+        // two equal characters
+        (7, 1, &[0], "alphabet"),
+        // a character no letter uses
+        (4, 4, &[3, 168, 12, 28, 1], "alphabet"),
+        // the next word as a stored delta of 1
+        (12, 1, &[0x90, 2], "letter header"),
+        // the same word as a stored delta of 0
+        (10, 1, &[0xA1, 0], "letter header"),
+        // a stored member count of 2, and of 0
+        (8, 1, &[0x07, 2], "letter members"),
+        (8, 1, &[0x07, 0], "letter members"),
+        // a stored `at` that code 1 gives
+        (10, 1, &[0x61, 2], "letter at"),
+        // bit 4 with no offset
+        (13, 2, &[0], "more_at"),
+        // a body member's own `at`, stored
+        (16, 1, &[0x1D], "member at"),
+    ];
+    for (at, remove, insert, what) in cases {
+        let mut patched = splice_tables(&b, at, remove, insert);
+        if what == "member at" {
+            // the stored value, at the start of the `at` column
+            patched = splice_tables(&patched, 26, 0, &[0]);
+        }
+        assert_eq!(dec(&patched), Err(Error::Corrupt(what)), "{what}: {insert:?}");
+    }
+}
+
+#[test]
+fn a_varint_holds_32_bits_at_most() {
+    let b = enc(&sample());
+    // the letter count 3 in five bytes: accepted, as QVP1 accepts it
+    let long = splice_tables(&b, 0, 1, &[0x83, 0x80, 0x80, 0x80, 0x00]);
+    assert_eq!(dec(&long), Ok(sample()));
+    // a fifth byte with bits above the 32nd, and a sixth byte
+    let over = splice_tables(&b, 0, 1, &[0x83, 0x80, 0x80, 0x80, 0x10]);
+    assert_eq!(dec(&over), Err(Error::Corrupt("varint too long")));
+    let six = splice_tables(&b, 0, 1, &[0x83, 0x80, 0x80, 0x80, 0x80, 0x00]);
+    assert_eq!(dec(&six), Err(Error::Corrupt("varint too long")));
+}
+
+#[test]
+fn rejects_a_source_that_starts_without_a_move() {
+    let bytes = enc(&sample());
+    let mut page = sample_page();
+    // path 2 drawn as a line first, then the lens
+    let off = page.ops.len() as u32;
+    let mut cmds = vec![Cmd::LineTo(5, 5)];
+    cmds.extend(page.path_cmds(2).unwrap());
+    encode_cmds(&cmds, 0, 0, &mut page.ops);
+    page.paths[2].op_off = off;
+    page.paths[2].op_len = page.ops.len() as u32 - off;
+    assert_eq!(decode_letters(&bytes, &page), Err(Error::Corrupt("source start")));
+}

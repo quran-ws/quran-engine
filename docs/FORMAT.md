@@ -291,6 +291,11 @@ The sections are: 1 tables, 2 operations, 3 run lengths, 4 segments, 5 back refe
 An offset (`at`) is a code-point offset in the word's `qpc` text. `0xFFFF` means that the
 source gives no offset.
 
+A varint in a letter layer holds at most 32 bits: it has at most five bytes, and a fifth
+byte is at most `0x0F`. A reader rejects a longer varint. It accepts a varint with more
+bytes than its value needs, as QVP1 does. The page's own opcode runs are QVP1 data, and a
+reader reads them as QVP1 does.
+
 ### The page digest
 
 The page digest is 64-bit FNV-1a over every byte of the page file (`NNN.qvp`): start with
@@ -315,28 +320,31 @@ words sidecar attached before the layer does not change it.
 The section starts with four varint counts: letters, members, word marks and pieces.
 
 **Alphabet.** A varint count, then one varint per character: the character's code point
-minus the code point of the character before it (minus 0 for the first). The writer lists
-each character of the page's letters once, in code-point order.
+minus the code point of the character before it (minus 0 for the first). The alphabet
+holds each character of the page's letters once, in code-point order: each delta after the
+first is at least 1, and each character is the text of at least one letter.
 
 **Letters**, one record each, in word order and then in the order of the word's spelling.
 A record starts with a header byte:
 
 | bits | field |
 |---|---|
-| 0 to 2 | the member count minus one, for 1 to 7 members. 7: the count is stored. |
+| 0 to 2 | the member count minus one, for 1 to 7 members. 7: the count is stored, and it is 8 or more. |
 | 3 | the letter is in the word after the previous letter's word |
 | 4 | `more_at` follows |
 | 5 and 6 | `at` code: 0 to 2, or 3 when `at` is stored |
 | 7 | a word delta is stored |
 
 Bits 3 and 7 are never both set. The first letter's previous word is 0. With neither
-bit, the letter is in the previous letter's word. The fields that follow the header byte,
+bit, the letter is in the previous letter's word. A stored word delta is neither 0 nor 1,
+which have their own codes. A stored `at` is one that codes 0 to 2 cannot give. With bit
+4, at least one `more_at` offset follows. The fields that follow the header byte,
 in order, each only when its bit or code asks for it:
 
 | field | coding |
 |---|---|
 | word delta (bit 7) | zigzag delta from the previous letter's word |
-| member count (code 7) | varint |
+| member count (code 7) | varint: the member count itself |
 | `at` (code 3) | varint |
 | `more_at` (bit 4) | a varint count, then one varint per offset: other characters that the letter's body also draws |
 | text | varint: an index into the alphabet |
@@ -356,7 +364,9 @@ mark of it.
 
 A member's `at` code is 0 for the default `at`: its letter's `at` for a body member, and
 `0xFFFF` for a mark. A code `c` from 1 to 5 gives the letter's `at + c - 1`. Code 7 means
-that `at` is stored. Code 6 is not used. The writer uses codes 1 to 5 for marks only.
+that `at` is stored. Code 6 is not used. Each `at` has exactly one code: 0 when the default
+gives it, else 1 to 5 for a mark whose `at` is its letter's `at` plus 0 to 4, else 7. So a
+body member never has codes 1 to 5, and a code that gives `0xFFFF` for a mark is code 0.
 
 A member's path is a delta in wrapping 32-bit arithmetic. A page path is a delta from the
 previous page member's path (from 0 for the first). A piece is a delta from the piece
@@ -367,8 +377,8 @@ member order, so most of these deltas are 0.
 
 | field | coding |
 |---|---|
-| word | zigzag delta from the previous word mark's word |
-| path | zigzag delta from the previous word mark's path, in wrapping 32-bit arithmetic |
+| word | zigzag delta from the previous word mark's word, from 0 for the first |
+| path | zigzag delta from the previous word mark's path, from 0 for the first, in wrapping 32-bit arithmetic |
 | `at` | `opt`: `at + 1`, 0 for `0xFFFF` |
 
 **Piece groups.** A group is the pieces of one source, next to each other in the pieces
@@ -380,6 +390,13 @@ of its source path. The file does not store it.
 
 **Operation counts.** One varint per piece, in piece order: the number of operations in
 the piece.
+
+**One coding for each table.** The rules above give each table one coding, and a reader
+rejects every other: a stored value that a short code gives, an alphabet out of order or
+with a character no letter uses, a stored count below 8. The pieces have no such rule: a
+writer can code one piece with other operations, and a reader decodes each correctly. The
+reference writer is deterministic, so it writes the same bytes again for a layer that it
+decoded from its own file.
 
 ### Sections 2 to 10: the pieces
 
@@ -400,7 +417,9 @@ operations below gives. A value from section 4 or 5 is read where the operation 
 #### The segments of a source
 
 A reader decodes the source path's commands from the page (`PageData::ops`, at the path's
-own origin) and lists its segments:
+own origin) and lists its segments. A source that has commands starts with a move: QVP1
+does not require it, the converter never writes a path that does not, and a reader
+rejects such a source as a source, because its first command would have no start point.
 
 1. Each line, quadratic curve or cubic curve is one segment. Its start is the current
    point.
@@ -433,7 +452,8 @@ start of each group, it lists the source's segments and starts three things empt
 last. A back reference `b` names entry `n − 1 − b` of a list of `n` entries.
 
 The **current point** starts at 0,0 for the first piece of the file. At the start of each
-later piece, it is the first point of the piece before it, also across groups. Each piece
+later piece, it is the point of the first move of the piece before it, also across
+groups. This is the piece's first command, not the start of its last subpath. Each piece
 also has a **first point**, the start of its current subpath, and an **open** flag, which
 starts false.
 
@@ -510,8 +530,9 @@ The second piece at a cut usually draws the cut line of the first piece backward
 A part is the piece of one segment from a start value `u0` to an end value `u1`.
 
 **The start.** Codes 13 to 15 store the start: a segment index `s` from section 4, then
-`v0` from section 6. The reader adds `(current point, s, v0)` to the registry. Codes 2 to 4
-take the start from the current point:
+`v0` from section 6. The reader adds `(current point, s, v0)` to the registry when the
+operation ends (see below), not when it reads `v0`. Codes 2 to 4 take the start from the
+current point:
 
 1. If segments start at the current point, the part's segment is one of them: the only
    one, or the one at a position read from section 4. `u0` is 0.
@@ -530,11 +551,13 @@ take the start from the current point:
 **The points.** The part has the degree of its segment. Its start is the current point. For
 `i` from 1 to the degree, its point `i` is the segment's part point `i` (see "Splitting a
 segment") plus two corrections, x then y. The end point of a part to end or to registry is
-the given point, and reads no correction. After the points, a part to new adds
-`(end point, s, v1)` to the registry.
+the given point, and reads no correction.
 
-So the registry gets its entries in this order inside one operation: a stored start first,
-then a new end.
+**The registry, at the end of the operation.** A part reads every value first: the start,
+the end's value or back reference, then the corrections. Only then does it add its
+entries, in this order: the stored start `(current point, s, v0)` of codes 13 to 15, then
+the new end `(end point, s, v1)` of codes 3 and 14. So a back reference of code 15 never
+names the entry of its own stored start.
 
 #### Splitting a segment
 
@@ -601,11 +624,27 @@ The file holds one group with source 0 and the operation counts 4 and 5:
 | right | 5 reverse | back 1: reverse list entry 0 | |
 | right | end of piece | the reader closes, at the first point | |
 
-The sections of this file: operations `37 2C 28 41 05` in hexadecimal, where the high half of
-the last byte is unused, run lengths `00`, segments `00 02`, back references `01 00 01`, splits
+The page of the example is page 1, with `quant` 100, one word that holds path 0, and path
+0, a body path with flags 0 drawn by the commands above. The layer has two letters, ل at
+offset 0 and ا at offset 1, each with one body member: piece 0 and piece 1.
+
+The header holds `quant` 100, page 1, one word, one path, the page digest
+`0xadb491ad09712a0c`, and the section lengths 21, 5, 1, 2, 3, 5, 4, 0, 0 and 0. The sections
+of this file: operations `37 2C 28 41 05` in hexadecimal, where the high half of the last
+byte is unused, run lengths `00`, segments `00 02`, back references `01 00 01`, splits
 `80 80 01 80 40`, corrections four bytes of 0, and no deltas. The tables section is
 `02 02 00 02 02 A7 0C 1D 00 01 00 00 03 03 00 00 01 00 01 04 05`. The whole file is 105
-bytes.
+bytes:
+
+```
+51564c310100640001000100010000000c2a7109ad91b4ad1500000005000000
+0100000002000000030000000500000004000000000000000000000000000000
+0202000202a70c1d00010000030300000100010405372c284105000002010001
+808001804000000000
+```
+
+`crates/qvp-format/src/letters/vectors.rs` holds this file and eleven more, each with the
+exact commands it decodes to.
 
 ### What a reader rejects
 
@@ -619,7 +658,12 @@ The reference decoder returns an error for each of these, and a writer keeps the
 - A count that its section cannot hold. A record takes at least 2 bytes (letter), 2
   (member), 3 (word mark) and 1 (piece), and a group 2. An alphabet character and a
   `more_at` offset each take at least 1 byte.
+- A varint of more than five bytes, or a fifth byte above `0x0F`.
 - A delta-coded field outside its type, or a varint that does not fit a u16 field.
+- A table that is not in its one coding: an alphabet delta of 0 after the first, an
+  alphabet character that no letter uses, a stored word delta of 0 or 1, a stored member
+  count below 8, a stored letter `at` that codes 0 to 2 give, bit 4 with a `more_at` count
+  of 0, or a member `at` code other than the one its `at` has.
 - An alphabet code point that is not a Unicode scalar value, or a letter text index past
   the alphabet.
 - A letter header with bits 3 and 7 set.
@@ -639,7 +683,9 @@ The reference decoder returns an error for each of these, and a writer keeps the
   operations section longer than they need. A set bit in the unused half of the last
   operation byte, or in the unused codes of the last correction byte.
 - A source that is a glyph instance (flag `PF_GLYPH`), a source whose commands do not
-  decode, or a source point with an absolute value of 2^30 or more.
+  decode, a source whose first command is not a move, or a source point with an absolute
+  value of 2^30 or more.
+- A large correction of −1, 0 or +1.
 - An escape sub-code above 4. A segment index past the source's segments, a position past
   the segments at the current point, or a back reference past its list.
 - A run where no segment starts at the current point, or a run longer than the budget.
