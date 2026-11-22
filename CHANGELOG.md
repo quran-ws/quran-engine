@@ -177,6 +177,18 @@ All notable changes to the engine and its packages. The format follows
   v2.0.0. An engine that does not know the field ignores it.
 
 ### Changed
+- **Breaking.** Rust: the letter layer adds variants to two public enums and a field to one
+  public struct, so the next release is a minor version, 0.9.0. A downstream crate changes
+  these:
+  - `qvp_core::Selector` has five new variants: `Letter`, `LetterMark`, `LetterMarkNamed`,
+    `WordChars` and `Letters`. A `match` that lists every variant needs arms for them, or
+    a `_` arm.
+  - `qvp_format::Error` has four new variants: `NotLetterLayer`, `LetterLayerVersion`,
+    `OtherPage` and `Damaged`. A `match` that lists every variant needs arms for them, or a
+    `_` arm.
+  - `qvp_convert::WordText` has a new public field, `w: Option<u32>`, the word's number in
+    the `quran-text` release. A struct literal of `WordText` needs `w: None`, or
+    `..Default::default()`.
 - React Native: `scripts/gen-rn-enums.py` also writes `ios/QvpRnCodes.swift`, and
   `scripts/check-parity.py` checks it. `scripts/sync-example-data.sh react-native` copies
   the pages to the iOS example too. The npm release job waits until the GitHub release serves
