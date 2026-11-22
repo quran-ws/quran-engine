@@ -41,9 +41,9 @@ final class QvpLettersTests: XCTestCase {
         return QvpLayoutSpec(viewportW: f("viewportW"), viewportH: f("viewportH"), padTop: f("padTop"), padBottom: f("padBottom"),
                              padLeft: f("padLeft"), padRight: f("padRight"), reflow: reflow)
     }
-    private func selector(_ v: Any?) -> Selector {
+    private func selector(_ v: Any?) -> QvpKit.Selector {
         let s = v as! [String: Any]
-        return Selector(int(s["selector"]), int(s["a"]), int(s["b"]), int(s["c"]))
+        return QvpKit.Selector(int(s["selector"]), int(s["a"]), int(s["b"]), int(s["c"]))
     }
     private func query(_ v: Any?) -> QvpLetterQuery {
         let q = v as! [String: Any], s = q["scope"] as! [String: Any]
