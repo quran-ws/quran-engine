@@ -113,19 +113,27 @@ address a letter, its marks or a range of characters.
 ```kotlin
 if (!page.attachLetters(assets.open("pages/003.qvl").readBytes())) error("not this page's layer")
 // the pieces come after the page's own paths: nPaths grew, and no index below it changed
-val lam = page.letters(4).first { it.character == "ل" }
+val lam = page.letters(4).first { it.text == "ل" }   // text is the character, codePoint the number
 page.style(Selector.letter(4, lam.index), QvpColor.parse("#c0392b"))
 page.style(Selector.letterMarkNamed(4, lam.index, "shaddah"), QvpColor.parse("#1a73e8"))
 page.style(Selector.wordChars(4, 0, 2), QvpColor.parse("#2e7d32"))           // qpc offsets 0 to 2
-page.styleLetters(QvpLetterQuery.of(letter = "ن", mark = "shaddah"), QvpColor.parse("#8e44ad"))
-val hit = page.hitTestLetterView(x, y)       // the letter or mark under a tap, or null
+page.styleLetters(QvpLetterQuery.of(text = "ن", mark = "shaddah"), QvpColor.parse("#8e44ad"))
+val hit = page.hitTestLetterView(x, y)       // the letter or mark under a tap, or null: mark and markName
 ```
 
 `QvpPageView` draws a page with a layer with no extra work. A cut path draws as its pieces
 while its letters differ in colour. A host that draws the page itself reads, each frame:
 `tick`, then `colors()` or `styledPaths()`, then `layoutDrawRevision()`, then
-`layoutDrawList()` when the revision, the layout or the band changed. After `attachLetters`,
-read `nPaths`, `ops`, `pts`, `table` and `colors()` again.
+`layoutDrawList()` when the revision, the layout or the band changed.
+
+After a successful `attachLetters`, the arrays that you got from the page before it are stale:
+`ops`, `pts`, `table`, `colors()`, the paths from `buildPaths()` and every array that you sized
+from `nPaths`. Read them again.
+
+A query's `text` is one character, or "" for any letter. A text of more than one character
+throws an `IllegalArgumentException`. `QvpLetterQuery(codePoint = …)` takes the number. A
+letter's `marks` are its members that are not body, in the engine's order. A member and a hit
+give the mark as its id (`mark`) and its name (`markName`).
 
 ## Verify and benchmark
 

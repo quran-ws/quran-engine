@@ -186,8 +186,8 @@ const qvp = useQvp();
   wordsUri="asset://pages/042.words.json"
   lettersUri="asset://pages/042.qvl"                                   // optional letter layer
   styles={[
-    { id: 'lam', letters: { scope: '2:255', letter: 'ل' }, color: '#c62828' },              // every lam of the ayah
-    { id: 'marks', letters: { letter: 'ب', part: LETTER_PART.MARKS }, color: '#1a73e8' },   // the marks of every ba
+    { id: 'lam', letters: { scope: '2:255', text: 'ل' }, color: '#c62828' },                // every lam of the ayah
+    { id: 'marks', letters: { text: 'ب', part: LETTER_PART.MARKS }, color: '#1a73e8' },     // the marks of every ba
     { id: 'one', selector: Sel.letter(12, 0, LETTER_PART.BODY_AND_DOTS), color: '#0a7d32' },
     { id: 'fathah', selector: Sel.letterMarkNamed(12, 1, 'fathah'), color: '#ef6c00' },
     { id: 'chars', selector: Sel.wordChars(12, 0, 2), color: '#6a1b9a' },                  // qpc characters 0 to 2
@@ -195,10 +195,10 @@ const qvp = useQvp();
 />
 
 await qvp.hasLetters();                              // true once a layer is attached
-const letters = await qvp.letters(12);               // [{index, character, at, moreAt, x0…y1, hasInk, members, marks}]
+const letters = await qvp.letters(12);               // [{index, text, codePoint, at, moreAt, x0…y1, hasInk, members, marks}]
 await qvp.letterAtOffset(12, 3);                     // the letter that draws qpc offset 3, or null
 await qvp.pathLetter(path);                          // {letter, at}, or null
-await qvp.findLetters({ scope: 'page', letter: 'ل', mark: 'shaddah' });   // [{word, letter}]
+await qvp.findLetters({ scope: 'page', text: 'ل', mark: 'shaddah' });     // [{word, letter}]
 const hit = await qvp.hitTestLetterView(x, y);       // view dp: {word, letter, path, at, mark, markName, isExact, isBody, …}
 await qvp.attachLetters('asset://pages/042.qvl');    // when you do not use the lettersUri prop
 ```
@@ -210,12 +210,17 @@ await qvp.attachLetters('asset://pages/042.qvl');    // when you do not use the 
 - `attachLetters` resolves `false` when the engine refuses the layer. Then nothing changes.
   It rejects when the URI does not load.
 - An attach adds the pieces as paths after the page's own paths, so `info().nPaths` grows.
-  No other path index changes.
+  No other path index changes. After a successful attach, a value that you got from the page
+  before it and that counts or indexes paths, such as `info().nPaths`, is stale. Read it again.
+- A letter's `text` is its character and `codePoint` the same as a number. A member and a hit
+  give the mark as its id (`mark`) and its name (`markName`).
 - `members` holds the bodies first, then the marks in text order. `marks[n]` is the path that
   `Sel.letterMark(word, index, n)` takes. An absent offset or letter is -1.
-- A letter query takes `scope` (a target, the page when left out), `letter` (one character)
-  or `text` (a code point), `mark` (a name or an id) and `part` (`LETTER_PART`). A field left
-  out matches any letter. `part` does not filter `findLetters`.
+- A letter query takes `scope` (a target, the page when left out), `text` (one character, or
+  a code point as a number), `mark` (a name or an id) and `part` (`LETTER_PART`). A field left
+  out, `''` or 0 matches any letter. `part` does not filter `findLetters`. A `text` of more
+  than one character rejects the call. In a style rule, it adds no rule, as a bad selector
+  does.
 - `hitTestLetter` and `hitTestLetterView` take the options of `hitTest`. As in `hitTest`, a
   `maxDistance` that you leave out is `DEFAULTS.TAP_DISTANCE`, so a tap far from every word
   finds nothing. The other wrappers have no limit by default. Pass 0 for no limit.

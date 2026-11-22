@@ -728,13 +728,21 @@ letters existed.
 
 ```js
 page.attachLetters(await fetchBytes('letters/042.qvl'));  // true, or false when the engine refuses the file
-page.letters(w)                // [{word, index, at, codePoint, text, moreAt, nMoreAt, box, hasInk, members, marks}]
+page.letters(w)                // [{word, index, at, codePoint, text, nMembers, nMarks, moreAt, nMoreAt, box, hasInk, members, marks}]
+page.letterMembers(w, 1)       // [{path, at, mark, markName, isBody, isCut}]: mark is the id, markName its name
 page.style(Sel.letter(w, 1), '#d02020');                  // the second letter of word w
 page.style(Sel.wordChars(w, 2, 4), '#d02020');            // the ink of qpc characters 2 to 4
 page.styleLetters({scope: 'page', text: 'ن', mark: 'shaddah'}, '#0a7d32');
 page.hitTestLetterView(viewX, viewY)
-// → {word, letter, path, at, line, distance, mark, isExact, isBody, wordKey} | null
+// → {word, letter, path, at, line, distance, mark, markName, isExact, isBody, wordKey} | null
 ```
+
+Every wrapper uses the same names. A letter's `text` is its character, and `codePoint` is the
+same as a number. A letter's `marks` are its members that are not body, in the engine's
+order. A member and a hit give the mark as its id, `mark`, and its name, `markName`. A query's
+`text` takes one character, or `''` for any letter. A wrapper that takes a code point there
+also takes 0 for any letter. A string of more than one character is an error in the
+wrapper's usual form.
 
 ### Attaching a layer
 
@@ -781,7 +789,9 @@ stays on the page's own paths. `qvp_letter_members` gives the pieces.
 
 The pointers that `qvp_geometry` and `qvp_colors` gave before the attach are not valid after
 it. Each wrapper reads them again in its `attachLetters`. An app that uses a wrapper must not
-keep its own copy of `ops`, `pts`, `table` or `nPaths` across an attach.
+keep its own copy of `ops`, `pts`, `table` or `nPaths` across an attach. The same is true for
+the built paths (`buildPaths()` and its equivalents), the colours (`colors()`), and each array
+that the app sized from `nPaths`: read them again after an attach that returns true.
 
 ### Reading letters
 

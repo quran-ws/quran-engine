@@ -159,7 +159,7 @@ typedef struct { float scale, offset_x, offset_y, content_w, content_h, line_spa
 typedef struct { uint8_t target /* QVP_TARGET_* */; uint32_t a, b, c; const uint32_t* words; uint32_t n_words; } QvpTarget;
 typedef struct { uint8_t selector /* QVP_SELECTOR_* */; uint32_t a, b, c; } QvpSelector;
 /* one letter of a word (qvp_letter_info). index: the letter's index in its word. at: the letter's qpc code-point
-   offset. more_at: the first other offset its body draws (the kashida of 2:97:5), QVP_NONE when none; n_more_at counts
+   offset. more_at: the first other offset its body draws (the tatweel of 2:97:5), QVP_NONE when none; n_more_at counts
    them and can be more than 1 (the Hafs data has at most 1). qvp_letter_at_offset gives the letter of any of them, so
    a host never needs the others from here. n_marks: the members that are not body, dots included. The box is in page units: the union of the members'
    boxes, and a piece can reach past its word's box. has_ink 0: no member has an outline (ink drawn off the page). */

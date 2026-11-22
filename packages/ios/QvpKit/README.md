@@ -126,19 +126,26 @@ that joins letters.
 ```swift
 page.attachLetters(qvlData)                // true, or false for a bad file; nothing changes then
 page.hasLetters; page.nPaths               // nPaths now counts the pieces after the page's own paths
-page.letters(w)                            // [QvpLetter]: index, char, at, moreAt, box, hasInk, members, marks
+page.letters(w)                            // [QvpLetter]: index, text, codePoint, at, moreAt, box, hasInk, members, marks
 page.letter(w, 1)?.marks[0].markName       // the first mark of the second letter, in text order
 page.style(.letter(w, 1), 0xd02020ff)      // also .letterMark(w, l, n), .letterMarkNamed(w, l, "shaddah"), .wordChars(w, 2, 4)
 page.style(.letter(w, 1, QvpLetterPart.MARKS), rgba)
 page.styleLetters(QvpLetterQuery("ن", mark: "shaddah", scope: page.target("2:255")), 0x0a7d32ff)
-page.findLetters(QvpLetterQuery("ن"))     // [(word, letter)]
+page.findLetters(QvpLetterQuery(text: "ن"))   // [(word, letter)]; QvpLetterQuery(codePoint:) takes the number
 page.pathLetter(path); page.letterAtOffset(w, at)
-page.hitTestLetter(x, y); page.hitTestLetterView(viewX, viewY)   // QvpLetterHit: word, letter, path, at, mark, isExact, isBody
+page.hitTestLetter(x, y); page.hitTestLetterView(viewX, viewY)   // QvpLetterHit: word, letter, path, at, mark, markName, isExact, isBody
 view.letterAt(point); controller.letterAt(point)                  // the same from a point of the view, through pan and zoom
 ```
 
 After an attach, the page reads its geometry again and builds its paths again on the next
-`buildPaths()`. Call `setNeedsDisplay()` on a `QvpPageView`, or `invalidate()` on a
+`buildPaths()`. The arrays that you got from the page before a successful attach are stale:
+`ops`, `pts`, `table`, `colors()`, the paths from `buildPaths()` and every array that you
+sized from `nPaths`. Read them again.
+
+A letter's `text` is its character and `codePoint` the same as a number. A query's `text` is
+one character, or "" for any letter. A string of more than one character fails a
+precondition. A letter's `marks` are its members that are not body, in the engine's order. A
+member and a hit give the mark as its id (`mark`) and its name (`markName`). Call `setNeedsDisplay()` on a `QvpPageView`, or `invalidate()` on a
 `QvpCanvasController`, as after a style. A joined outline draws as its pieces only while one
 piece has another colour. Both views key their kept draw list and ink on
 `layoutDrawRevision()`, which counts up when that changes. A host that draws the page itself

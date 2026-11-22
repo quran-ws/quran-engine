@@ -14,6 +14,15 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   attach.
 - With a letter layer and no letter rule, every view draws what it drew before. A page with no
   layer makes no new engine call per frame in any wrapper.
+- Every wrapper gives a letter the same names. A letter's `text` is its character, and
+  `codePoint` is the same as a number. A member and a letter hit give the mark as its id,
+  `mark`, and its name, `markName`. A letter's `marks` are its members that are not body, in
+  the engine's order. The web letter also gives `nMembers` and `nMarks`. A query's `text`
+  takes one character, or `''` for any letter. A string of more than one character is an
+  error in the wrapper's usual form. After an attach that succeeds, each array that a host
+  got from the page before it is stale: geometry, colours, built paths and each array sized
+  from the path count. In React Native, the letter hit tests take `DEFAULTS.TAP_DISTANCE` as
+  the default `maxDistance`, as its `hitTest` does.
 - `QvpPage.ayahMarksView()`, `hitAreasView(gapBias)` and `wordBandsView(words, height, padX,
   padY)`: the viewport-px twins of `ayahMarks`, `hitAreas` and `wordBands`. Each answers
   through the current layout, so an app that draws its own overlay on a reflowed page reads
