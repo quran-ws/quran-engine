@@ -7,23 +7,35 @@
 #                 A locally built dist/pages records no tag, so set QVP_KEEP_PAGES=1 to keep it.
 #   pages/ index/ the words archive of the quran-svg-elements release (hafs-kfgqpc);
 #                 needed by the identity gate.
+#   pages-letters/ the letters archive of the same release: NNN.svg, index/ and
+#                 schema/FORMAT.md. It unpacks to 614 MB. Only QVP_SYNC=letters fetches it.
 #
 # Environment:
 #   QVP_DATA_TAG   data release tag (default data-v0.5.0)
 #   QVP_SVG_TAG    quran-svg-elements release tag (default v2.0.0)
 #   QVP_KEEP_PAGES keep dist/pages as it is, whatever built it
-#   QVP_SYNC       what to fetch: `all` (default) or `pages`, which fetches the data release
-#                  and leaves pages/ and index/ alone. A job that reads dist/pages only,
-#                  such as a wrapper build, has no use for the 440 MB the SVG bundle unpacks to.
+#   QVP_SYNC       what to fetch: `all` (default), `pages` or `letters`. `pages` fetches the
+#                  data release and leaves pages/ and index/ alone. A job that reads dist/pages
+#                  only, such as a wrapper build, has no use for the 440 MB the SVG bundle
+#                  unpacks to. `letters` does what `all` does and then fetches pages-letters/.
+#                  A tag before v2.0.0 has no letters archive.
 # Output: the directories above; a line per artifact saying fetched, kept or skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 sync="${QVP_SYNC:-all}"
 case "$sync" in
-  all|pages) ;;
-  *) echo "error: QVP_SYNC must be all or pages, not '$sync'" >&2; exit 2 ;;
+  all|pages|letters) ;;
+  *) echo "error: QVP_SYNC must be all, pages or letters, not '$sync'" >&2; exit 2 ;;
 esac
+
+svg_tag="${QVP_SVG_TAG:-v2.0.0}"
+# Stop before a download when the letters archive cannot exist.
+if [ "$sync" = letters ]; then
+  case "$svg_tag" in
+    v0|v0.*|v1|v1.*) echo "error: $svg_tag has no letters archive" >&2; exit 1 ;;
+  esac
+fi
 
 tag="${QVP_DATA_TAG:-data-v0.5.0}"
 pages_fetched=""
@@ -82,7 +94,6 @@ if [ "$sync" = pages ]; then
   exit 0
 fi
 
-svg_tag="${QVP_SVG_TAG:-v2.0.0}"
 # From v2.0.0 a release holds two archives, words and letters. The pages are built from
 # the words archive. A release before v2.0.0 holds one archive, which has word pages.
 case "$svg_tag" in
@@ -104,4 +115,34 @@ else
   [ -f pages/001.svg ] || { echo "error: the bundle did not contain pages/001.svg" >&2; exit 1; }
   echo "$svg_tag" > pages/.tag
   echo "fetched  pages/ and index/ ($svg_tag, checksum verified)"
+fi
+
+[ "$sync" = letters ] || exit 0
+
+# The letters archive. Its pages/ goes to pages-letters/, its index/ to
+# pages-letters/index/. A later step reads schema/FORMAT.md, so keep it too.
+letters_asset="quran-svg-elements-hafs-kfgqpc-letters.tar.gz"
+if [ -f pages-letters/001.svg ] && [ -d pages-letters/index/by-page ] \
+   && [ "$(cat pages-letters/.tag 2>/dev/null)" = "$svg_tag" ]; then
+  echo "kept     pages-letters/ ($svg_tag)"
+else
+  mkdir -p dist
+  # The archive is large. Give the download up to one hour.
+  curl --fail --location --retry 3 --max-time 3600 --silent --show-error \
+    "$svg_base/$letters_asset" --output "dist/$letters_asset"
+  curl --fail --location --retry 3 --silent --show-error \
+    "$svg_base/$letters_asset.sha256" --output "dist/$letters_asset.sha256"
+  (cd dist && shasum -a 256 -c "$letters_asset.sha256" >/dev/null)
+  rm -rf pages-letters && mkdir -p pages-letters
+  tar -xzf "dist/$letters_asset" -C pages-letters --strip-components=1 \
+    --include='*/pages/*' --include='*/index/*' --include='*/schema/FORMAT.md' 2>/dev/null \
+    || tar -xzf "dist/$letters_asset" -C pages-letters --strip-components=1 \
+      --wildcards '*/pages/*' '*/index/*' '*/schema/FORMAT.md'
+  [ -f pages-letters/pages/001.svg ] || {
+    echo "error: the letters archive did not contain pages/001.svg" >&2; exit 1; }
+  # Move the pages up one level, so that a page is pages-letters/NNN.svg.
+  find pages-letters/pages -maxdepth 1 -name '*.svg' -exec mv {} pages-letters/ \;
+  rmdir pages-letters/pages
+  echo "$svg_tag" > pages-letters/.tag
+  echo "fetched  pages-letters/ ($svg_tag, checksum verified)"
 fi

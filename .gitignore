@@ -10,6 +10,7 @@ web/qvp_ffi.wasm
 /*.png
 # the quran-svg release bundle: exporter output, not code
 /pages/
+/pages-letters/
 index/
 # Android / Gradle
 packages/android/.gradle/
