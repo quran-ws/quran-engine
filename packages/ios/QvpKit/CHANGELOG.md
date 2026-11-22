@@ -5,6 +5,19 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- QvpKit: the letter layer. `QvpPage.attachLetters(_:)` attaches a page's `NNN.qvl` and
+  reads the geometry again, so `nPaths`, `ops`, `pts`, `table` and `colors()` hold the pieces.
+  Read a word's letters with `letters(_:)`, `letter(_:_:)`, `letterCount(_:)`,
+  `letterMembers(_:_:)`, `pathLetter(_:)` and `letterAtOffset(_:_:)`. Colour them with
+  `Selector.letter`, `letterMark`, `letterMarkNamed` and `wordChars`, or with
+  `styleLetters(_:_:)` and a `QvpLetterQuery`, which `findLetters(_:)` also takes. Hit-test with
+  `hitTestLetter` and `hitTestLetterView`, or `letterAt(_:)` on `QvpPageView` and
+  `QvpCanvasController`. New types: `QvpLetter`, `QvpLetterMember`, `QvpLetterHit`,
+  `QvpLetterQuery` and `QvpLetterPart`. `layoutDrawRevision()` binds
+  `qvp_layout_draw_revision`. `nPaths`, `ops`, `pts` and `table` are now `private(set) var`, so
+  an attach can update them. `QvpPageView` and `QvpPageCanvas` key their kept draw list and ink on
+  the draw revision. With no layer they make no extra engine call and draw as before. The tests
+  replay `conformance/scenarios/letters.json`.
 - QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
   `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
   `QvpPassageWord.wordKey`, as Kotlin's.

@@ -217,6 +217,14 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         lastHitUs = (CACurrentMediaTime() - t0) * 1e6
         return h
     }
+    /// The letter or the mark under a point of this view, through the reader's pan and zoom
+    /// and the layout: `QvpPage.hitTestLetterView`. Nil with no letter layer. `o` defaults to
+    /// `hitOptions`.
+    public func letterAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpLetterHit? {
+        guard let p = page, p.isOpen else { return nil }
+        let at = p.viewToLayout(currentView, Float(pt.x), Float(pt.y))
+        return p.hitTestLetterView(at.x, at.y, o ?? hitOptions)
+    }
     @objc private func onTap(_ g: UITapGestureRecognizer) {
         guard let p = page else { return }
         let hit = hitAt(g.location(in: self))
@@ -399,9 +407,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
                                  tx: viewOx + viewScale * (CGFloat(l?.offsetX ?? 0) + CGFloat(q.dx) * ls),
                                  ty: (offsetY ?? viewOy) + viewScale * (CGFloat(l?.offsetY ?? 0) + CGFloat(q.dy) * ls))
     }
-    /// What the layout in hand draws and where: the engine's own answer, read once per layout.
-    /// A printed page and a reflowed one come back in the same shape.
-    struct DrawList { let draws: [QvpDraw], places: [QvpPlacement], band: ClosedRange<Float> }
+    /// What the layout in hand draws and where: the engine's own answer, read once per layout,
+    /// band and draw revision. A printed page and a reflowed one come back in the same shape.
+    struct DrawList { let draws: [QvpDraw], places: [QvpPlacement], band: ClosedRange<Float>, revision: Int }
     private var drawList: DrawList?
     /// The band of the laid-out page worth drawing: the screen, with a screen of slack either
     /// side so a fast drag has somewhere to go before the next frame asks again.
@@ -478,9 +486,11 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     }
     private func drawListNow() -> DrawList? {
         let b = visibleBand
-        if let q = drawList, q.band == b.top...b.bottom { return q }
         guard let p = page, p.isOpen, p.currentLayout != nil else { return nil }
-        let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: b.top...b.bottom)
+        // with a letter layer the drawn set can change while the band stays: a cut path draws its pieces
+        let rev = p.viewDrawRevision
+        if let q = drawList, q.band == b.top...b.bottom, q.revision == rev { return q }
+        let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: b.top...b.bottom, revision: rev)
         drawList = q; return q
     }
     private func transform(_ q: DrawList, _ placement: Int, offsetY: CGFloat? = nil) -> CGAffineTransform {
@@ -619,6 +629,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         guard W > 0, bandPx > 0 else { return nil }
         let bands = p.highlightBoxesView()
         let masks = p.maskBoxesView()
+        // read after the styled paths and before the draw list, as the engine asks; it moves when
+        // a cut path of a letter layer starts or stops drawing its pieces
+        let drawRevision = p.viewDrawRevision
         var hasher = Hasher()
         hasher.combine(styledSet.sorted()); hasher.combine(l.lineDy)
         hasher.combine(bands.map { $0.id }); hasher.combine(masks.map { $0.id })
@@ -626,7 +639,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         // drag inside the band changes nothing.
         // the ornament layer is drawn into the band, so its revision is part of the key
         let dress = p === page ? p.dressInfo() : nil
-        let key = "\(p.pageNo)|\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(z.zoom)|\(l.rows)|\(dress?.revision ?? -1)"
+        let key = "\(p.pageNo)|\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(z.zoom)|\(l.rows)|\(dress?.revision ?? -1)|\(drawRevision)"
         if reuse, let kept = cachedInk(key) { return (key, kept) }
 
         let t0 = CACurrentMediaTime()

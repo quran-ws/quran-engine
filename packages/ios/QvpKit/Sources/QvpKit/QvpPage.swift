@@ -12,18 +12,25 @@ public final class QvpPage {
     private var h: OpaquePointer?
 
     public let width: Float, height: Float, pageNo: Int
-    public let nLines: Int, nAyahs: Int, nWords: Int, nPaths: Int, nDecorations: Int
+    /// The counts of the page's lines, ayahs, words and decorations.
+    public let nLines: Int, nAyahs: Int, nWords: Int, nDecorations: Int
+    /// The paths of the page. After `attachLetters`, this count includes the pieces of the
+    /// letter layer, which come after the page's own paths.
+    public private(set) var nPaths: Int
     /// path ops: 0 MoveTo 1 LineTo 2 QuadTo 3 CubicTo 4 Close
-    public let ops: [UInt8]
+    public private(set) var ops: [UInt8]
     /// x,y pairs consumed in order by the ops
-    public let pts: [Float]
+    public private(set) var pts: [Float]
     /// stride 8 per path: opStart, opCount, ptStart, ptCount, flags, word, line, extra
-    public let table: [UInt32]
+    public private(set) var table: [UInt32]
     public let words: [QvpWord], ayahs: [QvpAyah], lines: [QvpLine], decorations: [QvpDecoration]
     public let lineSpacing: Float
     public private(set) var currentLayout: QvpLayout?
     public private(set) var defaultInk: UInt32 = QvpDefaults.INK
     private var paths: [CGPath]?
+    /// True after an attach that the engine took. A view reads the draw revision only then:
+    /// with no layer the revision stays 0, so a page with no layer makes no extra call.
+    private(set) var lettersAttached = false
     /// The ornament display list and the dress revision it was read at.
     var dressDraws: (revision: Int, draws: [OrnamentDraw])?
 
@@ -136,6 +143,74 @@ public final class QvpPage {
     /// True when the page has the text of `form` for its words.
     public func hasForm(_ form: Form) -> Bool { qvp_has_form(p, UInt8(truncatingIfNeeded: form.rawValue)) != 0 }
 
+    // ── letters ──
+    /// Attach the page's letter layer (`NNN.qvl`). The engine copies the bytes. The pieces of the
+    /// layer join the path table after the page's own paths, so `nPaths`, `ops`, `pts`, `table`
+    /// and `colors()` grow, and `buildPaths()` builds the paths again on its next call. A view
+    /// that shows the page draws the layer after `setNeedsDisplay()` or `invalidate()`, as after
+    /// a style. Returns false, and changes nothing, for a bad file, the layer of another page, a
+    /// file over 1 MiB, or a page whose words share paths. A second attach replaces the first,
+    /// and the style rules stay.
+    @discardableResult public func attachLetters(_ bytes: Data) -> Bool {
+        let r = bytes.withUnsafeBytes { qvp_attach_letters(p, $0.bindMemory(to: UInt8.self).baseAddress, UInt32(truncatingIfNeeded: $0.count)) }
+        guard r == 0 else { return false }
+        readGeometry()
+        lettersAttached = true
+        return true
+    }
+    /// Read the path count and the geometry again: an attach makes the old engine pointers
+    /// invalid. The words, ayahs, lines and decorations do not change.
+    private func readGeometry() {
+        var info = QvpPageInfo(); qvp_page_info(p, &info)
+        nPaths = Int(info.n_paths)
+        var g = QvpGeometry(); qvp_geometry(p, &g)
+        ops = Array(UnsafeBufferPointer(start: g.ops, count: Int(g.ops_len)))
+        pts = Array(UnsafeBufferPointer(start: g.pts, count: Int(g.pts_len)))
+        table = Array(UnsafeBufferPointer(start: g.table, count: Int(g.n_paths) * 8))
+        paths = nil
+    }
+    /// True when a letter layer is attached.
+    public var hasLetters: Bool { qvp_has_letters(p) != 0 }
+    /// How many letters word `w` has. 0 with no layer.
+    public func letterCount(_ w: Int) -> Int { Int(qvp_letter_count(p, UInt32(truncatingIfNeeded: w))) }
+    /// Letter `i` of word `w`, with its members, or nil when there is no such letter.
+    public func letter(_ w: Int, _ i: Int) -> QvpLetter? {
+        var v = QvpFFI.QvpLetterInfo()
+        guard qvp_letter_info(p, UInt32(truncatingIfNeeded: w), UInt32(truncatingIfNeeded: i), &v) != 0 else { return nil }
+        return QvpLetter(word: Int(v.word), index: Int(v.index), at: index(v.at), text: v.text, nMembers: Int(v.n_members), nMarks: Int(v.n_marks),
+                         moreAt: index(v.more_at), nMoreAt: Int(v.n_more_at), x0: v.x0, y0: v.y0, x1: v.x1, y1: v.y1, hasInk: v.has_ink != 0,
+                         members: letterMembers(w, i))
+    }
+    /// Every letter of word `w`, in the word's order. Empty with no layer.
+    public func letters(_ w: Int) -> [QvpLetter] { (0..<letterCount(w)).compactMap { letter(w, $0) } }
+    /// The paths of letter `i` of word `w`: the bodies first, then the marks in text order, so
+    /// the nth mark here is the one `Selector.letterMark(w, i, n)` takes.
+    public func letterMembers(_ w: Int, _ i: Int) -> [QvpLetterMember] {
+        collect(8) { o, c in qvp_letter_members(p, UInt32(truncatingIfNeeded: w), UInt32(truncatingIfNeeded: i), o, c) }.map { (m: QvpFFI.QvpLetterMember) in
+            QvpLetterMember(path: Int(m.path), at: index(m.at), mark: Int(m.mark), isBody: m.is_body != 0, isCut: m.is_cut != 0)
+        }
+    }
+    /// The letter and the offset that path `i` draws, in the path's word. `letter` is -1 for a
+    /// word-level mark, and `at` is -1 when the path has no offset. Nil for a cut path, a path
+    /// with no letter role, a path past the table, or a page with no layer.
+    public func pathLetter(_ i: Int) -> (letter: Int, at: Int)? {
+        var l: UInt32 = 0, a: UInt32 = 0
+        guard qvp_path_letter(p, UInt32(truncatingIfNeeded: i), &l, &a) != 0 else { return nil }
+        return (index(l), index(a))
+    }
+    /// The letter of word `w` that draws the character at qpc offset `at`, or holds a mark at it.
+    /// Nil when no letter has it.
+    public func letterAtOffset(_ w: Int, _ at: Int) -> Int? {
+        var l: UInt32 = 0
+        return qvp_letter_at_offset(p, UInt32(truncatingIfNeeded: w), UInt32(truncatingIfNeeded: at), &l) != 0 ? Int(l) : nil
+    }
+    /// The letters a query finds, in word order and then letter order. The query's part does not
+    /// filter. Empty for a bad query and with no layer.
+    public func findLetters(_ q: QvpLetterQuery) -> [(word: Int, letter: Int)] {
+        let f: [UInt32] = q.withC { qp in collect(256) { o, c in qvp_find_letters(p, qp, o, c / 2) * 2 } }
+        return stride(from: 0, to: f.count - 1, by: 2).map { (Int(f[$0]), Int(f[$0 + 1])) }
+    }
+
     // ── metadata ──
     /// Every surah, in order.
     public func surahs() -> [QvpSurah] {
@@ -192,6 +267,22 @@ public final class QvpPage {
         var opt = QvpFFI.QvpHitOptions(max_distance: o.maxDistance, gap_bias: o.gapBias, prefer_exact: o.preferExact ? 1 : 0); var v = QvpFFI.QvpHit()
         return hit(qvp_hit_test_view(p, viewX, viewY, &opt, &v), v)
     }
+    private func letterHit(_ ok: Int32, _ v: QvpFFI.QvpLetterHit) -> QvpLetterHit? {
+        ok != 0 ? QvpLetterHit(word: index(v.word), letter: index(v.letter), path: index(v.path), at: index(v.at), line: index(v.line), distance: v.distance,
+                               mark: Int(v.mark), isExact: v.is_exact != 0, isBody: v.is_body != 0) : nil
+    }
+    /// The letter or the mark under a point, page units. On ink, the hit is exact and in the
+    /// ink's word. Off ink, it is the nearest letter of the word `hitTest` finds with the same
+    /// options, so check `isExact` or `distance`. Nil with no layer.
+    public func hitTestLetter(_ x: Float, _ y: Float, _ o: QvpHitOptions = QvpHitOptions()) -> QvpLetterHit? {
+        var opt = QvpFFI.QvpHitOptions(max_distance: o.maxDistance, gap_bias: o.gapBias, prefer_exact: o.preferExact ? 1 : 0); var v = QvpFFI.QvpLetterHit()
+        return letterHit(qvp_hit_test_letter(p, x, y, &opt, &v), v)
+    }
+    /// The same, viewport px through the current layout, printed or reflowed.
+    public func hitTestLetterView(_ viewX: Float, _ viewY: Float, _ o: QvpHitOptions = QvpHitOptions()) -> QvpLetterHit? {
+        var opt = QvpFFI.QvpHitOptions(max_distance: o.maxDistance, gap_bias: o.gapBias, prefer_exact: o.preferExact ? 1 : 0); var v = QvpFFI.QvpLetterHit()
+        return letterHit(qvp_hit_test_letter_view(p, viewX, viewY, &opt, &v), v)
+    }
     public func lineBands() -> [QvpLineBand] { collect(64) { o, c in qvp_line_bands(p, o, c) }.map { (b: QvpFFI.QvpLineBand) in QvpLineBand(line: Int(b.line), lineNumber: Int(b.line_number), y0: b.y0, y1: b.y1, mid: b.mid, inkY0: b.ink_y0, inkY1: b.ink_y1) } }
     public func hitAreas(gapBias: Float = QvpDefaults.GAP_BIAS) -> [QvpHitArea] { collect(512) { o, c in qvp_hit_areas(p, gapBias, o, c) }.map { (b: QvpFFI.QvpHitArea) in QvpHitArea(word: Int(b.word), line: Int(b.line), x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, inkX0: b.ink_x0, inkY0: b.ink_y0, inkX1: b.ink_x1, inkY1: b.ink_y1) } }
     /// The same partition in viewport px through the current layout. Not `hitAreas` transformed:
@@ -247,6 +338,15 @@ public final class QvpPage {
         let f: [UInt32] = collect(4096) { o, c in qvp_layout_draw_list(p, t, b, o, c / 2) * 2 }
         return stride(from: 0, to: f.count, by: 2).map { QvpDraw(path: Int(f[$0]), placement: Int(f[$0 + 1])) }
     }
+    /// Counts up when the draw list can change while the layout and the band stay the same: a
+    /// letter layer is attached, or a cut path starts or stops drawing its pieces. It stays 0 on a
+    /// page with no layer. Key a kept draw list on it. Per frame: `tick`, then `colors()` or
+    /// `styledPaths()`, then this, then `layoutDrawList` when the revision, the layout or the
+    /// band changed.
+    public func layoutDrawRevision() -> Int { Int(qvp_layout_draw_revision(p)) }
+    /// The draw revision a view keys its draw list on: 0 with no layer attached, which is what
+    /// the engine answers then, so a page with no layer makes no extra call per frame.
+    var viewDrawRevision: Int { lettersAttached ? layoutDrawRevision() : 0 }
     /// What a draw list's `placement` indexes: every group, then every repeat.
     public func layoutPlacements() -> [QvpPlacement] {
         let f: [Float] = collect(1024) { o, c in qvp_layout_placements(p, o, c / 4) * 4 }
@@ -294,6 +394,12 @@ public final class QvpPage {
     @discardableResult public func styleTarget(_ t: Target, _ rgba: UInt32, transitionMs: Int = 0, layer: Int = QvpLayer.BASE) -> Int { t.withC { Int(qvp_style_add_target(p, Int32(truncatingIfNeeded: layer), $0, rgba, UInt32(truncatingIfNeeded: transitionMs))) } }
     /// Colour the words a target resolves to on `layer`. The handle undoes it.
     @discardableResult public func styleTarget(_ s: String, _ rgba: UInt32, transitionMs: Int = 0, layer: Int = QvpLayer.BASE) -> Int { styleTarget(target(s), rgba, transitionMs: transitionMs, layer: layer) }
+    /// Colour the letters a query finds, and the query's part of each, on `layer`. One handle
+    /// undoes it. With no layer the rule selects nothing until a layer is attached. Returns 0
+    /// for a bad query: a part above 2, or a text that is not a Unicode scalar value.
+    @discardableResult public func styleLetters(_ q: QvpLetterQuery, _ rgba: UInt32, transitionMs: Int = 0, layer: Int = QvpLayer.BASE) -> Int {
+        q.withC { Int(qvp_style_add_letters(p, Int32(truncatingIfNeeded: layer), $0, rgba, UInt32(truncatingIfNeeded: transitionMs))) }
+    }
     /// Undo a style rule by its handle.
     @discardableResult public func removeStyle(_ handle: Int) -> Int { Int(qvp_style_remove(p, UInt32(truncatingIfNeeded: handle))) }
     /// Give a style rule another colour, fading over `transitionMs`.
