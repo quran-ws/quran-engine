@@ -565,8 +565,8 @@ impl Page {
                     return Some(HitExact { word: wi, path: pi, decoration: NONE });
                 }
             }
-            for di in 0..self.data.decorations.len() {
-                let (px, py) = flow.deco_place[di].invert(x, y);
+            for (di, place) in flow.deco_place.iter().enumerate().take(self.data.decorations.len()) {
+                let (px, py) = place.invert(x, y);
                 if let Some(hit) = self.exact_decoration_hit(di, px, py, &l.omitted_paths) {
                     return Some(hit);
                 }

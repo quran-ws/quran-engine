@@ -630,9 +630,9 @@ fn decode_piece(g: &mut Group, n_ops: u32, cur: &mut P, r: &mut Reader) -> Resul
         let deltas = |deg: u8, r: &mut Reader, g: &mut Group, cur: P| -> Result<Draw, Error> {
             let mut d = Draw { deg, pts: [(0, 0); 3] };
             let mut from = cur;
-            for i in 0..deg as usize {
-                d.pts[i] = r.delta(from)?;
-                from = d.pts[i];
+            for pt in d.pts.iter_mut().take(deg as usize) {
+                *pt = r.delta(from)?;
+                from = *pt;
             }
             g.rev.push((cur, d));
             Ok(d)
