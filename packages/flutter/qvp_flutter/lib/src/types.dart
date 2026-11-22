@@ -758,6 +758,7 @@ final class QvpLetterMember {
     required this.path,
     required this.at,
     required this.mark,
+    required this.markName,
     required this.isBody,
     required this.isCut,
   });
@@ -771,6 +772,9 @@ final class QvpLetterMember {
   /// The mark id of the path ([QvpMark]); 0 for body ink and for a piece.
   final int mark;
 
+  /// The name of [mark], as the engine names it ([QvpEngine.markName]); '' for body ink.
+  final String markName;
+
   /// True for a body member of the letter.
   final bool isBody;
 
@@ -783,15 +787,16 @@ final class QvpLetterMember {
       other.path == path &&
       other.at == at &&
       other.mark == mark &&
+      other.markName == markName &&
       other.isBody == isBody &&
       other.isCut == isCut;
 
   @override
-  int get hashCode => Object.hash(path, at, mark, isBody, isCut);
+  int get hashCode => Object.hash(path, at, mark, markName, isBody, isCut);
 
   @override
   String toString() =>
-      'QvpLetterMember(path: $path, at: $at, mark: $mark, isBody: $isBody, isCut: $isCut)';
+      'QvpLetterMember(path: $path, at: $at, mark: $mark, markName: $markName, isBody: $isBody, isCut: $isCut)';
 }
 
 /// One letter of a word ([QvpPage.letter], [QvpPage.letters]), with its members.
@@ -869,6 +874,7 @@ final class QvpLetterHit {
     required this.line,
     required this.distance,
     required this.mark,
+    required this.markName,
     required this.isExact,
     required this.isBody,
     this.wordKey,
@@ -886,6 +892,9 @@ final class QvpLetterHit {
   /// that the page stores as a mark.
   final int mark;
 
+  /// The name of [mark], as the engine names it ([QvpEngine.markName]); '' for body ink.
+  final String markName;
+
   /// True when the point is on the ink of [path].
   final bool isExact;
 
@@ -897,7 +906,7 @@ final class QvpLetterHit {
 
   @override
   String toString() =>
-      'QvpLetterHit(word: $word, letter: $letter, path: $path, at: $at, line: $line, distance: $distance, mark: $mark, isExact: $isExact, isBody: $isBody)';
+      'QvpLetterHit(word: $word, letter: $letter, path: $path, at: $at, line: $line, distance: $distance, mark: $mark, markName: $markName, isExact: $isExact, isBody: $isBody)';
 }
 
 /// Options of the gap-aware hit test.

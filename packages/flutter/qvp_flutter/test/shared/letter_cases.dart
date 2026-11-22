@@ -151,13 +151,23 @@ void letterCases(FutureOr<LetterFixture> Function() load) {
     expect(p.buildPaths().length, want, reason: '$what built paths');
   }
 
-  Map<String, Object?> member(QvpLetterMember m) => {
-    'path': m.path,
-    'at': m.at,
-    'mark': engine.markName(m.mark),
-    'isBody': m.isBody,
-    'isCut': m.isCut,
-  };
+  // The scenario names a mark by its engine name; the wrapper gives the id and the name, and
+  // the name is the one the engine's table gives that id.
+  Map<String, Object?> member(QvpLetterMember m) {
+    expect(
+      m.markName,
+      engine.markName(m.mark),
+      reason: 'markName of ${m.mark}',
+    );
+    return {
+      'path': m.path,
+      'at': m.at,
+      'mark': m.markName,
+      'isBody': m.isBody,
+      'isCut': m.isCut,
+    };
+  }
+
   void sameLetter(QvpLetter? got, Object? want, String what) {
     if (want == null) {
       expect(got, isNull, reason: what);
@@ -228,7 +238,7 @@ void letterCases(FutureOr<LetterFixture> Function() load) {
         'path': h.path,
         'at': h.at,
         'line': h.line,
-        'mark': engine.markName(h.mark),
+        'mark': h.markName,
         'isExact': h.isExact,
         'isBody': h.isBody,
       },
@@ -247,6 +257,7 @@ void letterCases(FutureOr<LetterFixture> Function() load) {
       },
       reason: what,
     );
+    expect(h.markName, engine.markName(h.mark), reason: '$what markName');
     close(h.distance, w['distance'] as num, '$what distance');
   }
 

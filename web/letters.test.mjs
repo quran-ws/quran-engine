@@ -48,15 +48,28 @@ const sameInfo = (got, want, what) => {
   assert.equal(got.moreAt, want.moreAt, `${what} moreAt`)
   assert.equal(got.codePoint, want.text, `${what} code point`)
   assert.equal(got.text, want.char, `${what} text`)
+  assert.equal(got.nMembers, want.nMembers, `${what} nMembers`)
+  assert.equal(got.nMarks, want.nMarks, `${what} nMarks`)
   assert.equal(got.members.length, want.nMembers, `${what} members`)
   assert.equal(got.marks.length, want.nMarks, `${what} marks`)
   for (const k of ['x0', 'y0', 'x1', 'y1']) close(got.box[k], want[k], `${what} ${k}`)
 }
-const sameMembers = (got, want, what) => assert.deepEqual(got.map(m => ({ path: m.path, at: m.at, mark: m.mark, isBody: m.isBody, isCut: m.isCut })), want, what)
+// The scenario names a mark by its engine name; the wrapper gives the id and the name, and the
+// name is the one the engine's table gives that id.
+const sameMark = (got, what) => {
+  assert.equal(typeof got.mark, 'number', `${what} mark is an id`)
+  assert.equal(got.markName, engine.markName(got.mark), `${what} markName is the engine's name of the id`)
+}
+const sameMembers = (got, want, what) => {
+  got.forEach((m, k) => sameMark(m, `${what} ${k}`))
+  assert.deepEqual(got.map(m => ({ path: m.path, at: m.at, mark: m.markName, isBody: m.isBody, isCut: m.isCut })), want, what)
+}
 const sameHit = (p, got, want, what) => {
   if (want === null) { assert.equal(got, null, what); return }
   assert.ok(got, `${what}: no hit`)
-  for (const k of ['word', 'letter', 'path', 'at', 'line', 'mark', 'isExact', 'isBody']) assert.equal(got[k], want[k], `${what} ${k}`)
+  for (const k of ['word', 'letter', 'path', 'at', 'line', 'isExact', 'isBody']) assert.equal(got[k], want[k], `${what} ${k}`)
+  sameMark(got, what)
+  assert.equal(got.markName, want.mark, `${what} mark`)
   close(got.distance, want.distance, `${what} distance`)
   assert.equal(got.wordKey, p.wordKey(got.word), `${what} wordKey`)
 }

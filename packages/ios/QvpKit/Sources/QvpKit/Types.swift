@@ -388,9 +388,9 @@ public struct QvpLetter: Equatable {
     public let members: [QvpLetterMember]
     /// The letter's character, as a string.
     public var text: String { Unicode.Scalar(codePoint).map { String(Character($0)) } ?? "" }
-    /// The members that are not body, in text order: `marks[n]` is what
-    /// `Selector.letterMark(word, index, n)` takes. The engine lists them after the bodies.
-    public var marks: [QvpLetterMember] { Array(members.suffix(nMarks)) }
+    /// The members that are not body, in the engine's order: `marks[n]` is what
+    /// `Selector.letterMark(word, index, n)` takes.
+    public var marks: [QvpLetterMember] { members.filter { !$0.isBody } }
 }
 /// The letter under a point (`QvpPage.hitTestLetter`). Indices are -1 when absent. `letter` is -1
 /// for a word-level mark. `line` is the word's printed line index. `distance` is in page units: 0

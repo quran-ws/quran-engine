@@ -952,11 +952,7 @@ class QvpWebBackend implements QvpBackend {
       )).toDartInt;
 
   // ── Letters ──
-  // qvp.js answers -1 for QVP_NONE and gives a mark as its name. The names come from the
-  // engine's own table (QvpNames), so a name goes back to its id there.
-
-  static int _markId(JSAny? name) =>
-      QvpNames.idOf(QvpNames.mark, (name as JSString).toDart);
+  // qvp.js answers -1 for QVP_NONE and gives a mark as its id and its name.
 
   /// -1 and every other negative index as `QVP_NONE`, as qvp.js reads it.
   static int _index(int v) => v < 0 ? qvpNone : v;
@@ -994,7 +990,8 @@ class QvpWebBackend implements QvpBackend {
         return QvpLetterMember(
           path: (m['path'] as JSNumber).toDartInt,
           at: (m['at'] as JSNumber).toDartInt,
-          mark: _markId(m['mark']),
+          mark: (m['mark'] as JSNumber).toDartInt,
+          markName: (m['markName'] as JSString).toDart,
           isBody: (m['isBody'] as JSBoolean).toDart,
           isCut: (m['isCut'] as JSBoolean).toDart,
         );
@@ -1017,9 +1014,8 @@ class QvpWebBackend implements QvpBackend {
       index: n(l, 'index'),
       at: n(l, 'at'),
       codePoint: n(l, 'codePoint'),
-      // qvp.js leaves the two counts out: its members and marks are the lists themselves
-      nMembers: members.length,
-      nMarks: (l['marks'] as JSArray).length,
+      nMembers: n(l, 'nMembers'),
+      nMarks: n(l, 'nMarks'),
       moreAt: n(l, 'moreAt'),
       nMoreAt: n(l, 'nMoreAt'),
       x0: f('x0'),
@@ -1124,7 +1120,8 @@ class QvpWebBackend implements QvpBackend {
       at: n('at'),
       line: n('line'),
       distance: (h['distance'] as JSNumber).toDartDouble,
-      mark: _markId(h['mark']),
+      mark: n('mark'),
+      markName: (h['markName'] as JSString).toDart,
       isExact: (h['isExact'] as JSBoolean).toDart,
       isBody: (h['isBody'] as JSBoolean).toDart,
     );

@@ -478,6 +478,7 @@ class QvpPage extends ChangeNotifier {
       line: h.line,
       distance: h.distance,
       mark: h.mark,
+      markName: h.markName,
       isExact: h.isExact,
       isBody: h.isBody,
       wordKey: w >= 0 && w < words.length ? words[w].wordKey : null,

@@ -734,9 +734,10 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /** Get every letter of a word, in order: the shape `letter` gives. */
     letters(w) { return Array.from({ length: this.letterCount(w) }, (_, i) => this.letter(w, i)); }
     /**
-     * Get one letter of a word, or null: {word, index, at, codePoint, text, moreAt, nMoreAt, box:
-     * {x0, y0, x1, y1}, hasInk, members, marks}. `text` is the character and `codePoint` its code
-     * point. `moreAt` is the first other offset the body draws (a tatweel), -1 when none, and
+     * Get one letter of a word, or null: {word, index, at, codePoint, text, nMembers, nMarks,
+     * moreAt, nMoreAt, box: {x0, y0, x1, y1}, hasInk, members, marks}. `text` is the character
+     * and `codePoint` its code point. `nMembers` counts the members and `nMarks` the members
+     * that are not body, dots included. `moreAt` is the first other offset the body draws (a tatweel), -1 when none, and
      * `nMoreAt` counts those offsets. The box is in page units, the union of the members' boxes.
      * `members` is `letterMembers(w, i)`; `marks` is its members that are not body, in the same
      * order, so `marks[n]` is what `Sel.letterMark(w, i, n)` takes.
@@ -746,21 +747,22 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       if (!this.e.ex.qvp_letter_info(this.h, w, i, s)) return null;
       const d = this.e.dv(), u = k => d.getUint32(s + k, true), f = k => d.getFloat32(s + k, true), none = v => (v === NONE ? -1 : v);
       const cp = u(12);
-      const out = { word: u(0), index: u(4), at: none(u(8)), codePoint: cp, text: String.fromCodePoint(cp), moreAt: none(u(24)), nMoreAt: u(28),
+      const out = { word: u(0), index: u(4), at: none(u(8)), codePoint: cp, text: String.fromCodePoint(cp), nMembers: u(16), nMarks: u(20), moreAt: none(u(24)), nMoreAt: u(28),
         box: { x0: f(32), y0: f(36), x1: f(40), y1: f(44) }, hasInk: !!d.getUint8(s + 48) };
       out.members = this.letterMembers(w, i);
       out.marks = out.members.filter(m => !m.isBody);
       return out;
     }
-    /** Get the paths of a letter: [{path, at, mark, isBody, isCut}], the bodies first, then the
-     * marks in text order. `mark` is the name of the path's mark ('' for none); `isCut` is a
-     * piece cut from an outline that joins letters, at an index past the page's own paths. */
+    /** Get the paths of a letter: [{path, at, mark, markName, isBody, isCut}], the bodies first,
+     * then the marks in text order. `mark` is the id of the path's mark (0 for none) and
+     * `markName` its name from `engine.markName` ('' for none); `isCut` is a piece cut from an
+     * outline that joins letters, at an index past the page's own paths. */
     letterMembers(w, i) {
       const [at, n] = this.e.collect(12, (o, c) => this.e.ex.qvp_letter_members(this.h, w, i, o, c));
       const d = this.e.dv(), raw = [];
       for (let k = 0; k < n; k++) { const o = at + k * 12; raw.push([d.getUint32(o, true), d.getUint32(o + 4, true), d.getUint8(o + 8), d.getUint8(o + 9), d.getUint8(o + 10)]); }
       // read every record before the names: a name is one more engine call
-      return raw.map(([path, a, mark, isBody, isCut]) => ({ path, at: a === NONE ? -1 : a, mark: this.e.markName(mark), isBody: !!isBody, isCut: !!isCut }));
+      return raw.map(([path, a, mark, isBody, isCut]) => ({ path, at: a === NONE ? -1 : a, mark, markName: this.e.markName(mark), isBody: !!isBody, isCut: !!isCut }));
     }
     /** Get the letter role of a path: {letter, at}, with `letter` -1 for a word-level mark and
      * `at` -1 when none. Null for a cut path (its pieces have the role), a path with no letter
@@ -795,19 +797,19 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * Returns one handle, or 0 for a bad query. With no layer the rule selects nothing until one
      * is attached, and it takes a second layer too. */
     styleLetters(query, color, { ms = 0, layer = LAYER.BASE } = {}) { return this.e._withInputs(() => this.e.ex.qvp_style_add_letters(this.h, layer, this._letterQuery(query), rgba(color), ms)); }
-    /** the one shape of a letter hit: indices -1 for none, the mark as a name, and the word's key */
+    /** the one shape of a letter hit: indices -1 for none, the mark as its id and its name, and the word's key */
     _letterHit(s) {
       const d = this.e.dv(), f = v => (v === NONE ? -1 : v);
       const h = { word: f(d.getUint32(s, true)), letter: f(d.getUint32(s + 4, true)), path: f(d.getUint32(s + 8, true)), at: f(d.getUint32(s + 12, true)), line: f(d.getUint32(s + 16, true)),
         distance: d.getFloat32(s + 20, true), mark: d.getUint8(s + 24), isExact: !!d.getUint8(s + 25), isBody: !!d.getUint8(s + 26) };
-      h.mark = this.e.markName(h.mark);
+      h.markName = this.e.markName(h.mark);
       if (h.word >= 0 && h.word < this.nWords) h.wordKey = this.wordKey(h.word);
       return h;
     }
     /**
      * The letter or mark under a point in page units, or null: {word, letter, path, at, line,
-     * distance, mark, isExact, isBody, wordKey}. The hit prefers ink. `letter` is -1 for a
-     * word-level mark. A near hit (`isExact` false) has the distance to the letter's box, and
+     * distance, mark, markName, isExact, isBody, wordKey}. The hit prefers ink. `letter` is -1
+     * for a word-level mark. `mark` is the id of the path's mark and `markName` its name. A near hit (`isExact` false) has the distance to the letter's box, and
      * `opt` ({maxDistance, gapBias, preferExact}, as in `hitTest`) chooses its word; null takes
      * the engine's defaults. Null with no layer.
      */

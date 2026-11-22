@@ -1006,6 +1006,7 @@ class QvpNativeBackend implements QvpBackend {
         path: m.path,
         at: _none(m.at),
         mark: m.mark,
+        markName: markName(m.mark),
         isBody: m.isBody != 0,
         isCut: m.isCut != 0,
       );
@@ -1086,6 +1087,7 @@ class QvpNativeBackend implements QvpBackend {
     line: _none(h.line),
     distance: h.distance,
     mark: h.mark,
+    markName: markName(h.mark),
     isExact: h.isExact != 0,
     isBody: h.isBody != 0,
   );

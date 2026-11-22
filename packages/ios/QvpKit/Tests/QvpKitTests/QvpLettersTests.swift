@@ -91,7 +91,7 @@ final class QvpLettersTests: XCTestCase {
         close(got.x1, w["x1"], tolerance, "\(tag) x1"); close(got.y1, w["y1"], tolerance, "\(tag) y1")
         if let members = w["members"] {
             sameMembers(got.members, members, tag)
-            XCTAssertEqual(got.marks, Array(got.members.dropFirst(got.nMembers - got.nMarks)), "\(tag) marks")
+            XCTAssertEqual(got.marks, got.members.filter { !$0.isBody }, "\(tag) marks")
         }
     }
     private func sameHit(_ got: QvpLetterHit?, _ want: Any?, _ tolerance: Double, _ tag: String) {
