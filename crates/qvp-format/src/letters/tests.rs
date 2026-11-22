@@ -260,7 +260,7 @@ fn sections(b: &[u8]) -> Vec<(usize, usize)> {
     let mut at = HEADER_LEN;
     (0..N_SECTIONS)
         .map(|i| {
-            let len = header_u32(b, 16 + 4 * i) as usize;
+            let len = header_u32(b, 24 + 4 * i) as usize;
             at += len;
             (at - len, len)
         })
@@ -273,8 +273,8 @@ fn patch_varint(b: &[u8], at: usize, old_len: usize, v: u32, sec: usize) -> Vec<
     write_varint(&mut out, v);
     let grown = out.len() - at;
     out.extend_from_slice(&b[at + old_len..]);
-    let len = header_u32(b, 16 + 4 * sec) as usize + grown - old_len;
-    out[16 + 4 * sec..20 + 4 * sec].copy_from_slice(&(len as u32).to_le_bytes());
+    let len = header_u32(b, 24 + 4 * sec) as usize + grown - old_len;
+    out[24 + 4 * sec..28 + 4 * sec].copy_from_slice(&(len as u32).to_le_bytes());
     out
 }
 
@@ -398,6 +398,39 @@ fn the_encoder_is_deterministic() {
     assert_eq!(a, b);
 }
 
+// ── the page digest ──
+
+#[test]
+fn page_digest_is_fnv_1a_64() {
+    assert_eq!(page_digest(b""), 0xcbf2_9ce4_8422_2325);
+    assert_eq!(page_digest(b"a"), 0xaf63_dc4c_8601_ec8c);
+    assert_eq!(page_digest(b"foobar"), 0x8594_4171_f739_67e8);
+}
+
+#[test]
+fn the_header_names_the_page_file() {
+    let page = sample_page();
+    let b = enc(&sample());
+    let file = crate::encode(&page);
+    assert_eq!(letters_page_digest(&b), Ok(page_digest(&file)));
+    assert_eq!(page_data_digest(&page), Ok(page_digest(&file)));
+    // other bytes of the same page give another digest
+    let mut other = page.clone();
+    other.header.width = 346.0;
+    assert_ne!(letters_page_digest(&encode_letters(&sample(), &other).unwrap()), letters_page_digest(&b));
+    assert_eq!(letters_page_digest(b"QVL1"), Err(Error::BadMagic));
+    assert_eq!(letters_page_digest(&b[..HEADER_LEN - 1]), Err(Error::Truncated("header")));
+    assert_eq!(letters_page_digest(b"QVP1\x01\x00"), Err(Error::BadMagic));
+}
+
+#[test]
+fn a_page_whose_commands_do_not_decode_has_no_digest() {
+    let mut page = sample_page();
+    page.ops[page.paths[3].op_off as usize] = 9;
+    assert_eq!(page_data_digest(&page), Err(Error::Corrupt("bad opcode")));
+    assert!(encode_letters(&sample(), &page).is_err());
+}
+
 // ── what the encoder refuses ──
 
 #[test]
@@ -471,7 +504,7 @@ fn rejects_another_page() {
 }
 
 /// A page with the layer's counts but other paths: the decoder gives an error or some
-/// layer, and never panics.
+/// layer, and never panics. The digest tells the two pages apart.
 #[test]
 fn another_page_with_the_same_counts_does_not_panic() {
     let d = rich();
@@ -504,6 +537,7 @@ fn another_page_with_the_same_counts_does_not_panic() {
         if let Ok(other) = decode_letters(&bytes, p) {
             assert_ne!(other, d, "page {i}");
         }
+        assert_ne!(page_data_digest(p).ok(), letters_page_digest(&bytes).ok(), "page {i}");
     }
 }
 
@@ -536,7 +570,7 @@ fn a_huge_more_at_count_does_not_allocate() {
     let mut d = sample();
     d.letters[2].more_at = vec![0x7F; 1];
     let bytes = enc(&d);
-    let tables_end = HEADER_LEN + header_u32(&bytes, 16) as usize;
+    let tables_end = HEADER_LEN + header_u32(&bytes, 24) as usize;
     // The more_at count of the last letter is 1, then its one offset 0x7F.
     let at = (HEADER_LEN..tables_end).find(|&i| bytes[i] == 1 && bytes[i + 1] == 0x7F).unwrap();
     let patched = patch_varint(&bytes, at, 1, u32::MAX, 0);
@@ -607,7 +641,7 @@ fn rejects_unknown_member_flags() {
     let bytes = enc(&sample());
     // The flags column of the sample: a body, a mark at its letter's offset plus one, two
     // piece bodies, a body.
-    let tables_end = HEADER_LEN + header_u32(&bytes, 16) as usize;
+    let tables_end = HEADER_LEN + header_u32(&bytes, 24) as usize;
     let flags_at = (HEADER_LEN..tables_end - 4)
         .find(|&i| bytes[i..i + 5] == [1, 8, 3, 3, 1])
         .expect("the flags column of the sample");
@@ -744,7 +778,7 @@ fn a_mutation_fuzz_never_panics() {
                 }
                 4 => {
                     // a section length, grown or shrunk by a little
-                    let f = 16 + 4 * (rng.step() as usize % N_SECTIONS);
+                    let f = 24 + 4 * (rng.step() as usize % N_SECTIONS);
                     if f + 4 <= b.len() {
                         let v = header_u32(&b, f).wrapping_add(rng.step() % 9).wrapping_sub(4);
                         b[f..f + 4].copy_from_slice(&v.to_le_bytes());

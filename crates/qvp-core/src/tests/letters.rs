@@ -170,6 +170,29 @@ fn a_bad_layer_is_refused_and_the_old_one_kept() {
 }
 
 #[test]
+fn a_layer_built_for_other_bytes_of_the_page_is_refused() {
+    // the same page, words and paths, but another file: one header field differs
+    let mut other = letters_page_data();
+    other.header.width = 101.0;
+    let stale = layer_for(&letters_layer(), &other);
+    let refused = Err(Error::Corrupt("letter layer page file"));
+    // a page loaded from its file
+    let mut p = Page::load(&encode(&letters_page_data())).unwrap();
+    assert_eq!(p.attach_letters(&stale), refused);
+    assert!(!p.has_letters());
+    assert_eq!((p.geometry().table.len(), p.draw_revision()), (8, 0));
+    // the layer built for this file attaches, and a refused one keeps it
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(p.attach_letters(&stale), refused);
+    assert_eq!((p.geometry().table.len(), p.draw_revision(), p.letter_count(0)), (10, 1, 2));
+    // a page built from data has the file that `encode` writes for it
+    assert_eq!(page_without_layer().attach_letters(&stale), refused);
+    let mut q = Page::from_data(other).unwrap();
+    q.attach_letters(&stale).unwrap();
+    assert_eq!(q.attach_letters(&layer_bytes()), refused);
+}
+
+#[test]
 fn a_second_attach_replaces_the_first() {
     let mut p = letters_page();
     let ops = p.geometry().ops.len();

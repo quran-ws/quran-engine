@@ -8,7 +8,7 @@
 use crate::defaults::MAX_LETTER_LAYER_BYTES;
 use crate::style::{PathAnim, PathCtx, Selector};
 use crate::{load, reflow, HitOptions, Page, PathGeom, Rgba, NONE};
-use qvp_format::letters::{decode_letters, LetterData, MemberPath, NO_AT};
+use qvp_format::letters::{decode_letters, letters_page_digest, LetterData, MemberPath, NO_AT};
 use qvp_format::{cmds_bbox, Error, IBox, Mark, PageData, PathKind, NONE_U16};
 
 /// What part of a letter a selector or a query takes. `QVP_LETTER_PART_*`.
@@ -487,7 +487,8 @@ impl Page {
     /// table after the page's own paths, and every rule is evaluated again.
     ///
     /// A file larger than [`MAX_LETTER_LAYER_BYTES`] is refused before it is decoded. A
-    /// file that does not decode, or that belongs to another page, is refused too. On an
+    /// file that does not decode, or that belongs to another page, is refused too, and so is
+    /// a layer built for other bytes of this page: `Corrupt("letter layer page file")`. On an
     /// error the page stays as it was, with the layer it had. A second attach replaces the
     /// first: its pieces are dropped and the new ones start at the same index.
     ///
@@ -500,6 +501,10 @@ impl Page {
     pub fn attach_letters(&mut self, bytes: &[u8]) -> Result<(), Error> {
         if bytes.len() > MAX_LETTER_LAYER_BYTES {
             return Err(Error::Bounds("letter layer size"));
+        }
+        // the layer names the page file it was built for
+        if Some(letters_page_digest(bytes)?) != self.file_digest {
+            return Err(Error::Corrupt("letter layer page file"));
         }
         let data = decode_letters(bytes, &self.data)?;
         data.check_against(&self.data)?;

@@ -162,16 +162,25 @@ pub struct Page {
     /// Counts up when the draw list can change while the layout and the band stay the same.
     /// See [`Page::draw_revision`].
     pub(crate) draw_revision: u32,
+    /// The digest of the page file (`qvp_format::letters::page_digest`), which a letter
+    /// layer must name. `None` for data that no file can hold.
+    pub(crate) file_digest: Option<u64>,
 }
 
 impl Page {
     pub fn load(bytes: &[u8]) -> Result<Page, Error> {
-        Page::from_data(decode(bytes)?)
+        Page::build(decode(bytes)?, Some(qvp_format::letters::page_digest(bytes)))
     }
 
     /// Build a page from decoded data. The data passes `PageData::validate` first, since
-    /// this indexes the tables by each other's values.
+    /// this indexes the tables by each other's values. Its file is the one `encode` writes
+    /// for it.
     pub fn from_data(data: PageData) -> Result<Page, Error> {
+        let digest = qvp_format::letters::page_data_digest(&data).ok();
+        Page::build(data, digest)
+    }
+
+    fn build(data: PageData, file_digest: Option<u64>) -> Result<Page, Error> {
         data.validate()?;
         let (path_word, path_deco) = load::path_owners(&data);
         let line_centre = load::line_centres(&data);
@@ -215,6 +224,7 @@ impl Page {
             colors: vec![DEFAULT_INK; n],
             letters: None,
             draw_revision: 0,
+            file_digest,
         })
     }
 

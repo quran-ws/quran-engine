@@ -12,8 +12,8 @@
 //! A page with a warning fails the gate, because the converter emits none on good data.
 
 use qvp_convert::letter_page::{letter_page, write_letters, LetterDirs, LetterPage};
-use qvp_format::letters::{decode_letters, encode_letters, MemberPath, PieceRec};
-use qvp_format::{encode_cmds, Cmd, PageData, PathRec};
+use qvp_format::letters::{decode_letters, encode_letters, letters_page_digest, page_digest, MemberPath, PieceRec};
+use qvp_format::{decode, encode, encode_cmds, Cmd, PageData, PathRec};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -86,6 +86,15 @@ fn check(page: &str) -> Result<Counts, String> {
     }
     if decode_letters(&lp.bytes, &lp.page).as_ref() != Ok(d) {
         return Err(format!("page {page}: the layer does not round-trip"));
+    }
+    // The header names the page file that `batch` writes, and that file reads back to the
+    // same bytes, so a page loaded from it has the digest the layer names.
+    let file = encode(&lp.page);
+    if letters_page_digest(&lp.bytes) != Ok(page_digest(&file)) {
+        return Err(format!("page {page}: the layer does not name its page file"));
+    }
+    if decode(&file).map(|p| encode(&p)).as_ref() != Ok(&file) {
+        return Err(format!("page {page}: the page file does not read back to the same bytes"));
     }
     d.check_against(&lp.page).map_err(|e| format!("page {page}: check_against: {e:?}"))?;
 
