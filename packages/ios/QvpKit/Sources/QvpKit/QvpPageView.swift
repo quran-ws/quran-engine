@@ -401,7 +401,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     }
     /// What the layout in hand draws and where: the engine's own answer, read once per layout.
     /// A printed page and a reflowed one come back in the same shape.
-    struct DrawList { let draws: [QvpDraw], places: [QvpPlacement], band: ClosedRange<Float> }
+    /// `layout` is the engine layout the list was read from: a dress lays the page out again,
+    /// and a list from the layout it replaced holds the old placements.
+    struct DrawList { let draws: [QvpDraw], places: [QvpPlacement], band: ClosedRange<Float>, layout: QvpLayout? }
     private var drawList: DrawList?
     /// The band of the laid-out page worth drawing: the screen, with a screen of slack either
     /// side so a fast drag has somewhere to go before the next frame asks again.
@@ -478,9 +480,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     }
     private func drawListNow() -> DrawList? {
         let b = visibleBand
-        if let q = drawList, q.band == b.top...b.bottom { return q }
+        if let q = drawList, q.band == b.top...b.bottom, q.layout === page?.currentLayout { return q }
         guard let p = page, p.isOpen, p.currentLayout != nil else { return nil }
-        let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: b.top...b.bottom)
+        let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: b.top...b.bottom, layout: p.currentLayout)
         drawList = q; return q
     }
     private func transform(_ q: DrawList, _ placement: Int, offsetY: CGFloat? = nil) -> CGAffineTransform {

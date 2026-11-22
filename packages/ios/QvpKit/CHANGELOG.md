@@ -37,6 +37,20 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   Native module reads them as an empty word list, as on Android.
 
 ### Changed
+- `layoutPrintedHeight` on a page dressed in a border answers the height of the whole page,
+  border included: the dressed box fitted to the viewport width, as `dressView` at scale 0
+  fits it. That is the height a host that scrolls the page gives its canvas, so a host can
+  plan a box for a bordered page before it sizes the canvas. With no padding the height is in
+  proportion to the width. An undressed page answers `contentH` as before.
+- Fill-height on a page dressed in a border fills the viewport with the border included:
+  `dressView(0, viewportW).height` is `viewportH`. Before, the text filled the viewport and the
+  border reached past it above and below. `layoutLineSpacingToFill` answers the same leading.
+- A printed layout of a dressed page narrows `cropLeft` and `cropRight` where a medallion
+  reaches past them, so the crop never cuts into a medallion. A medallion stays centred on
+  its printed ring. On page 50, four font markers reached about 1 unit past a crop measured
+  from the words.
+- `dress` and `undress` lay a printed page out again from its own spec, as they already did
+  for a reflowed page, because the crop and the fill now depend on the dress.
 - The Android `QvpPageView`, the Flutter `QvpPageView`, the iOS `QvpPageView` and the web
   `CanvasRenderer` ask the engine for their band of ink. Each had its own copy of the
   arithmetic, and the copies did not agree (#134):
@@ -79,6 +93,17 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ### Removed
 
 ### Fixed
+- A page dressed without a border no longer grows its dressed box to the whole printed page.
+  The box is the laid-out page, so a crop is kept. Before, `dressView` at scale 0 shrank a
+  cropped page to show the cut margins, by about 3.5% on page 50. A reflowed page dressed
+  without a border is no longer pushed off to the left: on page 50 at zoom 1.8, `fitX` was
+  −170 px.
+- `QvpCanvasController.relayout()` under `hostScrolls` also fits the view again when the page
+  is at rest. A crop, fill or box set after `page.dress(...)` moved a bordered page's fit, and
+  the view stayed where the last `resetView()` left it.
+- `QvpCanvasController.resetView()` takes up a layout the engine made for a dress, as
+  `relayout()` does, and both page views key their draw lists on the layout. Before, a host
+  that called only `resetView()` after a dress drew the ink with the old placements.
 - A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's

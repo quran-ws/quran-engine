@@ -15,10 +15,11 @@
 // When the page is not zoomed and `onSwipe` is nil the drag gesture is detached entirely,
 // so an enclosing pager (`TabView`, `ScrollView`) keeps its own swipe.
 //
-// After `page.dress(...)` or `page.undress()`, call `resetView()`: a dressed page is fitted
-// with its border. A host that scrolls the page itself (`hostScrolls`) gives the canvas the
-// height of `hostPageSize`, the engine's dressed box fitted to the canvas width, so the whole
-// border is on it.
+// After `page.dress(...)` or `page.undress()`, call `resetView()`: the engine lays the page out
+// again for the dress, and `resetView()` takes that layout up and fits the page with its
+// border. A host that scrolls the page itself (`hostScrolls`) gives the canvas the size of
+// `hostPageSize`, the engine's dressed box fitted to the canvas width, so the whole border is
+// on it, and plans its box with `printedHeight(forWidth:)`, which holds the border too.
 #if canImport(SwiftUI)
 import SwiftUI
 import CoreGraphics
@@ -212,6 +213,12 @@ public final class QvpCanvasController {
     /// engine shrinks a dressed box wider than the canvas to the canvas width and never
     /// enlarges one, so the whole border fits across. Give the canvas this height and the
     /// border's bottom is on it. nil before the canvas has a page and a width.
+    ///
+    /// Size the canvas from this, and decide whether the page scrolls from it, never from
+    /// `currentLayout.contentH`. On a bordered page `contentH` is the text alone at the layout's
+    /// scale, before the border shrinks the page to the width. Under `fillHeight` a bordered page
+    /// that fits its box gets a height of exactly `hostViewportHeight`, border included. On an
+    /// undressed page, or one dressed without a border, this height is `contentH`.
     public var hostPageSize: CGSize? {
         // read so an observer asks again after a relayout or a redraw (`resetView` after a dress)
         _ = layoutRevision; _ = revision
@@ -382,6 +389,11 @@ public final class QvpCanvasController {
     /// before fill-height adds any leading. A host sizing the page's box asks this BEFORE it
     /// sizes the canvas: the layout answers the same number, but only for the bounds it already
     /// has. nil before a page is attached.
+    ///
+    /// On a page dressed in a border it is the whole page, border included, fitted to `width`:
+    /// the height `hostPageSize` will have. Such a host sizes the canvas from `hostPageSize`,
+    /// not from `contentH`. With no padding the height is in proportion to the width, so a host
+    /// that shrinks a page to fit its box can divide by it.
     public func printedHeight(forWidth width: CGFloat) -> CGFloat? {
         guard let p = page, p.isOpen, width > 0 else { return nil }
         let base = baseSpec
@@ -394,20 +406,40 @@ public final class QvpCanvasController {
         return CGFloat(p.layoutPrintedHeight(spec))
     }
     /// Recompute the engine layout for the current size / knobs.
+    ///
+    /// Under `hostScrolls` the view at rest is the engine's fit of the page to the canvas width
+    /// (`fittedView`), and on a page dressed in a border a new layout moves it: a new crop, fill
+    /// or box fits the border again. So the view follows the layout here, and a host that sets
+    /// a knob after `page.dress(...)` needs no `resetView()`. A pinch in progress, or a magnified
+    /// peek the reader is holding, keeps its own view.
     public func relayout() {
         guard let p = page, p.isOpen, bounds.width > 0, bounds.height > 0 else { return }
-        _ = p.layout(layoutSpec)
+        layoutSeen = p.layout(layoutSpec)
         placements.removeAll()
         layoutRevision &+= 1
+        if hostScrolls, !isPinching, springTask == nil, !(zoomMode == .magnify && viewScale > fitScale) {
+            let f = fittedView()
+            viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
+        }
         cache.clear(); invalidate()
     }
     /// Go back to the fitted view (`fittedView()`).
+    ///
+    /// A dress or an undress lays the page out again inside the engine, without this controller.
+    /// The layout it made is taken up here as `relayout()` takes up its own: the draw lists and
+    /// the ink go, and `layoutRevision` moves, so a host's overlay redraws from the new rows.
     public func resetView() {
         springTask?.cancel(); springTask = nil
+        if let l = page?.currentLayout, l !== layoutSeen {
+            layoutSeen = l; placements.removeAll(); cache.clear(); layoutRevision &+= 1
+        }
         let f = fittedView()
         viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
         invalidate()
     }
+    /// The engine layout `layoutRevision` last counted: the one `relayout()`, a gesture or
+    /// `resetView()` took up.
+    @ObservationIgnored private var layoutSeen: QvpLayout?
     /// The transform `resetView()` applies. A printed page takes the layout's fit: the content
     /// plus any dress overflow, shrunk to fit the view and centred. A reflowed page takes scale 1,
     /// centred across, its top at the top.
@@ -522,6 +554,8 @@ public final class QvpCanvasController {
     /// slice's in turn, and a single slot rebuilt on every alternation. Cleared with the layout.
     /// Written from the renderer, so kept out of observation like `cache`.
     @ObservationIgnored var placements: [ClosedRange<Float>: DrawList] = [:]
+    /// The engine layout the lists in `placements` were read from.
+    @ObservationIgnored private var placementsLayout: QvpLayout?
     /// A band of the canvas, in layout points — the pan and zoom divided out: what the engine is
     /// asked to draw. `draw` hands it the band it is painting — its slice, or `band(displayScale:)`
     /// (two screens around the reader, the page, or the pinch's two boxes) — never a band of its
@@ -532,6 +566,9 @@ public final class QvpCanvasController {
     }
     func drawListNow(band b: (top: Float, bottom: Float)) -> DrawList? {
         let range = b.top...b.bottom
+        // a list read from a layout the engine has since replaced (a dress lays the page out
+        // again) holds the old placements
+        if placementsLayout !== page?.currentLayout { placements.removeAll(); placementsLayout = page?.currentLayout }
         if let q = placements[range] { return q }
         guard let p = page, p.isOpen, p.currentLayout != nil else { return nil }
         let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: range)
@@ -583,7 +620,7 @@ public final class QvpCanvasController {
         // The engine laid the page out inside the call rather than through `relayout()`, so the
         // revision is bumped here too — it is the count of LAYOUTS, and a host overlay keying on
         // it must not be told a pinch left the geometry where it was.
-        if c.relaid { placements.removeAll(); cache.clear(); layoutRevision &+= 1 }
+        if c.relaid { placements.removeAll(); cache.clear(); layoutRevision &+= 1; layoutSeen = page?.currentLayout }
         invalidate()
     }
     /// One frame of a pinch. `magnification` is the whole gesture against where the fingers

@@ -27,14 +27,19 @@ pub struct LayoutSpec {
     /// height of its own to fill: it takes the rows a full page gets,
     /// `(viewport_h - pads) / grid_lines` each, centred. Never below the printed
     /// spacing: a page that cannot fit at it reports a `content_h` taller than
-    /// the viewport.
+    /// the viewport. A page dressed in a border fills `viewport_h` with the border
+    /// included, as [`Page::dress_view`] at scale 0 shows it. Its `content_h` is then
+    /// the text at the layout's scale, before the border shrinks the page to the
+    /// width, and is not the viewport's height.
     pub fill_height: bool,
     /// The line grid to lay the page out inside; 0 means the page's own grid
     /// ([`Page::grid`], 15 lines for this mushaf). Pass the page's line count to
     /// make a short page fill the viewport on its own.
     pub grid_lines: u32,
     /// Printed side margins to cut, in page units (0 = keep the print's margins). The
-    /// ink then spans the padded viewport width instead of the full page width.
+    /// ink then spans the padded viewport width instead of the full page width. On a
+    /// printed layout of a dressed page, a crop that would cut into a medallion is
+    /// narrowed to the medallion's edge, so every ornament stays on the laid-out page.
     pub crop_left: f32,
     pub crop_right: f32,
     /// Upper bound on the content width as a multiple of the page's aspect ratio applied
@@ -238,6 +243,9 @@ struct PrintedMetrics {
     scale: f32,
     nominal: f32,
     avail_h: f32,
+    /// The printed side margins cut, left and right, in page units: the spec's, narrowed
+    /// where a dressed medallion reaches past them ([`Page::dressed_crop`]).
+    crop: (f32, f32),
 }
 
 impl Page {
@@ -282,13 +290,59 @@ impl Page {
     /// the answer was several percent high on an ordinary page and a quarter high on one whose
     /// printed margins are most of its width — and a host sizing its own furniture to a printed
     /// row drew it that much too big.
+    ///
+    /// A page dressed in a border fills the viewport with the border included: the dressed box,
+    /// fitted to the viewport width as [`Page::dress_view`] at scale 0 fits it, is
+    /// `viewport_h` tall. The border reaches past the text above and below, so it takes less
+    /// leading than the bare page. Without a border the dressed box is the content, and the
+    /// answer is the bare one.
     fn fill_delta(&self, spec: &LayoutSpec) -> f32 {
         let m = self.printed_metrics(spec);
-        if (self.data.lines.len() as f32) < m.nominal {
+        let short = (self.data.lines.len() as f32) < m.nominal;
+        let bare = if short {
             (m.avail_h / (m.nominal * m.scale) - self.line_spacing).max(0.0)
         } else {
             ((m.avail_h / m.scale - self.height()) / (m.nominal - 1.0)).max(0.0)
+        };
+        if self.dress_frame().is_none() {
+            return bare;
         }
+        // The dressed height rises with the leading, in straight pieces: the border's reach
+        // above and below is fixed for a frame that tiles and grows with the page for one that
+        // stretches, and a pad can hide part of it. Newton's method lands on the piece that holds
+        // the answer in a step or two; the slope is measured over one page unit.
+        let block = |delta: f32| {
+            if short {
+                m.nominal * (self.line_spacing + delta)
+            } else {
+                self.height() + (m.nominal - 1.0) * delta
+            }
+        };
+        let over = |delta: f32| self.printed_dressed_height(spec, &m, block(delta)) - spec.viewport_h;
+        let mut delta = 0.0f32;
+        for _ in 0..8 {
+            let f = over(delta);
+            if f.abs() < 1e-3 || (delta == 0.0 && f > 0.0) {
+                break;
+            }
+            let slope = over(delta + 1.0) - f;
+            if slope.is_nan() || slope <= f32::EPSILON {
+                break;
+            }
+            delta = (delta - f / slope).max(0.0);
+        }
+        delta
+    }
+
+    /// The height of a printed layout of `spec` whose block of lines is `block_h` page units
+    /// tall, in viewport px: the content and its padding, or on a dressed page the dressed box
+    /// fitted to the viewport width ([`Page::dressed_height`]).
+    fn printed_dressed_height(&self, spec: &LayoutSpec, m: &PrintedMetrics, block_h: f32) -> f32 {
+        let content_h = spec.pad_top + block_h * m.scale + spec.pad_bottom;
+        let laid =
+            (m.crop.0, spec.pad_top / m.scale, (m.content_w - spec.pad_left - spec.pad_right) / m.scale, block_h);
+        let ox = spec.pad_left - m.crop.0 * m.scale;
+        self.dressed_height(laid, m.scale, ox, m.content_w, content_h, spec.viewport_w)
     }
     /// The width the page is fitted into, in viewport px: the viewport, bounded by the page's
     /// aspect ratio when the host asks for it, so a wide screen does not stretch the lines.
@@ -307,11 +361,13 @@ impl Page {
         let pw = self.width();
         let content_w = self.content_width(spec);
         let avail_w = (content_w - spec.pad_left - spec.pad_right).max(1.0);
+        let crop = self.dressed_crop(spec.crop_left, spec.crop_right);
         PrintedMetrics {
             content_w,
-            scale: avail_w / (pw - spec.crop_left.max(0.0) - spec.crop_right.max(0.0)).max(1.0),
+            scale: avail_w / (pw - crop.0 - crop.1).max(1.0),
             nominal: self.grid_lines(spec).max(self.data.lines.len() as u32).max(2) as f32,
             avail_h: (spec.viewport_h - spec.pad_top - spec.pad_bottom).max(1.0),
+            crop,
         }
     }
     /// The share of the padded viewport of `spec` left empty when the page is fitted to width.
@@ -327,16 +383,21 @@ impl Page {
     /// [`Page::layout`] answers as `content_h` before fill-height adds any leading — the page
     /// fitted to the cropped width, or the grid a short page sits on, plus the padding.
     ///
+    /// A page dressed in a border answers the height of the whole page, border included: the
+    /// dressed box fitted to `viewport_w` as [`Page::dress_view`] at scale 0 fits it, which is
+    /// the height a host that scrolls the page gives its canvas. Without a border that is
+    /// `content_h`, the crop made with room for the medallions.
+    ///
     /// A host deciding whether a page fits a box, or how far it would have to shrink the page
     /// to keep it whole, asks this BEFORE it sizes the page's canvas — the layout answers the
     /// same number, but only for the viewport it is given. Measured the way the layout
-    /// measures itself (`printed_metrics`), so the crop and the grid are never re-derived by
-    /// the host.
+    /// measures itself (`printed_metrics`), so the crop, the grid and the border are never
+    /// re-derived by the host. With no padding the answer is in proportion to the width.
     pub fn printed_height(&self, spec: &LayoutSpec) -> f32 {
         let m = self.printed_metrics(spec);
         let on_grid = spec.fill_height && (self.data.lines.len() as f32) < m.nominal;
         let block_h = if on_grid { m.nominal * self.line_spacing } else { self.height() };
-        spec.pad_top + block_h * m.scale + spec.pad_bottom
+        self.printed_dressed_height(spec, &m, block_h)
     }
 
     /// Compute and store a layout. Horizontal placement is as printed (scaled to
@@ -358,8 +419,7 @@ impl Page {
             return self.layout.as_ref().unwrap();
         }
         let ph = self.height();
-        let crop = (spec.crop_left.max(0.0), spec.crop_right.max(0.0));
-        let PrintedMetrics { content_w, scale, nominal, .. } = self.printed_metrics(spec);
+        let PrintedMetrics { content_w, scale, nominal, crop, .. } = self.printed_metrics(spec);
         let n = self.data.lines.len();
         let natural = self.line_spacing;
         // a short page has no height of its own to fill: it takes the rows a

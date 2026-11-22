@@ -702,7 +702,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     layoutLineSpacingToFill(spec, max = 0) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_line_spacing_to_fill(this.h, s, max); }
     /** the share of the padded viewport left empty when the page is fitted to width */
     layoutWastedFraction(spec) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_wasted_fraction(this.h, s); }
-    /** the page's height laid out for `spec` at the printed pitch, in viewport px: contentH before fill-height adds leading, padding included */
+    /** the page's height laid out for `spec` at the printed pitch, in viewport px: contentH before fill-height adds leading, padding included. On a page dressed in a border, the whole page with the border: the dressed box fitted to the viewport width, as dressView at scale 0 fits it */
     layoutPrintedHeight(spec) { const s = this.e.scratch; this._writeLayoutSpec(spec, s); return this.e.ex.qvp_layout_printed_height(this.h, s); }
     /** the grid this page is laid out inside: the mushaf's line count and the printed line spacing */
     get grid() { this.e.ex.qvp_page_grid(this.h, this.e.scratch); const d = this.e.dv(); return { lines: d.getUint32(this.e.scratch, true), lineSpacing: d.getFloat32(this.e.scratch + 4, true) }; }
