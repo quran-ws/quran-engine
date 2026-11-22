@@ -147,7 +147,8 @@ The counter check does not see a counter that a cut divides between two pieces, 
 no single member holds it: of the 88,914 counters of cut paths on the 604
 pages, 883 are divided, 863 of them the loop of a kaf joined to the alif or lam after it,
 and a point in such a loop names the nearer of the two letters (the alif or lam for 192,775
-of 555,399 points sampled, another word for 412 points of word 76:20:6).
+of 555,399 points sampled). For 412 points of word 76:20:6 the answer is another word: the
+word that `qvp_hit_test` gives there, with or without a layer.
 
 Quran.ws did not measure where a joined outline divides between two letters. That
 division is the output of DigitalKhatt's `medinamushafanalyzer`

@@ -47,7 +47,8 @@ All notable changes to the engine and its packages. The format follows
   mark) and `QVP_SELECTOR_WORD_CHARS` (19, the ink of a range of `qpc` characters). The parts
   go by offset: the body and dots part takes the same paths as the character range over the
   letter's own offset. `qvp_find_letters` and `qvp_style_add_letters` take a `QvpLetterQuery`
-  (a scope, a character, a mark and a part). A letter rule added before a layer takes it when
+  (a scope, a character, a mark and a part). Before, `qvp_style_add` gave 0 for the ids 16 to
+  19. Now it gives a handle, also on a page with no layer. A letter rule added before a layer takes it when
   it comes.
 - A cut path draws whole while its letters have one colour, and as its pieces, in its place,
   while they differ or are in transition. `qvp_layout_draw_revision` counts up when the draw
