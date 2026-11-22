@@ -1,4 +1,4 @@
-# QvpExample — React Native demo of the QVP mushaf engine
+# QvpExample — React Native demo of the QVP mushaf engine, on Android and iOS
 
 One screen (`App.tsx`) reproducing the web / Android demos on top of
 `@quran.ws/qvp-react-native` (`../qvp-react-native`, linked as a `file:` dependency):
@@ -16,9 +16,11 @@ and the engine's readout with each ornament's licence.
 
 The package ships no page data. The example copies a subset from `dist/pages` (built by
 `cargo run -p qvp-convert --release -- batch pages dist/pages` at the repo root) into
-`android/app/src/main/assets/pages/` (gitignored): pages 001–021, 440–445, 582, 604 (`.qvp` +
+`android/app/src/main/assets/pages/` and `ios/QvpExample/pages/` (both gitignored): pages 001–021, 440–445, 582, 604 (`.qvp` +
 `.words.json`), `atlas.qva` and `ornaments.qvo` when the release has one.
-`scripts/sync-example-data.sh react-native` copies them. The dress panel works without the ornament set.
+`scripts/sync-example-data.sh react-native` copies them to both. The iOS project bundles
+`ios/QvpExample/pages` as a folder, so `asset://pages/001.qvp` names the same file on both
+platforms. The dress panel works without the ornament set.
 
 ```sh
 mkdir -p android/app/src/main/assets/pages
@@ -45,9 +47,32 @@ For live-reload development run `npm start` and build with `debuggableVariants =
 `metro.config.js` adds `../qvp-react-native` to `watchFolders` and resolves `react` / `react-native`
 from this app's `node_modules`.
 
+## Build (iOS)
+
+The pod `qvp-react-native` compiles QvpKit's sources from `packages/ios/QvpKit` and links the
+engine from `packages/ios/QvpKit/QvpEngine.xcframework`. Build the engine once with
+`scripts/build-engine-ios.sh` from the repository root, and again after a change under
+`crates/`. Run `pod install` again after a change to QvpKit's sources. The example needs
+macOS, Xcode 16 and CocoaPods. Copy the pages first with `scripts/sync-example-data.sh
+react-native` from the repository root: the Xcode project bundles `ios/QvpExample/pages`,
+and the build fails when that folder is missing.
+
+```sh
+npm install
+cd ios && pod install
+xcodebuild -workspace QvpExample.xcworkspace -scheme QvpExample -configuration Release \
+  -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+xcrun simctl install booted build/Build/Products/Release-iphonesimulator/QvpExample.app
+xcrun simctl launch booted org.reactjs.native.example.QvpExample
+```
+
+The Release build bundles the JavaScript, so the app runs without Metro. A Debug build loads
+the JavaScript from Metro (`npm start`). `metro.config.js` leaves
+`../qvp-react-native/node_modules` out of the bundle. That folder has its own copy of React
+after an `npm install` there, and two copies of React break every hook.
+
 ## Tests
 
 `npm test` runs Jest. `jest/qvpModule.js` stands in for the native module, so the tests check
 what the JavaScript side sends and reads back. `__tests__/dress.test.tsx` covers the dress calls.
-
-iOS is not set up (see the library README).

@@ -1,0 +1,25 @@
+# detekt for the Kotlin library: the two doc-block rules of docs/standards/CODE-STYLE.md and
+# nothing else. Every other rule of the comments set is off by default, and every other rule
+# set is off here. A companion object needs no block of its own: its members have theirs.
+comments:
+  UndocumentedPublicClass:
+    active: true
+    ignoreDefaultCompanionObject: true
+  UndocumentedPublicFunction:
+    active: true
+complexity:
+  active: false
+coroutines:
+  active: false
+empty-blocks:
+  active: false
+exceptions:
+  active: false
+naming:
+  active: false
+performance:
+  active: false
+potential-bugs:
+  active: false
+style:
+  active: false

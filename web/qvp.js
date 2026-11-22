@@ -5,6 +5,7 @@
 (function (global) {
   'use strict';
 
+  /** The absent index of the C ABI (QVP_NONE). */
   const NONE = 0xffffffff;
   const ORNAMENT_KIND = ['ayah_mark', 'surah_header', 'page_frame'];
   const LINEAGE = ['scan', 'font'];
@@ -18,14 +19,20 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     SELECTION_BAND: 0x2d6fd640, SELECTION_PAD_X: 0.6, GAP_BIAS: 0.6, TAP_DISTANCE: 6, GRID_LINES: 15, ASPECT_SLACK: 1.15, MASK_BLOCK: 0xd9d4c8ff, MASK_PAD: 0.6, MASK_RADIUS: 0.8,
     REVEAL_LIT: 1, REVEAL_GREY: 0xc9c4b8ff, CROP_PAD: 2, AYAH_MARK_SCALE_SCAN: 1.5,
     MIN_ZOOM: 0.5, MAX_ZOOM: 12, ZOOMED_THRESHOLD: 1.02, SWIPE_AXIS_RATIO: 1.5, SWIPE_DISTANCE: 40, SWIPE_VELOCITY: 500,
-    ZOOM_SNAP_HYSTERESIS: 0.03, ZOOM_QUANTUM: 0.01, REFLOW_RELAX: 0.5, REFLOW_MAX_STRETCH: 2 };
+    ZOOM_SNAP_HYSTERESIS: 0.03, ZOOM_QUANTUM: 0.01, REFLOW_RELAX: 0.5, REFLOW_MAX_STRETCH: 2, MAX_INK_HEIGHT: 4096 };
+  /** The path kinds (QVP_KIND_*): what a path draws. */
   const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, ORNAMENT: 5, PAGE_NUMBER: 6, RUNNING_HEAD: 7, OTHER: 255 };
+  /** The mark families (QVP_FAMILY_*) that a theme colours as one. */
   const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 };
+  /** The mark categories (QVP_CATEGORY_*). `engine.markCategory(mark)` gives a mark's. */
   const CATEGORY = { NONE: 0, HARAKAH: 1, TANWIN: 2, LETTER_DOT: 3, ORTHOGRAPHIC: 4, DABT: 5, WAQF: 6, READING_SIGN: 7, STANDALONE: 8 };
+  /** The decoration kinds (QVP_DECORATION_*): the page's ornaments and furniture. */
   const DECORATION = { AYAH_MARK: 0, SURAH_NAME: 1, BASMALAH: 2, DIVISION_MARK: 3, SAJDAH_MARK: 4, PAGE_NUMBER: 5, RUNNING_HEAD: 6, OTHER: 255 };
+  /** The text forms (QVP_FORM_*). Every form but `rasm_uthmani` needs the words sidecar. */
   const FORM = { rasm_uthmani: 0, rasm_imlai: 1, qpc: 2, rasm: 3, search: 4 };
+  /** The style layers (QVP_LAYER_*). A rule on a higher layer wins over one below it. */
   const LAYER = { BASE: 0, THEME: 10, HIGHLIGHT: 50, SELECTION: 60, TOP: 100 };
-  // The engine's name tables (QVP_NAMES_*), read from the engine when it is initialised.
+  /** The engine's name tables (QVP_NAMES_*), by key. The names come from the engine when it is initialised. */
   const NAMES_TABLE = { mark: 0, kind: 1, family: 2, category: 3, decoration: 4, division: 5, place: 6 };
   let NAMES = null;
   const names = table => { if (!NAMES) throw new Error('QvpEngine.init() first: names come from the engine'); return NAMES[table]; };
@@ -34,7 +41,12 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   // 0..1 → 0..255, rounded to the nearest step, as in every wrapper. NaN and out-of-range values
   // clamp first, so a bad alpha is 0 or 255.
   const alpha8 = a => Math.round((Number.isNaN(a) ? 0 : Math.min(Math.max(a, 0), 1)) * 255);
-  // colours: numbers are 0xRRGGBBAA; strings '#rgb', '#rrggbb', '#rrggbbaa'
+  /**
+   * Get a colour as 0xRRGGBBAA. A number passes through. A string is '#rgb', '#rgba', '#rrggbb' or
+   * '#rrggbbaa'; `alpha` (0 to 1) applies to the forms without one, which are opaque without it.
+   * Any other string gives a colour that is not defined: pass one of these forms. A value that
+   * is neither a number nor a string is 0.
+   */
   function rgba(c, alpha) {
     if (typeof c === 'number') return c >>> 0;
     if (typeof c !== 'string') return 0;
@@ -43,9 +55,14 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     if (h.length === 6) h += alpha !== undefined ? alpha8(alpha).toString(16).padStart(2, '0') : 'ff';
     return parseInt(h, 16) >>> 0;
   }
+  /** Get a 0xRRGGBBAA colour as a CSS `rgba()` string. */
   const css = c => `rgba(${(c >>> 24) & 255},${(c >>> 16) & 255},${(c >>> 8) & 255},${(c & 255) / 255})`;
 
-  // Selectors (what a style rule applies to)
+  /**
+   * Make a selector: what a style rule applies to (QVP_SELECTOR_*). A word, a path and a
+   * `decorationIndex` are indices on the page, and a line is its printed number from 1. A mark,
+   * a category, a family, a kind and a `decoration` kind are each an id or a name.
+   */
   const Sel = {
     page: () => ({ selector: 0 }),
     path: i => ({ selector: 1, a: i }),
@@ -66,7 +83,10 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   };
   const markId = m => idOf('mark', m);
 
-  // Targets (what resolves to a word list). Strings: 'page', '2:255', '2:255:3', '2:255-257', 'line:7', 'surah:2'
+  /**
+   * Make a target: what resolves to a word list (QVP_TARGET_*). Every call that takes one also takes
+   * a string: 'page', '2:255', '2:255:3', '2:255-257', 'line:7' or 'surah:2'.
+   */
   const T = {
     page: () => ({ target: 0 }),
     word: i => ({ target: 1, a: i }),
@@ -87,7 +107,12 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
   /** the error for an engine record call that answered 0 for an index below the count */
   const refused = (call, i, of) => new Error(`${call}(${i}) returned 0 on ${of}`);
 
+  /**
+   * The engine: one instance of `qvp_ffi.wasm`. It loads pages, atlases, ornament sets and
+   * passages, and owns them until each is freed. Make one with `QvpEngine.init`.
+   */
   class QvpEngine {
+    /** Instantiate the engine from the bytes of `qvp_ffi.wasm` and read its name tables. */
     static async init(wasmBytes) {
       const { instance } = await WebAssembly.instantiate(wasmBytes, {});
       return new QvpEngine(instance);
@@ -121,11 +146,17 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     }
     /** All names of a table (QVP_NAMES_* id or key), index = id. */
     names(table) { const t = typeof table === 'string' ? NAMES_TABLE[table] : table; const n = this.ex.qvp_name_count(t); return Array.from({ length: n }, (_, i) => this.name(t, i)); }
+    /** Get how many ids a name table (QVP_NAMES_* id or key) has. */
     nameCount(table) { return this.ex.qvp_name_count(typeof table === 'string' ? NAMES_TABLE[table] : table); }
+    /** Get the name of an id in a table; empty outside the table. */
     name(table, id) { this.ex.qvp_name(typeof table === 'string' ? NAMES_TABLE[table] : table, id, this.scratch); return this.qstr(this.scratch); }
+    /** Get the id of a name in a table; 255 when the table has no such name. */
     nameId(table, s) { return this._withInputs(() => { const [p, n] = this.putStr(s); return this.ex.qvp_name_id(typeof table === 'string' ? NAMES_TABLE[table] : table, p, n); }); }
+    /** Get a fresh view of wasm memory. Take a new one after any call that can grow the memory. */
     dv() { return new DataView(this.mem.buffer); }
+    /** Decode `len` bytes of UTF-8 at `ptr` in wasm memory. */
     str(ptr, len) { return this.td.decode(new Uint8Array(this.mem.buffer, ptr, len)); }
+    /** Decode the QvpStr {ptr, len} at `at`. It stays valid only until the next call that returns a string. */
     qstr(at) { const d = this.dv(); return this.str(d.getUint32(at, true), d.getUint32(at + 4, true)); }
     /** the reader's pan and zoom: {scale, offsetX, offsetY} in, the same out. The engine owns
      * the arithmetic so every platform pinches alike; the host owns only the gesture. */
@@ -187,12 +218,19 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     putStr(s, region = IN.STRING) { const b = this.te.encode(s), p = this._input(region, b.length); new Uint8Array(this.mem.buffer, p, b.length).set(b); return [p, b.length]; }
     /** write a list of uint32 into its input region; returns ptr */
     putU32(arr, region = IN.WORDS) { const p = this._input(region, arr.length * 4); new Uint32Array(this.mem.buffer, p, arr.length).set(arr); return p; }
+    /** Call the name getter `fn` for an id and decode the name. */
     nameOf(fn, v) { this.ex[fn](v, this.scratch); return this.qstr(this.scratch); }
+    /** Get a mark's name by its id. */
     markName(m) { return this.nameOf('qvp_mark_name', m); }
+    /** Get a mark family's name by its id. */
     familyName(f) { return this.nameOf('qvp_family_name', f); }
+    /** Get a path kind's name by its id. */
     kindName(k) { return this.nameOf('qvp_kind_name', k); }
+    /** Get a mark category's name by its id. */
     categoryName(c) { return this.nameOf('qvp_category_name', c); }
+    /** Get the category a mark belongs to. The mark is an id or a name. */
     markCategory(m) { return this.ex.qvp_mark_category(markId(m)); }
+    /** Get a mark's id by its name; 255 when the engine has no such mark. */
     markFromName(s) { return this._withInputs(() => { const [p, n] = this.putStr(s); return this.ex.qvp_mark_from_name(p, n); }); }
     /** The engine version, e.g. '0.2.0'. */
     version() { this.ex.qvp_version(this.scratch); return this.qstr(this.scratch); }
@@ -200,12 +238,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     formatVersion() { return this.ex.qvp_format_version(); }
     /** The engine's name, `qvp` (a NUL-terminated C string in wasm memory). */
     engineName() { const p = this.ex.qvp_engine_name(), u = new Uint8Array(this.mem.buffer); let n = 0; while (u[p + n]) n++; return this.str(p, n); }
-    /** Arabic text tools */
+    /** Remove every Arabic mark (harakah, tatweel, waqf signs and the like) and keep the letters. */
     strip(s) { return this._arabic(0, s); }
+    /** Fold the letter forms that search treats as one: أإآٱ to ا, ىئ to ي, ؤ to و, ة to ه, and Arabic-Indic digits to ASCII. */
     fold(s) { return this._arabic(1, s); }
+    /** Strip, fold and collapse the spaces, as search does to both the query and the page. */
     normalize(s) { return this._arabic(2, s); }
+    /** Normalise, then drop bare alif and hamzah: the key of the loose second search pass, so a typed `الرحمان` finds `الرحمن`. */
     looseKey(s) { return this._arabic(3, s); }
     _arabic(op, s) { this._withInputs(() => { const [p, n] = this.putStr(s); this.ex.qvp_arabic(op, p, n, this.scratch); }); return this.qstr(this.scratch); }
+    /** Load a page from the bytes of an `NNN.qvp` file; the engine copies them. Throws on a malformed page. */
     loadPage(bytes) {
       const p = this.ex.qvp_alloc(bytes.length);
       new Uint8Array(this.mem.buffer, p, bytes.length).set(bytes);
@@ -215,6 +257,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       // a page the engine loaded but refuses to describe is freed, not leaked
       try { return new QvpPage(this, h); } catch (e) { this.ex.qvp_page_free(h); throw e; }
     }
+    /** Load the atlas (`atlas.qva`) for cross-page lookup; the engine copies the bytes. Throws on a malformed file. */
     loadAtlas(bytes) {
       const p = this.ex.qvp_alloc(bytes.length);
       new Uint8Array(this.mem.buffer, p, bytes.length).set(bytes);
@@ -269,6 +312,10 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     d.setUint32(at + 16, wp, true); d.setUint32(at + 20, wn, true);
     return at;
   }
+  /**
+   * Parse a target string ('page', '2:255', '2:255:3', '2:255-257', 'line:7', 'surah:2'). A word
+   * key needs the page to find its index, so it comes back as `wordKey`. Throws on any other string.
+   */
   function parseTarget(s) {
     if (s === 'page') return T.page();
     let m;
@@ -300,6 +347,11 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     return out;
   }
 
+  /**
+   * One loaded page: its records, its geometry, and the engine state that goes with it (layout,
+   * styles, highlights, selection, mask, dress). Coordinates are page units unless a name ends in
+   * `View`, which means viewport px through the current layout. Make one with `engine.loadPage`.
+   */
   class QvpPage {
     constructor(engine, handle) {
       this.e = engine; this._h = handle;
@@ -405,7 +457,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /** The readout, or null when the page is not dressed: {ayahMark, surahHeader, pageFrame,
      * ayahMarks, surahHeaders, frameRepeats, frameStretched, draws, revision, viewBox,
      * overflow}. `viewBox` is [x, y, w, h] in page units; a border grows it. `overflow` is
-     * [left, top, right, bottom] in viewport px. The layout's `fitScale`, `fitX` and `fitY`
+     * [left, top, right, bottom] in layout px. The layout's `fitScale`, `fitX` and `fitY`
      * already fit the content plus this overflow, and `dressClamp` clamps to it. */
     dressInfo() {
       const s = this.e.scratch;
@@ -833,6 +885,18 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.e.ex.qvp_view_anchor(this.h, i, word, nx, ny, toX, toY, viewportW, viewportH, this.e.scratch);
       return this.e._getView(this.e.scratch);
     }
+    /** Which band of the current layout to keep drawn, `{top, height}` in layout px: the whole
+     * page when it fits, otherwise two screens around the reader. The top moves in steps, so a
+     * pan inside one step redraws nothing; pass `top` and `top + height` to `layoutDrawList`.
+     * `maxHeight` is the tallest band the host can draw and `maxPixels` the pixels it keeps for
+     * one, both in viewport px; 0 takes `MAX_INK_HEIGHT` and no pixel limit. The pixel limit
+     * never takes the band below one screen. */
+    layoutInkBand(view, viewportW, viewportH, { maxHeight = 0, maxPixels = 0 } = {}) {
+      const i = this.e._putView(view, this.e.scratch2 + 32768);
+      this.e.ex.qvp_layout_ink_band(this.h, i, viewportW, viewportH, maxHeight, maxPixels, this.e.scratch);
+      const f = new Float32Array(this.e.mem.buffer, this.e.scratch, 2);
+      return { top: f[0], height: f[1] };
+    }
     /** where a viewport point lands in the laid-out page, for turning a touch into a hit test */
     viewToLayout(view, vx, vy) {
       const i = this.e._putView(view, this.e.scratch2 + 32768);
@@ -929,6 +993,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     cropSvg(target, { pad = DEFAULTS.CROP_PAD, keepAyahMarks = true, background = null } = {}) { if (!this.e._withInputs(() => this.e.ex.qvp_crop_svg(this.h, this._target(target), pad, keepAyahMarks ? 1 : 0, background ? rgba(background) : 0, this.e.scratch))) return null; return this.e.qstr(this.e.scratch); }
   }
 
+  /** The cross-page lookup: which page an ayah, a surah or a division is on. Make one with `engine.loadAtlas`. */
   class QvpAtlas {
     constructor(engine, handle) { this.e = engine; this._h = handle; engine._live.add(this); }
     /** the engine's handle; a freed atlas has none */
@@ -1105,25 +1170,26 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * border carries none and sits in layout space. Rasterised once per band, like the
      * base ink, so a scroll inside the band is one blit: a tiled border is hundreds of
      * outlines and nothing about it changes while a highlight animates or the reader
-     * scrolls. A border stands past the content's top and bottom, so the band grows by
-     * the dress overflow. A new layout redraws it, as it moves the placements.
+     * scrolls. The engine's band of a dressed page holds every part of the border on the
+     * screen, except under a screen taller than the tallest band, where the band keeps the
+     * page's ink and the top of the border can be clipped. So the layer is the band, the same
+     * rows as the base ink. A new layout
+     * redraws it, as it moves the placements.
      */
     drawOrnaments(c, page, view, dpr, bandTop, bandH, bandView) {
       const info = page.dressInfo();
       if (!info) { this.ornamentLayer = null; this.ornamentKey = ''; this.ornamentFor = null; return; }
-      const scale = view.scale || 1;
-      const padTop = Math.ceil(info.overflow[1] * scale), padBottom = Math.ceil(info.overflow[3] * scale);
-      const top = bandTop - padTop;   // view px; a clamped canvas (H) keeps this top and loses its bottom edge
-      const W = this.canvas.width, H = Math.min(MAX_CANVAS_PX, Math.ceil((bandH + padTop + padBottom) * dpr));
+      // the band, held to the tallest canvas a browser makes, which the band reaches only by rounding
+      const W = this.canvas.width, H = Math.min(MAX_CANVAS_PX, Math.max(1, Math.ceil(bandH * dpr)));
       const L = page.currentLayout;
       // `page.h` is the page's engine handle, unique while the page is open: two dressed pages
       // drawn by one renderer with no layout would otherwise share a revision and a raster
-      const key = `${page.h}|${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${top.toFixed(1)}|${dpr}|${info.revision}|${W}x${H}`;
+      const key = `${page.h}|${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${bandTop.toFixed(1)}|${dpr}|${info.revision}|${W}x${H}`;
       if (!this.ornamentLayer || key !== this.ornamentKey || this.ornamentFor !== L) {
         if (!this.ornamentLayer) this.ornamentLayer = document.createElement('canvas');
         this.ornamentLayer.width = W; this.ornamentLayer.height = H;
         const b = this.ornamentLayer.getContext('2d');
-        const v = { ...bandView, offsetY: bandView.offsetY + padTop };
+        const v = bandView;
         let cur = -2;
         for (const o of page.dressGeometry()) {
           if (o.placement !== cur) {
@@ -1137,7 +1203,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
         this.ornamentKey = key; this.ornamentFor = L;
       }
       c.setTransform(1, 0, 0, 1, 0, 0);
-      c.drawImage(this.ornamentLayer, 0, Math.round(dpr * (view.offsetY + top)));
+      c.drawImage(this.ornamentLayer, 0, Math.round(dpr * (view.offsetY + bandTop)));
     }
     /** transform of one group of paths: a point p is drawn at (kx·p.x + dx, ky·p.y + dy), page units */
     groupTransform(page, view, group, dpr) {
@@ -1153,6 +1219,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const s = dpr * view.scale * L.scale;
       return [s * p.kx, s * p.ky, dpr * (view.offsetX + view.scale * (L.offsetX + p.dx * L.scale)), dpr * (view.offsetY + view.scale * (L.offsetY + p.dy * L.scale))];
     }
+    /** Get the transform of one printed line as [scale, tx, ty], for a host overlay on that line. */
     lineTransform(page, view, line, dpr) { const [a, , tx, ty] = this.groupTransform(page, view, line, dpr); return [a, tx, ty]; }
     /** Draw a passage layout into a context, its top left at (x, y) in CSS px: every draw under
      * its placement, with the path from the page the draw names. `pages` maps a page number to
@@ -1189,6 +1256,10 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       }
       flush();
     }
+    /**
+     * Draw one frame of the page into the canvas: the view's pan and zoom on top of the current
+     * layout, at `dpr` device px per CSS px. The base ink is cached between frames.
+     */
     draw(page, view, dpr) {
       const paths = page.buildPaths();
       const styled = page.styledPaths();
@@ -1197,20 +1268,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const ink = page.defaultInk;
       const W = this.canvas.width, H = this.canvas.height;
       // The cached ink is a band of the page, not the screen, so scrolling inside it is one
-      // blit and nothing is drawn again. A page that is several screens of ink used to redraw
-      // every path on every frame of a drag, because the cache was keyed on where the reader
-      // had scrolled to. The band is rebuilt only when the drag has travelled half a screen.
-      const viewH = H / dpr, slack = viewH / 2, step = viewH / 2;
+      // blit and nothing is drawn again. The engine picks the band: the whole page when it
+      // fits, otherwise two screens around the reader, with a top that moves in steps. It is
+      // asked in device px, so its limits are the canvas's own: the tallest canvas a browser
+      // makes, and the ink budget at four bytes a pixel.
       const scale = view.scale || 1;
-      // A page that fits the ink budget is drawn once, the parts past both ends of the screen
-      // included, and then scrolling draws nothing at all. A taller one keeps a band of itself,
-      // two screens tall, redrawn when the reader scrolls out of it.
-      const contentH = (L.contentH || 0) * scale;
-      const whole = contentH > 0 && W * contentH * dpr * 4 <= this.inkBudget && contentH * dpr <= MAX_CANVAS_PX;
-      const bandTop = whole ? 0 : Math.floor((-view.offsetY - slack) / step) * step;   // view px
-      const bandH = whole ? contentH : viewH + 2 * slack;
+      const band = page.layoutInkBand({ scale: scale * dpr, offsetX: view.offsetX * dpr, offsetY: view.offsetY * dpr }, W, H,
+        { maxHeight: MAX_CANVAS_PX, maxPixels: this.inkBudget / 4 });
       // the ink drawn into the band, in layout px: what the engine is asked for
-      const cullTop = bandTop / scale, cullBottom = (bandTop + bandH) / scale;
+      const cullTop = band.top, cullBottom = band.top + band.height;
+      const bandTop = band.top * scale, bandH = band.height * scale;   // view px
       // the view the band is rendered under: the reader's, less where the band starts
       const bandView = { ...view, offsetY: -bandTop };
       const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${bandTop.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.lineSpacing}|${L.lineDy ? L.lineDy[0] : ''}|${L.groups ? L.groups.length + ':' + L.groups[1] : ''}|${(L.repeats || []).length}|${L.omitted ? L.omitted.size : 0}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
@@ -1228,7 +1295,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
         const [a, d, tx, ty] = this.placementTransform(page, v, { dx: places[g * 4], dy: places[g * 4 + 1], kx: places[g * 4 + 2], ky: places[g * 4 + 3] }, dpr);
         c.setTransform(a, 0, 0, d, tx, ty);
       };
-      const baseH = Math.ceil(bandH * dpr);
+      const baseH = Math.max(1, Math.ceil(bandH * dpr));
       if (key !== this.baseKey || this.base.width !== W || this.base.height !== baseH) {
         const t0 = performance.now();
         this.base.width = W; this.base.height = baseH;

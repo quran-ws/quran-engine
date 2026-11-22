@@ -1,0 +1,120 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun division(division: Division, n: Int): QvpAtlasRubuAlHizb?</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun divisionOf(division: Division, surah: Int, ayah: Int): Int?</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun hizb(n: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun juz(n: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun juzOf(surah: Int, ayah: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun pageCount()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun pageOf(surah: Int, ayah: Int): Int?</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun pageOfSurah(n: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun pageRange(page: Int): Pair&lt;Pair&lt;Int, Int&gt;, Pair&lt;Int, Int&gt;&gt;?</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun pagesOfJuz(n: Int): Pair&lt;Int, Int&gt;?</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun rubuAlHizb(n: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun searchSurahs(text: String): List&lt;QvpAtlasSurah&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun surah(n: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpAtlas$fun surahs(): List&lt;QvpAtlasSurah&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun categoryName(c: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun decorationName(k: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun divisionName(d: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun engineName()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun familyName(f: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun fold(s: String)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun kindName(k: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun looseKey(s: String)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun markCategory(m: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun markFromName(name: String)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun markName(m: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun name(table: Int, id: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun nameCount(table: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun normalize(s: String)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun placeName(p: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpEngine$fun strip(s: String)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun attachWords(json: String)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun ayahKeys(): List&lt;Pair&lt;Int, Int&gt;&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun ayahLabel(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun ayahMarkOf(surah: Int, ayah: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun ayahMarks(): List&lt;QvpAyahMark&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun citation(ws: IntArray): String</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun clearHighlights()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun clearLayer(layer: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun clearSelection()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun clearStyles()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun colorOf(path: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun colors(): IntArray</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun cropBounds(t: Target, pad: Float = QvpDefaults.CROP_PAD, keepAyahMarks: Boolean = true): QvpCropBounds?</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun divisions(): List&lt;QvpDivision&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun findWord(surah: Int, ayah: Int, word: Int): Int</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun hasForm(form: Form)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun hide(sel: Selector): Int</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun highlight(s: String, style: QvpHighlightStyle = QvpHighlightStyle())</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun highlight(t: Target, style: QvpHighlightStyle = QvpHighlightStyle()): Int</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun highlightHandles(): IntArray</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun highlightWords(handle: Int): IntArray</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun hitAreas(gapBias: Float = QvpDefaults.GAP_BIAS): List&lt;QvpHitArea&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun hitTestExact(x: Float, y: Float)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun hitTestExactView(viewX: Float, viewY: Float)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun hitTestView(viewX: Float, viewY: Float, o: QvpHitOptions = QvpHitOptions())</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun layout(spec: QvpLayoutSpec): QvpLayout</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun lineBands(): List&lt;QvpLineBand&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun mask(t: Target, mode: MaskMode = MaskMode.HIDE)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun maskAll()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun maskBack(n: Int = 1)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun maskBoxesView(): List&lt;QvpBox&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun maskFrom(wordIndex: Int, mode: MaskMode = MaskMode.HIDE)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun maskHidden(): IntArray</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun maskOptions(blockColor: Int = QvpDefaults.MASK_BLOCK, padX: Float = QvpDefaults.MASK_PAD, padY: Float = QvpDefaults.MASK_PAD, radius: Float = QvpDefaults.MASK_RADIUS, reverse: Boolean = false)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun maskWord(wordIndex: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun maskWords(): IntArray</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun moveHighlight(handle: Int, t: Target)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathCategory(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathEvenOdd(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathFamily(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathFlags(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathKind(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathLine(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathMark(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathNthInWord(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathNthMark(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun pathWord(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun recolorStyle(handle: Int, rgba: Int, transitionMs: Int = 0)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun removeHighlight(handle: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun removeStyle(handle: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun restyleHighlight(handle: Int, style: QvpHighlightStyle)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun revealGoto(at: Long)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun revealPosition(): Long?</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun revealStepCount()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun revealStepOf(wordIndex: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun revealStop()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun rosettes(): List&lt;QvpRosette&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun sajdahs(): List&lt;QvpSajdah&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun search(query: String, form: Form = Form.SEARCH, mode: SearchMode = SearchMode.INCLUDES, normalize: Boolean = true, looseMatch: Boolean = true, limit: Int = 0): List&lt;QvpMatch&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun select(anchor: Int, focus: Int = anchor)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun selection(): IntArray</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun selectionText(form: Form = Form.RASM_UTHMANI, includeCitation: Boolean = false)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun setDefaultColor(rgba: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun style(sel: Selector, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun styleHandles(): IntArray</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun styleTarget(t: Target, rgba: Int, transitionMs: Int = 0, layer: Int = QvpLayer.BASE): Int</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun surahs(): List&lt;QvpSurah&gt;</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun target(s: String)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun targetWords(s: String)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun targetWords(t: Target): IntArray</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun text(s: String, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n")</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun text(t: Target, form: Form = Form.RASM_UTHMANI, wordSep: String = " ", lineSep: String = "\n"): String</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun theme(t: QvpTheme): Int</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun unmask()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun unmaskAll()</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun unmaskNext(n: Int = 1)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun unmaskWord(wordIndex: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun wordBands(ws: IntArray, height: BandHeight = BandHeight.LINE_SPACING, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun wordBoundsView(i: Int): FloatArray?</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun wordForm(i: Int, form: Form = Form.RASM_UTHMANI): String</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun wordKey(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPage.kt$QvpPage$fun wordLabel(i: Int)</ID>
+    <ID>UndocumentedPublicFunction:QvpPageView.kt$QvpPageView$fun relayout()</ID>
+    <ID>UndocumentedPublicFunction:QvpPageView.kt$QvpPageView$fun resetView()</ID>
+  </CurrentIssues>
+</SmellBaseline>

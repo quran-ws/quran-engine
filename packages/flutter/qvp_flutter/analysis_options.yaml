@@ -10,5 +10,14 @@ analyzer:
     - macos/**
     - linux/**
 
+# Every public item has a doc block (docs/standards/CODE-STYLE.md). flutter analyze fails on
+# a missing one. The raw FFI layer is exempt in its own files: lib/src/bindings.dart through
+# the `ignore_for_file: type=lint` line that ffigen writes, and the three backend files in
+# lib/src/backend/ (qvp_backend.dart, qvp_backend_native.dart, qvp_backend_web.dart) through
+# an `ignore_for_file` line each. crates/qvp-ffi/include/qvp.h documents what they marshal.
+linter:
+  rules:
+    - public_member_api_docs
+
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

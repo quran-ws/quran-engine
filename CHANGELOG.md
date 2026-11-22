@@ -7,6 +7,67 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
+  `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
+  `QvpPassageWord.wordKey`, as Kotlin's.
+- React Native on iOS (#41). The package has an iOS module over QvpKit with the method names
+  and result shapes of the Android module, so `src/index.tsx` has no platform branch. It
+  hosts QvpKit's `QvpPageView` for `<QvpPageView />` and draws `<QvpPassageView />`, with the
+  same props and events as Android. View methods take and return points on iOS, where they
+  take dp on Android. `qvp-react-native.podspec` compiles the module with QvpKit's Swift
+  sources and links `QvpEngine.xcframework`. Inside this repository the pod takes the engine
+  that `scripts/build-engine-ios.sh` writes. `QVP_ENGINE_XCFRAMEWORK` names another one.
+  Otherwise `pod install` downloads the XCFramework that `Package.swift` names for the
+  release and checks its SHA-256 checksum. The npm tarball holds the QvpKit sources, which
+  the `prepack` script copies, and never the XCFramework. The example builds and runs on
+  the iOS simulator with the same 29 pages as Android. The `ios` job of the React Native
+  workflow builds the engine, installs the pods and builds the example for the simulator,
+  and the `typecheck` job checks what the npm tarball holds.
+- QvpKit: `QvpPageView.reflowBreaks` and `QvpPageView.onZoomChanged`, as on Android;
+  `Target(parsing:page:)`, which returns nil for a key that `Target.parse` stops the program
+  on; `QvpPassageLayout.draw(in:pages:x:y:)`, which fills a passage into a `CGContext`, as
+  Kotlin's `QvpPassageLayout.draw`; and `QvpDefaults.decimal`, every default by its camelCase
+  name, as Kotlin's `QvpDefaults.decimal`. The React Native module uses all five.
+  `Target.parse` and `Target(parsing:)` read a key's numbers as ASCII digits that fit an
+  Int32, as Kotlin does: `line:٧` and `2:99999999999999999999` are no keys, and the React
+  Native module reads them as an empty word list, as on Android.
+- Flutter: `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
+  read a released drag, and `QvpPage.viewAnchor(view, word, nx, ny, toX, toY, viewportW,
+  viewportH)` holds a point of a word on the screen across a new layout. The generated
+  bindings declared all three, but no Dart call reached them (#165). Both backends bind them.
+- The viewport-px twins `ayahMarksView`, `hitAreasView(gapBias)` and `wordBandsView(words,
+  height, padX, padY)` on Android (`QvpPage`) and Flutter (`QvpPage`, both backends), and
+  `ayahMarksView` on React Native. Each answers its page-unit call through the current
+  layout, so an app that draws its own overlay on a reflowed page reads where each word or
+  mark is drawn (#82). iOS bound all three already.
+- `qvp_layout_ink_band` picks the band of a laid-out page that a host keeps drawn: the whole
+  page when it fits, otherwise two screens around the reader. The band's top moves in steps,
+  so a pan inside one step redraws nothing. The band is in layout px, ready for
+  `qvp_layout_draw_list`. Its two limits are in viewport px: `max_height` (0 takes the new
+  `QVP_DEFAULT_MAX_INK_HEIGHT`, 4096), which no band passes, and `max_pixels`, a pixel budget
+  (0 is no limit), which shrinks the band from two screens to no less than one. With no
+  screen (no scale, no viewport height, or a non-finite scale, height or offset) the band is
+  the whole page, however tall. A dressed page's dress overflow, and half the border's stroke
+  past it, counts against both limits, rounded up to whole viewport px plus one for the
+  antialiased edge. Its band is the dressed box when that fits. When neither the dressed box
+  nor the bare page fits, it is the bare page's band. When only the bare page fits, it steps on
+  whole viewport px, and under a screen taller than the ceiling it is the ceiling tall, holding
+  the bare page whole and as much border above it as fits. That is a deliberate choice: the
+  views used to cut the page's bottom rows there, and now the page's ink stays whole and the
+  top of the border is clipped as needed. iOS rounds that top to whole points, so up to 2 more
+  device rows of the border can be clipped there. With no screen it is the whole dressed box (#182). Bound as
+  `layoutInkBand` in JavaScript, Kotlin, Dart and Swift. React Native calls it through the
+  Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers for a bare and
+  a dressed page, and the web, Kotlin, Dart and Swift tests replay them (#134).
+- Flutter: Swift Package Manager support on iOS and macOS (#153). `Package.swift` in
+  `ios/qvp_flutter` and `macos/qvp_flutter` links `QvpEngine.xcframework` as a binary
+  target. The podspecs stay, and both builds read the same sources and framework.
+- The Flutter workflow tests and builds on more platforms (#129). The `test` job also runs
+  the shared public-API cases on the web backend in Chrome. A `darwin` job on macOS runs the
+  `dart:ffi` suite on `libqvp_ffi.dylib` and builds the example for macOS and the iOS
+  simulator, once with Swift Package Manager and once with CocoaPods.
+  `scripts/check-darwin-engine-symbols.sh` then checks that each app exports the engine. A
+  `windows` job builds the example for Windows and checks that `qvp_ffi.dll` is bundled.
 
 ### Changed
 - `layoutPrintedHeight` on a page dressed in a border answers the height of the whole page,
@@ -23,6 +84,80 @@ All notable changes to the engine and its packages. The format follows
   from the words.
 - `dress` and `undress` lay a printed page out again from its own spec, as they already did
   for a reflowed page, because the crop and the fill now depend on the dress.
+- React Native: `scripts/gen-rn-enums.py` also writes `ios/QvpRnCodes.swift`, and
+  `scripts/check-parity.py` checks it. `scripts/sync-example-data.sh react-native` copies
+  the pages to the iOS example too. The npm release job waits until the GitHub release serves
+  the XCFramework, so the file the pod downloads is public before npm holds the package.
+- `docs/API-PARITY.md` declares no gap for these six symbols on Android and Flutter, and
+  none for the three viewport-px twins on iOS.
+  React Native keeps `qvp_hit_areas_view` and `qvp_word_bands_view` as gaps, with the reason
+  that JavaScript hit-tests and places overlays through `hitTestView` and `wordBoundsView`.
+- The web example has a UI smoke test, `web/example/smoke.test.mjs`. Chromium opens page 440,
+  clicks a word and checks the highlight in the app's state, the engine's boxes and the
+  canvas pixels. `scripts/check.sh example` runs it, and the `web example` job in CI runs
+  that command (#154).
+- The Flutter example has a UI smoke test, `example/test/smoke_test.dart`. A widget test on
+  the host engine library opens page 1, taps a word, and checks the engine's highlight on
+  that word and the word key in the selection panel. The Flutter workflow runs it (#154).
+- The React Native example has a UI smoke test, `__tests__/smoke.test.tsx`. It sends the
+  native view's page-load and word-tap events, and checks that the app sends one highlight
+  on the tapped word in the `highlights` prop and shows the word key. The workflow's
+  `npm test` step runs it (#154).
+- The Android `QvpPageView`, the Flutter `QvpPageView`, the iOS `QvpPageView` and the web
+  `CanvasRenderer` ask the engine for their band of ink. Each had its own copy of the
+  arithmetic, and the copies did not agree (#134):
+  - Android drew a printed page as a band. It now draws any page whole when the page fits the
+    ceiling and the ink budget, as it already did for a reflowed page. Its band no longer
+    passes the ceiling on a screen taller than 4096 px. The ink budget now limits the band as
+    well as the whole page, down to one screen and never below.
+  - Flutter measured the 4096 ceiling in layout px. It now measures it in viewport px, so a
+    magnified page bands once it is taller than 4096 px on the screen. At a view scale of 1
+    nothing changes.
+  - The web band now stays under the tallest canvas a browser makes, and under the ink budget
+    down to one screen.
+  - iOS drew a printed page as a band one screen tall, from the top of the page. It now draws
+    any page whole when the page fits 16384 bitmap rows and the ink budget, and a magnified
+    printed page too tall for them as a band around the reader. A dressed page's bitmap is
+    the engine's band, which holds the border, so the view no longer adds the overflow
+    itself (#182). On a screen taller than 16384 bitmap rows the view took the overflow off
+    that limit, so a page that fitted it could be cut at the bottom; the page is now whole.
+  - The SwiftUI `QvpPageCanvas` steps its band in half screens as before, but asks the
+    engine for it, with a budget of two screens. A page that fits in two screens is now drawn
+    whole, in a bitmap no taller than the band was. A canvas taller than 16384 bitmap rows
+    over two screens gets a band held to 16384 rows. On a canvas an odd number of points tall,
+    the band's top could fall on half a pixel at 3x, so the ink was drawn soft; a page that fits
+    in two screens is now drawn whole on whole pixels.
+- The dress overflow is no longer added to the band by the views (#182). On Android the
+  ornament layer was the band plus the overflow, cut at the 4096-row ceiling and the ink
+  budget, so the bottom of a border could go missing. It is now the engine's band, the same
+  rows as the base ink, so on any screen under the ceiling the border on it is drawn whole. On
+  a screen taller than the ceiling the layer is the ceiling tall, from the border's top. The
+  web `CanvasRenderer`'s ornament layer is the
+  engine's band too. On a screen whose device pixel ratio is not a whole number, such as
+  1.5, the web border could be drawn a device pixel off the ink, since its layer was placed by
+  rounding of its own. It now sits on the ink's pixels. On both, the base ink's bitmap is now
+  the dressed band, a few rows taller than the bare band on a page that fits. A page whose
+  dressed box is just over a limit its bare page fits under now bands, so a pan can redraw it;
+  that costs time, not pixels. Flutter and React Native need no change.
+- `QvpDressInfo.overflow` and its twins in every wrapper are documented in layout px, which
+  is what the engine returns. The docs said viewport px (#182).
+- Flutter: `flutter analyze` fails on a public item with no doc block. The package turns on
+  the `public_member_api_docs` lint, and every public item of the API files has a block
+  that gives its units, its range and what an empty or null result means. The generated
+  `bindings.dart` and the three backend files are exempt, because `qvp.h` documents the
+  calls they marshal. `docs/standards/CODE-STYLE.md` names the lint and the exemption (#135).
+- CI checks that public items have doc blocks (#141). eslint `jsdoc/require-jsdoc` runs in
+  the `standards` job for `web/qvp.js`, `web/lite*.mjs` and the React Native package. detekt
+  runs in the Android workflow for the Kotlin library, and swiftlint `missing_docs` in the
+  iOS workflow for QvpKit. A baseline lists the items that had no block when each check went
+  in, so only a new item without one fails. `docs/standards/CODE-STYLE.md` states the scope.
+- Doc blocks on the lite modules, the exports and engine calls of `web/qvp.js`, most of the
+  React Native exports, the Kotlin and Swift types, selectors and targets, and Swift's
+  `QvpEngine`. Three Kotlin and React Native doc blocks sat on the wrong item and now sit on
+  the item they describe. The Kotlin and Swift `QvpLayout` blocks no longer say that
+  `lineDy` places a path on a reflowed page, where the words move and not the lines.
+- `scripts/build-engine-ios.sh` copies `QvpEngine.xcframework` into the Flutter plugin's
+  `ios/qvp_flutter` and `macos/qvp_flutter`, one level below the old place.
 
 ### Removed
 
@@ -38,6 +173,71 @@ All notable changes to the engine and its packages. The format follows
 - `QvpCanvasController.resetView()` takes up a layout the engine made for a dress, as
   `relayout()` does, and both page views key their draw lists on the layout. Before, a host
   that called only `resetView()` after a dress drew the ink with the old placements.
+- QvpKit: an index or count out of range no longer stops the program. Every call passes
+  an Int to the C ABI as the parameter's unsigned width, cut from the Int as JNI's casts cut
+  a jint on Android, and the engine answers: `wordLabel(-1)` is "", `findWord(-1, …)` is -1,
+  `unmaskNext(-1)` unhides every word. Before, `UInt32(i)` trapped on a negative or huge
+  value, and `qvp.wordLabel(-1)` from React Native stopped the iOS app.
+- `docs/API.md` and the Rust doc of `mask_back`: `unmaskNext` returns how many words it
+  unhid, not how many are still hidden. `maskBack` hides the last shown words by their position in the mask, not by the
+  order they were shown in.
+- A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
+  screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
+  of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's
+  edge (#134).
+||||||| parent of 2818fd8 (feat(react-native): an iOS module over QvpKit)
+- React Native example: Metro leaves `../qvp-react-native/node_modules` out of the bundle.
+  After an `npm install` in the library, the bundle held a second copy of React, and the app
+  stopped at its first hook.
+- React Native: the npm package builds in an app outside this repository. When the app's
+  build has no `:qvp` project and no `qvpAndroidDir` property, the Android module depends
+  on `ws.quran:qvp-android` from Maven Central, at the version in the package's
+  `package.json`. The Gradle property `qvpVersion` sets a different version. Before, the
+  module compiled the Kotlin library from `../../../android/qvp`, a path that exists only
+  in this repository (#42). CI resolves the library from Maven Central through the
+  example's build with `-PqvpFromMaven`.
+- The release workflow publishes `@quran.ws/qvp-react-native` to npm in its own job, after
+  the Maven Central job. The job waits up to 60 minutes for Maven Central to serve
+  `ws.quran:qvp-android` at the release version, then compiles the module against it with
+  `-PqvpFromMaven`. Before, npm could hold a package version whose library Maven Central
+  did not serve yet, or did not serve at all after a Maven failure (#172).
+- Flutter and React Native: the path-kind and decoration-kind constants name every code in
+  `qvp.h`. Flutter adds `QvpKind.ornament`, `pageNumber` and `runningHead` (5 to 7) and
+  `QvpDecorationKind.pageNumber`, `runningHead` and `other` (5, 6 and 255). React Native
+  adds `KIND.ORNAMENT`, `PAGE_NUMBER` and `RUNNING_HEAD` and `DECORATION.PAGE_NUMBER`,
+  `RUNNING_HEAD` and `OTHER`. Before, `QvpPage.pathKind` and a decoration's kind could
+  return a value that no constant named. Web, Android and iOS named every code already.
+  `scripts/check-parity.py` now fails when a wrapper leaves out a `QVP_KIND_*`,
+  `QVP_FAMILY_*`, `QVP_CATEGORY_*` or `QVP_DECORATION_*` code, or gives one another value.
+- Flutter: doc fixes in `types.dart`. `QvpSurahHeader`, `QvpAyahMark`, `QvpHitArea`, `QvpBox`
+  and `QvpLayout` name every call that fills them, the `_view` twins and
+  `qvp_layout_current` included. `QvpBox.line` and `QvpHitArea.line` say which calls carry a
+  row on a reflowed page. `QvpLayout.fitScale` shrinks to fit both width and height, not to
+  height alone. The default `QvpZoom` is at zoom 1, not all zero. `QvpDefaults` names its
+  ratios apart from its page-unit lengths.
+- Flutter: on web, a `'surah:ayah:word'` target such as `'2:255:3'` named word 0 of the
+  page. The web backend did not send the word key to `qvp.js`. The new web test found it.
+- Flutter: on the `dart:ffi` backend, a word key that is not on the page, such as `'2:1:1'`
+  on page 42, named word 0. It now names no word, as `web/qvp.js` does.
+- The XCFramework's macOS slice holds arm64 and x86_64. A Flutter macOS release build is
+  universal, and it failed to link against the arm64-only slice.
+- The docs of the layout's fit (`fit_scale`, `fit_x`, `fit_y`) say what a reflowed page
+  does. On a reflowed page `fit_scale` is 1 and the host scrolls the content. `fit_x`
+  centres it across the viewport, and `fit_y` puts the top of the box at the top of the viewport.
+  Before, `qvp.h`, the Rust docs, `docs/API.md` and the Kotlin, Swift, Dart and React Native docs
+  said that the fit shrinks every page into the viewport and centres it. `qvp.h`, the Rust docs,
+  `docs/API.md`, Kotlin and Swift also said that a printed page shrinks to the viewport
+  height. It shrinks to fit both the width and the height. The wrapper docs now also say
+  that on a dressed page the fit shows the content plus the dress overflow, and that
+  `fit_x`, `fit_y` place the content's own origin. The docs of the dress overflow in
+  Kotlin, Swift and Dart told a host to fit the overflow itself. The engine's fit holds it
+  already. The iOS `resetView()` docs said that the view fits the content height.
+- `scripts/check-parity.py` removes the comments from a wrapper's enum block before it
+  reads the codes, so a commented-out code no longer counts as named. It also fails when a
+  wrapper names a code that the header does not have. A string in the block, such as
+  `"https://…"`, is not read as a comment, and a `}` in a string or a comment does not end
+  the block. `scripts/test_check_parity.py` tests this, and `scripts/check.sh parity` runs
+  it.
 
 ## [0.8.0] - 2026-11-04
 

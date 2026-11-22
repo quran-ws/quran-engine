@@ -33,6 +33,7 @@ internal object QvpNative {
     @JvmStatic external fun surahHeaders(h: Long): FloatArray
     @JvmStatic external fun surahHeadersView(h: Long): FloatArray
     @JvmStatic external fun ayahMarks(h: Long): FloatArray
+    @JvmStatic external fun ayahMarksView(h: Long): FloatArray
     @JvmStatic external fun rosettes(h: Long): IntArray
     @JvmStatic external fun sajdahs(h: Long): IntArray
     @JvmStatic external fun ayahKeys(h: Long): IntArray
@@ -54,6 +55,7 @@ internal object QvpNative {
     @JvmStatic external fun hitTestView(h: Long, x: Float, y: Float, maxDistance: Float, gapBias: Float, preferExact: Boolean): FloatArray?
     @JvmStatic external fun lineBands(h: Long): FloatArray
     @JvmStatic external fun hitAreas(h: Long, gapBias: Float): FloatArray
+    @JvmStatic external fun hitAreasView(h: Long, gapBias: Float): FloatArray
     // layout
     @JvmStatic external fun layout(h: Long, spec: FloatArray): FloatArray
     @JvmStatic external fun layoutLineSpacingToFill(h: Long, spec: FloatArray, max: Float): Float
@@ -67,6 +69,8 @@ internal object QvpNative {
     @JvmStatic external fun dressView(h: Long, scale: Float, viewportW: Float): FloatArray
     @JvmStatic external fun viewAnchor(h: Long, view: FloatArray, word: Int, nx: Float, ny: Float, toX: Float, toY: Float, viewportW: Float, viewportH: Float): FloatArray
     @JvmStatic external fun viewToLayout(h: Long, view: FloatArray, vx: Float, vy: Float): FloatArray
+    // {top, height}
+    @JvmStatic external fun layoutInkBand(h: Long, view: FloatArray, viewportW: Float, viewportH: Float, maxHeight: Float, maxPixels: Float): FloatArray
     @JvmStatic external fun viewSwipe(dx: Float, dy: Float, vx: Float, vy: Float): Int
     @JvmStatic external fun swipePages(dx: Float, dy: Float, vx: Float, vy: Float): Int
     // the reader's zoom control: zoom FloatArray {mode, step, zoom}; a gesture answers
@@ -121,6 +125,7 @@ internal object QvpNative {
     @JvmStatic external fun highlightWords(h: Long, handle: Int): IntArray
     @JvmStatic external fun highlightBoxesView(h: Long): IntArray
     @JvmStatic external fun wordBands(h: Long, words: IntArray, height: Int, padX: Float, padY: Float): IntArray
+    @JvmStatic external fun wordBandsView(h: Long, words: IntArray, height: Int, padX: Float, padY: Float): IntArray
     // selection
     @JvmStatic external fun select(h: Long, anchor: Int, focus: Int)
     @JvmStatic external fun selection(h: Long): IntArray

@@ -5,5 +5,9 @@ rootProject.name = 'QvpExample'
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')
 // The Kotlin QVP library (JNI over qvp.h) as a Gradle project; @quran.ws/qvp-react-native depends on `project(":qvp")`.
-include ':qvp'
-project(':qvp').projectDir = file('../../../android/qvp')
+// With -PqvpFromMaven the build leaves the project out, so the module takes ws.quran:qvp-android
+// from Maven Central, as it does in an app that installs the package from npm.
+if (!providers.gradleProperty('qvpFromMaven').isPresent()) {
+    include ':qvp'
+    project(':qvp').projectDir = file('../../../android/qvp')
+}

@@ -1,7 +1,7 @@
 {
   "name": "@quran.ws/qvp-react-native",
   "version": "0.8.0",
-  "description": "React Native wrapper for the QVP vector mushaf engine (Android; iOS TODO). Thin marshalling over the Kotlin library, which is JNI over qvp.h.",
+  "description": "React Native wrapper for the QVP vector mushaf engine, for Android and iOS. Thin marshalling over the Kotlin library (JNI over qvp.h) and the Swift library QvpKit.",
   "main": "src/index.tsx",
   "types": "src/index.tsx",
   "react-native": "src/index.tsx",
@@ -11,12 +11,19 @@
     "android/build.gradle",
     "android/src",
     "!android/src/test",
+    "ios/*.swift",
+    "ios/*.m",
+    "ios/vendor-qvpkit.sh",
+    "ios/vendor/QvpKit",
+    "ios/vendor/QvpEngine.json",
+    "qvp-react-native.podspec",
     "README.md",
     "package.json"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "bash ios/vendor-qvpkit.sh"
   },
   "keywords": [
     "react-native",

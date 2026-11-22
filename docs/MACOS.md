@@ -7,7 +7,7 @@ Everything here also builds on macOS. The iOS wrapper is the one piece that need
 ```sh
 git clone git@github.com:quran-ws/quran-engine.git && cd quran-engine
 curl -sSf https://sh.rustup.rs | sh -s -- -y -t wasm32-unknown-unknown
-rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios aarch64-apple-darwin x86_64-apple-darwin
 brew install cmake ninja          # optional, for Flutter desktop
 # put the source SVGs in pages/ (they are not in git), then:
 cargo test --workspace --release

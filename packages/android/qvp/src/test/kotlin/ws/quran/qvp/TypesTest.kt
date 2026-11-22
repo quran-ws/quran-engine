@@ -85,16 +85,27 @@ class TypesTest {
     }
 
     @Test
-    fun ornamentLayerStaysWithinABitmapAndTheBudget() {
-        val max = 4096
-        assertEquals(1000, QvpPageView.ornamentLayerHeight(999.2f, 1080, 64 shl 20))
-        // band plus border past the bitmap limit is cut at the bottom, never past 4096
-        assertEquals(max, QvpPageView.ornamentLayerHeight(8000f, 1080, 64 shl 20))
-        // the budget shrinks it: 1080 px wide is 4320 bytes a row
-        assertEquals(1000, QvpPageView.ornamentLayerHeight(3000f, 1080, 1080 * 4 * 1000))
-        // not one row fits, or no width yet: skipped
-        assertEquals(0, QvpPageView.ornamentLayerHeight(3000f, 1080, 1000))
-        assertEquals(0, QvpPageView.ornamentLayerHeight(3000f, 0, 64 shl 20))
-        assertEquals(0, QvpPageView.ornamentLayerHeight(3000f, 1080, 0))
+    fun theOrnamentLayerIsTheBandTheBaseInkIs() {
+        // A dressed page's band starts above the content, at the border's top: 14 px over it, and
+        // the page's top is 483 px down the screen. The layer's top row is the band's top, so the
+        // content is drawn 14 px down the bitmap, and the bitmap goes 14 px above the page's top.
+        val b = QvpPageView.bandBitmap(-14f, 1625.2f, 483f)
+        assertEquals(QvpPageView.BandBitmap(1626, 14f, 469f), b)
+        // a magnified band far down the page: one screen of slack above the reader
+        assertEquals(QvpPageView.BandBitmap(4096, -2544f, 456f), QvpPageView.bandBitmap(2544f, 4096f, -2088f))
+        // under one row it still has one
+        assertEquals(1, QvpPageView.bandBitmap(0f, 0.2f, 0f).rows)
+    }
+
+    @Test
+    fun aBandBitmapHasWholeRowsAndAtLeastOne() {
+        // the base ink and the ornament layer of a dressed page take the same rows
+        assertEquals(1000, QvpPageView.bandRows(999.2f))
+        assertEquals(1000, QvpPageView.bandRows(1000f))
+        assertEquals(647, QvpPageView.bandRows(646.7246f))
+        assertEquals(1, QvpPageView.bandRows(0f))
+        assertEquals(1, QvpPageView.bandRows(0.2f))
+        assertEquals(1, QvpPageView.bandRows(-5f))
+        assertEquals(1, QvpPageView.bandRows(Float.NaN))
     }
 }

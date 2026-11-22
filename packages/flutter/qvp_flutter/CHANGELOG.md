@@ -1,12 +1,113 @@
 ## Unreleased
 
 ### Added
+- `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
+  read a released drag, and `QvpPage.viewAnchor(view, word, nx, ny, toX, toY, viewportW,
+  viewportH)` holds a point of a word on the screen across a new layout. The generated
+  bindings declared all three, but no Dart call reached them (#165). Both backends bind them.
+- `QvpPage.ayahMarksView()`, `hitAreasView([gapBias])` and `wordBandsView(words, height:,
+  padX:, padY:)`: the viewport-px twins of `ayahMarks`, `hitAreas` and `wordBands`, in both
+  backends. Each answers through the current layout, so an app that draws its own overlay on
+  a reflowed page reads where each word or mark is drawn (#82).
+- `qvp_layout_ink_band` picks the band of a laid-out page that a host keeps drawn: the whole
+  page when it fits, otherwise two screens around the reader. The band's top moves in steps,
+  so a pan inside one step redraws nothing. The band is in layout px, ready for
+  `qvp_layout_draw_list`. Its two limits are in viewport px: `max_height` (0 takes the new
+  `QVP_DEFAULT_MAX_INK_HEIGHT`, 4096), which no band passes, and `max_pixels`, a pixel budget
+  (0 is no limit), which shrinks the band from two screens to no less than one. With no
+  screen (no scale, no viewport height, or a non-finite scale, height or offset) the band is
+  the whole page, however tall. A dressed page's dress overflow, and half the border's stroke
+  past it, counts against both limits, rounded up to whole viewport px plus one for the
+  antialiased edge. Its band is the dressed box when that fits. When neither the dressed box
+  nor the bare page fits, it is the bare page's band. When only the bare page fits, it steps on
+  whole viewport px, and under a screen taller than the ceiling it is the ceiling tall, holding
+  the bare page whole and as much border above it as fits. That is a deliberate choice: the
+  views used to cut the page's bottom rows there, and now the page's ink stays whole and the
+  top of the border is clipped as needed. iOS rounds that top to whole points, so up to 2 more
+  device rows of the border can be clipped there. With no screen it is the whole dressed box (#182). Bound as
+  `layoutInkBand` in JavaScript, Kotlin, Dart and Swift. React Native calls it through the
+  Kotlin view. `conformance/scenarios/ink-band.json` holds the engine's answers for a bare and
+  a dressed page, and the web, Kotlin, Dart and Swift tests replay them (#134).
+- Swift Package Manager support on iOS and macOS (#153). `ios/qvp_flutter/Package.swift`
+  and `macos/qvp_flutter/Package.swift` link `QvpEngine.xcframework` as a binary target, and
+  the podspecs stay for apps that build with CocoaPods. Flutter no longer warns that the
+  plugin does not support Swift Package Manager.
+- `test/qvp_web_test.dart` runs the cases of `test/shared/api_cases.dart` on the web backend
+  in Chrome. `test/qvp_flutter_test.dart` runs the same cases on the `dart:ffi` backend.
 
 ### Changed
+- The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
+  engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
+  not agree (#134):
+  - Android drew a printed page as a band. It now draws any page whole when the page fits the
+    ceiling and the ink budget, as it already did for a reflowed page. Its band no longer
+    passes the ceiling on a screen taller than 4096 px. The ink budget now limits the band as
+    well as the whole page, down to one screen and never below.
+  - Flutter measured the 4096 ceiling in layout px. It now measures it in viewport px, so a
+    magnified page bands once it is taller than 4096 px on the screen. At a view scale of 1
+    nothing changes.
+  - The web band now stays under the tallest canvas a browser makes, and under the ink budget
+    down to one screen.
+- The dress overflow is no longer added to the band by the views (#182). On Android the
+  ornament layer was the band plus the overflow, cut at the 4096-row ceiling and the ink
+  budget, so the bottom of a border could go missing. It is now the engine's band, the same
+  rows as the base ink, so on any screen under the ceiling the border on it is drawn whole. On
+  a screen taller than the ceiling the layer is the ceiling tall, from the border's top. The
+  web `CanvasRenderer`'s ornament layer is the
+  engine's band too. On a screen whose device pixel ratio is not a whole number, such as
+  1.5, the web border could be drawn a device pixel off the ink, since its layer was placed by
+  rounding of its own. It now sits on the ink's pixels. On both, the base ink's bitmap is now
+  the dressed band, a few rows taller than the bare band on a page that fits. A page whose
+  dressed box is just over a limit its bare page fits under now bands, so a pan can redraw it;
+  that costs time, not pixels. Flutter and React Native need no change.
+- `QvpDressInfo.overflow` and its twins in every wrapper are documented in layout px, which
+  is what the engine returns. The docs said viewport px (#182).
+- `flutter analyze` fails on a public item with no doc block: `analysis_options.yaml` turns
+  on `public_member_api_docs`. Every public type, field and call in `types.dart`,
+  `page.dart`, `engine.dart`, `atlas.dart`, `ornaments.dart`, `passage.dart` and
+  `page_view.dart` has a block that gives its units, its range and what an empty or null
+  result means. `lib/src/bindings.dart` and the three backend files in `lib/src/backend/`
+  are exempt, because `qvp.h` documents the calls they marshal (#135).
+- The iOS and macOS sources moved from `Classes/` to `qvp_flutter/Sources/qvp_flutter/`, the
+  layout Swift Package Manager needs. `QvpEngine.xcframework` moved from `ios/` and `macos/`
+  to `ios/qvp_flutter/` and `macos/qvp_flutter/`, where the podspec and `Package.swift` both
+  read it. `scripts/build-engine-ios.sh` copies it there. Run it again after you pull.
 
 ### Removed
 
 ### Fixed
+- A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
+  screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
+  of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's
+  edge (#134).
+- `QvpKind` and `QvpDecorationKind` name every code in `qvp.h`: `QvpKind.ornament`,
+  `pageNumber` and `runningHead` (5 to 7), and `QvpDecorationKind.pageNumber`, `runningHead`
+  and `other` (5, 6 and 255). Before, `QvpPage.pathKind` and a decoration's kind could
+  return a value that no constant named.
+- Doc fixes in `types.dart`. `QvpSurahHeader`, `QvpAyahMark`, `QvpHitArea`, `QvpBox` and
+  `QvpLayout` name every call that fills them, the `_view` twins and `qvp_layout_current`
+  included. `QvpBox.line` and `QvpHitArea.line` say which calls carry a row on a reflowed
+  page. `QvpLayout.fitScale` shrinks to fit both width and height, not to height alone. The
+  default `QvpZoom` is at zoom 1, not all zero. `QvpDefaults` names its ratios apart from
+  its page-unit lengths.
+- On web, a `'surah:ayah:word'` target such as `'2:255:3'` named word 0 of the page.
+  `targetWords`, `highlight`, `mask`, `text`, `cropSvg` and the other target calls took the
+  first word. The web backend now sends the word key to `qvp.js`, which finds the word on
+  the page.
+- On iOS, macOS, Android, Windows and Linux, a word key that is not on the page, such as
+  `'2:1:1'` on page 42, named word 0. It now names no word, as on web: `targetWords` is
+  empty and `text` is `''`. A shared test case holds both backends to this.
+- The docs of the layout's fit (`fit_scale`, `fit_x`, `fit_y`) say what a reflowed page
+  does. On a reflowed page `fit_scale` is 1 and the host scrolls the content. `fit_x`
+  centres it across the viewport, and `fit_y` puts the top of the box at the top of the viewport.
+  Before, `qvp.h`, the Rust docs, `docs/API.md` and the Kotlin, Swift, Dart and React Native docs
+  said that the fit shrinks every page into the viewport and centres it. `qvp.h`, the Rust docs,
+  `docs/API.md`, Kotlin and Swift also said that a printed page shrinks to the viewport
+  height. It shrinks to fit both the width and the height. The wrapper docs now also say
+  that on a dressed page the fit shows the content plus the dress overflow, and that
+  `fit_x`, `fit_y` place the content's own origin. The docs of the dress overflow in
+  Kotlin, Swift and Dart told a host to fit the overflow itself. The engine's fit holds it
+  already. The iOS `resetView()` docs said that the view fits the content height.
 
 ## 0.8.0
 

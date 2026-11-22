@@ -22,7 +22,7 @@ When developing this repository, produce the native engines with:
 export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
 bash scripts/build-engine-android.sh
 
-# iOS & macOS: produces QvpEngine.xcframework
+# iOS & macOS: QvpEngine.xcframework, copied into ios/qvp_flutter and macos/qvp_flutter
 bash scripts/build-engine-ios.sh
 
 # Windows: target/dist/qvp_ffi.dll
@@ -34,6 +34,16 @@ cargo build -p qvp-ffi --release
 # Web: assets/wasm/qvp_ffi.wasm and assets/js/qvp.js (a copy of web/qvp.js)
 bash scripts/sync-flutter-web-engine.sh
 ```
+
+On iOS and macOS the plugin builds with Swift Package Manager or with CocoaPods. Flutter
+picks Swift Package Manager when `flutter config --enable-swift-package-manager` is on and
+CocoaPods when it is off. `ios/qvp_flutter/Package.swift` and `ios/qvp_flutter.podspec`
+(and the two `macos` twins) build the same C source and link the same
+`QvpEngine.xcframework` from the Swift package directory. The Swift package needs a Flutter
+version whose Swift Package Manager support provides the `FlutterFramework` package. The
+CocoaPods build has no such limit. Git does not track the framework. In a clone without it,
+Swift Package Manager fails at package resolution, before the build starts, until
+`scripts/build-engine-ios.sh` runs.
 
 Run the web step before `flutter test` or `flutter build web`. The pubspec declares the
 two asset directories, and the repository does not track the files. The release workflow
@@ -73,16 +83,17 @@ page.ayahWordCount(2, 255); page.reciteMap(2, 255, 4); page.wordLabel(i); page.a
 page.text('2:255'); page.search('الله', mode: 'includes'); page.citation(words); page.attachWords(json); page.hasForm('qpc');
 page.hitTestExact(x, y); page.hitTest(x, y, QvpHitOptions(maxDistance: 6));         // page units, exact / gap-aware
 page.hitTestExactView(viewX, viewY); page.hitTestView(viewX, viewY);                             // viewport px through the layout
-page.lineBands(); page.hitAreas();
+page.lineBands(); page.hitAreas(); page.hitAreasView(); page.ayahMarksView();          // the *View twins: viewport px through the layout
 final l = page.layout(QvpLayoutSpec(viewportW: 690, viewportH: 1100, padTop: 50, padBottom: 50, fillHeight: true)); // l.scale, l.lineDy[line]
-page.wordBoundsView(i);
+page.wordBoundsView(i); page.viewToLayout(view, vx, vy); page.viewAnchor(view, w, nx, ny, toX, toY, vw, vh);
+engine.viewPan(view, dx, dy); engine.viewClamp(view, cw, ch, vw, vh); engine.swipePages(dx, dy, vx, vy);   // pan, clamp, page turn
 final h = page.style(Sel.wordMark(w, 1), '#ef6c00', ms: 200, layer: QvpLayer.top);  // Sel.path/word/ayah/line/mark/category/family/kind/decoration…
 page.styleTarget('2:255', color); page.recolorStyle(h, color); page.removeStyle(h); page.hide(Sel.kind(QvpKind.mark));
 page.theme(QvpTheme(diacritics: '#1a73e8', marks: {'shaddah': '#0a7d32'})); page.setDefaultColor('#231f20'); page.clearStyles(); page.clearLayer(QvpLayer.theme);
 page.tick(nowMs);                                       // true while animating — keep drawing frames
 page.colors(); page.styledPaths(); page.colorOf(i);            // display list (per-path colours)
 final hl = page.highlight('2:255', QvpHighlightStyle(mode: 'both', ms: 200)); page.moveHighlight(hl, T.word(3)); page.removeHighlight(hl);
-page.highlightBoxesView(); page.wordBands(words);            // viewport px; draw each id as one nonzero path behind the ink
+page.highlightBoxesView(); page.wordBands(words); page.wordBandsView(words);   // boxes; draw each id as one nonzero path behind the ink
 page.select(anchor, focus); page.selection(); page.selectionText('rasm_uthmani', true); page.clearSelection();
 page.mask('2:255', 'hide'); page.unmaskNext(); page.maskBack(); page.unmask(); page.maskHidden(); page.maskBoxesView();
 page.revealStart(lit: 2); page.revealGoto(3); page.revealPosition(); page.revealStepCount(); page.revealStop();
@@ -168,8 +179,20 @@ the committed file. The Flutter workflow runs it.
 ```sh
 cargo build -p qvp-ffi --release
 bash scripts/sync-flutter-web-engine.sh               # the declared web assets must exist
-cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target/release/libqvp_ffi.so + dist/pages/042.qvp, 604.qvp, atlas.qva
+cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target/release/libqvp_ffi.so (.dylib on macOS) + dist/pages/042.qvp, 604.qvp, atlas.qva
+flutter test --platform chrome test/qvp_web_test.dart  # the web backend: assets/js/qvp.js, assets/wasm/qvp_ffi.wasm + the same data
 ```
+
+`test/shared/api_cases.dart` holds the cases that drive the public API alone. Both
+backends run them: `qvp_flutter_test.dart` on `dart:ffi` and `qvp_web_test.dart` on the
+web engine, so the two must give the same answers. A case that needs `dart:io`, a library
+path or the native backend stays in `qvp_flutter_test.dart`. Name the web file in a Chrome
+run: the `dart:ffi` suite does not compile for the web. Chrome must be installed. Set
+`CHROME_EXECUTABLE` when Flutter does not find it.
+
+CI runs the `dart:ffi` suite on Linux and macOS and the web cases in Chrome. It builds the
+example for Android, web, macOS, the iOS simulator and Windows. The macOS and simulator
+builds run once with Swift Package Manager and once with CocoaPods.
 
 ## Example — Mushaf Vector Reader
 

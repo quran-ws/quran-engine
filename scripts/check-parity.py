@@ -15,7 +15,8 @@ Output
   against the current sources (--check). Exit 1 on: a header/Rust mismatch, a stale
   Android header copy, a symbol that a wrapper neither binds nor declares as a gap, a
   header function without a row in the "Every symbol" table of docs/API.md (or a row
-  without a function), an abbreviated field name in a published JavaScript entry point, or
+  without a function), a wrapper that leaves out a QVP_KIND_*, QVP_FAMILY_*,
+  QVP_CATEGORY_* or QVP_DECORATION_* code or gives it another value, an abbreviated field name in a published JavaScript entry point, or
   React Native code files that differ from what scripts/gen-rn-enums.py writes from the
   header.
 
@@ -197,16 +198,116 @@ def check_defaults(problems: list[str]) -> None:
                 problems.append(f"{site} ({path}) has no default named {name}")
             elif abs(got[name] - value) > 1e-9:
                 problems.append(f"{site} ({path}) has default {name} = {got[name]}, the header says {value}")
+    check_default_tables(want, problems)
+
+
+# The whole-table forms of the defaults, by camelCase name, that the React Native modules send
+# as constants: Kotlin's QvpDefaults.all and Swift's QvpDefaults.decimal. Each entry names its
+# constant, so the values are the ones checked above; this checks that no default is left out.
+# Each entry: the file, where the table starts, where it ends, and the pattern of one entry.
+DEFAULT_TABLES = {
+    "android": ("packages/android/qvp/src/main/kotlin/ws/quran/qvp/Types.kt", "val all: Map<String, Number> = mapOf(", "\n\n",
+                r'"([a-zA-Z]+)" to ([A-Z_]+)'),
+    "ios": ("packages/ios/QvpKit/Sources/QvpKit/Types.swift", "public static let decimal: [String: Double]", "\n        ]",
+            r'"([a-zA-Z]+)": ([A-Z_]+)'),
+}
+
+
+def check_default_tables(want: dict[str, float], problems: list[str]) -> None:
+    for site, (path, start, end, pattern) in DEFAULT_TABLES.items():
+        text = (ROOT / path).read_text()
+        if start not in text:
+            problems.append(f"{site} ({path}) has no defaults table `{start}`")
+            continue
+        body = text[text.index(start):]
+        body = body[:body.index(end)] if end in body else body
+        table = dict(re.findall(pattern, body))
+        for name in want:
+            camel = name.split("_")[0].lower() + "".join(p.capitalize() for p in name.split("_")[1:])
+            if table.get(camel) != name:
+                problems.append(f"{site} ({path}) has no `{camel}` for {name} in its defaults table")
+
+
+def gen_rn_enums():
+    """scripts/gen-rn-enums.py as a module: its header enum reader and its writers."""
+    spec = importlib.util.spec_from_file_location("gen_rn_enums", ROOT / "scripts/gen-rn-enums.py")
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    return gen
+
+
+# The header enums every wrapper names, by prefix: (the JavaScript object, the native class).
+ENUMS = {
+    "KIND": ("KIND", "QvpKind"),
+    "FAMILY": ("FAMILY", "QvpFamily"),
+    "CATEGORY": ("CATEGORY", "QvpCategory"),
+    "DECORATION": ("DECORATION", "QvpDecorationKind"),
+}
+# Where each wrapper declares them, and how a declaration starts: {js} or {cls} is the name.
+ENUM_SITES = {
+    "web": ("web/qvp.js", "const {js} = {{"),
+    "react-native": ("packages/react-native/qvp-react-native/src/index.tsx", "const {js} = {{"),
+    "android": ("packages/android/qvp/src/main/kotlin/ws/quran/qvp/Types.kt", "object {cls} {{"),
+    "flutter": ("packages/flutter/qvp_flutter/lib/src/types.dart", "class {cls} {{"),
+    "ios": ("packages/ios/QvpKit/Sources/QvpKit/Types.swift", "enum {cls} {{"),
+}
+
+
+# The tokens of an enum block that are not code: a string literal, a `/* */` block comment
+# or a `//` line comment (Dart's `///` too), whichever starts first, and the `}` that ends
+# the block.
+TOKEN = re.compile(r""""(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|/\*.*?\*/|//[^\n]*|\}""", re.S)
+
+
+def enum_body(tail: str) -> str:
+    """The code of an enum block, from just after its opening `{` to its closing `}`. Its
+    comments are removed and its strings emptied, so neither a commented-out code nor a
+    `//` or `}` inside a string counts."""
+    out, at = [], 0
+    for m in TOKEN.finditer(tail):
+        out.append(tail[at:m.start()])
+        at = m.end()
+        token = m.group()
+        if token == "}":
+            return "".join(out)
+        if token[0] in "\"'":
+            out.append(token[0] * 2)
+    raise ValueError("the enum block has no closing `}`")
+
+
+def check_enums(problems: list[str]) -> None:
+    """Every wrapper names every code of each enum in ENUMS, at the header's value, and no
+    code the header lacks. A declaration runs from its start to the first `}` outside a
+    comment or a string (`enum_body`), so a commented-out code is not counted. A code is its SUFFIX or camelCase name followed by `=` or `:` and the value."""
+    gen = gen_rn_enums()
+    header = HEADER.read_text()
+    for prefix, (js, cls) in ENUMS.items():
+        codes = gen.enum(prefix, header)
+        for site, (path, start) in ENUM_SITES.items():
+            text = (ROOT / path).read_text()
+            marker = start.format(js=js, cls=cls)
+            if marker not in text:
+                problems.append(f"{site} ({path}) has no `{marker}` for QVP_{prefix}_*")
+                continue
+            body = enum_body(text[text.index(marker) + len(marker):])
+            known = {n for suffix, _ in codes for n in (suffix, gen.camel(suffix))}
+            for name in re.findall(r"\b([A-Za-z_]\w*)\s*[=:]\s*\d+", body):
+                if name not in known:
+                    problems.append(f"{site} ({path}) names {name} in {marker.rstrip('{= ')}, which the header has no QVP_{prefix}_* for")
+            for suffix, value in codes:
+                m = re.search(rf"\b(?:{suffix}|{gen.camel(suffix)})\s*[=:]\s*(\d+)", body)
+                if not m:
+                    problems.append(f"{site} ({path}) does not name QVP_{prefix}_{suffix}")
+                elif int(m.group(1)) != value:
+                    problems.append(f"{site} ({path}) has QVP_{prefix}_{suffix} = {m.group(1)}, the header says {value}")
 
 
 def check_rn_codes(problems: list[str]) -> None:
     """The React Native code files match what scripts/gen-rn-enums.py writes from the header."""
-    spec = importlib.util.spec_from_file_location("gen_rn_enums", ROOT / "scripts/gen-rn-enums.py")
-    gen = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(gen)
+    gen = gen_rn_enums()
     header = HEADER.read_text()
     tables = {prefix: gen.enum(prefix, header) for prefix in gen.TABLES}
-    for path, text in ((gen.TS_OUT, gen.typescript(tables)), (gen.KT_OUT, gen.kotlin(tables))):
+    for path, text in gen.outputs(tables):
         if not path.exists() or path.read_text() != text:
             problems.append(f"{path.relative_to(ROOT)} is out of date; run scripts/gen-rn-enums.py")
 
@@ -215,6 +316,7 @@ def main(argv: list[str]) -> int:
     check = "--check" in argv
     problems: list[str] = []
     check_defaults(problems)
+    check_enums(problems)
     check_js_names(problems)
     check_rn_codes(problems)
 

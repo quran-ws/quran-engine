@@ -3,6 +3,7 @@ const prepared_pages = new WeakMap()
 const band_height = 0.375
 const curve_steps = 8
 
+/** Get the box that holds every box given, skipping null entries, or null when none is left. */
 export function bounds(boxes) {
   const result = [Infinity, Infinity, -Infinity, -Infinity]
   for (const box of boxes) {
@@ -15,6 +16,7 @@ export function bounds(boxes) {
   return Number.isFinite(result[0]) ? result : null
 }
 
+/** Get the upper median of the values, or `fallback` when there are none. Sorts `values` in place. */
 export function median(values, fallback = 0) {
   if (!values.length) return fallback
   values.sort((a, b) => a - b)
@@ -78,6 +80,10 @@ function trace(paths, baseline, budget) {
   return [...bands].sort((a, b) => a[0] - b[0]).map(([row, [left, right]]) => [row, left, right])
 }
 
+/**
+ * Get the smallest horizontal air between two words' ink slices, over the slices they share, or
+ * null when they share none. `a` is the word to the right, as Arabic reads.
+ */
 export function clearance(a, b) {
   let air = Infinity
   let i = 0
@@ -94,8 +100,10 @@ export function clearance(a, b) {
   return Number.isFinite(air) ? air : null
 }
 
-// Resize slices by k from the baseline and the page's left edge. A resized slice goes into every
-// slice of the shared height that it reaches, so ink is never measured narrower than it is.
+/**
+ * Resize slices by k from the baseline and the page's left edge. A resized slice goes into every
+ * slice of the shared height that it reaches, so ink is never measured narrower than it is.
+ */
 export function resizedSlices(slices, k) {
   const spans = []
   for (const [row, left, right] of slices) {
@@ -115,6 +123,11 @@ function merged_slices(groups) {
   return [...rows].sort((a, b) => a[0] - b[0]).map(([row, [left, right]]) => [row, left, right])
 }
 
+/**
+ * Measure a decoded page once for passage layout: each word with the decorations that go with it,
+ * its ink slices and baseline, the sajdah strokes, the line pitch and the usual air between two
+ * words. The result is kept per page. Throws when the page needs more samples than the budget.
+ */
 export function preparePage(page) {
   if (prepared_pages.has(page)) return prepared_pages.get(page)
   // Shared across the page: large coordinates must not amplify bounded QVP input

@@ -34,6 +34,7 @@ extern "C" {
 #define QVP_DEFAULT_ZOOM_QUANTUM   0.01f
 #define QVP_DEFAULT_REFLOW_RELAX   0.5f    /* how far a short reflowed row opens towards its neighbours */
 #define QVP_DEFAULT_REFLOW_MAX_STRETCH 2.0f /* how far a reflowed row's gaps may open, in word gaps */
+#define QVP_DEFAULT_MAX_INK_HEIGHT 4096.0f /* the tallest band of ink qvp_layout_ink_band draws at once, in viewport px */
 #define QVP_DEFAULT_SWIPE_AXIS_RATIO 1.5f
 #define QVP_DEFAULT_SWIPE_DISTANCE 40.0f
 #define QVP_DEFAULT_SWIPE_VELOCITY 500.0f
@@ -128,10 +129,12 @@ typedef struct { uint32_t line, line_number; float y0, y1, mid, ink_y0, ink_y1; 
 typedef struct { float viewport_w, viewport_h, pad_top, pad_bottom, pad_left, pad_right, line_spacing; uint8_t fill_height; uint32_t grid_lines; float crop_left, crop_right, max_aspect_slack, reflow_zoom; uint8_t reflow_fill, reflow_breaks, reflow_gaps; float reflow_word_gap, reflow_max_stretch, reflow_relax, banner_zoom; uint8_t surah_frames; } QvpLayoutSpec;
 /* the grid a page is designed on: the mushaf's line count (15 here, or more when a page has more) and the printed spacing */
 typedef struct { uint32_t lines; float line_spacing; } QvpGrid;
-/* fit_*: the view transform that shows the whole content (shrink to the viewport height, never enlarge, centred):
-   draw at fit_x + fit_scale·view_x, fit_y + fit_scale·view_y; the host's pan and zoom go on top.
-   A dressed page fits the content plus the dress overflow, so the border is in view; fit_x, fit_y still place
-   the content's origin. qvp_dress and qvp_undress refit the current layout: read it again with qvp_layout_current. */
+/* fit_*: the view transform for the content: draw at fit_x + fit_scale·view_x, fit_y + fit_scale·view_y, and the
+   host's pan and zoom go on top. The fit shows a box: the content, plus the dress overflow on each side when the
+   page is dressed, so the border is in view. On a printed page, fit_scale shrinks the box to fit both the viewport
+   width and height and is never more than 1, and the box is centred. On a reflowed page, fit_scale is 1 and the
+   host scrolls: the box is centred across the viewport, and its top is at the top of the viewport. fit_x, fit_y
+   place the content's own origin, so the overflow sits to their left and above them. qvp_dress and qvp_undress refit the current layout: read it again with qvp_layout_current. */
 typedef struct { float scale, offset_x, offset_y, content_w, content_h, line_spacing; uint32_t n_lines; const float* lines; /* n_lines × {dy, slot_top, slot_bottom}; the rows when reflowed */ float fit_scale, fit_x, fit_y; uint32_t reflowed, n_rows; } QvpLayout;
 typedef struct { uint8_t target /* QVP_TARGET_* */; uint32_t a, b, c; const uint32_t* words; uint32_t n_words; } QvpTarget;
 typedef struct { uint8_t selector /* QVP_SELECTOR_* */; uint32_t a, b, c; } QvpSelector;
@@ -153,7 +156,7 @@ typedef struct { uint32_t ayah_mark, surah_header, page_frame /* ornament indice
                  const uint32_t* colors /* (ornament, part, rgba) triples, NULL for the designs' own */; uint32_t n_colors; } QvpDressSpec;
 typedef struct { uint32_t ayah_mark, surah_header, page_frame, n_ayah_marks, n_surah_headers, n_frame_repeats, frame_stretched, n_draws,
                  revision /* bumped on every rebuild: cache the ornament raster against it */;
-                 float view_box[4] /* x, y, w, h page units; a border grows it */; float overflow[4] /* left, top, right, bottom viewport px */; } QvpDressInfo;
+                 float view_box[4] /* x, y, w, h page units; a border grows it */; float overflow[4] /* left, top, right, bottom layout px */; } QvpDressInfo;
 /* table: n_draws × 9 uint32: op_start, op_count, pt_start, pt_count, colour, flags, stroke_width (float bits, page
    units), part, placement (the layout's placement index, as a page draw; QVP_NONE for the border). Ops and points
    are page units, as QvpGeometry. */
@@ -247,6 +250,24 @@ uint32_t qvp_layout_repeats(const QvpPage*, float* out /* n × {first_path, n_pa
 uint32_t qvp_layout_path_groups(const QvpPage*, uint32_t* out, uint32_t cap);    /* the group of every path; empty unless reflowed */
 uint32_t qvp_layout_omitted_paths(const QvpPage*, uint32_t* out, uint32_t cap);  /* paths this layout does not draw (sheet furniture and a native surah frame when reflowed) */
 uint32_t qvp_layout_draw_list(const QvpPage*, float band_top, float band_bottom /* <= top = the whole page */, uint32_t* out /* n × {path, placement} */, uint32_t cap);   /* everything this layout draws inside a band of it, in drawing order: one loop draws any page */
+/* Which band of the current layout to keep drawn: the whole page when it fits, otherwise two screens around the reader. Its top
+   moves in steps (with under 2 px of slack it follows the reader), so a pan inside one step redraws nothing and a pan across
+   one moves the band by one step. Pass top and top + height to qvp_layout_draw_list.
+   The band is in layout px and sits on the screen at view.offset_y + view.scale·y. The limits are viewport px, since a texture is
+   measured on the screen. max_height is the tallest band the host can draw (<= 0: QVP_DEFAULT_MAX_INK_HEIGHT), and no band passes
+   it. max_pixels is the pixels the host keeps for one band, width × height (<= 0: no limit); it shrinks the band from two
+   screens to no less than one screen, since a shorter band leaves part of the screen with no ink. The page is whole when it fits
+   both limits read this way. The one exception: no scale, no viewport height, or a scale, viewport height or view.offset_y
+   that is NaN or infinite gives the whole page however tall it is.
+   A dressed page's border stands over the content by the dress overflow (qvp_dress_info), and a stroked border by half
+   its stroke more. That counts against both limits, rounded up to whole viewport px plus one for the antialiased edge.
+   The dressed box fits: the band is that box. Neither it nor the bare page fits: the band is the bare page's band. Only
+   the bare page fits: the band steps like the bare page's, on whole viewport px; one that follows the reader is then one
+   px taller, which can pass max_pixels by one row; and under a screen taller than max_height it is 0.01 px under
+   max_height tall, holds the bare page whole and as much of the dress box above it as fits, so the top of the border can
+   be clipped. The host draws the border into the band and adds nothing. The exception gives the whole dressed box. */
+typedef struct { float top, height; } QvpInkBand;
+void     qvp_layout_ink_band(const QvpPage*, const QvpView*, float viewport_w, float viewport_h, float max_height, float max_pixels, QvpInkBand* out);
 uint32_t qvp_layout_placements(const QvpPage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);   /* what a draw list's `placement` indexes: the groups, then the repeats */
 uint32_t qvp_layout_row_words(const QvpPage*, uint32_t row, uint32_t* out, uint32_t cap);     /* the words of a reflowed row */
 uint32_t qvp_layout_word_row(const QvpPage*, uint32_t word);                    /* the row a word landed on, or QVP_NONE */

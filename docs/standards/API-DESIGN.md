@@ -120,7 +120,9 @@ that only resolves inside the monorepo is a bug.
 ## How it is checked
 
 - `scripts/check-parity.py` generates `docs/API-PARITY.md` and fails on any symbol that a
-  wrapper neither binds nor declares as a gap.
+  wrapper neither binds nor declares as a gap. It also fails when a wrapper leaves out a
+  code of the path-kind, family, category or decoration-kind enums, or gives one another
+  value.
 - The wrapper test suites run `conformance/scenarios/` and fail on any numeric divergence
   from the Rust golden output.
 - Pull requests state the tier of every change (template).

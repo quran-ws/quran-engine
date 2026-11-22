@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Run the checks CI runs, with the same commands. No argument runs all of them.
 #
-# Usage: scripts/check.sh [fmt|lint|test|gates|parity|versions|terminology|docs|structure|shell|web]...
+# Usage: scripts/check.sh [fmt|lint|test|gates|parity|versions|terminology|docs|docblocks|structure|shell|web|example]...
 #
-# Inputs: the repository; `gates` needs the data from scripts/sync-test-data.sh.
+# Inputs: the repository; `gates` and `example` need the data from scripts/sync-test-data.sh,
+# and `example` needs Playwright in web/example (npm ci, then npx playwright install chromium).
+# `docblocks` needs eslint in scripts/lint (npm ci --prefix scripts/lint); CI installs it.
 # Output: exit 0 when every selected check passes; the first failing check's output otherwise.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ALL=(fmt lint test gates parity versions terminology docs structure shell web)
+ALL=(fmt lint test gates parity versions terminology docs docblocks structure shell web example)
 [ $# -eq 0 ] && set -- "${ALL[@]}"
 
 step() { printf '\n== %s\n' "$1"; }
@@ -60,6 +62,7 @@ for check in "$@"; do
       step "header vs Rust vs every wrapper"
       # --check compares docs/API-PARITY.md with the sources and writes nothing. After an
       # API change, regenerate the table with `python3 scripts/check-parity.py`.
+      python3 scripts/test_check_parity.py
       python3 scripts/check-parity.py --check
       # The Flutter bindings are generated from the header. Generating them needs Flutter
       # and libclang, which the standards job does not install; the Flutter workflow runs
@@ -95,6 +98,36 @@ for check in "$@"; do
       if [ -n "$documents" ]; then
         printf '%s\n' "$documents" | tr '\n' '\0' |
           xargs -0 python3 scripts/ste_lint.py
+      fi
+      ;;
+    docblocks)
+      step "doc blocks on the public API: eslint for web/ and React Native, swiftlint for QvpKit"
+      # The linter's own package, which is private and pinned by its lockfile. The root
+      # package.json is the published one and gets no linter in its dependencies. Installing
+      # it is a download, so a local run without it skips with a hint. CI, or a run with
+      # QVP_REQUIRE_DATA set, installs it, and fails when it cannot.
+      eslint=scripts/lint/node_modules/.bin/eslint
+      if [ ! -x "$eslint" ] && { [ -n "${CI:-}" ] || [ -n "${QVP_REQUIRE_DATA:-}" ]; }; then
+        npm ci --prefix scripts/lint --no-audit --no-fund
+      fi
+      if [ ! -x "$eslint" ]; then
+        echo "skip eslint: not installed; run npm ci --prefix scripts/lint"
+      else
+      # The suppressions file counts the items per file that had no doc block when the check
+      # went in. A new item without one fails; after documenting items, prune the count:
+      #   scripts/lint/node_modules/.bin/eslint -c scripts/lint/eslint.config.mjs \
+      #     --suppressions-location scripts/lint/eslint-suppressions.json --prune-suppressions <files>
+        "$eslint" --config scripts/lint/eslint.config.mjs \
+          --suppressions-location scripts/lint/eslint-suppressions.json \
+          web/qvp.js 'web/lite*.mjs' packages/react-native/qvp-react-native/src
+        echo "ok   eslint jsdoc/require-jsdoc"
+      fi
+      # Kotlin has detekt in the Android workflow, which has the Android SDK that Gradle needs.
+      if ! command -v swiftlint >/dev/null; then
+        echo "skip swiftlint: not installed (brew install swiftlint); the iOS workflow runs it"
+      else
+        (cd packages/ios/QvpKit && swiftlint lint --quiet)
+        echo "ok   swiftlint missing_docs"
       fi
       ;;
     structure)
@@ -136,6 +169,20 @@ for check in "$@"; do
       # syntax check, not a typecheck; it catches the file being left unrunnable.
       node --check web/example/app.js
       echo "ok  web/example/app.js parses"
+      ;;
+    example)
+      step "web example UI smoke test: open a page, click a word, highlight"
+      wasm
+      python3 web/example/build.py dev
+      # Playwright and its browser are a download of about 150 MB, so a local run without
+      # them skips with a hint. CI installs them and sets QVP_REQUIRE_DATA, so there it fails.
+      if [ ! -d web/example/node_modules/playwright ]; then
+        hint="Playwright is not installed; run (cd web/example && npm ci && npx playwright install chromium)"
+        if [ -n "${QVP_REQUIRE_DATA:-}" ]; then echo "error: $hint" >&2; exit 1; fi
+        echo "skip web example: $hint"
+      else
+        (cd web/example && node smoke.test.mjs)
+      fi
       ;;
     *)
       echo "unknown check: $check (one of: ${ALL[*]})" >&2

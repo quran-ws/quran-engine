@@ -154,7 +154,7 @@ public final class QvpCanvasController {
     /// to the laid-out page (`hostPageSize`): a reflowed page, or a printed one too
     /// tall for the box. The canvas then attaches no drag of its own — the scroll view takes
     /// every vertical drag, with the momentum, bounce and indicator a reader expects — never
-    /// shrinks the page to the box's height (`fitScale` is the host's to ignore) nor centres it as if
+    /// shrinks the page to fit the box (`fitScale` is the host's to ignore) nor centres it as if
     /// it had (`fitX` goes with `fitScale`), keeps it at its top,
     /// shrinks a dressed printed page only as far as its border needs to fit across the width,
     /// and caches the ink for its whole bounds, which ARE the page, rather than a band around a
@@ -423,7 +423,7 @@ public final class QvpCanvasController {
         }
         cache.clear(); invalidate()
     }
-    /// Fit the content height and centre it.
+    /// Go back to the fitted view (`fittedView()`).
     ///
     /// A dress or an undress lays the page out again inside the engine, without this controller.
     /// The layout it made is taken up here as `relayout()` takes up its own: the draw lists and
@@ -440,7 +440,11 @@ public final class QvpCanvasController {
     /// The engine layout `layoutRevision` last counted: the one `relayout()`, a gesture or
     /// `resetView()` took up.
     @ObservationIgnored private var layoutSeen: QvpLayout?
-    /// The transform `resetView()` applies: content height fitted, centred.
+    /// The transform `resetView()` applies. A printed page takes the layout's fit: the content
+    /// plus any dress overflow, shrunk to fit the view and centred. A reflowed page takes scale 1,
+    /// centred across, its top at the top.
+    /// A printed page the host scrolls takes `dressView`: the same box fitted to the width,
+    /// never enlarged, centred across, its top at the top.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
         // The layout's fit already holds a dress's border: the engine fits content plus overflow.
@@ -505,9 +509,21 @@ public final class QvpCanvasController {
                                  tx: viewOx + viewScale * (CGFloat(l?.offsetX ?? 0) + CGFloat(q.dx) * ls),
                                  ty: (offsetY ?? viewOy) + viewScale * (CGFloat(l?.offsetY ?? 0) + CGFloat(q.dy) * ls))
     }
-    /// Where the cached band of ink starts, in view points. It moves in half-screen steps, so a
-    /// drag inside the band is a blit and nothing is drawn again.
-    var bandTop: CGFloat {
+    /// Where the cached band of ink starts and how tall it is, in view points down the page.
+    ///
+    /// A canvas whose host scrolls the page is the page, so its band is the page itself. While a
+    /// pinch runs it is two boxes around the fingers instead (see below).
+    ///
+    /// Otherwise the engine picks it, as it does for `QvpPageView`: two screens around the
+    /// reader, with a top that moves in half-screen steps, so a drag inside one step is a blit
+    /// and nothing is drawn again. A page that fits in two screens is drawn whole. The band of
+    /// a dressed page holds every part of its border on the screen, except under a screen taller
+    /// than 16384 rows, where it keeps the page's ink and the top of the border can be clipped,
+    /// and the border is drawn
+    /// into a bitmap of the same band. The
+    /// limits are the bitmap's: 16384 rows, and two screens of pixels, which is the most this
+    /// canvas has ever kept for a band.
+    func band(displayScale: CGFloat) -> (top: CGFloat, height: CGFloat) {
         if hostScrolls {
             // While a pinch runs, the engine reflows live at every step the fingers cross, and
             // painting the whole page each time is what made a pinch stutter: paint two boxes
@@ -521,19 +537,14 @@ public final class QvpCanvasController {
                 // the fingers as the page grew under them — a blank box exactly where they were.
                 let focal = pinchFocalY - viewOy
                 let pageHeight = bounds.height * viewScale
-                return max(min(focal - hostBoxHeight, pageHeight - hostBoxHeight * 2), 0)
+                let top = max(min(focal - hostBoxHeight, pageHeight - hostBoxHeight * 2), 0)
+                return (top, max(min(hostBoxHeight * 2, bounds.height * viewScale), 1))
             }
-            return -viewOy
+            return (-viewOy, max(bounds.height, 1))
         }
-        let step = max(bounds.height / 2, 1)
-        return ((-viewOy - step) / step).rounded(.down) * step
-    }
-    var bandHeight: CGFloat {
-        if hostScrolls {
-            if isPinching, hostBoxHeight > 0 { return max(min(hostBoxHeight * 2, bounds.height * viewScale), 1) }
-            return max(bounds.height, 1)
-        }
-        return max(bounds.height * 2, 1)
+        guard let p = page, p.isOpen, p.currentLayout != nil else { return (0, max(bounds.height * 2, 1)) }
+        return p.inkBandPoints(currentView, viewScale: viewScale, viewportW: bounds.width, viewportH: bounds.height,
+                               displayScale: displayScale, maxPixels: bounds.width * bounds.height * 2)
     }
     /// What the layout in hand draws and where: the engine's own answer, read once per layout.
     /// A printed page and a reflowed one come back in the same shape, so nothing here has to
@@ -546,9 +557,9 @@ public final class QvpCanvasController {
     /// The engine layout the lists in `placements` were read from.
     @ObservationIgnored private var placementsLayout: QvpLayout?
     /// A band of the canvas, in layout points — the pan and zoom divided out: what the engine is
-    /// asked to draw. `draw` hands it the band it is painting — its slice, or `bandTop` and
-    /// `bandHeight` (the screen with a screen of slack either side, the page, or the pinch's two
-    /// boxes) — never a band of its own choosing, which for a slice is the wrong one.
+    /// asked to draw. `draw` hands it the band it is painting — its slice, or `band(displayScale:)`
+    /// (two screens around the reader, the page, or the pinch's two boxes) — never a band of its
+    /// own choosing, which for a slice is the wrong one.
     func layoutBand(top: CGFloat, height: CGFloat) -> (top: Float, bottom: Float) {
         let s = viewScale == 0 ? 1 : viewScale
         return (Float(top / s), Float((top + height) / s))
@@ -736,8 +747,7 @@ public final class QvpCanvasController {
         // shows page row `y - viewOy` at canvas row `y`.
         let sliced = isPinching ? nil : slice
         let slot = sliced?.index ?? 0
-        let top = sliced.map { $0.top - viewOy } ?? bandTop
-        let bandH = sliced?.height ?? bandHeight
+        let (top, bandH) = sliced.map { ($0.top - viewOy, $0.height) } ?? band(displayScale: displayScale)
         let band = layoutBand(top: top, height: bandH)
         let bandPx = Int((bandH * displayScale).rounded(.up))
         let key = "\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(zoom.zoom)|\(l.rows)"

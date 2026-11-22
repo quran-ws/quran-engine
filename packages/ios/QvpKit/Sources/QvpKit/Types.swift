@@ -7,11 +7,31 @@ import QvpFFI
 /// Absent index in the C ABI.
 public let QVP_NONE: UInt32 = 0xFFFF_FFFF
 
-public enum QvpKind { public static let BODY = 0, MARK = 1, AYAH_NUMBER = 2, AYAH_MARK_ORNAMENT = 3, HEADER_INK = 4, ORNAMENT = 5, PAGE_NUMBER = 6, RUNNING_HEAD = 7, OTHER = 255 }
-public enum QvpFamily { public static let NONE = 0, DIACRITIC = 1, TANWIN = 2, DOTS = 3, WAQF = 4, SIFR = 5, SAJDAH = 6, READING_SIGN = 7 }
-public enum QvpCategory { public static let NONE = 0, HARAKAH = 1, TANWIN = 2, LETTER_DOT = 3, ORTHOGRAPHIC = 4, DABT = 5, WAQF = 6, READING_SIGN = 7, STANDALONE = 8 }
-public enum QvpDecorationKind { public static let AYAH_MARK = 0, SURAH_NAME = 1, BASMALAH = 2, DIVISION_MARK = 3, SAJDAH_MARK = 4, PAGE_NUMBER = 5, RUNNING_HEAD = 6, OTHER = 255 }
-public enum QvpLayer { public static let BASE = 0, THEME = 10, HIGHLIGHT = 50, SELECTION = 60, TOP = 100 }
+/// The path kinds (QVP_KIND_*): what a path draws.
+public enum QvpKind {
+    /// The ids by name, as qvp.h numbers them.
+    public static let BODY = 0, MARK = 1, AYAH_NUMBER = 2, AYAH_MARK_ORNAMENT = 3, HEADER_INK = 4, ORNAMENT = 5, PAGE_NUMBER = 6, RUNNING_HEAD = 7, OTHER = 255
+}
+/// The mark families (QVP_FAMILY_*) that a theme colours as one.
+public enum QvpFamily {
+    /// The ids by name, as qvp.h numbers them.
+    public static let NONE = 0, DIACRITIC = 1, TANWIN = 2, DOTS = 3, WAQF = 4, SIFR = 5, SAJDAH = 6, READING_SIGN = 7
+}
+/// The mark categories (QVP_CATEGORY_*). `QvpEngine.markCategory` gives a mark's.
+public enum QvpCategory {
+    /// The ids by name, as qvp.h numbers them.
+    public static let NONE = 0, HARAKAH = 1, TANWIN = 2, LETTER_DOT = 3, ORTHOGRAPHIC = 4, DABT = 5, WAQF = 6, READING_SIGN = 7, STANDALONE = 8
+}
+/// The decoration kinds (QVP_DECORATION_*): the page's ornaments and furniture.
+public enum QvpDecorationKind {
+    /// The ids by name, as qvp.h numbers them.
+    public static let AYAH_MARK = 0, SURAH_NAME = 1, BASMALAH = 2, DIVISION_MARK = 3, SAJDAH_MARK = 4, PAGE_NUMBER = 5, RUNNING_HEAD = 6, OTHER = 255
+}
+/// The style layers (QVP_LAYER_*). A rule on a higher layer wins over one below it.
+public enum QvpLayer {
+    /// The ids by name, as qvp.h numbers them.
+    public static let BASE = 0, THEME = 10, HIGHLIGHT = 50, SELECTION = 60, TOP = 100
+}
 
 public enum Form: Int { case rasmUthmani = 0, rasmImlai, qpc, rasm, search }
 public enum SearchMode: Int { case includes = 0, exact, prefix }
@@ -22,17 +42,66 @@ public enum Division: Int, CaseIterable { case juz = 0, hizb, nisf, rubuAlHizb }
 
 /// The defaults every wrapper shares (QVP_DEFAULT_* in qvp.h; the parity check compares them). Colours 0xRRGGBBAA.
 public enum QvpDefaults {
+    /// The ink of a page before any style rule, and the highlight ink and band.
     public static let INK: UInt32 = 0x231f20ff, HIGHLIGHT_INK: UInt32 = 0x1a73e8ff, HIGHLIGHT_BAND: UInt32 = 0xd6a3264d
+    /// The padding of a highlight band and the overlap of its seams, in page units.
     public static let HIGHLIGHT_PAD_X: Float = 1.2, HIGHLIGHT_PAD_Y: Float = 0, HIGHLIGHT_SEAM: Float = 0.25
+    /// The selection band and its side padding, the share of the gap between two words that
+    /// belongs to the preceding word, and how far a tap may land from the ink, in page units.
     public static let SELECTION_BAND: UInt32 = 0x2d6fd640, SELECTION_PAD_X: Float = 0.6, GAP_BIAS: Float = 0.6, TAP_DISTANCE: Float = 6
+    /// The line grid this mushaf is designed on, and the content-width bound the examples pass as
+    /// `maxAspectSlack`.
     public static let GRID_LINES = 15, ASPECT_SLACK: Float = 1.15
+    /// The block colour of a mask, and its padding and corner radius in page units.
     public static let MASK_BLOCK: UInt32 = 0xd9d4c8ff, MASK_PAD: Float = 0.6, MASK_RADIUS: Float = 0.8
+    /// How many steps a reveal lights at once and the grey of the rest, and the padding around a
+    /// crop in page units.
     public static let REVEAL_LIT = 1, REVEAL_GREY: UInt32 = 0xc9c4b8ff, CROP_PAD: Float = 2
+    /// The size of a dressed scanned medallion against the printed ring when `ayahMarkScale` is 0.
     public static let AYAH_MARK_SCALE_SCAN: Float = 1.5
+    /// How far a short reflowed row opens towards its neighbours, as a share of the difference, and
+    /// how far a reflowed row's gaps may open, in word gaps.
     public static let REFLOW_RELAX: Float = 0.5, REFLOW_MAX_STRETCH: Float = 2
+    /// The pinch limits, as multiples of the layout's own scale, and the point at which a page counts
+    /// as zoomed in.
     public static let MIN_ZOOM: Float = 0.5, MAX_ZOOM: Float = 12, ZOOMED_THRESHOLD: Float = 1.02
+    /// How far past the midpoint between two zoom steps a pinch must reach to commit to the next one,
+    /// and the smallest change in reflow zoom that a free pinch asks for.
     public static let ZOOM_SNAP_HYSTERESIS: Float = 0.03, ZOOM_QUANTUM: Float = 0.01
+    /// A released drag is a page swipe when it is this much more sideways than up and down, and
+    /// either this far (viewport px) or this fast (px per second).
     public static let SWIPE_AXIS_RATIO: Float = 1.5, SWIPE_DISTANCE: Float = 40, SWIPE_VELOCITY: Float = 500
+    /// The tallest band of ink a view draws at once, in viewport px: what `QvpPage.layoutInkBand`
+    /// holds a band to by default.
+    public static let MAX_INK_HEIGHT: Float = 4096
+
+    /// Every default by its camelCase name, as the decimals the header states, for a host that
+    /// reads the table whole (the React Native module's constants). A Float goes through its
+    /// shortest decimal string, so 0.6 stays 0.6 as a Double; a colour is unsigned 0xRRGGBBAA.
+    /// Member references only: the numbers live above, where the parity check reads them.
+    public static let decimal: [String: Double] = {
+        let all: [String: Any] = [
+            "ink": INK, "highlightInk": HIGHLIGHT_INK, "highlightBand": HIGHLIGHT_BAND,
+            "highlightPadX": HIGHLIGHT_PAD_X, "highlightPadY": HIGHLIGHT_PAD_Y, "highlightSeam": HIGHLIGHT_SEAM,
+            "selectionBand": SELECTION_BAND, "selectionPadX": SELECTION_PAD_X, "gapBias": GAP_BIAS, "tapDistance": TAP_DISTANCE,
+            "gridLines": GRID_LINES, "aspectSlack": ASPECT_SLACK,
+            "maskBlock": MASK_BLOCK, "maskPad": MASK_PAD, "maskRadius": MASK_RADIUS,
+            "revealLit": REVEAL_LIT, "revealGrey": REVEAL_GREY, "cropPad": CROP_PAD,
+            "ayahMarkScaleScan": AYAH_MARK_SCALE_SCAN,
+            "minZoom": MIN_ZOOM, "maxZoom": MAX_ZOOM, "zoomedThreshold": ZOOMED_THRESHOLD,
+            "swipeAxisRatio": SWIPE_AXIS_RATIO, "swipeDistance": SWIPE_DISTANCE, "swipeVelocity": SWIPE_VELOCITY,
+            "zoomSnapHysteresis": ZOOM_SNAP_HYSTERESIS, "zoomQuantum": ZOOM_QUANTUM,
+            "reflowRelax": REFLOW_RELAX, "reflowMaxStretch": REFLOW_MAX_STRETCH, "maxInkHeight": MAX_INK_HEIGHT,
+        ]
+        return all.mapValues { v in
+            switch v {
+            case let f as Float: return Double("\(f)") ?? Double(f)
+            case let u as UInt32: return Double(u)
+            case let i as Int: return Double(i)
+            default: return 0
+            }
+        }
+    }()
 }
 
 /// How a reflowed row fills the width, how the words are broken onto rows, and where the air
@@ -70,12 +139,15 @@ public enum QvpColor {
         if h.count == 6 { h += String(format: "%02x", alpha8(alpha)) }
         return UInt32(h, radix: 16) ?? 0
     }
+    /// Replace the alpha of a 0xRRGGBBAA colour with `alpha`, 0 to 1.
     public static func withAlpha(_ rgba: UInt32, _ alpha: Float) -> UInt32 {
         (rgba & 0xFFFF_FF00) | alpha8(alpha)
     }
+    /// Split a 0xRRGGBBAA colour into its channels, each 0 to 1.
     public static func components(_ rgba: UInt32) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {
         (CGFloat((rgba >> 24) & 255) / 255, CGFloat((rgba >> 16) & 255) / 255, CGFloat((rgba >> 8) & 255) / 255, CGFloat(rgba & 255) / 255)
     }
+    /// Make an sRGB `CGColor` from a 0xRRGGBBAA colour.
     public static func cgColor(_ rgba: UInt32) -> CGColor {
         let c = components(rgba)
         return CGColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: c.a)
@@ -85,7 +157,7 @@ public enum QvpColor {
         let c = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil) ?? color
         let k = c.components ?? [0, 0, 0, 1]
         let (r, g, b, a) = k.count >= 4 ? (k[0], k[1], k[2], k[3]) : (k[0], k[0], k[0], k.count > 1 ? k[1] : 1)
-        func u(_ v: CGFloat) -> UInt32 { UInt32(Int((v * 255).rounded()).clamped(0, 255)) }
+        func u(_ v: CGFloat) -> UInt32 { UInt32(truncatingIfNeeded: Int((v * 255).rounded()).clamped(0, 255)) }
         return (u(r) << 24) | (u(g) << 16) | (u(b) << 8) | u(a)
     }
 }
@@ -95,24 +167,40 @@ extension Int { func clamped(_ lo: Int, _ hi: Int) -> Int { Swift.min(Swift.max(
 /// What a style rule applies to (mirrors Sel in web/qvp.js and Selector in Kotlin).
 public struct Selector {
     let c: QvpSelector
-    init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ cc: Int = 0) { c = QvpSelector(selector: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(cc)) }
+    init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ cc: Int = 0) { c = QvpSelector(selector: UInt8(truncatingIfNeeded: kind), a: UInt32(truncatingIfNeeded: a), b: UInt32(truncatingIfNeeded: b), c: UInt32(truncatingIfNeeded: cc)) }
+    /// Every path of the page.
     public static func page() -> Selector { Selector(0) }
+    /// One path, by its index on the page.
     public static func path(_ i: Int) -> Selector { Selector(1, i) }
+    /// The nth path of a word, counting from 0.
     public static func wordPath(_ w: Int, _ nth: Int) -> Selector { Selector(2, w, nth) }
     /// nth mark of the word (0-based, marks only)
     public static func wordMark(_ w: Int, _ nth: Int) -> Selector { Selector(3, w, nth) }
+    /// The nth mark of a word that has this name, counting from 0.
     public static func wordMarkNamed(_ w: Int, _ mark: String, _ nth: Int = 0) -> Selector { Selector(4, w, markId(mark), nth) }
+    /// The letters of a word, without its marks.
     public static func wordBody(_ w: Int) -> Selector { Selector(5, w) }
+    /// Every mark of a word.
     public static func wordMarks(_ w: Int) -> Selector { Selector(6, w) }
+    /// Every path of a word.
     public static func word(_ w: Int) -> Selector { Selector(7, w) }
+    /// Every path of the words of an ayah, by surah and ayah number.
     public static func ayah(_ s: Int, _ a: Int) -> Selector { Selector(8, s, a) }
+    /// Every path on a printed line, by its number from 1.
     public static func line(_ n: Int) -> Selector { Selector(9, n) }
+    /// Every mark of one kind, by its name.
     public static func mark(_ name: String) -> Selector { Selector(10, markId(name)) }
+    /// Every mark of one kind, by its id.
     public static func mark(_ id: Int) -> Selector { Selector(10, id) }
+    /// Every mark of a category (`QvpCategory`).
     public static func category(_ c: Int) -> Selector { Selector(11, c) }
+    /// Every mark of a family (`QvpFamily`).
     public static func family(_ f: Int) -> Selector { Selector(12, f) }
+    /// Every path of a kind (`QvpKind`).
     public static func kind(_ k: Int) -> Selector { Selector(13, k) }
+    /// Every path of the decorations of a kind (`QvpDecorationKind`).
     public static func decoration(_ k: Int) -> Selector { Selector(14, k) }
+    /// Every path of one decoration, by its index on the page.
     public static func decorationIndex(_ i: Int) -> Selector { Selector(15, i) }
 }
 
@@ -121,32 +209,61 @@ public struct Selector {
 public struct Target {
     let kind: Int; let a: Int; let b: Int; let c: Int; let words: [UInt32]
     init(_ kind: Int, _ a: Int = 0, _ b: Int = 0, _ c: Int = 0, _ words: [UInt32] = []) { self.kind = kind; self.a = a; self.b = b; self.c = c; self.words = words }
+    /// Every word of the page.
     public static func page() -> Target { Target(0) }
+    /// One word, by its index on the page.
     public static func word(_ i: Int) -> Target { Target(1, i) }
-    public static func words(_ ws: [Int]) -> Target { Target(2, 0, 0, 0, ws.map { UInt32($0) }) }
+    /// A list of words, by their indices on the page.
+    public static func words(_ ws: [Int]) -> Target { Target(2, 0, 0, 0, ws.map { UInt32(truncatingIfNeeded: $0) }) }
+    /// The words of an ayah on this page, by surah and ayah number.
     public static func ayah(_ s: Int, _ a: Int) -> Target { Target(3, s, a) }
+    /// The words of the ayahs `a` to `b` of a surah on this page.
     public static func ayahRange(_ s: Int, _ a: Int, _ b: Int) -> Target { Target(4, s, a, b) }
+    /// The words of a printed line, by its number from 1.
     public static func line(_ n: Int) -> Target { Target(5, n) }
+    /// The words of a surah on this page.
     public static func surah(_ s: Int) -> Target { Target(6, s) }
+    /// The words from index `a` to index `b`, both included, in either order.
     public static func range(_ a: Int, _ b: Int) -> Target { Target(7, a, b) }
     /// Parse a string key; "s:a:w" word keys need the page to resolve (see QvpPage.target).
+    /// The numbers are ASCII digits that fit an Int32, as Kotlin's `Target.parse` reads them.
+    /// A key in none of these forms, or with a number out of that range, is a fatal error;
+    /// `Target(parsing:page:)` returns nil for one.
     public static func parse(_ s: String, page: QvpPage? = nil) -> Target {
+        guard let t = Target(parsing: s, page: page) else { preconditionFailure("bad target \(s)") }
+        return t
+    }
+    /// Parse a string key as `parse` does, or nil when the key is in none of its forms or a
+    /// number in it is not ASCII digits that fit an Int32.
+    public init?(parsing s: String, page: QvpPage? = nil) {
+        guard let t = Target.parsed(s, page: page) else { return nil }
+        self = t
+    }
+    private static func parsed(_ s: String, page: QvpPage?) -> Target? {
         if s == "page" { return Target.page() }
-        func nums(_ pattern: String) -> [Int]? {
-            guard let re = try? NSRegularExpression(pattern: pattern), let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) else { return nil }
-            return (1..<m.numberOfRanges).compactMap { Range(m.range(at: $0), in: s).flatMap { Int(s[$0]) } }
+        // The groups of `pattern`, each read as an Int32; nil when the key does not match or a
+        // group does not fit. `[0-9]`, not `\d`: `\d` also matches Arabic-Indic digits.
+        func nums(_ pattern: String, _ n: Int) -> [Int]? {
+            guard let re = try? NSRegularExpression(pattern: pattern), let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)),
+                  m.numberOfRanges == n + 1 else { return nil }
+            var out: [Int] = []
+            for k in 1...n {
+                guard let r = Range(m.range(at: k), in: s), let v = Int32(s[r]) else { return nil }
+                out.append(Int(v))
+            }
+            return out
         }
-        if let g = nums("^line:(\\d+)$") { return line(g[0]) }
-        if let g = nums("^surah:(\\d+)$") { return surah(g[0]) }
-        if let g = nums("^(\\d+):(\\d+)-(\\d+)$") { return ayahRange(g[0], g[1], g[2]) }
-        if let g = nums("^(\\d+):(\\d+):(\\d+)$") { let i = page?.findWord(g[0], g[1], g[2]) ?? -1; return i >= 0 ? word(i) : words([]) }
-        if let g = nums("^(\\d+):(\\d+)$") { return ayah(g[0], g[1]) }
-        preconditionFailure("bad target \(s)")
+        if let g = nums("^line:([0-9]+)$", 1) { return line(g[0]) }
+        if let g = nums("^surah:([0-9]+)$", 1) { return surah(g[0]) }
+        if let g = nums("^([0-9]+):([0-9]+)-([0-9]+)$", 3) { return ayahRange(g[0], g[1], g[2]) }
+        if let g = nums("^([0-9]+):([0-9]+):([0-9]+)$", 3) { let i = page?.findWord(g[0], g[1], g[2]) ?? -1; return i >= 0 ? word(i) : words([]) }
+        if let g = nums("^([0-9]+):([0-9]+)$", 2) { return ayah(g[0], g[1]) }
+        return nil
     }
     /// Run `body` with a C QvpTarget whose `words` pointer is valid for the call.
     func withC<R>(_ body: (UnsafePointer<QvpTarget>) -> R) -> R {
         words.withUnsafeBufferPointer { wp in
-            var t = QvpTarget(target: UInt8(kind), a: UInt32(a), b: UInt32(b), c: UInt32(c), words: wp.baseAddress, n_words: UInt32(wp.count))
+            var t = QvpTarget(target: UInt8(truncatingIfNeeded: kind), a: UInt32(truncatingIfNeeded: a), b: UInt32(truncatingIfNeeded: b), c: UInt32(truncatingIfNeeded: c), words: wp.baseAddress, n_words: UInt32(truncatingIfNeeded: wp.count))
             return withUnsafePointer(to: &t, body)
         }
     }
@@ -211,11 +328,11 @@ public struct QvpLayoutSpec: Equatable {
         // a zoom of 0 is the printed page, and 255 asks the engine for its own default
         let r = reflow
         return QvpFFI.QvpLayoutSpec(viewport_w: viewportW, viewport_h: viewportH, pad_top: padTop, pad_bottom: padBottom, pad_left: padLeft, pad_right: padRight, line_spacing: lineSpacing,
-                             fill_height: fillHeight ? 1 : 0, grid_lines: UInt32(gridLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack,
+                             fill_height: fillHeight ? 1 : 0, grid_lines: UInt32(truncatingIfNeeded: gridLines), crop_left: cropLeft, crop_right: cropRight, max_aspect_slack: maxAspectSlack,
                              reflow_zoom: r?.zoom ?? 0,
-                             reflow_fill: r.map { UInt8($0.fill.rawValue) } ?? 255,
-                             reflow_breaks: r.map { UInt8($0.breaks.rawValue) } ?? 255,
-                             reflow_gaps: r.map { UInt8($0.gaps.rawValue) } ?? 1,
+                             reflow_fill: r.map { UInt8(truncatingIfNeeded: $0.fill.rawValue) } ?? 255,
+                             reflow_breaks: r.map { UInt8(truncatingIfNeeded: $0.breaks.rawValue) } ?? 255,
+                             reflow_gaps: r.map { UInt8(truncatingIfNeeded: $0.gaps.rawValue) } ?? 1,
                              reflow_word_gap: r?.wordGap ?? 1,
                              reflow_max_stretch: r?.maxStretch ?? 0,
                              reflow_relax: r?.relax ?? -1,
@@ -225,11 +342,24 @@ public struct QvpLayoutSpec: Equatable {
 }
 /// The grid a page is laid out inside: the mushaf's line count and the printed line spacing (page units).
 public struct QvpGrid: Equatable { public let lines: Int, lineSpacing: Float }
-/// Page → viewport: viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. `fitScale`, `fitX`, `fitY` show the
-/// whole content in the viewport (shrink to height, never enlarge, centred); the host's pan and zoom go on top.
+/// Page → viewport. On a printed page, viewX = offsetX + x*scale ; viewY = offsetY + (y + lineDy[line])*scale. A reflowed
+/// page (`reflowed`) moves words, not lines, so `lineDy` places no path there: draw through `QvpPage.layoutDrawList` and
+/// `QvpPage.layoutPlacements`, and ask `QvpPage.wordBoundsView` where a word is. Draw at fitX + fitScale*viewX,
+/// fitY + fitScale*viewY, and put the host's pan and zoom on top. The fit shows a box: the content, plus the dress
+/// overflow on each side when the page is dressed (`QvpDressInfo.overflow`). On a printed page `fitScale` shrinks the
+/// box to fit both the viewport width and height (never above 1), and the box is centred. On a reflowed page
+/// `fitScale` is 1 and the host scrolls: the box is centred across the viewport, and its top is at the top of the
+/// viewport. `fitX` and `fitY` place the content's own origin, so the overflow sits to their left and above them.
 public final class QvpLayout {
+    /// The page-to-viewport scale and offset, the content size in viewport points, and the line
+    /// spacing in page units.
     public let scale: Float, offsetX: Float, offsetY: Float, contentW: Float, contentH: Float, lineSpacing: Float
+    /// Per printed line, or per row when the page is reflowed: the shift down in page units, and the
+    /// top and bottom of its slot.
     public let lineDy: [Float], slotTop: [Float], slotBottom: [Float]
+    /// The view transform for the content plus any dress overflow: shrunk to fit and centred on
+    /// a printed page, scale 1 and scrolled on a reflowed one. `fitX` and `fitY` place the
+    /// content's own origin (see the type's doc).
     public let fitScale: Float, fitX: Float, fitY: Float
     /// True when this layout broke the words onto rows of its own, and how many rows it made.
     /// A reflowed page places paths by group (`QvpPage.layoutGroups`), not by printed line.
@@ -261,7 +391,7 @@ public struct QvpHighlightStyle: Equatable {
         self.mode = mode; self.ink = ink; self.band = band; self.height = height; self.padX = padX; self.padY = padY; self.radius = radius; self.seam = seam; self.transitionMs = transitionMs; self.layer = layer
     }
     var c: QvpFFI.QvpHighlightStyle {
-        QvpFFI.QvpHighlightStyle(mode: UInt8(mode.rawValue), height: UInt8(height.rawValue), ink: ink, band: band, pad_x: padX, pad_y: padY, radius: radius, seam: seam, transition_ms: UInt32(transitionMs), layer: Int32(layer))
+        QvpFFI.QvpHighlightStyle(mode: UInt8(truncatingIfNeeded: mode.rawValue), height: UInt8(truncatingIfNeeded: height.rawValue), ink: ink, band: band, pad_x: padX, pad_y: padY, radius: radius, seam: seam, transition_ms: UInt32(truncatingIfNeeded: transitionMs), layer: Int32(truncatingIfNeeded: layer))
     }
 }
 /// Colours that are nil (or alpha 0) leave that colour alone.
@@ -298,13 +428,13 @@ func collect<T>(_ initial: Int = 256, _ f: (UnsafeMutablePointer<T>, UInt32) -> 
     var cap = initial
     while true {
         var total: UInt32 = 0
-        let buf = [T](unsafeUninitializedCapacity: cap) { p, n in total = f(p.baseAddress!, UInt32(cap)); n = Swift.min(Int(total), cap) }
+        let buf = [T](unsafeUninitializedCapacity: cap) { p, n in total = f(p.baseAddress!, UInt32(truncatingIfNeeded: cap)); n = Swift.min(Int(total), cap) }
         if Int(total) <= cap { return buf }
         cap = Int(total)
     }
 }
 func withBytes<R>(_ s: String, _ body: (UnsafePointer<UInt8>, UInt32) -> R) -> R {
     var b = Array(s.utf8); if b.isEmpty { b = [0] }
-    let n = UInt32(s.utf8.count)
+    let n = UInt32(truncatingIfNeeded: s.utf8.count)
     return b.withUnsafeBufferPointer { body($0.baseAddress!, n) }
 }

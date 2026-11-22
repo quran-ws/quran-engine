@@ -102,6 +102,9 @@ A new verb needs a row here first.
 
 - `bounds`: an extent you read (`crop_bounds`, `word_bounds_view`).
 - `band`: the vertical strip of a line (`line_bands`, `word_bands`).
+- `ink band`: the band of a laid-out page that a host keeps drawn, from a top down to a
+  height, in layout px (`layout_ink_band`, `QvpInkBand`). It is a strip of the whole page,
+  not of one line, so it always carries `ink` in its name.
 - `boxes`: rectangles the app draws (`highlight_boxes_view`, `mask_boxes_view`).
 - `_view` on every result in viewport pixels. Everything else is page units.
 

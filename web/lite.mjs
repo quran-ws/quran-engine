@@ -22,16 +22,28 @@ const limits = {
   records: 4096
 }
 
+/**
+ * Fetch a QVP1 page and decode it. `options` goes to `fetch` unchanged. Rejects when the
+ * response is not OK or the bytes are not a page the decoder accepts.
+ */
 export async function loadPage(url, options) {
   const response = await fetch(url, options)
   if (!response.ok) throw new Error(`Could not load QVP page: HTTP ${response.status}`)
   return decodePage(await response.arrayBuffer())
 }
 
+/**
+ * Decode the bytes of a QVP1 page into a page that draws itself. Throws on a truncated,
+ * malformed or oversized page.
+ */
 export function decodePage(buffer) {
   return new QvpLitePage(decodeGeometry(buffer))
 }
 
+/**
+ * Decode the bytes of a QVP1 page into plain records: the size in page units, the page number,
+ * and the paths, words, lines, ayahs and decorations. Throws as `decodePage` does.
+ */
 export function decodeGeometry(buffer) {
   const bytes = new Uint8Array(buffer.buffer ?? buffer, buffer.byteOffset ?? 0, buffer.byteLength)
   if (bytes.byteLength < 64) throw new Error('Truncated QVP header')
@@ -385,6 +397,10 @@ function bounds(records) {
   return box
 }
 
+/**
+ * A decoded page that draws on a Canvas2D context. Coordinates are page units, and a word's
+ * `box` is `[x0, y0, x1, y1]`. Make one with `decodePage` or `loadPage`.
+ */
 export class QvpLitePage {
   #paths
   #decorationPaths
@@ -406,6 +422,10 @@ export class QvpLitePage {
       .filter(path => path >= 0)
   }
 
+  /**
+   * Get the scale and offset that fit the whole page inside the canvas, centred, with `padding`
+   * canvas px on each side. Pass the result to `draw`.
+   */
   fit(canvas, padding = 0) {
     const scale = Math.min((canvas.width - 2 * padding) / this.width, (canvas.height - 2 * padding) / this.height)
     return {
@@ -415,6 +435,10 @@ export class QvpLitePage {
     }
   }
 
+  /**
+   * Draw the whole page. `highlight` lists word indices that get a `band` box under their ink;
+   * `ink` and `band` are CSS colours.
+   */
   draw(ctx, { scale = 1, x = 0, y = 0, ink = '#231f20', highlight = [], band = '#bedbfa' } = {}) {
     ctx.save()
     ctx.setTransform(scale, 0, 0, scale, x, y)
@@ -428,6 +452,10 @@ export class QvpLitePage {
     ctx.restore()
   }
 
+  /**
+   * Draw the paths of the given words only, each word once. Throws a `RangeError` on an index
+   * that is not a word of the page.
+   */
   drawWords(ctx, wordIndices, options = {}) {
     const pathIndices = []
     const seen = new Set()
@@ -443,6 +471,7 @@ export class QvpLitePage {
     this.#drawPaths(ctx, pathIndices, options)
   }
 
+  /** Draw every path that belongs to no word: ayah marks, surah headers and the other ornaments. */
   drawDecorations(ctx, options = {}) {
     this.#drawPaths(ctx, this.#decorationPaths, options)
   }
@@ -458,6 +487,7 @@ export class QvpLitePage {
     ctx.restore()
   }
 
+  /** Get the first word whose box holds the point, in page units, or null. */
   hitTest(x, y) {
     return this.words.find(({ box: [x0, y0, x1, y1] }) =>
       x >= x0 && x <= x1 && y >= y0 && y <= y1) ?? null

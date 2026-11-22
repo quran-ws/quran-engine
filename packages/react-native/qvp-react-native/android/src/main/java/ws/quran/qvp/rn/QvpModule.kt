@@ -104,6 +104,7 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun surahHeaders(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.surahHeaders().map { Marshal.surahHeader(it) } }
     @ReactMethod fun surahHeadersView(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.surahHeadersView().map { Marshal.surahHeader(it) } }
     @ReactMethod fun ayahMarks(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.ayahMarks().map { Marshal.ayahMark(it) } }
+    @ReactMethod fun ayahMarksView(tag: Int, promise: Promise) = withPage(tag, promise) { _, p -> p.ayahMarksView().map { Marshal.ayahMark(it) } }
     @ReactMethod fun rosettes(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.rosettes().map { Marshal.rosette(it) } }
     @ReactMethod fun sajdahs(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.sajdahs().map { Marshal.sajdah(it) } }
     @ReactMethod fun ayahKeys(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.ayahKeys().map { mapOf("surah" to it.first, "ayah" to it.second, "ayahKey" to "${it.first}:${it.second}") } }

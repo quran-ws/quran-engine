@@ -67,6 +67,8 @@ public struct QvpPassageWord: Equatable {
     /// The box of the word alone, without its signs: the word that closes an ayah leaves its
     /// medallion out. An underline under the word reads this box.
     public let wordX0: Float, wordY0: Float, wordX1: Float, wordY1: Float
+    /// The word's key, `surah:ayah:word`, as Kotlin's `QvpPassageWord.wordKey`.
+    public var wordKey: String { "\(surah):\(ayah):\(word)" }
 }
 
 /// The bounds of one ayah that a layout shows, in layout points.
@@ -107,6 +109,32 @@ public struct QvpPassageLayout: Equatable {
     public let isTruncated: Bool
     /// Where the host draws its ellipsis after a cut: from the last row's top to its baseline.
     public let ellipsis: CGRect?
+
+    /// Fill the layout into `ctx` with its top-left corner at (`x`, `y`), in the context's fill
+    /// colour. `pages` maps a page number to the open page the passage was loaded from, which
+    /// holds the outlines. A draw whose page is not in the map, or is closed, is skipped. The
+    /// ellipsis after a cut is the host's to draw, at `ellipsis`.
+    public func draw(in ctx: CGContext, pages: [Int: QvpPage], x: CGFloat = 0, y: CGFloat = 0) {
+        let s = CGFloat(scale)
+        var cur = -1
+        ctx.saveGState()
+        for d in draws {
+            guard let page = pages[d.page], page.isOpen else { continue }
+            if d.placement != cur {
+                // A point p of a path lands at scale · (k · p + d): the placement first, then the scale.
+                let q = d.placement < placements.count ? placements[d.placement] : .identity
+                ctx.restoreGState(); ctx.saveGState()
+                ctx.concatenate(CGAffineTransform(a: s * CGFloat(q.kx), b: 0, c: 0, d: s * CGFloat(q.ky),
+                                                  tx: x + s * CGFloat(q.dx), ty: y + s * CGFloat(q.dy)))
+                cur = d.placement
+            }
+            let paths = page.buildPaths()
+            guard d.path < paths.count else { continue }
+            ctx.addPath(paths[d.path])
+            ctx.fillPath(using: page.pathEvenOdd(d.path) ? .evenOdd : .winding)
+        }
+        ctx.restoreGState()
+    }
 }
 
 /// One ayah of a passage, with its text from the page's own word records.
@@ -138,7 +166,7 @@ public final class QvpPassage {
               (1...Int(UInt16.max)).contains(to) else { throw QvpError.badPassage }
         let handles: [OpaquePointer?] = pages.map { $0.p }
         let h = handles.withUnsafeBufferPointer {
-            qvp_passage_load($0.baseAddress, UInt32($0.count), UInt16(surah), UInt16(from), UInt16(to))
+            qvp_passage_load($0.baseAddress, UInt32(truncatingIfNeeded: $0.count), UInt16(truncatingIfNeeded: surah), UInt16(truncatingIfNeeded: from), UInt16(truncatingIfNeeded: to))
         }
         guard let h else { throw QvpError.badPassage }
         self.init(h, surah: surah, from: from)
@@ -152,7 +180,7 @@ public final class QvpPassage {
         guard pages.allSatisfy(\.isOpen), (1...Int(UInt16.max)).contains(surah) else { throw QvpError.badPassage }
         let handles: [OpaquePointer?] = pages.map { $0.p }
         let h = handles.withUnsafeBufferPointer {
-            qvp_passage_load_basmalah($0.baseAddress, UInt32($0.count), UInt16(surah))
+            qvp_passage_load_basmalah($0.baseAddress, UInt32(truncatingIfNeeded: $0.count), UInt16(truncatingIfNeeded: surah))
         }
         guard let h else { throw QvpError.badPassage }
         self.init(h, surah: surah, from: 1)
@@ -161,7 +189,7 @@ public final class QvpPassage {
     private init(_ h: OpaquePointer, surah: Int, from: Int) {
         self.h = h
         ayahs = (0..<Int(qvp_passage_ayah_count(h))).map { i in
-            var s = QvpStr(); qvp_passage_ayah_text(h, UInt32(i), &s)
+            var s = QvpStr(); qvp_passage_ayah_text(h, UInt32(truncatingIfNeeded: i), &s)
             return QvpPassageText(surah: surah, ayah: from + i, text: s.string)
         }
         lineSpacing = qvp_passage_line_spacing(h)
@@ -182,7 +210,7 @@ public final class QvpPassage {
         guard spec.maxRows >= 0 else { return nil }
         var s = QvpFFI.QvpPassageSpec(width: spec.width, scale: spec.scale, line_spacing: spec.lineSpacing, padding: spec.padding,
                                        align: spec.align.rawValue, keep_ayah_mark: spec.keepAyahMark ? 1 : 0, _pad: (0, 0),
-                                       max_rows: UInt32(spec.maxRows), ellipsis_width: spec.ellipsisWidth, max_stretch: spec.maxStretch)
+                                       max_rows: UInt32(truncatingIfNeeded: spec.maxRows), ellipsis_width: spec.ellipsisWidth, max_stretch: spec.maxStretch)
         var out = QvpFFI.QvpPassageLayout()
         guard qvp_passage_layout(p, &s, &out) != 0 else { return nil }
         let rows: [QvpFFI.QvpPassageRow] = collect(max(1, Int(out.n_rows))) { o, c in qvp_passage_rows(p, o, c) }

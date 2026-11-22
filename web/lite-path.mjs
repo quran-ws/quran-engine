@@ -1,4 +1,5 @@
 // Build a Canvas path without changing the decoded outline or its fill rule.
+/** Build a `Path2D` from one decoded path. Throws on an operation code it does not know. */
 export function buildPath({ ops, pts }) {
   const path = new Path2D()
   let point = 0

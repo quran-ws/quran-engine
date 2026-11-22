@@ -33,6 +33,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     public var fillHeight = false { didSet { relayout() } }
     /// Draw source-native frames around surah names on the printed page.
     public var surahFrames = true { didSet { guard oldValue != surahFrames else { return }; relayout() } }
+    /// How the words are broken onto rows as the reader zooms in.
+    public var reflowBreaks: QvpBreaks = .fitted { didSet { guard oldValue != reflowBreaks else { return }; relayout() } }
     /// Paper behind the page content (nil = transparent).
     public var paperColor: UIColor? { didSet { invalidateContent() } }
     /// 0xRRGGBBAA band colour of the drag selection.
@@ -44,6 +46,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// A sideways flick, in pages: +1 the page after this one, -1 the page before it. The
     /// muṣḥaf's own order, so a host adds it to the page it is on.
     public var onSwipe: ((Int) -> Void)?
+    /// The size the reader is at changed: a pinch committed, or a step was asked for.
+    public var onZoomChanged: ((QvpZoom) -> Void)?
     /// Double-tap. nil (the default) resets the view; a host that repurposes the gesture
     /// (e.g. marking reading progress) can still call `resetView()` itself — `isZoomed` says when.
     public var onDoubleTap: ((QvpHit?) -> Void)?
@@ -322,9 +326,12 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         invalidateContent()
     }
     private var lastSize = CGSize.zero
-    /// The layout the current size and knobs ask for, before the zoom control has its say.
-    var baseSpec: QvpLayoutSpec {
-        QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, fillHeight: fillHeight, surahFrames: surahFrames)
+    /// The layout the current size and knobs ask for, before the zoom control has its say: the
+    /// printed page this view lays out. Kotlin's `QvpPageView.layoutSpec()` is the same spec.
+    /// `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure it.
+    public var baseSpec: QvpLayoutSpec {
+        QvpLayoutSpec(viewportW: Float(bounds.width), viewportH: Float(bounds.height), padTop: Float(padTop), padBottom: Float(padBottom), padLeft: Float(padSide), padRight: Float(padSide), lineSpacing: lineSpacing, fillHeight: fillHeight,
+                      reflow: QvpReflowSpec(zoom: 0, breaks: reflowBreaks), surahFrames: surahFrames)
     }
     /// The spec in force: the knobs above with the reader's zoom control folded in.
     public var layoutSpec: QvpLayoutSpec {
@@ -339,14 +346,16 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         drawList = nil
         baseKey = ""; invalidateContent()
     }
-    /// Fit the content height and centre it.
+    /// Go back to the fitted view (`fittedView()`).
     public func resetView() {
         stopSpring()
         let f = fittedView()
         viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
         invalidateContent()
     }
-    /// The transform `resetView()` applies: content height fitted, centred.
+    /// The transform `resetView()` applies. A printed page takes the layout's fit: the content
+    /// plus any dress overflow, shrunk to fit the view and centred. A reflowed page takes scale 1,
+    /// centred across, its top at the top.
     private func fittedView() -> QvpZoomSpring.ViewTransform {
         let l = page?.currentLayout
         // The layout's fit already holds a dress's border: the engine fits content plus overflow.
@@ -448,8 +457,8 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     }
     /// Where the cached ink starts and how tall it is, for the page and place in hand.
     private var currentBand: (top: CGFloat, height: CGFloat) {
-        guard let p = page, let l = p.currentLayout else { return (0, max(bounds.height, 1)) }
-        return band(for: p, l, offsetY: viewOy, scale: window?.screen.scale ?? contentScaleFactor)
+        guard let p = page, p.isOpen, p.currentLayout != nil else { return (0, max(bounds.height, 1)) }
+        return band(for: p, offsetY: viewOy, scale: window?.screen.scale ?? contentScaleFactor)
     }
     private var bandTop: CGFloat { currentBand.top }
     private var bandHeight: CGFloat { currentBand.height }
@@ -484,7 +493,9 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// Take what a gesture produced: the page is already laid out at the new size, and the view
     /// already holds the word the fingers were on.
     private func apply(_ c: QvpZoomChange) {
+        let moved = c.zoom != zoom
         zoom = c.zoom
+        if moved { onZoomChanged?(c.zoom) }
         viewScale = CGFloat(c.view.scale); viewOx = CGFloat(c.view.offsetX); viewOy = CGFloat(c.view.offsetY)
         if c.relaid { drawList = nil; baseKey = "" }
         invalidateContent()
@@ -605,7 +616,7 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         let styledSet = Set(styled.map { $0.path })
         let ink = p.defaultInk
         let scale = window?.screen.scale ?? contentScaleFactor
-        let (top, bandH) = band(for: p, l, offsetY: offsetY, scale: scale)
+        let (top, bandH) = band(for: p, offsetY: offsetY, scale: scale)
         let W = Int(bounds.width * scale), bandPx = Int((bandH * scale).rounded(.up))
         guard W > 0, bandPx > 0 else { return nil }
         let bands = p.highlightBoxesView()
@@ -670,20 +681,19 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
         return (key, image)
     }
 
-    /// The band of one page worth drawing: the whole of it when it fits the ink budget, and two
-    /// screens around the reader when it does not.
-    /// A dressed page's band reaches past the content by the dress overflow, so the border
-    /// above and below it is drawn too.
-    private func band(for p: QvpPage, _ l: QvpLayout, offsetY: CGFloat, scale: CGFloat) -> (top: CGFloat, height: CGFloat) {
-        let o = dressOverflow(p)
-        let above = ((o?.top ?? 0) * viewScale).rounded(.up), below = ((o?.bottom ?? 0) * viewScale).rounded(.up)
-        let contentH = CGFloat(l.contentH) * viewScale + above + below
-        let whole = (contentH * scale).rounded(.up) <= 16384
-            && Int((bounds.width * scale).rounded(.up) * (contentH * scale).rounded(.up)) * 4 <= inkBudget
-        if l.reflowed, whole { return (-above, max(contentH, 1)) }
-        if !l.reflowed { return (-above, max(bounds.height + above + below, 1)) }
-        let step = max(bounds.height / 2, 1)
-        return (((-offsetY - step) / step).rounded(.down) * step, max(bounds.height * 2, 1))
+    /// The band of one page worth drawing, in view points down the page. The engine picks it:
+    /// the whole page when it fits, otherwise two screens around the reader, with a top that
+    /// moves in steps. Its limits are the bitmap's, in device pixels made points: 16384 rows,
+    /// and the ink budget at four bytes a pixel.
+    /// The band of a dressed page holds every part of its border on the screen, except under a
+    /// screen taller than 16384 rows, where it keeps the page's ink and the top of the border can
+    /// be clipped, and this view
+    /// draws the border into the same bitmap as the ink, so the band is the bitmap.
+    private func band(for p: QvpPage, offsetY: CGFloat, scale: CGFloat) -> (top: CGFloat, height: CGFloat) {
+        let s = max(scale, 1)
+        let view = QvpView(scale: Float(viewScale), offsetX: Float(viewOx), offsetY: Float(offsetY))
+        return p.inkBandPoints(view, viewScale: viewScale, viewportW: bounds.width, viewportH: bounds.height,
+                               displayScale: scale, maxPixels: CGFloat(inkBudget) / (4 * s * s))
     }
 
     private func paths(_ p: QvpPage) -> [CGPath] { p.buildPaths() }

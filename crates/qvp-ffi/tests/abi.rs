@@ -317,6 +317,45 @@ fn draw_list_count_then_fill_matches_a_fresh_layout() {
     }
 }
 
+/// The ink band over the ABI: a printed page fits and is one band, a page reflowed past the
+/// ceiling is drawn a band at a time, and the band feeds the draw list as it comes back.
+#[test]
+fn ink_band_bands_a_tall_page_and_feeds_the_draw_list() {
+    let Some(bytes) = page_bytes("036.qvp") else {
+        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
+            panic!("dist/pages/036.qvp is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
+        }
+        eprintln!("skip: dist/pages/036.qvp is missing; run scripts/sync-test-data.sh to enable this test");
+        return;
+    };
+    unsafe {
+        let page = qvp_page_load(bytes.as_ptr(), bytes.len());
+        let mut lay = std::mem::zeroed::<QvpLayout>();
+        let spec = phone_spec(1.0);
+        qvp_layout(page, &spec, &mut lay);
+        let view = QvpView { scale: 1.0, offset_x: 0.0, offset_y: 0.0 };
+        let mut band = QvpInkBand { top: -1.0, height: -1.0 };
+        qvp_layout_ink_band(page, &view, spec.viewport_w, spec.viewport_h, 0.0, 0.0, &mut band);
+        assert_eq!((band.top, band.height), (0.0, lay.content_h), "the printed page is one band");
+
+        // a ceiling under the content bands it, two screens tall around the reader
+        let scrolled = QvpView { offset_y: -300.0, ..view };
+        qvp_layout_ink_band(page, &scrolled, spec.viewport_w, 200.0, lay.content_h / 2.0, 0.0, &mut band);
+        assert_eq!(band.height, 400.0);
+        assert!(band.top <= 300.0 && band.top + band.height >= 500.0, "{} + {}", band.top, band.height);
+        let n = qvp_layout_draw_list(page, band.top, band.top + band.height, std::ptr::null_mut(), 0);
+        assert!(n > 0, "the band draws something");
+
+        // a pixel budget is a ceiling of its own: the width times the rows it allows
+        qvp_layout_ink_band(page, &view, 400.0, 200.0, 0.0, 400.0 * 300.0, &mut band);
+        assert_eq!(band.height, 300.0);
+        // no viewport height: the whole page
+        qvp_layout_ink_band(page, &scrolled, 400.0, 0.0, 1.0, 0.0, &mut band);
+        assert_eq!((band.top, band.height), (0.0, lay.content_h));
+        qvp_page_free(page);
+    }
+}
+
 /// A negative `gap_bias` is the engine's default, as a `max_distance` of 0 is, so a wrapper
 /// that leaves both to the engine taps the same word as one that passes no options.
 #[test]

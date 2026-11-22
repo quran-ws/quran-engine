@@ -31,7 +31,9 @@ for platform in "${@:-all}"; do
   case "$platform" in
     android) copy packages/android/example/src/main/assets/pages ;;
     flutter) copy packages/flutter/qvp_flutter/example/assets/pages ;;
-    react-native) copy packages/react-native/example/android/app/src/main/assets/pages ;;
+    react-native)
+      copy packages/react-native/example/android/app/src/main/assets/pages
+      copy packages/react-native/example/ios/QvpExample/pages ;;
     ios) packages/ios/example/sync-pages.sh ;;
     web) copy_all web/pages ;;
     all) "$0" android flutter react-native ios web ;;

@@ -34,7 +34,7 @@ public struct QvpZoom: Equatable {
     /// The size in force, 1 at the printed page, whichever field the mode steers by.
     public var zoom: Float
     public init(mode: QvpZoomMode = .stepped, step: Int = 0, zoom: Float = 1) { self.mode = mode; self.step = step; self.zoom = zoom }
-    var c: QvpFFI.QvpZoom { QvpFFI.QvpZoom(mode: mode.rawValue, step: UInt32(step), zoom: zoom) }
+    var c: QvpFFI.QvpZoom { QvpFFI.QvpZoom(mode: mode.rawValue, step: UInt32(truncatingIfNeeded: step), zoom: zoom) }
     init(_ z: QvpFFI.QvpZoom) { self.mode = QvpZoomMode(rawValue: z.mode) ?? .stepped; self.step = Int(z.step); self.zoom = z.zoom }
 }
 
@@ -47,12 +47,23 @@ public func qvpSwipePages(translation t: CGSize, velocity v: CGSize) -> Int? {
 }
 
 /// What a sideways drag on a page means.
-public enum QvpSideways { case pan, turnPage }
+public enum QvpSideways {
+    /// The drag pans the page, or it turns the page.
+    case pan, turnPage
+}
 
 /// What a gesture produced: the control to keep, the view to draw with, and whether the page was
 /// laid out again under it. A host redraws its overlays when `relaid` is true.
 public struct QvpZoomChange {
+    /// The control to keep, the view to draw with, and whether the page was laid out again.
     public let zoom: QvpZoom, view: QvpView, relaid: Bool
+}
+
+/// `QvpPage.layoutInkBand`: the band of the layout a host keeps drawn, in layout px. It sits on
+/// the screen at `view.offsetY + view.scale·y`.
+public struct QvpInkBand: Equatable {
+    public var top: Float, height: Float
+    public init(top: Float, height: Float) { self.top = top; self.height = height }
 }
 
 /// Pan and zoom over a laid-out page: a point `p` in layout points draws at `offset + scale·p`.
@@ -100,7 +111,7 @@ extension QvpPage {
     /// printed page.
     public func zoomToStep(_ spec: QvpLayoutSpec, _ zoom: QvpZoom, _ step: Int, _ view: QvpView) -> QvpZoomChange {
         var s = spec.c, z = zoom.c, v = view.c, out = QvpFFI.QvpZoomChange()
-        qvp_zoom_to_step(p, &s, &z, UInt32(step), &v, &out)
+        qvp_zoom_to_step(p, &s, &z, UInt32(truncatingIfNeeded: step), &v, &out)
         if out.relaid != 0 { readLayout() }
         return QvpZoomChange(zoom: QvpZoom(out.zoom), view: QvpView(out.view), relaid: out.relaid != 0)
     }
@@ -115,7 +126,7 @@ extension QvpPage {
     /// The reflow zoom one step of this page's control means; step 0 is the printed page.
     public func zoomAtStep(_ spec: QvpLayoutSpec, _ step: Int) -> Float {
         var s = spec.c
-        return qvp_zoom_at_step(p, &s, UInt32(step))
+        return qvp_zoom_at_step(p, &s, UInt32(truncatingIfNeeded: step))
     }
     /// What a sideways drag on this page means: pan it, or turn the page.
     public func sidewaysDrag(_ zoom: QvpZoom, _ view: QvpView, fitScale: Float) -> QvpSideways {
@@ -148,6 +159,30 @@ extension QvpPage {
         qvp_view_to_layout(p, &v, viewX, viewY, &out)
         return (out[0], out[1])
     }
+    /// Which band of the current layout to keep drawn for `view` and a viewport: the whole page
+    /// when it fits, otherwise two screens around the reader. The top moves in steps, so a pan
+    /// inside one step redraws nothing; pass `top` and `top + height` to `layoutDrawList`.
+    /// `maxHeight` is the tallest band the host can draw and `maxPixels` the pixels it keeps for
+    /// one, both in viewport px; 0 takes `QvpDefaults.MAX_INK_HEIGHT` and no pixel limit. The
+    /// pixel limit never takes the band below one screen.
+    public func layoutInkBand(_ view: QvpView, viewportW: Float, viewportH: Float, maxHeight: Float = 0, maxPixels: Float = 0) -> QvpInkBand {
+        var v = view.c, out = QvpFFI.QvpInkBand()
+        qvp_layout_ink_band(p, &v, viewportW, viewportH, maxHeight, maxPixels, &out)
+        return QvpInkBand(top: out.top, height: out.height)
+    }
+    /// The band a view draws into one bitmap, in view points down the page: `layoutInkBand` for
+    /// a viewport measured in points, with the bitmap's limits in device pixels made points.
+    /// A bitmap is at most 16384 rows, which is `16384 / displayScale` points, and `maxPixels`
+    /// is the points the view keeps for it, its width times its height. `viewScale` is the
+    /// view's scale as the view holds it, so the points come back on the view's own grid. The
+    /// height is at least one point.
+    func inkBandPoints(_ view: QvpView, viewScale: CGFloat, viewportW: CGFloat, viewportH: CGFloat,
+                       displayScale: CGFloat, maxPixels: CGFloat) -> (top: CGFloat, height: CGFloat) {
+        let s = max(displayScale, 1)
+        let b = layoutInkBand(view, viewportW: Float(viewportW), viewportH: Float(viewportH),
+                              maxHeight: Float(16384 / s), maxPixels: Float(maxPixels))
+        return (CGFloat(b.top) * viewScale, max(CGFloat(b.height) * viewScale, 1))
+    }
     /// Hold the content against the viewport: centre an axis it does not fill, cover the
     /// viewport on an axis it overflows, so no drag opens a blank strip beside the page.
     public func viewClamp(_ view: QvpView, contentW: Float, contentH: Float, viewportW: Float, viewportH: Float) -> QvpView {
@@ -159,7 +194,7 @@ extension QvpPage {
     /// pinch keeps its place when the layout reflows under it.
     public func viewAnchor(_ view: QvpView, word: Int, nx: Float, ny: Float, toX: Float, toY: Float, viewportW: Float, viewportH: Float) -> QvpView {
         var v = view.c, out = QvpFFI.QvpView()
-        qvp_view_anchor(p, &v, UInt32(word), nx, ny, toX, toY, viewportW, viewportH, &out)
+        qvp_view_anchor(p, &v, UInt32(truncatingIfNeeded: word), nx, ny, toX, toY, viewportW, viewportH, &out)
         return QvpView(out)
     }
 }

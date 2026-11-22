@@ -1,0 +1,12 @@
+{
+  "packages/react-native/qvp-react-native/src/index.tsx": {
+    "jsdoc/require-jsdoc": {
+      "count": 89
+    }
+  },
+  "web/qvp.js": {
+    "jsdoc/require-jsdoc": {
+      "count": 92
+    }
+  }
+}

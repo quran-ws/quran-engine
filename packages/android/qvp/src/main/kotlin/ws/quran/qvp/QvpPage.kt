@@ -242,7 +242,12 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
         QvpSurahHeader(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9], v[o + 10])
     }
 
-    fun ayahMarks(): List<QvpAyahMark> { val v = QvpNative.ayahMarks(h); return List(v.size / 9) { k -> val o = k * 9; QvpAyahMark(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3].toInt(), v[o + 4], v[o + 5], v[o + 6], v[o + 7].toInt(), v[o + 8].toInt()) } }
+    fun ayahMarks(): List<QvpAyahMark> = readMarks(QvpNative.ayahMarks(h))
+
+    /** The same marks in viewport px through the current layout: where a reflowed page put them. */
+    fun ayahMarksView(): List<QvpAyahMark> = readMarks(QvpNative.ayahMarksView(h))
+
+    private fun readMarks(v: FloatArray): List<QvpAyahMark> = List(v.size / 9) { k -> val o = k * 9; QvpAyahMark(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3].toInt(), v[o + 4], v[o + 5], v[o + 6], v[o + 7].toInt(), v[o + 8].toInt()) }
     fun ayahMarkOf(surah: Int, ayah: Int) = ayahMarks().firstOrNull { it.surah == surah && it.ayah == ayah }
     fun rosettes(): List<QvpRosette> { val v = QvpNative.rosettes(h); return List(v.size / 8) { k -> val o = k * 8; QvpRosette(v[o], v[o + 1], v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7]) } }
     fun sajdahs(): List<QvpSajdah> { val v = QvpNative.sajdahs(h); return List(v.size / 4) { k -> QvpSajdah(v[k * 4], v[k * 4 + 1], v[k * 4 + 2], v[k * 4 + 3]) } }
@@ -262,7 +267,11 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     fun hitTest(x: Float, y: Float, o: QvpHitOptions = QvpHitOptions()) = hit(QvpNative.hitTest(h, x, y, o.maxDistance, o.gapBias, o.preferExact))
     fun hitTestView(viewX: Float, viewY: Float, o: QvpHitOptions = QvpHitOptions()) = hit(QvpNative.hitTestView(h, viewX, viewY, o.maxDistance, o.gapBias, o.preferExact))
     fun lineBands(): List<QvpLineBand> { val v = QvpNative.lineBands(h); return List(v.size / 7) { k -> val o = k * 7; QvpLineBand(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6]) } }
-    fun hitAreas(gapBias: Float = QvpDefaults.GAP_BIAS): List<QvpHitArea> { val v = QvpNative.hitAreas(h, gapBias); return List(v.size / 10) { k -> val o = k * 10; QvpHitArea(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9]) } }
+    fun hitAreas(gapBias: Float = QvpDefaults.GAP_BIAS): List<QvpHitArea> = readAreas(QvpNative.hitAreas(h, gapBias))
+    /** The same partition in viewport px through the current layout. Not [hitAreas] transformed:
+     *  a reflowed row's words have other neighbours than a printed line's, so the engine computes it again. */
+    fun hitAreasView(gapBias: Float = QvpDefaults.GAP_BIAS): List<QvpHitArea> = readAreas(QvpNative.hitAreasView(h, gapBias))
+    private fun readAreas(v: FloatArray): List<QvpHitArea> = List(v.size / 10) { k -> val o = k * 10; QvpHitArea(v[o].toInt(), v[o + 1].toInt(), v[o + 2], v[o + 3], v[o + 4], v[o + 5], v[o + 6], v[o + 7], v[o + 8], v[o + 9]) }
 
     // ── layout ──
     fun layout(spec: QvpLayoutSpec): QvpLayout {
@@ -321,6 +330,14 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
      * [hitTestView]. The inverse of `offset + scale·p`. */
     fun viewToLayout(view: QvpView, viewX: Float, viewY: Float): Pair<Float, Float> =
         QvpNative.viewToLayout(h, view.floats(), viewX, viewY).let { it[0] to it[1] }
+    /** Which band of the current layout to keep drawn for [view] and a viewport: the whole page when it
+     * fits, otherwise two screens around the reader. The top moves in steps, so a pan inside one step
+     * redraws nothing; pass `top` and `top + height` to [layoutDrawList]. [maxHeight] is the tallest
+     * band the host can draw and [maxPixels] the pixels it keeps for one, both in viewport px; 0 takes
+     * [QvpDefaults.MAX_INK_HEIGHT] and no pixel limit. The pixel limit never takes the band below
+     * one screen. */
+    fun layoutInkBand(view: QvpView, viewportW: Float, viewportH: Float, maxHeight: Float = 0f, maxPixels: Float = 0f): QvpInkBand =
+        QvpNative.layoutInkBand(h, view.floats(), viewportW, viewportH, maxHeight, maxPixels).let { QvpInkBand(it[0], it[1]) }
     /** The reflow zoom one step of this page's control means; step 0 is the printed page. */
     fun zoomAtStep(spec: QvpLayoutSpec, step: Int): Float = QvpNative.zoomAtStep(h, spec.floats(), step)
     /** The zoom steps this page ships with, lowest first. Zoom 1, the printed page, is the step before them. */
@@ -403,6 +420,10 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
     /** animated band boxes in viewport px; draw each id as one nonzero path behind the ink */
     fun highlightBoxesView(): List<QvpBox> = boxes(QvpNative.highlightBoxesView(h))
     fun wordBands(ws: IntArray, height: BandHeight = BandHeight.LINE_SPACING, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) = boxes(QvpNative.wordBands(h, ws, height.id, padX, padY))
+    /** The same bands in viewport px through the current layout: one box per row the words
+     *  occupy, where a reflowed page has moved them. A host that draws its own underlines or
+     *  ayah marks reads these, never the printed page's boxes. */
+    fun wordBandsView(ws: IntArray, height: BandHeight = BandHeight.LINE_SPACING, padX: Float = QvpDefaults.HIGHLIGHT_PAD_X, padY: Float = QvpDefaults.HIGHLIGHT_PAD_Y) = boxes(QvpNative.wordBandsView(h, ws, height.id, padX, padY))
 
     // ── selection ──
     fun select(anchor: Int, focus: Int = anchor) = QvpNative.select(h, anchor, focus).also { touch() }

@@ -15,7 +15,7 @@ and `qvp_hit_test(...)` in C.
 - **Defaults.** Every default a wrapper applies (ink, highlight colours and padding, gap bias,
   tap distance, mask and reveal colours, crop padding, the reflow defaults
   `QVP_DEFAULT_REFLOW_RELAX` and `QVP_DEFAULT_REFLOW_MAX_STRETCH`, the selection band's side
-  padding `QVP_DEFAULT_SELECTION_PAD_X`) is a `QVP_DEFAULT_*` value in `qvp.h`,
+  padding `QVP_DEFAULT_SELECTION_PAD_X`, the ink band's ceiling `QVP_DEFAULT_MAX_INK_HEIGHT`) is a `QVP_DEFAULT_*` value in `qvp.h`,
   defined once in the engine (`crates/qvp-core/src/defaults.rs`) and mirrored as `QvpDefaults`
   in each wrapper; the parity check keeps every copy equal.
 - **Handles.** Every mutating style/highlight call returns a handle; removing the handle
@@ -143,10 +143,13 @@ page.grid                            // {lines, lineSpacing}: the mushaf's line 
 page.lineSpacing                     // the printed line spacing of this page, in page units
 ```
 
-**The fit.** `fitScale`, `fitX`, `fitY` is the view transform that shows the whole laid-out
-content in the viewport: shrink by `fitScale` when the content is taller than the viewport
-(never enlarge), then centre. A host draws at `fitX + fitScale·viewX`, `fitY + fitScale·viewY`
-and applies its own pan and zoom on top. `maxAspectSlack` bounds the content width to
+**The fit.** `fitScale`, `fitX`, `fitY` is the view transform for the laid-out content. A
+host draws at `fitX + fitScale·viewX`, `fitY + fitScale·viewY` and applies its own pan and
+zoom on top. The fit shows a box: the content, plus the dress overflow on each side when
+the page is dressed (see the dress section below). A printed page shows whole: `fitScale`
+shrinks the box to fit both the viewport width and height (it is never more than 1), and
+the box is centred. A reflowed page is scrolled, not shrunk: `fitScale` is 1, the box is
+centred across the viewport, and its top is at the top of the viewport. `maxAspectSlack` bounds the content width to
 `viewportH·pageW/pageH·slack` so a landscape screen does not stretch the lines (0 = no
 bound; the examples use 1.15). `cropLeft`/`cropRight` cut the printed side margins (page
 units) so the ink spans the padded width. On a dressed page a crop never cuts into a
@@ -435,12 +438,74 @@ The band holds it to a part of the laid-out page, in viewport px, as `L.slots` a
 `…View` answer are; a band no taller than nothing means the whole page.
 
 A reflowed page is several screens of ink, so a renderer draws it into an image once and lets
-the reader scroll that image, rather than drawing again on every frame. Both reference
-renderers keep the whole page when it fits their ink budget — about 18 MB for a page of this
-muṣḥaf at its largest step on a phone — and fall back to a band two screens tall when it does
-not, which is redrawn only when the reader scrolls out of it. That is what the band argument is
-for. On iOS the image is the content of a `UIScrollView`, so the scroll itself — the
+the reader scroll that image, rather than drawing again on every frame. That is what the band
+argument is for. On iOS the image is the content of a `UIScrollView`, so the scroll itself — the
 deceleration, the rubber band at the ends, the indicator — is the platform's own.
+
+**Which band to draw.** `page.layoutInkBand(view, viewportW, viewportH, {maxHeight, maxPixels})`
+picks the band, so no host computes it. It returns `{top, height}` in layout px, the space of
+`layoutDrawList`, and the band sits on the screen at `view.offsetY + view.scale · y`:
+
+```js
+const band = page.layoutInkBand(view, viewportW, viewportH, { maxPixels: inkBudget / 4 })
+const drawList = page.layoutDrawList(band.top, band.top + band.height)
+```
+
+The band is the whole page when the page fits. Otherwise it is two screens tall around the
+reader, and its top moves in steps: half a screen while the limits leave room for two. A pan
+inside one step returns the same band, so the image in hand stays valid. A pan across a step
+moves the band by exactly one step. With less than 2 px between the band and the screen, no
+step of a whole pixel fits, so the top follows the reader. Put `band.top` in the image's cache
+key.
+
+The two limits are in viewport px, because a texture is measured on the screen, not in the
+layout:
+
+- `maxHeight` is the tallest band the host can draw. 0 takes `QVP_DEFAULT_MAX_INK_HEIGHT`
+  (4096), a height that every GPU these wrappers run on can draw. No band is taller than
+  `maxHeight`. A screen taller than it gets a band of exactly `maxHeight`, or for a dressed page
+  whose bare page fits, one 0.01 px under it (see below).
+- `maxPixels` is how many pixels the host keeps for one band, its width times its height. 0
+  means no limit. A host with a byte budget passes the budget divided by its bytes per pixel.
+  The budget can shrink the band from two screens down to one screen, but not below: a band
+  shorter than the screen leaves part of the screen with no ink. So a band can hold more
+  pixels than `maxPixels` when one screen does.
+
+The limits are in the unit of the viewport the host passes. A host that measures its view in
+points, as iOS does, divides a limit in device pixels by the screen scale: a bitmap of 16384
+rows at 3 pixels to the point is a `maxHeight` of 5461 points.
+
+The page is whole when it fits under both limits, read this way. One case ignores both limits:
+a view with no scale, a viewport with no height, or a scale, viewport height or `offsetY` that
+is NaN or infinite has no screen to put a band around, so the band is the whole page however
+tall it is.
+
+A dressed page's border stands over the content's top and bottom by the dress overflow, and a
+stroked border by half its stroke more, since a stroke is centred on its outline. That
+overflow counts against both limits, rounded up to whole viewport px, plus one px for the
+antialiased edge. The host draws the border into the band and adds no rows of its own. The
+overflow to the left and right does not change the band, which is as wide as the viewport.
+
+- The dressed box fits: the band is that box, the content plus the overflow above and below.
+- Neither the dressed box nor the bare page fits: the band is the bare page's band, to the
+  bit. It covers the screen, and so every part of the border on it.
+- Only the bare page fits, so the page bands because of its border: the band steps as the bare
+  page's would, with the step rounded down to whole viewport px, so its ink stays on the pixel
+  grid of the whole page. A band that follows the reader (under 2 px of slack) has its top
+  rounded down and is one px taller, which can pass `maxPixels` by one row, when `maxHeight`
+  has room for it.
+- The same, under a screen taller than `maxHeight`, which no band covers: the band is 0.01 px
+  under `maxHeight` tall, so a host that rounds its rows up stays under `maxHeight`. It holds the whole bare page and starts at the top of the dress box
+  (`overflow[1]` over the content, without the stroke), or as near it as `maxHeight` allows.
+  The rest of the border is not drawn. This is where hosts started their ornament layer before
+  the band held the border.
+- No screen: the band is everything the dress draws above, on and below the page, not rounded.
+
+A page whose dressed box is just over a limit that its bare page fits under now bands, so a pan
+can draw it again where it was drawn whole before. That costs time, not pixels.
+
+A host that draws in device pixels passes the view, the viewport and the limits in device
+pixels, as `CanvasRenderer` does. The band comes back in layout px either way.
 
 `reflowMaxZoom(spec)` is the largest zoom at which every word still fits a row (2.44 on page
 121, whose longest word is 121 of 345 page units). Clamp a pinch to it; past it the engine
@@ -750,8 +815,9 @@ drawn in layout space. `CanvasRenderer` does all of this.
 
 **A dressed page is bigger than its text.** `viewBox` is the page box the border grew, in
 page units, and `overflow` is how far the border reaches past the laid-out content on each
-side, in viewport px. Without a border, `viewBox` is the laid-out page (the cropped page, or
-a reflowed page's rows) and the overflow is zero: medallions and bands stay inside it. The layout's fit includes the dress: `fitScale`, `fitX` and `fitY` fit
+side, in layout px. Without a border, `viewBox` is the laid-out page (the cropped page, or
+a reflowed page's rows) and the overflow is zero: medallions and bands stay inside it. The
+layout's fit includes the dress: `fitScale`, `fitX` and `fitY` fit
 the content plus the overflow in the viewport, so a host that draws at the layout's fit shows
 the whole border with no arithmetic of its own. `fitX` and `fitY` still place the content's
 origin, and the overflow sits to their left and above them. A printed page shrinks to fit
@@ -929,6 +995,7 @@ function in the header has no row here, or a row names a function the header lac
 | layout | `qvp_layout_path_groups` | `layout.pathGroup` | Return the group of every path; empty unless the page is reflowed. |
 | layout | `qvp_layout_omitted_paths` | `layout.omitted` | Return the paths this layout does not draw: sheet furniture, and a native surah frame when reflowed. |
 | layout | `qvp_layout_draw_list` | `page.layoutDrawList(bandTop, bandBottom)` | Return every path that the layout draws inside a band, with its placement, in drawing order. |
+| layout | `qvp_layout_ink_band` | `page.layoutInkBand(view, viewportW, viewportH, {maxHeight, maxPixels})` | Return the band of the layout to keep drawn for a view: the whole page when it fits, otherwise two screens around the reader, with a top that moves in steps. |
 | layout | `qvp_layout_placements` | `page.layoutPlacements()` | Return what a draw list's placement indexes: the groups, then the repeats. |
 | layout | `qvp_layout_row_words` | `page.rowWords(row)` | Return the words of a reflowed row, in reading order. |
 | layout | `qvp_layout_word_row` | `page.wordRow(word)` | Return the row a word landed on, or null when it is on none. |
@@ -971,8 +1038,8 @@ function in the header has no row here, or a row names a function the header lac
 | memorisation | `qvp_mask_from` | `page.maskFrom(word, mode)` | Mask every word from a word index to the end of the page. |
 | memorisation | `qvp_mask_options` | `page.maskOptions(options)` | Set the block colour, padding, radius and direction of the mask. |
 | memorisation | `qvp_mask_transition` | none yet (a declared gap); `page.maskTransition(ms)` in Swift | Set the fade time of a hide in milliseconds; 0 is instant, and unmask resets it. |
-| memorisation | `qvp_unmask_next` | `page.unmaskNext(n)` | Unhide the next `n` masked words; returns how many are still hidden. |
-| memorisation | `qvp_mask_back` | `page.maskBack(n)` | Re-hide the last `n` revealed words. |
+| memorisation | `qvp_unmask_next` | `page.unmaskNext(n)` | Unhide the next `n` hidden words, in mask order (from the end when the mask is reversed); returns how many it unhid. |
+| memorisation | `qvp_mask_back` | `page.maskBack(n)` | Hide again the last `n` shown words of the mask, walking back from its end (from its start when reversed); returns how many it hid. The position in the mask decides, not the order the words were shown in. |
 | memorisation | `qvp_unmask_word` | `page.unmaskWord(i)` | Unhide one word. |
 | memorisation | `qvp_mask_word` | `page.maskWord(i)` | Hide one word again. |
 | memorisation | `qvp_unmask_all` | `page.unmaskAll()` | Unhide every masked word. |
