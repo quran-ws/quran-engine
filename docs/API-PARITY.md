@@ -31,6 +31,7 @@ is owed.
 | `qvp_hit_areas_view` | react-native | other shape: JavaScript hit-tests in view dp with `hitTestView` and `hitTestExactView`. The page-unit `qvp_hit_areas` does not reach JavaScript either |
 | `qvp_layout_current` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_layout_draw_list` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
+| `qvp_layout_draw_revision` | react-native | native: `QvpRnPageView` calls it through the platform view while rendering; no drawing happens in JavaScript |
 | `qvp_layout_groups` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
 | `qvp_layout_ink_band` | react-native | native: `QvpRnPageView` calls it through the Kotlin `QvpPageView` while rendering; no drawing happens in JavaScript |
 | `qvp_layout_omitted_paths` | react-native | native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript |
@@ -86,6 +87,7 @@ is owed.
 | `qvp_atlas_surah_count` | react-native | list form: bound as `atlasSurahs()` |
 | `qvp_style_add` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_style_add_target` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
+| `qvp_style_add_letters` | react-native | declarative: the `styles` prop takes a rule with `letters` |
 | `qvp_style_remove` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_style_recolor` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
 | `qvp_style_clear` | react-native | declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript |
@@ -100,6 +102,9 @@ is owed.
 | `qvp_ayah_info` | react-native | list form: bound as `ayahs()` |
 | `qvp_line_info` | react-native | list form: bound as `lines()` |
 | `qvp_decoration_info` | react-native | list form: bound as `decorations()` |
+| `qvp_letter_count` | react-native | list form: bound as `letters()`, which gives each letter of a word with its members and marks |
+| `qvp_letter_info` | react-native | list form: bound as `letters()`, which gives each letter of a word with its members and marks |
+| `qvp_letter_members` | react-native | list form: bound as `letters()`, which gives each letter of a word with its members and marks |
 | `qvp_text` | react-native | list form: `text(target)` takes a target |
 | `qvp_mask_transition` | web | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_mask_transition` | android | issue (to open): a binding is owed; the fade landed on iOS first |
@@ -273,7 +278,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-186 symbols in the header, 186 Rust exports. web: 173 bound, android: 171 bound, flutter: 165 bound, ios: 168 bound, react-native: 97 bound.
+186 symbols in the header, 186 Rust exports. web: 185 bound, android: 183 bound, flutter: 177 bound, ios: 180 bound, react-native: 104 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -292,7 +297,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_atlas_surah` | yes | yes | yes | yes | yes |
 | `qvp_atlas_surah_at` | yes | yes | yes | yes | gap (list form: bound as `atlasSurahs()`) |
 | `qvp_atlas_surah_count` | yes | yes | yes | yes | gap (list form: bound as `atlasSurahs()`) |
-| `qvp_attach_letters` | **missing** | **missing** | **missing** | **missing** | **missing** |
+| `qvp_attach_letters` | yes | yes | yes | yes | yes |
 | `qvp_attach_words` | yes | yes | yes | yes | yes |
 | `qvp_ayah_info` | yes | yes | yes | yes | gap (list form: bound as `ayahs()`) |
 | `qvp_ayah_keys` | yes | yes | yes | yes | yes |
@@ -316,12 +321,12 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_dress_view` | yes | yes | yes | yes | yes |
 | `qvp_engine_name` | yes | yes | yes | yes | yes |
 | `qvp_family_name` | yes | yes | yes | yes | yes |
-| `qvp_find_letters` | **missing** | **missing** | **missing** | **missing** | **missing** |
+| `qvp_find_letters` | yes | yes | yes | yes | yes |
 | `qvp_find_word` | yes | yes | yes | yes | yes |
 | `qvp_format_version` | yes | yes | yes | yes | yes |
 | `qvp_geometry` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_has_form` | yes | yes | yes | yes | yes |
-| `qvp_has_letters` | **missing** | **missing** | **missing** | **missing** | **missing** |
+| `qvp_has_letters` | yes | yes | yes | yes | yes |
 | `qvp_highlight_add` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_highlight_boxes_view` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_highlight_clear` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
@@ -335,14 +340,14 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_hit_test` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_exact` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_exact_view` | yes | yes | yes | yes | yes |
-| `qvp_hit_test_letter` | **missing** | **missing** | **missing** | **missing** | **missing** |
-| `qvp_hit_test_letter_view` | **missing** | **missing** | **missing** | **missing** | **missing** |
+| `qvp_hit_test_letter` | yes | yes | yes | yes | yes |
+| `qvp_hit_test_letter_view` | yes | yes | yes | yes | yes |
 | `qvp_hit_test_view` | yes | yes | yes | yes | yes |
 | `qvp_kind_name` | yes | yes | yes | yes | yes |
 | `qvp_layout` | yes | yes | yes | yes | yes |
 | `qvp_layout_current` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_draw_list` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_layout_draw_revision` | **missing** | **missing** | **missing** | **missing** | **missing** |
+| `qvp_layout_draw_revision` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it through the platform view while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_groups` | yes | yes | gap (other shape: `qvp_layout_draw_list` and `qvp_layout_placements` carry the same placements, and the draw list leaves out what the layout omits) | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_ink_band` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it through the Kotlin `QvpPageView` while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_line_spacing_to_fill` | yes | yes | yes | yes | yes |
@@ -354,10 +359,10 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_layout_row_words` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_layout_wasted_fraction` | yes | yes | yes | yes | yes |
 | `qvp_layout_word_row` | yes | yes | yes | gap (native: `QvpPageView` calls it while rendering; the app sets the size through the zoom control) | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
-| `qvp_letter_at_offset` | **missing** | **missing** | **missing** | **missing** | **missing** |
-| `qvp_letter_count` | **missing** | **missing** | **missing** | **missing** | **missing** |
-| `qvp_letter_info` | **missing** | **missing** | **missing** | **missing** | **missing** |
-| `qvp_letter_members` | **missing** | **missing** | **missing** | **missing** | **missing** |
+| `qvp_letter_at_offset` | yes | yes | yes | yes | yes |
+| `qvp_letter_count` | yes | yes | yes | yes | gap (list form: bound as `letters()`, which gives each letter of a word with its members and marks) |
+| `qvp_letter_info` | yes | yes | yes | yes | gap (list form: bound as `letters()`, which gives each letter of a word with its members and marks) |
+| `qvp_letter_members` | yes | yes | yes | yes | gap (list form: bound as `letters()`, which gives each letter of a word with its members and marks) |
 | `qvp_line_bands` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_line_info` | yes | yes | yes | yes | gap (list form: bound as `lines()`) |
 | `qvp_mark_category` | yes | yes | yes | yes | yes |
@@ -399,7 +404,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_passage_placements` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_rows` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_words` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
-| `qvp_path_letter` | **missing** | **missing** | **missing** | **missing** | **missing** |
+| `qvp_path_letter` | yes | yes | yes | yes | yes |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |
 | `qvp_reflow_max_zoom` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_reveal_goto` | yes | yes | yes | yes | yes |
@@ -416,7 +421,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_selection_text` | yes | yes | yes | yes | yes |
 | `qvp_sideways_drag` | yes | yes | yes | yes | gap (native: `QvpRnPageView` calls it while rendering; no drawing happens in JavaScript) |
 | `qvp_style_add` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
-| `qvp_style_add_letters` | **missing** | **missing** | **missing** | **missing** | **missing** |
+| `qvp_style_add_letters` | yes | yes | yes | yes | gap (declarative: the `styles` prop takes a rule with `letters`) |
 | `qvp_style_add_target` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_clear` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |
 | `qvp_style_clear_layer` | yes | yes | yes | yes | gap (declarative: the `styles`, `highlights`, `theme` and `defaultInk` props reconcile handles natively; no handle reaches JavaScript) |

@@ -32,6 +32,9 @@ export const LAYER = { BASE: 0, THEME: 10, HIGHLIGHT: 50, SELECTION: 60, TOP: 10
 export const DIVISION = { JUZ: 0, HIZB: 1, NISF: 2, RUBU_AL_HIZB: 3 } as const;
 /** The three kinds of ornament a page can be dressed in, in engine order. Pass one to `find` or `ofKind`. */
 export const ORNAMENT_KIND = ['ayah_mark', 'surah_header', 'page_frame'] as const;
+/** What part of a letter a selector or a letter query takes (QVP_LETTER_PART_*). `BODY_AND_DOTS` is every member at
+ * the letter's own offset; `MARKS` is every other member. */
+export const LETTER_PART = { ALL: 0, BODY_AND_DOTS: 1, MARKS: 2 } as const;
 
 // ── colours ──────────────────────────────────────────────────────────────────────────────────
 /** A colour: '#rgb', '#rrggbb', '#rrggbbaa', or a 0xRRGGBBAA number. */
@@ -90,6 +93,16 @@ export const Sel = {
   kind: (k: string | number): Selector => ({ selector: SELECTOR.kind, a: named(k, KIND_NAMES) }),
   decoration: (k: string | number): Selector => ({ selector: SELECTOR.decoration, a: named(k, DECORATION_NAMES) }),
   decorationIndex: (d: number): Selector => ({ selector: SELECTOR.decorationIndex, a: d }),
+  /** A letter of word `w`, by its index in the word, and which part of it (`LETTER_PART`). The letter selectors read
+   * the letter layer (`lettersUri`, `attachLetters`): with no layer they select nothing, and the rule takes the layer when it comes. */
+  letter: (w: number, letter: number, part: number = LETTER_PART.ALL): Selector => ({ selector: SELECTOR.letter, a: w, b: letter, c: part }),
+  /** The nth mark of a letter in text order, from 0. Dots count; a body never does. `letter.marks[nth]` is the path it takes. */
+  letterMark: (w: number, letter: number, nth: number): Selector => ({ selector: SELECTOR.letterMark, a: w, b: letter, c: nth }),
+  /** Every member of a letter whose path has this mark, by name or id. A body that the page stores as a mark counts too. */
+  letterMarkNamed: (w: number, letter: number, mark: string | number): Selector =>
+    typeof mark === 'string' ? { selector: SELECTOR.letterMarkNamed, a: w, b: letter, c: markId(mark), mark } : { selector: SELECTOR.letterMarkNamed, a: w, b: letter, c: mark },
+  /** The ink of the `qpc` characters `from` to `to` of word `w`, both included, by code-point offset. `from` after `to` is a bad selector. */
+  wordChars: (w: number, from: number, to: number): Selector => ({ selector: SELECTOR.wordChars, a: w, b: from, c: to }),
 };
 
 // ── records ──────────────────────────────────────────────────────────────────────────────────
@@ -113,6 +126,37 @@ export interface Word {
 export interface Deco { index: number; decoration: number; decorationName: string; surah: number; ayah: number; line: number; x0: number; y0: number; x1: number; y1: number; text: string; firstPath: number; nPaths: number }
 /** The one hit shape for every hit test; the exact variants report distance 0. `isExact` is true only when the point is inside an outline. */
 export interface Hit { word: number; path: number; decoration: number; line: number; distance: number; isExact: boolean; wordKey: string | null; ayahKey: string | null }
+/** One path of a letter: a page path, or a piece cut from a joined outline (`isCut`) at an index past the page's own
+ * paths. `at` is its code-point offset in the word's `qpc` text, -1 when it has none. `mark` is the path's mark id and
+ * `markName` its name, as the engine names it; body ink has 0. */
+export interface LetterMember { path: number; at: number; mark: number; markName: string; isBody: boolean; isCut: boolean }
+/**
+ * One letter of a word, from the letter layer. `index` is the letter's index in its word, `at` its code-point offset in
+ * the word's `qpc` text, `text` its code point and `character` the same as a string. `moreAt` is the first other offset
+ * its body draws (a kashida), -1 when none, and `nMoreAt` counts them. The box is in page units: the union of its
+ * members' boxes. `hasInk` is false when no member has an outline. `members` holds the bodies first, then the marks in
+ * text order, as the engine gives them; `marks` holds the marks alone, so `marks[n]` is the path `Sel.letterMark(word, index, n)` takes.
+ */
+export interface Letter {
+  word: number; index: number; at: number; text: number; character: string; moreAt: number; nMoreAt: number; nMembers: number; nMarks: number;
+  x0: number; y0: number; x1: number; y1: number; hasInk: boolean; members: LetterMember[]; marks: LetterMember[];
+}
+/** The letter role of a path: the letter's index in the path's word (-1 for a word-level mark) and the path's offset (-1 when none). */
+export interface PathLetter { letter: number; at: number }
+/**
+ * The letter under a point. `letter` is its index in `word`, -1 for a word-level mark. `isExact` is true when the point
+ * is on ink; then `distance` is 0. A near hit names the letter's first body member as `path`, and `distance` is the
+ * distance to the letter's box in page units. `at` is the offset of the path hit or of the letter, -1 when none. `mark`
+ * is the mark id of the path hit and `markName` its name. `isBody` is true when the path is a body member of its letter.
+ */
+export interface LetterHit { word: number; letter: number; path: number; at: number; line: number; distance: number; mark: number; markName: string; isExact: boolean; isBody: boolean }
+/**
+ * Letters by what they are (`findLetters`, a style rule's `letters`). `scope` is the words to look in (the page when
+ * left out). `letter` is one character (its first code point is used), or `text` the code point; neither is any letter.
+ * `mark` is a mark name or id that one of the letter's members must carry; none is any. `part` (`LETTER_PART`) is what of
+ * each letter a rule takes; it does not filter `findLetters`.
+ */
+export interface LetterQuery { scope?: Target; letter?: string; text?: number; mark?: string | number; part?: number }
 /** The part of one ayah that is on this page: `fragment` of `fragments`, with its words and its box in page units. */
 export interface Ayah { index: number; surah: number; ayah: number; fragment: number; fragments: number; flags: number; rubuAlHizb: number; firstWord: number; nWords: number; ayahMarkDecoration: number; bbox: number[] }
 /** One printed line: its words, its box, and its band, in page units. */
@@ -162,8 +206,8 @@ export interface AtlasRubuAlHizb { rubuAlHizb: number; surah: number; ayah: numb
 export interface HighlightStyle { mode?: HighlightMode; ink?: Color; band?: Color; height?: 'lineSpacing' | 'ink'; padX?: number; padY?: number; radius?: number; seam?: number; ms?: number; layer?: number }
 /** One declarative highlight; the native side keeps id → handle and calls highlight / moveHighlight / restyleHighlight / removeHighlight on diff. */
 export interface Highlight { id: string; target: Target; style?: HighlightStyle }
-/** One declarative style rule: `selector` (→ page.style) or `target` (→ page.styleTarget); `hide` → page.hide(selector). */
-export interface StyleRule { id: string; selector?: Selector; target?: Target; color?: Color; ms?: number; layer?: number; hide?: boolean }
+/** One declarative style rule: `selector` (→ page.style), `letters` (→ page.styleLetters) or `target` (→ page.styleTarget); `hide` → page.hide(selector). */
+export interface StyleRule { id: string; selector?: Selector; letters?: LetterQuery; target?: Target; color?: Color; ms?: number; layer?: number; hide?: boolean }
 /** Colours by mark family, and by mark name in `marks`. A colour left out keeps what the page has. */
 export interface Theme { ink?: Color; diacritics?: Color; dots?: Color; waqf?: Color; sifr?: Color; ayahMark?: Color; numeral?: Color; headers?: Color; marks?: Record<string, Color>; ms?: number }
 /** `from` masks every word from that index to the end of the page instead of `target`. */
@@ -225,6 +269,10 @@ export interface QvpPageViewProps extends ViewProps {
   pageBase64?: string;
   /** optional NNN.words.json sidecar (derived forms), same URI schemes */
   wordsUri?: string;
+  /** optional NNN.qvl letter layer, same URI schemes. It is attached after the page loads, and a new value attaches
+   * that layer to the page in view, in place of the one before. The engine has no detach: with the prop left out
+   * again, the layer stays until the next page loads. A layer the engine refuses is logged; `hasLetters` says. */
+  lettersUri?: string;
   padTop?: number; padBottom?: number; padSide?: number;
   /** spacing only opens up: lineSpacing < 1 is clamped by the engine */
   lineSpacing?: number; fillHeight?: boolean;
@@ -536,6 +584,24 @@ export const Qvp = {
   /** Counts up on every rebuild of the ornament layer: a new dress, and every layout. 0 when undressed. */
   dressRevision: (tag: number): Promise<number> => M.dressRevision(tag),
 
+  // letters: the optional letter layer (NNN.qvl)
+  /** Attach the page's letter layer from a URI (the same schemes as `pageUri`). True when the engine took it; false
+   * when it refused it, and then nothing changed. The pieces cut from joined outlines become paths after the page's own. */
+  attachLetters: (tag: number, uri: string): Promise<boolean> => M.attachLetters(tag, uri),
+  hasLetters: (tag: number): Promise<boolean> => M.hasLetters(tag),
+  /** Every letter of a word, in the word's order, with its members and marks. Empty with no layer. */
+  letters: (tag: number, word: number): Promise<Letter[]> => M.letters(tag, word),
+  /** The letter role of a path, or null for a cut path, a path with no letter role, or no layer. */
+  pathLetter: (tag: number, path: number): Promise<PathLetter | null> => M.pathLetter(tag, path),
+  /** The letter of a word that draws the character at code-point offset `at`, or holds a mark there; null when none does. */
+  letterAtOffset: (tag: number, word: number, at: number): Promise<number | null> => M.letterAtOffset(tag, word, at),
+  /** The letters the query finds, in word order and then letter order. */
+  findLetters: (tag: number, query: LetterQuery): Promise<{ word: number; letter: number }[]> => M.findLetters(tag, query),
+  /** The letter or mark under a point in page units; null with no layer, or when the point finds no word. */
+  hitTestLetter: (tag: number, x: number, y: number, opts?: HitOptions): Promise<LetterHit | null> => M.hitTestLetter(tag, x, y, opts ?? null),
+  /** The same for a point in view dp (points on iOS), as `hitTestView` takes it. */
+  hitTestLetterView: (tag: number, x: number, y: number, opts?: HitOptions): Promise<LetterHit | null> => M.hitTestLetterView(tag, x, y, opts ?? null),
+
   // engine-wide
   strip: (s: string): Promise<string> => M.arabic('strip', s),
   fold: (s: string): Promise<string> => M.arabic('fold', s),
@@ -680,7 +746,7 @@ function dressSpec(spec: DressSpec): object {
 }
 
 type Tail<F> = F extends (tag: number, ...rest: infer R) => infer Ret ? (...rest: R) => Ret : never;
-const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'ayahMarksView', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg', 'dress', 'undress', 'dressClamp', 'dressView', 'dressInfo', 'dressRevision'] as const;
+const pageMethods = ['info', 'words', 'word', 'ayahs', 'lines', 'decorations', 'findWord', 'targetWords', 'wordForm', 'hasForm', 'attachWords', 'surahs', 'divisions', 'surahHeaders', 'surahHeadersView', 'ayahMarks', 'ayahMarksView', 'rosettes', 'sajdahs', 'ayahKeys', 'ayahWordCount', 'reciteMap', 'wordLabel', 'ayahLabel', 'text', 'search', 'citation', 'hitTestExact', 'hitTest', 'hitTestExactView', 'hitTestView', 'layoutLineSpacingToFill', 'layoutWastedFraction', 'layoutPrintedHeight', 'grid', 'wordBoundsView', 'currentLayout', 'relayout', 'resetView', 'stats', 'select', 'clearSelection', 'selection', 'selectionText', 'unmaskNext', 'maskBack', 'unmaskWord', 'maskWord', 'unmaskAll', 'maskAll', 'maskHidden', 'maskWords', 'revealStepCount', 'revealPosition', 'revealStepOf', 'cropBounds', 'cropSvg', 'dress', 'undress', 'dressClamp', 'dressView', 'dressInfo', 'dressRevision', 'attachLetters', 'hasLetters', 'letters', 'pathLetter', 'letterAtOffset', 'findLetters', 'hitTestLetter', 'hitTestLetterView'] as const;
 type PageMethod = (typeof pageMethods)[number];
 /** The page-bound part of `Qvp`, with the tag already bound. */
 export type PageApi = { [K in PageMethod]: Tail<(typeof Qvp)[K]> };

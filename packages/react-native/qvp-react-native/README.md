@@ -123,7 +123,8 @@ double-tap resets. Props `selectionEnabled`, `zoomEnabled`, `hitMaxDistance`, `s
 
 Colours: `'#rgb' | '#rrggbb' | '#rrggbbaa' | 0xRRGGBBAA` (`css()` / `rgba(c, alpha)` helpers).
 Targets: `'page' | '2:255' | '2:255:3' | '2:255-257' | 'line:7' | 'surah:2' | wordIdx | [index…] | T.*`.
-Selectors: `Sel.page/path/wordPath/wordMark/wordMarkNamed/wordBody/wordMarks/word/ayah/line/mark/category/family/kind/decoration/decorationIndex`.
+Selectors: `Sel.page/path/wordPath/wordMark/wordMarkNamed/wordBody/wordMarks/word/ayah/line/mark/category/family/kind/decoration/decorationIndex`,
+and with a letter layer `Sel.letter/letterMark/letterMarkNamed/wordChars` (see Letters).
 
 ## The passage view
 
@@ -170,6 +171,55 @@ const medallion = await set.find('ayah_mark', 'font-003-regular');
   publish a dressed page.
 - The prop dresses every page the view loads. `qvp.dress(set, spec)`, `qvp.undress()`,
   `qvp.dressInfo()` and `qvp.dressRevision()` act on the page in the view now. Do not mix them with the `dress` prop on one view.
+
+## Letters
+
+A page can take a letter layer (`NNN.qvl`, in the data release). The layer names the letters
+of each word, the paths that draw each letter, and the pieces cut from an outline that joins
+letters. With a layer, you can read, colour and hit-test one letter or one mark.
+
+```tsx
+const qvp = useQvp();
+<QvpPageView
+  ref={qvp.ref}
+  pageUri="asset://pages/042.qvp"
+  wordsUri="asset://pages/042.words.json"
+  lettersUri="asset://pages/042.qvl"                                   // optional letter layer
+  styles={[
+    { id: 'lam', letters: { scope: '2:255', letter: 'ل' }, color: '#c62828' },              // every lam of the ayah
+    { id: 'marks', letters: { letter: 'ب', part: LETTER_PART.MARKS }, color: '#1a73e8' },   // the marks of every ba
+    { id: 'one', selector: Sel.letter(12, 0, LETTER_PART.BODY_AND_DOTS), color: '#0a7d32' },
+    { id: 'fathah', selector: Sel.letterMarkNamed(12, 1, 'fathah'), color: '#ef6c00' },
+    { id: 'chars', selector: Sel.wordChars(12, 0, 2), color: '#6a1b9a' },                  // qpc characters 0 to 2
+  ]}
+/>
+
+await qvp.hasLetters();                              // true once a layer is attached
+const letters = await qvp.letters(12);               // [{index, character, at, moreAt, x0…y1, hasInk, members, marks}]
+await qvp.letterAtOffset(12, 3);                     // the letter that draws qpc offset 3, or null
+await qvp.pathLetter(path);                          // {letter, at}, or null
+await qvp.findLetters({ scope: 'page', letter: 'ل', mark: 'shaddah' });   // [{word, letter}]
+const hit = await qvp.hitTestLetterView(x, y);       // view dp: {word, letter, path, at, mark, markName, isExact, isBody, …}
+await qvp.attachLetters('asset://pages/042.qvl');    // when you do not use the lettersUri prop
+```
+
+- The view attaches `lettersUri` after the page loads and after `wordsUri`. A new value
+  attaches that layer in place of the one before. The engine has no detach: if you remove the
+  prop, the layer stays until the next page loads. The view logs a layer that does not load,
+  or that the engine refuses (the layer of another page). `hasLetters()` tells you.
+- `attachLetters` resolves `false` when the engine refuses the layer. Then nothing changes.
+  It rejects when the URI does not load.
+- An attach adds the pieces as paths after the page's own paths, so `info().nPaths` grows.
+  No other path index changes.
+- `members` holds the bodies first, then the marks in text order. `marks[n]` is the path that
+  `Sel.letterMark(word, index, n)` takes. An absent offset or letter is -1.
+- A letter query takes `scope` (a target, the page when left out), `letter` (one character)
+  or `text` (a code point), `mark` (a name or an id) and `part` (`LETTER_PART`). A field left
+  out matches any letter. `part` does not filter `findLetters`.
+- A rule with `letters` takes the layer that is attached when the rules run. A rule added
+  before the layer selects nothing until the layer comes.
+- The native view keys its draw list on the engine's draw revision. A page with no layer
+  draws as before.
 
 ## The module
 
@@ -218,7 +268,12 @@ and `ayahMarksView`, `text`, `search`, `citation`, `cropBounds`, `grid`, the eng
 the atlas. A long call there does not hold up a frame. The view keeps its page open until such a call returns. Every other
 call reads or changes the layout, the view, the styles or the page state, and runs on the UI thread
 (the main thread on iOS), where the view draws. `attachWords` runs on the UI thread after the queries queued before it, and the
-queries queued after it wait for it.
+queries queued after it wait for it. The letter calls run on the UI thread in the same order.
+
+A page with a letter layer changes as the view draws it: the engine brings its style state up
+to date for the draw list. The engine allows one thread at a time per page, so on such a page
+the query thread hands each query to the UI thread, in order. A page with no layer keeps the
+query thread.
 
 `words` builds each word's record once per page: its forms, its label and the names of its paths.
 A later call sends the same records again, and `attachWords` drops them.

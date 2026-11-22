@@ -6,6 +6,7 @@
 // Targets from JS: "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | word index |
 // [word indices] | {target, a, b, c, words} (target = QVP_TARGET_* or its name in QvpRnCodes).
 // Selectors from JS: {selector, a, b, c} (selector = QVP_SELECTOR_* or its name in QvpRnCodes).
+// Letter queries from JS: {scope, letter | text, mark, part} (scope a target as above, mark a name or an id).
 // Colours: '#rgb' | '#rrggbb' | '#rrggbbaa' | 0xRRGGBBAA.
 //
 // QvpKit's sources compile into this pod's module, so its types need no import.
@@ -119,8 +120,29 @@ enum QvpRnMarshal {
         case QvpRnCodes.SELECTOR_KIND: return .kind(a)
         case QvpRnCodes.SELECTOR_DECORATION: return .decoration(a)
         case QvpRnCodes.SELECTOR_DECORATION_INDEX: return .decorationIndex(a)
+        case QvpRnCodes.SELECTOR_LETTER: return .letter(a, b, c)
+        case QvpRnCodes.SELECTOR_LETTER_MARK: return .letterMark(a, b, c)
+        case QvpRnCodes.SELECTOR_LETTER_MARK_NAMED: return str(m["mark"]).map { Selector.letterMarkNamed(a, b, $0) } ?? Selector.letterMarkNamed(a, b, c)
+        case QvpRnCodes.SELECTOR_WORD_CHARS: return .wordChars(a, b, c)
         default: return nil
         }
+    }
+
+    /// A JS letter query as a QvpLetterQuery, as Marshal.kt reads it. `scope` is a target (the page
+    /// when missing). `text` is a code point; else `letter` is a character, whose first code point
+    /// is taken; neither is any letter. `mark` is a mark id, or a name the engine resolves; none is
+    /// any. `part` is a QVP_LETTER_PART_* code, ALL when missing.
+    static func letterQuery(_ v: Any?, _ page: QvpPage?) -> QvpLetterQuery {
+        guard let m = dict(v) else { return QvpLetterQuery() }
+        let text: UInt32
+        if let t = num(m["text"]) { text = UInt32(truncatingIfNeeded: t) } else { text = str(m["letter"])?.unicodeScalars.first?.value ?? 0 }
+        let mark: Int
+        switch some(m["mark"]) {
+        case let n as NSNumber: mark = n.intValue
+        case let s as String: mark = s.isEmpty ? 0 : markId(s)
+        default: mark = 0
+        }
+        return QvpLetterQuery(scope: target(m["scope"], page), text: text, mark: mark, part: num(m["part"]) ?? QvpLetterPart.ALL)
     }
 
     /// The case of an Int-backed enum that `v` names, in any of its spellings: the Kotlin
@@ -264,6 +286,22 @@ enum QvpRnMarshal {
         return ["word": h.word, "path": h.path, "decoration": h.decoration, "line": h.line, "distance": h.distance, "isExact": h.isExact,
                 "wordKey": w?.wordKey, "ayahKey": w?.ayahKey]
     }
+    static func letterMember(_ m: QvpLetterMember) -> [String: Any?] {
+        ["path": m.path, "at": m.at, "mark": m.mark, "markName": m.markName, "isBody": m.isBody, "isCut": m.isCut]
+    }
+    /// One letter with its members and, apart, its marks, both in the engine's order. -1 is an absent offset.
+    static func letter(_ l: QvpLetter) -> [String: Any?] {
+        ["word": l.word, "index": l.index, "at": l.at, "text": Int(l.text), "character": l.char, "moreAt": l.moreAt, "nMoreAt": l.nMoreAt,
+         "nMembers": l.nMembers, "nMarks": l.nMarks, "x0": l.x0, "y0": l.y0, "x1": l.x1, "y1": l.y1, "hasInk": l.hasInk,
+         "members": l.members.map { letterMember($0) }, "marks": l.marks.map { letterMember($0) }]
+    }
+    static func pathLetter(_ r: (letter: Int, at: Int)) -> [String: Any?] { ["letter": r.letter, "at": r.at] }
+    static func letterHit(_ h: QvpLetterHit) -> [String: Any?] {
+        ["word": h.word, "letter": h.letter, "path": h.path, "at": h.at, "line": h.line, "distance": h.distance, "mark": h.mark, "markName": h.markName,
+         "isExact": h.isExact, "isBody": h.isBody]
+    }
+    /// The (word, letter) pairs of findLetters as {word, letter} records.
+    static func foundLetters(_ found: [(word: Int, letter: Int)]) -> [[String: Any?]] { found.map { ["word": $0.word, "letter": $0.letter] } }
     static func ayah(_ a: QvpAyah) -> [String: Any?] {
         ["index": a.index, "surah": a.surah, "ayah": a.ayah, "fragment": a.fragment, "fragments": a.fragments, "flags": a.flags, "rubuAlHizb": a.rubuAlHizb,
          "firstWord": a.firstWord, "nWords": a.nWords, "ayahMarkDecoration": a.ayahMarkDecoration, "bbox": [a.x0, a.y0, a.x1, a.y1]]

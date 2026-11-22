@@ -5,7 +5,13 @@ import React
 /// What the module's query queue reads of one view: the page in view, its word records and how
 /// it loaded, behind one lock. It holds no UIKit object, so a query that outlives the view
 /// releases nothing UIKit off the main thread. The main thread writes it where the page is
-/// replaced, closed or given a words sidecar. Each write waits for the queries in progress.
+/// replaced, closed or given a words sidecar or a letter layer. Each write waits for the queries
+/// in progress.
+///
+/// A page with a letter layer is different. Its draw list and draw revision bring the engine's
+/// style state up to date while the view draws, so a draw changes the page, and the engine allows
+/// one thread at a time per page. The module's queries on such a page run on the main thread
+/// instead (`readShared`).
 final class QvpRnPageState {
     private let lock: UnsafeMutablePointer<pthread_rwlock_t> = {
         let l = UnsafeMutablePointer<pthread_rwlock_t>.allocate(capacity: 1)
@@ -14,6 +20,8 @@ final class QvpRnPageState {
         return l
     }()
     private var page: QvpPage?
+    /// The page in view while it has a letter layer, else nil.
+    private var lettersOn: QvpPage?
     private var wordTable: QvpRnWords?
     private var loadMs = 0.0
     private var pageBytes = 0
@@ -31,19 +39,38 @@ final class QvpRnPageState {
         pthread_rwlock_rdlock(lock); defer { pthread_rwlock_unlock(lock) }
         return try block(page.flatMap { $0.isOpen ? $0 : nil }, loadMs, pageBytes)
     }
+    /// As `read`, while the page in view has no letter layer. True when `block` ran; false, with
+    /// `block` not run, when the page has a layer: the caller then runs it on the main thread.
+    func readShared(_ block: (QvpPage?, _ loadMs: Double, _ bytes: Int) -> Void) -> Bool {
+        pthread_rwlock_rdlock(lock); defer { pthread_rwlock_unlock(lock) }
+        let p = page.flatMap { $0.isOpen ? $0 : nil }
+        if let p, p === lettersOn { return false }
+        block(p, loadMs, pageBytes)
+        return true
+    }
     private func write<T>(_ block: () throws -> T) rethrows -> T {
         pthread_rwlock_wrlock(lock); defer { pthread_rwlock_unlock(lock) }
         return try block()
     }
-    /// Put `p` in view with how it loaded, and drop the word records of the page before.
-    func swap(_ p: QvpPage?, loadMs: Double, bytes: Int) {
-        write { page = p; wordTable = nil; self.loadMs = loadMs; pageBytes = bytes }
+    /// Put `p` in view with how it loaded, and whether it has a letter layer, and drop the word
+    /// records of the page before.
+    func swap(_ p: QvpPage?, loadMs: Double, bytes: Int, letters: Bool) {
+        write { page = p; lettersOn = letters ? p : nil; wordTable = nil; self.loadMs = loadMs; pageBytes = bytes }
+    }
+    /// Attach a letter layer to `p`: true when the engine took it. Queries in progress finish
+    /// first, since the attach grows the page's path table.
+    func attachLetters(_ p: QvpPage, _ bytes: Data) -> Bool {
+        write {
+            let ok = p.attachLetters(bytes)
+            if ok { lettersOn = p }
+            return ok
+        }
     }
     /// Attach a words sidecar. Queries in progress finish first, and the word records built
     /// before it are dropped, since the forms they hold have changed.
     func attachWords(_ p: QvpPage, _ json: String) -> Int { write { let n = p.attachWords(json); wordTable = nil; return n } }
     /// Close the page in view, after the queries in progress.
-    func close() { write { page?.close(); page = nil; wordTable = nil } }
+    func close() { write { page?.close(); page = nil; lettersOn = nil; wordTable = nil } }
     /// How the page in view loaded: milliseconds and bytes.
     var load: (ms: Double, bytes: Int) { read { _, ms, bytes in (ms, bytes) } }
 
@@ -63,7 +90,8 @@ final class QvpRnPageState {
 /// android/.../QvpRnPageView.kt does.
 ///
 /// The module reads the page from its query queue while this view draws on the main thread,
-/// through `state`. Those reads touch only what the page fixed when it loaded.
+/// through `state`. Those reads touch only what the page fixed when it loaded. A page with a
+/// letter layer is read on the main thread (see `QvpRnPageState`).
 ///
 /// Lengths are in points, which are the dp of the JS side.
 @objc(QvpRnPageView)
@@ -77,6 +105,13 @@ final class QvpRnPageView: UIView {
     func words(_ p: QvpPage) -> QvpRnWords { state.words(p) }
     /// Attach a words sidecar to the page in view.
     func attachWords(_ p: QvpPage, _ json: String) -> Int { state.attachWords(p, json) }
+    /// Attach a letter layer to the page in view: true when the engine took it. The view draws
+    /// the pieces next frame.
+    func attachLetters(_ p: QvpPage, _ bytes: Data) -> Bool {
+        let ok = state.attachLetters(p, bytes)
+        inner.setNeedsDisplay()
+        return ok
+    }
     var loadMs: Double { state.load.ms }
     var pageBytes: Int { state.load.bytes }
 
@@ -142,6 +177,7 @@ final class QvpRnPageView: UIView {
     @objc var pageUri: String? { didSet { changed() } }
     @objc var pageBase64: String? { didSet { changed() } }
     @objc var wordsUri: String? { didSet { changed() } }
+    @objc var lettersUri: String? { didSet { changed() } }
     @objc var padTop: CGFloat = 0 { didSet { inner.padTop = padTop; layoutDirty = true; changed() } }
     @objc var padBottom: CGFloat = 0 { didSet { inner.padBottom = padBottom; layoutDirty = true; changed() } }
     @objc var padSide: CGFloat = 0 { didSet { inner.padSide = padSide; layoutDirty = true; changed() } }
@@ -182,6 +218,8 @@ final class QvpRnPageView: UIView {
 
     // ── applied state ──
     private var loadedKey: String?
+    /// The `lettersUri` the page in view last took, attached or refused.
+    private var appliedLetters: String?
     private var appliedTheme: NSDictionary?
     private var themeHandle = 0
     private struct Rule { let handle: Int; let entry: NSDictionary }
@@ -237,6 +275,7 @@ final class QvpRnPageView: UIView {
             try ensurePage()
             let p = page
             if let p {
+                applyLetters(p)
                 applyInk(p); applyTheme(p); applyStyles(p); applyHighlights(p); applyMask(p); applyReveal(p)
             }
             var fit = false
@@ -259,10 +298,10 @@ final class QvpRnPageView: UIView {
         themeHandle = 0; appliedTheme = nil; styleHandles = []; highlightHandles = []; appliedMask = nil; appliedReveal = nil
         appliedRevealAt = nil; appliedInk = nil; appliedDress = nil; revealStepCount = 0
         loadedKey = key
-        guard let key else { swap(nil); return }
+        guard let key else { swap(nil); appliedLetters = nil; return }
         // Load the new page before the swap, so a query sees the old page or the new one and
         // never a view with no page. A load that fails leaves no page.
-        let p: QvpPage, bytes: Data, ms: Double
+        let p: QvpPage, bytes: Data, ms: Double, letters: Bool
         do {
             if let b64 = pageBase64 {
                 guard let d = Data(base64Encoded: b64, options: .ignoreUnknownCharacters) else { throw QvpRnError("pageBase64 is not base64") }
@@ -277,21 +316,44 @@ final class QvpRnPageView: UIView {
             if let w = wordsUri {
                 do { _ = p.attachWords(try QvpRnBytes.read(w)) } catch { NSLog("QvpRn: words sidecar: %@", "\(error)") }
             }
+            // The letter layer after the sidecar, as the sidecar's offsets check the layer's. No
+            // query sees the page yet, so the layer needs no lock either.
+            letters = lettersUri.map { uri in letterLayer(uri) { p.attachLetters($0) } } ?? false
+            appliedLetters = lettersUri
         } catch {
             swap(nil)
             throw error
         }
-        swap(p, loadMs: ms, bytes: bytes.count)
+        swap(p, loadMs: ms, bytes: bytes.count, letters: letters)
         layoutDirty = true
         emit(onPageLoad, QvpRnMarshal.pageInfo(p, words(p).forms).merging(["loadMs": ms, "bytes": bytes.count, "uri": pageUri]) { a, _ in a })
     }
     /// Put `p` in view and close the old page, with no query reading either.
-    private func swap(_ p: QvpPage?, loadMs: Double = 0, bytes: Int = 0) {
+    private func swap(_ p: QvpPage?, loadMs: Double = 0, bytes: Int = 0, letters: Bool = false) {
         let old = inner.page
-        state.swap(p, loadMs: loadMs, bytes: bytes)
+        state.swap(p, loadMs: loadMs, bytes: bytes, letters: letters)
         inner.page = p
         // the state no longer holds the old page, so no query reads it now
         if old !== p { old?.close() }
+    }
+
+    /// Read the layer `uri` names and `attach` it: true when the engine took it. A layer that does
+    /// not load or that the engine refuses is logged, as a words sidecar is.
+    private func letterLayer(_ uri: String, _ attach: (Data) -> Bool) -> Bool {
+        let bytes: Data
+        do { bytes = try QvpRnBytes.read(uri) } catch { NSLog("QvpRn: letter layer %@: %@", uri, "\(error)"); return false }
+        let ok = attach(bytes)
+        if !ok { NSLog("QvpRn: letter layer %@: the engine refused it", uri) }
+        return ok
+    }
+    /// The `lettersUri` prop on the page in view. A new value attaches that layer in place of the
+    /// one before. The engine has no detach, so a prop set to nil keeps the layer until the next
+    /// page loads.
+    private func applyLetters(_ p: QvpPage) {
+        if lettersUri == appliedLetters { return }
+        appliedLetters = lettersUri
+        guard let uri = lettersUri else { return }
+        _ = letterLayer(uri) { attachLetters(p, $0) }
     }
 
     private func applyInk(_ p: QvpPage) {
@@ -323,7 +385,7 @@ final class QvpRnPageView: UIView {
         for (id, e) in want {
             if let o = old[id], same(o.entry, e) { next.append((id, o)); continue }
             let hide = QvpRnMarshal.isTrue(e["hide"])
-            if let o = old[id], !hide, same(o.entry["selector"], e["selector"]), same(o.entry["target"], e["target"]),
+            if let o = old[id], !hide, same(o.entry["selector"], e["selector"]), same(o.entry["letters"], e["letters"]), same(o.entry["target"], e["target"]),
                same(o.entry["layer"], e["layer"]), same(o.entry["hide"], e["hide"]) {
                 p.recolorStyle(o.handle, QvpRnMarshal.color(e["color"], 0), transitionMs: QvpRnMarshal.num(e["ms"]) ?? 0)
                 next.append((id, Rule(handle: o.handle, entry: e))); continue
@@ -335,6 +397,7 @@ final class QvpRnPageView: UIView {
             var h = 0
             if hide { h = QvpRnMarshal.selector(e["selector"]).map { p.hide($0) } ?? 0 }
             else if QvpRnMarshal.some(e["selector"]) != nil { h = QvpRnMarshal.selector(e["selector"]).map { p.style($0, color, transitionMs: ms, layer: layer) } ?? 0 }
+            else if QvpRnMarshal.some(e["letters"]) != nil { h = p.styleLetters(QvpRnMarshal.letterQuery(e["letters"], p), color, transitionMs: ms, layer: layer) }
             else if QvpRnMarshal.some(e["target"]) != nil { h = p.styleTarget(QvpRnMarshal.target(e["target"], p), color, transitionMs: ms, layer: layer) }
             if h != 0 { next.append((id, Rule(handle: h, entry: e))) }
         }

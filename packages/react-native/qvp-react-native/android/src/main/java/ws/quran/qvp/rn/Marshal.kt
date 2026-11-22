@@ -15,6 +15,7 @@ import ws.quran.qvp.Target
  * Targets from JS: "page" | "2:255" | "2:255:3" | "2:255-257" | "line:7" | "surah:2" | word index |
  * [word indices] | {target, a, b, c, words} (target = QVP_TARGET_* or its name in [Codes]).
  * Selectors from JS: {selector, a, b, c} (selector = QVP_SELECTOR_* or its name in [Codes]). Colours: '#rgb' | '#rrggbb' | '#rrggbbaa'.
+ * Letter queries from JS: {scope, letter | text, mark, part} (scope a target as above, mark a name or an id).
  */
 object Marshal {
     // ── colours ──
@@ -88,8 +89,25 @@ object Marshal {
             Codes.SELECTOR_KIND -> Selector.kind(a)
             Codes.SELECTOR_DECORATION -> Selector.decoration(a)
             Codes.SELECTOR_DECORATION_INDEX -> Selector.decorationIndex(a)
+            Codes.SELECTOR_LETTER -> Selector.letter(a, b, c)
+            Codes.SELECTOR_LETTER_MARK -> Selector.letterMark(a, b, c)
+            Codes.SELECTOR_LETTER_MARK_NAMED -> (m["mark"] as? String)?.let { Selector.letterMarkNamed(a, b, it) } ?: Selector.letterMarkNamed(a, b, c)
+            Codes.SELECTOR_WORD_CHARS -> Selector.wordChars(a, b, c)
             else -> null
         }
+    }
+
+    /**
+     * JS letter query → [QvpLetterQuery]. `scope` is a target (the page when missing). `text` is a
+     * code point; else `letter` is a character, whose first code point is taken; neither is any
+     * letter. `mark` is a mark id, or a name the engine resolves; none is any. `part` is a
+     * QVP_LETTER_PART_* code, [QvpLetterPart.ALL] when missing.
+     */
+    fun letterQuery(v: Any?, page: QvpPage?): QvpLetterQuery {
+        val m = v as? Map<*, *> ?: return QvpLetterQuery()
+        val text = num(m["text"]) ?: (m["letter"] as? String)?.takeIf { it.isNotEmpty() }?.codePointAt(0) ?: 0
+        val mark = when (val x = m["mark"]) { is Number -> x.toInt(); is String -> if (x.isEmpty()) 0 else markId(x); else -> 0 }
+        return QvpLetterQuery(target(m["scope"], page), text, mark, num(m["part"]) ?: QvpLetterPart.ALL)
     }
 
     /** The constant of [entries] that [v] names, in any of its spellings: the constant's own
@@ -224,6 +242,16 @@ object Marshal {
         val w = if (h.word >= 0) p.words[h.word] else null
         return mapOf("word" to h.word, "path" to h.path, "decoration" to h.decoration, "line" to h.line, "distance" to h.distance, "isExact" to h.isExact, "wordKey" to w?.wordKey, "ayahKey" to w?.ayahKey)
     }
+    fun letterMember(m: QvpLetterMember): Map<String, Any?> = mapOf("path" to m.path, "at" to m.at, "mark" to m.mark, "markName" to m.markName, "isBody" to m.isBody, "isCut" to m.isCut)
+    /** One letter with its members and, apart, its marks, both in the engine's order. -1 is an absent offset. */
+    fun letter(l: QvpLetter): Map<String, Any?> = mapOf("word" to l.word, "index" to l.index, "at" to l.at, "text" to l.text, "character" to l.character,
+        "moreAt" to l.moreAt, "nMoreAt" to l.nMoreAt, "nMembers" to l.nMembers, "nMarks" to l.nMarks, "x0" to l.x0, "y0" to l.y0, "x1" to l.x1, "y1" to l.y1,
+        "hasInk" to l.hasInk, "members" to l.members.map { letterMember(it) }, "marks" to l.marks.map { letterMember(it) })
+    fun pathLetter(r: QvpPathLetter): Map<String, Any?> = mapOf("letter" to r.letter, "at" to r.at)
+    fun letterHit(h: QvpLetterHit): Map<String, Any?> = mapOf("word" to h.word, "letter" to h.letter, "path" to h.path, "at" to h.at, "line" to h.line,
+        "distance" to h.distance, "mark" to h.mark, "markName" to h.markName, "isExact" to h.isExact, "isBody" to h.isBody)
+    /** The (word, letter) pairs of [QvpPage.findLetters] as {word, letter} records. */
+    fun foundLetters(found: List<Pair<Int, Int>>): List<Map<String, Any?>> = found.map { mapOf("word" to it.first, "letter" to it.second) }
     fun ayah(a: QvpAyah): Map<String, Any?> = mapOf("index" to a.index, "surah" to a.surah, "ayah" to a.ayah, "fragment" to a.fragment, "fragments" to a.fragments, "flags" to a.flags, "rubuAlHizb" to a.rubuAlHizb, "firstWord" to a.firstWord, "nWords" to a.nWords,
         "ayahMarkDecoration" to a.ayahMarkDecoration, "bbox" to listOf(a.x0, a.y0, a.x1, a.y1))
     fun line(l: QvpLine): Map<String, Any?> = mapOf("index" to l.index, "lineNumber" to l.lineNumber, "isHeader" to l.isHeader, "firstWord" to l.firstWord, "nWords" to l.nWords, "bbox" to listOf(l.x0, l.y0, l.x1, l.y1),
