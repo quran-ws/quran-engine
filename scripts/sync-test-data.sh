@@ -86,8 +86,8 @@ svg_tag="${QVP_SVG_TAG:-v2.0.0}"
 # From v2.0.0 a release holds two archives, words and letters. The pages are built from
 # the words archive. A release before v2.0.0 holds one archive, which has word pages.
 case "$svg_tag" in
-  v0.*|v1.*) svg_asset="quran-svg-elements-hafs-kfgqpc.tar.gz" ;;
-  *)         svg_asset="quran-svg-elements-hafs-kfgqpc-words.tar.gz" ;;
+  v0|v0.*|v1|v1.*) svg_asset="quran-svg-elements-hafs-kfgqpc.tar.gz" ;;
+  *)                svg_asset="quran-svg-elements-hafs-kfgqpc-words.tar.gz" ;;
 esac
 svg_base="https://github.com/quran-ws/quran-svg-elements/releases/download/$svg_tag"
 

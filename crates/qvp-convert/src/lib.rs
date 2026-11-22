@@ -143,5 +143,20 @@ mod words_number_tests {
         assert_eq!(forms.len(), 2);
         assert_eq!(forms[0].0, "2:6:2");
         assert_eq!(forms[0].1.rasm_uthmani.as_deref(), Some("ٱلَّذِينَ"));
+        // the word after the number still parses
+        assert_eq!(forms[1].0, "2:6:3");
+        assert_eq!(forms[1].1.rasm_uthmani.as_deref(), Some("كَفَرُواْ"));
+    }
+
+    #[test]
+    fn a_number_that_does_not_parse_is_reported_and_not_written() {
+        let good = convert(SVG).expect("convert");
+        assert!(!good.report.warnings.iter().any(|w| w.contains("data-w")), "{:?}", good.report.warnings);
+
+        let bad = convert(&SVG.replace(r#"data-w="67""#, r#"data-w="6x""#)).expect("convert");
+        assert_eq!(bad.words_text[0].w, None);
+        let found: Vec<_> = bad.report.warnings.iter().filter(|w| w.contains("data-w")).collect();
+        assert_eq!(found.len(), 1, "{:?}", bad.report.warnings);
+        assert!(found[0].contains("2:6:2") && found[0].contains(r#""6x""#), "{}", found[0]);
     }
 }

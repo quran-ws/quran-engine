@@ -287,6 +287,13 @@ impl<'a> Ctx<'a> {
         let mut it = word_key.split(':').map(|s| s.parse::<u16>().unwrap_or(0));
         let (surah, ayah, word) = (it.next().unwrap_or(0), it.next().unwrap_or(0), it.next().unwrap_or(0));
         let rasm_uthmani = n.attribute("data-rasm-uthmani").unwrap_or("");
+        let w = n.attribute("data-w").and_then(|s| {
+            let parsed = s.parse().ok();
+            if parsed.is_none() {
+                self.warn(format!("word {word_key}: data-w {s:?} is not a number"));
+            }
+            parsed
+        });
         self.words_text.push(WordText {
             word_key: word_key.to_owned(),
             rasm_uthmani: rasm_uthmani.to_owned(),
@@ -294,7 +301,7 @@ impl<'a> Ctx<'a> {
             qpc: n.attribute("data-qpc").unwrap_or("").to_owned(),
             rasm: n.attribute("data-rasm").unwrap_or("").to_owned(),
             search: n.attribute("data-search").unwrap_or("").to_owned(),
-            w: n.attribute("data-w").and_then(|s| s.parse().ok()),
+            w,
         });
         let text = if rasm_uthmani.is_empty() { NONE_U16 } else { self.intern(rasm_uthmani) };
         // Dev-profile pages carry the derived forms inline; production pages do not,
