@@ -270,12 +270,14 @@ uint8_t  qvp_has_form(const QvpPage*, uint8_t form);
    With no layer, or a NULL page, every call below answers 0 and writes nothing; so does an index out of range. The
    array calls return the count with a NULL out or cap 0 and write nothing. Every other out-pointer may be NULL. */
 int32_t  qvp_attach_letters(QvpPage*, const uint8_t* bytes, uint32_t len);   /* 0: attached; the bytes are copied */
-/* -1: a NULL page or NULL bytes, a file that does not decode, the layer of another page (page number, quant, path or
-   word count differ), a file over 1 MiB, or a page whose words share paths. On -1 nothing changes: the page keeps the
-   layer it had, and every pointer and count stays valid. A second attach replaces the first, and the rules stay and
-   take the new layer. After a 0, read these again: qvp_geometry (its pointers and n_paths), qvp_colors (its pointer and
-   length), qvp_page_info.n_paths, qvp_layout_path_groups, a cached draw list (qvp_layout_draw_revision counts up), and
-   any per-path array the host sized from n_paths. The pointers qvp_geometry and qvp_colors returned before are invalid. */
+/* -1: a NULL page or NULL bytes, a file that does not decode, damaged bytes (the layer's own digest differs), the layer
+   of another page (page number, quant, path or word count differ), a layer built for other page bytes (the page digest
+   differs: the page's paths or word runs are not the ones the layer was built for), a file over 1 MiB, or a page whose
+   words share paths. On -1 nothing changes: the page keeps the layer it had, and every pointer and count stays valid. A
+   second attach replaces the first, and the rules stay and take the new layer. After a 0, read these again:
+   qvp_geometry (its pointers and n_paths), qvp_colors (its pointer and length), qvp_page_info.n_paths,
+   qvp_layout_path_groups, a cached draw list (qvp_layout_draw_revision counts up), and any per-path array the host
+   sized from n_paths. The pointers qvp_geometry and qvp_colors returned before are invalid. */
 uint8_t  qvp_has_letters(const QvpPage*);                                   /* 1 when a layer is attached */
 uint32_t qvp_letter_count(const QvpPage*, uint32_t word);                   /* the word's letters */
 int      qvp_letter_info(const QvpPage*, uint32_t word, uint32_t letter /* index in the word */, QvpLetterInfo* out);   /* 0 = no such letter */

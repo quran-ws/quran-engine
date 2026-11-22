@@ -1066,7 +1066,7 @@ function in the header has no row here, or a row names a function the header lac
 | text and search | `qvp_citation` | `page.citation(words)` | Return a citation such as `2:255-257, 3:1` for a word list. |
 | text and search | `qvp_attach_words` | `page.attachWords(json)` | Attach the words sidecar's text forms; returns the number of words updated, −1 on bad JSON. |
 | text and search | `qvp_has_form` | `page.hasForm(form)` | Return whether a text form is available (the derived forms need the sidecar). |
-| letters | `qvp_attach_letters` | `page.attachLetters(bytes)` | Attach the letter layer of the page, and add its pieces to the path table. Returns −1, and changes nothing, for one of these: a bad file, a layer of another page, a file over 1 MiB, a page whose words share paths. |
+| letters | `qvp_attach_letters` | `page.attachLetters(bytes)` | Attach the letter layer of the page, and add its pieces to the path table. Returns −1, and changes nothing, for one of these: a bad file, damaged bytes, a layer of another page, a layer built for other page bytes, a file over 1 MiB, a page whose words share paths. |
 | letters | `qvp_has_letters` | `page.hasLetters()` | Return whether a letter layer is attached. |
 | letters | `qvp_letter_count` | `page.letterCount(word)` | Return how many letters a word has. 0 with no layer. |
 | letters | `qvp_letter_info` | `page.letter(word, i)` | Return one letter: its offset, character, member and mark counts, the other offset its body draws, and its box. |

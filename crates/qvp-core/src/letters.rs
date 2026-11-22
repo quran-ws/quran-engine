@@ -487,7 +487,9 @@ impl Page {
     /// table after the page's own paths, and every rule is evaluated again.
     ///
     /// A file larger than [`MAX_LETTER_LAYER_BYTES`] is refused before it is decoded. A
-    /// file that does not decode, or that belongs to another page, is refused too. On an
+    /// file that does not decode, or that belongs to another page, is refused too:
+    /// `decode_letters` checks the layer's own digest (`Damaged("body digest")`) and the
+    /// digest of the page it was built for (`OtherPage("page digest")`). On an
     /// error the page stays as it was, with the layer it had. A second attach replaces the
     /// first: its pieces are dropped and the new ones start at the same index.
     ///
