@@ -32,15 +32,21 @@ jobs:
           QVP_SYNC: letters
         run: scripts/sync-test-data.sh
       - name: All pages
+        id: identity
         run: QVP_REQUIRE_DATA=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity -- --nocapture
+      # The letter gate also runs when the identity gate fails, but not when a step
+      # before it failed.
       - name: Letter layer, all pages
+        if: success() || (failure() && steps.identity.outcome == 'failure')
         run: QVP_REQUIRE_DATA=1 QVP_REQUIRE_LETTERS=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test letters -- --nocapture
       - name: Diff images of failing pages
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: identity-diffs-${{ github.run_id }}
-          path: target/identity/
+          name: gate-diffs-${{ github.run_id }}
+          path: |
+            target/identity/
+            target/letters/
 
   bench:
     name: benchmark, page 042
