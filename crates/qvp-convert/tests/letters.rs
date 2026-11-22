@@ -144,6 +144,25 @@ fn have_letters() -> bool {
     false
 }
 
+/// False, after a skip line, when a file of the words archive or its index is missing,
+/// as `have_letters` does for the letters archive.
+fn have_words(pages: &[&str]) -> bool {
+    let missing: Vec<PathBuf> = pages
+        .iter()
+        .flat_map(|p| [repo().join(format!("pages/{p}.svg")), repo().join(format!("index/by-page/{p}.json"))])
+        .filter(|f| !f.exists())
+        .collect();
+    let Some(first) = missing.first() else { return true };
+    if std::env::var("QVP_REQUIRE_LETTERS").is_ok() {
+        panic!(
+            "{} (the words archive) is missing and QVP_REQUIRE_LETTERS is set; run scripts/sync-test-data.sh",
+            first.display()
+        );
+    }
+    eprintln!("skip: {} is missing; run scripts/sync-test-data.sh to enable this test", first.display());
+    false
+}
+
 #[test]
 fn structure() {
     if !have_letters() {
@@ -184,7 +203,7 @@ fn structure() {
 /// and neither the bad page's old file nor the file of a page outside the run is left.
 #[test]
 fn a_run_leaves_no_stale_file() {
-    if !have_letters() {
+    if !have_letters() || !have_words(&["001", "002"]) {
         return;
     }
     let tmp = Path::new(env!("CARGO_TARGET_TMPDIR")).join("letters-run");

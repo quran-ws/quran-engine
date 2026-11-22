@@ -170,7 +170,7 @@ fn check_words(pg: u16, page: &PageData, lwords: &[(Node, Affine)], wwords: &[(N
 /// its transform moves no path that the layer keeps. Pages 17 and 144 have one.
 fn check_frames(pg: u16, page: &PageData, lwords: &[(Node, Affine)], wwords: &[(Node, Affine)]) -> Result<(), String> {
     for (((lw, ltf), (ww, wtf)), rec) in lwords.iter().zip(wwords).zip(&page.words) {
-        let err = |s: &str| format!("page {pg} word {}: {s}", key(*ww));
+        let err = |s: &str| format!("page {pg}: word {}: {s}", key(*ww));
         let n = ww.children().filter(|c| c.has_tag_name("path")).count();
         let end = rec.first_path as u64 + rec.n_paths as u64;
         if n != rec.n_paths as usize || end > page.paths.len() as u64 {
@@ -228,7 +228,7 @@ impl Builder<'_> {
         letters_qpc: &str,
     ) -> Result<(), String> {
         let (pg, wk) = (self.page.header.page, key(wword));
-        let err = |s: String| format!("page {pg} word {wk}: {s}");
+        let err = |s: String| format!("page {pg}: word {wk}: {s}");
         let rec = &self.page.words[w];
 
         // Rule 2: the i-th path of the word in the words page is page path first_path + i.

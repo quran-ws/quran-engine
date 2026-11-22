@@ -152,8 +152,9 @@ fn remove(path: &Path) -> Result<(), String> {
 }
 
 /// Write `<out_dir>/NNN.qvl` for every page in either SVG directory, in parallel. A page in
-/// one directory only is an error. When the run ends, `<out_dir>` has a `.qvl` file for each
-/// page that converted, and no other `.qvl` file:
+/// one directory only is an error. A run with no page is an error and removes nothing.
+/// When the run ends, `<out_dir>` has a `.qvl` file for each page that converted, and no
+/// other `.qvl` file:
 /// - before the pages, the run removes each `.qvl` file whose page is not in the set, and
 ///   each temporary file that an earlier run left;
 /// - a page writes to a temporary name, then renames the file into place;
@@ -161,6 +162,15 @@ fn remove(path: &Path) -> Result<(), String> {
 pub fn write_letters(dirs: &LetterDirs, out_dir: &Path) -> Result<LettersRun, String> {
     let mut pages = page_stems(&dirs.letters_svg)?;
     pages.extend(page_stems(&dirs.words_svg)?);
+    // A mistyped directory must not empty `<out_dir>`: with no page, every file is stale.
+    if pages.is_empty() {
+        return Err(format!(
+            "no page SVG in {} or {}; nothing removed from {}",
+            dirs.letters_svg.display(),
+            dirs.words_svg.display(),
+            out_dir.display()
+        ));
+    }
     fs::create_dir_all(out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
 
     let mut removed = 0;
@@ -285,6 +295,29 @@ mod tests {
             fs::read_dir(&out).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
         left.sort();
         assert_eq!(left, ["notes.txt"]);
+        fs::remove_dir_all(&d).ok();
+    }
+
+    /// Input directories with no page SVG are an error, and the run removes nothing.
+    #[test]
+    fn a_run_with_no_page_removes_nothing() {
+        let d = temp("empty");
+        let dirs = LetterDirs {
+            letters_svg: d.join("letters"),
+            words_svg: d.join("words"),
+            words_index: d.join("words-index"),
+            letters_index: d.join("letters-index"),
+        };
+        for p in [&dirs.letters_svg, &dirs.words_svg] {
+            fs::create_dir_all(p).unwrap();
+            fs::write(p.join("notes.txt"), "not a page").unwrap();
+        }
+        let out = d.join("out");
+        fs::create_dir_all(&out).unwrap();
+        fs::write(out.join("001.qvl"), "old").unwrap();
+        let e = write_letters(&dirs, &out).err().expect("an error");
+        assert!(e.starts_with("no page SVG in "), "{e}");
+        assert_eq!(fs::read(out.join("001.qvl")).unwrap(), b"old");
         fs::remove_dir_all(&d).ok();
     }
 }
