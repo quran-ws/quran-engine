@@ -69,7 +69,8 @@ All notable changes to the engine and its packages. The format follows
   `scripts/check-darwin-engine-symbols.sh` then checks that each app exports the engine. A
   `windows` job builds the example for Windows and checks that `qvp_ffi.dll` is bundled.
 - `qvp-convert` writes `w`, each word's number in the quran-text release, to
-  `NNN.words.json`. An engine that does not know the field ignores it.
+  `NNN.words.json` when the page source is the words archive of `quran-svg-elements`
+  v2.0.0. An engine that does not know the field ignores it.
 
 ### Changed
 - React Native: `scripts/gen-rn-enums.py` also writes `ios/QvpRnCodes.swift`, and
@@ -147,11 +148,13 @@ All notable changes to the engine and its packages. The format follows
 - `scripts/build-engine-ios.sh` copies `QvpEngine.xcframework` into the Flutter plugin's
   `ios/qvp_flutter` and `macos/qvp_flutter`, one level below the old place.
 - The page source is the words archive of `quran-svg-elements` v2.0.0. `scripts/sync-test-data.sh`
-  takes the archive name from the tag, so a tag before v2.0.0 still resolves. The ink fixes
-  of that release reach apps with the next data release (`docs/UPSTREAM-DATA-ISSUES.md`).
-- The `qpc` text of 4159 words changes with the next data release, because the words index
-  of `quran-svg-elements` v2.0.0 takes it from the quran-text release. Do not mix `qpc`
-  strings or offsets from an older data release with the new ones
+  takes the archive name from the tag, so a tag before v2.0.0 still resolves. Upstream
+  lists ink fixes on six pages. Page data built from v2.0.0 has different mark paths on
+  pages 437, 470, 540 and 567. On pages 232 and 526, only the order of paths differs
+  (`docs/UPSTREAM-DATA-ISSUES.md`).
+- A data release built from v2.0.0 has a different `qpc` text in 4159 words. The words
+  index of `quran-svg-elements` v2.0.0 takes that text from the quran-text release. Do not
+  mix `qpc` strings or offsets from data built from an older source with those from v2.0.0
   (`docs/UPSTREAM-DATA-ISSUES.md`).
 
 ### Removed

@@ -82,6 +82,19 @@ records each item in `docs/defects/reported.json`.
   two different letters.
 - p526: three words beside a hizb rosette held ink of a neighbouring word.
 
+In page data built from the words archive of v2.0.0, the paths of these words compare as
+follows with data-v0.5.0. Each count is the number of words on the page whose set of path
+`d` strings is different:
+
+- p437: 2 words, `35:24:12` and `35:29:14`. Each has a `mark` path with a new outline or
+  position.
+- p470: 1 word, `40:27:9`.
+- p540: 1 word, `57:22:21`, on the line below `57:22:12`. The paths of `57:22:12` do not
+  change.
+- p567: 1 word, `69:10:5`.
+- p232 and p526: 0 words. The built page holds the same paths per word as before. Only the
+  order of paths differs.
+
 When the converter builds the pages from the words archive of v2.0.0, 575 of the 604 page
 files differ from data-v0.5.0. On 470 of these pages, only the paint order changes: the
 page holds the same elements in a different order. On the other 105 pages, some marks have
@@ -90,13 +103,15 @@ a new outline or position. The identity gate passes on all 604 pages.
 ### The `qpc` text changed
 
 The words index of v2.0.0 takes its text from the quran-text release. Its `qpc` form is
-different from v1.1.2 in 4159 words on 603 of the 604 pages. The word keys and the other
-four text forms do not change. Each count below is the number of places that have the edit:
+different from v1.1.2 in 4159 words on 603 of the 604 pages, in page data built from
+v2.0.0. The word keys and the other four text forms do not change. Each count below is the
+number of places that have the edit:
 
 - 2945: U+0622 ARABIC LETTER ALEF WITH MADDA ABOVE becomes U+0627 ARABIC LETTER ALEF and <!-- terminology: ignore (Unicode character names) -->
   U+0653 ARABIC MADDAH ABOVE.
 - 397 and 393: the text gains a U+0651 ARABIC SHADDA in 397 places and loses one in 393. <!-- terminology: ignore (Unicode character names) -->
-  Most of these pairs move the shaddah to a different place in its cluster.
+  397 words have such an edit. In 385 of them, the old and new text are equal
+  without U+0651: the shaddah moves to a different place in the word.
 - 277: U+064E ARABIC FATHA becomes U+0653 ARABIC MADDAH ABOVE. <!-- terminology: ignore (Unicode character names) -->
 - 206: a U+0640 ARABIC TATWEEL now comes between
   U+06E1 ARABIC SMALL HIGH DOTLESS HEAD OF KHAH and U+0654 ARABIC HAMZA ABOVE. <!-- terminology: ignore (Unicode character names) -->
@@ -105,4 +120,4 @@ four text forms do not change. Each count below is the number of places that hav
 
 This is an upstream change to the text of record. The converter copies the text as it is.
 An app that stores `qpc` strings or offsets into them from an older data release must not
-mix them with the `qpc` text of the new release.
+mix them with the `qpc` text of a data release built from v2.0.0.
