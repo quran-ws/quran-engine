@@ -42,11 +42,16 @@ for check in "$@"; do
       cargo test --workspace --release
       ;;
     gates)
-      step "data gates: identity (8 pages), letter layer (8 pages), line shift, zoom control, passages, ABI, conformance, zoom steps, web replays"
+      step "data gates: identity (8 pages), letter layer (8 pages, with pages-letters/), line shift, zoom control, passages, ABI, conformance, zoom steps, web replays"
       QVP_REQUIRE_DATA=1 cargo test -p qvp-convert --release --test identity
-      # Not QVP_REQUIRE_LETTERS: this gate skips when pages-letters/ is missing, as it is
-      # unless QVP_SYNC=letters fetched it.
-      cargo test -p qvp-convert --release --test letters
+      # The letter gates need pages-letters/, which only QVP_SYNC=letters fetches. When it
+      # is there, a gate that cannot read it fails. QVP_LETTERS_DIR names another copy.
+      letters_dir="${QVP_LETTERS_DIR:-pages-letters}"
+      if [ -f "$letters_dir/001.svg" ]; then
+        QVP_REQUIRE_LETTERS=1 QVP_LETTERS_DIR="$letters_dir" cargo test -p qvp-convert --release --test letters
+      else
+        echo "skipped  letter gates (no $letters_dir/; QVP_SYNC=letters scripts/sync-test-data.sh fetches it)"
+      fi
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test line_shift
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test zoom_control
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test passage

@@ -1,5 +1,5 @@
-# Once a night: the identity gate over all 604 pages, and the benchmark numbers as an
-# artifact for comparison with docs/MEASURED.md.
+# Once a night: the identity gate and the letter-layer gate over all 604 pages, and the
+# benchmark numbers as an artifact for comparison with docs/MEASURED.md.
 name: Nightly
 
 on:
@@ -22,15 +22,19 @@ jobs:
           path: |
             dist/pages
             pages
+            pages-letters
             index
-          key: test-data-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ vars.QVP_SVG_TAG || 'v2.0.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+          key: test-data-letters-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ vars.QVP_SVG_TAG || 'v2.0.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
       - name: Fetch test data
         env:
           QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
           QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v2.0.0' }}
+          QVP_SYNC: letters
         run: scripts/sync-test-data.sh
       - name: All pages
         run: QVP_REQUIRE_DATA=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity -- --nocapture
+      - name: Letter layer, all pages
+        run: QVP_REQUIRE_DATA=1 QVP_REQUIRE_LETTERS=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test letters -- --nocapture
       - name: Diff images of failing pages
         if: failure()
         uses: actions/upload-artifact@v7

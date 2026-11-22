@@ -5,10 +5,12 @@
 //! Run all 604:   QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test letters
 //!
 //! The letters archive is `pages-letters/` (`QVP_SYNC=letters scripts/sync-test-data.sh`).
-//! `QVP_LETTERS_DIR` points the gate at another copy. Without the archive the gate skips,
+//! `QVP_LETTERS_DIR` points the gate at another copy, relative to the repository. Without the archive the gate skips,
 //! unless `QVP_REQUIRE_LETTERS` is set.
+//!
+//! A page with a warning fails the gate, because the converter emits none on good data.
 
-use qvp_convert::letter_page::letter_page;
+use qvp_convert::letter_page::{letter_page, write_letters, LetterDirs};
 use qvp_format::letters::{decode_letters, encode_letters, MemberPath};
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
@@ -23,8 +25,10 @@ fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// `QVP_LETTERS_DIR`, or `pages-letters/`. A relative path is relative to the repository,
+/// because cargo runs the test in the crate directory.
 fn letters_dir() -> PathBuf {
-    std::env::var_os("QVP_LETTERS_DIR").map(PathBuf::from).unwrap_or_else(|| repo().join("pages-letters"))
+    repo().join(std::env::var_os("QVP_LETTERS_DIR").map(PathBuf::from).unwrap_or_else(|| "pages-letters".into()))
 }
 
 fn selected_pages() -> Vec<String> {
@@ -88,7 +92,14 @@ fn check(page: &str) -> Result<Counts, String> {
         source[p.source as usize] = true;
     }
     for w in &lp.page.words {
-        for p in w.first_path as usize..w.first_path as usize + w.n_paths as usize {
+        let range = w.first_path as usize..w.first_path as usize + w.n_paths as usize;
+        if range.end > n {
+            return Err(format!(
+                "page {page}: word {}:{}:{}: paths {range:?} run past the {n} paths of the page",
+                w.surah, w.ayah, w.word
+            ));
+        }
+        for p in range {
             let roles = (member[p] > 0) as u32 + (mark[p] > 0) as u32 + source[p] as u32;
             if roles != 1 || member[p] > 1 || mark[p] > 1 {
                 return Err(format!(
@@ -106,19 +117,27 @@ fn check(page: &str) -> Result<Counts, String> {
     Ok(Counts { letters: d.letters.len(), pieces: d.pieces.len(), sources })
 }
 
-#[test]
-fn structure() {
-    if !letters_dir().join("001.svg").exists() {
-        if std::env::var("QVP_REQUIRE_LETTERS").is_ok() {
-            panic!(
+/// False, after a skip line, when the letters archive is missing and not required.
+fn have_letters() -> bool {
+    if letters_dir().join("001.svg").exists() {
+        return true;
+    }
+    if std::env::var("QVP_REQUIRE_LETTERS").is_ok() {
+        panic!(
                 "{} (the letters archive) is missing and QVP_REQUIRE_LETTERS is set; run QVP_SYNC=letters scripts/sync-test-data.sh",
                 letters_dir().display()
             );
-        }
-        eprintln!(
-            "skip: {} is missing; run QVP_SYNC=letters scripts/sync-test-data.sh to enable the letter gate",
-            letters_dir().display()
-        );
+    }
+    eprintln!(
+        "skip: {} is missing; run QVP_SYNC=letters scripts/sync-test-data.sh to enable the letter gate",
+        letters_dir().display()
+    );
+    false
+}
+
+#[test]
+fn structure() {
+    if !have_letters() {
         return;
     }
     let pages = selected_pages();
@@ -150,4 +169,55 @@ fn structure() {
         assert_eq!(pieces, ALL_PIECES, "pieces over all pages");
         assert_eq!(sources, ALL_SOURCES, "distinct piece sources over all pages");
     }
+}
+
+/// A run of `write_letters` over one good page and one bad page: the good page has its file,
+/// and neither the bad page's old file nor the file of a page outside the run is left.
+#[test]
+fn a_run_leaves_no_stale_file() {
+    if !have_letters() {
+        return;
+    }
+    let tmp = Path::new(env!("CARGO_TARGET_TMPDIR")).join("letters-run");
+    let _ = std::fs::remove_dir_all(&tmp);
+    let dirs = LetterDirs {
+        letters_svg: tmp.join("letters"),
+        words_svg: tmp.join("words"),
+        words_index: tmp.join("words-index"),
+        letters_index: tmp.join("letters-index"),
+    };
+    let out = tmp.join("out");
+    for d in [&dirs.letters_svg, &dirs.words_svg, &dirs.words_index, &dirs.letters_index, &out] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    let copy = |from: PathBuf, to: PathBuf| std::fs::copy(from, to).unwrap();
+    for page in ["001", "002"] {
+        copy(repo().join(format!("pages/{page}.svg")), dirs.words_svg.join(format!("{page}.svg")));
+        copy(repo().join(format!("index/by-page/{page}.json")), dirs.words_index.join(format!("{page}.json")));
+        copy(letters_dir().join(format!("index/by-page/{page}.json")), dirs.letters_index.join(format!("{page}.json")));
+    }
+    copy(letters_dir().join("001.svg"), dirs.letters_svg.join("001.svg"));
+    // Page 002 fails: its letters page is not a page.
+    std::fs::write(dirs.letters_svg.join("002.svg"), "not a page").unwrap();
+    for f in ["001.qvl", "002.qvl", "700.qvl"] {
+        std::fs::write(out.join(f), "old").unwrap();
+    }
+
+    let run = write_letters(&dirs, &out).unwrap();
+    assert_eq!(run.removed, 1, "700.qvl is the one page outside the run");
+    let ok: Vec<(&str, bool)> = run.pages.iter().map(|(p, r)| (p.as_str(), r.is_ok())).collect();
+    assert_eq!(ok, [("001", true), ("002", false)]);
+    let mut left: Vec<String> =
+        std::fs::read_dir(&out).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    left.sort();
+    assert_eq!(left, ["001.qvl"]);
+    let lp = letter_page(
+        &dirs.letters_svg.join("001.svg"),
+        &dirs.words_svg.join("001.svg"),
+        &dirs.words_index.join("001.json"),
+        &dirs.letters_index.join("001.json"),
+    )
+    .unwrap();
+    assert_eq!(std::fs::read(out.join("001.qvl")).unwrap(), lp.bytes);
+    std::fs::remove_dir_all(&tmp).ok();
 }
