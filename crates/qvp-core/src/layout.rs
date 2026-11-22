@@ -697,25 +697,42 @@ impl Page {
     }
 
     fn build_draw_list(&self, l: &Layout, band: Option<(f32, f32)>, out: &mut Vec<Draw>) {
+        match self.letters.as_deref() {
+            // a page with no layer builds the list it built before the layer existed
+            None => self.build_draw_list_with(l, band, out, |path| self.data.paths[path as usize].bbox, |_| None),
+            Some(lt) => self.build_draw_list_with(
+                l,
+                band,
+                out,
+                |path| lt.path_box(&self.data, path),
+                |path| lt.drawn_pieces(path),
+            ),
+        }
+    }
+
+    /// The draw list, with `bbox` the box of any path and `pieces` the pieces a page path
+    /// draws in its place now.
+    fn build_draw_list_with(
+        &self,
+        l: &Layout,
+        band: Option<(f32, f32)>,
+        out: &mut Vec<Draw>,
+        bbox: impl Fn(u32) -> qvp_format::IBox,
+        pieces: impl Fn(u32) -> Option<std::ops::Range<u32>>,
+    ) {
         let q = self.quant();
-        let letters = self.letters.as_deref();
         // A path is kept when its ink reaches into the band. Its box is in page units, so it
         // goes through the placement it is drawn under and then the layout's own scale. A
         // piece is tested by its own box, which can reach past its word's.
         let visible = |path: u32, placement: &Placement| -> bool {
             let Some((top, bottom)) = band else { return true };
-            let bb = match letters {
-                Some(lt) => lt.path_box(&self.data, path),
-                None => self.data.paths[path as usize].bbox,
-            };
+            let bb = bbox(path);
             let (y0, y1) = (bb.y0 as f32 / q, bb.y1 as f32 / q);
             let at = |y: f32| l.offset_y + l.scale * (placement.ky * y + placement.dy);
             at(y1) >= top && at(y0) <= bottom
         };
         // A page path, or the pieces it draws in its place, under one placement.
-        let push = |out: &mut Vec<Draw>, path: u32, placement: u32, at: &Placement| match letters
-            .and_then(|lt| lt.drawn_pieces(path))
-        {
+        let push = |out: &mut Vec<Draw>, path: u32, placement: u32, at: &Placement| match pieces(path) {
             Some(pieces) => out.extend(pieces.filter(|&p| visible(p, at)).map(|p| Draw { path: p, placement })),
             None if visible(path, at) => out.push(Draw { path, placement }),
             None => {}

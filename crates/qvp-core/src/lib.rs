@@ -799,16 +799,23 @@ impl Page {
             r.fill_rect(b.x0, b.y0, b.x1, b.y1, b.radius, b.color);
         }
         self.colors();
-        for path in 0..self.data.paths.len() as u32 {
-            for i in self.drawn_in_place_of(path) {
-                let c = self.colors[i as usize];
-                if c & 0xff == 0 {
-                    continue;
-                }
-                let g = &self.geom.table[i as usize];
+        let draw = |r: &mut R, i: u32, g: &PathGeom| {
+            let c = self.colors[i as usize];
+            if c & 0xff != 0 {
                 let ops = &self.geom.ops[g.op_start as usize..(g.op_start + g.op_count) as usize];
                 let pts = &self.geom.pts[g.pt_start as usize..(g.pt_start + g.pt_count) as usize];
                 r.fill_path(i, ops, pts, c, g.flags >> 24 & 1 == 1);
+            }
+        };
+        match self.letters.as_deref() {
+            // a page with no layer draws every path in order, as before the layer existed
+            None => self.geom.table.iter().enumerate().for_each(|(i, g)| draw(r, i as u32, g)),
+            Some(lt) => {
+                for path in 0..lt.first_piece {
+                    for i in lt.drawn_pieces(path).unwrap_or(path..path + 1) {
+                        draw(r, i, &self.geom.table[i as usize]);
+                    }
+                }
             }
         }
         for b in self.mask_boxes_view() {

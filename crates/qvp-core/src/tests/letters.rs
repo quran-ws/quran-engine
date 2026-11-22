@@ -436,14 +436,14 @@ fn the_letter_index_holds_the_boxes_and_the_cuts() {
     assert!(lt.letter_has_mark(4, Mark::OmittedAlif));
     assert_eq!(lt.drawn_pieces(0), None);
     assert!(lt.is_drawn(0) && !lt.is_drawn(8) && lt.is_drawn(3));
-    let c8 = p.path_ctx[8].letter;
+    let c8 = lt.path_letter[8];
     assert_eq!((c8.letter, c8.letter_in_word, c8.at, c8.is_body, c8.source), (0, 0, 0, true, 0));
-    assert_eq!(p.path_ctx[0].letter.pieces, (8, 2));
-    assert_eq!(p.path_ctx[2].letter.nth_letter_mark, 1);
-    assert_eq!(p.path_ctx[1].letter.nth_letter_mark, 0);
-    assert_eq!(p.path_ctx[8].letter.nth_letter_mark, u16::MAX);
-    assert_eq!(p.path_ctx[5].letter.letter, NONE);
-    assert_eq!(p.path_ctx[5].letter.raw_at, 3);
+    assert_eq!(lt.path_letter[0].pieces, (8, 2));
+    assert_eq!(lt.path_letter[2].nth_letter_mark, 1);
+    assert_eq!(lt.path_letter[1].nth_letter_mark, 0);
+    assert_eq!(lt.path_letter[8].nth_letter_mark, u16::MAX);
+    assert_eq!(lt.path_letter[5].letter, NONE);
+    assert_eq!(lt.path_letter[5].raw_at, 3);
 }
 
 #[test]
@@ -524,7 +524,7 @@ fn a_page_whose_word_runs_overlap_takes_no_layer() {
 #[test]
 fn a_members_word_is_its_letters_word() {
     let p = letters_page();
-    let word = |i: usize| p.path_ctx[i].letter.word;
+    let word = |i: usize| p.letters.as_deref().unwrap().path_letter[i].word;
     // members, a word mark, a cut path and its pieces each carry the layer's word
     assert_eq!((0..10).map(word).collect::<Vec<_>>(), vec![0, 0, 0, 1, 1, 1, 2, 2, 0, 0]);
     let lt = p.letters.as_deref().unwrap();
@@ -588,7 +588,7 @@ fn a_second_attach_can_add_pieces() {
     p.attach_letters(&layer_bytes()).unwrap();
     assert_eq!(p.geometry().table.len(), 10);
     assert_eq!(p.path_letter(3), Some((0, 0)));
-    assert_eq!(p.path_ctx[3].letter.pieces, (0, 0));
+    assert_eq!(p.letters.as_deref().unwrap().path_letter[3].pieces, (0, 0));
 }
 
 #[test]
@@ -791,7 +791,7 @@ fn an_out_of_range_selector_selects_nothing() {
         assert_eq!(selected(s.clone()), none, "{s:?}");
     }
     let q = |w: Vec<u32>| {
-        Selector::Letters(LetterSelection { words: w, text: None, mark: Mark::None, part: LetterPart::All })
+        Selector::Letters(Box::new(LetterSelection { words: w, text: None, mark: Mark::None, part: LetterPart::All }))
     };
     assert_eq!(selected(q(vec![3, NONE])), none);
     assert_eq!(selected(q(vec![])), none);

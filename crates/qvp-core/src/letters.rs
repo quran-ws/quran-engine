@@ -177,7 +177,9 @@ enum Frame<'a> {
     Reflowed(&'a crate::Reflowed),
 }
 
-/// The letter facts of one path, inside its `PathCtx`.
+/// The letter facts of one path. The layer keeps them in [`Letters::path_letter`], beside the
+/// path contexts and not in them, so a page with no layer reads contexts of the size they had
+/// before the layer existed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PathLetter {
     /// The word of the letter or the word mark that holds this path, as the layer says it.
@@ -230,6 +232,8 @@ pub(crate) struct Letters {
     pub data: LetterData,
     /// The path index of the first piece: the page's own path count.
     pub first_piece: u32,
+    /// Per path, the page's own and the pieces: its letter facts.
+    pub path_letter: Vec<PathLetter>,
     /// Per page word: (first letter, letter count) into `data.letters`.
     pub word_letters: Vec<(u32, u32)>,
     /// Per letter: the union of its members' boxes, quantised.
@@ -348,26 +352,38 @@ pub(crate) struct LetterView<'a> {
     pub ctx: &'a [PathCtx],
 }
 
+impl Letters {
+    /// The page path that path `pi` is cut from: `pi` itself unless it is a piece.
+    #[inline]
+    pub(crate) fn source_of(&self, pi: u32) -> u32 {
+        self.path_letter.get(pi as usize).map_or(pi, |m| m.source)
+    }
+}
+
 impl LetterView<'_> {
     /// True when a letter selector takes the path whose context is `c`. With no layer,
     /// nothing is taken.
-    pub(crate) fn takes(&self, sel: &Selector, c: &PathCtx) -> bool {
+    pub(crate) fn takes(&self, sel: &Selector, pi: u32, c: &PathCtx) -> bool {
         let Some(lt) = self.letters else { return false };
-        let (first, n) = c.letter.pieces;
+        let Some(m) = lt.path_letter.get(pi as usize) else { return false };
+        let (first, n) = m.pieces;
         if n > 0 {
             // a cut path is taken when every piece is: a rule over the whole outline draws
             // it whole
-            return (first..first + n).all(|p| self.ctx.get(p as usize).is_some_and(|pc| member_matches(lt, sel, pc)));
+            return (first..first + n).all(|p| {
+                let (pc, pm) = (self.ctx.get(p as usize), lt.path_letter.get(p as usize));
+                pc.zip(pm).is_some_and(|(pc, pm)| member_matches(lt, sel, pc, pm))
+            });
         }
-        member_matches(lt, sel, c)
+        member_matches(lt, sel, c, m)
     }
 }
 
 /// True when a letter selector takes one path that is not cut: a letter member, a word
-/// mark, or a path with no role. Every test is constant time: the facts come from the
-/// path's own context and from what the attach indexed per letter.
-pub(crate) fn member_matches(lt: &Letters, sel: &Selector, c: &PathCtx) -> bool {
-    let m = &c.letter;
+/// mark, or a path with no role. `c` is the path's context and `m` its letter facts. Every
+/// test is constant time: the facts come from the path and from what the attach indexed per
+/// letter.
+pub(crate) fn member_matches(lt: &Letters, sel: &Selector, c: &PathCtx, m: &PathLetter) -> bool {
     // the word comes from the layer's letter or word mark, never from the path's context
     let of_letter = |w: u32, l: u16| m.letter != NONE && m.word == w && m.letter_in_word == l;
     match sel {
@@ -584,15 +600,14 @@ impl Page {
     /// the checked offset, or `NONE`). `None` for a cut path, a decoration path, a path out
     /// of range, or with no layer.
     pub fn path_letter(&self, path: u32) -> Option<(u32, u32)> {
-        self.letters.as_deref()?;
-        let c = self.path_ctx.get(path as usize)?;
+        let m = self.letters.as_deref()?.path_letter.get(path as usize)?;
         // every path of a word has a role once the layer is checked: a member, a word
         // mark, or a cut path. A decoration path has none.
-        if c.letter.word == NONE || c.letter.pieces.1 > 0 {
+        if m.word == NONE || m.pieces.1 > 0 {
             return None;
         }
-        let letter = if c.letter.letter == NONE { NONE } else { c.letter.letter_in_word as u32 };
-        Some((letter, offset(c.letter.at)))
+        let letter = if m.letter == NONE { NONE } else { m.letter_in_word as u32 };
+        Some((letter, offset(m.at)))
     }
 
     /// The letter of a word that draws the character at offset `at`, or that holds the mark
@@ -698,12 +713,12 @@ impl Page {
         let mut ink = None;
         self.each_word_near(lt, frame, x, y, |w, px, py| self.ink_in_word(lt, w, px, py, &mut ink));
         if let Some(ink) = ink {
-            return Some(self.exact_letter_hit(ink));
+            return Some(self.exact_letter_hit(lt, ink));
         }
         let mut counter: Option<InkHit> = None;
         self.each_word_near(lt, frame, x, y, |w, px, py| self.counter_in_word(lt, w, px, py, &mut counter));
         let c = counter?;
-        let g = self.path_ctx[c.path as usize].letter.letter;
+        let g = lt.path_letter[c.path as usize].letter;
         Some(self.near_letter_hit(lt, c.word, g, 0.0))
     }
 
@@ -758,14 +773,14 @@ impl Page {
         };
         let first = word.first_path;
         for p in first..first + word.n_paths as u32 {
-            let Some(c) = self.path_ctx.get(p as usize) else { continue };
-            if c.letter.word != w {
+            let Some(c) = lt.path_letter.get(p as usize) else { continue };
+            if c.word != w {
                 continue;
             }
-            let (a, n) = c.letter.pieces;
+            let (a, n) = c.pieces;
             let paths = if n > 0 { a..a + n } else { p..p + 1 };
             for path in paths {
-                let m = &self.path_ctx[path as usize].letter;
+                let m = &lt.path_letter[path as usize];
                 if m.letter != NONE
                     && m.is_body
                     && lt.path_box(&self.data, path).contains(qx, qy)
@@ -822,11 +837,11 @@ impl Page {
         };
         let first = word.first_path;
         for p in first..first + word.n_paths as u32 {
-            let Some(c) = self.path_ctx.get(p as usize) else { continue };
-            if c.letter.word != w {
+            let (Some(c), Some(m)) = (self.path_ctx.get(p as usize), lt.path_letter.get(p as usize)) else { continue };
+            if m.word != w {
                 continue;
             }
-            let (a, n) = c.letter.pieces;
+            let (a, n) = m.pieces;
             if n == 0 {
                 if holds(p) {
                     take((c.kind != PathKind::Body, p, p), p);
@@ -863,7 +878,7 @@ impl Page {
         let mut ink = None;
         self.ink_in_word(lt, w, x, y, &mut ink);
         if let Some(ink) = ink {
-            return Some(self.exact_letter_hit(ink));
+            return Some(self.exact_letter_hit(lt, ink));
         }
         let &(first, n) = lt.word_letters.get(w as usize)?;
         let q = self.quant();
@@ -951,9 +966,9 @@ impl Page {
     }
 
     /// An exact hit on the ink `ink`: a letter member or a word-level mark.
-    fn exact_letter_hit(&self, ink: InkHit) -> LetterHit {
+    fn exact_letter_hit(&self, lt: &Letters, ink: InkHit) -> LetterHit {
         let c = &self.path_ctx[ink.path as usize];
-        let m = &c.letter;
+        let m = &lt.path_letter[ink.path as usize];
         LetterHit {
             word: m.word,
             letter: if m.letter == NONE { NONE } else { m.letter_in_word as u32 },
@@ -965,12 +980,6 @@ impl Page {
             is_exact: true,
             is_body: m.is_body,
         }
-    }
-
-    /// What is drawn for page path `path` now: its pieces, when it is a cut path that draws
-    /// them, else the path itself.
-    pub(crate) fn drawn_in_place_of(&self, path: u32) -> std::ops::Range<u32> {
-        self.letters.as_deref().and_then(|lt| lt.drawn_pieces(path)).unwrap_or(path..path + 1)
     }
 
     /// Decide again which cut paths draw their pieces: the paths of `slots` (indices into
@@ -1023,9 +1032,11 @@ impl Page {
                 Some(u16::try_from(n).unwrap_or(u16::MAX))
             })
             .collect();
-        for c in &mut self.path_ctx {
-            c.letter.at = if c.letter.word == NONE { NO_AT } else { lt.checked(c.letter.word, c.letter.raw_at) };
+        let mut path_letter = std::mem::take(&mut lt.path_letter);
+        for m in &mut path_letter {
+            m.at = if m.word == NONE { NO_AT } else { lt.checked(m.word, m.raw_at) };
         }
+        lt.path_letter = path_letter;
     }
 
     /// Drop the layer, its pieces and every state sized by them. The page's own paths keep
@@ -1041,9 +1052,6 @@ impl Page {
         self.path_ctx.truncate(n);
         self.path_deco.truncate(n);
         self.animating.retain(|&p| (p as usize) < n);
-        for (i, c) in self.path_ctx.iter_mut().enumerate() {
-            c.letter = PathLetter::page_path(i as u32);
-        }
     }
 
     /// Append the pieces of a checked layer and index its letters.
@@ -1058,6 +1066,8 @@ impl Page {
         let q = self.data.header.quant as f32;
         let moving: std::collections::HashSet<u32> = self.animating.iter().copied().collect();
         let mut piece_box = Vec::with_capacity(data.pieces.len());
+        let mut path_letter: Vec<PathLetter> = (0..n).map(PathLetter::page_path).collect();
+        path_letter.reserve(data.pieces.len());
 
         // the pieces, as paths n.. in the layer's order
         for (i, piece) in data.pieces.iter().enumerate() {
@@ -1086,9 +1096,8 @@ impl Page {
                 ..s
             });
             let pi = n + i as u32;
-            let mut ctx = self.path_ctx[src];
-            ctx.letter = PathLetter { source: piece.source, ..PathLetter::page_path(pi) };
-            self.path_ctx.push(ctx);
+            self.path_ctx.push(self.path_ctx[src]);
+            path_letter.push(PathLetter { source: piece.source, ..PathLetter::page_path(pi) });
             self.path_deco.push(NONE);
             // a piece starts where its source is: same colour, same target, same transition
             self.anim.push(self.anim[src]);
@@ -1110,7 +1119,7 @@ impl Page {
         let mut slot_of = vec![NONE; n as usize];
         for (slot, &(src, first, count)) in sources.iter().enumerate() {
             slot_of[src as usize] = slot as u32;
-            self.path_ctx[src as usize].letter.pieces = (first, count);
+            path_letter[src as usize].pieces = (first, count);
         }
 
         // the letters of each word, and the letter facts of each member
@@ -1153,22 +1162,23 @@ impl Page {
                     MemberPath::Piece(i) => n + i,
                 };
                 bb.union(&path_box(p));
-                let c = &mut self.path_ctx[p as usize];
-                if c.mark != Mark::None {
-                    let id = c.mark as u8 as usize;
+                let mark = self.path_ctx[p as usize].mark;
+                if mark != Mark::None {
+                    let id = mark as u8 as usize;
                     marks[id / 64] |= 1 << (id % 64);
                 }
+                let c = &mut path_letter[p as usize];
                 // the word of the letter, which a page whose runs overlap could make
-                // differ from `c.word`; `attach_letters` refuses such a page
-                c.letter.word = l.word as u32;
-                c.letter.letter = g as u32;
-                c.letter.letter_in_word = in_word;
-                c.letter.raw_at = m.at;
-                c.letter.is_body = m.is_body;
-                c.letter.own = m.at == l.at;
+                // differ from the context's word; `attach_letters` refuses such a page
+                c.word = l.word as u32;
+                c.letter = g as u32;
+                c.letter_in_word = in_word;
+                c.raw_at = m.at;
+                c.is_body = m.is_body;
+                c.own = m.at == l.at;
                 // a letter has at most u16::MAX members and one of them is its body, so
                 // this count stays below u16::MAX
-                c.letter.nth_letter_mark = if m.is_body {
+                c.nth_letter_mark = if m.is_body {
                     u16::MAX
                 } else {
                     nth += 1;
@@ -1179,15 +1189,15 @@ impl Page {
             letter_marks.push(marks);
         }
         for wm in &data.word_marks {
-            let c = &mut self.path_ctx[wm.path as usize].letter;
+            let c = &mut path_letter[wm.path as usize];
             c.word = wm.word as u32;
             c.raw_at = wm.at;
         }
         // a piece's word is the word of the letter that holds it: every piece is a member
         let mut word_box: Vec<IBox> = self.data.words.iter().map(|w| w.bbox).collect();
         for (i, (piece, bb)) in data.pieces.iter().zip(&piece_box).enumerate() {
-            let w = self.path_ctx[n as usize + i].letter.word;
-            self.path_ctx[piece.source as usize].letter.word = w;
+            let w = path_letter[n as usize + i].word;
+            path_letter[piece.source as usize].word = w;
             word_box[w as usize].union(bb);
         }
 
@@ -1202,6 +1212,7 @@ impl Page {
         self.letters = Some(Box::new(Letters {
             data,
             first_piece: n,
+            path_letter,
             word_letters,
             letter_box,
             letter_marks,

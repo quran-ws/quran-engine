@@ -1,5 +1,4 @@
 //! Loading a page: the steps that turn decoded page data into what a `Page` reads.
-use crate::letters::PathLetter;
 use crate::reflow::line_under_stroke;
 use crate::style::PathCtx;
 use crate::{Geometry, PathGeom, NONE};
@@ -184,7 +183,6 @@ pub(crate) fn path_contexts(data: &PageData, path_word: &[u32], path_deco: &[u32
             nth_mark: if p.kind == PathKind::Mark { nth_mark } else { u16::MAX },
             nth_mark_named: nm,
             deco_kind: if di != NONE { data.decorations[di as usize].kind } else { DecoKind::Other },
-            letter: PathLetter::page_path(i as u32),
         });
         if wi != NONE {
             nth_in_word += 1;
