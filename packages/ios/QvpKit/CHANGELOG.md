@@ -5,6 +5,16 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.9.0] - 2026-11-22
+
+### Added
 - QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
   `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
   `QvpPassageWord.wordKey`, as Kotlin's.
@@ -90,8 +100,6 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 - `QvpDressInfo.overflow` and its twins in every wrapper are documented in layout px, which
   is what the engine returns. The docs said viewport px (#182).
 
-### Removed
-
 ### Fixed
 - A page dressed without a border no longer grows its dressed box to the whole printed page.
   The box is the laid-out page, so a crop is kept. Before, `dressView` at scale 0 shrank a
@@ -126,6 +134,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   a jint on Android, and the engine answers: `wordLabel(-1)` is "", `findWord(-1, …)` is -1,
   `unmaskNext(-1)` unhides every word. Before, `UInt32(i)` trapped on a negative or huge
   value, and `qvp.wordLabel(-1)` from React Native stopped the iOS app.
+- The XCFramework's macOS slice holds arm64 and x86_64. A Flutter macOS release build is
+  universal, and it failed to link against the arm64-only slice.
 
 ## [0.8.0] - 2026-11-04
 

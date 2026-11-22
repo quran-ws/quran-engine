@@ -5,6 +5,16 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.9.0] - 2026-11-22
+
+### Added
 - `QvpPage.ayahMarksView()`, `hitAreasView(gapBias)` and `wordBandsView(words, height, padX,
   padY)`: the viewport-px twins of `ayahMarks`, `hitAreas` and `wordBands`. Each answers
   through the current layout, so an app that draws its own overlay on a reflowed page reads
@@ -56,8 +66,20 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   that costs time, not pixels. Flutter and React Native need no change.
 - `QvpDressInfo.overflow` and its twins in every wrapper are documented in layout px, which
   is what the engine returns. The docs said viewport px (#182).
-
-### Removed
+- `layoutPrintedHeight` on a page dressed in a border answers the height of the whole page,
+  border included: the dressed box fitted to the viewport width, as `dressView` at scale 0
+  fits it. That is the height a host that scrolls the page gives its canvas, so a host can
+  plan a box for a bordered page before it sizes the canvas. With no padding the height is in
+  proportion to the width. An undressed page answers `contentH` as before.
+- Fill-height on a page dressed in a border fills the viewport with the border included:
+  `dressView(0, viewportW).height` is `viewportH`. Before, the text filled the viewport and the
+  border reached past it above and below. `layoutLineSpacingToFill` answers the same leading.
+- A printed layout of a dressed page narrows `cropLeft` and `cropRight` where a medallion
+  reaches past them, so the crop never cuts into a medallion. A medallion stays centred on
+  its printed ring. On page 50, four font markers reached about 1 unit past a crop measured
+  from the words.
+- `dress` and `undress` lay a printed page out again from its own spec, as they already did
+  for a reflowed page, because the crop and the fill now depend on the dress.
 
 ### Fixed
 - A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
@@ -75,6 +97,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   `fit_x`, `fit_y` place the content's own origin. The docs of the dress overflow in
   Kotlin, Swift and Dart told a host to fit the overflow itself. The engine's fit holds it
   already. The iOS `resetView()` docs said that the view fits the content height.
+- A page dressed without a border no longer grows its dressed box to the whole printed page.
+  The box is the laid-out page, so a crop is kept. Before, `dressView` at scale 0 shrank a
+  cropped page to show the cut margins, by about 3.5% on page 50. A reflowed page dressed
+  without a border is no longer pushed off to the left: on page 50 at zoom 1.8, `fitX` was
+  −170 px.
 
 ## [0.8.0] - 2026-11-04
 

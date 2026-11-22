@@ -7,6 +7,16 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.9.0] - 2026-11-22
+
+### Added
 - QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
   `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
   `QvpPassageWord.wordKey`, as Kotlin's.
@@ -158,8 +168,6 @@ All notable changes to the engine and its packages. The format follows
   `lineDy` places a path on a reflowed page, where the words move and not the lines.
 - `scripts/build-engine-ios.sh` copies `QvpEngine.xcframework` into the Flutter plugin's
   `ios/qvp_flutter` and `macos/qvp_flutter`, one level below the old place.
-
-### Removed
 
 ### Fixed
 - A page dressed without a border no longer grows its dressed box to the whole printed page.
@@ -1164,7 +1172,9 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/quran-ws/quran-engine/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/quran-ws/quran-engine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/quran-ws/quran-engine/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/quran-ws/quran-engine/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/quran-ws/quran-engine/compare/v0.5.0...v0.6.0
