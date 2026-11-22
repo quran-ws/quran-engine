@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Regenerate the cross-wrapper scenarios from the Rust engine (docs/standards/TESTING.md).
 # Input: dist/pages (scripts/sync-test-data.sh). Output: conformance/scenarios/*.json, and the
-# synthetic ornament set the dress scenarios load, conformance/qvo1-dress.hex.
+# synthetic ornament set the dress scenarios load, conformance/qvo1-dress.hex. The letter
+# scenarios need no page data: conformance/scenarios/letters.json and the synthetic pages and
+# letter layers it loads, conformance/qvp1-letters*.hex and conformance/qvl1-letters*.hex.
 # `--check` exits 1 when the committed files differ from what the engine produces now.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -15,7 +17,15 @@ cargo run -q -p qvp-core --release --example dress_scenarios -- dist/pages/042.q
 cargo run -q -p qvp-core --release --example zoom_scenarios -- dist/pages/042.qvp "$tmp/scenarios/zoom.json"
 cargo run -q -p qvp-core --release --example hit_scenarios -- dist/pages/042.qvp "$tmp/scenarios/hit.json"
 cargo run -q -p qvp-core --release --example ink_band_scenarios -- dist/pages/042.qvp "$tmp/scenarios/ink-band.json" "$tmp/qvo1-dress.hex"
-for file in scenarios/layout.json scenarios/passage.json lite-passage-metrics.json scenarios/dress.json qvo1-dress.hex scenarios/zoom.json scenarios/hit.json scenarios/ink-band.json; do
+cargo run -q -p qvp-core --release --example letters_scenarios -- "$tmp"
+letters="scenarios/letters.json qvp1-letters.hex qvl1-letters.hex qvl1-letters-seam.hex qvl1-letters-body-mark.hex"
+letters="$letters qvp1-letters-variant.hex qvl1-letters-variant.hex qvp1-letters-overlap.hex qvl1-letters-overlap.hex"
+letters="$letters qvp1-letters-counter.hex qvl1-letters-counter.hex qvp1-letters-decoration.hex qvl1-letters-decoration.hex"
+# a fixture the generator writes and this list does not name would never be compared
+for written in "$tmp"/qv[pl]1-letters*.hex; do
+  case " $letters " in *" ${written##*/} "*) ;; *) echo "error: ${written##*/} is not in the letters list" >&2; exit 1 ;; esac
+done
+for file in scenarios/layout.json scenarios/passage.json lite-passage-metrics.json scenarios/dress.json qvo1-dress.hex scenarios/zoom.json scenarios/hit.json scenarios/ink-band.json $letters; do
   if [ "${1:-}" = "--check" ]; then
     if cmp -s "$tmp/$file" "conformance/$file"; then
       echo "ok   conformance/$file matches the engine"

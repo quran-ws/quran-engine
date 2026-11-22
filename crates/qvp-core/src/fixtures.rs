@@ -445,3 +445,183 @@ pub(crate) fn letters_variant_page() -> Page {
     p.attach_letters(&encode_letters(&letters_variant_layer())).unwrap();
     p
 }
+
+/// `data` with the boxes of every word, line and ayah made again from its paths.
+pub(crate) fn reboxed(mut data: PageData) -> PageData {
+    for w in 0..data.words.len() {
+        let r = &data.words[w];
+        let mut b = IBox::EMPTY;
+        for q in r.first_path..r.first_path + r.n_paths as u32 {
+            b.union(&data.paths[q as usize].bbox);
+        }
+        data.words[w].bbox = b;
+    }
+    for l in &mut data.lines {
+        let mut b = IBox::EMPTY;
+        for w in &data.words[l.first_word as usize..(l.first_word + l.n_words) as usize] {
+            b.union(&w.bbox);
+        }
+        l.bbox = b;
+    }
+    for a in &mut data.ayahs {
+        let mut b = IBox::EMPTY;
+        for w in &data.words[a.first_word as usize..(a.first_word + a.n_words) as usize] {
+            b.union(&w.bbox);
+        }
+        a.bbox = b;
+    }
+    data
+}
+
+/// Put `cmds` in place of path `i`'s outline, keeping its kind, mark and family.
+pub(crate) fn reshape(data: &mut PageData, i: usize, cmds: &[Cmd]) {
+    let r = data.paths[i];
+    let mut one = Vec::new();
+    push_path(&mut data.ops, &mut one, cmds, r.kind, r.mark, r.family, r.flags);
+    data.paths[i] = one[0];
+}
+
+/// `data` as [`attached`] loads it: reboxed, with its ops in canonical order.
+pub(crate) fn settled(data: PageData) -> PageData {
+    let mut data = reboxed(data);
+    data.canonicalize_ops();
+    data
+}
+
+/// The page of `data`, settled, with `layer` attached.
+pub(crate) fn attached(data: PageData, layer: &LetterData) -> Page {
+    let mut p = Page::from_data(settled(data)).unwrap();
+    p.attach_letters(&encode_letters(layer)).unwrap();
+    p
+}
+
+/// The letter fixture with two marks drawn over the ba's piece. Paths 3 and 4 are new in
+/// word 0, so every later page path moves up by two and the pieces are paths 10 and 11:
+/// - path 3: a sukun of the lam (letter 1, offset 2), `square(5300,1300,5700,1700)`;
+/// - path 4: a shaddah of the ba (letter 0, offset 0), `square(5450,1450,5550,1550)`.
+///
+/// Both lie inside piece 0 (the ba), and path 4 lies inside path 3. Returns the page data and
+/// its layer.
+pub(crate) fn overlap_fixture() -> (PageData, LetterData) {
+    let mut data = letters_page_data();
+    let mut extra = Vec::new();
+    push_path(
+        &mut data.ops,
+        &mut extra,
+        &square(5300, 1300, 5700, 1700),
+        PathKind::Mark,
+        Mark::Sukun,
+        Family::Diacritic,
+        PF_EVENODD,
+    );
+    push_path(
+        &mut data.ops,
+        &mut extra,
+        &square(5450, 1450, 5550, 1550),
+        PathKind::Mark,
+        Mark::Shaddah,
+        Family::Diacritic,
+        PF_EVENODD,
+    );
+    for (i, rec) in extra.into_iter().enumerate() {
+        data.paths.insert(3 + i, rec);
+    }
+    data.words[0].n_paths = 5;
+    data.words[1].first_path = 5;
+    data.words[2].first_path = 8;
+    data.canonicalize_ops();
+    let mut layer = letters_layer();
+    layer.n_page_paths = 10;
+    let member = |path: u32, at: u16, is_body: bool| MemberRec { path: MemberPath::Page(path), at, is_body };
+    let piece = |i: u32| MemberRec { path: MemberPath::Piece(i), at: if i == 0 { 0 } else { 2 }, is_body: true };
+    layer.members = vec![
+        piece(0),
+        member(1, 0, false),
+        member(2, 1, false),
+        member(4, 0, false),
+        piece(1),
+        member(3, 2, false),
+        member(5, 0, true),
+        member(6, 2, true),
+        member(8, 0, true),
+        member(9, NO_AT, false),
+    ];
+    for (l, (first, n)) in layer.letters.iter_mut().zip([(0, 4), (4, 2), (6, 1), (7, 1), (8, 2)]) {
+        l.first_member = first;
+        l.n_members = n;
+    }
+    layer.word_marks[0].path = 7;
+    (data, layer)
+}
+
+/// The page of [`overlap_fixture`] with its layer attached.
+pub(crate) fn overlap_page() -> Page {
+    let (data, layer) = overlap_fixture();
+    let mut p = Page::from_data(data).unwrap();
+    p.attach_letters(&encode_letters(&layer)).unwrap();
+    p
+}
+
+/// The layer of the letter fixture with a seam: the lam's piece ends at 48, so from 48 to 50
+/// the cut path holds the point and no piece does.
+pub(crate) fn seam_layer() -> LetterData {
+    let mut layer = letters_layer();
+    layer.pieces[1].cmds = square(3900, 1000, 4800, 2000);
+    layer
+}
+
+/// The letter fixture with the seam of [`seam_layer`].
+pub(crate) fn seam_page() -> Page {
+    attached(letters_page_data(), &seam_layer())
+}
+
+/// The layer of the letter fixture where the omitted alif (path 7, a mark of the page) is a
+/// second body of word 2's letter, at offset 0, as a dagger alif can be.
+pub(crate) fn body_mark_layer() -> LetterData {
+    let mut layer = letters_layer();
+    layer.members[7] = MemberRec { path: MemberPath::Page(7), at: 0, is_body: true };
+    layer
+}
+
+/// The letter fixture with the layer of [`body_mark_layer`].
+pub(crate) fn body_mark_page() -> Page {
+    attached(letters_page_data(), &body_mark_layer())
+}
+
+/// The letter fixture with a counter in the lam, under another word's box: the cut path and
+/// the lam's piece have a hole `square(4200,1300,4700,1700)`, and word 1's waqf sign (path 5)
+/// is moved over the hole to `square(4400,400,4600,600)`. Once the page is settled, word 1's
+/// box reaches over the hole, and the word hit test picks word 1 there. Returns the page data,
+/// before [`settled`], and its layer.
+pub(crate) fn counter_under_a_box_fixture() -> (PageData, LetterData) {
+    let hole = square(4200, 1300, 4700, 1700);
+    let mut data = letters_page_data();
+    let mut joined = square(4000, 1000, 6000, 2000);
+    joined.extend(hole.iter().copied());
+    reshape(&mut data, 0, &joined);
+    reshape(&mut data, 5, &square(4400, 400, 4600, 600));
+    let mut layer = letters_layer();
+    let mut lam = square(3900, 1000, 5000, 2000);
+    lam.extend(hole.iter().copied());
+    layer.pieces[1].cmds = lam;
+    (data, layer)
+}
+
+/// The letter fixture with a decoration on line 2: path 8, an ayah mark ornament at
+/// `square(7000,5000,8000,6000)`. Returns the page data and its layer, whose pieces are paths
+/// 9 and 10.
+pub(crate) fn letters_decoration_fixture() -> (PageData, LetterData) {
+    let mut data = letters_page_data();
+    let (path, bbox) = add_path(&mut data, &square(7000, 5000, 8000, 6000), PathKind::AyahMarkOrnament);
+    data.decorations.push(DecoRec {
+        kind: DecoKind::Other,
+        surah: 1,
+        ayah: 0,
+        text: NONE_U16,
+        first_path: path,
+        n_paths: 1,
+        line: 1,
+        bbox,
+    });
+    (data, LetterData { n_page_paths: 9, ..letters_layer() })
+}
