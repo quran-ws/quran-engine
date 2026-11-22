@@ -57,6 +57,7 @@ pub fn convert_letters(
     let lwords = word_nodes(&ldoc)?;
     let wwords = word_nodes(&wdoc)?;
     check_words(pg, page, &lwords, &wwords)?;
+    check_frames(pg, page, &lwords, &wwords)?;
     if words_qpc.len() != page.words.len() || letters_qpc.len() != page.words.len() {
         return Err(format!(
             "page {pg}: {} words, but {} words qpc and {} letters qpc texts",
@@ -159,6 +160,45 @@ fn check_words(pg: u16, page: &PageData, lwords: &[(Node, Affine)], wwords: &[(N
     Ok(())
 }
 
+/// Checks that let the rest index the page and compare the two pages by `d` alone.
+///
+/// The page has the path counts of the words page, so no index goes past `page.paths`.
+/// An uncut path maps by its `d` only, and that ignores where a transform puts it. So
+/// each word has the same transform in the two pages, and no element inside a word has
+/// a `transform`: in either page, every path of a word is drawn in the word's frame.
+/// The one exception is the rosette group of the letters page. The layer drops it, so
+/// its transform moves no path that the layer keeps. Pages 17 and 144 have one.
+fn check_frames(pg: u16, page: &PageData, lwords: &[(Node, Affine)], wwords: &[(Node, Affine)]) -> Result<(), String> {
+    for (((lw, ltf), (ww, wtf)), rec) in lwords.iter().zip(wwords).zip(&page.words) {
+        let err = |s: &str| format!("page {pg} word {}: {s}", key(*ww));
+        let n = ww.children().filter(|c| c.has_tag_name("path")).count();
+        let end = rec.first_path as u64 + rec.n_paths as u64;
+        if n != rec.n_paths as usize || end > page.paths.len() as u64 {
+            return Err(err(&format!(
+                "the words page has {n} paths, the page data {} from path {} of {}",
+                rec.n_paths,
+                rec.first_path,
+                page.paths.len()
+            )));
+        }
+        if ltf != wtf {
+            return Err(err(&format!(
+                "the transform above the word differs: letters page {ltf:?}, words page {wtf:?}"
+            )));
+        }
+        for (which, w) in [("letters", lw), ("words", ww)] {
+            let dropped = |d: &Node| d.parent() == Some(*lw) && d.has_tag_name("g") && class(*d) == "division-mark";
+            if let Some(t) = w.descendants().skip(1).find(|d| d.has_attribute("transform") && !dropped(d)) {
+                return Err(err(&format!(
+                    "a transform on <{}> inside the word in the {which} page",
+                    t.tag_name().name()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 struct Builder<'p> {
     quant: f64,
     page: &'p PageData,
@@ -222,6 +262,14 @@ impl Builder<'_> {
         if children.iter().skip(1).any(is_rosette) {
             return Err(err("a rosette that is not the first child of its word".into()));
         }
+        if let Some(r) = children.first().filter(|c| c.has_tag_name("g") && is_rosette(c)) {
+            let inner: Vec<Node> = r.children().filter(|c| c.is_element()).collect();
+            let one_hizb =
+                matches!(inner.as_slice(), [p] if p.has_tag_name("path") && p.attribute("data-mark") == Some("hizb"));
+            if !one_hizb {
+                return Err(err("a rosette group that does not hold exactly one hizb path".into()));
+            }
+        }
         let prefixed = letters_qpc.strip_prefix(ROSETTE_PREFIX);
         let shift: u16 = match (rosette, prefixed) {
             (true, Some(rest)) if rest == qpc => 2,
@@ -239,12 +287,14 @@ impl Builder<'_> {
         let n_chars = qpc.chars().count();
         let at_of = |s: &str, what: &str| -> Result<u16, String> {
             let v: u16 = s.parse().map_err(|_| err(format!("{what}: data-at {s:?} is not a number")))?;
+            if v == NO_AT {
+                return Err(err(format!("{what}: data-at {v} is out of range")));
+            }
             v.checked_sub(shift).ok_or_else(|| err(format!("{what}: data-at {v} points into the rosette prefix")))
         };
 
         let mut cuts: Vec<Cut> = Vec::new();
         for c in children.iter().skip(rosette as usize) {
-            let ctf = node_tf(*c, ltf)?;
             match (c.tag_name().name(), class(*c)) {
                 ("g", "letter") => {
                     let idx = c.attribute("data-index").unwrap_or("?");
@@ -284,7 +334,7 @@ impl Builder<'_> {
                             k => return Err(err(format!("{what}: data-kind {k:?} inside a letter"))),
                         };
                         if m_at != NO_AT && m_at as usize >= n_chars {
-                            self.warnings.push(err(format!("{what}: data-at {m_at} is past the end of {qpc:?}")));
+                            return Err(err(format!("{what}: data-at {m_at} is past the end of {qpc:?}")));
                         }
                         n_body += is_body as u32;
                         let member = self.out.members.len();
@@ -293,8 +343,7 @@ impl Builder<'_> {
                                 return Err(err(format!("{what}: a cut mark")));
                             }
                             // Rule 4: the same parser, transform and quantisation as a word path.
-                            let cmds =
-                                parse_d(d, &node_tf(p, ctf)?, self.quant).map_err(|e| err(format!("{what}: {e}")))?;
+                            let cmds = parse_d(d, &ltf, self.quant).map_err(|e| err(format!("{what}: {e}")))?;
                             cuts.push(Cut { cmds, member, what: what.clone() });
                             self.out.members.push(MemberRec { path: MemberPath::Piece(u32::MAX), at: m_at, is_body });
                         } else {
@@ -332,7 +381,7 @@ impl Builder<'_> {
                         None => NO_AT,
                     };
                     if at != NO_AT && at as usize >= n_chars {
-                        self.warnings.push(err(format!("{what}: data-at {at} is past the end of {qpc:?}")));
+                        return Err(err(format!("{what}: data-at {at} is past the end of {qpc:?}")));
                     }
                     self.out.word_marks.push(WordMarkRec { word: w as u16, path, at });
                 }
@@ -347,8 +396,7 @@ impl Builder<'_> {
             if self.page.paths[path as usize].kind != PathKind::Body {
                 return Err(err(format!("words page path {i} is in no letter and is not a body")));
             }
-            let tf = node_tf(*p, wtf)?;
-            let cmds = parse_d(p.attribute("d").unwrap_or(""), &tf, self.quant).map_err(&err)?;
+            let cmds = parse_d(p.attribute("d").unwrap_or(""), &wtf, self.quant).map_err(&err)?;
             let evenodd = self.page.paths[path as usize].flags & PF_EVENODD != 0;
             bodies.push((i, path, Outline::new(&cmds, evenodd, self.quant)));
         }
@@ -662,7 +710,7 @@ mod tests {
         ]
         .concat();
         let e = build(&[("2:6:1", &letters)], &[("2:6:1", &words)], &["اب"], &["اب"]).err().unwrap();
-        assert!(e.contains("2:6:1") && e.contains("piece"), "{e}");
+        assert!(e.contains("2:6:1") && e.contains("letter 0: path 0: a cut piece that fits two bodies"), "{e}");
     }
 
     #[test]
@@ -674,7 +722,7 @@ mod tests {
         ]
         .concat();
         let e = build(&[("2:6:1", &letters)], &[("2:6:1", &body(BODY))], &["ابت"], &["ابت"]).err().unwrap();
-        assert!(e.contains("2:6:1") && e.contains("no body"), "{e}");
+        assert!(e.contains("2:6:1") && e.contains("letter 2: path 0: a cut piece that fits no body"), "{e}");
     }
 
     #[test]
@@ -703,6 +751,13 @@ mod tests {
     #[test]
     fn a_rosette_is_dropped_and_offsets_shift() {
         let (letters_svg, words_svg, lq) = rosette_pages(&format!("{ROSETTE}وَ"));
+        // As on pages 17 and 144, the rosette group has a transform of its own.
+        let group = r#"<g class="division-mark" data-mark="hizb" data-ayah-key="2:6">"#;
+        let letters_svg = letters_svg.replacen(
+            group,
+            r#"<g class="division-mark" data-mark="hizb" data-ayah-key="2:6" transform="translate(1 -2)">"#,
+            1,
+        );
         let out = build_svg(&letters_svg, &words_svg, &["وَ"], &[&lq]).unwrap();
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
         let d = &out.data;
@@ -711,6 +766,10 @@ mod tests {
         assert_eq!((d.letters[0].at, d.letters[0].text), (0, 'و'));
         assert_eq!(d.members, vec![page_member(1, 0, true), page_member(2, 1, false)]);
         assert!(d.word_marks.is_empty());
+        // A transform on the rosette's path is still an error.
+        let moved = letters_svg.replacen(r#"<path data-at="0""#, r#"<path transform="translate(1 0)" data-at="0""#, 1);
+        let e = build_svg(&moved, &words_svg, &["وَ"], &[&lq]).err().unwrap();
+        assert!(e.contains("2:6:1") && e.contains("a transform on <path> inside the word"), "{e}");
     }
 
     #[test]
@@ -794,5 +853,125 @@ mod tests {
         let letters = letter(0, "ب", "0", &format!("{}{}", body(BODY), mark(BODY, Some(1))));
         let e = build(&[("2:6:1", &letters)], &[("2:6:1", &words)], &["بَ"], &["بَ"]).err().unwrap();
         assert!(e.contains("2:6:1") && e.contains("same d"), "{e}");
+    }
+
+    #[test]
+    fn a_piece_goes_to_the_clearly_nearer_of_two_bodies() {
+        // A large body holds the small one. The pieces of the small body are inside both
+        // fills, but much nearer to the outline of the small one.
+        let large = "M-10 -10H40V20H-10Z";
+        let words = format!("{}{}", body(BODY), body(large));
+        let letters = [
+            letter(0, "ا", "0", &format!("{}{}", piece("M0.5 0.5H10V9.5H0.5Z"), piece("M10 0.5H29.5V9.5H10Z"))),
+            letter(1, "ب", "1", &piece("M-10 -10H40V-5H-10Z")),
+        ]
+        .concat();
+        let out = build(&[("2:6:1", &letters)], &[("2:6:1", &words)], &["اب"], &["اب"]).unwrap();
+        let sources: Vec<u32> = out.data.pieces.iter().map(|p| p.source).collect();
+        assert_eq!(sources, vec![0, 0, 1]);
+        // Both bodies take the first two pieces: the tiebreak, not the fill test, decides.
+        let page = crate::convert(&page_svg(&[("2:6:1", &words)])).unwrap().page;
+        let large_outline = Outline::new(&page.path_cmds(1).unwrap(), false, 100.0);
+        for p in &out.data.pieces[..2] {
+            assert!(large_outline.fit(&on_curve_points(&p.cmds), MARGIN * 100.0).is_some());
+        }
+    }
+
+    #[test]
+    fn the_fill_rule_of_the_body_decides_its_hole() {
+        // The inner contour runs the same way as the outer one: the square in the middle
+        // is ink under the nonzero rule and a hole under the even-odd rule.
+        let d = "M0 0H40V40H0ZM10 10H30V30H10Z";
+        let letters = letter(0, "ا", "0", &piece("M15 15H25V25H15Z"));
+        let nonzero = format!(r#"<path data-kind="body" d="{d}"/>"#);
+        let out = build(&[("2:6:1", &letters)], &[("2:6:1", &nonzero)], &["ا"], &["ا"]).unwrap();
+        assert_eq!(out.data.pieces.len(), 1);
+        let evenodd = format!(r#"<path data-kind="body" fill-rule="evenodd" d="{d}"/>"#);
+        let e = build(&[("2:6:1", &letters)], &[("2:6:1", &evenodd)], &["ا"], &["ا"]).err().unwrap();
+        assert!(e.contains("2:6:1") && e.contains("a cut piece that fits no body"), "{e}");
+    }
+
+    #[test]
+    fn a_transform_inside_a_word_is_an_error() {
+        let shifted = r#"<g class="letter" data-text="ب" data-index="0" data-at="0" transform="translate(1 0)">"#;
+        let letters = letter(0, "ب", "0", &body(BODY))
+            .replace(r#"<g class="letter" data-text="ب" data-index="0" data-at="0">"#, shifted);
+        let e = build(&[("2:6:1", &letters)], &[("2:6:1", &body(BODY))], &["بَ"], &["بَ"]).err().unwrap();
+        assert!(e.contains("2:6:1") && e.contains("a transform on <g> inside the word in the letters page"), "{e}");
+        // and on a path of the words page
+        let words = format!(r#"<path data-kind="body" transform="translate(1 0)" d="{BODY}"/>"#);
+        let letters = letter(0, "ب", "0", &body(BODY));
+        let e = build(&[("2:6:1", &letters)], &[("2:6:1", &words)], &["بَ"], &["بَ"]).err().unwrap();
+        assert!(e.contains("2:6:1") && e.contains("a transform on <path> inside the word in the words page"), "{e}");
+    }
+
+    #[test]
+    fn a_different_transform_above_the_word_is_an_error() {
+        let letters = letter(0, "ب", "0", &body(BODY));
+        let line = r#"<g class="line" data-line="1">"#;
+        let letters_svg = page_svg(&[("2:6:1", &letters)])
+            .replace(line, r#"<g class="line" data-line="1" transform="translate(1 0)">"#);
+        let e = build_svg(&letters_svg, &page_svg(&[("2:6:1", &body(BODY))]), &["بَ"], &["بَ"]).err().unwrap();
+        assert!(e.contains("2:6:1") && e.contains("the transform above the word differs"), "{e}");
+    }
+
+    #[test]
+    fn a_rosette_that_is_not_the_first_child_is_an_error() {
+        let (letters_svg, words_svg, lq) = rosette_pages(&format!("{ROSETTE}وَ"));
+        // Move the rosette group after the letter.
+        let start = letters_svg.find(r#"<g class="division-mark""#).unwrap();
+        let end = letters_svg[start..].find("</g>").unwrap() + start + 4;
+        let rosette = letters_svg[start..end].to_string();
+        let moved = letters_svg.replacen(&rosette, "", 1).replacen(
+            "</g></g></g></svg>",
+            &format!("{rosette}</g></g></g></svg>"),
+            1,
+        );
+        let e = build_svg(&moved, &words_svg, &["وَ"], &[&lq]).err().unwrap();
+        assert!(e.contains("2:6:1") && e.contains("a rosette that is not the first child"), "{e}");
+    }
+
+    #[test]
+    fn a_rosette_group_must_hold_one_hizb_path() {
+        let (letters_svg, words_svg, lq) = rosette_pages(&format!("{ROSETTE}وَ"));
+        // a path that is not a hizb mark, and a second path
+        let not_hizb = letters_svg.replacen(r#"data-mark="hizb" d="#, r#"data-mark="sajdah" d="#, 1);
+        let two = letters_svg.replacen(
+            r#""/></g><g class="letter""#,
+            r#""/><path data-kind="mark" data-mark="hizb" d="M0 0H1V1Z"/></g><g class="letter""#,
+            1,
+        );
+        for svg in [not_hizb, two] {
+            assert_ne!(svg, letters_svg);
+            let e = build_svg(&svg, &words_svg, &["وَ"], &[&lq]).err().unwrap();
+            assert!(e.contains("2:6:1") && e.contains("exactly one hizb path"), "{e}");
+        }
+    }
+
+    #[test]
+    fn an_offset_past_the_text_or_out_of_range_is_an_error() {
+        let m = "M0 12H5V14H0Z";
+        let words = format!("{}{}", body(BODY), mark(m, None));
+        // a mark of a letter, then a mark of the word
+        let cases = [
+            (letter(0, "ب", "0", &format!("{}{}", body(BODY), mark(m, Some(2)))), "data-at 2 is past the end"),
+            (format!("{}{}", letter(0, "ب", "0", &body(BODY)), mark(m, Some(2))), "data-at 2 is past the end"),
+            (letter(0, "ب", "0", &format!("{}{}", body(BODY), mark(m, Some(65535)))), "data-at 65535 is out of range"),
+        ];
+        for (letters, what) in cases {
+            let e = build(&[("2:6:1", &letters)], &[("2:6:1", &words)], &["بَ"], &["بَ"]).err().unwrap();
+            assert!(e.contains("2:6:1") && e.contains(what), "{e}");
+        }
+    }
+
+    #[test]
+    fn a_page_from_another_svg_is_an_error() {
+        let letters = letter(0, "ب", "0", &body(BODY));
+        let words_svg = page_svg(&[("2:6:1", &body(BODY))]);
+        let other = crate::convert(&page_svg(&[("2:6:1", "")])).unwrap().page;
+        let own = |v: &str| vec![v.to_string()];
+        let e =
+            convert_letters(&page_svg(&[("2:6:1", &letters)]), &words_svg, &other, &own("بَ"), &own("بَ")).err().unwrap();
+        assert!(e.contains("2:6:1") && e.contains("the words page has 1 paths"), "{e}");
     }
 }
