@@ -336,6 +336,18 @@ pub(crate) fn ease_in_out(t: f64) -> f64 {
     t * t * (3.0 - 2.0 * t)
 }
 
+/// The paint of a cut path: its own, or the colour all its pieces resolve to when they agree
+/// on one. Then a rule on each letter of a joined outline, all in one colour, draws the outline
+/// whole in that colour. The cut path's transition is the longest of its pieces', so it never
+/// settles before them. With no pieces, or pieces that do not agree, the path keeps its own.
+fn shared_paint(own: Paint, pieces: &[Paint]) -> Paint {
+    let Some(first) = pieces.first() else { return own };
+    if first.color == own.color || pieces.iter().any(|p| p.color != first.color) {
+        return own;
+    }
+    Paint { color: first.color, transition_ms: pieces.iter().map(|p| p.transition_ms).max().unwrap_or(0) }
+}
+
 pub fn lerp_rgba(a: Rgba, b: Rgba, t: f64) -> Rgba {
     if t <= 0.0 {
         return a;
@@ -405,6 +417,9 @@ impl Page {
         // every listed path has a transition running: `refresh_targets` compacts the list
         // when it settles one before its time
         let (anim, colors, now) = (&mut self.anim, &mut self.colors, self.clock_ms);
+        // the cut paths of the paths that settle in this tick: only they can go back to whole
+        let (letters, ctx) = (self.letters.as_deref(), &self.path_ctx);
+        let mut settled: Vec<u32> = Vec::new();
         self.animating.retain(|&pi| {
             let a = &mut anim[pi as usize];
             let t = (now - a.t0) / a.dur;
@@ -414,10 +429,16 @@ impl Page {
             } else {
                 a.cur = a.to;
                 a.dur = 0.0;
+                if let Some(slot) = letters.and_then(|lt| lt.slot_of_path(ctx[pi as usize].letter.source)) {
+                    settled.push(slot);
+                }
             }
             colors[pi as usize] = a.cur;
             moving
         });
+        if !settled.is_empty() {
+            self.update_swaps(Some(&settled));
+        }
         !self.animating.is_empty() | self.highlights_moving()
     }
 
@@ -432,8 +453,18 @@ impl Page {
         let fading: std::collections::HashSet<u32> =
             if self.mask.transition_ms > 0 { self.mask.words.iter().copied().collect() } else { Default::default() };
         let mut cut_short = false;
+        // a letter layer's pieces resolve first: a cut path takes the colour they share
+        let first_piece = self.letters.as_deref().map_or(self.anim.len(), |lt| lt.first_piece as usize);
+        let piece_paints: Vec<Paint> = (first_piece..self.anim.len()).map(|pi| self.target_paint(pi as u32)).collect();
         for pi in 0..self.anim.len() {
-            let p = self.target_paint(pi as u32);
+            let p = match self.path_ctx[pi].letter.pieces {
+                _ if pi >= first_piece => piece_paints[pi - first_piece],
+                (first, n) if n > 0 => {
+                    let from = first as usize - first_piece;
+                    shared_paint(self.target_paint(pi as u32), &piece_paints[from..from + n as usize])
+                }
+                _ => self.target_paint(pi as u32),
+            };
             let word = self.path_ctx[pi].word;
             let a = &mut self.anim[pi];
             if p.color != a.target {
@@ -456,6 +487,9 @@ impl Page {
             let anim = &self.anim;
             self.animating.retain(|&pi| anim[pi as usize].dur > 0.0);
         }
+        // a change of rules or state is the one time a cut path can start to differ from its
+        // pieces; the clock only brings them back together, which `tick` checks
+        self.update_swaps(None);
     }
 
     /// Start a path's colour moving to `to` over `ms` from where it is now, and list it as
@@ -502,7 +536,9 @@ impl Page {
     /// Paths whose current colour differs from the default ink (overlay repaint).
     ///
     /// With a letter layer, a path the draw list cannot hold now is left out: a piece whose
-    /// cut path is drawn whole, or a cut path drawn as its pieces.
+    /// cut path is drawn whole, or a cut path drawn as its pieces. So a host that paints this
+    /// list over its cached ink never paints a cut path and its pieces both. [`Page::colors`]
+    /// still gives every path a colour, the pieces that are not drawn included.
     pub fn styled_paths(&mut self) -> Vec<(u32, Rgba)> {
         self.refresh_targets();
         let d = self.styles.default_ink;

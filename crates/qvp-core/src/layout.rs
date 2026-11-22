@@ -629,14 +629,20 @@ impl Page {
     }
 
     /// Counts up when the draw list can change while the layout and the band stay the same:
-    /// a letter layer is attached, or a cut path starts or stops drawing its pieces. It
-    /// starts at 0. A host that keeps a draw list keys it on this number too.
+    /// a letter layer is attached, or a cut path starts or stops drawing its pieces. It starts
+    /// at 0 and wraps. A host that keeps a draw list keys it on this number too.
+    ///
+    /// It never changes on a frame where the drawn set stays the same, so colours that move
+    /// leave it alone. On a page with no letter layer it stays 0, and a host that never
+    /// attaches one need not read it.
     pub fn draw_revision(&self) -> u32 {
         self.draw_revision
     }
 
-    /// Apply pending rule changes to the colours and the targets. Every call that reads
-    /// colours does it first.
+    /// Apply pending rule changes to the colours, the targets and the cut paths that draw
+    /// their pieces. Every call that reads colours, and [`Page::tick`], does it first. The
+    /// draw list takes the page as it is, so a host that adds a rule and asks for the draw
+    /// list before anything else calls this first.
     pub fn refresh_display(&mut self) {
         self.refresh_targets();
     }
@@ -648,6 +654,11 @@ impl Page {
     /// layout leaves out never appear, a sajdah line stroked over two rows appears twice, and a
     /// printed page hands back each path under its own line — so one loop draws any page, and
     /// no host has to know which of those cases it is in.
+    ///
+    /// With a letter layer, a cut path whose pieces differ in colour is listed as its pieces,
+    /// in its place and under its placement. Every other cut path is listed whole, and its
+    /// pieces are not listed. The list holds the rules as of the last refresh: see
+    /// [`Page::refresh_display`] and [`Page::draw_revision`].
     pub fn layout_draw_list(&self) -> Vec<Draw> {
         self.layout_draw_list_in(None)
     }
@@ -683,18 +694,31 @@ impl Page {
 
     fn build_draw_list(&self, l: &Layout, band: Option<(f32, f32)>, out: &mut Vec<Draw>) {
         let q = self.quant();
+        let letters = self.letters.as_deref();
         // A path is kept when its ink reaches into the band. Its box is in page units, so it
-        // goes through the placement it is drawn under and then the layout's own scale.
+        // goes through the placement it is drawn under and then the layout's own scale. A
+        // piece is tested by its own box, which can reach past its word's.
         let visible = |path: u32, placement: &Placement| -> bool {
             let Some((top, bottom)) = band else { return true };
-            let bb = self.data.paths[path as usize].bbox;
+            let bb = match letters {
+                Some(lt) => lt.path_box(&self.data, path),
+                None => self.data.paths[path as usize].bbox,
+            };
             let (y0, y1) = (bb.y0 as f32 / q, bb.y1 as f32 / q);
             let at = |y: f32| l.offset_y + l.scale * (placement.ky * y + placement.dy);
             at(y1) >= top && at(y0) <= bottom
         };
+        // A page path, or the pieces it draws in its place, under one placement.
+        let push = |out: &mut Vec<Draw>, path: u32, placement: u32, at: &Placement| match letters
+            .and_then(|lt| lt.drawn_pieces(path))
+        {
+            Some(pieces) => out.extend(pieces.filter(|&p| visible(p, at)).map(|p| Draw { path: p, placement })),
+            None if visible(path, at) => out.push(Draw { path, placement }),
+            None => {}
+        };
         let group = |i: usize| l.groups.get(i).copied().unwrap_or(Placement::IDENTITY);
-        // the page's own paths: a letter layer's pieces come after them in the table, and
-        // none is drawn while its cut path is drawn whole
+        // the page's own paths: a letter layer's pieces come after them in the table, and are
+        // listed only in place of their cut path
         let n = self.data.paths.len();
         out.reserve(n);
         for path in 0..n as u32 {
@@ -703,17 +727,13 @@ impl Page {
             }
             let placement =
                 if l.path_group.is_empty() { self.geom.table[path as usize].line } else { l.path_group[path as usize] };
-            if visible(path, &group(placement as usize)) {
-                out.push(Draw { path, placement });
-            }
+            push(out, path, placement, &group(placement as usize));
         }
         if let Some(r) = &l.reflow {
             let base = l.groups.len() as u32;
             for (i, rep) in r.repeats.iter().enumerate() {
                 for path in rep.first_path..rep.first_path + rep.n_paths {
-                    if visible(path, &rep.placement) {
-                        out.push(Draw { path, placement: base + i as u32 });
-                    }
+                    push(out, path, base + i as u32, &rep.placement);
                 }
             }
         }

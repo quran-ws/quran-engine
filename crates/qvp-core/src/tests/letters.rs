@@ -869,3 +869,344 @@ fn style_letters_takes_a_part_and_a_mark() {
     assert_eq!(style(query(Target::Line(2), None, Mark::None, LetterPart::Marks)), vec![7]);
     assert_eq!(style(query(Target::Word(9), None, Mark::None, LetterPart::All)), Vec::<u32>::new());
 }
+
+// ── the swap: a cut path draws as its pieces while they differ ──
+
+/// The printed layout of the swap tests: scale 2, every `line_dy` 0.
+fn printed() -> LayoutSpec {
+    LayoutSpec { viewport_w: 200.0, viewport_h: 200.0, ..Default::default() }
+}
+
+/// The current layout's draw list as (path, placement) pairs.
+fn draws(p: &Page) -> Vec<(u32, u32)> {
+    p.layout_draw_list().iter().map(|d| (d.path, d.placement)).collect()
+}
+
+fn draws_in(p: &Page, band: (f32, f32)) -> Vec<(u32, u32)> {
+    p.layout_draw_list_in(Some(band)).iter().map(|d| (d.path, d.placement)).collect()
+}
+
+const PLAIN: [(u32, u32); 8] = [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 1), (7, 1)];
+const SWAPPED: [(u32, u32); 9] = [(8, 0), (9, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 1), (7, 1)];
+
+/// The letter page, laid out as printed.
+fn laid_letters_page() -> Page {
+    let mut p = letters_page();
+    p.layout(&printed());
+    p
+}
+
+/// True while the fixture's cut path, path 0, draws its pieces.
+fn is_swapped(p: &Page) -> bool {
+    p.letters.as_deref().is_some_and(|lt| lt.drawn_pieces(0).is_some())
+}
+
+/// A renderer that keeps the index of each path it fills, and every argument as bytes.
+#[derive(Default)]
+struct Fills {
+    paths: Vec<u32>,
+    bytes: Vec<u8>,
+}
+
+impl Renderer for Fills {
+    fn begin(&mut self, w: f32, h: f32) {
+        self.bytes.extend(w.to_le_bytes());
+        self.bytes.extend(h.to_le_bytes());
+    }
+    fn fill_path(&mut self, index: u32, ops: &[u8], pts: &[f32], color: Rgba, evenodd: bool) {
+        self.paths.push(index);
+        self.bytes.extend(ops);
+        pts.iter().for_each(|v| self.bytes.extend(v.to_le_bytes()));
+        self.bytes.extend(color.to_le_bytes());
+        self.bytes.push(evenodd as u8);
+    }
+    fn fill_rect(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, radius: f32, color: Rgba) {
+        [x0, y0, x1, y1, radius].iter().for_each(|v| self.bytes.extend(v.to_le_bytes()));
+        self.bytes.extend(color.to_le_bytes());
+    }
+    fn end(&mut self) {}
+}
+
+#[test]
+fn no_layer_draws_as_before() {
+    let mut p = page();
+    p.layout(&printed());
+    assert_eq!(draws(&p), vec![(0, 0), (1, 0), (2, 0), (3, 0), (4, 1)]);
+    p.style(Selector::Word(0), Paint::fade(RED, 200));
+    p.tick(0.0);
+    p.tick(300.0);
+    assert_eq!(draws(&p), vec![(0, 0), (1, 0), (2, 0), (3, 0), (4, 1)]);
+    assert_eq!(p.draw_revision(), 0, "a page with no layer never counts");
+}
+
+#[test]
+fn a_layer_alone_changes_nothing() {
+    let mut p = laid_letters_page();
+    assert_eq!(draws(&p), PLAIN);
+    assert!(p.styled_paths().is_empty());
+    let mut bare = page_without_layer();
+    bare.layout(&printed());
+    assert_eq!(draws(&p), draws(&bare));
+    let (mut a, mut b) = (Fills::default(), Fills::default());
+    p.render(&mut a);
+    bare.render(&mut b);
+    assert_eq!(a.bytes, b.bytes);
+}
+
+#[test]
+fn a_letter_colour_draws_the_pieces() {
+    let mut p = laid_letters_page();
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    p.refresh_display();
+    assert_eq!(draws(&p), SWAPPED);
+    assert_eq!(p.draw_revision(), 2);
+    assert_eq!(p.colors()[9], RED);
+    assert_eq!(p.colors()[8], DEFAULT_INK);
+}
+
+#[test]
+fn a_word_colour_draws_the_path_whole() {
+    let mut p = laid_letters_page();
+    p.style(Selector::Word(0), Paint::new(RED));
+    p.refresh_display();
+    assert_eq!(draws(&p), PLAIN);
+    assert_eq!(p.styled_paths(), vec![(0, RED), (1, RED), (2, RED)]);
+    assert_eq!(p.draw_revision(), 1);
+}
+
+#[test]
+fn styled_paths_follow_the_swap() {
+    let mut p = laid_letters_page();
+    p.style(Selector::Word(0), Paint::new(RED));
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(BLUE));
+    assert_eq!(p.styled_paths(), vec![(1, RED), (2, RED), (8, RED), (9, BLUE)]);
+    assert_eq!(draws(&p), SWAPPED);
+}
+
+#[test]
+fn an_uncut_letter_needs_no_pieces() {
+    let mut p = laid_letters_page();
+    p.style(Selector::Letter(1, 1, LetterPart::All), Paint::new(RED));
+    p.refresh_display();
+    assert_eq!(draws(&p), PLAIN);
+    assert_eq!(p.draw_revision(), 1);
+}
+
+#[test]
+fn the_pieces_stay_until_the_fade_ends() {
+    let mut p = laid_letters_page();
+    p.tick(0.0);
+    let h = p.style(Selector::Letter(0, 1, LetterPart::All), Paint::fade(RED, 200));
+    p.refresh_display();
+    assert_eq!(draws(&p), SWAPPED);
+    assert_eq!(p.draw_revision(), 2);
+    p.tick(100.0);
+    p.remove_style(h);
+    // rules resolve when the display is next refreshed: the fade back starts here, at 100 ms
+    p.refresh_display();
+    for t in [150.0, 200.0, 250.0, 299.0] {
+        p.tick(t);
+        assert_eq!(draws(&p), SWAPPED, "at {t} ms");
+        assert_eq!(p.draw_revision(), 2, "the colours move, the drawn set does not");
+    }
+    assert!(!p.tick(300.0));
+    assert_eq!(draws(&p), PLAIN);
+    assert_eq!(p.draw_revision(), 3);
+    p.tick(400.0);
+    assert_eq!(p.draw_revision(), 3);
+}
+
+#[test]
+fn a_rule_added_before_the_draw_list_counts() {
+    let mut p = laid_letters_page();
+    assert_eq!(draws(&p), PLAIN);
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    // no colour read first: the pending rule applies here
+    p.refresh_display();
+    assert_eq!(draws(&p), SWAPPED);
+}
+
+#[test]
+fn render_draws_each_ink_once() {
+    let mut p = letters_page();
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    let mut r = Fills::default();
+    p.render(&mut r);
+    assert_eq!(r.paths, vec![8, 9, 1, 2, 3, 4, 5, 6, 7]);
+}
+
+#[test]
+fn crop_writes_the_pieces() {
+    let mut p = letters_page();
+    let whole = p.crop_svg(&Target::Word(0), 0.0, false, None).unwrap();
+    assert_eq!(whole.matches("<path").count(), 3);
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    let svg = p.crop_svg(&Target::Word(0), 0.0, false, None).unwrap();
+    assert_eq!(svg.matches("<path").count(), 4);
+    assert_eq!(svg.matches("fill=\"#ff0000\"").count(), 1);
+    assert_eq!(svg.matches("fill-rule=\"evenodd\"").count(), 4, "a piece takes its source's fill rule");
+    // the lam's piece, at its own outline
+    assert!(svg.contains("M39 10"), "{svg}");
+}
+
+#[test]
+fn a_band_culls_pieces_by_their_box() {
+    let mut p = laid_letters_page();
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    p.refresh_display();
+    assert!(draws_in(&p, (0.0, 1.0)).is_empty());
+    // page y 10 to 20: the bodies of line 1, with the pieces in place of path 0
+    assert_eq!(draws_in(&p, (20.0, 40.0)), vec![(8, 0), (9, 0), (3, 0), (4, 0)]);
+}
+
+#[test]
+fn a_band_keeps_the_piece_that_reaches_past_its_source() {
+    // the lam's piece reaches 6 units below its source (page y 20 to 26)
+    let mut low = letters_layer();
+    low.pieces[1].cmds = square(3900, 1000, 5000, 2600);
+    let mut p = page_without_layer();
+    p.attach_letters(&encode_letters(&low)).unwrap();
+    p.layout(&printed());
+    // page y 21 to 25: the dot under the ba (y 22 to 24) and the low piece, nothing else
+    let band = (42.0, 50.0);
+    assert_eq!(draws_in(&p, band), vec![(1, 0)], "a whole path is culled by its own box");
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    p.refresh_display();
+    assert_eq!(draws_in(&p, band), vec![(9, 0), (1, 0)], "each piece is culled by its own box");
+    assert_eq!(draws_in(&p, (0.0, 19.0)), vec![(2, 0), (5, 0)], "above the bodies: the fathah and the waqf sign");
+}
+
+#[test]
+fn every_letter_of_the_path_in_one_colour_draws_it_whole() {
+    let mut p = laid_letters_page();
+    p.tick(0.0);
+    p.style(Selector::Letter(0, 0, LetterPart::All), Paint::fade(RED, 200));
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::fade(RED, 200));
+    for t in [0.0, 50.0, 199.0, 200.0, 300.0] {
+        p.tick(t);
+        assert_eq!(draws(&p), PLAIN, "at {t} ms");
+    }
+    assert_eq!(p.draw_revision(), 1);
+    assert_eq!(p.colors()[0], RED, "the cut path takes the colour its pieces share");
+    assert_eq!(p.styled_paths(), vec![(0, RED), (1, RED), (2, RED)]);
+    // one letter, then the other: apart while the second fades in, whole once it has
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::fade(BLUE, 200));
+    p.tick(400.0);
+    assert_eq!(draws(&p), SWAPPED);
+    p.style(Selector::Letter(0, 0, LetterPart::All), Paint::fade(BLUE, 200));
+    p.tick(500.0);
+    assert_eq!(draws(&p), SWAPPED);
+    p.tick(600.0);
+    assert_eq!(draws(&p), SWAPPED, "the second letter is still fading");
+    p.tick(700.0);
+    assert_eq!(draws(&p), PLAIN);
+    assert_eq!(p.colors()[0], BLUE);
+    assert_eq!(p.draw_revision(), 3);
+}
+
+#[test]
+fn a_theme_a_highlight_and_a_mask_leave_every_path_whole() {
+    let mut p = laid_letters_page();
+    p.tick(0.0);
+    p.theme(&Theme { ink: Some(0x202020ff), dots: Some(BLUE), transition_ms: 300, ..Default::default() });
+    let style = HighlightStyle { mode: HighlightMode::Ink, ink: RED, transition_ms: 200, ..Default::default() };
+    let h = p.highlight(&Target::Word(0), style);
+    p.set_mask_transition(150);
+    p.mask(&Target::Word(0), MaskMode::Hide);
+    for t in [0.0, 100.0, 200.0, 400.0] {
+        p.tick(t);
+        assert_eq!(draws(&p), PLAIN, "at {t} ms");
+    }
+    p.unmask();
+    p.remove_highlight(h);
+    for t in [450.0, 600.0, 900.0] {
+        p.tick(t);
+        assert_eq!(draws(&p), PLAIN, "at {t} ms");
+    }
+    p.style(Selector::Path(0), Paint::fade(BLUE, 100));
+    p.tick(1000.0);
+    p.tick(1200.0);
+    assert_eq!(draws(&p), PLAIN, "a rule on the cut path takes its pieces with it");
+    assert_eq!(p.draw_revision(), 1);
+}
+
+#[test]
+fn a_swap_under_a_reflow() {
+    let mut p = letters_page();
+    let spec = LayoutSpec {
+        viewport_w: 200.0,
+        viewport_h: 400.0,
+        reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+        ..Default::default()
+    };
+    let l = p.layout(&spec).clone();
+    let plain = draws(&p);
+    let at = plain.iter().position(|d| d.0 == 0).unwrap();
+    let g = l.path_group[0];
+    assert_eq!(plain[at], (0, g));
+    p.style(Selector::Letter(0, 0, LetterPart::BodyAndDots), Paint::new(RED));
+    p.refresh_display();
+    let mut want = plain.clone();
+    want.splice(at..at + 1, [(8, g), (9, g)]);
+    assert_eq!(draws(&p), want);
+    // the band of the whole page keeps both pieces under the word's placement
+    let all = draws_in(&p, (0.0, l.content_h));
+    assert!(all.contains(&(8, g)) && all.contains(&(9, g)) && !all.iter().any(|d| d.0 == 0));
+}
+
+#[test]
+fn a_swap_survives_every_change_of_state() {
+    // a layout made before the attach
+    let mut p = page_without_layer();
+    p.layout(&printed());
+    p.tick(0.0);
+    let lam = p.style(Selector::Letter(0, 1, LetterPart::All), Paint::fade(RED, 200));
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(draws(&p), SWAPPED, "the attach applies the waiting rule");
+    // a second rule on the other letter of the swapped path
+    let ba = p.style(Selector::Letter(0, 0, LetterPart::All), Paint::fade(BLUE, 200));
+    p.tick(50.0);
+    assert_eq!(draws(&p), SWAPPED);
+    // a second attach while swapped
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(draws(&p), SWAPPED);
+    // the rules go mid-transition
+    p.tick(100.0);
+    p.remove_style(lam);
+    p.tick(120.0);
+    p.remove_style(ba);
+    p.tick(150.0);
+    assert_eq!(draws(&p), SWAPPED);
+    while p.tick(p.clock_ms + 25.0) {}
+    assert_eq!(draws(&p), PLAIN);
+    // a layer with no cut, attached while swapped
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    p.refresh_display();
+    assert_eq!(draws(&p), SWAPPED);
+    let mut uncut = letters_layer();
+    uncut.pieces.clear();
+    uncut.members[0].path = qvp_format::letters::MemberPath::Page(0);
+    uncut.members.remove(3);
+    uncut.letters.remove(1);
+    for (l, first) in uncut.letters.iter_mut().zip([0, 3, 4, 5]) {
+        l.first_member = first;
+    }
+    let rev = p.draw_revision();
+    p.attach_letters(&encode_letters(&uncut)).unwrap();
+    assert_eq!(draws(&p), PLAIN);
+    assert!(p.draw_revision() != rev);
+    assert!(!is_swapped(&p));
+    let mut r = Fills::default();
+    p.render(&mut r);
+    assert_eq!(r.paths, (0..8).collect::<Vec<u32>>());
+}
+
+#[test]
+fn a_new_layout_keeps_the_swap() {
+    let mut p = laid_letters_page();
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    p.refresh_display();
+    // a new layout keeps the swap
+    p.layout(&LayoutSpec { viewport_w: 400.0, viewport_h: 400.0, ..Default::default() });
+    assert_eq!(draws(&p), SWAPPED);
+}

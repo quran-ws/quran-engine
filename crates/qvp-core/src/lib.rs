@@ -781,24 +781,26 @@ impl Page {
     }
 
     /// Drive a renderer over the whole page (bands first, then ink).
+    ///
+    /// The ink is the page's own paths in order. A cut path whose pieces differ in colour is
+    /// drawn as its pieces, in its place, as the draw list holds it.
     pub fn render<R: Renderer>(&mut self, r: &mut R) {
         r.begin(self.width(), self.height());
         for b in self.highlight_boxes_view() {
             r.fill_rect(b.x0, b.y0, b.x1, b.y1, b.radius, b.color);
         }
         self.colors();
-        // This walks the table in order, so a piece would come after every page path. Once a
-        // cut path can draw its pieces, draw them in its place, in draw-list order, not at
-        // the end of the table.
-        for (i, g) in self.geom.table.iter().enumerate() {
-            let c = self.colors[i];
-            // a letter layer's piece is drawn only in place of its cut path
-            if c & 0xff == 0 || self.letters.as_deref().is_some_and(|lt| !lt.is_drawn(i as u32)) {
-                continue;
+        for path in 0..self.data.paths.len() as u32 {
+            for i in self.drawn_in_place_of(path) {
+                let c = self.colors[i as usize];
+                if c & 0xff == 0 {
+                    continue;
+                }
+                let g = &self.geom.table[i as usize];
+                let ops = &self.geom.ops[g.op_start as usize..(g.op_start + g.op_count) as usize];
+                let pts = &self.geom.pts[g.pt_start as usize..(g.pt_start + g.pt_count) as usize];
+                r.fill_path(i, ops, pts, c, g.flags >> 24 & 1 == 1);
             }
-            let ops = &self.geom.ops[g.op_start as usize..(g.op_start + g.op_count) as usize];
-            let pts = &self.geom.pts[g.pt_start as usize..(g.pt_start + g.pt_count) as usize];
-            r.fill_path(i as u32, ops, pts, c, g.flags >> 24 & 1 == 1);
         }
         for b in self.mask_boxes_view() {
             r.fill_rect(b.x0, b.y0, b.x1, b.y1, b.radius, b.color);

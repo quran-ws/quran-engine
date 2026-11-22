@@ -91,21 +91,30 @@ impl Page {
             let dc = &d.decorations[cb.ayah_mark_decoration as usize];
             path_ids.extend(dc.first_path..dc.first_path + dc.n_paths as u32);
         }
+        // a cut path whose pieces differ in colour writes its pieces, each in its own colour
+        let letters = self.letters.as_deref();
         for pi in path_ids {
-            let c = colors[pi as usize];
-            if c & 0xff == 0 {
-                continue;
-            }
-            let cmds = d.path_cmds(pi as usize).ok()?;
             let p = &d.paths[pi as usize];
-            write!(s, "<path d=\"{}\" fill=\"{}\"", svg_path_d(&cmds, quant), css_hex(c)).unwrap();
-            if c & 0xff != 0xff {
-                write!(s, " fill-opacity=\"{:.3}\"", (c & 0xff) as f32 / 255.0).unwrap();
+            for drawn in self.drawn_in_place_of(pi) {
+                let c = colors[drawn as usize];
+                if c & 0xff == 0 {
+                    continue;
+                }
+                let d_attr = match letters.filter(|lt| drawn >= lt.first_piece) {
+                    // a piece is stored as page-space commands in the page's own quant
+                    Some(lt) => svg_path_d(&lt.data.pieces[(drawn - lt.first_piece) as usize].cmds, quant),
+                    None => svg_path_d(&d.path_cmds(pi as usize).ok()?, quant),
+                };
+                write!(s, "<path d=\"{}\" fill=\"{}\"", d_attr, css_hex(c)).unwrap();
+                if c & 0xff != 0xff {
+                    write!(s, " fill-opacity=\"{:.3}\"", (c & 0xff) as f32 / 255.0).unwrap();
+                }
+                // a piece fills by its source's rule
+                if p.flags & PF_EVENODD != 0 {
+                    s.push_str(" fill-rule=\"evenodd\"");
+                }
+                s.push_str("/>");
             }
-            if p.flags & PF_EVENODD != 0 {
-                s.push_str(" fill-rule=\"evenodd\"");
-            }
-            s.push_str("/>");
         }
         s.push_str("</svg>");
         Some(s)

@@ -1,12 +1,13 @@
 //! The letter layer of a page: which paths draw which letter, the pieces cut from joined
-//! outlines, the letters a host reads back, the four letter selectors and the letter query.
+//! outlines, the letters a host reads back, the four letter selectors, the letter query, and
+//! the cut paths that draw their pieces.
 //!
 //! A layer is optional. [`Page::attach_letters`] appends its pieces to the page's path
 //! table, after the page's own paths, so no page path changes its index. No word range
 //! holds a piece.
 use crate::defaults::MAX_LETTER_LAYER_BYTES;
-use crate::style::{PathCtx, Selector};
-use crate::{load, reflow, Page, PathGeom, NONE};
+use crate::style::{PathAnim, PathCtx, Selector};
+use crate::{load, reflow, Page, PathGeom, Rgba, NONE};
 use qvp_format::letters::{decode_letters, LetterData, MemberPath, NO_AT};
 use qvp_format::{cmds_bbox, Category, Error, IBox, Mark, PageData, NONE_U16};
 
@@ -194,7 +195,6 @@ pub(crate) struct Letters {
     /// Per letter: the mark ids its members' paths carry, as a 256-bit set.
     pub letter_marks: Vec<[u64; 4]>,
     /// Per piece: its box, quantised.
-    #[allow(dead_code)] // read by the letter hit test and the draw list
     pub piece_box: Vec<IBox>,
     /// Per page word: the word's box with its pieces' boxes.
     #[allow(dead_code)] // read by the letter hit test
@@ -233,7 +233,6 @@ impl Letters {
     }
 
     /// The pieces to draw in place of `path`, when it is a cut path that draws them now.
-    #[allow(dead_code)] // read by the draw list
     pub(crate) fn drawn_pieces(&self, path: u32) -> Option<std::ops::Range<u32>> {
         let slot = *self.slot_of.get(path as usize)?;
         if slot == NONE || !self.swapped[slot as usize] {
@@ -258,12 +257,16 @@ impl Letters {
     }
 
     /// The box of any path index: a page path's record box, or a piece's own box.
-    #[allow(dead_code)] // read by the letter hit test and the draw list
     pub(crate) fn path_box(&self, page: &PageData, path: u32) -> IBox {
         if path < self.first_piece {
             return page.paths.get(path as usize).map_or(IBox::EMPTY, |p| p.bbox);
         }
         self.piece_box.get((path - self.first_piece) as usize).copied().unwrap_or(IBox::EMPTY)
+    }
+
+    /// The slot in `sources` of a page path, when it is a cut path.
+    pub(crate) fn slot_of_path(&self, path: u32) -> Option<u32> {
+        self.slot_of.get(path as usize).copied().filter(|&s| s != NONE)
     }
 
     /// True when letter `letter` (an index into `data.letters`) is the character `text`
@@ -345,6 +348,25 @@ pub(crate) fn member_matches(lt: &Letters, sel: &Selector, c: &PathCtx) -> bool 
                 && q.words.binary_search(&m.word).is_ok()
                 && lt.letter_is(m.letter, q.text, q.mark)
                 && q.part.takes(m.is_body, c.category)
+        }
+        _ => false,
+    }
+}
+
+/// True when paths `a` and `b` are in one colour state: the same colour now, the same
+/// target, and, while either moves, the same transition. Two paths in one state move
+/// alike on every tick, so they stay in it until a rule changes.
+fn same_colour_state(colors: &[Rgba], anim: &[PathAnim], a: usize, b: usize) -> bool {
+    let (Some(x), Some(y)) = (anim.get(a), anim.get(b)) else { return true };
+    if colors.get(a) != colors.get(b) || x.target != y.target {
+        return false;
+    }
+    match (x.dur > 0.0, y.dur > 0.0) {
+        (false, false) => true,
+        (true, true) => {
+            (x.from, x.to, x.smooth) == (y.from, y.to, y.smooth)
+                && x.t0.to_bits() == y.t0.to_bits()
+                && x.dur.to_bits() == y.dur.to_bits()
         }
         _ => false,
     }
@@ -443,6 +465,8 @@ impl Page {
         // nothing of the page has changed up to here, and nothing below can fail
         self.drop_letters();
         self.install_letters(data);
+        // the rules take the new pieces now, so the next draw list already holds the swaps
+        self.refresh_display();
         Ok(())
     }
 
@@ -548,6 +572,45 @@ impl Page {
             }
         }
         found
+    }
+
+    /// What is drawn for page path `path` now: its pieces, when it is a cut path that draws
+    /// them, else the path itself.
+    pub(crate) fn drawn_in_place_of(&self, path: u32) -> std::ops::Range<u32> {
+        self.letters.as_deref().and_then(|lt| lt.drawn_pieces(path)).unwrap_or(path..path + 1)
+    }
+
+    /// Decide again which cut paths draw their pieces: the paths of `slots` (indices into
+    /// `Letters::sources`), or every cut path with `None`.
+    ///
+    /// A cut path draws its pieces while one of them is in another colour state than the
+    /// path: another colour now, another target, or another transition running. A rule that
+    /// is gone keeps the pieces until its transition has ended. Two paths in one state stay
+    /// in it as the clock moves, so this needs to run only after a rule change and when a
+    /// transition ends. When the drawn set changes, the draw revision counts up and the
+    /// current layout's cached draw list is dropped.
+    pub(crate) fn update_swaps(&mut self, slots: Option<&[u32]>) {
+        let (colors, anim) = (&self.colors, &self.anim);
+        let Some(lt) = self.letters.as_deref_mut() else { return };
+        let mut changed = false;
+        let mut update = |slot: usize| {
+            let Some(&(src, first, n)) = lt.sources.get(slot) else { return };
+            let now = (first..first + n).any(|p| !same_colour_state(colors, anim, src as usize, p as usize));
+            if lt.swapped[slot] != now {
+                lt.swapped[slot] = now;
+                changed = true;
+            }
+        };
+        match slots {
+            Some(slots) => slots.iter().for_each(|&s| update(s as usize)),
+            None => (0..lt.sources.len()).for_each(update),
+        }
+        if changed {
+            self.draw_revision = self.draw_revision.wrapping_add(1);
+            if let Some(l) = &self.layout {
+                l.draw_list.clear();
+            }
+        }
     }
 
     /// Put each member's checked offset into its context. Runs after an attach and after a
