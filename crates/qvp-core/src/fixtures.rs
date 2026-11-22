@@ -1,5 +1,6 @@
 //! Synthesised pages and the path builder the unit tests share.
 use crate::{Layout, Page};
+use qvp_format::letters::*;
 use qvp_format::*;
 
 pub(crate) fn square(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<Cmd> {
@@ -271,4 +272,119 @@ pub(crate) fn placed_point(page: &Page, layout: &Layout, path: u32, x: f32, y: f
     let line = page.geometry().table[path as usize].line;
     let (x, y) = layout.placement(path, line).apply(x, y);
     (layout.offset_x + x * layout.scale, layout.offset_y + y * layout.scale)
+}
+
+/// The page of the letter fixture: three words on two lines, eight paths. Path 0 joins two
+/// letters, and the layer cuts it into two pieces.
+pub(crate) fn letters_page_data() -> PageData {
+    let mut ops = Vec::new();
+    let mut paths = Vec::new();
+    let mut add = |cmds: &[Cmd], kind: PathKind, mark: Mark, fam: Family| {
+        push_path(&mut ops, &mut paths, cmds, kind, mark, fam, PF_EVENODD).1
+    };
+    // word 0: the joined ba and lam, a dot under the ba, a fathah over it
+    let mut w0 = add(&square(4000, 1000, 6000, 2000), PathKind::Body, Mark::None, Family::None);
+    w0.union(&add(&square(5400, 2200, 5600, 2400), PathKind::Mark, Mark::Dot, Family::Dots));
+    w0.union(&add(&square(5400, 600, 5600, 800), PathKind::Mark, Mark::Fathah, Family::Diacritic));
+    // word 1: lam with its kashida, ha, and a waqf sign that belongs to the word
+    let mut w1 = add(&square(2000, 1000, 3000, 2000), PathKind::Body, Mark::None, Family::None);
+    w1.union(&add(&square(1000, 1000, 2000, 2000), PathKind::Body, Mark::None, Family::None));
+    w1.union(&add(&square(1400, 400, 1600, 600), PathKind::Mark, Mark::WaqfJaizWaslAwla, Family::Waqf));
+    // word 2: waw and an omitted alif with no offset
+    let mut w2 = add(&square(1000, 5000, 2000, 6000), PathKind::Body, Mark::None, Family::None);
+    w2.union(&add(&square(1400, 4600, 1600, 4800), PathKind::Mark, Mark::OmittedAlif, Family::Diacritic));
+    let mut l1 = w0;
+    l1.union(&w1);
+    let strings: Vec<String> = ["بَل", "لـهۖ", "و"].iter().map(|s| s.to_string()).collect();
+    let word = |i: u16, ayah: u16, n: u16, line: u16, first_path: u32, n_paths: u16, bbox: IBox| WordRec {
+        surah: 1,
+        ayah,
+        word: n,
+        line_index: line,
+        ayah_index: ayah - 1,
+        text: i,
+        rasm_imlai: i,
+        qpc: i,
+        rasm: i,
+        search: i,
+        first_path,
+        n_paths,
+        bbox,
+    };
+    let ayah = |n: u16, first_word: u16, n_words: u16, bbox: IBox| AyahRec {
+        surah: 1,
+        ayah: n,
+        fragment: 1,
+        fragments: 1,
+        flags: 0,
+        first_word,
+        n_words,
+        ayah_mark_decoration: NONE_U16,
+        rubu_al_hizb: 0,
+        bbox,
+    };
+    PageData {
+        header: Header { version: VERSION, quant: 100, page: 1, flags: 0, width: 100.0, height: 100.0 },
+        lines: vec![
+            LineRec { line_number: 1, first_word: 0, n_words: 2, bbox: l1 },
+            LineRec { line_number: 2, first_word: 2, n_words: 1, bbox: w2 },
+        ],
+        ayahs: vec![ayah(1, 0, 2, l1), ayah(2, 2, 1, w2)],
+        words: vec![word(0, 1, 1, 0, 0, 3, w0), word(1, 1, 2, 0, 3, 3, w1), word(2, 2, 1, 1, 6, 2, w2)],
+        paths,
+        decorations: vec![],
+        glyphs: vec![],
+        insts: vec![],
+        ops,
+        strings,
+    }
+}
+
+/// The layer of [`letters_page_data`]: path 0 cut into two pieces, five letters, one word
+/// mark. It passes `check_against` on that page.
+pub(crate) fn letters_layer() -> LetterData {
+    let letter = |word: u16, at: u16, text: char, more_at: Vec<u16>, first_member: u32, n_members: u16| LetterRec {
+        word,
+        at,
+        text,
+        more_at,
+        first_member,
+        n_members,
+    };
+    let member = |path: MemberPath, at: u16, is_body: bool| MemberRec { path, at, is_body };
+    LetterData {
+        page: 1,
+        quant: 100,
+        n_page_paths: 8,
+        n_page_words: 3,
+        letters: vec![
+            letter(0, 0, 'ب', vec![], 0, 3),
+            letter(0, 2, 'ل', vec![], 3, 1),
+            letter(1, 0, 'ل', vec![1], 4, 1),
+            letter(1, 2, 'ه', vec![], 5, 1),
+            letter(2, 0, 'و', vec![], 6, 2),
+        ],
+        members: vec![
+            member(MemberPath::Piece(0), 0, true),
+            member(MemberPath::Page(1), 0, false),
+            member(MemberPath::Page(2), 1, false),
+            member(MemberPath::Piece(1), 2, true),
+            member(MemberPath::Page(3), 0, true),
+            member(MemberPath::Page(4), 2, true),
+            member(MemberPath::Page(6), 0, true),
+            member(MemberPath::Page(7), NO_AT, false),
+        ],
+        word_marks: vec![WordMarkRec { word: 1, path: 5, at: 3 }],
+        pieces: vec![
+            PieceRec { source: 0, cmds: square(5000, 1000, 6000, 2000) },
+            PieceRec { source: 0, cmds: square(4000, 1000, 5000, 2000) },
+        ],
+    }
+}
+
+/// The letter fixture's page with its layer attached.
+pub(crate) fn letters_page() -> Page {
+    let mut p = Page::from_data(letters_page_data()).unwrap();
+    p.attach_letters(&encode_letters(&letters_layer())).unwrap();
+    p
 }

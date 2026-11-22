@@ -178,6 +178,11 @@ impl Page {
             set(&f.search, |w| &mut w.search, self);
             n += 1;
         }
+        // a letter offset is checked against the word's `qpc` text, which may have changed
+        if self.letters.is_some() {
+            self.check_letter_offsets();
+            self.styles.dirty = true;
+        }
         n
     }
 

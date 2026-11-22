@@ -37,7 +37,8 @@ pub unsafe extern "C" fn qvp_page_info(page: *const Page, out: *mut QvpPageInfo)
             n_lines: d.lines.len() as u32,
             n_ayahs: d.ayahs.len() as u32,
             n_words: d.words.len() as u32,
-            n_paths: d.paths.len() as u32,
+            // a letter layer's pieces count: the same number as `qvp_geometry`
+            n_paths: p.geometry().table.len() as u32,
             n_decorations: d.decorations.len() as u32,
         };
     })

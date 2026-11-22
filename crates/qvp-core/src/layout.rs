@@ -177,6 +177,15 @@ struct CachedDrawList {
     list: Vec<Draw>,
 }
 
+impl DrawListCache {
+    /// Forget the list, so the next request builds it again.
+    pub(crate) fn clear(&self) {
+        let mut cache = self.0.borrow_mut();
+        cache.band = None;
+        cache.list.clear();
+    }
+}
+
 impl Clone for DrawListCache {
     fn clone(&self) -> Self {
         DrawListCache::default()
@@ -619,6 +628,19 @@ impl Page {
         self.layout.as_ref()
     }
 
+    /// Counts up when the draw list can change while the layout and the band stay the same:
+    /// a letter layer is attached, or a cut path starts or stops drawing its pieces. It
+    /// starts at 0. A host that keeps a draw list keys it on this number too.
+    pub fn draw_revision(&self) -> u32 {
+        self.draw_revision
+    }
+
+    /// Apply pending rule changes to the colours and the targets. Every call that reads
+    /// colours does it first.
+    pub fn refresh_display(&mut self) {
+        self.refresh_targets();
+    }
+
     /// Everything the current layout draws, in drawing order: each path once under the
     /// placement it belongs to, and again for every row a decoration is repeated over.
     ///
@@ -671,7 +693,9 @@ impl Page {
             at(y1) >= top && at(y0) <= bottom
         };
         let group = |i: usize| l.groups.get(i).copied().unwrap_or(Placement::IDENTITY);
-        let n = self.geom.table.len();
+        // the page's own paths: a letter layer's pieces come after them in the table, and
+        // none is drawn while its cut path is drawn whole
+        let n = self.data.paths.len();
         out.reserve(n);
         for path in 0..n as u32 {
             if l.omitted_paths.binary_search(&path).is_ok() {

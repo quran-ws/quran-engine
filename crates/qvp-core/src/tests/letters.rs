@@ -1,0 +1,420 @@
+//! The letter layer: attaching it, the pieces it appends, and reading its letters.
+use super::*;
+use crate::letters::*;
+use qvp_format::letters::{encode_letters, LetterData};
+
+const RED: Rgba = 0xff0000ff;
+const BLUE: Rgba = 0x0000ffff;
+
+fn layer_bytes() -> Vec<u8> {
+    encode_letters(&letters_layer())
+}
+
+fn page_without_layer() -> Page {
+    Page::from_data(letters_page_data()).unwrap()
+}
+
+fn points(p: &Page, path: usize) -> Vec<(f32, f32)> {
+    let g = p.geometry().table[path];
+    let pts = &p.geometry().pts[g.pt_start as usize..(g.pt_start + g.pt_count) as usize];
+    pts.chunks(2).map(|c| (c[0], c[1])).collect()
+}
+
+#[test]
+fn a_page_without_a_layer_answers_nothing() {
+    let p = page();
+    assert!(!p.has_letters());
+    assert_eq!(p.letter_count(0), 0);
+    assert_eq!(p.letter_info(0, 0), None);
+    assert!(p.letter_members(0, 0).is_empty());
+    assert_eq!(p.path_letter(0), None);
+    assert_eq!(p.letter_at_offset(0, 0), None);
+    assert_eq!(p.draw_revision(), 0);
+    assert_eq!(p.geometry().table.len(), 5);
+}
+
+#[test]
+fn attaching_appends_the_pieces() {
+    let mut p = letters_page();
+    assert!(p.has_letters());
+    assert_eq!(p.geometry().table.len(), 10);
+    assert_eq!(p.colors().len(), 10);
+    assert_eq!(p.draw_revision(), 1);
+    let (row0, row8) = (p.geometry().table[0], p.geometry().table[8]);
+    assert_eq!((row8.flags, row8.word, row8.line, row8.extra), (row0.flags, 0, 0, row0.extra));
+    assert_eq!(points(&p, 8), vec![(50.0, 10.0), (60.0, 10.0), (60.0, 20.0), (50.0, 20.0)]);
+    assert_eq!(points(&p, 9), vec![(40.0, 10.0), (50.0, 10.0), (50.0, 20.0), (40.0, 20.0)]);
+    assert_eq!(p.path_deco(8), NONE);
+    assert_eq!(p.path_deco(9), NONE);
+}
+
+#[test]
+fn attaching_leaves_every_page_path_as_it_was() {
+    let before = page_without_layer();
+    let after = letters_page();
+    let (b, a) = (before.geometry(), after.geometry());
+    let n = b.table.len();
+    assert_eq!(n, 8);
+    assert_eq!(&a.ops[..b.ops.len()], &b.ops[..]);
+    assert_eq!(&a.pts[..b.pts.len()], &b.pts[..]);
+    for i in 0..n {
+        let (x, y) = (b.table[i], a.table[i]);
+        assert_eq!(
+            (x.op_start, x.op_count, x.pt_start, x.pt_count, x.flags, x.word, x.line, x.extra),
+            (y.op_start, y.op_count, y.pt_start, y.pt_count, y.flags, y.word, y.line, y.extra),
+            "row {i}"
+        );
+    }
+}
+
+#[test]
+fn the_word_ranges_hold_no_piece() {
+    let p = letters_page();
+    let ranges: Vec<(u32, u16)> = p.data().words.iter().map(|w| (w.first_path, w.n_paths)).collect();
+    assert_eq!(ranges, vec![(0, 3), (3, 3), (6, 2)]);
+    assert_eq!(p.data().paths.len(), 8, "the page's own path table keeps its length");
+}
+
+#[test]
+fn letters_read_back() {
+    let p = letters_page();
+    assert_eq!([p.letter_count(0), p.letter_count(1), p.letter_count(2), p.letter_count(3)], [2, 2, 1, 0]);
+    let ba = p.letter_info(0, 0).unwrap();
+    assert_eq!((ba.word, ba.index, ba.at, ba.text), (0, 0, 0, 'ب'));
+    assert_eq!((ba.n_members, ba.n_marks), (3, 2));
+    assert!(ba.more_at.is_empty());
+    assert_eq!((ba.x0, ba.y0, ba.x1, ba.y1), (50.0, 6.0, 60.0, 24.0));
+    assert!(ba.has_ink);
+    let lam = p.letter_info(1, 0).unwrap();
+    assert_eq!((lam.text, lam.more_at.clone()), ('ل', vec![1]));
+    let lam0 = p.letter_info(0, 1).unwrap();
+    assert_eq!((lam0.at, lam0.x0, lam0.y0, lam0.x1, lam0.y1), (2, 40.0, 10.0, 50.0, 20.0), "a piece's own box");
+    assert_eq!(p.letter_info(0, 2), None);
+    assert_eq!(p.letter_info(3, 0), None);
+}
+
+#[test]
+fn members_read_back() {
+    let p = letters_page();
+    let m = |path, at, mark, is_body, is_cut| LetterMember { path, at, mark, is_body, is_cut };
+    assert_eq!(
+        p.letter_members(0, 0),
+        vec![m(8, 0, Mark::None, true, true), m(1, 0, Mark::Dot, false, false), m(2, 1, Mark::Fathah, false, false)]
+    );
+    assert_eq!(p.letter_members(0, 1), vec![m(9, 2, Mark::None, true, true)]);
+    assert_eq!(p.letter_members(2, 0)[1].at, NONE);
+    assert_eq!(p.letter_members(2, 0)[1].mark, Mark::OmittedAlif);
+    assert!(p.letter_members(2, 1).is_empty());
+    assert!(p.letter_members(9, 0).is_empty());
+}
+
+#[test]
+fn a_path_names_its_letter() {
+    let p = letters_page();
+    assert_eq!(p.path_letter(0), None, "a cut path draws no one letter");
+    assert_eq!(p.path_letter(8), Some((0, 0)));
+    assert_eq!(p.path_letter(9), Some((1, 2)));
+    assert_eq!(p.path_letter(2), Some((0, 1)));
+    assert_eq!(p.path_letter(3), Some((0, 0)));
+    assert_eq!(p.path_letter(5), Some((NONE, 3)), "a word-level mark");
+    assert_eq!(p.path_letter(7), Some((0, NONE)));
+    assert_eq!(p.path_letter(10), None);
+    assert_eq!(p.path_letter(NONE), None);
+}
+
+#[test]
+fn an_offset_names_its_letter() {
+    let p = letters_page();
+    assert_eq!(p.letter_at_offset(0, 0), Some(0));
+    assert_eq!(p.letter_at_offset(0, 1), Some(0), "the fathah");
+    assert_eq!(p.letter_at_offset(0, 2), Some(1));
+    assert_eq!(p.letter_at_offset(1, 1), Some(0), "the kashida the lam draws");
+    assert_eq!(p.letter_at_offset(1, 3), None, "a word-level mark is no letter");
+    assert_eq!(p.letter_at_offset(1, 9), None);
+    assert_eq!(p.letter_at_offset(1, 0x1_0000), None);
+    assert_eq!(p.letter_at_offset(7, 0), None);
+}
+
+#[test]
+fn a_bad_layer_is_refused_and_the_old_one_kept() {
+    let mut p = letters_page();
+    let check = |p: &mut Page| {
+        assert_eq!(p.geometry().table.len(), 10);
+        assert_eq!(p.colors().len(), 10);
+        assert_eq!(p.letter_count(0), 2);
+        assert_eq!(p.draw_revision(), 1);
+    };
+    let other = LetterData { page: 2, ..letters_layer() };
+    assert!(p.attach_letters(&encode_letters(&other)).is_err());
+    check(&mut p);
+    let big = vec![0u8; defaults::MAX_LETTER_LAYER_BYTES + 1];
+    assert_eq!(p.attach_letters(&big), Err(Error::Bounds("letter layer size")));
+    check(&mut p);
+    let bytes = layer_bytes();
+    for n in 0..bytes.len() {
+        assert!(p.attach_letters(&bytes[..n]).is_err(), "{n} bytes");
+    }
+    check(&mut p);
+    // a layer for another page leaves a page with no layer with none
+    let mut bare = page();
+    assert!(bare.attach_letters(&bytes).is_err());
+    assert!(!bare.has_letters());
+    assert_eq!(bare.geometry().table.len(), 5);
+}
+
+#[test]
+fn a_second_attach_replaces_the_first() {
+    let mut p = letters_page();
+    let ops = p.geometry().ops.len();
+    let pts = p.geometry().pts.len();
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(p.geometry().table.len(), 10);
+    assert_eq!((p.geometry().ops.len(), p.geometry().pts.len()), (ops, pts), "the first pieces are dropped");
+    assert_eq!(p.colors().len(), 10);
+    assert_eq!(p.draw_revision(), 2);
+    assert_eq!(p.letter_members(0, 0)[0].path, 8);
+    // a layer with no cut: the pieces of the first are gone and path 0 draws a letter again
+    let mut uncut = letters_layer();
+    uncut.pieces.clear();
+    uncut.members[0].path = qvp_format::letters::MemberPath::Page(0);
+    uncut.members.remove(3);
+    uncut.letters.remove(1);
+    for (l, first) in uncut.letters.iter_mut().zip([0, 3, 4, 5]) {
+        l.first_member = first;
+    }
+    p.attach_letters(&encode_letters(&uncut)).unwrap();
+    assert_eq!(p.geometry().table.len(), 8);
+    assert_eq!(p.colors().len(), 8);
+    assert_eq!(p.letter_count(0), 1);
+    assert_eq!(p.path_letter(0), Some((0, 0)));
+    assert_eq!(p.path_letter(8), None);
+    assert_eq!(p.draw_revision(), 3);
+}
+
+#[test]
+fn a_short_qpc_drops_the_offset() {
+    let mut p = letters_page();
+    assert_eq!(p.attach_words_json(r#"{"1:1:2": {"qpc": "لـه"}}"#.as_bytes()), Some(1));
+    assert_eq!(p.path_letter(5), Some((NONE, NONE)));
+    assert_eq!(p.letter_at_offset(1, 2), Some(1));
+    assert_eq!(p.letter_at_offset(1, 1), Some(0), "the kashida is inside the text");
+    // the same with the sidecar attached first
+    let mut q = page_without_layer();
+    q.attach_words_json(r#"{"1:1:2": {"qpc": "ل"}}"#.as_bytes()).unwrap();
+    q.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(q.path_letter(5), Some((NONE, NONE)));
+    assert_eq!(q.letter_info(1, 1).unwrap().at, NONE, "a letter past the text has no offset");
+    assert_eq!(q.letter_count(1), 2, "but keeps its index");
+    assert_eq!(q.letter_info(1, 0).unwrap().more_at, vec![NONE]);
+    assert_eq!(q.letter_at_offset(1, 1), None);
+    assert_eq!(q.letter_at_offset(1, 0), Some(0));
+    // a longer text later brings the offsets back
+    q.attach_words_json(r#"{"1:1:2": {"qpc": "لـهۖ"}}"#.as_bytes()).unwrap();
+    assert_eq!(q.path_letter(5), Some((NONE, 3)));
+    assert_eq!(q.letter_at_offset(1, 1), Some(0));
+}
+
+#[test]
+fn without_qpc_offsets_are_used_as_stored() {
+    let mut data = letters_page_data();
+    for w in &mut data.words {
+        w.qpc = NONE_U16;
+    }
+    let mut p = Page::from_data(data).unwrap();
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(p.path_letter(5), Some((NONE, 3)));
+    assert_eq!(p.letter_at_offset(1, 1), Some(0));
+    // a sidecar with other forms only leaves them unchecked
+    p.attach_words_json(r#"{"1:1:2": {"search": "له"}}"#.as_bytes()).unwrap();
+    assert_eq!(p.path_letter(5), Some((NONE, 3)));
+}
+
+#[test]
+fn a_reflowed_layout_groups_the_pieces_with_their_word() {
+    let mut p = page_without_layer();
+    let spec = LayoutSpec {
+        viewport_w: 200.0,
+        viewport_h: 400.0,
+        reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+        ..Default::default()
+    };
+    let before = p.layout(&spec).clone();
+    assert_eq!(before.path_group.len(), 8);
+    p.attach_letters(&layer_bytes()).unwrap();
+    let l = p.current_layout().unwrap();
+    assert_eq!(l.path_group.len(), 10);
+    assert_eq!(l.path_group[8], l.path_group[0]);
+    assert_eq!(l.path_group[9], l.path_group[0]);
+    assert_eq!(&l.path_group[..8], &before.path_group[..], "no page path changes group");
+    assert_eq!(l.groups, before.groups, "positions do not change");
+    // a new reflow after the attach covers the pieces too
+    let again = p.layout(&LayoutSpec { reflow: Some(ReflowSpec { zoom: 2.5, ..Default::default() }), ..spec });
+    assert_eq!(again.path_group.len(), 10);
+    assert_eq!(again.path_group[8], again.path_group[0]);
+}
+
+#[test]
+fn a_reflow_measured_after_the_attach_groups_the_pieces() {
+    let mut p = letters_page();
+    let spec = LayoutSpec {
+        viewport_w: 200.0,
+        viewport_h: 400.0,
+        reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }),
+        ..Default::default()
+    };
+    let l = p.layout(&spec);
+    assert_eq!(l.path_group.len(), 10);
+    assert_eq!(l.path_group[9], l.path_group[0]);
+}
+
+#[test]
+fn attaching_after_a_layout_keeps_its_draw_list() {
+    let mut p = page_without_layer();
+    let spec = LayoutSpec { viewport_w: 200.0, viewport_h: 400.0, ..Default::default() };
+    p.layout(&spec);
+    let all = p.layout_draw_list();
+    let band = p.layout_draw_list_in(Some((0.0, 60.0)));
+    assert_eq!(all.len(), 8);
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(p.layout_draw_list(), all, "no piece is drawn while no cut path draws its pieces");
+    assert_eq!(p.layout_draw_list_in(Some((0.0, 60.0))), band);
+    let reflowed = LayoutSpec { reflow: Some(ReflowSpec { zoom: 2.0, ..Default::default() }), ..spec };
+    p.layout(&reflowed);
+    let list = p.layout_draw_list_in(Some((0.0, 1000.0)));
+    assert!(list.iter().all(|d| d.path < 8));
+}
+
+#[test]
+fn a_piece_takes_its_sources_context() {
+    let mut p = letters_page();
+    p.style(Selector::Word(0), Paint::new(RED));
+    p.style(Selector::WordMarks(0), Paint::new(BLUE));
+    let c = p.colors().to_vec();
+    assert_eq!((c[0], c[8], c[9]), (RED, RED, RED));
+    assert_eq!((c[1], c[2]), (BLUE, BLUE));
+    let mut q = letters_page();
+    q.style(Selector::Ayah(1, 1), Paint::new(RED));
+    q.style(Selector::Line(2), Paint::new(BLUE));
+    q.style(Selector::WordPath(0, 0), Paint::new(BLUE));
+    let c = q.colors().to_vec();
+    assert_eq!((c[0], c[8], c[9], c[3], c[6]), (BLUE, BLUE, BLUE, RED, BLUE));
+    let mut r = letters_page();
+    r.style(Selector::Kind(PathKind::Body), Paint::new(RED));
+    r.style(Selector::WordBody(1), Paint::new(BLUE));
+    r.style(Selector::Category(Category::LetterDot), Paint::new(BLUE));
+    let c = r.colors().to_vec();
+    assert_eq!((c[8], c[9], c[3], c[1], c[2]), (RED, RED, BLUE, BLUE, DEFAULT_INK));
+}
+
+#[test]
+fn a_mask_and_a_reveal_take_the_pieces_with_their_word() {
+    let mut p = letters_page();
+    p.mask(&Target::Word(0), MaskMode::Hide);
+    let c = p.colors().to_vec();
+    assert_eq!((c[0] & 0xff, c[8] & 0xff, c[9] & 0xff), (0, 0, 0));
+    assert_eq!(c[3], DEFAULT_INK);
+    // a reveal started before the attach lights the pieces with their word
+    let mut r = page_without_layer();
+    r.reveal_start(1, false, 0xc9c4b8ff, 0x000000ff, true, 0);
+    r.reveal_goto(1);
+    r.attach_letters(&layer_bytes()).unwrap();
+    let c = r.colors().to_vec();
+    assert_eq!((c[0], c[8], c[9], c[3]), (0xc9c4b8ff, 0xc9c4b8ff, 0xc9c4b8ff, 0x000000ff));
+}
+
+#[test]
+fn a_piece_starts_at_its_sources_colour_state() {
+    let mut p = page_without_layer();
+    p.style(Selector::Word(0), Paint::fade(RED, 1000));
+    p.tick(0.0);
+    p.tick(500.0);
+    let mid = p.colors()[0];
+    assert!(mid != RED && mid != DEFAULT_INK);
+    p.attach_letters(&layer_bytes()).unwrap();
+    let c = p.colors().to_vec();
+    assert_eq!((c[8], c[9]), (mid, mid));
+    assert!(p.tick(750.0));
+    let c = p.colors().to_vec();
+    assert_eq!((c[8], c[9]), (c[0], c[0]));
+    // a second attach mid-transition lists each piece once
+    p.attach_letters(&layer_bytes()).unwrap();
+    let mut listed = p.animating.clone();
+    listed.sort_unstable();
+    assert_eq!(listed, vec![0, 1, 2, 8, 9]);
+    assert!(!p.tick(1000.0));
+    let c = p.colors().to_vec();
+    assert_eq!((c[0], c[8], c[9]), (RED, RED, RED));
+    assert!(p.animating.is_empty());
+}
+
+#[test]
+fn styled_paths_and_render_leave_out_the_pieces_of_a_whole_path() {
+    let mut p = letters_page();
+    p.style(Selector::Word(0), Paint::new(RED));
+    let styled: Vec<u32> = p.styled_paths().into_iter().map(|(i, _)| i).collect();
+    assert_eq!(styled, vec![0, 1, 2]);
+    struct Count(Vec<u32>);
+    impl Renderer for Count {
+        fn begin(&mut self, _: f32, _: f32) {}
+        fn fill_path(&mut self, index: u32, _: &[u8], _: &[f32], _: Rgba, _: bool) {
+            self.0.push(index);
+        }
+        fn fill_rect(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, _: Rgba) {}
+        fn end(&mut self) {}
+    }
+    let mut r = Count(vec![]);
+    p.render(&mut r);
+    assert_eq!(r.0, (0..8).collect::<Vec<u32>>());
+}
+
+#[test]
+fn the_letter_index_holds_the_boxes_and_the_cuts() {
+    let p = letters_page();
+    let lt = p.letters.as_deref().unwrap();
+    assert_eq!(lt.first_piece, 8);
+    assert_eq!(lt.word_letters, vec![(0, 2), (2, 2), (4, 1)]);
+    assert_eq!(lt.sources, vec![(0, 8, 2)]);
+    assert_eq!(lt.swapped, vec![false]);
+    assert_eq!(lt.slot_of[0], 0);
+    assert!(lt.slot_of[1..].iter().all(|&s| s == NONE));
+    assert_eq!(lt.piece_box[0], IBox { x0: 5000, y0: 1000, x1: 6000, y1: 2000 });
+    assert_eq!(lt.word_box[0], p.data().words[0].bbox);
+    assert_eq!(lt.path_box(p.data(), 9), lt.piece_box[1]);
+    assert_eq!(lt.path_box(p.data(), 1), p.data().paths[1].bbox);
+    assert!(lt.letter_has_mark(0, Mark::Dot) && lt.letter_has_mark(0, Mark::Fathah));
+    assert!(!lt.letter_has_mark(1, Mark::Dot));
+    assert!(lt.letter_has_mark(4, Mark::OmittedAlif));
+    assert_eq!(lt.drawn_pieces(0), None);
+    assert!(lt.is_drawn(0) && !lt.is_drawn(8) && lt.is_drawn(3));
+    let c8 = p.path_ctx[8].letter;
+    assert_eq!((c8.letter, c8.letter_in_word, c8.at, c8.is_body, c8.source), (0, 0, 0, true, 0));
+    assert_eq!(p.path_ctx[0].letter.pieces, (8, 2));
+    assert_eq!(p.path_ctx[2].letter.nth_letter_mark, 1);
+    assert_eq!(p.path_ctx[1].letter.nth_letter_mark, 0);
+    assert_eq!(p.path_ctx[8].letter.nth_letter_mark, u16::MAX);
+    assert_eq!(p.path_ctx[5].letter.letter, NONE);
+    assert_eq!(p.path_ctx[5].letter.raw_at, 3);
+}
+
+#[test]
+fn a_letter_part_reads_from_its_code() {
+    assert_eq!(LetterPart::from_u8(0), Some(LetterPart::All));
+    assert_eq!(LetterPart::from_u8(1), Some(LetterPart::BodyAndDots));
+    assert_eq!(LetterPart::from_u8(2), Some(LetterPart::Marks));
+    assert_eq!(LetterPart::from_u8(3), None);
+    assert!(LetterPart::BodyAndDots.takes(false, Category::LetterDot));
+    assert!(!LetterPart::Marks.takes(false, Category::LetterDot));
+    assert!(LetterPart::Marks.takes(false, Category::Harakah));
+    assert!(!LetterPart::Marks.takes(true, Category::None));
+}
+
+#[test]
+fn a_page_with_no_layer_behaves_as_before() {
+    // the fixture page with no layer: same counts, colours and draw list as any page
+    let mut p = page_without_layer();
+    p.style(Selector::Word(0), Paint::new(RED));
+    assert_eq!(p.colors().len(), 8);
+    assert_eq!(p.styled_paths().len(), 3);
+    p.refresh_display();
+    assert_eq!(p.draw_revision(), 0);
+}

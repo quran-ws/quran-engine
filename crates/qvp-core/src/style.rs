@@ -238,6 +238,8 @@ pub(crate) struct PathCtx {
     pub nth_mark: u16,
     pub nth_mark_named: u16,
     pub deco_kind: DecoKind,
+    /// The path's role in the letter layer. A path with no role when no layer is attached.
+    pub letter: crate::letters::PathLetter,
 }
 
 impl Rule {
@@ -467,10 +469,14 @@ impl Page {
     }
 
     /// Paths whose current colour differs from the default ink (overlay repaint).
+    ///
+    /// With a letter layer, a path the draw list cannot hold now is left out: a piece whose
+    /// cut path is drawn whole, or a cut path drawn as its pieces.
     pub fn styled_paths(&mut self) -> Vec<(u32, Rgba)> {
         self.refresh_targets();
         let d = self.styles.default_ink;
-        self.colors.iter().enumerate().filter(|(_, &c)| c != d).map(|(i, &c)| (i as u32, c)).collect()
+        let drawn = |i: usize| self.letters.as_deref().is_none_or(|lt| lt.is_drawn(i as u32));
+        self.colors.iter().enumerate().filter(|&(i, &c)| c != d && drawn(i)).map(|(i, &c)| (i as u32, c)).collect()
     }
 
     // ── convenience API (what apps call) ──

@@ -4,6 +4,7 @@ use crate::fixtures::*;
 
 mod hit;
 mod layout;
+mod letters;
 mod load;
 mod memorize;
 mod reflow;

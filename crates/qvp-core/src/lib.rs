@@ -10,6 +10,7 @@ pub mod dress;
 pub mod highlight;
 pub mod hit;
 pub mod layout;
+pub mod letters;
 mod load;
 pub mod memorize;
 pub mod meta;
@@ -32,6 +33,7 @@ pub use dress::{
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
 pub use hit::{Hit, HitArea, HitOptions, LineBand};
 pub use layout::{Draw, Grid, Layout, LayoutSpec};
+pub use letters::{LetterHit, LetterInfo, LetterMember, LetterPart, LetterQuery};
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahHeader, SurahInfo};
 pub use passage::{
@@ -155,6 +157,11 @@ pub struct Page {
     /// The current colour of every path, kept equal to `anim[i].cur` as the clock moves it,
     /// so a display list is read and never rebuilt.
     colors: Vec<Rgba>,
+    /// The letter layer, once one is attached. Its pieces are the paths after the page's own.
+    pub(crate) letters: Option<Box<letters::Letters>>,
+    /// Counts up when the draw list can change while the layout and the band stay the same.
+    /// See [`Page::draw_revision`].
+    pub(crate) draw_revision: u32,
 }
 
 impl Page {
@@ -206,6 +213,8 @@ impl Page {
             animating: Vec::new(),
             state_dirty: true,
             colors: vec![DEFAULT_INK; n],
+            letters: None,
+            draw_revision: 0,
         })
     }
 
@@ -780,7 +789,8 @@ impl Page {
         self.colors();
         for (i, g) in self.geom.table.iter().enumerate() {
             let c = self.colors[i];
-            if c & 0xff == 0 {
+            // a letter layer's piece is drawn only in place of its cut path
+            if c & 0xff == 0 || self.letters.as_deref().is_some_and(|lt| !lt.is_drawn(i as u32)) {
                 continue;
             }
             let ops = &self.geom.ops[g.op_start as usize..(g.op_start + g.op_count) as usize];
