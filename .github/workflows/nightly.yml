@@ -1,4 +1,4 @@
-# Once a night: the identity gate and the letter-layer gate over all 604 pages, and the
+# Once a night: the identity gate and the letter-layer gates over all 604 pages, and the
 # benchmark numbers as an artifact for comparison with docs/MEASURED.md.
 name: Nightly
 
@@ -39,6 +39,9 @@ jobs:
       - name: Letter layer, all pages
         if: success() || (failure() && steps.identity.outcome == 'failure')
         run: QVP_REQUIRE_DATA=1 QVP_REQUIRE_LETTERS=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test letters -- --nocapture
+      - name: Letter layer in the engine, all pages
+        if: success() || (failure() && steps.identity.outcome == 'failure')
+        run: QVP_REQUIRE_DATA=1 QVP_REQUIRE_LETTERS=1 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test letters_engine -- --nocapture
       - name: Diff images of failing pages
         if: failure()
         uses: actions/upload-artifact@v7

@@ -154,6 +154,26 @@ pub struct LetterHit {
     /// True when the point is inside the path's outline. False when the hit is the nearest
     /// letter's box.
     pub is_exact: bool,
+    /// True when the path is a body member of its letter.
+    pub is_body: bool,
+}
+
+/// The ink a letter hit found: the path, its word, and its rank among the ink under the
+/// point. The rank orders mark ink over body ink, then by draw order: the page path drawn,
+/// then the piece drawn in its place.
+#[derive(Clone, Copy, Debug)]
+struct InkHit {
+    rank: (bool, u32, u32),
+    path: u32,
+    word: u32,
+}
+
+/// Where a letter hit looks for ink: a printed page, with the layout's shift of each line or
+/// none in page units, or a reflowed one.
+#[derive(Clone, Copy)]
+enum Frame<'a> {
+    Printed(Option<&'a [f32]>),
+    Reflowed(&'a crate::Reflowed),
 }
 
 /// The letter facts of one path, inside its `PathCtx`.
@@ -225,6 +245,8 @@ pub(crate) struct Letters {
     pub piece_box: Vec<IBox>,
     /// Per page word: the word's box with its pieces' boxes.
     pub word_box: Vec<IBox>,
+    /// Per printed line: the union of its words' `word_box`, the ink a letter hit looks in.
+    pub line_box: Vec<IBox>,
     /// The cut paths, ascending: (source path, first piece path, piece count).
     pub sources: Vec<(u32, u32, u32)>,
     /// Per entry of `sources`: true while it draws its pieces.
@@ -606,137 +628,339 @@ impl Page {
 
     /// The letter under a point in page units, and the mark when the point is on a mark.
     ///
-    /// The word is the word [`Page::hit_test`] finds, with the same options: `max_distance`,
-    /// `gap_bias` and `prefer_exact` choose the word exactly as they do there. Inside that
-    /// word the engine always tests the outlines, whatever `prefer_exact` is:
+    /// The letter hit always prefers ink:
     ///
-    /// - A point inside the outline of a member, or of a word-level mark, is an exact hit.
-    ///   Ink the page stores as a mark wins over body ink, and of two paths of the same ink,
-    ///   the one drawn last wins. A mark is small and sits on or over a body, so a tap on it
-    ///   means the mark. A word-level mark gives `letter` `NONE`.
-    /// - A cut path is never hit: its pieces are. The pieces are tested whether the path
-    ///   draws whole or as its pieces now, so a hit does not change while colours move. Each
-    ///   path and piece is culled by its own box, and a piece can reach past its word's box.
-    /// - A point off every outline is a near hit: the letter whose box is nearest, with that
-    ///   distance, its first body member as `path`, its offset, and `Mark::None`.
+    /// - A point inside the outline of a word path gives an exact hit in that path's word,
+    ///   whatever word the gap-aware [`Page::hit_test`] would choose. Ink the page stores as a
+    ///   mark wins over body ink, and of two paths of the same ink, the one drawn last wins,
+    ///   in any word. A word-level mark gives `letter` `NONE`.
+    /// - A cut path is never hit: its pieces are. They are tested whether the path draws
+    ///   whole or as its pieces now, so a hit does not change while colours move. A point
+    ///   that the cut path holds and no piece holds (a seam between two pieces) is an exact
+    ///   hit on the piece nearest the point, by the distance to its outline.
+    /// - A point on no ink inside a counter of a letter's body, such as the hole of a waw or a
+    ///   meem, is a near hit on that letter, in that letter's word, at distance 0. The counter
+    ///   decides the word even where another word's box reaches over it.
+    /// - Anywhere else, the word is the one [`Page::hit_test`] finds with the same options.
+    ///   The hit is near: the letter whose box is nearest the point. When several boxes hold
+    ///   the point, the letter whose body ink is nearest wins.
+    /// - A near hit has `distance` the distance to that letter's box, so 0 inside it, `path`
+    ///   the letter's first body member, `mark` `Mark::None` and `is_body` false.
+    ///
+    /// `max_distance`, `gap_bias` and `prefer_exact` act on how the word is chosen off ink and
+    /// out of a counter, as in [`Page::hit_test`]: `max_distance` limits the distance to the
+    /// word, not to the letter. A host that wants only close letters filters on `distance`.
     ///
     /// `None` with no layer, when the word hit test finds no word or a decoration, or when
-    /// the word has no letter to be near. The cost is that of [`Page::hit_test`] and a test of
-    /// the paths and pieces of one word, then a look at the boxes of its letters.
+    /// the word has no letter to be near. The cost: the words of the lines whose ink box holds
+    /// the point, each culled by its box, then the paths and pieces of the words whose box
+    /// holds it, once for ink and once for counters. Off ink, [`Page::hit_test`] and the
+    /// letters of one word.
     pub fn hit_test_letter(&self, x: f32, y: f32, opt: &HitOptions) -> Option<LetterHit> {
         self.letters.as_deref()?;
+        if let Some(hit) = self.letter_on_ink(Frame::Printed(None), x, y) {
+            return Some(hit);
+        }
         let h = self.hit_test(x, y, opt)?;
-        self.letter_in_word(h.word, h.line, x, y)
+        self.off_ink_letter(h.word, x, y)
     }
 
-    /// The letter under a point in layout px, as the other `_view` hit tests take it: the
-    /// word is the one [`Page::hit_test_view`] finds, and the point goes back to page units
-    /// through the current layout's placement of that word, printed or reflowed. Then it is
-    /// [`Page::hit_test_letter`]. With no layout, the point is in page units, as
-    /// [`Page::hit_test_view`] takes it then.
+    /// The letter under a point in layout px, as the other `_view` hit tests take it. The
+    /// point goes back to page units through the current layout's placement of each word,
+    /// printed or reflowed, and then the rules of [`Page::hit_test_letter`] apply. Off ink,
+    /// the word is the one [`Page::hit_test_view`] finds. With no layout, the point is in page
+    /// units, as [`Page::hit_test_view`] takes it then.
     pub fn hit_test_letter_view(&self, view_x: f32, view_y: f32, opt: &HitOptions) -> Option<LetterHit> {
         self.letters.as_deref()?;
-        let h = self.hit_test_view(view_x, view_y, opt)?;
-        let (x, y) = match self.current_layout() {
-            None => (view_x, view_y),
-            Some(l) => {
-                let line = self.data.words.get(h.word as usize)?.line_index as usize;
-                let (x, y) = ((view_x - l.offset_x) / l.scale, (view_y - l.offset_y) / l.scale);
-                l.word_placement(h.word, line).invert(x, y)
-            }
+        let Some(l) = self.current_layout() else { return self.hit_test_letter(view_x, view_y, opt) };
+        let (x, y) = ((view_x - l.offset_x) / l.scale, (view_y - l.offset_y) / l.scale);
+        let frame = match &l.reflow {
+            Some(flow) => Frame::Reflowed(flow),
+            None => Frame::Printed(Some(&l.line_dy)),
         };
-        self.letter_in_word(h.word, h.line, x, y)
+        if let Some(hit) = self.letter_on_ink(frame, x, y) {
+            return Some(hit);
+        }
+        let h = self.hit_test_view(view_x, view_y, opt)?;
+        let line = self.data.words.get(h.word as usize)?.line_index as usize;
+        let (px, py) = l.word_placement(h.word, line).invert(x, y);
+        self.off_ink_letter(h.word, px, py)
     }
 
-    /// The letter of word `w` under a point in page units: the exact pass over the word's
-    /// paths and pieces, then the nearest letter's box. `line` is the word hit's line.
-    fn letter_in_word(&self, w: u32, line: u32, x: f32, y: f32) -> Option<LetterHit> {
+    /// The letter hit that the ink under a point decides: an exact hit on the topmost ink, or
+    /// a near hit on the letter whose body encloses the point in a counter. `None` when the
+    /// point is on no ink and in no counter.
+    fn letter_on_ink(&self, frame: Frame<'_>, x: f32, y: f32) -> Option<LetterHit> {
         let lt = self.letters.as_deref()?;
-        let word = self.data.words.get(w as usize)?;
+        let mut ink = None;
+        self.each_word_near(lt, frame, x, y, |w, px, py| self.ink_in_word(lt, w, px, py, &mut ink));
+        if let Some(ink) = ink {
+            return Some(self.exact_letter_hit(ink));
+        }
+        let mut counter: Option<InkHit> = None;
+        self.each_word_near(lt, frame, x, y, |w, px, py| self.counter_in_word(lt, w, px, py, &mut counter));
+        let c = counter?;
+        let g = self.path_ctx[c.path as usize].letter.letter;
+        Some(self.near_letter_hit(lt, c.word, g, 0.0))
+    }
+
+    /// Call `f` with each word whose ink can hold a point, and the point in that word's page
+    /// units. Printed: the words of every line whose ink box holds the point, `line_dy` the
+    /// layout's shift of each line. Reflowed: the words of the row whose band holds the point
+    /// and of the rows next to it, each through its own placement. Ink can reach past its
+    /// row's band, never past the next row.
+    fn each_word_near(&self, lt: &Letters, frame: Frame<'_>, x: f32, y: f32, mut f: impl FnMut(u32, f32, f32)) {
+        match frame {
+            Frame::Printed(line_dy) => {
+                let q = self.quant();
+                for (li, words) in self.line_words.iter().enumerate() {
+                    let py = y - line_dy.and_then(|d| d.get(li)).copied().unwrap_or(0.0);
+                    let (qx, qy) = ((x * q).round() as i32, (py * q).round() as i32);
+                    if lt.line_box.get(li).is_some_and(|b| b.contains(qx, qy)) {
+                        words.iter().for_each(|&(_, w)| f(w, x, py));
+                    }
+                }
+            }
+            Frame::Reflowed(flow) => {
+                for (r, &(top, bottom)) in flow.row_band.iter().enumerate() {
+                    let h = bottom - top;
+                    if !(y >= top - h && y <= bottom + h) {
+                        continue;
+                    }
+                    for &w in flow.row_words.get(r).map_or(&[][..], |v| &v[..]) {
+                        if let Some(place) = flow.word_place.get(w as usize) {
+                            let (px, py) = place.invert(x, y);
+                            f(w, px, py);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Put into `best` the topmost body member of word `w` that encloses a point it does not
+    /// fill: a point in a counter, such as the hole of a waw. One subpath of the member holds
+    /// the point by the member's fill rule, and the member as a whole does not.
+    fn counter_in_word(&self, lt: &Letters, w: u32, x: f32, y: f32, best: &mut Option<InkHit>) {
+        let Some(word) = self.data.words.get(w as usize) else { return };
+        let q = self.quant();
+        let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
+        if !lt.word_box.get(w as usize).is_some_and(|b| b.contains(qx, qy)) {
+            return;
+        }
+        let mut take = |rank: (bool, u32, u32), path: u32| {
+            if best.is_none_or(|b| rank > b.rank) {
+                *best = Some(InkHit { rank, path, word: w });
+            }
+        };
+        let first = word.first_path;
+        for p in first..first + word.n_paths as u32 {
+            let Some(c) = self.path_ctx.get(p as usize) else { continue };
+            if c.letter.word != w {
+                continue;
+            }
+            let (a, n) = c.letter.pieces;
+            let paths = if n > 0 { a..a + n } else { p..p + 1 };
+            for path in paths {
+                let m = &self.path_ctx[path as usize].letter;
+                if m.letter != NONE
+                    && m.is_body
+                    && lt.path_box(&self.data, path).contains(qx, qy)
+                    && self.encloses(path, x, y)
+                {
+                    take((false, p, path), path);
+                }
+            }
+        }
+    }
+
+    /// True when one subpath of `path`, alone, holds the point by the path's fill rule and
+    /// the path as a whole does not: the point is in a counter of the outline.
+    pub(crate) fn encloses(&self, path: u32, x: f32, y: f32) -> bool {
+        let evenodd = self.geom.table[path as usize].flags >> 24 & 1 == 1;
+        let (mut whole_wn, mut whole_cross) = (0i32, 0u32);
+        let (mut cur, mut wn, mut cross, mut one_holds) = (0u32, 0i32, 0u32, false);
+        let holds = |wn: i32, cross: u32| if evenodd { cross % 2 == 1 } else { wn != 0 };
+        self.path_segments(path, |sub, x0, y0, x1, y1| {
+            if sub != cur {
+                one_holds |= holds(wn, cross);
+                (cur, wn, cross) = (sub, 0, 0);
+            }
+            if (y0 <= y) != (y1 <= y) {
+                let t = (y - y0) / (y1 - y0);
+                if x0 + t * (x1 - x0) > x {
+                    let d = if y1 > y0 { 1 } else { -1 };
+                    (cross, wn) = (cross + 1, wn + d);
+                    (whole_cross, whole_wn) = (whole_cross + 1, whole_wn + d);
+                }
+            }
+        });
+        one_holds |= holds(wn, cross);
+        one_holds && !holds(whole_wn, whole_cross)
+    }
+
+    /// Put into `best` the topmost ink of word `w` under a point in page units, when it is
+    /// above what `best` holds: mark ink over body ink, then the one drawn last. Each path
+    /// and piece is culled by its own box. A cut path is tested as its pieces, and as itself
+    /// only for a seam.
+    fn ink_in_word(&self, lt: &Letters, w: u32, x: f32, y: f32, best: &mut Option<InkHit>) {
+        let Some(word) = self.data.words.get(w as usize) else { return };
         let q = self.quant();
         let (qx, qy) = ((x * q).round() as i32, (y * q).round() as i32);
         // the layer's word box holds every member's box, pieces included
-        if lt.word_box.get(w as usize).is_some_and(|b| b.contains(qx, qy)) {
-            // in reverse draw order, so the first mark found is the one drawn last. A body
-            // counts only when no mark holds the point
-            let mut body = None;
-            let first = word.first_path;
-            for p in (first..first + word.n_paths as u32).rev() {
-                let Some(c) = self.path_ctx.get(p as usize) else { continue };
-                // a cut path is hit as its pieces, which are drawn in its place
-                let (a, n) = c.letter.pieces;
-                let paths = if n > 0 { a..a + n } else { p..p + 1 };
-                for path in paths.rev() {
-                    let Some(pc) = self.path_ctx.get(path as usize) else { continue };
-                    if pc.letter.word != w {
-                        continue;
-                    }
-                    let is_mark = pc.kind != PathKind::Body;
-                    if !is_mark && body.is_some() {
-                        continue;
-                    }
-                    if !lt.path_box(&self.data, path).contains(qx, qy) || !self.point_in_path(path, x, y) {
-                        continue;
-                    }
-                    if is_mark {
-                        return Some(self.exact_letter_hit(path, line));
-                    }
-                    body = Some(path);
+        if !lt.word_box.get(w as usize).is_some_and(|b| b.contains(qx, qy)) {
+            return;
+        }
+        let holds = |path: u32| lt.path_box(&self.data, path).contains(qx, qy) && self.point_in_path(path, x, y);
+        let mut take = |rank: (bool, u32, u32), path: u32| {
+            if best.is_none_or(|b| rank > b.rank) {
+                *best = Some(InkHit { rank, path, word: w });
+            }
+        };
+        let first = word.first_path;
+        for p in first..first + word.n_paths as u32 {
+            let Some(c) = self.path_ctx.get(p as usize) else { continue };
+            if c.letter.word != w {
+                continue;
+            }
+            let (a, n) = c.letter.pieces;
+            if n == 0 {
+                if holds(p) {
+                    take((c.kind != PathKind::Body, p, p), p);
+                }
+                continue;
+            }
+            // a piece is drawn in its cut path's place, so it ranks by that path
+            let mut on_piece = false;
+            for piece in a..a + n {
+                if holds(piece) {
+                    on_piece = true;
+                    take((false, p, piece), piece);
                 }
             }
-            if let Some(path) = body {
-                return Some(self.exact_letter_hit(path, line));
+            if !on_piece && holds(p) {
+                // a seam: the cut path holds the point and no piece does. The hit is the piece
+                // whose outline is nearest the point. The first wins a tie
+                let mut nearest = (a, f32::INFINITY);
+                for piece in a..a + n {
+                    let d = self.outline_distance(piece, x, y);
+                    if d < nearest.1 {
+                        nearest = (piece, d);
+                    }
+                }
+                take((false, p, nearest.0), nearest.0);
             }
         }
-        // the nearest letter's box. The first letter wins a tie
+    }
+
+    /// The letter of word `w` under a point in page units that is on no other word's ink and
+    /// in no counter. The word's own ink first, then the nearest letter.
+    fn off_ink_letter(&self, w: u32, x: f32, y: f32) -> Option<LetterHit> {
+        let lt = self.letters.as_deref()?;
+        let mut ink = None;
+        self.ink_in_word(lt, w, x, y, &mut ink);
+        if let Some(ink) = ink {
+            return Some(self.exact_letter_hit(ink));
+        }
         let &(first, n) = lt.word_letters.get(w as usize)?;
-        let mut best: Option<(u32, f32)> = None;
-        for g in first..first + n {
+        let q = self.quant();
+        let box_distance = |g: u32| -> Option<f32> {
             let b = lt.letter_box[g as usize];
             if b.is_empty() {
-                continue;
+                return None;
             }
             let dx = (b.x0 as f32 / q - x).max(x - b.x1 as f32 / q).max(0.0);
             let dy = (b.y0 as f32 / q - y).max(y - b.y1 as f32 / q).max(0.0);
-            let d = (dx * dx + dy * dy).sqrt();
+            Some((dx * dx + dy * dy).sqrt())
+        };
+        // the nearest box. The first letter wins a tie
+        let mut best: Option<(u32, f32)> = None;
+        let mut inside = 0;
+        for g in first..first + n {
+            let Some(d) = box_distance(g) else { continue };
+            inside += (d == 0.0) as u32;
             if best.is_none_or(|(_, bd)| d < bd) {
                 best = Some((g, d));
             }
         }
-        let (g, distance) = best?;
+        let (mut g, distance) = best?;
+        if inside > 1 {
+            // several boxes hold the point, as in an open bowl: the nearest body ink wins
+            let mut near = f32::INFINITY;
+            for k in first..first + n {
+                if box_distance(k) != Some(0.0) {
+                    continue;
+                }
+                let d = self.body_ink_distance(lt, k, x, y);
+                if d < near {
+                    (g, near) = (k, d);
+                }
+            }
+        }
+        Some(self.near_letter_hit(lt, w, g, distance))
+    }
+
+    /// A near hit on letter `g` (an index into `data.letters`) of word `w`.
+    fn near_letter_hit(&self, lt: &Letters, w: u32, g: u32, distance: f32) -> LetterHit {
         let l = &lt.data.letters[g as usize];
-        let slots = &lt.member_order[l.first_member as usize..l.first_member as usize + l.n_members as usize];
-        // the body members come first in the engine's order, and every letter has one
-        let path = slots
-            .iter()
-            .map(|&i| &lt.data.members[i as usize])
-            .find(|m| m.is_body)
-            .map_or(NONE, |m| lt.member_path(m.path));
-        Some(LetterHit {
+        let first = lt.word_letters.get(w as usize).map_or(g, |wl| wl.0);
+        LetterHit {
             word: w,
             letter: g - first,
-            path,
+            path: self.body_members(lt, g).next().unwrap_or(NONE),
             at: offset(lt.checked(w, l.at)),
-            line,
+            line: self.data.words.get(w as usize).map_or(NONE, |r| r.line_index as u32),
             distance,
             mark: Mark::None,
             is_exact: false,
-        })
+            is_body: false,
+        }
     }
 
-    /// An exact hit on `path`, a letter member or a word-level mark.
-    fn exact_letter_hit(&self, path: u32, line: u32) -> LetterHit {
-        let c = &self.path_ctx[path as usize];
+    /// The paths of the body members of letter `g` (an index into `data.letters`), in the
+    /// engine's member order.
+    fn body_members<'a>(&self, lt: &'a Letters, g: u32) -> impl Iterator<Item = u32> + 'a {
+        let l = &lt.data.letters[g as usize];
+        lt.member_order[l.first_member as usize..l.first_member as usize + l.n_members as usize]
+            .iter()
+            .map(|&i| &lt.data.members[i as usize])
+            .filter(|m| m.is_body)
+            .map(|m| lt.member_path(m.path))
+    }
+
+    /// The distance from a point to the nearest outline of letter `g`'s body members.
+    fn body_ink_distance(&self, lt: &Letters, g: u32, x: f32, y: f32) -> f32 {
+        self.body_members(lt, g).map(|p| self.outline_distance(p, x, y)).fold(f32::INFINITY, f32::min)
+    }
+
+    /// The distance from a point to a path's flattened outline, in page units. Infinite for a
+    /// path with no outline.
+    fn outline_distance(&self, path: u32, x: f32, y: f32) -> f32 {
+        let mut d2 = f32::INFINITY;
+        self.path_segments(path, |_, x0, y0, x1, y1| {
+            let (dx, dy) = (x1 - x0, y1 - y0);
+            let len2 = dx * dx + dy * dy;
+            let t = if len2 > 0.0 { (((x - x0) * dx + (y - y0) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
+            let (ex, ey) = (x0 + t * dx - x, y0 + t * dy - y);
+            d2 = d2.min(ex * ex + ey * ey);
+        });
+        d2.sqrt()
+    }
+
+    /// An exact hit on the ink `ink`: a letter member or a word-level mark.
+    fn exact_letter_hit(&self, ink: InkHit) -> LetterHit {
+        let c = &self.path_ctx[ink.path as usize];
         let m = &c.letter;
         LetterHit {
             word: m.word,
             letter: if m.letter == NONE { NONE } else { m.letter_in_word as u32 },
-            path,
+            path: ink.path,
             at: offset(m.at),
-            line,
+            line: self.data.words.get(ink.word as usize).map_or(NONE, |w| w.line_index as u32),
             distance: 0.0,
             mark: c.mark,
             is_exact: true,
+            is_body: m.is_body,
         }
     }
 
@@ -964,6 +1188,13 @@ impl Page {
             word_box[w as usize].union(bb);
         }
 
+        let mut line_box = vec![IBox::EMPTY; self.data.lines.len()];
+        for (w, bb) in self.data.words.iter().zip(&word_box) {
+            if let Some(l) = line_box.get_mut(w.line_index as usize) {
+                l.union(bb);
+            }
+        }
+
         let swapped = vec![false; sources.len()];
         self.letters = Some(Box::new(Letters {
             data,
@@ -974,6 +1205,7 @@ impl Page {
             member_order,
             piece_box,
             word_box,
+            line_box,
             sources,
             swapped,
             slot_of,

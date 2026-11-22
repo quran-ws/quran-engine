@@ -298,7 +298,9 @@ pub struct QvpLetterHit {
     pub distance: f32,
     pub mark: u8,
     pub is_exact: u8,
-    pub _pad: [u8; 2],
+    /// 1 when `path` is a body member of its letter
+    pub is_body: u8,
+    pub _pad: u8,
 }
 
 /// Letters by what they are (`qvp_find_letters`, `qvp_style_add_letters`). 40 bytes on a

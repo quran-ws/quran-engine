@@ -785,15 +785,24 @@ its pieces. It can count up with no visible change, for example on a second atta
 same layer. It never stays the same when the drawn set changes. On a page with no layer it
 stays 0.
 
-**The letter under a point.** `qvp_hit_test_letter` uses the word that `qvp_hit_test` finds
-with the same options, then finds the letter in that word. A point on the ink of a path gives
-an exact hit on that path. Ink that the page stores as a mark wins over body ink. The engine
-tests the pieces of a cut path, never the path. A point off the ink gives the letter with the
-nearest box, with `is_exact` 0.
+**The letter under a point.** `qvp_hit_test_letter` prefers ink. A point on the ink of a word
+path gives an exact hit on that path, in that path's word, whatever word `qvp_hit_test` would
+choose there. Ink that the page stores as a mark wins over body ink, and of two paths of the
+same ink, the one drawn last wins. The engine tests the pieces of a cut path, never the path.
+A point on the cut path between two pieces (a seam) is an exact hit on the nearest piece.
+
+Off the ink, the word is the one `qvp_hit_test` finds with the same options, and the hit is
+near (`is_exact` 0): the letter with the nearest box. When several boxes hold the point, as in
+the counter of a waw, the letter whose body ink is nearest wins. `distance` is the distance to
+that letter's box, so it is 0 inside the box. `max_distance` limits the distance to the word,
+as in `qvp_hit_test`, not the distance to the letter. A host that wants only close letters
+filters on `distance`. `gap_bias` and `prefer_exact` also act only off the ink.
 
 A word-level mark, such as a waqf sign, has the letter `QVP_NONE`. `mark` is the mark id of
 the path that the point hit. Body ink has 0, but a body that the page stores as a mark, such
-as `omitted_alif` (12), has that id.
+as `omitted_alif` (12), has that id. `is_body` is 1 when the path is a body member of its
+letter. It is 0 for a mark member, a word-level mark and a near hit. So a host can tell the
+letter itself from a mark on it.
 
 ## Highlights
 
@@ -1056,7 +1065,7 @@ function in the header has no row here, or a row names a function the header lac
 | hit testing | `qvp_hit_test_view` | `page.hitTestView(viewX, viewY, options)` | The same for viewport pixels. |
 | hit testing | `qvp_hit_test_exact` | `page.hitTestExact(x, y)` | Return the word, path or decoration whose exact outline contains a point in page units. |
 | hit testing | `qvp_hit_test_exact_view` | `page.hitTestExactView(viewX, viewY)` | The same for a point in viewport pixels through the current layout. |
-| hit testing | `qvp_hit_test_letter` | `page.hitTestLetter(x, y, options)` | Return the letter, or the mark, under a point in page units, in the word that `qvp_hit_test` finds. |
+| hit testing | `qvp_hit_test_letter` | `page.hitTestLetter(x, y, options)` | Return the letter, or the mark, under a point in page units: on ink, the ink's word; off ink, the word that `qvp_hit_test` finds. |
 | hit testing | `qvp_hit_test_letter_view` | `page.hitTestLetterView(viewX, viewY, options)` | The same for a point in viewport pixels through the current layout. |
 | hit testing | `qvp_line_bands` | `page.lineBands()` | Return every line's vertical band in page units. |
 | hit testing | `qvp_hit_areas` | `page.hitAreas(gapBias)` | Return the gap-aware rectangle of every word, a partition of each line with no dead zone. |

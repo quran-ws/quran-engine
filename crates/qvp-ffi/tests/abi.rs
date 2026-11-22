@@ -1138,9 +1138,10 @@ fn letters_over_the_abi() {
         offset_of!(QvpLetterHit, distance),
         offset_of!(QvpLetterHit, mark),
         offset_of!(QvpLetterHit, is_exact),
+        offset_of!(QvpLetterHit, is_body),
         offset_of!(QvpLetterHit, _pad),
     ];
-    assert_eq!(hit_offsets, [0, 4, 8, 12, 16, 20, 24, 25, 26]);
+    assert_eq!(hit_offsets, [0, 4, 8, 12, 16, 20, 24, 25, 26, 27]);
     let query_offsets = [
         offset_of!(QvpLetterQuery, scope),
         offset_of!(QvpLetterQuery, text),
@@ -1333,19 +1334,25 @@ fn letters_over_the_abi() {
 
         // ── hit tests ──
         assert_eq!(qvp_hit_test_letter(p, 15.0, 5.0, std::ptr::null(), &mut hit), 1);
-        let hv = |h: &QvpLetterHit| (h.word, h.letter, h.path, h.at, h.line, h.distance, h.mark, h.is_exact, h._pad);
-        assert_eq!(hv(&hit), (1, QVP_NONE, 5, 3, 0, 0.0, Mark::WaqfJaizWaslAwla as u8, 1, [0; 2]));
+        let hv = |h: &QvpLetterHit| {
+            (h.word, h.letter, h.path, h.at, h.line, h.distance, h.mark, h.is_exact, h.is_body, h._pad)
+        };
+        // a word-level mark: no letter, not a body
+        assert_eq!(hv(&hit), (1, QVP_NONE, 5, 3, 0, 0.0, Mark::WaqfJaizWaslAwla as u8, 1, 0, 0));
+        // a mark member of a letter: the dot of the ba
+        assert_eq!(qvp_hit_test_letter(p, 55.0, 23.0, std::ptr::null(), &mut hit), 1);
+        assert_eq!(hv(&hit), (0, 0, 1, 0, 0, 0.0, Mark::Dot as u8, 1, 0, 0));
         // the piece of the lam, which reaches past its word's box
         assert_eq!(qvp_hit_test_letter(p, 39.5, 15.0, std::ptr::null(), &mut hit), 1);
-        assert_eq!(hv(&hit), (0, 1, 9, 2, 0, 0.0, 0, 1, [0; 2]));
+        assert_eq!(hv(&hit), (0, 1, 9, 2, 0, 0.0, 0, 1, 1, 0));
         // the view variant goes through the layout: the middle of piece 0 at (55, 15)
         let dy = *lay.lines;
         let (vx, vy) = (lay.offset_x + 55.0 * lay.scale, lay.offset_y + (15.0 + dy) * lay.scale);
         assert_eq!(qvp_hit_test_letter_view(p, vx, vy, std::ptr::null(), &mut hit), 1);
-        assert_eq!(hv(&hit), (0, 0, 8, 0, 0, 0.0, 0, 1, [0; 2]));
+        assert_eq!(hv(&hit), (0, 0, 8, 0, 0, 0.0, 0, 1, 1, 0));
         // between the letters of word 2, off the ink: the nearest letter's box
         assert_eq!(qvp_hit_test_letter(p, 21.0, 55.0, std::ptr::null(), &mut hit), 1);
-        assert_eq!((hit.word, hit.letter, hit.path, hit.is_exact, hit.mark), (2, 0, 6, 0, 0));
+        assert_eq!((hit.word, hit.letter, hit.path, hit.is_exact, hit.mark, hit.is_body), (2, 0, 6, 0, 0, 0));
         assert!((hit.distance - 1.0).abs() < 1e-5, "{}", hit.distance);
         let tight = QvpHitOptions { max_distance: 0.5, gap_bias: -1.0, prefer_exact: 1 };
         assert_eq!(qvp_hit_test_letter(p, 80.0, 90.0, &tight, &mut hit), 0, "too far from every word");
@@ -1375,6 +1382,32 @@ fn letters_over_the_abi() {
         assert_eq!(qvp_hit_test_letter_view(null, 0.0, 0.0, std::ptr::null(), &mut hit), 0);
         assert_eq!(qvp_layout_draw_revision(null), 0);
         assert_eq!(qvp_style_add_letters(null, 0, &any, RED, 0), 0);
+    }
+}
+
+/// `is_body` is the member's role, and `mark` the path's mark: a body that the page stores as
+/// a mark, as a dagger alif, has both.
+#[test]
+fn a_letter_hit_says_whether_it_is_body_ink() {
+    unsafe {
+        let data = letters_page_data();
+        let bytes = encode(&data);
+        let p = qvp_page_load(bytes.as_ptr(), bytes.len());
+        assert!(!p.is_null());
+        // the omitted alif (path 7, a mark of the page) as a second body of word 2's letter
+        let mut layer = letters_layer();
+        layer.members[7] = MemberRec { path: MemberPath::Page(7), at: 0, is_body: true };
+        let bytes = layer_bytes(&data, &layer);
+        assert_eq!(qvp_attach_letters(p, bytes.as_ptr(), bytes.len() as u32), 0);
+        let mut hit = std::mem::zeroed::<QvpLetterHit>();
+        let kind = |hit: &QvpLetterHit| (hit.word, hit.letter, hit.path, hit.mark, hit.is_exact, hit.is_body);
+        assert_eq!(qvp_hit_test_letter(p, 15.0, 47.0, std::ptr::null(), &mut hit), 1);
+        assert_eq!(kind(&hit), (2, 0, 7, Mark::OmittedAlif as u8, 1, 1), "a body stored as a mark");
+        assert_eq!(qvp_hit_test_letter(p, 15.0, 55.0, std::ptr::null(), &mut hit), 1);
+        assert_eq!(kind(&hit), (2, 0, 6, 0, 1, 1), "body ink");
+        assert_eq!(qvp_hit_test_letter(p, 55.0, 7.0, std::ptr::null(), &mut hit), 1);
+        assert_eq!(kind(&hit), (0, 0, 2, Mark::Fathah as u8, 1, 0), "a mark member");
+        qvp_page_free(p);
     }
 }
 

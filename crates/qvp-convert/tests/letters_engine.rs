@@ -1,7 +1,8 @@
 //! The engine over real letter layers. Each test builds the selected pages and their layers
 //! in memory from `pages/` and `pages-letters/`, loads them into the engine, and checks what
 //! the letter feature rests on: the attach, the letter selectors, the swap of a cut path for
-//! its pieces, the letter hit test and the offsets against the `qpc` text.
+//! its pieces, the letter hit test on ink, on seams and in counters, printed and reflowed,
+//! and the offsets against the `qpc` text.
 //!
 //! No data release carries a layer, and `dist/pages` is built from another source release
 //! than `pages-letters/`. So the test never pairs `dist/` files: it builds both files here.
@@ -18,7 +19,9 @@
 
 use qvp_convert::letter_page::{letter_page, LetterPage};
 use qvp_convert::{convert, merge_words_index, words_json};
-use qvp_core::{Draw, HitOptions, LayoutSpec, LetterMember, LetterPart, Page, Paint, Selector, NONE};
+use qvp_core::{
+    Draw, HitOptions, LayoutSpec, LetterHit, LetterMember, LetterPart, Page, Paint, ReflowSpec, Selector, NONE,
+};
 use qvp_format::letters::{encode_letters, NO_AT};
 use rayon::prelude::*;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -47,6 +50,24 @@ const ALL_BODY_SKIPS: usize = 0;
 const ALL_PIECE_CENTRES: usize = 86_814;
 /// Pieces among the body members hit inside.
 const ALL_PIECE_HITS: usize = 261_953;
+/// Grid points on word ink, printed, and the seam hits among them: a cut path holds the
+/// point and no piece does.
+const ALL_INK_POINTS: usize = 39_674_994;
+const ALL_SEAM_HITS: usize = 23_379;
+/// Grid points on word ink under the reflow at `REFLOW_ZOOM`, through the view call, the
+/// seam hits among them, and the points the round trip through the view moves off the ink.
+const ALL_REFLOW_POINTS: usize = 39_674_298;
+const ALL_REFLOW_SEAM_HITS: usize = 23_333;
+const ALL_REFLOW_LOST: usize = 696;
+/// Counters (a nested subpath of a body member that the member does not fill) hit at a
+/// point inside them, and those with no point clear of all ink at the scan's resolution.
+const ALL_COUNTERS: usize = 104_835;
+const ALL_COUNTER_SKIPS: usize = 0;
+
+/// The grid step of the ink tests, in page units.
+const INK_STEP: f32 = 0.5;
+/// The zoom of the reflow the ink test lays out.
+const REFLOW_ZOOM: f32 = 2.0;
 
 /// The phone layout of the draw lists the tests compare.
 const PHONE: LayoutSpec = LayoutSpec {
@@ -917,33 +938,335 @@ fn a_point_inside_a_piece_names_its_letter() {
     }
 }
 
-/// The brief's coverage rule for the centre test: at least 80% of the pieces of each page
-/// have their box centre inside them. On the real pages about a third do, because most
-/// pieces are thin curved strokes. The scan of `a_point_inside_a_piece_names_its_letter`
-/// tests the pieces the centre misses. This rule fails on every page, so it does not gate.
+/// The ink of the page's words: every page path of a word, cut paths included, and every
+/// piece, in a grid of cells, to find the words whose ink holds a point.
+struct WordInk {
+    cell: f32,
+    cols: usize,
+    rows: usize,
+    /// (path, its word) per cell
+    cells: Vec<Vec<(u32, u32)>>,
+    boxes: Vec<[f32; 4]>,
+}
+
+impl WordInk {
+    fn new(p: &Page) -> WordInk {
+        let g = p.geometry();
+        let boxes: Vec<[f32; 4]> = g
+            .table
+            .iter()
+            .map(|r| {
+                let pts = &g.pts[r.pt_start as usize..(r.pt_start + r.pt_count) as usize];
+                pts.chunks(2).fold([f32::MAX, f32::MAX, f32::MIN, f32::MIN], |b, c| {
+                    [b[0].min(c[0]), b[1].min(c[1]), b[2].max(c[0]), b[3].max(c[1])]
+                })
+            })
+            .collect();
+        let cell = 4.0;
+        let cols = (p.width() / cell) as usize + 1;
+        let rows = (p.height() / cell) as usize + 1;
+        let mut cells = vec![vec![]; cols * rows];
+        let clamp = |v: f32, n: usize| ((v / cell).max(0.0) as usize).min(n - 1);
+        for (i, b) in boxes.iter().enumerate() {
+            let word = g.table[i].word;
+            if b[0] > b[2] || word == NONE {
+                continue;
+            }
+            for y in clamp(b[1], rows)..=clamp(b[3], rows) {
+                for x in clamp(b[0], cols)..=clamp(b[2], cols) {
+                    cells[y * cols + x].push((i as u32, word));
+                }
+            }
+        }
+        WordInk { cell, cols, rows, cells, boxes }
+    }
+
+    /// The words whose ink holds the point, ascending, with no repeat.
+    fn owners(&self, p: &Page, x: f32, y: f32) -> Vec<u32> {
+        if !(x >= 0.0 && y >= 0.0) || x / self.cell >= self.cols as f32 || y / self.cell >= self.rows as f32 {
+            return vec![];
+        }
+        let i = (y / self.cell) as usize * self.cols + (x / self.cell) as usize;
+        let mut out: Vec<u32> = self.cells[i]
+            .iter()
+            .filter(|&&(q, _)| {
+                let b = self.boxes[q as usize];
+                b[0] <= x && x <= b[2] && b[1] <= y && y <= b[3] && p.point_in_path(q, x, y)
+            })
+            .map(|&(_, w)| w)
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+}
+
+/// Per path: true for a body member of a letter. Every other path is false.
+fn body_roles(p: &Page) -> Vec<bool> {
+    let mut role = vec![false; p.geometry().table.len()];
+    for w in 0..p.data().words.len() as u32 {
+        for l in 0..p.letter_count(w) {
+            for m in p.letter_members(w, l) {
+                role[m.path as usize] = m.is_body;
+            }
+        }
+    }
+    role
+}
+
+/// What is wrong with an exact letter hit at a page-unit point `(x, y)`, if anything: the
+/// hit is exact, its path holds the point or is a piece of the cut path that holds it, and
+/// `is_body` is the member's role. Returns whether it was a seam hit.
+fn exact_problem(p: &Page, ix: &Index, role: &[bool], h: &LetterHit, x: f32, y: f32) -> Result<bool, String> {
+    if !h.is_exact || h.distance != 0.0 {
+        return Err("not exact".into());
+    }
+    if ix.pieces_of.contains_key(&h.path) {
+        return Err("the hit names a cut path".into());
+    }
+    let seam = !p.point_in_path(h.path, x, y);
+    if seam {
+        let source = h.path.checked_sub(ix.n).and_then(|i| ix.source.get(i as usize));
+        if !source.is_some_and(|&s| p.point_in_path(s, x, y)) {
+            return Err("neither the path nor a cut path it is cut from holds the point".into());
+        }
+    }
+    if h.is_body != role.get(h.path as usize).copied().unwrap_or(false) {
+        return Err(format!("is_body {} for a path whose role is {}", h.is_body, !h.is_body));
+    }
+    Ok(seam)
+}
+
+/// The subpaths of a path's flattened outline, each a closed polygon. A curve is cut into
+/// 8 segments, as the engine cuts it.
+fn subpaths(p: &Page, path: u32) -> Vec<Vec<(f32, f32)>> {
+    use qvp_format::{OP_CLOSE, OP_CUBIC, OP_LINE, OP_MOVE, OP_QUAD};
+    let g = p.geometry();
+    let r = g.table[path as usize];
+    let ops = &g.ops[r.op_start as usize..(r.op_start + r.op_count) as usize];
+    let pts = &g.pts[r.pt_start as usize..(r.pt_start + r.pt_count) as usize];
+    let mut out: Vec<Vec<(f32, f32)>> = vec![];
+    let mut cur: Vec<(f32, f32)> = vec![];
+    let mut k = 0;
+    for &op in ops {
+        let at = |i: usize| (pts[k + i], pts[k + i + 1]);
+        match op {
+            OP_MOVE => {
+                if cur.len() > 2 {
+                    out.push(std::mem::take(&mut cur));
+                }
+                cur.clear();
+                cur.push(at(0));
+                k += 2;
+            }
+            OP_LINE => {
+                cur.push(at(0));
+                k += 2;
+            }
+            OP_QUAD | OP_CUBIC => {
+                let n = if op == OP_QUAD { 2 } else { 3 };
+                let p0 = *cur.last().unwrap_or(&(0.0, 0.0));
+                let c: Vec<(f32, f32)> = (0..n).map(|i| at(2 * i)).collect();
+                for i in 1..=8 {
+                    let t = i as f32 / 8.0;
+                    let u = 1.0 - t;
+                    cur.push(if n == 2 {
+                        (
+                            u * u * p0.0 + 2.0 * u * t * c[0].0 + t * t * c[1].0,
+                            u * u * p0.1 + 2.0 * u * t * c[0].1 + t * t * c[1].1,
+                        )
+                    } else {
+                        (
+                            u * u * u * p0.0 + 3.0 * u * u * t * c[0].0 + 3.0 * u * t * t * c[1].0 + t * t * t * c[2].0,
+                            u * u * u * p0.1 + 3.0 * u * u * t * c[0].1 + 3.0 * u * t * t * c[1].1 + t * t * t * c[2].1,
+                        )
+                    });
+                }
+                k += 2 * n;
+            }
+            OP_CLOSE => {}
+            _ => {}
+        }
+    }
+    if cur.len() > 2 {
+        out.push(cur);
+    }
+    out
+}
+
+/// Even-odd containment in one polygon.
+fn in_polygon(poly: &[(f32, f32)], x: f32, y: f32) -> bool {
+    let mut inside = false;
+    for i in 0..poly.len() {
+        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+        if (a.1 <= y) != (b.1 <= y) && a.0 + (y - a.1) / (b.1 - a.1) * (b.0 - a.0) > x {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+/// A point in each counter of a body member. A counter is a subpath nested inside another
+/// subpath of the same path, with points inside it that the path does not fill (two strokes
+/// of one path that cross are no counter). The point is inside the counter and on no word's
+/// ink. `None` for a counter with no such point on grids of 8, 16 and 32 cells over its box:
+/// ink of another path covers it, or it is too small to sample.
+fn counter_points(p: &Page, ink: &WordInk, path: u32) -> Vec<Option<(f32, f32)>> {
+    let subs = subpaths(p, path);
+    let mut out = vec![];
+    for (j, hole) in subs.iter().enumerate() {
+        let nested = subs.iter().enumerate().any(|(k, outer)| k != j && in_polygon(outer, hole[0].0, hole[0].1));
+        if !nested {
+            continue;
+        }
+        let (x0, y0, x1, y1) = hole.iter().fold((f32::MAX, f32::MAX, f32::MIN, f32::MIN), |b, &(x, y)| {
+            (b.0.min(x), b.1.min(y), b.2.max(x), b.3.max(y))
+        });
+        let grid = || {
+            [8u32, 16, 32].into_iter().flat_map(move |n| {
+                (1..n).flat_map(move |i| {
+                    (1..n).map(move |j| (x0 + (x1 - x0) * i as f32 / n as f32, y0 + (y1 - y0) * j as f32 / n as f32))
+                })
+            })
+        };
+        let open: Vec<(f32, f32)> =
+            grid().filter(|&(x, y)| in_polygon(hole, x, y) && !p.point_in_path(path, x, y)).collect();
+        if open.is_empty() {
+            continue;
+        }
+        out.push(open.into_iter().find(|&(x, y)| ink.owners(p, x, y).is_empty()));
+    }
+    out
+}
+
+/// The letter hit prefers ink. (1) Printed: at every grid point on a word's ink, the letter
+/// hit is exact, in a word whose ink holds the point, on a path that holds it or on a piece
+/// of the cut path that holds it (a seam), and `is_body` is the member's role. (2) The same
+/// under a reflow, through the view call: each ink point of one word only goes to the view
+/// through that word's placement. (3) A point in a body member's counter, on no ink, gives a
+/// near hit that names the member's letter.
 #[test]
-#[ignore = "fails on every page: about a third of the pieces hold their box centre"]
-fn most_pieces_hold_their_box_centre() {
+fn a_letter_hit_prefers_ink() {
     if !have_letters() {
         return;
     }
-    let ([centres, pieces], _) = run("most_pieces_hold_their_box_centre", |b, f| {
-        let p = load(b, true)?;
-        let ix = index(&p, b);
-        let ink = Ink::new(&p, &ix);
-        let n = b.piece_source.len();
-        let centres = (0..n as u32)
-            .map(|i| ix.n + i)
-            .filter(|&path| {
-                ink.boxes.get(path as usize).is_some_and(|&[x0, y0, x1, y1]| {
-                    x0 <= x1 && p.point_in_path(path, (x0 + x1) / 2.0, (y0 + y1) / 2.0)
-                })
-            })
-            .count();
-        if centres * 5 < n * 4 {
-            f.push(format!("only {centres} of {n} pieces have their box centre inside them"));
-        }
-        Ok([centres, n])
-    });
-    println!("totals: {centres} of {pieces} pieces hold their box centre");
+    let ([ink_points, seams, reflow_points, reflow_seams, lost, counters, counter_skips], _) = run(
+        "a_letter_hit_prefers_ink",
+        |b, f| {
+            let mut p = load(b, true)?;
+            let ix = index(&p, b);
+            let ink = WordInk::new(&p);
+            let role = body_roles(&p);
+            let opt = HitOptions::default();
+            let mut c = [0usize; 7];
+
+            // (1) and the points of (2): every grid point on ink
+            let mut single = vec![];
+            let (w, h) = (p.width(), p.height());
+            let mut y = 0.0;
+            while y <= h {
+                let mut x = 0.0;
+                while x <= w {
+                    let owners = ink.owners(&p, x, y);
+                    if !owners.is_empty() {
+                        c[0] += 1;
+                        let hit = p.hit_test_letter(x, y, &opt);
+                        let problem = match hit {
+                            None => Err("no hit".to_string()),
+                            Some(h) if !owners.contains(&h.word) => Err(format!("word {}", key(&p, h.word))),
+                            Some(h) => exact_problem(&p, &ix, &role, &h, x, y),
+                        };
+                        match problem {
+                            Ok(seam) => c[1] += seam as usize,
+                            Err(e) => f.push(format!(
+                                "printed ({x}, {y}) on the ink of {:?}: {e}: letter hit {hit:?}, exact word hit {:?}",
+                                owners.iter().map(|&w| key(&p, w)).collect::<Vec<_>>(),
+                                p.hit_test_exact(x, y)
+                            )),
+                        }
+                        if owners.len() == 1 {
+                            single.push((x, y, owners[0]));
+                        }
+                    }
+                    x += INK_STEP;
+                }
+                y += INK_STEP;
+            }
+
+            // (2) the reflow
+            let spec = LayoutSpec { reflow: Some(ReflowSpec { zoom: REFLOW_ZOOM, ..Default::default() }), ..PHONE };
+            let l = p.layout(&spec).clone();
+            for &(x, y, w) in &single {
+                let line = p.data().words[w as usize].line_index as usize;
+                let place = l.word_placement(w, line);
+                let (lx, ly) = place.apply(x, y);
+                let (vx, vy) = (l.offset_x + lx * l.scale, l.offset_y + ly * l.scale);
+                // the point the engine works with, after the round trip through the view
+                let (px, py) = place.invert((vx - l.offset_x) / l.scale, (vy - l.offset_y) / l.scale);
+                if !ink.owners(&p, px, py).contains(&w) {
+                    c[4] += 1;
+                    continue;
+                }
+                c[2] += 1;
+                let hit = p.hit_test_letter_view(vx, vy, &opt);
+                let problem = match hit {
+                    None => Err("no hit".to_string()),
+                    Some(h) if h.word != w => {
+                        // another word placed over this one: its own ink must hold the point
+                        let line = p.data().words[h.word as usize].line_index as usize;
+                        let (qx, qy) = l
+                            .word_placement(h.word, line)
+                            .invert((vx - l.offset_x) / l.scale, (vy - l.offset_y) / l.scale);
+                        exact_problem(&p, &ix, &role, &h, qx, qy)
+                            .map_err(|e| format!("word {} over word {}: {e}", key(&p, h.word), key(&p, w)))
+                    }
+                    Some(h) => exact_problem(&p, &ix, &role, &h, px, py),
+                };
+                match problem {
+                    Ok(seam) => c[3] += seam as usize,
+                    Err(e) => f.push(format!(
+                        "reflow zoom {REFLOW_ZOOM}: ink of {} at ({x}, {y}), view ({vx}, {vy}): {e}: letter hit {hit:?}, exact view hit {:?}",
+                        key(&p, w),
+                        p.hit_test_exact_view(vx, vy)
+                    )),
+                }
+            }
+
+            // (3) the counters, in page units
+            for w in 0..p.data().words.len() as u32 {
+                for l in 0..p.letter_count(w) {
+                    for m in p.letter_members(w, l).into_iter().filter(|m| m.is_body) {
+                        for point in counter_points(&p, &ink, m.path) {
+                            let Some((x, y)) = point else {
+                                c[6] += 1;
+                                continue;
+                            };
+                            c[5] += 1;
+                            let hit = p.hit_test_letter(x, y, &opt);
+                            if !hit.is_some_and(|h| !h.is_exact && !h.is_body && h.word == w && h.letter == l) {
+                                f.push(format!(
+                                    "counter of word {} letter {l} body path {} at ({x}, {y}): letter hit {hit:?}",
+                                    key(&p, w),
+                                    m.path
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(c)
+        },
+    );
+    println!(
+        "totals: {ink_points} printed ink points ({seams} seam hits), {reflow_points} reflowed ink points at zoom {REFLOW_ZOOM} ({reflow_seams} seam hits, {lost} moved off the ink by the view round trip), {counters} counters ({counter_skips} with no clear point)"
+    );
+    if all_pages() {
+        assert_eq!(ink_points, ALL_INK_POINTS, "printed ink points over all pages");
+        assert_eq!(seams, ALL_SEAM_HITS, "printed seam hits over all pages");
+        assert_eq!(reflow_points, ALL_REFLOW_POINTS, "reflowed ink points over all pages");
+        assert_eq!(reflow_seams, ALL_REFLOW_SEAM_HITS, "reflowed seam hits over all pages");
+        assert_eq!(lost, ALL_REFLOW_LOST, "reflowed ink points moved off the ink over all pages");
+        assert_eq!(counters, ALL_COUNTERS, "counters over all pages");
+        assert_eq!(counter_skips, ALL_COUNTER_SKIPS, "counters with no clear point over all pages");
+    }
 }

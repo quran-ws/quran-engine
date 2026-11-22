@@ -100,12 +100,13 @@ fn letter_hit(h: LetterHit) -> QvpLetterHit {
         distance: h.distance,
         mark: h.mark as u8,
         is_exact: h.is_exact as u8,
-        _pad: [0; 2],
+        is_body: h.is_body as u8,
+        _pad: 0,
     }
 }
-/// The letter, or the mark, under a point in page units. The word is the one `qvp_hit_test`
-/// finds with the same options. 0 with no layer, no word, or a decoration; `out` is then left
-/// as it was, and it may be NULL.
+/// The letter, or the mark, under a point in page units. On ink, the word of that ink. Off
+/// ink, the word `qvp_hit_test` finds with the same options. 0 with no layer, no word, or a
+/// decoration: `out` is then left as it was, and it may be NULL.
 #[no_mangle]
 pub unsafe extern "C" fn qvp_hit_test_letter(
     page: *const Page,

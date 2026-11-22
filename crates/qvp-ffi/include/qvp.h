@@ -166,15 +166,18 @@ typedef struct { uint32_t word, index, at, text /* code point */, n_members, n_m
    paths. at: its offset, QVP_NONE when none; a body and its dots carry the letter's. mark: the mark id of the path; a
    piece has its source's, 0. */
 typedef struct { uint32_t path, at; uint8_t mark, is_body, is_cut, _pad; } QvpLetterMember;
-/* the letter under a point (qvp_hit_test_letter). word: the word qvp_hit_test finds with the same options. letter:
-   the index in the word, QVP_NONE for a word-level mark. line: the word's printed line index.
-   is_exact 1: the point is inside the outline of path, and distance is 0. A cut path is never path: its pieces are.
-     Ink the page stores as a mark wins over body ink, and of two of the same ink, the one drawn last wins.
-   is_exact 0: the point is off the word's ink. The letter is the one whose box is nearest, path is its first body
-     member, distance is the distance to its box in page units (0 inside the box), and mark is 0.
+/* the letter under a point (qvp_hit_test_letter). The hit prefers ink. letter: the index in the word, QVP_NONE for a
+   word-level mark. line: the word's printed line index.
+   is_exact 1: the point is on the ink of path, in path's word, and distance is 0. A cut path is never path: its
+     pieces are, and a point on the cut path between two pieces (a seam) hits the nearest piece. Ink the page stores as
+     a mark wins over body ink, and of two of the same ink, the one drawn last wins.
+   is_exact 0: the point is on no ink. word is the one qvp_hit_test finds with the same options. The letter is the one
+     whose box is nearest; when several boxes hold the point (a counter), the one whose body ink is nearest. path is
+     its first body member, distance is the distance to its box in page units (0 inside the box), mark and is_body 0.
    at: the offset of the path hit, or of the letter; QVP_NONE when none. mark: the mark id of the path hit. Body ink has
-   0, but a body the page stores as a mark (a dagger alif, mark 12) has that mark's id. */
-typedef struct { uint32_t word, letter, path, at, line; float distance; uint8_t mark, is_exact, _pad[2]; } QvpLetterHit;
+   0, but a body the page stores as a mark (a dagger alif, mark 12) has that mark's id. is_body: 1 when path is a body
+   member of its letter, 0 for a mark member, a word-level mark and a near hit. */
+typedef struct { uint32_t word, letter, path, at, line; float distance; uint8_t mark, is_exact, is_body, _pad; } QvpLetterHit;
 /* letters by what they are (qvp_find_letters, qvp_style_add_letters). scope: the words to look in. text: a code
    point, 0 = any letter. mark: a mark id that one of the letter's members must carry, 0 = any. part:
    QVP_LETTER_PART_*, what of each letter a rule takes; it does not filter qvp_find_letters. */
@@ -288,9 +291,11 @@ int      qvp_hit_test_exact(const QvpPage*, float x, float y, QvpHit* out);     
 int      qvp_hit_test_exact_view(const QvpPage*, float view_x, float view_y, QvpHit* out);                         /* outline, else box; no gap; viewport px */
 int      qvp_hit_test_letter(const QvpPage*, float x, float y, const QvpHitOptions* opt /* NULL ok */, QvpLetterHit* out);   /* the letter or mark under a point, page units */
 int      qvp_hit_test_letter_view(const QvpPage*, float view_x, float view_y, const QvpHitOptions* opt, QvpLetterHit* out);   /* the same, viewport px */
-/* 0: no layer, no word under the point within opt's max_distance, or a decoration. A tap between words gives the
-   nearest letter of the word qvp_hit_test picks, which can be far: check is_exact. The hit does not follow the colours:
-   the pieces of a cut path are tested whether it draws whole or as its pieces. */
+/* 0: no layer, no word under the point within opt's max_distance, or a decoration. On ink the hit is always exact,
+   whatever opt says: max_distance, gap_bias and prefer_exact choose the word off ink, as in qvp_hit_test, and
+   max_distance limits the distance to the word, not to the letter. A tap between words gives the nearest letter of
+   that word, which can be far: check is_exact, or filter on distance. The hit does not follow the colours: the pieces
+   of a cut path are tested whether it draws whole or as its pieces. */
 uint32_t qvp_line_bands(const QvpPage*, QvpLineBand* out, uint32_t cap);
 uint32_t qvp_hit_areas(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);
 uint32_t qvp_hit_areas_view(const QvpPage*, float gap_bias /* <0: default */, QvpHitArea* out, uint32_t cap);   /* the same, in viewport px; a reflowed page's rows */
