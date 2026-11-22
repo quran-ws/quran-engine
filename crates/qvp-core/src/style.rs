@@ -1,5 +1,6 @@
 //! Style engine: layered rules with handles that undo exactly, sub-word
 //! selectors, and per-path colour transitions driven by the engine clock.
+use crate::letters::{LetterPart, LetterQuery, LetterSelection, LetterView};
 use crate::{Page, Rgba, DEFAULT_INK, NONE};
 use qvp_format::*;
 
@@ -29,6 +30,22 @@ pub enum Selector {
     Kind(PathKind),
     Deco(DecoKind),
     DecoIdx(u32),
+    /// A letter of a word: (word, letter index in the word, part). With no letter layer it
+    /// selects nothing.
+    Letter(u32, u16, LetterPart),
+    /// The nth mark of a letter: (word, letter, n). Marks count in member order, dots
+    /// included, and a body never counts.
+    LetterMark(u32, u16, u16),
+    /// Every member of a letter whose path has that mark: (word, letter, mark). A body that
+    /// the page stores as a mark counts. `Mark::None` selects nothing.
+    LetterMarkNamed(u32, u16, Mark),
+    /// The ink of a word's `qpc` characters, by code-point offset: (word, from, to), both
+    /// ends in. A letter's offset takes its body and its dots, a mark's offset takes that
+    /// mark, and an extra offset the body draws takes the body. A character with no ink, or
+    /// a mark with no offset, is never taken.
+    WordChars(u32, u16, u16),
+    /// Letters by what they are: the rule [`Page::style_letters`] adds.
+    Letters(LetterSelection),
 }
 
 impl Selector {
@@ -44,7 +61,12 @@ impl Selector {
             Selector::DecoIdx(_) => 7,
             Selector::Word(_) => 8,
             Selector::WordBody(_) | Selector::WordMarks(_) => 9,
+            Selector::Letters(_) => 9,
             Selector::WordMark(..) | Selector::WordMarkNamed(..) | Selector::WordPath(..) => 10,
+            Selector::Letter(..)
+            | Selector::LetterMark(..)
+            | Selector::LetterMarkNamed(..)
+            | Selector::WordChars(..) => 10,
             Selector::Path(_) => 11,
         }
     }
@@ -243,10 +265,13 @@ pub(crate) struct PathCtx {
 }
 
 impl Rule {
-    fn matches(&self, c: &PathCtx, pi: u32) -> bool {
+    /// True when the rule takes path `pi`, whose context is `c`. `lx` holds the letter
+    /// layer, which the letter selectors need.
+    fn matches(&self, c: &PathCtx, pi: u32, lx: LetterView<'_>) -> bool {
         match &self.sel {
             Selector::Page => true,
-            Selector::Path(p) => *p == pi,
+            // a piece follows the path it is cut from: hiding a body hides its pieces
+            Selector::Path(p) => *p == pi || c.letter.source == *p,
             Selector::WordPath(w, n) => c.word == *w && c.nth_in_word == *n,
             Selector::WordMark(w, n) => c.word == *w && c.kind == PathKind::Mark && c.nth_mark == *n,
             Selector::WordMarkNamed(w, m, n) => c.word == *w && c.mark == *m && c.nth_mark_named == *n,
@@ -261,6 +286,11 @@ impl Rule {
             Selector::Kind(k) => c.kind == *k,
             Selector::Deco(k) => c.decoration != NONE && c.deco_kind == *k,
             Selector::DecoIdx(d) => c.decoration == *d,
+            Selector::Letter(..)
+            | Selector::LetterMark(..)
+            | Selector::LetterMarkNamed(..)
+            | Selector::WordChars(..)
+            | Selector::Letters(_) => lx.takes(&self.sel, c),
         }
     }
 }
@@ -325,9 +355,10 @@ impl Page {
     /// Winning rule paint for a path, or None when no rule applies.
     pub(crate) fn rule_paint(&self, pi: u32) -> Option<Paint> {
         let c = &self.path_ctx[pi as usize];
+        let lx = LetterView { letters: self.letters.as_deref(), ctx: &self.path_ctx };
         let mut best: Option<(&Rule, u8)> = None;
         for r in &self.styles.rules {
-            if !r.matches(c, pi) {
+            if !r.matches(c, pi, lx) {
                 continue;
             }
             let sp = r.sel.specificity();
@@ -491,6 +522,19 @@ impl Page {
     pub fn style_target(&mut self, layer: i32, target: &crate::Target, paint: Paint) -> Handle {
         let words = self.target_words(target);
         self.styles.add_many(layer, words.into_iter().map(Selector::Word), paint)
+    }
+    /// Recolour the letters a query finds, under one handle and one rule.
+    ///
+    /// The scope resolves to words now. The rest of the query is kept and resolved per path
+    /// each time the rules are evaluated, so the rule takes the letters of a layer attached
+    /// later, and of a second attach too. A handle is returned with no layer: the rule then
+    /// selects nothing until a layer is attached. `part` says which members of each letter
+    /// found take the paint.
+    pub fn style_letters(&mut self, layer: i32, q: &LetterQuery, paint: Paint) -> Handle {
+        // sorted and with no repeat: the rule looks a word up by binary search
+        let words = self.target_words(&q.scope);
+        let sel = LetterSelection { words, text: q.text, mark: q.mark, part: q.part };
+        self.styles.add(layer, Selector::Letters(sel), paint)
     }
     pub fn remove_style(&mut self, handle: Handle) -> usize {
         self.styles.remove(handle)

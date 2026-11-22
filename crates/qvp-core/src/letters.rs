@@ -1,10 +1,11 @@
 //! The letter layer of a page: which paths draw which letter, the pieces cut from joined
-//! outlines, and the letters a host reads back.
+//! outlines, the letters a host reads back, the four letter selectors and the letter query.
 //!
 //! A layer is optional. [`Page::attach_letters`] appends its pieces to the page's path
 //! table, after the page's own paths, so no page path changes its index. No word range
 //! holds a piece.
 use crate::defaults::MAX_LETTER_LAYER_BYTES;
+use crate::style::{PathCtx, Selector};
 use crate::{load, reflow, Page, PathGeom, NONE};
 use qvp_format::letters::{decode_letters, LetterData, MemberPath, NO_AT};
 use qvp_format::{cmds_bbox, Category, Error, IBox, Mark, PageData, NONE_U16};
@@ -32,7 +33,6 @@ impl LetterPart {
     }
 
     /// True when this part takes a member with this role and mark category.
-    #[allow(dead_code)] // read by the letter selectors
     pub(crate) fn takes(self, is_body: bool, category: Category) -> bool {
         let dot = category == Category::LetterDot;
         match self {
@@ -48,6 +48,20 @@ impl LetterPart {
 pub struct LetterQuery {
     /// The words to look in.
     pub scope: crate::Target,
+    /// The letter's character. `None` takes any letter.
+    pub text: Option<char>,
+    /// A mark that one of the letter's members must carry. `Mark::None` takes any letter.
+    pub mark: Mark,
+    /// The part of each letter found.
+    pub part: LetterPart,
+}
+
+/// The rule a letter query leaves: [`Selector::Letters`]. The query's scope is resolved to
+/// words when the rule is added. The engine resolves the rest per path each time the rules run.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct LetterSelection {
+    /// The words to look in, ascending, with no repeat.
+    pub words: Vec<u32>,
     /// The letter's character. `None` takes any letter.
     pub text: Option<char>,
     /// A mark that one of the letter's members must carry. `Mark::None` takes any letter.
@@ -140,11 +154,9 @@ pub(crate) struct PathLetter {
     /// The offset as the layer stores it, kept for a later check.
     pub raw_at: u16,
     /// True for a body member.
-    #[allow(dead_code)] // read by the letter selectors
     pub is_body: bool,
     /// Index among the letter's members that are not body, in member order. `u16::MAX` for
     /// a body member.
-    #[allow(dead_code)] // read by the letter selectors
     pub nth_letter_mark: u16,
     /// The page path a piece replaces. The path itself for every other path.
     pub source: u32,
@@ -215,7 +227,6 @@ impl Letters {
     }
 
     /// True when a member of the letter has a path with the mark `m`.
-    #[allow(dead_code)] // read by the letter selectors
     pub(crate) fn letter_has_mark(&self, letter: u32, m: Mark) -> bool {
         let id = m as u8 as usize;
         self.letter_marks[letter as usize][id / 64] >> (id % 64) & 1 == 1
@@ -255,6 +266,13 @@ impl Letters {
         self.piece_box.get((path - self.first_piece) as usize).copied().unwrap_or(IBox::EMPTY)
     }
 
+    /// True when letter `letter` (an index into `data.letters`) is the character `text`
+    /// and carries the mark `mark`. `None` and `Mark::None` take any letter.
+    pub(crate) fn letter_is(&self, letter: u32, text: Option<char>, mark: Mark) -> bool {
+        let Some(l) = self.data.letters.get(letter as usize) else { return false };
+        text.is_none_or(|t| l.text == t) && (mark == Mark::None || self.letter_has_mark(letter, mark))
+    }
+
     /// The path index of a member.
     fn member_path(&self, path: MemberPath) -> u32 {
         match path {
@@ -267,6 +285,68 @@ impl Letters {
     fn letter_of(&self, word: u32, letter: u32) -> Option<u32> {
         let &(first, n) = self.word_letters.get(word as usize)?;
         (letter < n).then_some(first + letter)
+    }
+}
+
+/// What the letter selectors read: the layer, when one is attached, and every path's
+/// context. The style engine builds one per path it resolves.
+#[derive(Clone, Copy)]
+pub(crate) struct LetterView<'a> {
+    pub letters: Option<&'a Letters>,
+    pub ctx: &'a [PathCtx],
+}
+
+impl LetterView<'_> {
+    /// True when a letter selector takes the path whose context is `c`. With no layer,
+    /// nothing is taken.
+    pub(crate) fn takes(&self, sel: &Selector, c: &PathCtx) -> bool {
+        let Some(lt) = self.letters else { return false };
+        let (first, n) = c.letter.pieces;
+        if n > 0 {
+            // a cut path is taken when every piece is: a rule over the whole outline draws
+            // it whole
+            return (first..first + n).all(|p| self.ctx.get(p as usize).is_some_and(|pc| member_matches(lt, sel, pc)));
+        }
+        member_matches(lt, sel, c)
+    }
+}
+
+/// True when a letter selector takes one path that is not cut: a letter member, a word
+/// mark, or a path with no role. Every test is constant time: the facts come from the
+/// path's own context and from what the attach indexed per letter.
+pub(crate) fn member_matches(lt: &Letters, sel: &Selector, c: &PathCtx) -> bool {
+    let m = &c.letter;
+    // the word comes from the layer's letter or word mark, never from the path's context
+    let of_letter = |w: u32, l: u16| m.letter != NONE && m.word == w && m.letter_in_word == l;
+    match sel {
+        Selector::Letter(w, l, part) => of_letter(*w, *l) && part.takes(m.is_body, c.category),
+        Selector::LetterMark(w, l, n) => of_letter(*w, *l) && !m.is_body && m.nth_letter_mark == *n,
+        Selector::LetterMarkNamed(w, l, mark) => of_letter(*w, *l) && *mark != Mark::None && c.mark == *mark,
+        Selector::WordChars(w, from, to) => {
+            if m.word == NONE || m.word != *w {
+                return false;
+            }
+            let inside = |at: u16| at != NO_AT && *from <= at && at <= *to;
+            // a member's own offset: a body and its dots carry the letter's, a mark its own
+            if inside(m.at) {
+                return true;
+            }
+            // the other characters a body draws, such as the kashida of a lam
+            m.is_body
+                && m.letter != NONE
+                && lt
+                    .data
+                    .letters
+                    .get(m.letter as usize)
+                    .is_some_and(|l| l.more_at.iter().any(|&a| inside(lt.checked(*w, a))))
+        }
+        Selector::Letters(q) => {
+            m.letter != NONE
+                && q.words.binary_search(&m.word).is_ok()
+                && lt.letter_is(m.letter, q.text, q.mark)
+                && q.part.takes(m.is_body, c.category)
+        }
+        _ => false,
     }
 }
 
@@ -451,6 +531,23 @@ impl Page {
                 || members.iter().any(|m| !m.is_body && lt.checked(word, m.at) == at);
             hit.then_some(g - first)
         })
+    }
+
+    /// The letters a query finds: (word, letter index in the word), in word order, then in
+    /// letter order. The query's `text` and `mark` filter the letters, and its `part` does
+    /// not. Empty with no layer.
+    pub fn find_letters(&self, q: &LetterQuery) -> Vec<(u32, u32)> {
+        let Some(lt) = self.letters.as_deref() else { return vec![] };
+        let mut found = vec![];
+        for w in self.target_words(&q.scope) {
+            let Some(&(first, n)) = lt.word_letters.get(w as usize) else { continue };
+            for g in first..first + n {
+                if lt.letter_is(g, q.text, q.mark) {
+                    found.push((w, g - first));
+                }
+            }
+        }
+        found
     }
 
     /// Put each member's checked offset into its context. Runs after an attach and after a

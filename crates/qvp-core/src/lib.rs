@@ -33,7 +33,7 @@ pub use dress::{
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
 pub use hit::{Hit, HitArea, HitOptions, LineBand};
 pub use layout::{Draw, Grid, Layout, LayoutSpec};
-pub use letters::{LetterHit, LetterInfo, LetterMember, LetterPart, LetterQuery};
+pub use letters::{LetterHit, LetterInfo, LetterMember, LetterPart, LetterQuery, LetterSelection};
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahHeader, SurahInfo};
 pub use passage::{

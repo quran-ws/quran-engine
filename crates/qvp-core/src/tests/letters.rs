@@ -590,3 +590,282 @@ fn a_decoration_keeps_its_own_group_beside_the_pieces() {
     };
     assert_eq!(&p.layout(&spec).path_group[..], &groups[..]);
 }
+
+// ── the letter selectors and the letter query ──
+
+/// The paths of `p` in `RED`. Every other path must be in the default ink.
+fn reds(p: &mut Page) -> Vec<u32> {
+    let c = p.colors().to_vec();
+    let mut red = vec![];
+    for (i, &col) in c.iter().enumerate() {
+        if col == RED {
+            red.push(i as u32);
+        } else {
+            assert_eq!(col, DEFAULT_INK, "path {i}");
+        }
+    }
+    red
+}
+
+/// The paths a rule in `RED` at `LAYER_BASE` takes on the letter fixture.
+fn selected(sel: Selector) -> Vec<u32> {
+    let mut p = letters_page();
+    p.style(sel, Paint::new(RED));
+    reds(&mut p)
+}
+
+fn query(scope: Target, text: Option<char>, mark: Mark, part: LetterPart) -> LetterQuery {
+    LetterQuery { scope, text, mark, part }
+}
+
+#[test]
+fn letter_all() {
+    assert_eq!(selected(Selector::Letter(0, 1, LetterPart::All)), vec![9]);
+    assert_eq!(selected(Selector::Letter(0, 0, LetterPart::All)), vec![1, 2, 8]);
+}
+
+#[test]
+fn letter_body_and_dots() {
+    assert_eq!(selected(Selector::Letter(0, 0, LetterPart::BodyAndDots)), vec![1, 8]);
+}
+
+#[test]
+fn letter_marks() {
+    assert_eq!(selected(Selector::Letter(0, 0, LetterPart::Marks)), vec![2]);
+    assert_eq!(selected(Selector::Letter(2, 0, LetterPart::Marks)), vec![7]);
+}
+
+#[test]
+fn letter_mark_nth() {
+    assert_eq!(selected(Selector::LetterMark(0, 0, 0)), vec![1]);
+    assert_eq!(selected(Selector::LetterMark(0, 0, 1)), vec![2]);
+    assert_eq!(selected(Selector::LetterMark(0, 0, 2)), Vec::<u32>::new());
+}
+
+#[test]
+fn letter_mark_named() {
+    assert_eq!(selected(Selector::LetterMarkNamed(0, 0, Mark::Fathah)), vec![2]);
+    assert_eq!(selected(Selector::LetterMarkNamed(0, 0, Mark::Dot)), vec![1]);
+    assert_eq!(selected(Selector::LetterMarkNamed(2, 0, Mark::OmittedAlif)), vec![7]);
+    assert_eq!(selected(Selector::LetterMarkNamed(0, 0, Mark::None)), Vec::<u32>::new());
+}
+
+#[test]
+fn a_named_mark_takes_a_body_stored_as_a_mark() {
+    // the omitted alif of word 2 as a second body of its letter, as the page stores a
+    // dagger alif that draws a letter
+    let mut layer = letters_layer();
+    layer.members[7].is_body = true;
+    let mut p = page_without_layer();
+    p.attach_letters(&encode_letters(&layer)).unwrap();
+    p.style(Selector::LetterMarkNamed(2, 0, Mark::OmittedAlif), Paint::new(RED));
+    assert_eq!(reds(&mut p), vec![7]);
+    let mut q = page_without_layer();
+    q.attach_letters(&encode_letters(&layer)).unwrap();
+    q.style(Selector::LetterMark(2, 0, 0), Paint::new(RED));
+    assert_eq!(reds(&mut q), Vec::<u32>::new(), "a body is no nth mark");
+}
+
+#[test]
+fn word_chars_letter() {
+    assert_eq!(selected(Selector::WordChars(0, 0, 0)), vec![1, 8]);
+}
+
+#[test]
+fn word_chars_mark() {
+    assert_eq!(selected(Selector::WordChars(0, 1, 1)), vec![2]);
+}
+
+#[test]
+fn word_chars_kashida() {
+    assert_eq!(selected(Selector::WordChars(1, 1, 1)), vec![3]);
+}
+
+#[test]
+fn word_chars_word_mark() {
+    assert_eq!(selected(Selector::WordChars(1, 3, 3)), vec![5]);
+}
+
+#[test]
+fn word_chars_no_offset() {
+    assert_eq!(selected(Selector::WordChars(2, 0, 5)), vec![6]);
+}
+
+#[test]
+fn a_cut_path_taken_whole() {
+    assert_eq!(selected(Selector::WordChars(0, 0, 2)), vec![0, 1, 2, 8, 9]);
+    assert_eq!(selected(Selector::WordChars(0, 1, 2)), vec![2, 9], "one piece leaves the cut path");
+}
+
+#[test]
+fn word_reaches_the_pieces() {
+    assert_eq!(selected(Selector::Word(0)), vec![0, 1, 2, 8, 9]);
+    assert_eq!(selected(Selector::Kind(PathKind::Body)), vec![0, 3, 4, 6, 8, 9]);
+    let mut p = letters_page();
+    p.theme(&Theme { ink: Some(RED), ..Default::default() });
+    assert_eq!(reds(&mut p), (0..10).collect::<Vec<u32>>());
+}
+
+#[test]
+fn path_reaches_the_pieces() {
+    let mut p = letters_page();
+    p.hide(Selector::Path(0));
+    let c = p.colors().to_vec();
+    for (i, col) in c.iter().enumerate() {
+        let hidden = [0, 8, 9].contains(&i);
+        assert_eq!(col & 0xff == 0, hidden, "path {i}");
+    }
+    assert_eq!(selected(Selector::Path(8)), vec![8], "a piece takes its own index");
+    assert_eq!(selected(Selector::Path(3)), vec![3]);
+}
+
+#[test]
+fn no_layer_selects_nothing() {
+    let mut p = page();
+    let n = p.colors().len();
+    let sels = [
+        Selector::Letter(0, 0, LetterPart::All),
+        Selector::LetterMark(0, 0, 0),
+        Selector::LetterMarkNamed(0, 0, Mark::Fathah),
+        Selector::WordChars(0, 0, u16::MAX),
+    ];
+    for s in sels {
+        assert!(p.style(s, Paint::new(RED)) > 0);
+    }
+    let q = query(Target::Page, None, Mark::None, LetterPart::All);
+    assert!(p.style_letters(LAYER_BASE, &q, Paint::new(RED)) > 0);
+    assert!(p.colors().iter().all(|&c| c == DEFAULT_INK));
+    assert_eq!(p.colors().len(), n);
+}
+
+#[test]
+fn an_out_of_range_selector_selects_nothing() {
+    let none = Vec::<u32>::new();
+    for s in [
+        Selector::Letter(3, 0, LetterPart::All),
+        Selector::Letter(NONE, 0, LetterPart::All),
+        Selector::Letter(0, 2, LetterPart::All),
+        Selector::Letter(0, u16::MAX, LetterPart::All),
+        Selector::LetterMark(0, 0, u16::MAX),
+        Selector::LetterMark(9, 0, 0),
+        Selector::LetterMarkNamed(0, 0, Mark::from_u8(255)),
+        Selector::LetterMarkNamed(0, u16::MAX, Mark::Dot),
+        Selector::WordChars(0, 2, 1),
+        Selector::WordChars(0, 3, u16::MAX - 1),
+        Selector::WordChars(0, u16::MAX, u16::MAX),
+        Selector::WordChars(3, 0, u16::MAX),
+        Selector::WordChars(NONE, 0, u16::MAX),
+    ] {
+        assert_eq!(selected(s.clone()), none, "{s:?}");
+    }
+    let q = |w: Vec<u32>| {
+        Selector::Letters(LetterSelection { words: w, text: None, mark: Mark::None, part: LetterPart::All })
+    };
+    assert_eq!(selected(q(vec![3, NONE])), none);
+    assert_eq!(selected(q(vec![])), none);
+}
+
+#[test]
+fn a_word_mark_is_no_letters() {
+    for s in [Selector::Letter(1, 0, LetterPart::All), Selector::Letter(1, 1, LetterPart::Marks)] {
+        assert!(!selected(s).contains(&5));
+    }
+    let mut p = letters_page();
+    p.style_letters(LAYER_BASE, &query(Target::Word(1), None, Mark::None, LetterPart::All), Paint::new(RED));
+    assert_eq!(reds(&mut p), vec![3, 4]);
+}
+
+#[test]
+fn a_short_qpc_hides_offsets_from_a_range() {
+    // the sidecar before the layer and after it
+    for before in [true, false] {
+        let mut p = page_without_layer();
+        let json = r#"{"1:1:2": {"qpc": "ل"}}"#.as_bytes();
+        if before {
+            p.attach_words_json(json).unwrap();
+        }
+        p.attach_letters(&layer_bytes()).unwrap();
+        p.style(Selector::WordChars(1, 0, 5), Paint::new(RED));
+        p.style(Selector::Letter(1, 1, LetterPart::All), Paint::new(RED));
+        if !before {
+            assert_eq!(reds(&mut p), vec![3, 4, 5], "unchecked before the sidecar");
+            p.attach_words_json(json).unwrap();
+        }
+        // the lam at 0 stays; its kashida (1), the ha (2) and the waqf sign (3) are past the
+        // text. The ha keeps its index, so the letter selector still takes it
+        assert_eq!(reds(&mut p), vec![3, 4], "sidecar first: {before}");
+    }
+}
+
+#[test]
+fn a_rule_waits_for_the_layer() {
+    let mut p = page_without_layer();
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(RED));
+    let q = query(Target::Page, Some('ه'), Mark::None, LetterPart::All);
+    p.style_letters(LAYER_BASE, &q, Paint::new(RED));
+    assert!(p.colors().iter().all(|&c| c == DEFAULT_INK));
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(p.color_of(9), RED);
+    assert_eq!(reds(&mut p), vec![4, 9]);
+}
+
+#[test]
+fn a_more_specific_letter_rule_wins() {
+    let mut p = letters_page();
+    p.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(BLUE));
+    p.style(Selector::Word(0), Paint::new(RED));
+    let c = p.colors().to_vec();
+    assert_eq!((c[9], c[8], c[0]), (BLUE, RED, RED));
+    // a query rule is as specific as a word's body
+    let mut q = letters_page();
+    q.style_letters(LAYER_BASE, &query(Target::Page, Some('ل'), Mark::None, LetterPart::All), Paint::new(BLUE));
+    q.style(Selector::Word(0), Paint::new(RED));
+    q.style(Selector::WordBody(1), Paint::new(RED));
+    let c = q.colors().to_vec();
+    assert_eq!((c[9], c[8], c[3]), (BLUE, RED, RED), "the later rule of the same weight wins");
+}
+
+#[test]
+fn find_letters_by_text() {
+    let p = letters_page();
+    let find = |scope, text, mark| p.find_letters(&query(scope, text, mark, LetterPart::All));
+    assert_eq!(find(Target::Page, Some('ل'), Mark::None), vec![(0, 1), (1, 0)]);
+    assert_eq!(find(Target::Page, char::from_u32(0x0628), Mark::None), vec![(0, 0)]);
+    assert_eq!(find(Target::Page, None, Mark::Fathah), vec![(0, 0)]);
+    assert_eq!(find(Target::Word(2), None, Mark::None), vec![(2, 0)]);
+    assert_eq!(find(Target::Page, None, Mark::None), vec![(0, 0), (0, 1), (1, 0), (1, 1), (2, 0)]);
+    assert_eq!(find(Target::Words(vec![2, 0, 9]), Some('ل'), Mark::None), vec![(0, 1)]);
+    assert_eq!(find(Target::Page, Some('ل'), Mark::Fathah), vec![]);
+    assert_eq!(find(Target::Page, None, Mark::WaqfJaizWaslAwla), vec![], "a word mark is no letter's");
+    // part does not filter
+    let marks = p.find_letters(&query(Target::Page, Some('ل'), Mark::None, LetterPart::Marks));
+    assert_eq!(marks, vec![(0, 1), (1, 0)]);
+    assert_eq!(page_without_layer().find_letters(&query(Target::Page, None, Mark::None, LetterPart::All)), vec![]);
+}
+
+#[test]
+fn style_letters_lasts() {
+    let mut p = letters_page();
+    let h = p.style_letters(LAYER_BASE, &query(Target::Page, Some('ل'), Mark::None, LetterPart::All), Paint::new(RED));
+    assert!(h > 0);
+    assert_eq!(reds(&mut p), vec![3, 9]);
+    p.attach_letters(&layer_bytes()).unwrap();
+    assert_eq!(reds(&mut p), vec![3, 9]);
+    assert_eq!(p.remove_style(h), 1);
+    assert_eq!(reds(&mut p), Vec::<u32>::new());
+}
+
+#[test]
+fn style_letters_takes_a_part_and_a_mark() {
+    let style = |q: LetterQuery| {
+        let mut p = letters_page();
+        p.style_letters(LAYER_BASE, &q, Paint::new(RED));
+        reds(&mut p)
+    };
+    assert_eq!(style(query(Target::Page, None, Mark::Fathah, LetterPart::All)), vec![1, 2, 8]);
+    assert_eq!(style(query(Target::Page, None, Mark::Fathah, LetterPart::BodyAndDots)), vec![1, 8]);
+    assert_eq!(style(query(Target::Page, None, Mark::Fathah, LetterPart::Marks)), vec![2]);
+    assert_eq!(style(query(Target::Page, None, Mark::None, LetterPart::BodyAndDots)), vec![0, 1, 3, 4, 6, 8, 9]);
+    assert_eq!(style(query(Target::Line(2), None, Mark::None, LetterPart::Marks)), vec![7]);
+    assert_eq!(style(query(Target::Word(9), None, Mark::None, LetterPart::All)), Vec::<u32>::new());
+}
