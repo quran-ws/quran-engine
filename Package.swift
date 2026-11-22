@@ -8,11 +8,11 @@ let package = Package(
         .library(name: "QvpKit", targets: ["QvpKit"]),
     ],
     targets: [
-        // Built by .github/workflows/prepare-ios-release.yml from commit 8808361743ca53c81b48501847c7f1f4aa618fef.
+        // Built by .github/workflows/prepare-ios-release.yml from commit 19e7fe90b043a763fd5ac99bf286e0e4f64019f9.
         .binaryTarget(
             name: "QvpEngine",
             url: "https://github.com/quran-ws/quran-engine/releases/download/v0.9.0/QvpEngine.xcframework.zip",
-            checksum: "454b42710fde5a5752ba72866eedef9b58092e8e13a67a6708d958ac7eec0a5a"
+            checksum: "77b7d5ad6eba4fd1a92f30c747e0325b877ca016fed67726ca7450b86d68f79b"
         ),
         .target(
             name: "QvpKit",
