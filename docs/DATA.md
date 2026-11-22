@@ -61,10 +61,14 @@ letters, the page paths that draw each letter, and the marks of each letter. Som
 paths join several letters in one outline. For those, the layer holds pieces: parts of the
 outline that the converter cut out, one for each letter. The page file does not change.
 
-A layer belongs to one page file. It codes each piece against the page path it was cut
-from, and its header holds a digest of the page file that the converter built with it. A
-reader refuses a layer whose digest is not the digest of its page file. So a layer must be
-built again whenever the page data is built again.
+A layer is built for one exact page file. It codes each piece against the page path it was
+cut from, and its header holds a digest of what it depends on in that page: the word runs
+and each path's kind, mark, family, flags and geometry. A reader refuses a layer whose page
+digest differs from the digest of its page. The layers built from `quran-svg-elements`
+v2.0.0 match the pages built from v2.0.0 on all 604 pages. They match the released
+`data-v0.5.0` pages, built from v1.1.2, on 29 pages only. So the layers ship only together
+with pages rebuilt from the same source release, and a layer is built again whenever the
+page data is built again.
 
 The data release described on this page does not include the layer. Build it with:
 

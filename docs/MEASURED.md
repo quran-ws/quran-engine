@@ -89,15 +89,15 @@ words archive of the same release.
 
 | | `NNN.qvl`, 604 files | `NNN.qvp`, 604 files |
 |---|---|---|
-| raw | 8,257,673 B | 81,218,231 B |
-| each file after `gzip -9`, summed | 4,641,408 B | 41,632,217 B |
-| each file after `brotli -q 11`, summed | 3,919,273 B | 37,249,927 B |
-| smallest file | page 001, 3,682 B | page 001, 37,486 B |
-| largest file | page 552, 17,049 B | page 552, 170,465 B |
+| raw | 8,262,505 B | 81,218,231 B |
+| each file after `gzip -9`, summed | 4,647,264 B | 41,632,217 B |
+| each file after `brotli -q 11`, summed | 3,926,524 B | 37,249,927 B |
+| smallest file | page 001, 3,690 B | page 001, 37,486 B |
+| largest file | page 552, 17,057 B | page 552, 170,465 B |
 
 The layers hold 333,220 letters and 261,953 pieces. A piece is a part of a joined outline
 that the converter cut out for one letter. The pieces come from 89,853 page paths. Raw,
-the layers are 10.2% of the size of the page files. After `gzip -9` they are 11.1%: gzip
+the layers are 10.2% of the size of the page files. After `gzip -9` they are 11.2%: gzip
 makes a layer 43.8% smaller and a page file 48.7% smaller. After brotli at quality 11 they
 are 10.5%: brotli makes a layer 52.5% smaller and a page file 54.1% smaller. The brotli
 figures come from the Python `brotli` module, version 1.1.0, one file at a time:
@@ -115,7 +115,7 @@ stat -c '%s %n' dist/letters/*.qvl | sort -n | sed -n '1p;$p'
 ```
 
 Repeat the last three commands with `<pages_dir>/*.qvp` for the page column. On an Intel
-Core i9-13900 with 32 threads, the subcommand built all 604 layers in 1.55 s to 1.76 s
+Core i9-13900 with 32 threads, the subcommand built all 604 layers in 1.59 s to 1.71 s
 wall clock over six runs, with the binary already built.
 
 A layer codes each piece against its source path in the page (`docs/FORMAT.md`). The first
@@ -124,11 +124,19 @@ version of the format stored every piece as plain coordinate deltas. Its 604 fil
 16,045 B (page 001) to 81,582 B (page 552). The coded pieces are lossless: the structure
 gate decodes every layer and compares each command of each piece.
 
+Each layer has a 72-byte header with two digests: 4,832 B of the raw total.
+
 Decoding a layer costs more than it did, because the decoder lists the segments of each
 source and computes each part of a segment. Over the 604 pages, on one thread of the same
-machine, `decode_letters` takes a median 0.437 ms per page (90th percentile 0.490 ms,
-largest 0.579 ms). The plain-delta decoder took a median 0.188 ms. Each figure is the
+machine, `decode_letters` takes a median 0.484 ms per page (90th percentile 0.547 ms,
+largest 0.669 ms). The plain-delta decoder took a median 0.188 ms. Each figure is the
 median of 9 decodes of each page, in a release build, with the page already decoded.
+
+The decode time includes the page digest, which the decoder takes from the decoded page
+when a layer is attached: a median 0.042 ms per page, and 0.053 ms on page 552, the
+largest page (the median of 41 runs of each page). Loading a page does not take it:
+`Page::load` costs what it cost before the letter layer, a median 1.03 ms over pages 001,
+050, 187, 300, 440, 552 and 604 (300 runs of each).
 
 The ink gate (`cargo test -p qvp-convert --release --test letters ink`, with
 `QVP_REQUIRE_LETTERS=1 QVP_TEST_ALL=1` for all pages) draws each page twice from its

@@ -13,9 +13,13 @@ All notable changes to the engine and its packages. The format follows
   letters. The page file does not change. The engine does not load the layer yet. A layer
   codes each piece against the page path it was cut from: runs of the path's segments,
   parts of one segment that the decoder computes in integers, and cut lines between points
-  on the path. Its header names the page file it was built for by an FNV-1a digest, and a
-  reader refuses a layer for other bytes. The 604 layers take 8,257,673 bytes, 3,919,273
-  bytes after brotli at quality 11.
+  on the path. Its header holds a digest of what it depends on in its page, and a digest of
+  the file itself. A reader refuses a layer built for another page, or for other paths of
+  the same page, and a layer whose bytes are damaged, and `qvp-format` tells the two apart
+  (`OtherPage`, `Damaged`). The format has limits: 65,535 commands a layer, 512 a piece.
+  The 604 layers take 8,262,505 bytes, 3,926,524 bytes after brotli at quality 11. They
+  match the pages built from the same `quran-svg-elements` release, v2.0.0, and not the
+  released `data-v0.5.0` pages.
   `qvp-convert letters <letters_svg_dir> <words_svg_dir> <out_dir>` builds it from the
   letters archive of `quran-svg-elements` v2.0.0, and `QVP_SYNC=letters
   scripts/sync-test-data.sh` fetches that archive into `pages-letters/`. Two gates in

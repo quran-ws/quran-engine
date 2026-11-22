@@ -268,11 +268,11 @@ codes each drawing command of a piece as an operation on its source. A reader ne
 decoded page to decode a layer, and it gets the same commands on every platform, because
 the decoder uses integer arithmetic only.
 
-A letter layer is a 64-byte header followed by ten sections whose lengths the header
+A letter layer is a 72-byte header followed by ten sections whose lengths the header
 gives. The sections follow the header back to back, in header order, and the file ends
 where the last section ends.
 
-### Header (64 bytes)
+### Header (72 bytes)
 
 | offset | size | field |
 |---|---|---|
@@ -282,8 +282,9 @@ where the last section ends.
 | 8 | u16 | page number |
 | 10 | u16 | number of words in the page |
 | 12 | u32 | number of paths in the page |
-| 16 | u64 | page digest: the FNV-1a digest of the page file the layer was built for |
-| 24 | 10 × u32 | byte lengths of sections 1 to 10, in order |
+| 16 | u64 | page digest: what the layer depends on in its page (see "The digests") |
+| 24 | u64 | body digest: the digest of the whole file, with these eight bytes taken as 0 |
+| 32 | 10 × u32 | byte lengths of sections 1 to 10, in order |
 
 The sections are: 1 tables, 2 operations, 3 run lengths, 4 segments, 5 back references,
 6 splits, 7 corrections, 8 large corrections, 9 x deltas, 10 y deltas.
@@ -296,24 +297,59 @@ byte is at most `0x0F`. A reader rejects a longer varint. It accepts a varint wi
 bytes than its value needs, as QVP1 does. The page's own opcode runs are QVP1 data, and a
 reader reads them as QVP1 does.
 
-### The page digest
+### The digests
 
-The page digest is 64-bit FNV-1a over every byte of the page file (`NNN.qvp`): start with
-`h = 0xcbf29ce484222325`, and for each byte `b`, set `h = (h XOR b) × 0x100000001b3`
-modulo 2^64. The digest of the empty file is `0xcbf29ce484222325`, of `a` is
-`0xaf63dc4c8601ec8c`, and of `foobar` is `0x85944171f73967e8`.
+Both digests use one 64-bit digest of a byte sequence, `digest64`, which takes the bytes
+eight at a time:
 
-A reader compares the layer's digest with the digest of its page file before it decodes
-the layer, and refuses a layer whose digest differs. A layer that names other bytes of the
-same page is a layer for another page: its pieces are coded against paths that the
-reader's page may not have.
+1. Set `h = 0xcbf29ce484222325`.
+2. For each complete group of eight bytes, read as a little-endian u64 `w`: set
+   `h = (h XOR w) × 0x9E3779B97F4A7C15` modulo 2^64, then `h = h XOR (h >> 29)`.
+3. Take the bytes that are left, zero to seven, padded with zero bytes to eight, as one
+   more `w`, and do step 2 with it. This step runs also when no byte is left.
+4. Set `h = (h XOR n) × 0x9E3779B97F4A7C15` modulo 2^64, where `n` is the number of
+   bytes. The digest is `h XOR (h >> 32)`.
 
-The converter writes the digest of the page file that `batch` writes for the page. For
-every page file that the encoder writes, `encode(decode(file)) == file`, so a reader that
-holds only a decoded page can compute the digest from `encode(page)`. The engine computes
-the digest from the file bytes when it loads a page (`Page::load`), and from `encode(data)`
-for a page built from data (`Page::from_data`). It does not compute it again later, so a
-words sidecar attached before the layer does not change it.
+The digest of no bytes is `0x99b6af66b78b8ad8`, of `a` is `0xc24efef7cc63c094`, of
+`foobar` is `0xce773884005ec91d`, and of `0123456789abcdef` is `0xa97c4e98d9398a71`.
+
+The **body digest** is `digest64` of the whole file, with bytes 24 to 31 taken as 0. A
+reader checks it first, after the magic and the version.
+
+The **page digest** is `digest64` of what the layer depends on in its decoded page, in this
+order. Integers are little-endian:
+
+1. The page number (u16), `quant` (u16), the word count (u32) and the path count (u32).
+2. For each word: its first path (u32) and its path count (u16).
+3. For each path: its kind, mark, family and flags (one byte each), then its geometry.
+   For a glyph instance, that is its instance record: the glyph index (u16) and the six
+   transform values (each the 32 bits of its f32). For any other path, it is the path's
+   commands as one opcode run (below).
+4. The glyph outline count (u32), then each glyph outline as one opcode run.
+
+An **opcode run** codes commands as QVP1 codes a path's run in its decoded form: one byte
+per command (0 move, 1 line, 2 quadratic curve, 3 cubic curve, 4 close), each followed by
+its points as zigzag varint x and y deltas from the point before. In the page digest, a
+run's first point is not a delta: the input holds the run's first opcode byte, then (when
+that command has a point) the first point as two absolute i32, then the number of the
+run's remaining bytes (u32), then those bytes. The varints are the shortest that hold
+their values. A glyph outline's points are in glyph space.
+
+Strings, boxes, a path's origin and every word field but its path run are not in the
+digest. So a words sidecar, which changes word texts, does not change it. Paths alike in
+kind, mark, family, flags and geometry are alike to it. The page digest of a page of one
+word and one path, page 3, `quant` 100, a body path with flags 0 drawn by
+`M 0,0 L 10,0 L 0,10 Z`, is `0x5e3b2943ec1296d2`. Its input is these 46 bytes:
+
+```
+0300 6400 01000000 01000000 00000000 0100 00000000
+00 0000000000000000 07000000 011400 011314 04 00000000
+```
+
+A reader computes the page digest of its page after the header and before any table, and
+refuses a layer whose page digest differs: the layer is for another page, or for other
+paths of this one. A layer built from one release of the source does not match the pages
+built from another release.
 
 ### Section 1: tables
 
@@ -629,28 +665,90 @@ The page of the example is page 1, with `quant` 100, one word that holds path 0,
 offset 0 and ا at offset 1, each with one body member: piece 0 and piece 1.
 
 The header holds `quant` 100, page 1, one word, one path, the page digest
-`0xadb491ad09712a0c`, and the section lengths 21, 5, 1, 2, 3, 5, 4, 0, 0 and 0. The sections
-of this file: operations `37 2C 28 41 05` in hexadecimal, where the high half of the last
-byte is unused, run lengths `00`, segments `00 02`, back references `01 00 01`, splits
-`80 80 01 80 40`, corrections four bytes of 0, and no deltas. The tables section is
-`02 02 00 02 02 A7 0C 1D 00 01 00 00 03 03 00 00 01 00 01 04 05`. The whole file is 105
+`0x80050d8c356e268c`, the body digest `0x28ac373a6749fa54`, and the section lengths 21, 5, 1,
+2, 3, 5, 4, 0, 0 and 0. The sections of this file: operations `37 2C 28 41 05` in
+hexadecimal, where the high half of the last byte is unused, run lengths `00`, segments
+`00 02`, back references `01 00 01`, splits `80 80 01 80 40`, corrections four bytes of 0,
+and no deltas. The tables section is
+`02 02 00 02 02 A7 0C 1D 00 01 00 00 03 03 00 00 01 00 01 04 05`. The whole file is 113
 bytes:
 
 ```
-51564c310100640001000100010000000c2a7109ad91b4ad1500000005000000
-0100000002000000030000000500000004000000000000000000000000000000
-0202000202a70c1d00010000030300000100010405372c284105000002010001
-808001804000000000
+51564c310100640001000100010000008c266e358c0d058054fa49673a37ac28
+1500000005000000010000000200000003000000050000000400000000000000
+00000000000000000202000202a70c1d00010000030300000100010405372c28
+4105000002010001808001804000000000
 ```
 
 `crates/qvp-format/src/letters/vectors.rs` holds this file and eleven more, each with the
-exact commands it decodes to.
+exact commands it decodes to. Its tests do not call the encoder. Here is one more of them,
+a run that wraps from the end of a subpath to its start. The page is page 9, `quant` 100,
+one word of three paths with flags 0:
+
+- path 0, a body path: `M -1000,-1000 C -700,-1301 -299,-1299 1,-999 L 1,-2001
+  Q -500,-2303 -1000,-2001 Z`
+- path 1, a body path: `M 5000,0 L 6000,0 L 6000,1000 Z M 7000,0 C 7300,0 7700,400
+  8000,1000 L 7000,1000 Z`. Its segments are 0 to 2 for the first subpath, then 3 (the
+  cubic), 4 and 5 (the closing line) for the second.
+- path 2, a mark: `M 0,500 L 100,500 L 100,600 Z`
+
+The layer has one letter, ب at offset 0, whose one body member is the piece. The piece is
+cut from path 1: `M 8000,1000 L 7000,1000 L 7000,0 C 7300,0 7700,400 8000,1000 Z`. It is a
+move to the start of segment 4, then a run of 3 that draws segments 4, 5 and 3. The file:
+
+```
+51564c3101006400090001000300000094fdac7c3f3af286718536064fee83fd
+0f00000001000000010000000100000000000000000000000000000000000000
+00000000000000000101000101a80c0000030001010002170204
+```
+
+### Limits
+
+A layer keeps these limits, and a reader rejects a layer past one before it allocates for
+it. The writer and `check_against` refuse a layer past one. Each limit is at least four
+times the largest value in the 604 layers of `quran-svg-elements` v2.0.0:
+
+| limit | value | largest in the 604 layers |
+|---|---|---|
+| commands in a layer | 65,535 | 10,880 |
+| commands in a piece | 512 | 62 |
+| operations in a piece | 1,024 | 29 |
+| operations in a layer | 131,070 | 5,474 |
+| pieces of one source | 64 | 10 |
+| registry entries in a group | 256 | 46 |
+
+A piece has at least one command, so a layer holds at most 65,535 pieces. A command takes
+at most two operations, so a layer inside the command limits is inside the operation
+limits. The writer never fills the registry: when a group's registry is full, it codes a
+point from deltas.
+
+So a layer decodes to at most 65,535 commands, about 1.8 MB of commands at 28 bytes each.
+The largest file inside the limits that we built holds 65,535 commands of parts of
+segments, on page 552: 109,601 bytes, decoded in 2.4 ms, with 1.5 MB more peak memory than
+the page alone.
 
 ### What a reader rejects
 
-The reference decoder returns an error for each of these, and a writer keeps them:
+The reference decoder returns an error for each of these, and a writer keeps them. Each
+error is of one of four kinds, so a caller can tell them apart:
+
+- **Not a letter layer** (`NotLetterLayer`): the file does not start with `QVL1`.
+- **A version this reader does not know** (`LetterLayerVersion`).
+- **A layer for another page** (`OtherPage`): the page number, `quant`, path count or word
+  count of the page differs from the header's, the page digest differs or cannot be taken
+  (a run that leaves the opcode stream, a glyph instance with no record), or a source is
+  not a path that the page can give.
+- **Damaged bytes** (`Damaged`): the body digest differs, the file is too short, or the
+  file breaks any other rule below.
+
+The decoder checks in this order: the magic and the version, the length of the header,
+the body digest, the section lengths, the page's counts, the page digest, the tables, the
+sources, then the pieces. The rules:
 
 - A magic other than `QVL1`, or a version other than 1.
+- A body digest that is not the digest of the file. A page digest that is not the digest
+  of the page.
+- A layer past one of the limits above.
 - A `quant` of 0.
 - A file shorter than the header or than the section lengths, or bytes after the last
   section.
@@ -698,18 +796,18 @@ The reference decoder returns an error for each of these, and a writer keeps the
   above.
 
 These rules bound the work and the output. Each source is listed once, because the group
-sources rise. A piece has at most two commands per operation, plus one for its last close
-and the segments of its runs. Over a group, the runs draw at most the source's segment
-count. So the decoded commands number at most `2 × operations + pieces + the segments of
-the sources`, and the operations section holds at most two operations per byte.
+sources rise, and over a group the runs draw at most the source's segment count. The
+limits bound the commands, the operations and the registry before anything is allocated
+for them.
 
 These rules tie a layer to its page. `LetterData::check_against` checks them. A reader
-calls it before it trusts a layer for a page, after it compares the page digest. The
+calls it on what `decode_letters` returns, before it trusts the layer for a page. The
 writer encodes every layer that passes these checks, and the reader decodes it to the
 same layer, every command of every piece bit for bit.
 
 - The layer's page number, `quant`, path count and word count are those of the page.
 - Letters are in word order, and pieces in source order.
+- The layer is inside the limits above.
 - Inside one word, each letter's `at` is greater than the `at` of the letter before it.
 - No letter has an `at` of `0xFFFF`.
 - Each letter's first member is the running total of the member counts before it, and
