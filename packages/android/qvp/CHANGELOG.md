@@ -5,17 +5,15 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
-- The letter layer in Kotlin. `QvpPage.attachLetters(bytes)` attaches a page's `.qvl` file
-  and reads the geometry again, since the pieces grow the path table. `hasLetters()`,
-  `letterCount(word)`, `letters(word)`, `letter(word, index)`, `letterMembers(word, index)`,
-  `pathLetter(path)`, `letterAtOffset(word, at)` and `findLetters(query)` read it.
-  `styleLetters(query, rgba)` colours the letters a `QvpLetterQuery` finds.
-  `hitTestLetter(x, y)` and `hitTestLetterView(x, y)` give the letter or mark under a point.
-  `layoutDrawRevision()` counts up when the draw list changes with the same layout. New
-  selectors: `Selector.letter`, `letterMark`, `letterMarkNamed` and `wordChars`. New types:
-  `QvpLetterPart`, `QvpLetter`, `QvpLetterMember`, `QvpPathLetter`, `QvpLetterHit` and
-  `QvpLetterQuery`. `QvpPageView` keys its draw list on the revision and sizes its per-path
-  flags after an attach. On a page with no layer it makes no new call.
+- Kotlin: `QvpPage.attachLetters`, the letter reads (`hasLetters`, `letterCount`, `letters`,
+  `letter`, `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`), `styleLetters`,
+  `hitTestLetter`, `hitTestLetterView`, `layoutDrawRevision`, and `Selector.letter`,
+  `letterMark`, `letterMarkNamed` and `wordChars`. New types: `QvpLetterPart`, `QvpLetter`,
+  `QvpLetterMember`, `QvpPathLetter`, `QvpLetterHit` and `QvpLetterQuery`. The Android
+  `QvpPageView` keys its draw list on the draw revision and sizes its per-path state after an
+  attach.
+- With a letter layer and no letter rule, every view draws what it drew before. A page with no
+  layer makes no new engine call per frame in any wrapper.
 - `QvpPage.ayahMarksView()`, `hitAreasView(gapBias)` and `wordBandsView(words, height, padX,
   padY)`: the viewport-px twins of `ayahMarks`, `hitAreas` and `wordBands`. Each answers
   through the current layout, so an app that draws its own overlay on a reflowed page reads
@@ -41,6 +39,23 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   a dressed page, and the web, Kotlin, Dart and Swift tests replay them (#134).
 
 ### Changed
+- `qvp.h` states three rules that hosts must follow. After a change of rules or state,
+  call `qvp_tick` before any call that reads colours, styled paths, the draw revision or the
+  draw list, or a transition starts at the time of the last tick. That was already how
+  `qvp_colors` worked, and the header now says so. Use a page from one thread at a time,
+  const calls included, because a const call can update the page's caches. Each frame, call
+  `qvp_tick`, then `qvp_colors` or `qvp_styled_paths`, then `qvp_layout_draw_revision`, then
+  `qvp_layout_draw_list` when the revision, the layout or the band changed.
+- An attach of a letter layer makes stale what the host read before it. The pointers that
+  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
+  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
+  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
+  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
+  `qvp_colors` does. On a page with no layer they do not.
+- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
+  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
+  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
+  An array that an app copied from them before an attach does not hold the pieces.
 - The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
   engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
   not agree (#134):
@@ -71,11 +86,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ### Removed
 
 ### Fixed
-- `QvpPageView` draws a styled path only where the engine's draw list puts it. The web, iOS
-  and Flutter views do the same. Before, the view drew every styled path. It put a styled
-  path that the list leaves out, such as a page number under reflow, at its printed line. It
-  drew a path once when the list holds it twice. `lastOverlayPaths` now counts the styled
-  draws.
+- Android: the styled pass of `QvpPageView` draws a styled path only where the engine's draw
+  list puts it. Before, it drew every styled path. It put a styled path that the list leaves
+  out, such as a page number under reflow, at its printed line, and it drew a path once when
+  the list holds it twice. `lastOverlayPaths` now counts the styled draws.
 - A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's

@@ -5,17 +5,17 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
-- React Native binds the letter layer. `<QvpPageView />` takes a `lettersUri` prop, which the
-  view attaches after the page and its words sidecar. A new value attaches that layer in place
-  of the one before. The engine has no detach, so a removed prop keeps the layer until the next
-  page. The module adds `attachLetters(tag, uri)`, `hasLetters`, `letters(tag, word)` (each
-  letter with its members and marks), `pathLetter`, `letterAtOffset`, `findLetters`,
-  `hitTestLetter` and `hitTestLetterView`, and the page-bound forms of each. `Sel.letter`,
-  `Sel.letterMark`, `Sel.letterMarkNamed` and `Sel.wordChars` make the selectors 16 to 19, and
-  `LETTER_PART` holds the parts. A `styles` rule with `letters` (a letter query) colours letters.
-  The Android and iOS modules have the same method names and result shapes. On a page with a
-  layer, the view's draw changes the page, so the module runs the letter calls, and every query
-  on that page, on the UI thread. A page with no layer behaves as before.
+- React Native: `<QvpPageView />` takes a `lettersUri` prop, which the view attaches after
+  the page and its words sidecar. A new value attaches that layer in place of the one before.
+  A removed prop keeps the layer until the next page, because the engine has no detach. The
+  module adds `attachLetters(tag, uri)`, `hasLetters`, `letters(tag, word)` (each letter with
+  its members and marks), `pathLetter`, `letterAtOffset`, `findLetters`, `hitTestLetter` and
+  `hitTestLetterView`, and the page-bound forms of each. `Sel.letter`, `Sel.letterMark`,
+  `Sel.letterMarkNamed` and `Sel.wordChars` make the selectors 16 to 19, and `LETTER_PART`
+  holds the parts. A `styles` rule with `letters` (a letter query) colours letters. The
+  Android and iOS modules have the same method names and result shapes.
+- With a letter layer and no letter rule, every view draws what it drew before. A page with no
+  layer makes no new engine call per frame in any wrapper.
 - React Native on iOS (#41). The package has an iOS module over QvpKit with the method names
   and result shapes of the Android module, so `src/index.tsx` has no platform branch. It
   hosts QvpKit's `QvpPageView` for `<QvpPageView />` and draws `<QvpPassageView />`, with the
@@ -53,6 +53,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   a dressed page, and the web, Kotlin, Dart and Swift tests replay them (#134).
 
 ### Changed
+- React Native: on a page with a letter layer, the module runs the letter calls, and every
+  query on that page, on the UI thread, in queue order. With a layer, the view's draw changes
+  the page, and the query thread must not call into it at the same time. A page with no layer
+  keeps its queries on the query thread, as before.
 - The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
   engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
   not agree (#134):

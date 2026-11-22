@@ -29,7 +29,8 @@ and each fix is verified here rather than taken on trust:
 The words archive has body paths per connected stroke, not per letter. The letters
 archive of `quran-svg-elements` v2.0.0 divides every word into letters, and cuts an
 outline that joins several letters into pieces. The converter builds the letter layer
-from it. `docs/DATA.md`, section "The letter layer", says how and what its limits are.
+from it, and an app attaches the layer to a page in the engine (`docs/API.md`, "Letters").
+`docs/DATA.md`, section "The letter layer", says how and what its limits are.
 
 ### 2. Ayah numbers are one merged outline per number
 

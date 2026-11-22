@@ -61,19 +61,26 @@ letters, the page paths that draw each letter, and the marks of each letter. Som
 paths join several letters in one outline. For those, the layer holds pieces: parts of the
 outline that the converter cut out, one for each letter. The page file does not change.
 
+The engine loads a layer on request: an app attaches it to a loaded page
+(`qvp_attach_letters`, `docs/API.md` "Letters"), and the page then colours, reads and
+hit-tests single letters. A page with no layer works as before.
+
 A layer is built for one exact page file. It codes each piece against the page path it was
 cut from, and its header holds a digest of what it depends on in that page: the word runs
-and each path's kind, mark, family, flags and geometry. A reader refuses a layer whose page
-digest differs from the digest of its page. The layers built from `quran-svg-elements`
-v2.0.0 match the pages built from v2.0.0 on all 604 pages. They match the released
-`data-v0.5.0` pages, built from v1.1.2, on 29 pages only. So the layers ship only together
-with pages rebuilt from the same source release, and a layer is built again whenever the
-page data is built again.
+and each path's kind, mark, family, flags and geometry. The engine refuses a layer whose page
+digest differs from the digest of its page.
 
-The data release described on this page does not include the layer. Build it with:
+The layers built from `quran-svg-elements` v2.0.0 match the pages built from v2.0.0 on all
+604 pages. They match the released `data-v0.5.0` pages, built from v1.1.2, on 29 pages only.
+So a data release that carries the layers must carry pages built from the same source
+release, and the layers are built again whenever the page data is built again.
+
+A data release carries the layers only when its `VERSION.json` lists them. `data-v0.5.0`
+does not. Until a release carries them, build the layers and the pages from the same source:
 
 ```sh
 QVP_SYNC=letters scripts/sync-test-data.sh   # what the default sync fetches, then pages-letters/
+cargo run -p qvp-convert --release -- batch pages dist/pages
 cargo run -p qvp-convert --release -- letters pages-letters pages dist/letters
 ```
 
@@ -82,10 +89,16 @@ the same pages as the words archive with every word divided into letters. The pa
 still comes from the words archive. The layer only says which part of that ink draws
 which letter.
 
-Two gates check each layer (`crates/qvp-convert/tests/letters.rs`). The structure gate
-checks that every path of every word has exactly one role and that the letter count is
-the count of the archive's index. The ink gate draws the page from the
-pieces and compares it with the page (`docs/MEASURED.md`). It asserts these things:
+Three gates check the layers. `scripts/check.sh gates` runs them on 8 pages when
+`pages-letters/` is present, and the nightly workflow runs them on all 604 pages. All 604
+pages pass each gate. `docs/MEASURED.md` gives their figures.
+
+The structure gate (`crates/qvp-convert/tests/letters.rs`) checks that every path of every
+word has exactly one role and that the letter count is the count of the archive's index.
+It also decodes every layer and compares each command of each piece with the converter's.
+
+The ink gate (the same file) draws the page from the pieces and compares it with the page.
+It asserts these things:
 
 - The page drawn from its pieces passes the pixel threshold of the identity gate.
 - For each cut path, the area of its pieces is within 0.0125 units × L of the area of the
@@ -100,12 +113,35 @@ pieces and compares it with the page (`docs/MEASURED.md`). It asserts these thin
 It reports, and does not assert, the page drawn with the pieces of each path as one path,
 and the result of losing, doubling or replacing each piece. It cannot see these:
 
-- A change to the pieces that moves less ink than the area limit allows. Of all single
-  lost pieces, 25 pass, up to 0.034 square units. No doubled piece passes.
+- A lost piece whose cut sides lie within 0.028 units of the outline of its path (a sliver
+  thinner than about 0.056 units), or whose neighbours' sides each find a partner in a
+  third piece. Of all single lost pieces, 25 pass, up to 0.034 square units. No doubled or
+  replaced piece passes.
+- A cut side whose partner is an outline edge. The partner rule takes any side of another
+  piece, so near the outline the end of a cut side can find its partner in a neighbour's
+  outline edge.
+- A subpath whose nesting it cannot decide. It counts 954 such subpaths and asserts nothing
+  about them.
 - A gap or an overlap between the pieces of two different paths.
 - Where ink moved inside one path. The pixel threshold sees this at page level only.
 - Whether a cut falls where a calligrapher would put it, and whether a reader can see a
   seam.
+
+The engine gate (`crates/qvp-convert/tests/letters_engine.rs`) attaches each layer to its
+page in the engine and asserts what an app relies on:
+
+- The attach changes no drawing. With no letter rule, the draw list, the colours and every
+  geometry row of the page's own paths are those of the page with no layer.
+- Every letter's offset points at its own character in the `qpc` text, and the offsets that
+  the engine keeps are the ones the layer stores.
+- The selectors take the letter's paths. For each letter, the body and dots part takes the
+  same paths as the character range over the letter's offset, and the nth mark takes the
+  nth mark in text order.
+- A colour on one letter draws each cut path with a piece of another letter as its pieces,
+  in place, and the plain draw list comes back when the rule goes.
+- The letter hit test names the right letter: at a point inside each body member, on every
+  point of ink on a 0.5-unit grid, printed and reflowed, and inside each counter, the hole of
+  a letter's body.
 
 Quran.ws did not measure where a joined outline divides between two letters. That
 division is the output of DigitalKhatt's `medinamushafanalyzer`

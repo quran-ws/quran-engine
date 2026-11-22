@@ -833,6 +833,34 @@ Upstream keeps the `data-unsplit` attribute for such a word, and no page uses it
 The converter stops a page that has one. To support such a word, add a new record or a
 new format version. Do not make a reader relax this check.
 
+### What the engine checks at attach
+
+`Page::attach_letters` in `crates/qvp-core/src/letters.rs` (`qvp_attach_letters` in C) refuses
+a layer, and leaves the page as it was, in this order:
+
+1. A file over 1 MiB (`MAX_LETTER_LAYER_BYTES`), before it decodes anything. The largest of
+   the 604 layers is 17,057 bytes, and a layer at the command limit about 110 KB.
+2. Every rule of "What a reader rejects": `decode_letters` against the loaded page. The body
+   digest, the page's counts and the page digest are part of this step. The engine takes the
+   page digest from the page it holds, at the attach. Loading a page does not take it.
+3. Every rule of `check_against` above, against the same page.
+4. A page whose word path runs overlap, so that a path is in two words. The format allows
+   such a page, but the engine takes no layer for it: each path of a word must belong to
+   that word only. No page of the mushaf has overlapping runs.
+5. A layer whose counts, added to the page's, do not fit the engine's indices.
+
+The engine does not refuse a layer for its offsets. When the page has a words sidecar that
+gives a word's `qpc` text, the engine counts an offset at or past the length of that text as
+no offset. It checks again when a sidecar comes after the layer. Without a sidecar it uses the
+offsets as stored.
+
+The engine numbers the pieces after the page's own paths. A page with `N` paths and a layer
+with `P` pieces has the paths `0` to `N + P - 1`, the pieces in the order of the pieces
+table. No page path changes its number, and no word's path run holds a piece. Because a
+layer covers every word of its page, each path of each word has a role in the layer once it
+is attached. A second attach removes the pieces of the first and numbers the new ones from
+`N` again.
+
 ### Versions
 
 A reader rejects every version other than 1. Any change to this layout is a new version:

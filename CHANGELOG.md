@@ -10,31 +10,98 @@ All notable changes to the engine and its packages. The format follows
 - The letter layer, an optional file per page (`NNN.qvl`) in the new `QVL1` format
   (`docs/FORMAT.md`). For each word it gives the letters, the page paths that draw each
   letter, and the pieces that the converter cut from an outline that joins several
-  letters. The page file does not change. The engine does not load the layer yet. A layer
-  codes each piece against the page path it was cut from: runs of the path's segments,
-  parts of one segment that the decoder computes in integers, and cut lines between points
-  on the path. Its header holds a digest of what it depends on in its page, and a digest of
-  the file itself. A reader refuses a layer built for another page, or for other paths of
-  the same page, and a layer whose bytes are damaged, and `qvp-format` tells the two apart
-  (`OtherPage`, `Damaged`). The format has limits: 65,535 commands a layer, 512 a piece.
-  The 604 layers take 8,262,505 bytes, 3,926,524 bytes after brotli at quality 11. They
-  match the pages built from the same `quran-svg-elements` release, v2.0.0, and not the
-  released `data-v0.5.0` pages.
-  `qvp-convert letters <letters_svg_dir> <words_svg_dir> <out_dir>` builds it from the
-  letters archive of `quran-svg-elements` v2.0.0, and `QVP_SYNC=letters
-  scripts/sync-test-data.sh` fetches that archive into `pages-letters/`. Two gates in
-  `crates/qvp-convert/tests/letters.rs` check it. The structure gate checks that every
-  path of a word has exactly one role and that the letter count is the archive's count.
-  The ink gate draws each page from its pieces and compares it with the page by the
-  identity gate's metric. For each cut path, it also asserts that the area of the pieces
-  is the area of the path within upstream's edge limit of 0.0125 units times the length
-  of the edges remade near the outline, and that each side of a cut has a partner side.
-  Two pieces that meet along a cut must draw it in opposite directions, so a doubled
-  piece fails.
-  All 604 pages pass both. `scripts/check.sh gates` runs them on
-  8 pages when `pages-letters/` is present. The letter division comes from DigitalKhatt's
-  `medinamushafanalyzer` (`docs/DATA.md`). The sizes and the gate's figures are in
-  `docs/MEASURED.md`.
+  letters. The page file does not change. A layer codes each piece against the page path it
+  was cut from, and its decoder uses integer arithmetic only. Its header holds a digest of
+  what it depends on in its page, and a digest of the file itself, so a reader refuses a
+  layer for other page bytes and a layer whose bytes are damaged, and `qvp-format` tells the
+  two apart (`OtherPage`, `Damaged`). The 604 layers take 8,262,505 bytes, 3,926,524 bytes
+  after brotli at quality 11 (`docs/MEASURED.md`). They match the pages built from the same
+  `quran-svg-elements` release, v2.0.0, on 604 of 604 pages, and the released `data-v0.5.0`
+  pages on 29 of 604. So a data release that carries layers must carry pages built from the
+  same source. `data-v0.5.0` carries none.
+- `qvp-convert letters <letters_svg_dir> <words_svg_dir> <out_dir>` builds the layers from
+  the letters archive of `quran-svg-elements` v2.0.0, and `QVP_SYNC=letters
+  scripts/sync-test-data.sh` fetches that archive into `pages-letters/`. The letter division
+  comes from DigitalKhatt's `medinamushafanalyzer` (`docs/DATA.md`).
+- Three gates check the layers, and all 604 pages pass each (`docs/DATA.md`,
+  `docs/MEASURED.md`). The structure gate checks that every path of a word has exactly one
+  role and that the letter count is the archive's count. The ink gate draws each page from
+  its pieces and compares it with the page by the identity gate's metric, and checks each cut
+  path's area, the partner of each cut side and the direction of each cut. The engine gate
+  attaches each layer in the engine and checks the drawing, the offsets, the selectors, the
+  swaps and the letter hit test. `scripts/check.sh gates` runs them on 8 pages when
+  `pages-letters/` is present, and the nightly workflow on all 604.
+- The engine loads a letter layer. `qvp_attach_letters` attaches one to a loaded page and
+  adds its pieces to the path table after the page's own paths, so no page path changes its
+  index and no word range holds a piece. It returns −1, and changes nothing, for a file over
+  1 MiB, a file that does not decode, damaged bytes, the layer of another page, a layer built
+  for other page bytes, or a page whose words share paths. A second attach replaces the
+  first. There is no detach. `qvp_has_letters`, `qvp_letter_count`, `qvp_letter_info`,
+  `qvp_letter_members`, `qvp_path_letter` and `qvp_letter_at_offset` read the layer.
+  `qvp_letter_members` gives the bodies first, then the marks in text order. With a words
+  sidecar, an offset at or past the end of the word's `qpc` text counts as none (`docs/API.md`,
+  "Letters").
+- Letter selectors: `QVP_SELECTOR_LETTER` (16, a letter or a part of it, with
+  `QVP_LETTER_PART_ALL`, `BODY_AND_DOTS` and `MARKS`), `QVP_SELECTOR_LETTER_MARK` (17, the nth
+  mark of a letter in text order), `QVP_SELECTOR_LETTER_MARK_NAMED` (18, the members with a
+  mark) and `QVP_SELECTOR_WORD_CHARS` (19, the ink of a range of `qpc` characters). The parts
+  go by offset: the body and dots part takes the same paths as the character range over the
+  letter's own offset. `qvp_find_letters` and `qvp_style_add_letters` take a `QvpLetterQuery`
+  (a scope, a character, a mark and a part). A letter rule added before a layer takes it when
+  it comes.
+- A cut path draws whole while its letters have one colour, and as its pieces, in its place,
+  while they differ or are in transition. `qvp_layout_draw_revision` counts up when the draw
+  list changes with the same layout and band: key a kept draw list on it. With no layer the
+  draw list, the colours, the styled paths, the crops and the hits are what they were.
+- `qvp_hit_test_letter` and `qvp_hit_test_letter_view` give the letter or the mark under a
+  point. The hit prefers ink: on ink it is exact, in the word that owns the ink, and a seam
+  between two pieces is an exact hit on the nearest piece. A point in a letter's counter
+  names that letter. Elsewhere the word is the one `qvp_hit_test` finds, and the letter is
+  the nearest of that word. `QvpLetterHit.is_body` tells the letter's body from a mark on it.
+- `conformance/scenarios/letters.json` holds the engine's answers for letters, selections,
+  queries, hits and call sequences over synthetic pages and layers. The web, Kotlin, Swift and
+  Dart tests replay it.
+- Web: `page.attachLetters(bytes)` attaches a letter layer, and `nPaths`, `table`, `colors()`
+  and `buildPaths()` then hold the pieces. `hasLetters`, `letterCount`, `letters`, `letter`,
+  `letterMembers`, `pathLetter` and `letterAtOffset` read it. `Sel.letter`, `Sel.letterMark`,
+  `Sel.letterMarkNamed` and `Sel.wordChars` select letters, marks and character ranges, and
+  `findLetters` and `styleLetters` find and colour letters by character, mark and part.
+  `LETTER_PART` names the parts. `hitTestLetter` and `hitTestLetterView` give the letter or
+  mark under a point. `layoutDrawRevision()` binds the draw revision, and `CanvasRenderer` keys
+  its kept draw list and base ink on it. `npm test` runs `web/letters.test.mjs`, which replays
+  `letters.json`.
+- Kotlin: `QvpPage.attachLetters`, the letter reads (`hasLetters`, `letterCount`, `letters`,
+  `letter`, `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`), `styleLetters`,
+  `hitTestLetter`, `hitTestLetterView`, `layoutDrawRevision`, and `Selector.letter`,
+  `letterMark`, `letterMarkNamed` and `wordChars`. New types: `QvpLetterPart`, `QvpLetter`,
+  `QvpLetterMember`, `QvpPathLetter`, `QvpLetterHit` and `QvpLetterQuery`. The Android
+  `QvpPageView` keys its draw list on the draw revision and sizes its per-path state after an
+  attach.
+- QvpKit: `QvpPage.attachLetters(_:)`, `hasLetters`, `letters(_:)`, `letter(_:_:)`,
+  `letterCount(_:)`, `letterMembers(_:_:)`, `pathLetter(_:)`, `letterAtOffset(_:_:)`,
+  `findLetters(_:)`, `styleLetters(_:_:)`, `hitTestLetter`, `hitTestLetterView`,
+  `layoutDrawRevision()`, `Selector.letter`, `letterMark`, `letterMarkNamed` and `wordChars`,
+  the types `QvpLetter`, `QvpLetterMember`, `QvpLetterHit`, `QvpLetterQuery` and
+  `QvpLetterPart`, and `letterAt(_:)` on `QvpPageView` and `QvpCanvasController`. Both views
+  key their kept draw list and ink on the draw revision.
+- Flutter: `QvpPage.attachLetters(bytes)`, `hasLetters`, `letterCount`, `letter`, `letters`,
+  `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`, `styleLetters`,
+  `hitTestLetter`, `hitTestLetterView` and `layoutDrawRevision()`, on both backends.
+  `Sel.letter`, `Sel.letterMark`, `Sel.letterMarkNamed` and `Sel.wordChars` select letters.
+  New types: `QvpLetter`, `QvpLetterMember`, `QvpLetterHit`, `QvpLetterQuery` and
+  `QvpLetterPart`. `QvpPageView` keys its draw list on the draw revision, and its base ink on
+  the draw list.
+- React Native: `<QvpPageView />` takes a `lettersUri` prop, which the view attaches after
+  the page and its words sidecar. A new value attaches that layer in place of the one before.
+  A removed prop keeps the layer until the next page, because the engine has no detach. The
+  module adds `attachLetters(tag, uri)`, `hasLetters`, `letters(tag, word)` (each letter with
+  its members and marks), `pathLetter`, `letterAtOffset`, `findLetters`, `hitTestLetter` and
+  `hitTestLetterView`, and the page-bound forms of each. `Sel.letter`, `Sel.letterMark`,
+  `Sel.letterMarkNamed` and `Sel.wordChars` make the selectors 16 to 19, and `LETTER_PART`
+  holds the parts. A `styles` rule with `letters` (a letter query) colours letters. The
+  Android and iOS modules have the same method names and result shapes.
+- With a letter layer and no letter rule, every view draws what it drew before. A page with no
+  layer makes no new engine call per frame in any wrapper.
 - QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
   `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
   `QvpPassageWord.wordKey`, as Kotlin's.
@@ -184,10 +251,45 @@ All notable changes to the engine and its packages. The format follows
   index of `quran-svg-elements` v2.0.0 takes that text from the quran-text release. Do not
   mix `qpc` strings or offsets from data built from an older source with those from v2.0.0
   (`docs/UPSTREAM-DATA-ISSUES.md`).
+- `qvp.h` states three rules that hosts must follow. After a change of rules or state,
+  call `qvp_tick` before any call that reads colours, styled paths, the draw revision or the
+  draw list, or a transition starts at the time of the last tick. That was already how
+  `qvp_colors` worked, and the header now says so. Use a page from one thread at a time,
+  const calls included, because a const call can update the page's caches. Each frame, call
+  `qvp_tick`, then `qvp_colors` or `qvp_styled_paths`, then `qvp_layout_draw_revision`, then
+  `qvp_layout_draw_list` when the revision, the layout or the band changed.
+- An attach of a letter layer makes stale what the host read before it. The pointers that
+  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
+  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
+  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
+  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
+  `qvp_colors` does. On a page with no layer they do not.
+- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
+  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
+  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
+  An array that an app copied from them before an attach does not hold the pieces.
+- Flutter: the `QvpBackend` interface has 13 new members for the letter layer, and a new
+  type, `QvpPageGeometry`. This is a source-breaking change for a class outside the package
+  that implements `QvpBackend`: it must add the members. An app that uses the package's own
+  backends needs no change.
+- React Native: on a page with a letter layer, the module runs the letter calls, and every
+  query on that page, on the UI thread, in queue order. With a layer, the view's draw changes
+  the page, and the query thread must not call into it at the same time. A page with no layer
+  keeps its queries on the query thread, as before.
 
 ### Removed
 
 ### Fixed
+- Android: the styled pass of `QvpPageView` draws a styled path only where the engine's draw
+  list puts it. Before, it drew every styled path. It put a styled path that the list leaves
+  out, such as a page number under reflow, at its printed line, and it drew a path once when
+  the list holds it twice. `lastOverlayPaths` now counts the styled draws.
+- Flutter: the styled pass of `QvpPageView` draws each styled entry of the draw list, in its
+  order and under its own placement. It drew each styled path once, at its first placement,
+  so a styled path that a reflowed layout draws twice, such as a sajdah line over two rows,
+  lost its second copy. The base ink and the styled pass now draw each entry of the draw list
+  once between them, and a hidden path not at all. Now every view draws only what the draw
+  list holds.
 - QvpKit: an index or count out of range no longer stops the program. Every call passes
   an Int to the C ABI as the parameter's unsigned width, cut from the Int as JNI's casts cut
   a jint on Android, and the engine answers: `wordLabel(-1)` is "", `findWord(-1, …)` is -1,

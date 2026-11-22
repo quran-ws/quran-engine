@@ -118,13 +118,13 @@ Repeat the last three commands with `<pages_dir>/*.qvp` for the page column. On 
 Core i9-13900 with 32 threads, the subcommand built all 604 layers in 1.59 s to 1.71 s
 wall clock over six runs, with the binary already built.
 
-A layer codes each piece against its source path in the page (`docs/FORMAT.md`). The first
-version of the format stored every piece as plain coordinate deltas. Its 604 files took
-37,200,857 B raw, 30,001,948 B after `gzip -9` and 25,946,365 B after brotli, from
-16,045 B (page 001) to 81,582 B (page 552). The coded pieces are lossless: the structure
-gate decodes every layer and compares each command of each piece.
+A layer codes each piece against its source path in the page (`docs/FORMAT.md`). The coded
+pieces are lossless: the structure gate decodes every layer and compares each command of
+each piece. Before: a first encoding, never released, stored every piece as plain
+coordinate deltas, and its 604 files took 37,200,857 B raw and 25,946,365 B after brotli.
 
-Each layer has a 72-byte header with two digests: 4,832 B of the raw total.
+Each layer starts with a 72-byte header that holds two 8-byte digests. Over 604 files the
+headers take 43,488 B of the raw total, and the digests 9,664 B of it.
 
 Decoding a layer costs more than it did, because the decoder lists the segments of each
 source and computes each part of a segment. Over the 604 pages, on one thread of the same
@@ -187,6 +187,42 @@ On the Intel Core i9-13900 with 32 threads, the `ink` test alone took 17.7 s to 
 for 604 pages over three runs. The whole test file, with the default test harness, took
 20.2 s to 24.2 s. The harness runs the four tests of the file at the same time. The
 sweep test alone, with `QVP_LETTERS_SWEEP=1`, took 11.5 s to 12.5 s.
+
+The engine gate (`cargo test -p qvp-convert --release --test letters_engine`, with
+`QVP_REQUIRE_LETTERS=1 QVP_TEST_ALL=1` for all pages) attaches each layer to its page in the
+engine. Its totals on all 604 pages, each asserted:
+
+| check | count |
+|---|---|
+| pages whose draw list, colours and own geometry rows the attach leaves unchanged | 604 |
+| letters whose offset points at their own character in the `qpc` text | 333,220 |
+| letters whose body and dots part takes the paths of the character range over their offset | 333,220 |
+| marks taken by the nth-mark selector, in text order | 430,453 |
+| cut paths swapped for their pieces by a colour on one letter, one path at a time | 12,067 |
+| cut paths drawn whole because every piece is of the coloured letter | 13 |
+| cut paths swapped by a colour on one letter of every word | 73,793 |
+| body members hit at a point inside them and inside no other ink | 335,548 (every one of the 261,953 pieces among them), 0 skipped |
+| printed ink points on a 0.5-unit grid, each an exact hit in the ink's word | 39,674,994, of which 23,379 seams |
+| the same points reflowed at zoom 2, through each word's placement | 39,674,298, of which 23,333 seams; 696 moved off the ink by the round trip and not tested |
+| counters, each a near hit on its own letter | 104,835, 0 with no clear point |
+
+The first run of the counter check failed on 89 counters on 78 pages, where the box of a
+neighbouring word reaches over the counter. The hit test now gives a point in a counter
+that counter's letter (`docs/API.md`, "The letter under a point"). On the Intel Core
+i9-13900, the gate took 24.3 s for 604 pages and about 2 s for the default 8 pages.
+
+What a layer costs the engine on page 003, in a release build on the same machine (the
+median of 20,000 calls):
+
+| | |
+|---|---|
+| a settled `tick`, with or without a layer and letter rules | 13 ns |
+| draw-list build, no layer | 5.56 µs |
+| draw-list build, a layer and no letter rule | 5.63 µs |
+| draw-list build, 400 letter rules, 194 cut paths drawn as pieces | 6.72 µs |
+| letter hit on ink | 359 ns |
+| letter hit in a gap between words | 339 ns |
+| word hit on the same ink point, for scale | 467 ns |
 
 ## Known rough edges
 

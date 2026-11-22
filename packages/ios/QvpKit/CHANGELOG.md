@@ -5,19 +5,15 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
-- QvpKit: the letter layer. `QvpPage.attachLetters(_:)` attaches a page's `NNN.qvl` and
-  reads the geometry again, so `nPaths`, `ops`, `pts`, `table` and `colors()` hold the pieces.
-  Read a word's letters with `letters(_:)`, `letter(_:_:)`, `letterCount(_:)`,
-  `letterMembers(_:_:)`, `pathLetter(_:)` and `letterAtOffset(_:_:)`. Colour them with
-  `Selector.letter`, `letterMark`, `letterMarkNamed` and `wordChars`, or with
-  `styleLetters(_:_:)` and a `QvpLetterQuery`, which `findLetters(_:)` also takes. Hit-test with
-  `hitTestLetter` and `hitTestLetterView`, or `letterAt(_:)` on `QvpPageView` and
-  `QvpCanvasController`. New types: `QvpLetter`, `QvpLetterMember`, `QvpLetterHit`,
-  `QvpLetterQuery` and `QvpLetterPart`. `layoutDrawRevision()` binds
-  `qvp_layout_draw_revision`. `nPaths`, `ops`, `pts` and `table` are now `private(set) var`, so
-  an attach can update them. `QvpPageView` and `QvpPageCanvas` key their kept draw list and ink on
-  the draw revision. With no layer they make no extra engine call and draw as before. The tests
-  replay `conformance/scenarios/letters.json`.
+- QvpKit: `QvpPage.attachLetters(_:)`, `hasLetters`, `letters(_:)`, `letter(_:_:)`,
+  `letterCount(_:)`, `letterMembers(_:_:)`, `pathLetter(_:)`, `letterAtOffset(_:_:)`,
+  `findLetters(_:)`, `styleLetters(_:_:)`, `hitTestLetter`, `hitTestLetterView`,
+  `layoutDrawRevision()`, `Selector.letter`, `letterMark`, `letterMarkNamed` and `wordChars`,
+  the types `QvpLetter`, `QvpLetterMember`, `QvpLetterHit`, `QvpLetterQuery` and
+  `QvpLetterPart`, and `letterAt(_:)` on `QvpPageView` and `QvpCanvasController`. Both views
+  key their kept draw list and ink on the draw revision.
+- With a letter layer and no letter rule, every view draws what it drew before. A page with no
+  layer makes no new engine call per frame in any wrapper.
 - QvpKit: `QvpPageView.baseSpec` is public: the spec before the reader's zoom, which
   `layoutLineSpacingToFill`, `layoutWastedFraction` and `layoutPrintedHeight` measure.
   `QvpPassageWord.wordKey`, as Kotlin's.
@@ -50,6 +46,23 @@ This package shares the engine version. Entries are copied from the root `CHANGE
   Native module reads them as an empty word list, as on Android.
 
 ### Changed
+- `qvp.h` states three rules that hosts must follow. After a change of rules or state,
+  call `qvp_tick` before any call that reads colours, styled paths, the draw revision or the
+  draw list, or a transition starts at the time of the last tick. That was already how
+  `qvp_colors` worked, and the header now says so. Use a page from one thread at a time,
+  const calls included, because a const call can update the page's caches. Each frame, call
+  `qvp_tick`, then `qvp_colors` or `qvp_styled_paths`, then `qvp_layout_draw_revision`, then
+  `qvp_layout_draw_list` when the revision, the layout or the band changed.
+- An attach of a letter layer makes stale what the host read before it. The pointers that
+  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
+  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
+  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
+  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
+  `qvp_colors` does. On a page with no layer they do not.
+- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
+  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
+  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
+  An array that an app copied from them before an attach does not hold the pieces.
 - The Android `QvpPageView`, the Flutter `QvpPageView`, the iOS `QvpPageView` and the web
   `CanvasRenderer` ask the engine for their band of ink. Each had its own copy of the
   arithmetic, and the copies did not agree (#134):

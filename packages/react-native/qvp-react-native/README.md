@@ -174,7 +174,7 @@ const medallion = await set.find('ayah_mark', 'font-003-regular');
 
 ## Letters
 
-A page can take a letter layer (`NNN.qvl`, in the data release). The layer names the letters
+A page can take a letter layer (`NNN.qvl`, `docs/DATA.md`). The layer names the letters
 of each word, the paths that draw each letter, and the pieces cut from an outline that joins
 letters. With a layer, you can read, colour and hit-test one letter or one mark.
 

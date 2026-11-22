@@ -1,20 +1,15 @@
 ## Unreleased
 
 ### Added
-- `QvpPage.attachLetters(bytes)` attaches the page's letter layer (`NNN.qvl`). The layer's
-  pieces join the path table after the page's own paths, so `nPaths`, `ops`, `pts`, `table`
-  and `colors()` grow. It returns false, and changes nothing, when the engine refuses the
-  file. `hasLetters`, `letterCount`, `letter`, `letters`, `letterMembers`, `pathLetter` and
-  `letterAtOffset` read the layer. `QvpLetter`, `QvpLetterMember` and `QvpLetterHit` carry
-  what the engine answers.
-- `Sel.letter`, `Sel.letterMark`, `Sel.letterMarkNamed` and `Sel.wordChars` select a letter,
-  a mark of a letter and a range of a word's qpc characters. `QvpLetterPart` names the parts.
-  `QvpLetterQuery` with `findLetters` and `styleLetters` finds and colours letters by
-  character, mark and part.
-- `hitTestLetter` and `hitTestLetterView` give the letter or mark under a point.
-- `layoutDrawRevision()` counts up when the draw list changes with no layout change.
-  `QvpPageView` reads it after the styled paths on a page with a letter layer, and keys its
-  draw list and base ink on the list. A page with no layer makes no extra call.
+- Flutter: `QvpPage.attachLetters(bytes)`, `hasLetters`, `letterCount`, `letter`, `letters`,
+  `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`, `styleLetters`,
+  `hitTestLetter`, `hitTestLetterView` and `layoutDrawRevision()`, on both backends.
+  `Sel.letter`, `Sel.letterMark`, `Sel.letterMarkNamed` and `Sel.wordChars` select letters.
+  New types: `QvpLetter`, `QvpLetterMember`, `QvpLetterHit`, `QvpLetterQuery` and
+  `QvpLetterPart`. `QvpPageView` keys its draw list on the draw revision, and its base ink on
+  the draw list.
+- With a letter layer and no letter rule, every view draws what it drew before. A page with no
+  layer makes no new engine call per frame in any wrapper.
 - `test/shared/letter_cases.dart` replays `conformance/scenarios/letters.json` on both
   backends.
 - `QvpEngine.viewSwipe(dx, dy, [vx, vy])` and `QvpEngine.swipePages(dx, dy, [vx, vy])`
@@ -52,6 +47,20 @@
   in Chrome. `test/qvp_flutter_test.dart` runs the same cases on the `dart:ffi` backend.
 
 ### Changed
+- Flutter: the `QvpBackend` interface has 13 new members for the letter layer, and a new
+  type, `QvpPageGeometry`. This is a source-breaking change for a class outside the package
+  that implements `QvpBackend`: it must add the members. An app that uses the package's own
+  backends needs no change.
+- An attach of a letter layer makes stale what the host read before it. The pointers that
+  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
+  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
+  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
+  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
+  `qvp_colors` does. On a page with no layer they do not.
+- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
+  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
+  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
+  An array that an app copied from them before an attach does not hold the pieces.
 - The Android `QvpPageView`, the Flutter `QvpPageView` and the web `CanvasRenderer` ask the
   engine for their band of ink. Each had its own copy of the arithmetic, and the copies did
   not agree (#134):
@@ -92,11 +101,12 @@
 ### Removed
 
 ### Fixed
-- The styled pass of `QvpPageView` draws each styled entry of the draw list, in its order and
-  under its own placement. It drew each styled path once, at its first placement, so a styled
-  path that a reflowed layout draws twice, such as a sajdah line over two rows, lost its
-  second copy. The base ink and the styled pass now draw each entry of the draw list once
-  between them, and a hidden path not at all.
+- Flutter: the styled pass of `QvpPageView` draws each styled entry of the draw list, in its
+  order and under its own placement. It drew each styled path once, at its first placement,
+  so a styled path that a reflowed layout draws twice, such as a sajdah line over two rows,
+  lost its second copy. The base ink and the styled pass now draw each entry of the draw list
+  once between them, and a hidden path not at all. Now every view draws only what the draw
+  list holds.
 - A band of ink with less than 2 px of slack, from an ink budget of about one screen or a
   screen within 2 px of `max_height`, now follows the reader. Before, its top moved in steps
   of 1 px, more than half its slack, and the band could end up to 2 px short of the screen's

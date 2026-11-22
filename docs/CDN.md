@@ -22,6 +22,9 @@ individual QVP or SVG titles, either combined sheet, or the WOFF2 font without l
 full page. The atlas supplies aggregate lookup and search metadata. A service worker can prefetch a juz from the manifest. Nothing needs the
 whole data set up front.
 
+A data release serves letter layers (`NNN.qvl`, `docs/DATA.md`) only when its `VERSION.json`
+and its manifest list them. `data-v0.5.0` does not.
+
 ## The layout
 
 One host carries every published artefact of the stack. Each family has its own folder and
