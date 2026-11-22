@@ -461,6 +461,43 @@ fn the_page_digest_hashes_the_bytes_the_format_gives() {
     assert_eq!(page_digest(&page), Ok(TINY_PAGE_DIGEST));
 }
 
+/// The page digest codes each run with the shortest varints, whatever varints the page file
+/// used: `decode` reads the values of a QVP1 file and codes every run again. Here the page
+/// file spells an x delta in two bytes, where one holds it.
+#[test]
+fn the_page_digest_does_not_depend_on_how_the_page_file_spells_a_varint() {
+    let mut page = sample_page();
+    // a page that decodes: its words on a line, in an ayah and with a text
+    page.strings = vec!["w".into()];
+    page.lines = vec![crate::LineRec { line_number: 1, first_word: 0, n_words: 2, bbox: IBox::EMPTY }];
+    page.ayahs = vec![crate::AyahRec {
+        surah: 1,
+        ayah: 1,
+        n_words: 2,
+        ayah_mark_decoration: crate::NONE_U16,
+        ..Default::default()
+    }];
+    let file = crate::codec::encode(&page);
+    let section = |b: &[u8], i: usize| u32::from_le_bytes(b[40 + i * 4..44 + i * 4].try_into().unwrap()) as usize;
+    // the sections follow the 64-byte header: tables, opcodes, close indices, x deltas
+    let mut at = 64 + (0..3).map(|i| section(&file, i)).sum::<usize>();
+    // the first x delta that one byte holds
+    while file[at] >= 0x80 {
+        while file[at] >= 0x80 {
+            at += 1;
+        }
+        at += 1;
+    }
+    let mut long = file[..at].to_vec();
+    long.extend([file[at] | 0x80, 0x00]);
+    long.extend(&file[at + 1..]);
+    long[52..56].copy_from_slice(&(section(&file, 3) as u32 + 1).to_le_bytes());
+    let (short, long) = (crate::codec::decode(&file).unwrap(), crate::codec::decode(&long).unwrap());
+    assert_eq!(long.ops, short.ops);
+    assert_eq!(page_digest(&long), page_digest(&page));
+    assert_eq!(page_digest(&short), page_digest(&page));
+}
+
 /// The page digest of `tiny_page`, as `docs/FORMAT.md` quotes it, computed by a separate
 /// Python version of the digest over the bytes above.
 const TINY_PAGE_DIGEST: u64 = 0x5e3b_2943_ec12_96d2;

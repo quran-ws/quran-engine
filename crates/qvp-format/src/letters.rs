@@ -261,6 +261,9 @@ pub fn digest64(bytes: &[u8]) -> u64 {
 /// not change it. A path's geometry does not depend on its origin: its first point is
 /// absolute. It is an error when a path's run leaves the opcode stream, or a glyph
 /// instance has no instance record.
+///
+/// It reads the runs as [`crate::codec::decode`] leaves them, with the shortest varints. A
+/// page built in memory gives the same digest when [`crate::encode_cmds`] codes its runs.
 pub fn page_digest(page: &PageData) -> Result<u64, Error> {
     let mut h = Digest::new();
     h.bytes(&page.header.page.to_le_bytes());
@@ -293,6 +296,11 @@ pub fn page_digest(page: &PageData) -> Result<u64, Error> {
 /// One opcode run of the page into the page digest: its first opcode, its first point as
 /// two absolute i32 when that opcode has one, then the length of the rest of the run and
 /// the rest as it is: each later point is a delta from the point before it.
+///
+/// `docs/FORMAT.md` codes each varint of the input in its shortest form. The run is hashed
+/// as `PageData::ops` holds it, which is that form: `codec::decode` codes every run again
+/// with `encode_cmds`, whatever varints the page file used. A `PageData` built by hand must
+/// code its runs with `encode_cmds` too, or its digest differs.
 fn hash_run(h: &mut Digest, page: &PageData, off: u32, len: u32, origin: (i32, i32)) -> Result<(), Error> {
     let end = off.checked_add(len).ok_or(Error::Bounds("path ops"))?;
     let run = page.ops.get(off as usize..end as usize).ok_or(Error::Bounds("path ops"))?;

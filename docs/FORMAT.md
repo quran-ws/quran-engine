@@ -332,8 +332,12 @@ per command (0 move, 1 line, 2 quadratic curve, 3 cubic curve, 4 close), each fo
 its points as zigzag varint x and y deltas from the point before. In the page digest, a
 run's first point is not a delta: the input holds the run's first opcode byte, then (when
 that command has a point) the first point as two absolute i32, then the number of the
-run's remaining bytes (u32), then those bytes. The varints are the shortest that hold
-their values. A glyph outline's points are in glyph space.
+run's remaining bytes (u32), then those bytes. Each varint is the shortest that holds its
+value, whatever varints the page file used. So the input depends on the decoded commands
+only, and two page files that decode to the same commands have one page digest. A QVP1
+reader that keeps the file's own bytes must code each run again. This engine's decoder
+codes every run in this form when it reads a page, so it hashes its runs as they are in
+memory. A glyph outline's points are in glyph space.
 
 Strings, boxes, a path's origin and every word field but its path run are not in the
 digest. So a words sidecar, which changes word texts, does not change it. Paths alike in
