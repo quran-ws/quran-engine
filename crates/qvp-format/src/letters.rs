@@ -9,7 +9,7 @@
 //! struct-of-arrays tables in varints and zigzag deltas, and the drawing operations of the
 //! pieces in the same four streams as a page's runs. `docs/FORMAT.md` specifies it.
 
-use crate::{read_varint, unzigzag, write_varint, zigzag, Cmd, Error, PageData, PathKind, COORD_LIMIT};
+use crate::{read_varint, unzigzag, write_varint, zigzag, Cmd, Error, PageData, PathKind, COORD_LIMIT, PF_GLYPH};
 
 pub const LETTERS_MAGIC: &[u8; 4] = b"QVL1";
 pub const LETTERS_VERSION: u16 = 1;
@@ -372,7 +372,9 @@ pub fn decode_letters(b: &[u8]) -> Result<LetterData, Error> {
         if word >= n_page_words {
             return Err(Error::Bounds("letter word"));
         }
-        let at = t.u16("letter at")?;
+        // A letter always has an offset: `NO_AT` is outside the field, as it is for a
+        // word mark's stored `at + 1`.
+        let at = t.u16("letter at").and_then(|a| if a == NO_AT { Err(Error::Corrupt("letter at")) } else { Ok(a) })?;
         let text = char::from_u32(t.vi("letter text")?).ok_or(Error::Corrupt("letter text"))?;
         let n = t.u16("letter members")?;
         let n_more = t.vi("more_at")? as usize;
@@ -576,6 +578,14 @@ impl LetterData {
         if self.letters.windows(2).any(|w| w[0].word > w[1].word) {
             return Err(Error::Corrupt("letter order"));
         }
+        // The decoder rejects this too. The check here keeps the round-trip promise.
+        if self.letters.iter().any(|l| l.at == NO_AT) {
+            return Err(Error::Corrupt("letter at"));
+        }
+        // Inside one word, the letters follow the word's spelling.
+        if self.letters.windows(2).any(|w| w[0].word == w[1].word && w[0].at >= w[1].at) {
+            return Err(Error::Corrupt("letter at order"));
+        }
         if self.pieces.windows(2).any(|w| w[0].source > w[1].source) {
             return Err(Error::Corrupt("piece order"));
         }
@@ -630,8 +640,14 @@ impl LetterData {
                         if !range.contains(&(piece.source as u64)) {
                             return Err(Error::Bounds("piece source"));
                         }
-                        if page.paths[piece.source as usize].kind != PathKind::Body {
+                        let source = &page.paths[piece.source as usize];
+                        if source.kind != PathKind::Body {
                             return Err(Error::Corrupt("piece source kind"));
+                        }
+                        // A glyph instance draws a shared outline. A piece is cut from
+                        // the page's own geometry only.
+                        if source.flags & PF_GLYPH != 0 {
+                            return Err(Error::Corrupt("piece source glyph"));
                         }
                     }
                 }
@@ -651,6 +667,28 @@ impl LetterData {
                 Role::Source => return Err(Error::Corrupt("word mark and source")),
                 Role::Member => return Err(Error::Corrupt("word mark and member")),
                 Role::WordMark => return Err(Error::Corrupt("word mark twice")),
+            }
+        }
+        // Every path of every word has a role, so the layer covers every word of its
+        // page. Word runs may overlap, so the paths inside some run come from a running
+        // count of the runs that start and end at each path: linear in words and paths.
+        let mut starts = vec![0i64; page.paths.len() + 1];
+        for w in &page.words {
+            let (a, b) = (w.first_path as usize, w.first_path as usize + w.n_paths as usize);
+            if w.n_paths == 0 {
+                continue;
+            }
+            if b > page.paths.len() {
+                return Err(Error::Bounds("word path"));
+            }
+            starts[a] += 1;
+            starts[b] -= 1;
+        }
+        let mut open = 0i64;
+        for (r, s) in role.iter().zip(&starts) {
+            open += s;
+            if open > 0 && matches!(r, Role::None) {
+                return Err(Error::Corrupt("path without role"));
             }
         }
         Ok(())
@@ -1101,6 +1139,46 @@ mod tests {
         let mut d = sample();
         d.word_marks[1].path = 4;
         assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("word mark twice")));
+    }
+
+    #[test]
+    fn check_against_rejects_a_word_path_with_no_role() {
+        let mut d = sample();
+        d.word_marks.pop();
+        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("path without role")));
+        // A page path outside every word needs no role.
+        let mut p = sample_page();
+        p.words[1].n_paths = 2;
+        let mut d = sample();
+        d.word_marks.pop();
+        assert_eq!(d.check_against(&p), Ok(()));
+    }
+
+    #[test]
+    fn check_against_rejects_letters_out_of_spelling_order() {
+        let mut d = sample();
+        d.letters[1].at = 0;
+        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("letter at order")));
+        let mut d = sample();
+        d.letters.swap(0, 1);
+        renumber(&mut d);
+        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("letter at order")));
+    }
+
+    #[test]
+    fn rejects_a_letter_with_no_offset() {
+        let mut d = sample();
+        d.letters[0].at = NO_AT;
+        d.members[0].at = 0;
+        assert_eq!(d.check_against(&sample_page()), Err(Error::Corrupt("letter at")));
+        assert_eq!(decode_letters(&encode_letters(&d)), Err(Error::Corrupt("letter at")));
+    }
+
+    #[test]
+    fn check_against_rejects_a_piece_cut_from_a_glyph_instance() {
+        let mut p = sample_page();
+        p.paths[2].flags = PF_GLYPH;
+        assert_eq!(sample().check_against(&p), Err(Error::Corrupt("piece source glyph")));
     }
 
     /// A word whose path run ends past the path table: an index inside the run but past

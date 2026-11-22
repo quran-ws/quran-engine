@@ -85,7 +85,8 @@ fn check(page: &str) -> Result<Counts, String> {
     d.check_against(&lp.page).map_err(|e| format!("page {page}: check_against: {e:?}"))?;
 
     // Every path of every word has exactly one role: a member of one letter, a word mark,
-    // or the source of at least one piece.
+    // or the source of at least one piece. `check_against` now checks this too; this
+    // check stays so that a failure names the word and the path.
     let n = lp.page.paths.len();
     let (mut member, mut mark, mut source) = (vec![0u32; n], vec![0u32; n], vec![false; n]);
     for m in &d.members {

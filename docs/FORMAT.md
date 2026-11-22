@@ -358,6 +358,9 @@ The reference decoder returns an error for each of these, and a writer keeps the
 - A delta-coded field outside its type, or a varint that does not fit a u16 field.
 - A word mark's `at + 1` that is not 0 and does not give an offset in 0 to 65534.
 - A letter text that is not a Unicode scalar value.
+- A letter `at` of `0xFFFF`. A letter always has an offset. The decoder rejects it, as it
+  rejects a word mark's `at + 1` that gives `0xFFFF`. `check_against` also rejects it, so
+  that a layer it accepts round-trips.
 - Member counts that do not add up to the members count.
 - Member flags with a bit other than bits 0 to 2 set.
 - A piece member at or past the pieces count. A page member, a word mark's path or a
@@ -379,6 +382,8 @@ to the same layer that the writer encoded.
 
 - The layer's page number, `quant`, path count and word count are those of the page.
 - Letters are in word order, and pieces in source order.
+- Inside one word, each letter's `at` is greater than the `at` of the letter before it.
+- No letter has an `at` of `0xFFFF`.
 - Each letter's first member is the running total of the member counts before it, and
   the member counts add up to the members count.
 - Each letter has at least one body member.
@@ -387,6 +392,9 @@ to the same layer that the writer encoded.
 - Exactly one member uses each piece.
 - A letter's page members, and a word mark's path, lie inside the path run of its word.
 - A piece's source lies inside the path run of the word of the letter that holds the
-  piece, and the source path has kind body.
+  piece, and the source path has kind body. The source is not a glyph instance (flag
+  `PF_GLYPH`).
 - A page path has at most one role: a member of one letter, one word mark, or the
   source of pieces. One path can be the source of several pieces.
+- Every path inside the path run of a word has a role. So a layer covers every word of
+  its page. A word whose path run ends past the page's path table is an error.
