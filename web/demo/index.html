@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>محرّك المصحف · عرض حيّ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* The mushaf's own world: the deep green of its cover, the gold of its tooling, the paper of its page. */
+  :root {
+    --night:#0b2022; --night-2:#102b2c; --night-3:#173a39; --line:#24504d;
+    --mist:#e3ece8; --muted:#8eaaa3; --gold:#c9a44c; --gold-soft:rgba(201,164,76,.16);
+    --paper:#fffdf7; --ink:#231f20; --hover:rgba(201,164,76,.22);
+    --display:'Aref Ruqaa','Amiri',serif; --body:'IBM Plex Sans Arabic',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  * { box-sizing:border-box }
+  html { scroll-behavior:smooth; scroll-snap-type:y proximity }
+  body { margin:0; background:var(--night); color:var(--mist); font:16px/1.8 var(--body); -webkit-font-smoothing:antialiased }
+  :focus-visible { outline:2px solid var(--gold); outline-offset:2px; border-radius:6px }
+  a { color:var(--gold) }
+
+  /* the bar at the top: the name, and where the reader is among the scenes */
+  .top { position:fixed; inset:0 0 auto 0; z-index:20; display:flex; align-items:center; gap:18px; padding:10px 22px; background:linear-gradient(var(--night) 55%,transparent); pointer-events:none }
+  .top > * { pointer-events:auto }
+  .brand { font:700 22px/1 var(--display); color:var(--gold); text-decoration:none; white-space:nowrap }
+  .rail { display:flex; gap:2px; margin-inline-start:auto; padding:4px; background:rgba(16,43,44,.86); border:1px solid var(--line); border-radius:999px; backdrop-filter:blur(8px) }
+  .rail a { padding:3px 13px; border-radius:999px; font-size:13px; color:var(--muted); text-decoration:none; white-space:nowrap; transition:color .2s,background .2s }
+  .rail a:hover { color:var(--mist) }
+  .rail a.on { background:var(--gold); color:var(--night); font-weight:600 }
+
+  /* a scene: words on one side, a live page on the other */
+  .scene { min-height:100vh; display:grid; grid-template-columns:minmax(300px,400px) minmax(0,1fr); gap:clamp(20px,4vw,64px); align-items:center; padding:84px clamp(18px,5vw,72px) 36px; scroll-snap-align:start; border-bottom:1px solid var(--night-2) }
+  .scene:nth-of-type(even) { background:var(--night-2) }
+  .say { display:flex; flex-direction:column; gap:14px }
+  .kicker { font:500 13px/1 var(--body); color:var(--gold); letter-spacing:.02em }
+  h1, h2 { font-family:var(--display); font-weight:700; color:#fff; margin:0; line-height:1.35 }
+  h1 { font-size:clamp(40px,5.4vw,72px) }
+  h2 { font-size:clamp(30px,3.4vw,46px) }
+  .say p { margin:0; color:var(--mist); font-weight:300; max-width:36ch }
+  .say .fine { font-size:13px; color:var(--muted); max-width:44ch }
+  code { font:13px var(--mono); color:var(--gold); direction:ltr; unicode-bidi:isolate }
+
+  /* controls */
+  .ctl { display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+  .ctl .lab { font-size:13px; color:var(--muted); min-width:4.5em }
+  button, select { font:inherit; font-size:14px; color:var(--mist); background:transparent; border:1px solid var(--line); border-radius:999px; padding:5px 16px; cursor:pointer; transition:border-color .15s,background .15s,color .15s }
+  button:hover:not(:disabled) { border-color:var(--gold) }
+  button.on { background:var(--gold); color:var(--night); border-color:var(--gold); font-weight:600 }
+  button.go { background:var(--gold); color:var(--night); border-color:var(--gold); font-weight:600; padding:8px 24px }
+  button:disabled { opacity:.4; cursor:not-allowed }
+  select { background:var(--night-2); padding-inline-end:28px }
+  input[type=range] { accent-color:var(--gold); flex:1; min-width:120px }
+  .chips { display:flex; flex-wrap:wrap; gap:6px }
+  .chip { display:inline-flex; align-items:center; gap:7px; font-size:13px; padding:3px 12px 3px 10px; border:1px solid var(--line); border-radius:999px; cursor:pointer; user-select:none; color:var(--mist); background:transparent }
+  .chip i { width:10px; height:10px; border-radius:50%; flex:none }
+  .chip.off { opacity:.38 }
+  .card { border:1px solid var(--line); border-radius:14px; padding:12px 16px; background:rgba(11,32,34,.5); min-height:64px }
+  .card .big { font:700 30px/1.5 var(--display); color:#fff }
+  .card .sub { font-size:13px; color:var(--muted) }
+  .card b { color:var(--gold); font-weight:600 }
+  .time { font:13px var(--mono); color:var(--muted); direction:ltr; min-width:9ch; text-align:center }
+
+  /* the lectern: where a page lives */
+  .stage { position:relative; height:min(84vh,900px); min-height:420px; border-radius:22px; background:radial-gradient(120% 90% at 50% 0%,var(--night-3),var(--night) 78%); border:1px solid var(--line); overflow:hidden; touch-action:pan-y; cursor:default }
+  .scene:nth-of-type(even) .stage { background:radial-gradient(120% 90% at 50% 0%,var(--night-3),var(--night-2) 78%) }
+  .stage .bed { position:absolute; inset:22px; touch-action:pan-y }
+  .stage canvas { position:absolute; inset:0; display:block }
+  .stage .paper { position:absolute; background:var(--paper); border-radius:5px; box-shadow:0 18px 50px rgba(0,0,0,.45),0 0 0 1px rgba(201,164,76,.25); pointer-events:none; transition:background .3s }
+  .stage.zoomed .bed { cursor:grab } .stage .bed.dragging { cursor:grabbing }
+  .zoom { position:absolute; bottom:12px; inset-inline-end:12px; z-index:3; display:flex; gap:2px; padding:3px; background:rgba(11,32,34,.82); border:1px solid var(--line); border-radius:999px; backdrop-filter:blur(6px) }
+  .zoom button { border:0; width:34px; height:30px; padding:0; font:500 17px/1 var(--mono); border-radius:999px }
+  .zoom button:hover:not(:disabled) { background:var(--gold-soft) }
+  .stage .note { position:absolute; inset:auto 0 50% 0; text-align:center; color:var(--muted); font-size:14px; padding:0 20px }
+  .stage .hint { position:absolute; top:12px; inset-inline-start:14px; z-index:3; font-size:12px; color:var(--muted); background:rgba(11,32,34,.7); padding:2px 12px; border-radius:999px }
+
+  .foot { padding:48px clamp(18px,5vw,72px) 64px; color:var(--muted); font-size:14px; display:grid; gap:8px; max-width:900px }
+  .foot h3 { font:700 24px var(--display); color:var(--gold); margin:0 0 4px }
+
+  @media (max-width:900px) {
+    .scene { grid-template-columns:1fr; padding-top:76px; align-items:start }
+    .stage { height:70vh; order:2 }
+    .rail a { padding:3px 9px; font-size:12px }
+    .rail { overflow-x:auto; max-width:68vw }
+    html { scroll-snap-type:none }
+  }
+  @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto } * { transition:none !important } }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#hero">محرّك المصحف</a>
+  <nav class="rail" id="rail" aria-label="مشاهد العرض">
+    <a href="#hero">البداية</a><a href="#tajwid">التجويد</a><a href="#listen">التلاوة</a><a href="#hifz">الحفظ</a><a href="#read">القراءة</a><a href="#dress">الزخرفة</a>
+  </nav>
+</header>
+
+<section class="scene" id="hero">
+  <div class="say">
+    <span class="kicker">عرض حيّ · كل صفحة هنا يرسمها المحرّك أمامك</span>
+    <h1>صفحة المصحف كما طُبعت، وكل حرف فيها يُجيبك</h1>
+    <p>هذه ليست صورة. المحرّك يرسم صفحة مصحف المدينة من خطوطها الأصلية، ويعرف كل كلمة وكل حرف وكل علامة فيها.</p>
+    <div class="ctl"><button class="go" id="heroWrite">اكتب الصفحة من جديد</button><a href="#tajwid"><button>ابدأ الجولة ↓</button></a></div>
+    <div class="card" id="heroCard"><div class="sub">المس أي كلمة في الصفحة.</div></div>
+    <p class="fine">كبِّر بإصبعين، أو بأزرار التكبير، أو بـ Ctrl مع عجلة الفأرة. الحروف تبقى حادّة عند أي حجم.</p>
+  </div>
+  <div class="stage" id="heroStage"></div>
+</section>
+
+<section class="scene" id="tajwid">
+  <div class="say">
+    <span class="kicker">التجويد</span>
+    <h2>أحكام التجويد على الحرف نفسه</h2>
+    <p>كل حكم ملوَّن على موضعه من الرسم: على الحرف، لا على الكلمة كلها. المس حرفًا ملوَّنًا لتعرف حكمه.</p>
+    <div class="chips" id="tjLegend"></div>
+    <div class="ctl"><button id="tjAll">أظهر الكل</button><button id="tjNone">أخفِ الكل</button></div>
+    <div class="card" id="tjCard"><div class="sub">المس حرفًا ملوَّنًا.</div></div>
+    <p class="fine">الأحكام من مشروع <a href="https://github.com/quran-ws/quran-tajweed">quran-tajweed</a> الذي راجعه مختصون، والألوان ألوان موقع قرآنبيديا.</p>
+  </div>
+  <div class="stage" id="tjStage"></div>
+</section>
+
+<section class="scene" id="listen">
+  <div class="say">
+    <span class="kicker">التلاوة</span>
+    <h2>الصفحة تتبع القارئ كلمةً كلمة، وحرفًا حرفًا</h2>
+    <p>يضيء موضع القارئ أثناء التلاوة. المس أي كلمة ليبدأ القارئ منها، والصفحة تنقلب وحدها عند آخرها.</p>
+    <div class="ctl"><span class="lab">القارئ</span><select id="plReciter" aria-label="القارئ"></select></div>
+    <div class="ctl">
+      <button class="go" id="plPlay">▶ استمع</button>
+      <span class="time" id="plTime">0:00</span>
+      <input type="range" id="plSeek" min="0" max="1000" value="0" aria-label="موضع التلاوة">
+    </div>
+    <div class="ctl"><span class="lab">الإضاءة</span><button id="plByWord" class="on">بالكلمة</button><button id="plByLetter">بالحرف</button><button id="plRepeat">كرّر الآية</button></div>
+    <div class="card" id="plCard"><div class="sub">سورة يس، من أولها.</div></div>
+    <p class="fine">الصوت وتوقيت الكلمات والحروف من <a href="https://docs-staging.mp3quran.net/">واجهة MP3Quran</a>.</p>
+  </div>
+  <div class="stage" id="plStage"></div>
+</section>
+
+<section class="scene" id="hifz">
+  <div class="say">
+    <span class="kicker">الحفظ</span>
+    <h2>أخفِ الآيات، ثم اقرأها من حفظك</h2>
+    <p>تختفي الكلمات ويبقى مكانها في الصفحة. اكشفها واحدةً واحدة، أو اقرأ بصوتك فتظهر كل كلمة حين تنطقها.</p>
+    <div class="ctl"><span class="lab">الإخفاء</span><button id="hzHide" class="on">إخفاء</button><button id="hzBlock">تغطية</button></div>
+    <div class="ctl"><button class="go" id="hzNext">اكشف كلمة</button><button id="hzBack">أعِد كلمة</button><button id="hzReset">ابدأ من جديد</button><button id="hzShow">أظهر الصفحة</button></div>
+    <div class="ctl"><button id="hzListen" disabled>🎙 اقرأ بصوتك</button><button id="hzClip" disabled>جرّب بمقطع جاهز</button></div>
+    <div class="card" id="hzCard"><div class="sub">سورة الفاتحة.</div></div>
+    <p class="fine" id="hzFine">القراءة بالصوت تعمل بنموذج TajweedFormer V4 من <a href="https://sdk.quranlab.ai/overview">Quran Lab</a>، وهو يعمل على جهازك. التنبيه الآلي قد يخطئ، ولا يغني عن معلّم متقن.</p>
+  </div>
+  <div class="stage" id="hzStage"></div>
+</section>
+
+<section class="scene" id="read">
+  <div class="say">
+    <span class="kicker">راحة القراءة</span>
+    <h2>كبِّر الخط، والسطور تعيد ترتيب نفسها</h2>
+    <p>عند التكبير لا تخرج الكلمات من الشاشة. يوزّع المحرّك الكلمات على سطور جديدة، وكل كلمة تبقى برسمها المطبوع.</p>
+    <div class="ctl"><span class="lab">الحجم</span><button data-step="0" class="on">كالمطبوع</button><button data-step="1">٢</button><button data-step="2">٣</button><button data-step="3">٤</button></div>
+    <div class="ctl"><span class="lab">التكبير</span><button data-zmode="stepped" class="on">بدرجات</button><button data-zmode="continuous">حرّ</button><button data-zmode="magnify">عدسة</button></div>
+    <div class="ctl"><span class="lab">الورق</span><button data-theme="light" class="on">فاتح</button><button data-theme="sepia">عاجي</button><button data-theme="dark">داكن</button></div>
+    <div class="card" id="rdCard"><div class="sub">كالمطبوع.</div></div>
+    <p class="fine">«بدرجات» ما يراه القارئ: التكبير يقف على حجم تخرج سطوره متوازنة. «عدسة» تكبّر الصفحة المطبوعة كما هي.</p>
+  </div>
+  <div class="stage" id="rdStage"></div>
+</section>
+
+<section class="scene" id="dress">
+  <div class="say">
+    <span class="kicker">الزخرفة</span>
+    <h2>الصفحة نفسها بزخارف مصحف آخر</h2>
+    <p id="drSay">النص نصّ مصحف المدينة، والإطار ورأس السورة وعلامات الآيات من مصحف آخر. المحرّك يضع كل زخرفة في مكانها ويترك للنص هواءه.</p>
+    <div class="chips" id="drStyles"></div>
+    <div class="ctl"><span class="lab">الرسم</span><button id="drLine">خطوط فقط</button><button id="drPlain">كالمطبوع</button></div>
+    <div class="card" id="drCard"><div class="sub">اختر مصحفًا.</div></div>
+  </div>
+  <div class="stage" id="drStage"></div>
+</section>
+
+<footer class="foot">
+  <h3>كل هذا من محرّك واحد</h3>
+  <div>محرّك المصحف مكتبة مفتوحة للويب و Android و iOS و Flutter و React Native: <a href="https://github.com/quran-ws/quran-engine">github.com/quran-ws/quran-engine</a></div>
+  <div>صفحات المصحف من <a href="https://github.com/quran-ws/quran-svg-elements">quran-svg-elements</a> عن خط مجمع الملك فهد لطباعة المصحف الشريف.</div>
+</footer>
+
+<script src="qvp.js"></script>
+<script src="config.local.js" onerror="this.remove()"></script>
+<script src="demo.js"></script>
+</body>
+</html>
