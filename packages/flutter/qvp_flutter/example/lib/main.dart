@@ -256,8 +256,7 @@ class _ReaderPageState extends State<ReaderPage>
       QvpAtlas? a;
       try {
         a = e.loadAtlas(
-          (await rootBundle.load('assets/pages/atlas.qva'))
-              .buffer
+          (await rootBundle.load('assets/pages/atlas.qva')).buffer
               .asUint8List(),
         );
       } catch (_) {
@@ -267,8 +266,7 @@ class _ReaderPageState extends State<ReaderPage>
       QvpOrnaments? o;
       try {
         o = e.loadOrnaments(
-          (await rootBundle.load('assets/pages/ornaments.qvo'))
-              .buffer
+          (await rootBundle.load('assets/pages/ornaments.qvo')).buffer
               .asUint8List(),
         );
       } catch (_) {
@@ -567,8 +565,8 @@ class _ReaderPageState extends State<ReaderPage>
   }
 
   void _snack(String s) => ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s), duration: const Duration(seconds: 2)),
-      );
+    SnackBar(content: Text(s), duration: const Duration(seconds: 2)),
+  );
 
   // ── copy / crop ──
   Future<void> copy() async {
@@ -616,7 +614,7 @@ class _ReaderPageState extends State<ReaderPage>
       () => cropInfo = svg == null || box == null
           ? 'crop failed'
           : 'SVG ${svg.length} chars · ${svg.substring(0, svg.indexOf('>') + 1).replaceAll(RegExp(r'\s+'), ' ')}\n'
-              'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.ayahMarkDecoration != qvpNone ? ' · ayahMark' : ''}',
+                'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.ayahMarkDecoration != qvpNone ? ' · ayahMark' : ''}',
     );
   }
 
@@ -746,8 +744,8 @@ class _ReaderPageState extends State<ReaderPage>
     final t = selAyah != null
         ? T.ayah(selAyah!.$1, selAyah!.$2)
         : selWord >= 0
-            ? T.ayah(p.words[selWord].surah, p.words[selWord].ayah)
-            : T.page();
+        ? T.ayah(p.words[selWord].surah, p.words[selWord].ayah)
+        : T.page();
     p.maskOptions(blockColor: QvpColor.fromColor(pal.line));
     p.mask(t, maskMode);
     setState(() {});
@@ -803,7 +801,9 @@ class _ReaderPageState extends State<ReaderPage>
       handle = letterEvery
           ? p.styleLetters(
               QvpLetterQuery(
-                  text: l.codePoint, part: QvpLetterPart.bodyAndDots),
+                text: l.codePoint,
+                part: QvpLetterPart.bodyAndDots,
+              ),
               letterColor,
               ms: 200,
               layer: QvpLayer.top,
@@ -1092,17 +1092,17 @@ class _ReaderPageState extends State<ReaderPage>
   }
 
   Widget _h2(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(
-          t.toUpperCase(),
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.6,
-            color: pal.muted,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      t.toUpperCase(),
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.6,
+        color: pal.muted,
+      ),
+    ),
+  );
   Widget _hint(String t) =>
       Text(t, style: TextStyle(color: pal.muted, fontSize: 12));
   TextStyle get _ar => const TextStyle(fontSize: 26, height: 1.6);
@@ -1565,8 +1565,9 @@ class _ReaderPageState extends State<ReaderPage>
                 max: revealOn && revealStepCount > 0
                     ? (revealStepCount - 1).toDouble()
                     : 0,
-                divisions:
-                    revealOn && revealStepCount > 0 ? revealStepCount : null,
+                divisions: revealOn && revealStepCount > 0
+                    ? revealStepCount
+                    : null,
                 onChanged: revealOn
                     ? (v) {
                         revealPos = v.round();
@@ -1601,28 +1602,27 @@ class _ReaderPageState extends State<ReaderPage>
       int div,
       String text,
       ValueChanged<double> f,
-    ) =>
-        Row(
-          children: [
-            SizedBox(
-              width: 84,
-              child: Text(label, style: const TextStyle(fontSize: 12)),
-            ),
-            Expanded(
-              child: Slider(
-                value: v,
-                min: min,
-                max: max,
-                divisions: div,
-                onChanged: f,
-              ),
-            ),
-            SizedBox(
-              width: 44,
-              child: Text(text, style: const TextStyle(fontSize: 12)),
-            ),
-          ],
-        );
+    ) => Row(
+      children: [
+        SizedBox(
+          width: 84,
+          child: Text(label, style: const TextStyle(fontSize: 12)),
+        ),
+        Expanded(
+          child: Slider(
+            value: v,
+            min: min,
+            max: max,
+            divisions: div,
+            onChanged: f,
+          ),
+        ),
+        SizedBox(
+          width: 44,
+          child: Text(text, style: const TextStyle(fontSize: 12)),
+        ),
+      ],
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1720,7 +1720,8 @@ class _ReaderPageState extends State<ReaderPage>
     final chosen = [
       for (final i in picks.values) i == null ? null : set.list[i].style,
     ];
-    final same = chosen.every((s) => s == chosen.first) &&
+    final same =
+        chosen.every((s) => s == chosen.first) &&
         (chosen.first == null || presets.any((s) => s.style == chosen.first));
     final styleValue = same ? chosen.first : 'mixed';
 
@@ -1736,23 +1737,22 @@ class _ReaderPageState extends State<ReaderPage>
       V value,
       List<DropdownMenuItem<V>> items,
       ValueChanged<V?> f,
-    ) =>
-        Row(
-          children: [
-            SizedBox(
-              width: 84,
-              child: Text(text, style: const TextStyle(fontSize: 12)),
-            ),
-            Expanded(
-              child: DropdownButton<V>(
-                isExpanded: true,
-                value: value,
-                items: items,
-                onChanged: f,
-              ),
-            ),
-          ],
-        );
+    ) => Row(
+      children: [
+        SizedBox(
+          width: 84,
+          child: Text(text, style: const TextStyle(fontSize: 12)),
+        ),
+        Expanded(
+          child: DropdownButton<V>(
+            isExpanded: true,
+            value: value,
+            items: items,
+            onChanged: f,
+          ),
+        ),
+      ],
+    );
     Widget slider(
       String text,
       double v,
@@ -1761,28 +1761,27 @@ class _ReaderPageState extends State<ReaderPage>
       int div,
       String shown,
       ValueChanged<double> f,
-    ) =>
-        Row(
-          children: [
-            SizedBox(
-              width: 84,
-              child: Text(text, style: const TextStyle(fontSize: 12)),
-            ),
-            Expanded(
-              child: Slider(
-                value: v,
-                min: min,
-                max: max,
-                divisions: div,
-                onChanged: f,
-              ),
-            ),
-            SizedBox(
-              width: 76,
-              child: Text(shown, style: const TextStyle(fontSize: 12)),
-            ),
-          ],
-        );
+    ) => Row(
+      children: [
+        SizedBox(
+          width: 84,
+          child: Text(text, style: const TextStyle(fontSize: 12)),
+        ),
+        Expanded(
+          child: Slider(
+            value: v,
+            min: min,
+            max: max,
+            divisions: div,
+            onChanged: f,
+          ),
+        ),
+        SizedBox(
+          width: 76,
+          child: Text(shown, style: const TextStyle(fontSize: 12)),
+        ),
+      ],
+    );
 
     // One colour well per part of each chosen ornament. A kind drawn as line art has one ink.
     final wells = <Widget>[];
@@ -1860,8 +1859,13 @@ class _ReaderPageState extends State<ReaderPage>
     } else if (info == null) {
       readout = 'the engine refused that dress';
     } else {
-      readout = '${info.ayahMarks} medallions · ${info.surahHeaders} band(s) · '
-          '${info.pageFrame == null ? 'no border' : info.frameStretched ? 'the whole frame is stretched (no slices)' : '${info.frameRepeats} border repeats tiled to this page'}'
+      readout =
+          '${info.ayahMarks} medallions · ${info.surahHeaders} band(s) · '
+          '${info.pageFrame == null
+              ? 'no border'
+              : info.frameStretched
+              ? 'the whole frame is stretched (no slices)'
+              : '${info.frameRepeats} border repeats tiled to this page'}'
           '\nviewBox ${info.viewBox.map((v) => v.toStringAsFixed(1)).join(' ')}';
       for (final i in picks.values) {
         if (i == null) continue;
@@ -1895,23 +1899,19 @@ class _ReaderPageState extends State<ReaderPage>
           },
         ),
         for (final k in QvpOrnamentKind.values)
-          dropdown<int?>(
-              _kindLabel[k]!,
-              picks[k],
-              [
-                DropdownMenuItem(
-                  value: null,
-                  child: Text(
-                    k == QvpOrnamentKind.pageFrame ? 'none' : 'as printed',
-                  ),
-                ),
-                for (final o in set.ofKind(k))
-                  DropdownMenuItem(
-                    value: o.index,
-                    child: Text(label(o), overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              (v) => pick(k, v)),
+          dropdown<int?>(_kindLabel[k]!, picks[k], [
+            DropdownMenuItem(
+              value: null,
+              child: Text(
+                k == QvpOrnamentKind.pageFrame ? 'none' : 'as printed',
+              ),
+            ),
+            for (final o in set.ofKind(k))
+              DropdownMenuItem(
+                value: o.index,
+                child: Text(label(o), overflow: TextOverflow.ellipsis),
+              ),
+          ], (v) => pick(k, v)),
         Wrap(
           spacing: 6,
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -2044,8 +2044,9 @@ class _ReaderPageState extends State<ReaderPage>
           ],
           selected: {letterTarget},
           showSelectedIcon: false,
-          onSelectionChanged:
-              on ? (v) => setState(() => letterTarget = v.single) : null,
+          onSelectionChanged: on
+              ? (v) => setState(() => letterTarget = v.single)
+              : null,
         ),
         const SizedBox(height: 6),
         Wrap(

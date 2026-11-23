@@ -124,8 +124,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
       expect(p.styleHandles(), hasLength(before + 1));
-      expect(p.highlightHandles(), isEmpty,
-          reason: 'a letter tap is no word tap');
+      expect(
+        p.highlightHandles(),
+        isEmpty,
+        reason: 'a letter tap is no word tap',
+      );
       await tester.tap(find.text('clear letters'));
       await tester.pump(const Duration(milliseconds: 400));
       expect(p.styleHandles(), hasLength(before));

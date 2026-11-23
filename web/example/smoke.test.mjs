@@ -76,7 +76,9 @@ try {
   if (!shown.includes(word)) throw new Error(`the selection panel does not show ${word}: ${shown}`);
   console.log(`ok  the click selects word ${word}, and the panel shows it`);
 
-  const boxes = await page.evaluate(() => window.__qvp.S.page.highlightBoxesView().length);
+  // The engine gives the boxes of a highlight from the next tick, so wait for a frame to pass.
+  const boxes = await page.waitForFunction(() => window.__qvp.S.page.highlightBoxesView().length, null, { timeout: 5000 })
+    .then(h => h.jsonValue(), () => 0);
   if (!boxes) throw new Error('the engine has no highlight boxes after the click');
   // The highlight fades in over the app's transition time; wait for the canvas to show it.
   const after = await page.waitForFunction(bluePixels, 200, { timeout: 5000 }).then(h => h.jsonValue());
