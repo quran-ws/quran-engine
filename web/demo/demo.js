@@ -966,9 +966,16 @@
   // the rail at the top follows the scene on the screen
   const links = [...$('rail').children];
   for (const id of scenes) {
+    // The scene on the screen is the one that crosses the middle line. On a phone a scene is
+    // taller than the screen, so a share of the scene is no measure. The rail is a strip
+    // there, and it moves to keep the scene's link in view.
     new IntersectionObserver(es => {
-      if (es[0].isIntersecting) for (const a of links) a.classList.toggle('on', a.getAttribute('href') === '#' + id);
-    }, { threshold: 0.5 }).observe($(id));
+      if (!es[0].isIntersecting) return;
+      for (const a of links) {
+        const on = a.getAttribute('href') === '#' + id; a.classList.toggle('on', on);
+        if (on && $('rail').scrollWidth > $('rail').clientWidth) $('rail').scrollTo({ left: a.offsetLeft - ($('rail').clientWidth - a.offsetWidth) / 2, behavior: 'smooth' });
+      }
+    }, { rootMargin: '-50% 0px -50% 0px' }).observe($(id));
   }
   window.__demo = { engine, atlas };
 })();
