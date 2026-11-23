@@ -134,9 +134,9 @@
   <div class="say">
     <span class="kicker">عرض تفاعلي</span>
     <h1>محرّك عرض صفحات المصحف</h1>
-    <p>يرسم المحرّك صفحات مصحف المدينة من نسخته الأصلية، ويحدّد كل كلمة وحرف وعلامة فيها. جميع الصفحات في هذا العرض يرسمها المحرّك مباشرة في متصفحك.</p>
+    <p>يرسم المحرّك صفحات مصحف المدينة من نسخته الأصلية، ويحدّد كل كلمة وحرف وعلامة فيها. الصفحات في هذا العرض يرسمها المحرّك في متصفحك.</p>
     <div class="ctl"><button class="go" id="heroWrite">إعادة رسم الصفحة</button><a href="#tajwid"><button>بدء الجولة</button></a></div>
-    <div class="card" id="heroCard"><div class="sub">اضغط على كلمة في الصفحة لعرض بياناتها.</div></div>
+    <div class="card" id="heroCard"><div class="sub">اضغط على كلمة لعرض بياناتها.</div></div>
     <p class="fine">للتكبير: استخدم إصبعين، أو أزرار التكبير، أو Ctrl مع عجلة الفأرة.</p>
   </div>
   <div class="stage" id="heroStage"></div>
@@ -146,7 +146,7 @@
   <div class="say">
     <span class="kicker">التجويد</span>
     <h2>تلوين أحكام التجويد</h2>
-    <p>يلوّن المحرّك كل حكم على الحرف الذي يخصّه. اضغط على حرف ملوّن لعرض حكمه.</p>
+    <p>يلوّن المحرّك كل حكم على حرفه.</p>
     <div class="chips" id="tjLegend"></div>
     <div class="ctl"><button id="tjAll">إظهار الكل</button><button id="tjNone">إخفاء الكل</button></div>
     <div class="card" id="tjCard"><div class="sub">اضغط على حرف ملوّن لعرض حكمه.</div></div>
@@ -159,7 +159,7 @@
   <div class="say">
     <span class="kicker">التلاوة</span>
     <h2>متابعة التلاوة بالكلمة والحرف</h2>
-    <p>يميّز المحرّك الكلمة التي يقرؤها القارئ، وينتقل إلى الصفحة التالية عند انتهاء الصفحة. اضغط على كلمة لبدء التلاوة منها.</p>
+    <p>يميّز المحرّك الكلمة التي يقرؤها القارئ، وينتقل إلى الصفحة التالية تلقائيًا. اضغط على كلمة لبدء التلاوة منها.</p>
     <div class="ctl"><span class="lab">القارئ</span><select id="plReciter" aria-label="القارئ"></select></div>
     <div class="ctl">
       <button class="go" id="plPlay">▶ تشغيل</button>
@@ -176,8 +176,8 @@
 <section class="scene" id="hifz">
   <div class="say">
     <span class="kicker">الحفظ</span>
-    <h2>إخفاء الآيات للحفظ والمراجعة</h2>
-    <p>تختفي الكلمات وتبقى أماكنها في الصفحة. اكشف الكلمات واحدة تلو الأخرى، أو اقرأ بصوتك لتظهر كل كلمة عند نطقها.</p>
+    <h2>إخفاء الآيات وكشفها</h2>
+    <p>تختفي الكلمات وتبقى أماكنها. اكشف الكلمات واحدة تلو الأخرى، أو اقرأ بصوتك لتظهر كل كلمة عند نطقها.</p>
     <div class="ctl"><span class="lab">الطريقة</span><button id="hzHide" class="on">إخفاء</button><button id="hzBlock">تغطية</button></div>
     <div class="ctl"><button class="go" id="hzNext">كشف كلمة</button><button id="hzBack">إخفاء كلمة</button><button id="hzReset">إعادة</button><button id="hzShow">إظهار الصفحة</button></div>
     <div class="ctl"><button id="hzListen" disabled>القراءة بالصوت</button><button id="hzClip" disabled>تجربة بمقطع صوتي</button></div>
@@ -191,7 +191,7 @@
   <div class="say">
     <span class="kicker">القراءة</span>
     <h2>تكبير الخط مع إعادة توزيع السطور</h2>
-    <p>عند التكبير يعيد المحرّك توزيع الكلمات على سطور جديدة ضمن عرض الشاشة، وتحتفظ كل كلمة برسمها المطبوع.</p>
+    <p>عند التكبير يعيد المحرّك توزيع الكلمات على السطور ضمن عرض الشاشة، وتحتفظ كل كلمة برسمها المطبوع.</p>
     <div class="ctl"><span class="lab">الحجم</span><button data-step="0" class="on">المطبوع</button><button data-step="1">2</button><button data-step="2">3</button><button data-step="3">4</button></div>
     <div class="ctl"><span class="lab">التكبير</span><button data-zmode="stepped" class="on">درجات</button><button data-zmode="continuous">حر</button><button data-zmode="magnify">عدسة</button></div>
     <div class="ctl"><span class="lab">الورق</span><button data-theme="light" class="on">فاتح</button><button data-theme="sepia">عاجي</button><button data-theme="dark">داكن</button></div>
@@ -217,15 +217,15 @@
   <div class="say">
     <span class="kicker">المقارنة</span>
     <h2>مقارنة طرق عرض صفحة المصحف</h2>
-    <p>خمس طرق لعرض صفحة المصحف، وما تقدّمه كل طريقة. الأحجام مقيسة على المصحف كاملًا.</p>
+    <p>خمس طرق وما تقدّمه كل منها. الأحجام للمصحف كاملًا.</p>
   </div>
   <div class="tblwrap">
     <table class="cmp">
       <thead><tr>
         <th></th>
         <th>محرّك المصحف<small>ملف لكل صفحة</small></th>
-        <th>SVG<small>ملف رسم لكل صفحة</small></th>
-        <th>صور<small>صورة PNG لكل صفحة</small></th>
+        <th>SVG<small>ملف لكل صفحة</small></th>
+        <th>صور<small>ملف PNG لكل صفحة</small></th>
         <th>خطوط الصفحات<small>خط لكل صفحة (QPC)</small></th>
         <th>خط حفص مع النص<small>خط واحد ونص المصحف</small></th>
       </tr></thead>
@@ -241,7 +241,7 @@
         <tr><th>الوضوح عند التكبير</th>
           <td class="y">نعم</td><td class="y">نعم</td><td class="n">لا، تتغبّش الصورة بعد حدّ دقتها</td><td class="y">نعم</td><td class="y">نعم</td></tr>
         <tr><th>تحديد الكلمة عند الضغط</th>
-          <td class="y">نعم، حتى بين الكلمات</td><td class="h">نعم، عبر عناصر الصفحة في المتصفح</td><td class="n">لا، يحتاج إلى إحداثيات معدّة مسبقًا</td><td class="y">نعم، كل كلمة محرف</td><td class="y">نعم، من النص</td></tr>
+          <td class="y">نعم، حتى بين الكلمات</td><td class="h">نعم، عبر عناصر الصفحة</td><td class="n">لا، يحتاج إلى إحداثيات معدّة مسبقًا</td><td class="y">نعم، كل كلمة محرف</td><td class="y">نعم، من النص</td></tr>
         <tr><th>تلوين حرف أو علامة</th>
           <td class="y">نعم، بطبقة الحروف</td><td class="h">ممكن، بآلاف العناصر في الصفحة</td><td class="n">لا</td><td class="n">لا، الكلمة محرف واحد</td><td class="h">جزئيًا، وقد ينقطع اتصال الحروف</td></tr>
         <tr><th>إعادة توزيع السطور عند التكبير</th>
@@ -257,7 +257,7 @@
   </div>
   <div class="bench"><button class="go" id="cmpRun">بدء القياس</button>
     <select id="cmpPages" aria-label="عدد الصفحات"><option value="1">صفحة واحدة</option><option value="10" selected>10 صفحات</option><option value="50">50 صفحة</option></select>
-    <span class="fine" id="cmpNote">يفتح صفحات من المصحف بالطرق الخمس على هذا الجهاز، ويقيس الحجم والزمن والذاكرة.</span></div>
+    <span class="fine" id="cmpNote">يفتح الصفحات بالطرق الخمس على جهازك، ويقيس الحجم والزمن والذاكرة.</span></div>
   <div class="cells" id="cmpCells"></div>
   <details class="how"><summary>طريقة القياس</summary>
     <ul>

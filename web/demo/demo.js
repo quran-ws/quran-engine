@@ -215,7 +215,7 @@
     const st = new Stage($('heroStage'), {
       onTap: (x, y) => {
         const p = st.page, h = p.hitTestView(x, y, { maxDistance: 6 });
-        if (!h || h.word < 0) { if (hl) { p.removeHighlight(hl); hl = 0; } card('heroCard', '', 'اضغط على كلمة في الصفحة لعرض بياناتها.'); st.draw(); return; }
+        if (!h || h.word < 0) { if (hl) { p.removeHighlight(hl); hl = 0; } card('heroCard', '', 'اضغط على كلمة لعرض بياناتها.'); st.draw(); return; }
         const style = { mode: 'both', ink: '#9a6b00', band: rgba('#c9a44c', 0.28), radius: 1.5, ms: 220, layer: LAYER.SELECTION };
         if (hl) p.moveHighlight(hl, T.word(h.word)); else hl = p.highlight(T.word(h.word), style);
         const w = p.words[h.word], letters = st.letters ? p.letters(h.word).map(l => l.text).join(' · ') : '';
