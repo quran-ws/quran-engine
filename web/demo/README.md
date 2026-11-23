@@ -11,6 +11,7 @@ live mushaf page that the engine draws through `web/qvp.js`.
 | الحفظ | hide the words, then reveal them by a tap or by the reader's voice | `mask`, `unmaskNext`, `maskBack`, `unmaskWord` |
 | القراءة | zoom steps with reflow, pinch modes and paper themes | `zoomToStep`, `zoomPinch`, `zoomMode`, `setDefaultColor` |
 | الزخرفة | the same text in the ornaments of another mushaf | `dress`, `undress` |
+| المقارنة | the engine against SVG, images, page fonts and the Hafs font with text: size, features, and a measure on the reader's device | `loadPage`, `buildPaths`, `CanvasRenderer.draw` |
 
 Every page takes a pinch, Ctrl with the mouse wheel, and the zoom buttons on its frame.
 
@@ -35,11 +36,30 @@ The showcase commits no data. It reads these at run time:
   name other directories.
 - **Tajwid rulings** from `@quran.ws/tajwid-annotations` and `@quran.ws/tajwid-rules`
   (`quran-ws/quran-tajweed`, CC BY 4.0), through a public CDN. The colours are the colour
-  classes of quranpedia.net.
+  classes of quranpedia.net. A span of the published package, 0.1.0, covers a letter and
+  its condition, so a qalqalah or a madd colours the next letter too. A newer span adds a
+  focus, the letters that the ruling is about, and the scene colours the focus alone.
+  `QVP_TAJWID` names such a file until the package has it.
 - **Audio and timings** from the MP3Quran API, version 4. It needs no key. The showcase uses
   the staging API until the API has a public address.
 - **Ornaments** from `ornaments.qvo` beside the pages. The released set has ayah markers
   only, so the scene then changes the markers alone. `QVP_ORNAMENTS` names another set.
+
+## Fonts
+
+The titles and the words of the Quran beside the page can use two fonts of your machine.
+The repository does not hold them, because their licences do not allow that:
+
+```sh
+QVP_FONT_TITLE=/path/to/thmanyahserifdisplay-Bold.woff2 \
+QVP_FONT_QURAN=/path/to/hafs.woff2 \
+python3 web/demo/build.py
+```
+
+`QVP_FONT_TITLE` is the typeface of the titles, and the showcase is designed with Thmanyah
+Serif Display. `QVP_FONT_QURAN` is the typeface for a word of the Quran outside the page:
+the KFGQPC Hafs font, so the word looks as it does in the mushaf. Without a file, the page
+uses a web font.
 
 ## The reader's voice
 

@@ -18,7 +18,12 @@
   function card(id, big, ...subs) {
     const c = $(id); c.textContent = '';
     if (big) c.append(el('div', 'big', big));
-    for (const s of subs) if (s) c.append(el('div', 'sub', s));
+    // a small line is text, or [label, words of the Quran]: the words take the mushaf's typeface
+    for (const s of subs) {
+      if (!s) continue;
+      const d = c.appendChild(el('div', 'sub'));
+      if (Array.isArray(s)) d.append(s[0], el('span', 'q', s[1])); else d.textContent = s;
+    }
   }
 
   const engine = await QvpEngine.init(await bytes('qvp_ffi.wasm'));
@@ -215,7 +220,7 @@
         const style = { mode: 'both', ink: '#9a6b00', band: rgba('#c9a44c', 0.28), radius: 1.5, ms: 220, layer: LAYER.SELECTION };
         if (hl) p.moveHighlight(hl, T.word(h.word)); else hl = p.highlight(T.word(h.word), style);
         const w = p.words[h.word], letters = st.letters ? p.letters(h.word).map(l => l.text).join(' · ') : '';
-        card('heroCard', p.wordForm(h.word, 'qpc') || w.text, `سورة ${arNum(w.surah)} · آية ${arNum(w.ayah)} · الكلمة ${arNum(w.word)}`, letters && `حروفها: ${letters}`);
+        card('heroCard', p.wordForm(h.word, 'qpc') || w.text, `سورة ${arNum(w.surah)} · آية ${arNum(w.ayah)} · الكلمة ${arNum(w.word)}`, letters && ['حروفها: ', letters]);
         st.draw();
       },
     });
@@ -253,7 +258,10 @@
   const TAJWID_RULINGS = 'https://cdn.jsdelivr.net/npm/@quran.ws/tajwid-rules@0.1.0/rules.json';
   scene('tajwid', async () => {
     const off = new Set(); let marks = [], handles = new Map(), picked = 0;
-    const [ann, rules] = await Promise.all([json(TAJWID_DATA), json(TAJWID_RULINGS).catch(() => null)]);
+    // The build can name a newer file of rulings (QVP_TAJWID). A span of the published package
+    // covers the letter and its condition. A newer span adds a focus, the letters that the
+    // ruling is about, and the scene colours the focus when the span has one.
+    const [ann, rules] = await Promise.all([json('tajwid.json').catch(() => json(TAJWID_DATA)), json(TAJWID_RULINGS).catch(() => null)]);
     const family = ann.ruleIds.map(id => TAJWID.findIndex(f => f[3].some(start => id.startsWith(start))));
     const label = new Map((rules && rules.rules || []).map(r => [r.id, r.label && r.label.ar]));
     const st = new Stage($('tjStage'), {
@@ -285,7 +293,7 @@
         here.sort((a, b) => (b.fam >= 0) - (a.fam >= 0));
         const m = here[0], id = ann.ruleIds[m.rule];
         picked = p.highlight(T.word(h.word), { mode: 'band', band: rgba('#c9a44c', 0.2), radius: 1.5, ms: 180 });
-        card('tjCard', m.fam >= 0 ? TAJWID[m.fam][1] : 'حكم بلا لون', label.get(id) || '', `الكلمة: ${p.wordForm(h.word, 'qpc')}`);
+        card('tjCard', m.fam >= 0 ? TAJWID[m.fam][1] : 'حكم بلا لون', label.get(id) || '', ['الكلمة: ', p.wordForm(h.word, 'qpc')]);
         st.draw();
       },
     });
@@ -348,7 +356,8 @@
       const w = index.by.get(`${SURAH}:${ayah}:${pos}`); if (w === undefined) return;
       if (i !== cur) {
         cur = i;
-        const style = byLetter ? { mode: 'band', band: rgba('#c9a44c', 0.22), radius: 1.5, ms: 120 } : { mode: 'both', ink: '#0a7d32', band: rgba('#0a7d32', 0.16), radius: 1.5, ms: 120 };
+        // by word, the ink alone takes the colour. By letter, a faint band holds the word and the letter takes the colour.
+        const style = byLetter ? { mode: 'band', band: rgba('#c9a44c', 0.22), radius: 1.5, ms: 120 } : { mode: 'ink', ink: '#0a7d32', ms: 120 };
         if (hl) p.moveHighlight(hl, T.word(w)); else hl = p.highlight(T.word(w), style);
         card('plCard', p.wordForm(w, 'qpc'), `يس · آية ${arNum(ayah)} · الكلمة ${arNum(pos)}`, recitation && recitation.reciter.name);
       }
@@ -507,6 +516,57 @@
     $('drPlain').onclick = () => { style = null; apply(); };
     if (full.length) { style = full[0].style; apply(); } else apply();
   });
+
+  // ── 7. the comparison: the same page three ways, measured on this device ──
+  scenes.push('compare');
+  $('cmpRun').onclick = async () => {
+    const n = 3, W = 1080, cells = $('cmpCells'), btn = $('cmpRun');
+    btn.disabled = true; cells.textContent = '';
+    const kb = b => (b / 1024).toFixed(0) + ' KB', ms = t => t.toFixed(1) + ' ms';
+    const cell = (title, value, note) => { const c = cells.appendChild(el('div', 'cell')); c.append(el('h4', '', title), el('div', 'v', value), el('p', '', note)); };
+    const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+    try {
+      // the engine: decode the page file, build its paths, lay it out and draw it
+      const pb = await bytes(`pages/${pad(n)}.qvp`);
+      const canvas = document.createElement('canvas');
+      let t = performance.now();
+      const p = engine.loadPage(pb); p.buildPaths();
+      const L = p.layout({ viewportW: W, viewportH: W * 2, padTop: 0, padBottom: 0, padLeft: 0, padRight: 0, lineSpacing: 1, fillHeight: false, surahFrames: true, maxAspectSlack: DEFAULTS.ASPECT_SLACK, reflow: null });
+      canvas.width = W; canvas.height = Math.ceil(L.contentH * L.fitScale);
+      p.tick(performance.now());
+      new CanvasRenderer(canvas).draw(p, { scale: L.fitScale, offsetX: L.fitX, offsetY: 0 }, 1);
+      const tQvp = performance.now() - t;
+      $('cmpQvp').textContent = ms(tQvp);
+      cell('محرّك المصحف', ms(tQvp), `ملف الصفحة ${kb(pb.length)}. فكّ الملف وبناء ${p.nPaths} مسارًا ورسمها.`);
+      // an image: the same pixels as a PNG, then the time to decode and draw it
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      t = performance.now();
+      const bmp = await createImageBitmap(blob);
+      document.createElement('canvas').getContext('2d').drawImage(bmp, 0, 0);
+      const tImg = performance.now() - t;
+      $('cmpImg').textContent = ms(tImg); $('cmpPng').textContent = '≈ ' + (blob.size * 604 / 1048576).toFixed(0) + ' MB';
+      cell('صورة PNG', ms(tImg), `الصورة ${kb(blob.size)} بعرض ${W} بكسل. لا كلمات فيها ولا حروف.`);
+      p.free();
+      // SVG: put the file in the page, as an app must to reach its words, and let the browser lay it out
+      const sb = await maybe(`svg/${pad(n)}.svg`);
+      if (sb) {
+        const text = new TextDecoder().decode(sb), host = document.body.appendChild(el('div'));
+        // almost clear, so the browser still paints it: the measure must hold the paint
+        host.style.cssText = `position:fixed;opacity:0.01;pointer-events:none;inset-inline-start:0;top:0;width:${W}px;z-index:-1`;
+        t = performance.now();
+        host.innerHTML = text;   // the file is this project's own page source, served by the build
+        host.getBoundingClientRect(); const count = host.querySelectorAll('*').length;
+        // the second frame starts after the browser painted the first
+        await frame(); await frame();
+        const tSvg = performance.now() - t;
+        host.remove();
+        $('cmpSvg').textContent = ms(tSvg);
+        cell('SVG', ms(tSvg), `الملف ${kb(sb.length)}، و${count} عنصرًا في الصفحة.`);
+      } else { $('cmpSvg').textContent = '—'; cell('SVG', '—', 'ملفات SVG ليست مع هذا البناء.'); }
+      $('cmpNote').textContent = 'هذه أرقام جهازك الآن. تتغير من جهاز إلى جهاز ومن مرة إلى مرة.';
+    } catch (e) { console.error(e); $('cmpNote').textContent = 'تعذّر القياس: ' + e.message; }
+    btn.disabled = false;
+  };
 
   // the rail at the top follows the scene on the screen
   const links = [...$('rail').children];

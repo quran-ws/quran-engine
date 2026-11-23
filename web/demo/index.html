@@ -7,12 +7,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
+  /* Two fonts come from the build (build.py, QVP_FONT_TITLE and QVP_FONT_QURAN). They are not
+     in the repository. When a file is not there, the next family of the list is used. */
+  @font-face { font-family:'Demo Title'; src:url('fonts/title.woff2') format('woff2'); font-weight:400 900; font-display:swap }
+  @font-face { font-family:'Demo Quran'; src:url('fonts/quran.woff2') format('woff2'); font-display:swap }
   /* The mushaf's own world: the deep green of its cover, the gold of its tooling, the paper of its page. */
   :root {
     --night:#0b2022; --night-2:#102b2c; --night-3:#173a39; --line:#24504d;
     --mist:#e3ece8; --muted:#8eaaa3; --gold:#c9a44c; --gold-soft:rgba(201,164,76,.16);
     --paper:#fffdf7; --ink:#231f20; --hover:rgba(201,164,76,.22);
-    --display:'Aref Ruqaa','Amiri',serif; --body:'IBM Plex Sans Arabic',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --display:'Demo Title','Aref Ruqaa','Amiri',serif; --quran:'Demo Quran','KFGQPC Uthmanic Script HAFS','Amiri','Scheherazade New',serif; --body:'IBM Plex Sans Arabic',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
   }
   * { box-sizing:border-box }
   html { scroll-behavior:smooth; scroll-snap-type:y proximity }
@@ -56,7 +60,10 @@
   .chip i { width:10px; height:10px; border-radius:50%; flex:none }
   .chip.off { opacity:.38 }
   .card { border:1px solid var(--line); border-radius:14px; padding:12px 16px; background:rgba(11,32,34,.5); min-height:64px }
-  .card .big { font:700 30px/1.5 var(--display); color:#fff }
+  /* a word of the Quran outside the page is set in the mushaf's own typeface */
+  .card .big, .q { font-family:var(--quran); font-weight:400; color:#fff }
+  .card .big { font-size:34px; line-height:1.9 }
+  .q { font-size:1.35em; line-height:1 }
   .card .sub { font-size:13px; color:var(--muted) }
   .card b { color:var(--gold); font-weight:600 }
   .time { font:13px var(--mono); color:var(--muted); direction:ltr; min-width:9ch; text-align:center }
@@ -73,6 +80,33 @@
   .zoom button:hover:not(:disabled) { background:var(--gold-soft) }
   .stage .note { position:absolute; inset:auto 0 50% 0; text-align:center; color:var(--muted); font-size:14px; padding:0 20px }
   .stage .hint { position:absolute; top:12px; inset-inline-start:14px; z-index:3; font-size:12px; color:var(--muted); background:rgba(11,32,34,.7); padding:2px 12px; border-radius:999px }
+
+  /* the comparison: one column for each way to show a page of the mushaf */
+  .wide { display:block; min-height:0; padding-bottom:64px }
+  .wide .say { max-width:760px; margin-bottom:26px }
+  .wide .say p { max-width:60ch }
+  .tblwrap { overflow-x:auto; border:1px solid var(--line); border-radius:16px; background:rgba(11,32,34,.5) }
+  table.cmp { width:100%; border-collapse:collapse; font-size:14px; min-width:880px }
+  .cmp th, .cmp td { padding:11px 14px; text-align:start; vertical-align:top; border-bottom:1px solid var(--line); line-height:1.6 }
+  .cmp tr:last-child td { border-bottom:0 }
+  .cmp thead th { font:700 17px var(--display); color:#fff; white-space:nowrap }
+  .cmp thead th small { display:block; font:300 12px var(--body); color:var(--muted) }
+  .cmp tbody th { font-weight:500; color:var(--muted); white-space:nowrap; width:1% }
+  .cmp td:nth-child(2), .cmp thead th:nth-child(2) { background:var(--gold-soft) }
+  .cmp thead th:nth-child(2) { color:var(--gold) }
+  .cmp .y { color:#7fd49a } .cmp .n { color:#f08a8a } .cmp .h { color:#e6c268 }
+  .cmp .num { font:500 14px var(--mono); direction:ltr; unicode-bidi:isolate; color:#fff }
+  .cmp td small { display:block; color:var(--muted); font-size:12px }
+  .bench { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:22px 0 10px }
+  .cells { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px }
+  .cell { border:1px solid var(--line); border-radius:14px; padding:14px 16px; background:rgba(11,32,34,.5) }
+  .cell h4 { margin:0 0 6px; font:700 17px var(--display); color:#fff }
+  .cell .v { font:500 22px var(--mono); color:var(--gold); direction:ltr; text-align:end }
+  .cell .v small { font-size:12px; color:var(--muted) }
+  .cell p { margin:4px 0 0; font-size:12px; color:var(--muted); line-height:1.6 }
+  details.how { margin-top:18px; font-size:13px; color:var(--muted); max-width:860px }
+  details.how summary { cursor:pointer; color:var(--mist) }
+  details.how li { margin:4px 0 }
 
   .foot { padding:48px clamp(18px,5vw,72px) 64px; color:var(--muted); font-size:14px; display:grid; gap:8px; max-width:900px }
   .foot h3 { font:700 24px var(--display); color:var(--gold); margin:0 0 4px }
@@ -91,7 +125,7 @@
 <header class="top">
   <a class="brand" href="#hero">محرّك المصحف</a>
   <nav class="rail" id="rail" aria-label="مشاهد العرض">
-    <a href="#hero">البداية</a><a href="#tajwid">التجويد</a><a href="#listen">التلاوة</a><a href="#hifz">الحفظ</a><a href="#read">القراءة</a><a href="#dress">الزخرفة</a>
+    <a href="#hero">البداية</a><a href="#tajwid">التجويد</a><a href="#listen">التلاوة</a><a href="#hifz">الحفظ</a><a href="#read">القراءة</a><a href="#dress">الزخرفة</a><a href="#compare">المقارنة</a>
   </nav>
 </header>
 
@@ -176,6 +210,62 @@
     <div class="card" id="drCard"><div class="sub">اختر مصحفًا.</div></div>
   </div>
   <div class="stage" id="drStage"></div>
+</section>
+
+<section class="scene wide" id="compare">
+  <div class="say">
+    <span class="kicker">المقارنة</span>
+    <h2>خمس طرق لعرض صفحة المصحف</h2>
+    <p>كل طريقة تصلح لشيء. هذا ما تأخذه وما تتركه مع كل واحدة، بأرقام قِسناها على المصحف نفسه.</p>
+  </div>
+  <div class="tblwrap">
+    <table class="cmp">
+      <thead><tr>
+        <th></th>
+        <th>محرّك المصحف<small>ملف لكل صفحة، يرسمه المحرّك</small></th>
+        <th>SVG<small>ملف رسم لكل صفحة</small></th>
+        <th>صور<small>صورة PNG لكل صفحة</small></th>
+        <th>خطوط الصفحات<small>خط لكل صفحة (QPC)</small></th>
+        <th>خط حفص مع النص<small>خط واحد ونص المصحف</small></th>
+      </tr></thead>
+      <tbody>
+        <tr><th>حجم المصحف كاملًا</th>
+          <td><span class="num">92.6 MB</span><small>مضغوطًا صفحةً صفحة: <span class="num">41.8 MB</span>، والمحرّك نفسه <span class="num">0.6 MB</span></small></td>
+          <td><span class="num">441 MB</span><small>مضغوطًا: <span class="num">109 MB</span></small></td>
+          <td><span class="num" id="cmpPng">—</span><small>تقدير من قياس صفحة واحدة على جهازك، بعرض 1080 بكسل</small></td>
+          <td><span class="num">50.9 MB</span><small>604 خطوط مضغوطة (نسخة التجويد الملوّنة)</small></td>
+          <td><span class="num">4.5 MB</span><small>الخط <span class="num">0.1 MB</span> والنص <span class="num">4.4 MB</span> (<span class="num">0.6 MB</span> مضغوطًا)</small></td></tr>
+        <tr><th>يطابق الصفحة المطبوعة</th>
+          <td class="y">نعم، بالخطوط نفسها</td><td class="y">نعم</td><td class="y">نعم</td><td class="y">نعم</td><td class="n">لا: السطور والمسافات تختلف عن المطبوع</td></tr>
+        <tr><th>يبقى حادًّا عند التكبير</th>
+          <td class="y">نعم</td><td class="y">نعم</td><td class="n">لا: يتغبّش فوق دقّة الصورة</td><td class="y">نعم</td><td class="y">نعم</td></tr>
+        <tr><th>لمس الكلمة ومعرفتها</th>
+          <td class="y">نعم، حتى في الفراغ بين كلمتين</td><td class="h">نعم، بعناصر الصفحة في المتصفح</td><td class="n">لا: تحتاج إحداثيات تُعدّها أنت</td><td class="y">نعم، كل كلمة محرف</td><td class="y">نعم، بالنص</td></tr>
+        <tr><th>تلوين حرف أو علامة وحدها</th>
+          <td class="y">نعم، بطبقة الحروف</td><td class="h">ممكن، بآلاف العناصر في كل صفحة</td><td class="n">لا</td><td class="n">لا: الكلمة محرف واحد</td><td class="h">جزئيًّا: التلوين قد يقطع اتصال الحروف</td></tr>
+        <tr><th>إعادة توزيع السطور عند التكبير</th>
+          <td class="y">نعم، والكلمة برسمها المطبوع</td><td class="n">لا</td><td class="n">لا</td><td class="n">لا</td><td class="h">نعم، لكن ليس برسم المطبوع</td></tr>
+        <tr><th>الحفظ وتتبّع التلاوة</th>
+          <td class="y">جاهزان في المحرّك</td><td class="h">تبنيهما أنت</td><td class="n">تغطية مستطيلات فقط</td><td class="h">تبنيهما أنت</td><td class="h">تبنيهما أنت</td></tr>
+        <tr><th>تطبيقات الجوال بلا متصفح</th>
+          <td class="y">نعم: Android و iOS و Flutter و React Native</td><td class="n">يحتاج متصفحًا داخل التطبيق</td><td class="y">نعم</td><td class="y">نعم</td><td class="y">نعم</td></tr>
+        <tr><th>زمن فتح الصفحة</th>
+          <td><span class="num" id="cmpQvp">—</span></td><td><span class="num" id="cmpSvg">—</span></td><td><span class="num" id="cmpImg">—</span></td><td class="h">لم نقِسه هنا</td><td class="h">لم نقِسه هنا</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="bench"><button class="go" id="cmpRun">قِس على جهازك</button><span class="fine" id="cmpNote">يفتح الصفحة ٣ من المصحف بثلاث طرق على هذا الجهاز ويقيس الحجم والزمن.</span></div>
+  <div class="cells" id="cmpCells"></div>
+  <details class="how"><summary>كيف قِسنا</summary>
+    <ul>
+      <li>محرّك المصحف: 604 ملفات صفحات مع نصوصها من إصدار البيانات، والأرقام من ملف README في المستودع.</li>
+      <li>SVG: 604 ملفات من أرشيف الكلمات في quran-svg-elements الإصدار 2.0.0، والمضغوط حجم الأرشيف.</li>
+      <li>الصور: لا نملك مجموعة صور مرجعية. الرقم تقدير: حجم صورة PNG للصفحة ٣ يرسمها متصفحك بعرض 1080 بكسل، مضروبًا في 604.</li>
+      <li>خطوط الصفحات: 604 خطوط woff2 من نسخة التجويد الملوّنة (V4). لم نقِس النسختين V1 و V2.</li>
+      <li>خط حفص: خط KFGQPC بصيغة woff2، مع ملف نص المصحف من quran-text.</li>
+      <li>الزمن يُقاس على جهازك عند الضغط على الزر: للمحرّك فكّ الملف وبناء الخطوط ورسم الصفحة، ولـ SVG وضعه في الصفحة ورسمه، وللصورة فكّها ورسمها. لا يدخل زمن التحميل من الشبكة.</li>
+    </ul>
+  </details>
 </section>
 
 <footer class="foot">
