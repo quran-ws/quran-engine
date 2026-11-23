@@ -48,11 +48,19 @@ A web key is public by design: it works only on the origins that you list for it
 each address its own key, and do not allow `localhost` on a key that a public page uses.
 Git ignores `config.local.js`. Do not commit a key or any file of the model.
 
-The model gives the sounds that it heard and does not judge. `demo.js` does the rest, and
-it is simple: it finds the one place in the Quran that matches what it heard, opens that
-page, shows each word that the reader says, and marks a word that did not come. It can be
-wrong, and it does not replace a qualified teacher. The model's licence (NPL-1.2) does not
-let anyone charge for a feature that it powers.
+The model does not judge a recitation. `demo.js` does the rest:
+
+1. **Find the place.** It searches the whole Quran for the consonants of what was heard, and
+   opens the page when they are in one place only. The isti'adhah and the basmalah do not
+   count, because they come before every recitation.
+2. **Follow the words.** For each frame of the model's output it lines up the sounds that a
+   correct recitation of the page has (`model.reference`). A word shows in the frame where
+   its last sound is heard.
+3. **Mark a mistake.** When six sounds come with no step forward, the word that was
+   expected gets a sound and a red mark, and the reader can say it again.
+
+It can be wrong, and it does not replace a qualified teacher. The model's licence (NPL-1.2)
+does not let anyone charge for a feature that it powers.
 
 ## Languages
 
