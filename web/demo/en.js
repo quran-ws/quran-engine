@@ -78,6 +78,8 @@ window.DEMO_EN = {
   '{} · سورة يس · المدة {}': '{} · Surah Ya-Sin · {} long',
   'تعذّر تحميل هذه التلاوة: ': 'This recitation did not load: ',
   'لا توجد تلاوات متاحة حاليًا.': 'No recitation is available now.',
+  'الصفحة {} غير متوفرة في هذا العرض.': 'This demo does not hold page {}.',
+  'سورة {}، الآية {}': 'Surah {}, ayah {}',
 
   // memorisation
   'إخفاء الآيات وكشفها': 'Hide the ayahs and reveal them',

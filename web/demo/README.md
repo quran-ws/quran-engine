@@ -29,6 +29,9 @@ The repository holds no data, no font and no key. `build.py` reads these variabl
 | `QVP_TAJWID` | a file of tajwid rulings | `quran-ws/quran-tajweed` at a fixed commit |
 | `QVP_DEMO_CONFIG`, `QVP_DEMO_OUT` | a config file and an output directory, for a build to share | `config.local.js`, `dist/demo` |
 
+A build can hold some pages only. Then `pages/index.json` lists them, as `{"pages": [1, 3, 42]}`,
+and each scene stays inside the list.
+
 At run time the page reads tajwid rulings from a public CDN, audio and timings from the
 MP3Quran API, and the text of the Quran from `text.quran.ws`.
 

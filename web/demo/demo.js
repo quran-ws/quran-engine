@@ -61,6 +61,10 @@
   const engine = await QvpEngine.init(await bytes('qvp_ffi.wasm'));
   const atlasBytes = await maybe('pages/atlas.qva');
   const atlas = atlasBytes ? engine.loadAtlas(atlasBytes) : null;
+  // A build can hold some pages only. Then pages/index.json lists them, and each scene stays
+  // inside the list. With no list, the build has all 604 pages.
+  const listed = await json('pages/index.json').then(d => d.pages.map(Number).sort((a, b) => a - b)).catch(() => null);
+  const has = n => !listed || listed.includes(n);
   const THEMES = { light: ['#fffdf7', '#231f20'], sepia: ['#f3e7cf', '#3b2a14'], dark: ['#1e2126', '#e8e4dc'] };
 
   // ── a stage: one page on the screen, with the reader's zoom and pan ──
@@ -402,7 +406,10 @@
       const [ayah, pos] = words[i];
       // the ayah left the page: the atlas says which page holds it
       const pg = atlas ? atlas.pageOf(SURAH, ayah) : st.n;
-      if (pg && pg !== st.n) { turning = true; try { await st.load(pg); } finally { turning = false; } return; }
+      if (pg && pg !== st.n) {
+        if (!has(pg)) { audio.pause(); card('plCard', '', tt`الصفحة ${pg} غير متوفرة في هذا العرض.`); return; }
+        turning = true; try { await st.load(pg); } finally { turning = false; } return;
+      }
       if (repeat && cur >= 0 && words[cur][0] !== ayah && !audio.seeking) { const a = words[cur][0], first = words.find(v => v[0] === a); cur = -1; audio.currentTime = first[2] / 1000; return; }
       const w = index.by.get(`${SURAH}:${ayah}:${pos}`); if (w === undefined) return;
       if (i !== cur) {
@@ -549,10 +556,11 @@
       const w = quran ? locate(heard) : null;
       if (w !== null) {
         place = w;
+        if (quran.page(w) !== st.n && !has(quran.page(w))) { card('hzCard', '', tt`سورة ${quran.surah(w)}، الآية ${quran.ayah(w)}`, tt`الصفحة ${quran.page(w)} غير متوفرة في هذا العرض.`); return; }
         if (quran.page(w) !== st.n) { await st.load(quran.page(w)); st.page.maskOptions({ blockColor: '#d9cfb8' }); st.page.mask(T.page(), mode); said = 0; kept = 0; progressAt = 0; }
       }
       // every word of this page was said: the recitation goes on to the next page
-      if (said === expect.length && expect.length && st.n < 604 && place !== null && quran.page(place) > st.n) {
+      if (said === expect.length && expect.length && has(st.n + 1) && st.n < 604 && place !== null && quran.page(place) > st.n) {
         await st.load(st.n + 1); st.page.maskOptions({ blockColor: '#d9cfb8' }); st.page.mask(T.page(), mode); said = 0; kept = 0; progressAt = 0;
       }
       // Before the first mistake the match can start anywhere in what was heard. After one, it
@@ -675,8 +683,11 @@
 
   // ── 7. the comparison: the same page three ways, measured on this device ──
   scenes.push('compare', 'platforms');
+  if (listed) for (const o of [...$('cmpPages').options]) if (+o.value > listed.length) o.remove();
   $('cmpRun').onclick = async () => {
-    const first = 3, count = +$('cmpPages').value, W = 1080, cells = $('cmpCells'), btn = $('cmpRun');
+    const count = +$('cmpPages').value, W = 1080, cells = $('cmpCells'), btn = $('cmpRun');
+    // the pages of the measure: from page 3, or the first pages that this build holds
+    const numbers = (listed || Array.from({ length: 602 }, (_, i) => i + 3)).slice(0, count);
     btn.disabled = true; cells.textContent = '';
     // A number with its unit reads left to right. The isolate keeps it whole inside Arabic text.
     const ltr = s => '\u2066' + s + '\u2069';
@@ -697,7 +708,7 @@
       c.append(el('p', '', tr('الذاكرة: ') + r.memory));
       if (note) c.append(el('p', '', note));
     };
-    const pagesOf = n => Array.from({ length: n }, (_, i) => first + i);
+    const pagesOf = () => numbers;
     try {
       // a box that the browser lays out and paints: almost clear, so the paint still happens
       const box = () => { const h = document.body.appendChild(el('div')); h.style.cssText = `position:fixed;opacity:0.01;pointer-events:none;inset-inline-start:0;top:0;width:${W}px;z-index:-1;direction:rtl;text-align:justify;font-size:46px;line-height:2.1`; return h; };
@@ -739,7 +750,7 @@
       $('cmpPng').textContent = '≈ ' + (pngBytes / count * 604 / 1048576).toFixed(0) + ' MB';   // this cell is set left to right in the page
       // the words of each page as text, for the Hafs font. The sidecar gives them, and no measure counts it.
       const texts = [];
-      for (const [i, p] of open.entries()) { const wb = await fresh(`pages/${pad(first + i)}.words.json`); if (wb) p.attachWords(wb); texts.push(p.words.map(w => p.wordForm(w.index, 'qpc') || w.text).join(' ')); }
+      for (const [i, p] of open.entries()) { const wb = await fresh(`pages/${pad(numbers[i])}.words.json`); if (wb) p.attachWords(wb); texts.push(p.words.map(w => p.wordForm(w.index, 'qpc') || w.text).join(' ')); }
       for (const p of open) p.free();
       for (const x of bitmaps) x.close();
 
@@ -785,7 +796,7 @@
       };
       // a page font holds one glyph for each word of its page, at the code points the build lists
       const codes = []; for (const n of pagesOf(count)) { const cb = await fresh(`fonts/qpc-${pad(n)}.json`); codes.push(cb ? JSON.parse(new TextDecoder().decode(cb)) : null); }
-      await withFonts('cmpQpc', tr('خطوط الصفحات (QPC)'), i => (codes[i] ? `fonts/qpc-${pad(first + i)}.woff2` : ''), i => (codes[i] ? codes[i].map(c => String.fromCodePoint(c)).join(' ') : null), tr('خط لكل صفحة، وكل كلمة محرف فيه.'));
+      await withFonts('cmpQpc', tr('خطوط الصفحات (QPC)'), i => (codes[i] ? `fonts/qpc-${pad(numbers[i])}.woff2` : ''), i => (codes[i] ? codes[i].map(c => String.fromCodePoint(c)).join(' ') : null), tr('خط لكل صفحة، وكل كلمة محرف فيه.'));
       await withFonts('cmpHafs', tr('خط حفص مع النص'), () => 'fonts/quran.woff2', i => texts[i], tr('خط واحد للمصحف كاملًا مع نص كل صفحة.'));
       $('cmpNote').textContent = tr('هذه نتائج جهازك، وتختلف من جهاز إلى آخر ومن قياس إلى آخر.');
     } catch (e) { console.error(e); $('cmpNote').textContent = tr('تعذّر القياس: ') + e.message; }
