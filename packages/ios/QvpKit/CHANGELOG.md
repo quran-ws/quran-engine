@@ -21,6 +21,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 - `QvpCanvasController` under `hostScrolls` fits the view once more when a pinch ends, so a
   pinch lands where a step button does. The last frame of a pinch could be held against a
   canvas the host had not yet resized for the new layout.
+- `QvpCanvasController` under `hostScrolls` paints everything the canvas shows while a pinch
+  runs. The band a pinch paints was held to the scaled content from its origin, so on a page
+  dressed in a border, which rests shrunk with its border's top above that origin, the
+  border's top and the page's bottom went unpainted until the fingers lifted. The band is now
+  held to the canvas's rows instead; an undressed page at rest gets the band it had.
 
 ## [0.9.0] - 2026-11-22
 

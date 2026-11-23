@@ -535,10 +535,16 @@ public final class QvpCanvasController {
                 // reflow keeps the page at its top, so that is the same number; a magnify peek
                 // moves `viewOy` and `viewScale`, and a band cut in canvas points drifted off
                 // the fingers as the page grew under them — a blank box exactly where they were.
+                //
+                // It is held to what the canvas shows, canvas rows 0 to its height, which in the
+                // same space run from `-viewOy`. A bordered page rests shrunk with its border's
+                // top above the content's origin, so a band held to the scaled content from 0
+                // left the border's top and the page's bottom unpainted under the fingers.
                 let focal = pinchFocalY - viewOy
-                let pageHeight = bounds.height * viewScale
-                let top = max(min(focal - hostBoxHeight, pageHeight - hostBoxHeight * 2), 0)
-                return (top, max(min(hostBoxHeight * 2, bounds.height * viewScale), 1))
+                let (shownTop, shownHeight) = (-viewOy, max(bounds.height, 1))
+                let height = min(hostBoxHeight * 2, shownHeight)
+                let top = min(max(focal - hostBoxHeight, shownTop), shownTop + shownHeight - height)
+                return (top, max(height, 1))
             }
             return (-viewOy, max(bounds.height, 1))
         }

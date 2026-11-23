@@ -660,7 +660,10 @@ final class QvpKitTests: XCTestCase {
         XCTAssertEqual(scaledFocal, focal.y * 2, accuracy: 1e-3, "the point under the fingers scaled about them")
         XCTAssertLessThanOrEqual(c.band(displayScale: 3).top, scaledFocal, "the band starts at or above the fingers")
         XCTAssertGreaterThanOrEqual(c.band(displayScale: 3).top + c.band(displayScale: 3).height, scaledFocal, "and ends at or below them")
-        XCTAssertEqual(c.band(displayScale: 3).height, min(800, pageHeight * 2), accuracy: 0.01, "two boxes, or the whole scaled page")
+        XCTAssertEqual(c.band(displayScale: 3).height, min(800, pageHeight), accuracy: 0.01, "two boxes, or the whole canvas")
+        // held to what the canvas shows: its rows 0 to its height, from `-viewOy` in this space
+        XCTAssertGreaterThanOrEqual(c.band(displayScale: 3).top, -c.viewOy - 1e-3)
+        XCTAssertLessThanOrEqual(c.band(displayScale: 3).top + c.band(displayScale: 3).height, pageHeight - c.viewOy + 1e-3)
 
         // The peek springs back and the whole page is painted again.
         c.pinchEnded()
