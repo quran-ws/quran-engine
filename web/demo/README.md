@@ -75,6 +75,11 @@ converts all 604 pages and their letter layers from `quran-svg-elements`, builds
 and makes an nginx image from `web/demo/site/`. An image-bump pull request in the server's
 repository then deploys it, as for the other sites of quran.ws.
 
+The site's dress scene shows the ornaments of the Madinah mushafs. The job builds that
+set from `quran-ws/quran-assets` without `--redistributable`, with the approval that the
+site's owner has for this site. A data release does not hold these ornaments. Before you
+show them on another site, read each ornament's licence, which the scene prints.
+
 The site's key of Quran Lab is the repository secret `QURANLAB_WEB_KEY`. Its one allowed
 origin is `https://engine.quran.ws`.
 

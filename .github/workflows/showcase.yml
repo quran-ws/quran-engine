@@ -91,8 +91,18 @@ jobs:
         run: |
           cargo run -p qvp-convert --release -- batch pages dist/site-pages
           cargo run -p qvp-convert --release -- letters pages-letters pages dist/site-letters
-          # the ornament set of the data release: its redistributable part
-          if [ -f dist/pages/ornaments.qvo ]; then cp dist/pages/ornaments.qvo dist/site-pages/; fi
+
+      # The ornaments of the Madinah mushafs, for the dress scene. They are traced from the
+      # printed mushafs, and the owner of this site has the approvals to show them here. A data release does not hold them: its set has only the
+      # ornaments whose licence the catalogue confirms. So the site builds the whole set from
+      # a fixed commit of quran-ws/quran-assets.
+      - uses: actions/checkout@v7
+        with:
+          repository: quran-ws/quran-assets
+          ref: d4cae845c9aae1fbe56ee69d04bc7d8964419373
+          path: quran-assets
+      - name: Build the ornament set
+        run: cargo run -p qvp-convert --release -- ornaments quran-assets dist/site-pages/ornaments.qvo
 
       - name: Build the wasm engine
         run: |
