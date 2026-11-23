@@ -10,7 +10,6 @@
   const bytes = async url => { const r = await fetch(url); if (!r.ok) throw new Error(url + ' ' + r.status); return new Uint8Array(await r.arrayBuffer()); };
   const maybe = async url => { try { return await bytes(url); } catch { return null; } };
   const json = async url => { const r = await fetch(url); if (!r.ok) throw new Error(url + ' ' + r.status); return r.json(); };
-  const arNum = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
   // a word that is only the number of its ayah has no letters to colour, time or recite
   const isNumber = s => !s || /^[٠-٩۝\s]+$/.test(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
@@ -47,7 +46,7 @@
       this.raf = 0; this.visible = false; this.loading = null; this.onZoom = null;
       if (hint) this.frameEl.appendChild(el('div', 'hint', hint));
       const z = this.frameEl.appendChild(el('div', 'zoom'));
-      for (const [label, title, fn] of [['+', 'كبِّر', () => this.nudge(1)], ['−', 'صغِّر', () => this.nudge(-1)], ['⤢', 'الصفحة كاملة', () => this.reset()]]) {
+      for (const [label, title, fn] of [['+', 'تكبير', () => this.nudge(1)], ['−', 'تصغير', () => this.nudge(-1)], ['⤢', 'ملاءمة الصفحة', () => this.reset()]]) {
         const b = z.appendChild(el('button', '', label)); b.title = title; b.setAttribute('aria-label', title); b.onclick = fn;
       }
       new ResizeObserver(() => this.resize()).observe(host);
@@ -206,7 +205,7 @@
     new IntersectionObserver((es, o) => {
       if (done || !es[0].isIntersecting) return;
       done = true; o.disconnect();
-      start().catch(e => { console.error(id, e); const host = $(id).querySelector('.stage'); host.appendChild(el('div', 'note', 'تعذّر تحميل هذا المشهد: ' + e.message)); });
+      start().catch(e => { console.error(id, e); const host = $(id).querySelector('.stage'); host.appendChild(el('div', 'note', 'تعذّر تحميل هذا القسم: ' + e.message)); });
     }, { rootMargin: '400px' }).observe($(id));
   }
 
@@ -216,11 +215,11 @@
     const st = new Stage($('heroStage'), {
       onTap: (x, y) => {
         const p = st.page, h = p.hitTestView(x, y, { maxDistance: 6 });
-        if (!h || h.word < 0) { if (hl) { p.removeHighlight(hl); hl = 0; } card('heroCard', '', 'المس أي كلمة في الصفحة.'); st.draw(); return; }
+        if (!h || h.word < 0) { if (hl) { p.removeHighlight(hl); hl = 0; } card('heroCard', '', 'اضغط على كلمة في الصفحة لعرض بياناتها.'); st.draw(); return; }
         const style = { mode: 'both', ink: '#9a6b00', band: rgba('#c9a44c', 0.28), radius: 1.5, ms: 220, layer: LAYER.SELECTION };
         if (hl) p.moveHighlight(hl, T.word(h.word)); else hl = p.highlight(T.word(h.word), style);
         const w = p.words[h.word], letters = st.letters ? p.letters(h.word).map(l => l.text).join(' · ') : '';
-        card('heroCard', p.wordForm(h.word, 'qpc') || w.text, `سورة ${arNum(w.surah)} · آية ${arNum(w.ayah)} · الكلمة ${arNum(w.word)}`, letters && ['حروفها: ', letters]);
+        card('heroCard', p.wordForm(h.word, 'qpc') || w.text, `السورة ${w.surah}، الآية ${w.ayah}، الكلمة ${w.word}`, letters && ['الحروف: ', letters]);
         st.draw();
       },
     });
@@ -274,7 +273,7 @@
     const st = new Stage($('tjStage'), {
       onLoad: p => {
         marks = [];
-        if (!st.letters) { $('tjStage').appendChild(el('div', 'hint', 'هذه الصفحة بلا طبقة حروف، فلا يمكن تلوين الحرف وحده.')); return; }
+        if (!st.letters) { $('tjStage').appendChild(el('div', 'hint', 'لا تتوفر طبقة الحروف لهذه الصفحة، ولا يمكن تلوين الحروف منفردة.')); return; }
         const { list } = wordIndex(p), ayahs = new Map();
         for (const w of list) { const k = `${w.surah}:${w.ayah}`; if (!ayahs.has(k)) ayahs.set(k, []); ayahs.get(k).push(w); }
         for (const [key, ws] of ayahs) {
@@ -301,7 +300,7 @@
         const p = st.page, h = p.hitTestLetterView(x, y, { maxDistance: 6 });
         if (picked) { p.removeHighlight(picked); picked = 0; }
         const here = h && h.at >= 0 ? marks.filter(m => m.word === h.word && h.at >= m.from && h.at <= m.to) : [];
-        if (!here.length) { card('tjCard', '', h ? 'لا حكم ملوَّن على هذا الحرف.' : 'المس حرفًا ملوَّنًا.'); st.draw(); return; }
+        if (!here.length) { card('tjCard', '', h ? 'لا يوجد حكم ملوّن على هذا الحرف.' : 'اضغط على حرف ملوّن لعرض حكمه.'); st.draw(); return; }
         // the ruling that has a colour first, then the others on the same letter
         here.sort((a, b) => (b.fam >= 0) - (a.fam >= 0));
         const m = here[0], id = ann.ruleIds[m.rule];
@@ -309,7 +308,7 @@
         const own = rulingName.get(id.split('.')[0]) || (m.fam >= 0 ? TAJWID[m.fam][1] : 'حكم');
         // the other rulings on the same letter, by name
         const more = [...new Set(here.slice(1).map(x => rulingName.get(ann.ruleIds[x.rule].split('.')[0])).filter(Boolean))].filter(x => x !== own);
-        card('tjCard', '', label.get(id) || '', ['الكلمة: ', p.wordForm(h.word, 'qpc')], more.length ? 'وعلى الحرف نفسه: ' + more.join('، ') : '');
+        card('tjCard', '', label.get(id) || '', ['الكلمة: ', p.wordForm(h.word, 'qpc')], more.length ? 'أحكام أخرى على الحرف: ' + more.join('، ') : '');
         $('tjCard').prepend(el('div', 'name', own));
         st.draw();
       },
@@ -376,7 +375,7 @@
         // by word, the ink alone takes the colour. By letter, a faint band holds the word and the letter takes the colour.
         const style = byLetter ? { mode: 'band', band: rgba('#c9a44c', 0.22), radius: 1.5, ms: 120 } : { mode: 'ink', ink: '#0a7d32', ms: 120 };
         if (hl) p.moveHighlight(hl, T.word(w)); else hl = p.highlight(T.word(w), style);
-        card('plCard', p.wordForm(w, 'qpc'), `يس · آية ${arNum(ayah)} · الكلمة ${arNum(pos)}`, recitation && recitation.reciter.name);
+        card('plCard', p.wordForm(w, 'qpc'), `سورة يس، الآية ${ayah}، الكلمة ${pos}`, recitation && recitation.reciter.name);
       }
       if (byLetter && letters && st.letters) {
         const j = last(letters, 3, ms);
@@ -403,12 +402,12 @@
       const files = info.data.files; audio.src = (files.mp3_64 || files.original || Object.values(files)[0]).url;
       words = wt.data.words;
       $('plByLetter').disabled = !info.data.timings.includes('letter') || !st.letters;
-      card('plCard', '', `${r.reciter.name} · سورة يس · ${clock(info.data.duration_ms)}`);
+      card('plCard', '', `${r.reciter.name} · سورة يس · المدة ${clock(info.data.duration_ms)}`);
       if (byLetter) await needLetters();
     }
     async function needLetters() { if (!letters && recitation) letters = (await json(`${API}/v4/recitations/${recitation.id}/surahs/${SURAH}/letter-timings`)).data.letters; }
-    audio.onplay = () => { $('plPlay').textContent = '⏸ توقّف'; loop(); };
-    audio.onpause = () => { $('plPlay').textContent = '▶ استمع'; };
+    audio.onplay = () => { $('plPlay').textContent = '⏸ إيقاف مؤقت'; loop(); };
+    audio.onpause = () => { $('plPlay').textContent = '▶ تشغيل'; };
     audio.addEventListener('seeked', () => { cur = -1; curLetter = -1; show(audio.currentTime * 1000); });
     $('plPlay').onclick = () => { if (audio.paused) audio.play(); else audio.pause(); };
     $('plSeek').oninput = e => { if (audio.duration) audio.currentTime = audio.duration * e.target.value / 1000; };
@@ -424,7 +423,7 @@
     const sel = $('plReciter');
     for (const r of list) { const o = el('option', '', r.reciter.name); o.value = r.id; sel.append(o); }
     sel.onchange = () => pick(list.find(r => String(r.id) === sel.value)).catch(e => card('plCard', '', 'تعذّر تحميل هذه التلاوة: ' + e.message));
-    if (list.length) await pick(list[0]); else card('plCard', '', 'لا توجد تلاوات متاحة الآن.');
+    if (list.length) await pick(list[0]); else card('plCard', '', 'لا توجد تلاوات متاحة حاليًا.');
   });
 
   // ── 4. memorisation: hide, then reveal by a tap or by the reader's own voice ──
@@ -432,7 +431,7 @@
     let mode = 'hide', expect = [], said = 0;
     const st = new Stage($('hzStage'), { onLoad: p => { expect = wordIndex(p).list; }, onTap: () => next() });
     const left = () => st.page.maskHidden().length;
-    const status = text => card('hzCard', '', text || (left() ? `بقي ${arNum(left())} كلمة مخفية. المس الصفحة لتكشف كلمة.` : 'ظهرت الصفحة كلها.'));
+    const status = text => card('hzCard', '', text || (left() ? `الكلمات المخفية: ${left()}. اضغط على الصفحة لكشف كلمة.` : 'جميع الكلمات ظاهرة.'));
     function mask() { const p = st.page; p.unmask(); p.maskOptions({ blockColor: '#d9cfb8' }); p.mask(T.page(), mode); said = 0; st.draw(); status(); }
     function next() { st.page.unmaskNext(1); st.draw(); status(); }
     for (const [id, m] of [['hzHide', 'hide'], ['hzBlock', 'block']]) $(id).onclick = () => { mode = m; for (const b of ['hzHide', 'hzBlock']) $(b).classList.toggle('on', b === id); mask(); };
@@ -460,12 +459,12 @@
       }
       for (let i = said; i < k; i++) st.page.unmaskWord(expect[i].index);
       if (k > said) { said = k; st.draw(); }
-      status(`سمعتُ: ${decoded.text || '…'}`);
+      status(`النص المسموع: ${decoded.text || '…'}`);
     }
     let model = null;
     async function voice() {
       if (model) return model;
-      status('جارٍ تجهيز النموذج. التحميل الأول يأخذ وقتًا.');
+      status('جارٍ تجهيز النموذج. قد يستغرق التحميل الأول بعض الوقت.');
       await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://web.quranlab.ai/4/loader.js'; s.crossOrigin = 'anonymous'; s.onload = ok; s.onerror = () => bad(new Error('loader')); document.head.append(s); });
       const client = await window.QuranLab.TajweedClient.create({ key: CFG.quranlabKey });
       return (model = await client.model());
@@ -473,7 +472,7 @@
     async function take(clip) {
       try {
         const m = await voice();
-        mask(); status(clip ? 'يعمل النموذج على مقطع جاهز…' : 'اقرأ الآن…');
+        mask(); status(clip ? 'جارٍ تحليل المقطع الصوتي.' : 'ابدأ القراءة.');
         const session = await m.listen(clip ? { from: m.sampleClips[0] } : { endOnSilenceMs: 2500 });
         for await (const chunk of session.chunks) if (chunk.decoded) hear(chunk.decoded);
       } catch (e) { console.error(e); status('تعذّر تشغيل القراءة بالصوت: ' + (e.code || e.message)); }
@@ -482,18 +481,18 @@
       $('hzListen').disabled = false; $('hzClip').disabled = false;
       $('hzListen').onclick = () => take(false); $('hzClip').onclick = () => take(true);
     } else {
-      $('hzFine').prepend('القراءة بالصوت تحتاج مفتاح Quran Lab في الملف config.local.js (انظر README). ');
+      $('hzFine').prepend('تحتاج القراءة بالصوت إلى مفتاح Quran Lab في الملف config.local.js. ');
     }
   });
 
   // ── 5. reading comfort: the engine's zoom steps, reflow and paper ──
   scene('read', async () => {
-    const sec = $('read'), st = new Stage($('rdStage'), { zoomMode: 'stepped', hint: 'اسحب الصفحة بعد التكبير' });
+    const sec = $('read'), st = new Stage($('rdStage'), { zoomMode: 'stepped', hint: 'اسحب الصفحة للتنقل بعد التكبير' });
     st.onZoom = z => {
       for (const b of sec.querySelectorAll('[data-step]')) b.classList.toggle('on', z.mode === 'stepped' && +b.dataset.step === z.step);
       for (const b of sec.querySelectorAll('[data-zmode]')) b.classList.toggle('on', b.dataset.zmode === z.mode);
       const L = st.page && st.page.currentLayout;
-      card('rdCard', '', L && L.reflowed ? `التكبير ×${arNum(z.zoom.toFixed(2))} · ${arNum(L.rows)} سطرًا بدل ${arNum(st.page.nLines)}` : 'كالمطبوع: السطور كما في المصحف.');
+      card('rdCard', '', L && L.reflowed ? `التكبير: ×${z.zoom.toFixed(2)}. عدد السطور: ${L.rows} (في المطبوع: ${st.page.nLines}).` : 'الحجم المطبوع: السطور كما في المصحف.');
     };
     for (const b of sec.querySelectorAll('[data-step]')) b.onclick = () => { if (st.zoom.mode !== 'stepped') st.setZoomMode('stepped'); st.toStep(+b.dataset.step); };
     for (const b of sec.querySelectorAll('[data-zmode]')) b.onclick = () => st.setZoomMode(b.dataset.zmode);
@@ -509,11 +508,11 @@
     let style = null, lineArt = false;
     function apply() {
       const p = st.page;
-      if (!set || !style) { p.undress(); card('drCard', '', set ? 'كالمطبوع.' : 'لا توجد مجموعة زخارف مع الصفحات (ornaments.qvo).'); }
+      if (!set || !style) { p.undress(); card('drCard', '', set ? 'الزخارف المطبوعة.' : 'لا توجد مجموعة زخارف مع الصفحات (ornaments.qvo).'); }
       else {
         // a whole mushaf, or its ayah marker alone when the set has no border and band for it
         const info = p.dress(set, whole ? { style, lineArt } : { ayahMark: style, lineArt });
-        card('drCard', '', info ? `${arNum(info.ayahMarks)} علامة آية · ${arNum(info.surahHeaders)} رأس سورة · ${info.pageFrame === null ? 'بلا إطار' : 'إطار يحيط بالصفحة'}` : 'رفض المحرّك هذه الزخرفة.');
+        card('drCard', '', info ? `علامات الآيات: ${info.ayahMarks}. رؤوس السور: ${info.surahHeaders}. الإطار: ${info.pageFrame === null ? 'لا يوجد' : 'موجود'}.` : 'تعذّر تطبيق هذه الزخارف.');
       }
       for (const c of $('drStyles').children) c.classList.toggle('on', c.dataset.style === style);
       $('drLine').classList.toggle('on', lineArt);
@@ -524,10 +523,10 @@
     let full = all.filter(s => s.ayahMark && s.surahHeader && s.pageFrame);
     const whole = full.length > 0;
     // with markers only, one design of each family is enough to show the idea
-    if (!whole) { const seen = new Set(); full = all.filter(s => s.ayahMark && !seen.has(s.style.slice(0, 8)) && seen.add(s.style.slice(0, 8))).slice(0, 10); $('drSay').textContent = 'النص نصّ مصحف المدينة، وعلامات الآيات من تصميم آخر. المحرّك يضع كل علامة في مكان العلامة المطبوعة وبحجمها.'; }
+    if (!whole) { const seen = new Set(); full = all.filter(s => s.ayahMark && !seen.has(s.style.slice(0, 8)) && seen.add(s.style.slice(0, 8))).slice(0, 10); $('drSay').textContent = 'يبقى نص مصحف المدينة كما هو، وتتغيّر علامات الآيات. يضع المحرّك كل علامة في موضع العلامة المطبوعة وبحجمها.'; }
     // the Arabic name of a style of the set, or its own name when the list has none
     const NAMES = { 'mushaf-douri': 'مصحف الدوري', 'mushaf-hafs-adi': 'مصحف حفص العادي', 'mushaf-hafs-madinah-kabir': 'مصحف المدينة الكبير', 'mushaf-hafs-madinah-mumtaza': 'مصحف المدينة الممتاز', 'mushaf-qalon': 'مصحف قالون', 'mushaf-shubah': 'مصحف شعبة', 'mushaf-sousi': 'مصحف السوسي', 'mushaf-warsh': 'مصحف ورش' };
-    const name = (st0, i) => NAMES[st0] || (whole ? st0 : `علامة ${arNum(i + 1)}`);
+    const name = (st0, i) => NAMES[st0] || (whole ? st0 : `التصميم ${i + 1}`);
     for (const [i, s] of full.entries()) { const c = el('button', '', name(s.style, i)); c.dataset.style = s.style; c.onclick = () => { style = s.style; apply(); }; $('drStyles').append(c); }
     $('drLine').onclick = () => { lineArt = !lineArt; apply(); };
     $('drPlain').onclick = () => { style = null; apply(); };
@@ -552,7 +551,7 @@
       const c = cells.appendChild(el('div', 'cell')); c.append(el('h4', '', title));
       if (!r) { c.append(el('div', 'v', '—'), el('p', '', note)); return; }
       c.append(el('div', 'v', ms(r.time)));
-      c.append(el('p', '', `${arNum(count)} صفحة · ${ms(r.time / count)} للصفحة · الملفات ${mb(r.bytes)}`));
+      c.append(el('p', '', `عدد الصفحات: ${count} · متوسط الصفحة: ${ms(r.time / count)} · حجم الملفات: ${mb(r.bytes)}`));
       c.append(el('p', '', 'الذاكرة: ' + r.memory));
       if (note) c.append(el('p', '', note));
     };
@@ -586,7 +585,7 @@
         open.push(p); canvases.push(c); paths += p.nPaths; pixels += c.width * c.height * 4;
       }
       const engineTime = performance.now() - t, grown = own.mem.buffer.byteLength - before;
-      show('cmpQvp', 'محرّك المصحف', { time: engineTime, bytes: files.reduce((a, f) => a + f.length, 0), memory: `${mb(grown)} للصفحات المفتوحة في ذاكرة المحرّك، و${mb(pixels)} لبكسلات الرسم` }, `فكّ الملفات وبناء ${arNum(paths)} مسارًا ورسمها.`);
+      show('cmpQvp', 'محرّك المصحف', { time: engineTime, bytes: files.reduce((a, f) => a + f.length, 0), memory: `ذاكرة المحرّك للصفحات المفتوحة ${mb(grown)}، وبكسلات الرسم ${mb(pixels)}` }, `يشمل فك الملفات وبناء المسارات ورسمها. عدد المسارات: ${paths}.`);
 
       // ── images: the same pixels as PNG files, then decode and draw each one ──
       const blobs = []; for (const c of canvases) blobs.push(await new Promise(r => c.toBlob(r, 'image/png')));
@@ -594,7 +593,7 @@
       t = performance.now();
       for (const blob of blobs) { const bmp = await createImageBitmap(blob); document.createElement('canvas').getContext('2d').drawImage(bmp, 0, 0); bitmaps.push(bmp); decoded += bmp.width * bmp.height * 4; }
       const pngBytes = blobs.reduce((a, x) => a + x.size, 0);
-      show('cmpImg', 'صور PNG', { time: performance.now() - t, bytes: pngBytes, memory: `${mb(decoded)} للصور بعد فكّها` }, `بعرض ${W} بكسل. لا كلمات فيها ولا حروف.`);
+      show('cmpImg', 'صور PNG', { time: performance.now() - t, bytes: pngBytes, memory: `الصور بعد فك ضغطها ${mb(decoded)}` }, `بعرض ${W} بكسل، دون بيانات للكلمات أو الحروف.`);
       $('cmpPng').textContent = '≈ ' + (pngBytes / count * 604 / 1048576).toFixed(0) + ' MB';
       // the words of each page as text, for the Hafs font. The sidecar gives them, and no measure counts it.
       const texts = [];
@@ -602,14 +601,13 @@
       for (const p of open) p.free();
       for (const x of bitmaps) x.close();
 
-      // what a page can say about the memory of content that the browser itself holds
-      const heap = () => (performance.memory ? performance.memory.usedJSHeapSize : null);
-      const domMemory = (h0, nodes) => `${arNum(nodes)} عنصرًا في الصفحة. ` + (h0 === null ? 'هذا المتصفح لا يتيح للصفحة قياسها.' : 'المتصفح يحفظها خارج ما تراه الصفحة، فلا تُقاس من هنا.');
+      // the browser holds SVG nodes and fonts where a page cannot measure them, so the result says so
+      const domMemory = nodes => `عدد عناصر الصفحة ${nodes}. لا يتيح المتصفح قياس ذاكرتها من داخل الصفحة.`;
 
       // ── SVG: read each file and put it in the page, as an app must to reach its words ──
       const svgs = []; for (const n of pagesOf(count)) { const f = await fresh(`svg/${pad(n)}.svg`); if (!f) break; svgs.push(f); }
       if (svgs.length === count) {
-        const host = box(); let time = 0, nodes = 0; const h0 = heap();
+        const host = box(); let time = 0, nodes = 0; 
         for (const f of svgs) {
           t = performance.now();
           const doc = new DOMParser().parseFromString(new TextDecoder().decode(f), 'image/svg+xml');
@@ -622,32 +620,32 @@
           time += parse + await painted(host, t);
         }
         nodes = host.querySelectorAll('*').length;
-        show('cmpSvg', 'SVG', { time, bytes: svgs.reduce((a, f) => a + f.length, 0), memory: domMemory(h0, nodes) }, 'قراءة الملفات ووضعها في الصفحة.');
+        show('cmpSvg', 'SVG', { time, bytes: svgs.reduce((a, f) => a + f.length, 0), memory: domMemory(nodes) }, 'يشمل قراءة الملفات وإضافتها إلى الصفحة.');
         host.remove();
-      } else show('cmpSvg', 'SVG', null, 'ملفات SVG ليست مع هذا البناء.');
+      } else show('cmpSvg', 'SVG', null, 'ملفات SVG غير متوفرة في هذا البناء.');
 
       // ── fonts: decode a font, set a page's text in it, and let the browser lay it out and paint it ──
       const withFonts = async (id, title, fontOf, textOf, note) => {
         const host = box(), faces = []; let time = 0, size = 0; const seen = new Map();
         for (let i = 0; i < count; i++) {
-          const url = fontOf(i), text = textOf(i); if (!url || text === null) { host.remove(); for (const f of faces) document.fonts.delete(f); show(id, title, null, 'هذا الخط ليس مع هذا البناء.'); return; }
+          const url = fontOf(i), text = textOf(i); if (!url || text === null) { host.remove(); for (const f of faces) document.fonts.delete(f); show(id, title, null, 'هذا الخط غير متوفر في هذا البناء.'); return; }
           const line = host.appendChild(el('div'));
           let fam = seen.get(url), fb = null;
-          if (!fam) { fb = await fresh(url); if (!fb) { host.remove(); show(id, title, null, 'هذا الخط ليس مع هذا البناء.'); return; } size += fb.length; }
+          if (!fam) { fb = await fresh(url); if (!fb) { host.remove(); show(id, title, null, 'هذا الخط غير متوفر في هذا البناء.'); return; } size += fb.length; }
           size += new TextEncoder().encode(text).length;
           t = performance.now();
           if (!fam) { fam = `bench-${id}-${run}-${i}`; const face = new FontFace(fam, fb); await face.load(); document.fonts.add(face); faces.push(face); seen.set(url, fam); }
           line.style.fontFamily = fam; line.textContent = text;
           time += await painted(host, t);
         }
-        show(id, title, { time, bytes: size, memory: `${arNum(faces.length)} خطًّا مفتوحًا. المتصفح يحفظ الخطوط خارج ما تراه الصفحة، فلا تُقاس من هنا.` }, note);
+        show(id, title, { time, bytes: size, memory: `عدد الخطوط المفتوحة ${faces.length}. لا يتيح المتصفح قياس ذاكرتها من داخل الصفحة.` }, note);
         host.remove(); for (const f of faces) document.fonts.delete(f);
       };
       // a page font holds one glyph for each word of its page, at the code points the build lists
       const codes = []; for (const n of pagesOf(count)) { const cb = await fresh(`fonts/qpc-${pad(n)}.json`); codes.push(cb ? JSON.parse(new TextDecoder().decode(cb)) : null); }
-      await withFonts('cmpQpc', 'خطوط الصفحات (QPC)', i => (codes[i] ? `fonts/qpc-${pad(first + i)}.woff2` : ''), i => (codes[i] ? codes[i].map(c => String.fromCodePoint(c)).join(' ') : null), 'خط لكل صفحة، وكلماتها محارف فيه.');
-      await withFonts('cmpHafs', 'خط حفص مع النص', () => 'fonts/quran.woff2', i => texts[i], 'خط واحد للمصحف كله، ونص كل صفحة.');
-      $('cmpNote').textContent = 'هذه أرقام جهازك الآن. تتغير من جهاز إلى جهاز ومن مرة إلى مرة.';
+      await withFonts('cmpQpc', 'خطوط الصفحات (QPC)', i => (codes[i] ? `fonts/qpc-${pad(first + i)}.woff2` : ''), i => (codes[i] ? codes[i].map(c => String.fromCodePoint(c)).join(' ') : null), 'خط لكل صفحة، وكل كلمة محرف فيه.');
+      await withFonts('cmpHafs', 'خط حفص مع النص', () => 'fonts/quran.woff2', i => texts[i], 'خط واحد للمصحف كاملًا مع نص كل صفحة.');
+      $('cmpNote').textContent = 'هذه نتائج جهازك، وتختلف من جهاز إلى آخر ومن قياس إلى آخر.';
     } catch (e) { console.error(e); $('cmpNote').textContent = 'تعذّر القياس: ' + e.message; }
     btn.disabled = false;
   };
