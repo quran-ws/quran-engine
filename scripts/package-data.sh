@@ -29,7 +29,8 @@ surah_names="$(find dist/pages/surah-names/qvp -maxdepth 1 -type f -name '[0-9][
 surah_svgs="$(find dist/pages/surah-names/svg -maxdepth 1 -type f -name '[0-9][0-9][0-9].svg' | wc -l | tr -d ' ')"
 [ "$surah_names" = 114 ] || { echo "error: expected 114 QVP surah names, found $surah_names" >&2; exit 1; }
 [ "$surah_svgs" = 114 ] || { echo "error: expected 114 SVG surah names, found $surah_svgs" >&2; exit 1; }
-for number in {001..114}; do
+# bash 3.2, which macOS ships, drops the zeros of {001..114}; seq -w keeps them everywhere
+for number in $(seq -w 1 114); do
   [ -f "dist/pages/surah-names/qvp/$number.qvp" ] || { echo "error: missing surah-names/qvp/$number.qvp" >&2; exit 1; }
   [ -f "dist/pages/surah-names/svg/$number.svg" ] || { echo "error: missing surah-names/svg/$number.svg" >&2; exit 1; }
 done

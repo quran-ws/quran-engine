@@ -89,7 +89,8 @@ surah_name_svgs=( "$SRC"/surah-names/svg/[0-9][0-9][0-9].svg )
   echo "expected 114 SVG surah names, found ${#surah_name_svgs[@]}" >&2
   exit 1
 }
-for number in {001..114}; do
+# bash 3.2, which macOS ships, drops the zeros of {001..114}; seq -w keeps them everywhere
+for number in $(seq -w 1 114); do
   [ -f "$SRC/surah-names/qvp/$number.qvp" ] || { echo "missing surah-names/qvp/$number.qvp" >&2; exit 1; }
   [ -f "$SRC/surah-names/svg/$number.svg" ] || { echo "missing surah-names/svg/$number.svg" >&2; exit 1; }
 done

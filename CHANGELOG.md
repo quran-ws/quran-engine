@@ -195,6 +195,9 @@ All notable changes to the engine and its packages. The format follows
   lost its second copy. The base ink and the styled pass now draw each entry of the draw list
   once between them, and a hidden path not at all. Now every view draws only what the draw
   list holds.
+- `scripts/package-data.sh` and `scripts/publish-cdn.sh` run under the bash 3.2 that macOS
+  ships. Both checked the 114 surah names with `{001..114}`, which bash 3.2 expands without
+  the zeros, so on a Mac they looked for `1.qvp` and stopped. They now use `seq -w 1 114`.
 
 ## [0.9.1] - 2026-11-23
 
