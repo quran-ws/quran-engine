@@ -4,6 +4,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-23
+
 ### Added
 - React Native: `<QvpPageView />` takes a `lettersUri` prop, which the view attaches after
   the page and its words sidecar. A new value attaches that layer in place of the one before.

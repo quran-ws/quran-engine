@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.10.0
+
 ### Added
 - Flutter: `QvpPage.attachLetters(bytes)`, `hasLetters`, `letterCount`, `letter`, `letters`,
   `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`, `styleLetters`,

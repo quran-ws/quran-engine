@@ -4,6 +4,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-23
+
 ### Added
 - Kotlin: `QvpPage.attachLetters`, the letter reads (`hasLetters`, `letterCount`, `letters`,
   `letter`, `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`), `styleLetters`,

@@ -6,6 +6,8 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-23
+
 ### Added
 - The letter layer, an optional file per page (`NNN.qvl`) in the new `QVL1` format
   (`docs/FORMAT.md`). For each word it gives the letters, the page paths that draw each
