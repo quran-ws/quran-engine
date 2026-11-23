@@ -290,7 +290,7 @@
           }
         }
         // The corpus marks the natural madd on every madd letter, also where another madd
-        // applies to the same letter: munfasil, muttasil, lazim, arid, badal, iwad. The other
+        // applies to the same letter, such as `madd_munfasil` or `madd_muttasil`. The other
         // madd is the ruling of that letter, so the natural madd gives way to it.
         const isMadd = m => ann.ruleIds[m.rule].startsWith('madd-'), natural = m => ann.ruleIds[m.rule].startsWith('madd-tabee');
         const others = marks.filter(m => isMadd(m) && !natural(m));
