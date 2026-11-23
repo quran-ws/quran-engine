@@ -489,11 +489,12 @@
     // is simple: it aligns the strong consonants of the page's words with what was heard.
     // A doubled letter is heard once, so equal neighbours count once on both sides.
     const once = a => a.filter((c, i) => c !== a[i - 1]);
-    const strong = s => once([...s.normalize('NFC')].filter(c => /\p{L}/u.test(c) && !/[ـاأإآٱوؤيىئءة]/.test(c)));
+    // The lam of the article before a sun letter is written and not said, so it does not count.
+    const strong = s => once([...s.normalize('NFC').replace(/([ٱا])ل(?=[تثدذرزسشصضطظلن][\u064b-\u0650\u0652-\u065f\u0670\u08f0-\u08f2]*\u0651)/g, '$1')].filter(c => /\p{L}/u.test(c) && !/[ـاأإآٱوؤيىئءة]/.test(c)));
     // The words said so far: the longest run of whole words, from the first, whose letters
     // align with some stretch of what was heard. The stretch can start anywhere, so words
-    // before the page's first word, such as the isti'adhah, do not count. A word must itself
-    // be there (one letter in three can differ), and the whole run must hold (one in four).
+    // before the first word do not count. A word must itself be there, and the whole run must
+    // hold: one letter in four can differ.
     function wordsSaid(heard, from = 0) {
       // cost[j]: the least edits that align the letters so far with a stretch that ends at j
       let cost = new Array(heard.length + 1).fill(0), letters = 0, before = 0, words = 0;
@@ -506,7 +507,9 @@
         }
         letters += need.length;
         const now = Math.min(...cost);
-        if (now - before > Math.floor(need.length / 3) || now > Math.floor(letters / 4)) break;
+        // A word of two letters or more can miss one in three: a letter that joins the next
+        // word, as the noon of idgham, is not heard as itself.
+        if (now - before > (need.length < 2 ? 0 : Math.ceil(need.length / 3)) || now > Math.ceil(letters / 4)) break;
         before = now; words++;
       }
       return words;
@@ -521,19 +524,72 @@
       d.words.forEach((w, i) => { for (const c of strong(w)) if (c !== letters[letters.length - 1]) { letters.push(c); wordOf.push(i); } });
       // the last start at or before a word: its page, its ayah or its surah, counted from 1
       const at = (starts, w) => { let lo = 0, hi = starts.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (starts[mid] <= w) lo = mid; else hi = mid - 1; } return lo + 1; };
-      return (quran = { letters: letters.join(''), wordOf, page: w => at(d.page_starts, w), surah: w => at(d.surah_starts, w), ayah: w => { const a = at(d.ayah_starts, w), s = at(d.surah_starts, w); return a - at(d.ayah_starts, d.surah_starts[s - 1]) + 1; } });
+      return (quran = { text: letters.join(''), wordOf, page: w => at(d.page_starts, w), firstOf: pg => d.page_starts[pg - 1], surah: w => at(d.surah_starts, w),
+        ayah: w => { const a = at(d.ayah_starts, w), s = at(d.surah_starts, w); return a - at(d.ayah_starts, d.surah_starts[s - 1]) + 1; },
+        // the letters of the basmalah: the first four words of the text
+        basmalah: letters.slice(0, wordOf.indexOf(4)) });
     }
-    // The place of what was heard: the word where its last letters end, when those letters
-    // are in the Quran exactly once. The longest ending is tried first, and a shorter one
-    // serves when the longer holds a letter that the model heard wrong. Twelve letters is the
-    // least: fewer are in many places.
+    // the edits between two runs of letters
+    function edits(a, b) {
+      let row = Array.from({ length: b.length + 1 }, (_, j) => j);
+      for (let i = 1; i <= a.length; i++) { const next = [i]; for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1), row[j] + 1, next[j - 1] + 1); row = next; }
+      return row[b.length];
+    }
+    // Every place where a run of letters ends in the Quran with at most `k` edits (Sellers'
+    // search). A letter that is written and not said, or a sound heard as another, is an
+    // edit, so an exact search would miss the place. Ends that are close are one place.
+    function ends(run, k) {
+      const text = quran.text, m = run.length, col = Array.from({ length: m + 1 }, (_, i) => i), out = [];
+      for (let j = 0; j < text.length; j++) {
+        let diag = col[0];   // col[0] stays 0: a match can start anywhere
+        for (let i = 1; i <= m; i++) { const up = col[i]; col[i] = Math.min(diag + (run[i - 1] === text[j] ? 0 : 1), up + 1, col[i - 1] + 1); diag = up; }
+        if (col[m] <= k) { const last = out[out.length - 1]; if (last && j - last.at <= m) { if (col[m] < last.cost) { last.at = j; last.cost = col[m]; } } else out.push({ at: j, cost: col[m] }); }
+      }
+      return out;
+    }
+    // The place of what was heard: where its last letters end, when they are in the Quran in
+    // one place only. A long run is tried first. Two places or more mean the reader must say
+    // more, and fourteen letters is the least: fewer are in many places.
     function locate(heard) {
-      for (let n = Math.min(heard.length, 40); n >= 12; n--) {
-        const run = heard.slice(-n).join(''), first = quran.letters.indexOf(run);
-        if (first < 0) continue;
-        return quran.letters.indexOf(run, first + 1) < 0 ? quran.wordOf[first + n - 1] : null;
+      for (const m of [24, 18, 14]) {
+        if (heard.length < m) continue;
+        const found = ends(heard.slice(-m), Math.floor(m / 7));
+        if (found.length === 1) return { end: found[0].at, m };
+        if (found.length > 1) return null;
       }
       return null;
+    }
+    // The word where the recitation began. First the start of the found run in the text: the
+    // length that fits best. Then back from it, while the letters heard before the run agree.
+    function begin(heard, hit) {
+      const text = quran.text, run = heard.slice(-hit.m); let start = hit.end - hit.m + 1, best = Infinity;
+      for (let len = hit.m - 3; len <= hit.m + 3; len++) { const from = hit.end - len + 1; if (from < 0) continue; const c = edits(run, [...text.slice(from, hit.end + 1)]) + Math.abs(len - hit.m) * 0.01; if (c < best) { best = c; start = from; } }
+      let q = start - 1, h = heard.length - hit.m - 1;
+      while (q >= 0 && h >= 0) {
+        if (text[q] === heard[h]) { start = q; q--; h--; continue; }
+        if (q > 0 && h > 0 && text[q - 1] === heard[h - 1]) { q--; h--; continue; }                 // one letter heard as another
+        if (q > 1 && text[q - 1] === heard[h] && text[q - 2] === heard[h - 1]) { q--; continue; }    // a letter not said
+        if (h > 1 && text[q] === heard[h - 1] && text[q - 1] === heard[h - 2]) { h--; continue; }    // a sound that is no letter
+        break;
+      }
+      // a word counts from its first letter
+      let w = quran.wordOf[start]; if (start > 0 && quran.wordOf[start - 1] === w) w++;
+      return w;
+    }
+    // The isti'adhah and the basmalah come before a recitation and are not its place: the
+    // basmalah is before every surah. They are cut from the start of what was heard. The
+    // answer is null while what was heard can still be only the start of one of them.
+    const ISTIADHAH = [...'عذبلهمنشطنرجم'];
+    function afterOpening(heard) {
+      let cut = 0, basmalah = false;
+      for (const formula of [ISTIADHAH, quran.basmalah]) {
+        const rest = heard.slice(cut);
+        if (rest.length < formula.length + 2) { if (rest.length && edits(rest.slice(0, formula.length), formula.slice(0, rest.length)) <= 2) return null; continue; }
+        let best = Infinity, len = 0;
+        for (let n = formula.length - 2; n <= formula.length + 2; n++) { const c = edits(rest.slice(0, n), formula); if (c < best) { best = c; len = n; } }
+        if (best <= 2) { cut += len; if (formula === quran.basmalah) basmalah = true; }
+      }
+      return { letters: heard.slice(cut), basmalah };
     }
     // A mistake, as the reader hears and sees it: two short low tones, and a red mark on the
     // place of the word that was expected. The word stays hidden.
@@ -546,34 +602,48 @@
       const p = st.page, h = p.highlight(T.word(word), { mode: 'band', band: rgba('#c62828', 0.45), radius: 1.5, ms: 120 });
       st.draw(); setTimeout(() => { if (st.page === p) { p.removeHighlight(h); st.draw(); } }, 700);
     }
-    // `kept` is where the match starts again after a mistake: the letters heard before it are
-    // set aside, and the words before `said` stay as they are.
+    // `said` is the next word of the page that the reader must say. `kept` is where the match
+    // reads from: the letters heard before it are set aside, at the start and after a mistake.
     let place = null, kept = 0, mistakes = 0, progressAt = 0;
     async function hear(decoded) {
       const tokens = decoded.tokens || [], n = decoded.isFinal ? tokens.length : (decoded.settled ?? tokens.length);
-      const heard = once(tokens.slice(0, n).map(t => t.name).filter(x => /^\p{L}$/u.test(x) && /[؀-ۿ]/.test(x) && !/[ءوي]/.test(x)));
-      // the reader can recite from any page: open the page of what was heard
-      const w = quran ? locate(heard) : null;
-      if (w !== null) {
-        place = w;
-        if (quran.page(w) !== st.n && !has(quran.page(w))) { card('hzCard', '', tt`سورة ${quran.surah(w)}، الآية ${quran.ayah(w)}`, tt`الصفحة ${quran.page(w)} غير متوفرة في هذا العرض.`); return; }
-        if (quran.page(w) !== st.n) { await st.load(quran.page(w)); st.page.maskOptions({ blockColor: '#d9cfb8' }); st.page.mask(T.page(), mode); said = 0; kept = 0; progressAt = 0; }
+      const all = once(tokens.slice(0, n).map(t => t.name).filter(x => /^\p{L}$/u.test(x) && /[؀-ۿ]/.test(x) && !/[ءوي]/.test(x)));
+      // nothing was heard yet: the invitation to recite stays on the card
+      if (!all.length) return;
+      window.__demo.heard = all.join(''); window.__demo.tokens = tokens.map(t => t.name + (t.confidence < 0.6 ? '?' : '')).join(' ');   // for a look from the console
+      const opening = quran ? afterOpening(all) : { letters: all, basmalah: false };
+      if (!opening) { card('hzCard', '', tr('جارٍ الاستماع وتحديد الموضع.')); return; }
+      const heard = opening.letters;
+      // The reader can recite from any page, and from any word of it. Nothing shows until
+      // what was heard is in one place only.
+      const hit = quran ? locate(heard) : null;
+      if (hit && (place === null || (quran.page(quran.wordOf[hit.end]) !== st.n && quran.page(quran.wordOf[hit.end]) !== st.n + 1))) {
+        let first = begin(heard, hit);
+        // in the first surah the basmalah is the first ayah, so there it is part of the recitation
+        if (opening.basmalah && first === 4) first = 0;
+        const pg = quran.page(first);
+        if (!has(pg)) { card('hzCard', '', tt`سورة ${quran.surah(first)}، الآية ${quran.ayah(first)}`, tt`الصفحة ${pg} غير متوفرة في هذا العرض.`); return; }
+        if (pg !== st.n) { await st.load(pg); st.page.maskOptions({ blockColor: '#d9cfb8' }); st.page.mask(T.page(), mode); }
+        // The recitation starts at this word of the page: the words before it stay hidden.
+        // The match then reads all that was heard, and it starts where the word starts.
+        said = Math.min(expect.length, first - quran.firstOf(pg)); kept = 0; progressAt = 0;
       }
+      if (hit) place = quran.wordOf[hit.end];
+      if (place === null) { card('hzCard', '', tr('جارٍ الاستماع وتحديد الموضع.')); return; }
       // every word of this page was said: the recitation goes on to the next page
-      if (said === expect.length && expect.length && has(st.n + 1) && st.n < 604 && place !== null && quran.page(place) > st.n) {
-        await st.load(st.n + 1); st.page.maskOptions({ blockColor: '#d9cfb8' }); st.page.mask(T.page(), mode); said = 0; kept = 0; progressAt = 0;
+      if (said === expect.length && expect.length && has(st.n + 1) && st.n < 604 && quran.page(place) > st.n) {
+        await st.load(st.n + 1); st.page.maskOptions({ blockColor: '#d9cfb8' }); st.page.mask(T.page(), mode); said = 0; kept = Math.max(0, heard.length - 12); progressAt = kept;
       }
-      // Before the first mistake the match can start anywhere in what was heard. After one, it
-      // goes on from the word that was expected, with the letters heard since.
-      const k = kept ? said + wordsSaid(heard.slice(kept), said) : wordsSaid(heard);
+      // The match goes on from the next word of the page, with the letters heard since `kept`.
+      const k = said + wordsSaid(heard.slice(kept), said);
       if (k > said) { for (let i = said; i < k; i++) st.page.unmaskWord(expect[i].index); said = k; progressAt = heard.length; st.draw(); }
       // The place is known and the reader went on, but the next word did not come: a mistake.
       // The letters heard so far are set aside, so the reader can say the word again.
-      else if (place !== null && quran.page(place) === st.n && said < expect.length) {
+      else if (quran.page(place) === st.n && said < expect.length) {
         const need = strong(expect[said].qpc).length;
         if (heard.length - Math.max(progressAt, kept) >= Math.max(5, need + 3)) { mistakes++; wrong(expect[said].index); kept = heard.length; progressAt = heard.length; }
       }
-      card('hzCard', '', place === null ? tr('جارٍ الاستماع وتحديد الموضع.') : tt`سورة ${quran.surah(place)}، الآية ${quran.ayah(place)} · الصفحة ${st.n}`, tt`الكلمات المقروءة: ${said} من ${expect.length} · الأخطاء: ${mistakes}`);
+      card('hzCard', '', tt`سورة ${quran.surah(place)}، الآية ${quran.ayah(place)} · الصفحة ${st.n}`, tt`الكلمات المقروءة حتى الكلمة ${said} من ${expect.length} · الأخطاء: ${mistakes}`);
     }
     let model = null, busy = false;
     async function voice() {
@@ -589,7 +659,8 @@
     async function recorded(m) {
       // Surah 112, which is on the last page: the demo starts on the first page, so the
       // reader sees it find the place.
-      const info = await json(`${API}/v4/recitations/1/surahs/112`), files = info.data.files;
+      // Al-Husary's murattal recitation is slow and clear, which suits a model that hears each sound.
+      const info = await json(`${API}/v4/recitations/mahmoud-husary/r1/surahs/112`), files = info.data.files;
       const url = (files.mp3_64 || files.original || Object.values(files)[0]).url;
       const decoded = await new OfflineAudioContext(1, RATE, RATE).decodeAudioData((await bytes(url)).buffer);
       const off = new OfflineAudioContext(1, Math.ceil(decoded.duration * RATE), RATE), src = off.createBufferSource();
@@ -738,7 +809,7 @@
         open.push(p); canvases.push(c); paths += p.nPaths; pixels += c.width * c.height * 4;
       }
       const engineTime = performance.now() - t, grown = own.mem.buffer.byteLength - before;
-      show('cmpQvp', tr('محرّك المصحف'), { time: engineTime, bytes: files.reduce((a, f) => a + f.length, 0), memory: tt`ذاكرة المحرّك للصفحات المفتوحة ${mb(grown)}، وبكسلات الرسم ${mb(pixels)}` }, tt`يشمل فك الملفات وبناء المسارات ورسمها. عدد المسارات: ${paths}.`);
+      show('cmpQvp', tr('Quran Engine'), { time: engineTime, bytes: files.reduce((a, f) => a + f.length, 0), memory: tt`ذاكرة المحرّك للصفحات المفتوحة ${mb(grown)}، وبكسلات الرسم ${mb(pixels)}` }, tt`يشمل فك الملفات وبناء المسارات ورسمها. عدد المسارات: ${paths}.`);
 
       // ── images: the same pixels as PNG files, then decode and draw each one ──
       const blobs = []; for (const c of canvases) blobs.push(await new Promise(r => c.toBlob(r, 'image/png')));

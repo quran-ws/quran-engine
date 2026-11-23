@@ -3,8 +3,7 @@
 // language is English, and warns in the console about a string that the map does not hold.
 window.DEMO_EN = {
   // the bar at the top
-  'محرّك المصحف': 'Quran Engine',
-  'محرّك المصحف: عرض تفاعلي': 'Quran Engine: an interactive demo',
+  'Quran Engine: عرض تفاعلي': 'Quran Engine: an interactive demo',
   'مقدمة': 'Intro',
   'التجويد': 'Tajwid',
   'التلاوة': 'Recitation',
@@ -98,7 +97,7 @@ window.DEMO_EN = {
   'على جهازك مباشرة. نتائج التعرّف الآلي قد تخطئ، ولا تغني عن معلّم متقن.': ', which runs on your device. Automatic recognition can be wrong, and it does not replace a qualified teacher.',
   'الكلمات المخفية: {}. اضغط على الصفحة لكشف كلمة.': 'Hidden words: {}. Tap the page to reveal a word.',
   'جميع الكلمات ظاهرة.': 'All the words show.',
-  'الكلمات المقروءة: {} من {} · الأخطاء: {}': 'Words recited: {} of {} · mistakes: {}',
+  'الكلمات المقروءة حتى الكلمة {} من {} · الأخطاء: {}': 'Recited up to word {} of {} · mistakes: {}',
   'جارٍ تجهيز النموذج. قد يستغرق التحميل الأول بعض الوقت.': 'The model is loading. The first load can take some time.',
   'جارٍ تحليل التلاوة المسجّلة.': 'The model listens to the recorded recitation.',
   'ابدأ القراءة من أي موضع في المصحف.': 'Start to recite, from any place in the mushaf.',
@@ -207,7 +206,7 @@ window.DEMO_EN = {
   '50 صفحة': '50 pages',
   'يفتح الصفحات بالطرق الخمس على جهازك، ويقيس الحجم والزمن والذاكرة.': 'It opens the pages in the five ways on your device, and it measures size, time and memory.',
   'طريقة القياس': 'How it is measured',
-  'محرّك المصحف: 604 ملفات للصفحات مع نصوصها من إصدار البيانات. المصدر: ملف README في المستودع.':
+  'Quran Engine: 604 ملفات للصفحات مع نصوصها من إصدار البيانات. المصدر: ملف README في المستودع.':
     'Quran Engine: 604 page files with their text, from the data release. Source: the README of the repository.',
   'SVG: 604 ملفات من أرشيف الكلمات في quran-svg-elements، الإصدار 2.0.0. الحجم المضغوط هو حجم الأرشيف.':
     'SVG: 604 files from the words archive of quran-svg-elements, version 2.0.0. The compressed size is the size of the archive.',
@@ -258,7 +257,7 @@ window.DEMO_EN = {
 
   // footer
   'عن المحرّك': 'About the engine',
-  'محرّك المصحف مكتبة مفتوحة المصدر للويب و Android و iOS و Flutter و React Native:': 'Quran Engine is an open source library for the web, Android, iOS, Flutter and React Native:',
+  'Quran Engine مكتبة مفتوحة المصدر للويب و Android و iOS و Flutter و React Native:': 'Quran Engine is an open source library for the web, Android, iOS, Flutter and React Native:',
   'مصدر صفحات المصحف:': 'Source of the mushaf pages:',
   '، عن خط مجمع الملك فهد لطباعة المصحف الشريف.': ', from the typeface of the King Fahd Complex for the Printing of the Holy Quran.',
 };
