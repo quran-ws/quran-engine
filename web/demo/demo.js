@@ -415,7 +415,7 @@
       if (i !== cur) {
         cur = i;
         // by word, the ink alone takes the colour. By letter, a faint band holds the word and the letter takes the colour.
-        const style = byLetter ? { mode: 'band', band: rgba('#c9a44c', 0.22), radius: 1.5, ms: 120 } : { mode: 'ink', ink: '#0a7d32', ms: 120 };
+        const style = byLetter ? { mode: 'band', band: rgba('#c9a44c', 0.22), radius: 1.5, ms: 120 } : { mode: 'ink', ink: '#c62828', ms: 120 };
         if (hl) p.moveHighlight(hl, T.word(w)); else hl = p.highlight(T.word(w), style);
         card('plCard', p.wordForm(w, 'qpc'), tt`سورة يس، الآية ${ayah}، الكلمة ${pos}`, recitation && recitation.reciter.name);
       }

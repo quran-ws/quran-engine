@@ -21,6 +21,7 @@ All notable changes to the engine and its packages. The format follows
 
 ### Changed
 - Each platform in the showcase links to its package.
+- The player of the showcase colours the recited word red, as it does the letter.
 - `scripts/sync-test-data.sh` takes `ornaments.qvo` from `QVP_ORNAMENTS_TAG`, by default
   `data-v0.7.0`, and the pages from `QVP_DATA_TAG` as before. So the dress controls of every
   example app list the eight mushafs.
