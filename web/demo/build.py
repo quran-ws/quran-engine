@@ -2,7 +2,7 @@
 """Build the Arabic showcase.
 
   python3 web/demo/build.py
-      dist/demo/: index.html, demo.js, qvp.js, qvp_ffi.wasm, a link to the pages and a link
+      dist/demo/: index.html, demo.js, en.js, qvp.js, qvp_ffi.wasm, a link to the pages and a link
       to the letter layers. Serve it: (cd dist/demo && python3 -m http.server 8771), then
       open http://localhost:8771/
 
@@ -43,12 +43,14 @@ os.makedirs(out, exist_ok=True)
 html = open(os.path.join(demo, 'index.html')).read()
 qvp = open(os.path.join(web, 'qvp.js')).read()
 app = open(os.path.join(demo, 'demo.js')).read()
+en = open(os.path.join(demo, 'en.js')).read()
 # The scripts carry a digest of this build in their address, so a browser that kept an older
 # script asks for the new one.
-build = hashlib.sha256((html + qvp + app).encode()).hexdigest()[:10]
-html = html.replace('src="qvp.js"', f'src="qvp.js?v={build}"').replace('src="demo.js"', f'src="demo.js?v={build}"')
+build = hashlib.sha256((html + qvp + app + en).encode()).hexdigest()[:10]
+for name in ('qvp.js', 'demo.js', 'en.js'):
+    html = html.replace(f'src="{name}"', f'src="{name}?v={build}"')
 open(os.path.join(out, 'index.html'), 'w').write(html)
-for name, src in (('qvp.js', web), ('demo.js', demo), ('qvp_ffi.wasm', web)):
+for name, src in (('qvp.js', web), ('demo.js', demo), ('en.js', demo), ('qvp_ffi.wasm', web)):
     shutil.copy(os.path.join(src, name), os.path.join(out, name))
 local = os.path.join(demo, 'config.local.js')
 if os.path.exists(local):

@@ -72,7 +72,12 @@
     "mushaf-sousi",
     "audio\\.pause",
     "'(madd|idgham|ikhfa|iqlab|qalqalah|noon|meem|mutajanisain|mutamathilain)-[a-z-]*'",
-    "rules\\.hukums"
+    "rules\\.hukums",
+    "Al-Fatihah",
+    "Al-Duri",
+    "Al-Susi",
+    "'Madd Lazim'",
+    "'Madd Muttasil'"
   ],
   "_external_names": [
     "ayah_markers  — the id of the medallion layer in the quran-svg-elements source SVG; a locator in their file, not our name.",
@@ -95,7 +100,9 @@
     "mushaf-douri, mushaf-sousi — style keys of the quran-assets catalogue, as mushaf-qalon above; the rawis are written duri and susi everywhere else here.",
     "audio.pause — the DOM method of an audio element; nothing to do with waqf.",
     "'madd-…', 'idgham-…', 'ikhfa-…' and the like, in quotes — hukum ids of quran-ws/quran-tajweed, which the showcase matches rule ids against. The ids are that corpus's own spelling.",
-    "rules.hukums — the key of rules.json in quran-ws/quran-tajweed that lists the rulings; the showcase reads it, and the key is that file's own spelling."
+    "rules.hukums — the key of rules.json in quran-ws/quran-tajweed that lists the rulings; the showcase reads it, and the key is that file's own spelling.",
+    "Al-Fatihah, Al-Duri, Al-Susi — English display names in the string table of the showcase (web/demo/en.js): a surah label, as Ya-Sin above, and the names of two mushafs by their rawi. They are text a reader sees, not names in code.",
+    "'Madd Lazim', 'Madd Muttasil', in quotes — the standard's own display forms, as labels of the tajwid legend in web/demo/en.js. The audit reads a .js file as code and splits the two words."
   ],
   "compatibility": [
     "crates/qvp-core/src/sidecar.rs"

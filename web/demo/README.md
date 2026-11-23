@@ -1,7 +1,7 @@
-# The Arabic showcase
+# The showcase
 
-One Arabic page that shows what the engine can do. It has six scenes, and each scene is a
-live mushaf page that the engine draws through `web/qvp.js`.
+One page, in Arabic and English, that shows what the engine can do. Each scene is a live
+mushaf page that the engine draws through `web/qvp.js`.
 
 | scene | what it shows | engine calls |
 |---|---|---|
@@ -13,7 +13,18 @@ live mushaf page that the engine draws through `web/qvp.js`.
 | الزخرفة | the same text in the ornaments of another mushaf | `dress`, `undress` |
 | المقارنة | the engine against SVG, images, page fonts and the Hafs font with text: size, features, and a measure on the reader's device | `loadPage`, `buildPaths`, `CanvasRenderer.draw` |
 
+| المنصات | the package of each platform, and the links to start |  |
+
 Every page takes a pinch, Ctrl with the mouse wheel, and the zoom buttons on its frame.
+
+## Languages
+
+The page is written in Arabic. `en.js` maps each Arabic string to its English one, and
+`demo.js` uses the map when the address has `?lang=en`. The link in the top bar changes the
+language, and the page keeps the reader's choice. A string that `en.js` does not hold stays
+Arabic and shows as a warning in the console. So when you add or change a string, add its
+English to `en.js`. The rule descriptions of the tajwid corpus are Arabic in both languages,
+because the corpus has them in Arabic only.
 
 ## Run it
 

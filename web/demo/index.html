@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>محرّك المصحف: عرض تفاعلي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   /* Two fonts come from the build (build.py, QVP_FONT_TITLE and QVP_FONT_QURAN). They are not
      in the repository. When a file is not there, the next family of the list is used. */
@@ -16,22 +16,40 @@
     --night:#0b2022; --night-2:#102b2c; --night-3:#173a39; --line:#24504d;
     --mist:#e3ece8; --muted:#8eaaa3; --gold:#c9a44c; --gold-soft:rgba(201,164,76,.16);
     --paper:#fffdf7; --ink:#231f20; --hover:rgba(201,164,76,.22);
-    --display:'Demo Title','Aref Ruqaa','Amiri',serif; --quran:'Demo Quran','KFGQPC Uthmanic Script HAFS','Amiri','Scheherazade New',serif; --body:'IBM Plex Sans Arabic',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --display:'Demo Title','Fraunces','Aref Ruqaa','Amiri',serif; --quran:'Demo Quran','KFGQPC Uthmanic Script HAFS','Amiri','Scheherazade New',serif; --body:'IBM Plex Sans Arabic','IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
   }
   * { box-sizing:border-box }
   html { scroll-behavior:smooth; scroll-snap-type:y proximity }
   body { margin:0; background:var(--night); color:var(--mist); font:16px/1.8 var(--body); -webkit-font-smoothing:antialiased }
   :focus-visible { outline:2px solid var(--gold); outline-offset:2px; border-radius:6px }
   a { color:var(--gold) }
+  /* Latin text sits tighter than Arabic, and its titles are smaller for the same weight */
+  html[lang=en] body { line-height:1.6 }
+  html[lang=en] { --body:'IBM Plex Sans','IBM Plex Sans Arabic',system-ui,sans-serif }
+  html[lang=en] h1 { font-size:clamp(34px,4.4vw,58px); line-height:1.15 }
+  html[lang=en] h2 { font-size:clamp(26px,2.9vw,38px); line-height:1.2 }
 
   /* the bar at the top: the name, and where the reader is among the scenes */
   .top { position:fixed; inset:0 0 auto 0; z-index:20; display:flex; align-items:center; gap:18px; padding:10px 22px; background:linear-gradient(var(--night) 55%,transparent); pointer-events:none }
   .top > * { pointer-events:auto }
   .brand { font:700 22px/1 var(--display); color:var(--gold); text-decoration:none; white-space:nowrap }
-  .rail { display:flex; gap:2px; margin-inline-start:auto; padding:4px; background:rgba(16,43,44,.86); border:1px solid var(--line); border-radius:999px; backdrop-filter:blur(8px) }
+  .rail { display:flex; gap:2px; margin-inline:auto; padding:4px; background:rgba(16,43,44,.86); border:1px solid var(--line); border-radius:999px; backdrop-filter:blur(8px) }
   .rail a { padding:3px 13px; border-radius:999px; font-size:13px; color:var(--muted); text-decoration:none; white-space:nowrap; transition:color .2s,background .2s }
   .rail a:hover { color:var(--mist) }
   .rail a.on { background:var(--gold); color:var(--night); font-weight:600 }
+  .top .tools { display:flex; gap:8px; align-items:center }
+  .top .tools a { text-decoration:none; font-size:13px; padding:5px 14px; border-radius:999px; border:1px solid var(--line); color:var(--mist); background:rgba(16,43,44,.86); white-space:nowrap }
+  .top .tools a:hover { border-color:var(--gold) }
+  .top .tools a.cta, a.cta { background:var(--gold); color:var(--night); border-color:var(--gold); font-weight:600 }
+  a.btn { display:inline-block; text-decoration:none; font-size:14px; color:var(--mist); border:1px solid var(--line); border-radius:999px; padding:8px 24px; transition:border-color .15s }
+  a.btn:hover { border-color:var(--gold) }
+  a.btn.cta { color:var(--night); font-size:15px; padding:10px 28px }
+  a.btn.cta:hover { filter:brightness(1.08) }
+  /* the platforms: one card for each package */
+  .plat { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-bottom:26px }
+  .plat .cell h4 { font-size:19px }
+  .plat .cell code { display:block; margin:8px 0 6px; font-size:12.5px; word-break:break-all; text-align:start }
+  .plat .cell p { font-size:13px }
 
   /* a scene: words on one side, a live page on the other */
   .scene { min-height:100vh; display:grid; grid-template-columns:minmax(300px,400px) minmax(0,1fr); gap:clamp(20px,4vw,64px); align-items:center; padding:84px clamp(18px,5vw,72px) 36px; scroll-snap-align:start; border-bottom:1px solid var(--night-2) }
@@ -116,7 +134,9 @@
     .scene { grid-template-columns:1fr; padding-top:76px; align-items:start }
     .stage { height:70vh; order:2 }
     .rail a { padding:3px 9px; font-size:12px }
-    .rail { overflow-x:auto; max-width:68vw }
+    .rail { overflow-x:auto; max-width:46vw }
+    .top { gap:8px; padding:8px 10px } .brand { font-size:17px }
+    .top .tools a { padding:4px 9px; font-size:12px }
     html { scroll-snap-type:none }
   }
   @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto } * { transition:none !important } }
@@ -126,8 +146,12 @@
 <header class="top">
   <a class="brand" href="#hero">محرّك المصحف</a>
   <nav class="rail" id="rail" aria-label="أقسام العرض">
-    <a href="#hero">مقدمة</a><a href="#tajwid">التجويد</a><a href="#listen">التلاوة</a><a href="#hifz">الحفظ</a><a href="#read">القراءة</a><a href="#dress">الزخرفة</a><a href="#compare">المقارنة</a>
+    <a href="#hero">مقدمة</a><a href="#tajwid">التجويد</a><a href="#listen">التلاوة</a><a href="#hifz">الحفظ</a><a href="#read">القراءة</a><a href="#dress">الزخرفة</a><a href="#compare">المقارنة</a><a href="#platforms">المنصات</a>
   </nav>
+  <div class="tools">
+    <a id="langSwitch" href="?lang=en" lang="en" dir="ltr">English</a>
+    <a class="cta" href="https://quran.ws/docs/build/platforms">البدء بالاستخدام</a>
+  </div>
 </header>
 
 <section class="scene" id="hero">
@@ -135,7 +159,8 @@
     <span class="kicker">عرض تفاعلي</span>
     <h1>محرّك عرض صفحات المصحف</h1>
     <p>يرسم المحرّك صفحات مصحف المدينة من نسخته الأصلية، ويحدّد كل كلمة وحرف وعلامة فيها. الصفحات في هذا العرض يرسمها المحرّك في متصفحك.</p>
-    <div class="ctl"><button class="go" id="heroWrite">إعادة رسم الصفحة</button><a href="#tajwid"><button>بدء الجولة</button></a></div>
+    <div class="ctl"><a class="btn cta" href="https://quran.ws/docs/build/platforms">البدء بالاستخدام</a><a class="btn" href="#tajwid">بدء الجولة</a></div>
+    <div class="ctl"><button id="heroWrite">إعادة رسم الصفحة</button></div>
     <div class="card" id="heroCard"><div class="sub">اضغط على كلمة لعرض بياناتها.</div></div>
     <p class="fine">للتكبير: استخدم إصبعين، أو أزرار التكبير، أو Ctrl مع عجلة الفأرة.</p>
   </div>
@@ -178,7 +203,7 @@
     <span class="kicker">الحفظ</span>
     <h2>إخفاء الآيات وكشفها</h2>
     <p>يخفي المحرّك كلمات الصفحة لاختبار الحفظ، ويحافظ على مواضعها. اكشف الكلمات واحدة تلو الأخرى، أو اقرأ بصوتك لتظهر كل كلمة عند نطقها.</p>
-    <div class="ctl"><span class="lab">الطريقة</span><button id="hzHide" class="on">إخفاء</button><button id="hzBlock">تغطية</button></div>
+    <div class="ctl"><span class="lab">الطريقة</span><button id="hzHide" class="on" data-en="Hide">إخفاء</button><button id="hzBlock">تغطية</button></div>
     <div class="ctl"><button class="go" id="hzNext">كشف كلمة</button><button id="hzBack">إخفاء كلمة</button><button id="hzReset">إعادة</button><button id="hzShow">إظهار الصفحة</button></div>
     <div class="ctl"><button id="hzListen" disabled>القراءة بالصوت</button><button id="hzClip" disabled>تجربة بمقطع صوتي</button></div>
     <div class="card" id="hzCard"><div class="sub">سورة الفاتحة.</div></div>
@@ -275,12 +300,29 @@
   </details>
 </section>
 
+<section class="scene wide" id="platforms">
+  <div class="say">
+    <span class="kicker">المنصات</span>
+    <h2>المنصات المدعومة</h2>
+    <p>المحرّك مكتوب بلغة Rust، وله حزمة لكل منصة. تعرض الحزم كلها الصفحة نفسها بالنتيجة نفسها.</p>
+  </div>
+  <div class="plat">
+    <div class="cell"><h4>الويب</h4><code dir="ltr">npm install @quran.ws/engine</code><p>JavaScript و WebAssembly. يعمل في المتصفح وفي Node.</p></div>
+    <div class="cell"><h4>Android</h4><code dir="ltr">ws.quran:qvp-android</code><p>مكتبة Kotlin من Maven Central، مع عنصر عرض جاهز.</p></div>
+    <div class="cell"><h4>iOS و macOS</h4><code dir="ltr">github.com/quran-ws/quran-engine</code><p>حزمة QvpKit عبر Swift Package Manager، لـ UIKit و SwiftUI.</p></div>
+    <div class="cell"><h4>Flutter</h4><code dir="ltr">qvp_flutter</code><p>من pub.dev. يعمل على Android و iOS و macOS و Windows و Linux والويب.</p></div>
+    <div class="cell"><h4>React Native</h4><code dir="ltr">npm install @quran.ws/qvp-react-native</code><p>يعمل على Android و iOS.</p></div>
+  </div>
+  <div class="ctl"><a class="btn cta" href="https://quran.ws/docs/build/platforms">البدء بالاستخدام</a><a class="btn" href="https://github.com/quran-ws/quran-engine">المستودع على GitHub</a><a class="btn" href="https://quran.ws/docs/reference/quran-engine">مرجع الواجهة البرمجية</a></div>
+</section>
+
 <footer class="foot">
   <h3>عن المحرّك</h3>
   <div>محرّك المصحف مكتبة مفتوحة المصدر للويب و Android و iOS و Flutter و React Native: <a href="https://github.com/quran-ws/quran-engine">github.com/quran-ws/quran-engine</a></div>
   <div>مصدر صفحات المصحف: <a href="https://github.com/quran-ws/quran-svg-elements">quran-svg-elements</a>، عن خط مجمع الملك فهد لطباعة المصحف الشريف.</div>
 </footer>
 
+<script src="en.js"></script>
 <script src="qvp.js"></script>
 <script src="config.local.js" onerror="this.remove()"></script>
 <script src="demo.js"></script>
