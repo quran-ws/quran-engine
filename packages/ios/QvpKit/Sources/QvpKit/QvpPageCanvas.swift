@@ -539,10 +539,16 @@ public final class QvpCanvasController {
                 // reflow keeps the page at its top, so that is the same number; a magnify peek
                 // moves `viewOy` and `viewScale`, and a band cut in canvas points drifted off
                 // the fingers as the page grew under them — a blank box exactly where they were.
+                //
+                // It is held to what the canvas shows, canvas rows 0 to its height, which in the
+                // same space run from `-viewOy`. A bordered page rests shrunk with its border's
+                // top above the content's origin, so a band held to the scaled content from 0
+                // left the border's top and the page's bottom unpainted under the fingers.
                 let focal = pinchFocalY - viewOy
-                let pageHeight = bounds.height * viewScale
-                let top = max(min(focal - hostBoxHeight, pageHeight - hostBoxHeight * 2), 0)
-                return (top, max(min(hostBoxHeight * 2, bounds.height * viewScale), 1))
+                let (shownTop, shownHeight) = (-viewOy, max(bounds.height, 1))
+                let height = min(hostBoxHeight * 2, shownHeight)
+                let top = min(max(focal - hostBoxHeight, shownTop), shownTop + shownHeight - height)
+                return (top, max(height, 1))
             }
             return (-viewOy, max(bounds.height, 1))
         }
@@ -674,6 +680,14 @@ public final class QvpCanvasController {
         isPinching = false
         // A reflowed page is a size the reader chose, not a peek: it stays until they change it.
         if zoomSpringsBack && zoomMode == .magnify { springBack() }
+        // A page the host scrolls rests at the engine's fit, and a pinch lands there as a step
+        // button does. Its last frame may have been held against a canvas the host had not yet
+        // resized for the new layout, so the view is fitted once more now. A magnified peek is
+        // the reader's own and stays.
+        if hostScrolls, zoomMode != .magnify {
+            let f = fittedView()
+            viewScale = f.scale; fitScale = f.scale; viewOx = f.offsetX; viewOy = f.offsetY
+        }
         // The pinch painted a band around the fingers; the page is painted whole once, now.
         if hostScrolls { invalidate() }
     }

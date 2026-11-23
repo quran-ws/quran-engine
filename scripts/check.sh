@@ -42,7 +42,7 @@ for check in "$@"; do
       cargo test --workspace --release
       ;;
     gates)
-      step "data gates: identity (8 pages), letter layer, ink and engine (8 pages, with pages-letters/), line shift, zoom control, passages, ABI, conformance, zoom steps, web replays"
+      step "data gates: identity (8 pages), letter layer, ink and engine (8 pages, with pages-letters/), line shift, zoom control, passages, dress fit, ABI, conformance, zoom steps, web replays"
       QVP_REQUIRE_DATA=1 cargo test -p qvp-convert --release --test identity
       # The letter gates need pages-letters/, which only QVP_SYNC=letters fetches. When it
       # is there, a gate that cannot read it fails. QVP_LETTERS_DIR names another copy.
@@ -57,6 +57,7 @@ for check in "$@"; do
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test zoom_control
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test passage
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test malformed
+      QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test dress_fit
       QVP_REQUIRE_DATA=1 cargo test -p qvp-ffi --release --test abi
       scripts/gen-conformance.sh --check
       cargo run -p qvp-convert --release -- zoom-levels dist/pages crates/qvp-core/src/zoom_table.rs --check

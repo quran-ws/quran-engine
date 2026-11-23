@@ -1931,6 +1931,32 @@ mod tests {
     }
 
     #[test]
+    fn a_step_on_a_bordered_page_lands_on_the_new_layout_s_rest() {
+        use crate::{Zoom, ZoomMode};
+        let spec = LayoutSpec { reflow: Some(ReflowSpec { zoom: 0.0, ..Default::default() }), ..tall(true) };
+        let rest = |p: &Page| p.dress_view(0.0, spec.viewport_w).0.scale;
+        let printed = Zoom { mode: ZoomMode::Stepped, step: 0, zoom: 1.0 };
+        for dressed in [true, false] {
+            let (mut p, _, _) = page();
+            if dressed {
+                p.dress(&tiled_set(false), &frame_only()).unwrap();
+            }
+            let at = p.zoom_spec(&spec, printed);
+            p.layout(&at);
+            let start = p.dress_view(0.0, spec.viewport_w).0;
+            assert_eq!(start.scale < 1.0, dressed, "only the border shrinks the printed page");
+            let up = p.zoom_to_step(&spec, printed, 1, start);
+            assert!(up.relaid && p.current_layout().unwrap().is_reflowed());
+            assert!(near(up.view.scale, rest(&p)), "dressed {dressed}: {} vs {}", up.view.scale, rest(&p));
+            let down = p.zoom_to_step(&spec, up.zoom, 0, up.view);
+            assert!(near(down.view.scale, start.scale), "dressed {dressed}: {} vs {}", down.view.scale, start.scale);
+            if !dressed {
+                assert_eq!((up.view.scale, down.view.scale), (1.0, 1.0), "a bare page keeps its view's scale");
+            }
+        }
+    }
+
+    #[test]
     fn the_ink_extent_is_the_curve_s_not_its_control_points() {
         // a quadratic from (0, 0) through the control point (10, 0) to (0, 10): x = 20 t (1 - t)
         let (lo, hi) = ink_x_extent(&[OP_MOVE, OP_QUAD], &[0.0, 0.0, 10.0, 0.0, 0.0, 10.0]);

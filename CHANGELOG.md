@@ -187,6 +187,27 @@ All notable changes to the engine and its packages. The format follows
   once between them, and a hidden path not at all. Now every view draws only what the draw
   list holds.
 
+## [0.9.1] - 2026-11-23
+
+### Fixed
+- A pinch or a step on a page dressed in a border lands on the new layout's resting scale. The
+  printed page rests shrunk so its border fits across the width, and a reflowed page rests at
+  scale 1 because its rows are narrowed instead. The zoom control kept the view's scale across
+  the relayout, so a pinch in drew the reflowed page narrower than the screen and a pinch out
+  cut the printed page's border off (page 584: scale 0.708 carried into a layout that rests at
+  1, and back). The view now keeps its size against the width the page spans. An undressed
+  page rests at scale 1 in every layout and is unchanged.
+- `QvpCanvasController` under `hostScrolls` fits the view once more when a pinch ends, so a
+  pinch lands where a step button does. The last frame of a pinch could be held against a
+  canvas the host had not yet resized for the new layout.
+- `scripts/check.sh gates`, and so CI, runs `crates/qvp-core/tests/dress_fit.rs`, which
+  needs the data release. It skipped in CI before.
+- `QvpCanvasController` under `hostScrolls` paints everything the canvas shows while a pinch
+  runs. The band a pinch paints was held to the scaled content from its origin, so on a page
+  dressed in a border, which rests shrunk with its border's top above that origin, the
+  border's top and the page's bottom went unpainted until the fingers lifted. The band is now
+  held to the canvas's rows instead; an undressed page at rest gets the band it had.
+
 ## [0.9.0] - 2026-11-22
 
 ### Added
@@ -1345,7 +1366,8 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/quran-ws/quran-engine/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/quran-ws/quran-engine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/quran-ws/quran-engine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/quran-ws/quran-engine/compare/v0.6.1...v0.7.0

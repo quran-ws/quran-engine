@@ -48,6 +48,25 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ### Fixed
 
+## [0.9.1] - 2026-11-23
+
+### Fixed
+- A pinch or a step on a page dressed in a border lands on the new layout's resting scale. The
+  printed page rests shrunk so its border fits across the width, and a reflowed page rests at
+  scale 1 because its rows are narrowed instead. The zoom control kept the view's scale across
+  the relayout, so a pinch in drew the reflowed page narrower than the screen and a pinch out
+  cut the printed page's border off (page 584: scale 0.708 carried into a layout that rests at
+  1, and back). The view now keeps its size against the width the page spans. An undressed
+  page rests at scale 1 in every layout and is unchanged.
+- `QvpCanvasController` under `hostScrolls` fits the view once more when a pinch ends, so a
+  pinch lands where a step button does. The last frame of a pinch could be held against a
+  canvas the host had not yet resized for the new layout.
+- `QvpCanvasController` under `hostScrolls` paints everything the canvas shows while a pinch
+  runs. The band a pinch paints was held to the scaled content from its origin, so on a page
+  dressed in a border, which rests shrunk with its border's top above that origin, the
+  border's top and the page's bottom went unpainted until the fingers lifted. The band is now
+  held to the canvas's rows instead; an undressed page at rest gets the band it had.
+
 ## [0.9.0] - 2026-11-22
 
 ### Added
