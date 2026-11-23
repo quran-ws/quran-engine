@@ -24,7 +24,7 @@ The repository holds no data, no font and no key. `build.py` reads these variabl
 |---|---|---|
 | `QVP_PAGES_DIR`, `QVP_LETTERS_DIR` | pages and letter layers from the same build (`docs/DATA.md`) | `dist/pages`, `dist/letters` |
 | `QVP_ORNAMENTS` | an ornament set (`.qvo`) | the set beside the pages, which has ayah markers only |
-| `QVP_FONT_TITLE`, `QVP_FONT_QURAN` | two `.woff2` fonts: the titles, and a word of the Quran outside the page | web fonts |
+| `QVP_FONT_QURAN` | a `.woff2` font for a word of the Quran outside the page | a web font |
 | `QVP_FONT_QPC`, `QVP_SVG_DIR` | QPC page fonts and page SVGs, for the comparison | those two rows show no measure |
 | `QVP_TAJWID` | a file of tajwid rulings | `quran-ws/quran-tajweed` at a fixed commit |
 | `QVP_DEMO_CONFIG`, `QVP_DEMO_OUT` | a config file and an output directory, for a build to share | `config.local.js`, `dist/demo` |

@@ -10,9 +10,8 @@ Inputs: web/qvp.js, web/qvp_ffi.wasm (cargo build for wasm32, then copy), the pa
 dist/pages/ and the letter layers in dist/letters/ (docs/DATA.md). QVP_PAGES_DIR and
 QVP_LETTERS_DIR name other directories, and QVP_ORNAMENTS names an ornament set (.qvo) for
 the dress scene, and QVP_TAJWID a file of tajwid rulings (uthmani-hafs.json of
-quran-tajweed) in the place of the published package. QVP_FONT_TITLE and QVP_FONT_QURAN name two .woff2 files: the typeface of
-the titles, and the typeface for a word of the Quran outside the page. The page falls back
-to web fonts without them. QVP_FONT_QPC names a directory of QPC page fonts, which the
+quran-tajweed) in the place of the published package. QVP_FONT_QURAN names a .woff2 file: the typeface for a word of the Quran
+outside the page. The page falls back to a web font without it. QVP_FONT_QPC names a directory of QPC page fonts, which the
 comparison measures. A layer attaches only to the page file it was built
 with, so take the pages and the layers from the same build. The tajwid and recitation
 scenes need the layers.
@@ -72,10 +71,10 @@ if os.path.lexists(tj):
     os.remove(tj)
 if os.environ.get('QVP_TAJWID'):
     shutil.copy(os.path.expanduser(os.environ['QVP_TAJWID']), tj)
-# The two fonts of this machine. Their licences do not let the repository hold them.
+# The font of this machine for a word of the Quran. The repository does not hold it.
 fonts = os.path.join(out, 'fonts')
 shutil.rmtree(fonts, ignore_errors=True)
-for var, name in (('QVP_FONT_TITLE', 'title.woff2'), ('QVP_FONT_QURAN', 'quran.woff2')):
+for var, name in (('QVP_FONT_QURAN', 'quran.woff2'),):
     if os.environ.get(var):
         os.makedirs(fonts, exist_ok=True)
         shutil.copy(os.path.expanduser(os.environ[var]), os.path.join(fonts, name))
