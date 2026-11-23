@@ -94,7 +94,7 @@ window.DEMO_EN = {
   'إيقاف': 'Stop',
   'مصدر الزخارف: مشروع quran-assets.': 'Ornaments: the quran-assets project.',
   'الرخصة: ': 'Licence: ',
-  'الزخارف منقولة عن مصحف مطبوع، وتصميمها ملك لناشره.': 'The ornaments are traced from a printed mushaf, and their design belongs to its publisher.',
+  'الزخارف منقولة عن مصاحف مجمع الملك فهد لطباعة المصحف الشريف.': 'The ornaments are traced from the mushafs of the King Fahd Complex for the Printing of the Holy Quran.',
   'تجربة بتلاوة مسجّلة': 'Try a recorded recitation',
   'سورة الفاتحة.': 'Surah Al-Fatihah.',
   'تعمل القراءة بالصوت بنموذج TajweedFormer V4 من': 'Recitation by voice uses the TajweedFormer V4 model of',
@@ -132,8 +132,8 @@ window.DEMO_EN = {
 
   // ornaments
   'تغيير زخارف الصفحة': 'Change the ornaments of the page',
-  'يستخدم المحرّك زخارف مصحف آخر مع نص مصحف المدينة: الإطار ورأس السورة وعلامات الآيات، ويضع كل زخرفة في موضعها.':
-    'The engine puts the ornaments of another mushaf on the text of the Madinah mushaf: the border, the surah header and the ayah markers. It sets each ornament in its place.',
+  'يستخدم المحرّك زخارف مصحف آخر من مصاحف مجمع الملك فهد مع نص مصحف المدينة: الإطار ورأس السورة وعلامات الآيات، ويضع كل زخرفة في موضعها.':
+    'The engine puts the ornaments of another mushaf of the King Fahd Complex on the text of the Madinah mushaf: the border, the surah header and the ayah markers. It sets each ornament in its place.',
   'يستخدم المحرّك علامات آيات بتصميم آخر مع نص مصحف المدينة، ويضع كل علامة في موضع العلامة المطبوعة وبحجمها.':
     'The engine puts ayah markers of another design on the text of the Madinah mushaf. It sets each marker in the place and at the size of the printed one.',
   'الرسم': 'Drawing',
