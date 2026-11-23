@@ -105,6 +105,9 @@ class Palette {
 }
 
 /// Mark-category colours (the "Mark colours" theme + legend).
+/// The colours of the letter controls (docs/EXAMPLE-APP.md, feature 12).
+const List<String> kLetterColors = ['#c62828', '#1a73e8', '#0a7d32', '#ef6c00'];
+
 const Map<int, String> kPalette = {
   QvpCategory.harakah: '#1a73e8',
   QvpCategory.tanwin: '#8e24aa',
@@ -229,7 +232,13 @@ class _ReaderPageState extends State<ReaderPage>
       dressFrameScale = 1;
   Set<QvpOrnamentKind> dressLineArt = {};
   List<(int, int, int)> dressColors = [];
-  late final TabController tabs = TabController(length: 9, vsync: this);
+  // ── letters: the optional letter layer NNN.qvl ──
+  bool hasLetterLayer = false, letterEvery = false;
+  String letterTarget = 'word', letterColor = kLetterColors.first;
+  final List<int> letterHandles = [];
+  String letterInfo = '';
+  Offset? tapAt; // where the last tap went up, in the page view's local space
+  late final TabController tabs = TabController(length: 10, vsync: this);
 
   Palette get pal => widget.palette;
 
@@ -247,7 +256,8 @@ class _ReaderPageState extends State<ReaderPage>
       QvpAtlas? a;
       try {
         a = e.loadAtlas(
-          (await rootBundle.load('assets/pages/atlas.qva')).buffer
+          (await rootBundle.load('assets/pages/atlas.qva'))
+              .buffer
               .asUint8List(),
         );
       } catch (_) {
@@ -257,7 +267,8 @@ class _ReaderPageState extends State<ReaderPage>
       QvpOrnaments? o;
       try {
         o = e.loadOrnaments(
-          (await rootBundle.load('assets/pages/ornaments.qvo')).buffer
+          (await rootBundle.load('assets/pages/ornaments.qvo'))
+              .buffer
               .asUint8List(),
         );
       } catch (_) {
@@ -317,6 +328,12 @@ class _ReaderPageState extends State<ReaderPage>
       );
       np.attachWords(json);
     } catch (_) {}
+    // The letter layer is optional. A missing file or a refused attach disables the controls.
+    var letters = false;
+    try {
+      final qvl = await rootBundle.load('assets/pages/${_pad(target)}.qvl');
+      letters = np.attachLetters(qvl.buffer.asUint8List());
+    } catch (_) {}
     loadMs = sw.elapsedMicroseconds / 1000;
     final old = page;
     _stopPlay(notify: false);
@@ -333,6 +350,10 @@ class _ReaderPageState extends State<ReaderPage>
       revealPos = -1;
       tajwidHandle = hideHandle = ayahMarksHandle = 0;
       cropInfo = null;
+      // the rules of the old page go with it
+      hasLetterLayer = letters;
+      letterHandles.clear();
+      letterInfo = '';
       pageCtl.text = '$target';
     });
     if (old != null) {
@@ -546,8 +567,8 @@ class _ReaderPageState extends State<ReaderPage>
   }
 
   void _snack(String s) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(s), duration: const Duration(seconds: 2)),
-  );
+        SnackBar(content: Text(s), duration: const Duration(seconds: 2)),
+      );
 
   // ── copy / crop ──
   Future<void> copy() async {
@@ -595,7 +616,7 @@ class _ReaderPageState extends State<ReaderPage>
       () => cropInfo = svg == null || box == null
           ? 'crop failed'
           : 'SVG ${svg.length} chars · ${svg.substring(0, svg.indexOf('>') + 1).replaceAll(RegExp(r'\s+'), ' ')}\n'
-                'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.ayahMarkDecoration != qvpNone ? ' · ayahMark' : ''}',
+              'box ${box.x0.toStringAsFixed(1)},${box.y0.toStringAsFixed(1)} → ${box.x1.toStringAsFixed(1)},${box.y1.toStringAsFixed(1)} · ${box.nWords} words${box.ayahMarkDecoration != qvpNone ? ' · ayahMark' : ''}',
     );
   }
 
@@ -698,6 +719,8 @@ class _ReaderPageState extends State<ReaderPage>
     hlSel = hlAyah = hlSearch = hlPlay = 0;
     tajwidHandle = hideHandle = ayahMarksHandle = 0;
     pathHandles.clear();
+    letterHandles.clear();
+    letterInfo = '';
     selWord = -1;
     selAyah = null;
     revealOn = false;
@@ -723,8 +746,8 @@ class _ReaderPageState extends State<ReaderPage>
     final t = selAyah != null
         ? T.ayah(selAyah!.$1, selAyah!.$2)
         : selWord >= 0
-        ? T.ayah(p.words[selWord].surah, p.words[selWord].ayah)
-        : T.page();
+            ? T.ayah(p.words[selWord].surah, p.words[selWord].ayah)
+            : T.page();
     p.maskOptions(blockColor: QvpColor.fromColor(pal.line));
     p.mask(t, maskMode);
     setState(() {});
@@ -744,6 +767,85 @@ class _ReaderPageState extends State<ReaderPage>
     } else {
       p.revealStop();
     }
+    setState(() {});
+  }
+
+  // ── letters: the engine finds the letter and its paths. This code only picks the rule. ──
+  bool get _letterTaps => hasLetterLayer && letterTarget != 'word';
+
+  void _letterTap() {
+    final p = page!, at = tapAt;
+    if (at == null) return;
+    final v = view.toView(at);
+    final h = p.hitTestLetterView(
+      v.dx,
+      v.dy,
+      const QvpHitOptions(maxDistance: QvpDefaults.tapDistance),
+    );
+    final l = h == null || h.letter < 0 ? null : p.letter(h.word, h.letter);
+    if (h == null || l == null) {
+      setState(
+        () => letterInfo = h == null
+            ? 'no letter here'
+            : 'a word-level mark of ${h.wordKey}${h.markName.isNotEmpty ? ' (${h.markName})' : ''}',
+      );
+      return;
+    }
+    final onMark = h.isExact && !h.isBody && h.mark != 0;
+    final cp =
+        'U+${l.codePoint.toRadixString(16).toUpperCase().padLeft(4, '0')}';
+    letterInfo =
+        '${l.text} $cp · ${h.wordKey} · letter ${l.index} · at ${l.at} · '
+        '${l.nMarks} mark${l.nMarks == 1 ? '' : 's'}'
+        '${onMark ? ' · ${h.markName}' : ''} · ${h.isExact ? 'exact' : 'near'}';
+    int handle = 0;
+    if (letterTarget == 'letter') {
+      handle = letterEvery
+          ? p.styleLetters(
+              QvpLetterQuery(
+                  text: l.codePoint, part: QvpLetterPart.bodyAndDots),
+              letterColor,
+              ms: 200,
+              layer: QvpLayer.top,
+            )
+          : p.style(
+              Sel.letter(h.word, h.letter, QvpLetterPart.bodyAndDots),
+              letterColor,
+              ms: 200,
+              layer: QvpLayer.top,
+            );
+    } else if (onMark) {
+      handle = letterEvery
+          ? p.styleLetters(
+              QvpLetterQuery(mark: h.mark, part: QvpLetterPart.marks),
+              letterColor,
+              ms: 200,
+              layer: QvpLayer.top,
+            )
+          : p.style(
+              Sel.letterMarkNamed(h.word, h.letter, h.mark),
+              letterColor,
+              ms: 200,
+              layer: QvpLayer.top,
+            );
+    } else if (!letterEvery) {
+      handle = p.style(
+        Sel.letter(h.word, h.letter, QvpLetterPart.marks),
+        letterColor,
+        ms: 200,
+        layer: QvpLayer.top,
+      );
+    }
+    if (handle != 0) letterHandles.add(handle);
+    setState(() {});
+  }
+
+  void clearLetters() {
+    final p = page!;
+    for (final h in letterHandles) {
+      p.removeStyle(h);
+    }
+    letterHandles.clear();
     setState(() {});
   }
 
@@ -781,23 +883,30 @@ class _ReaderPageState extends State<ReaderPage>
         final wide = c.maxWidth >= 800;
         final stage = Container(
           color: pal.bg,
-          child: QvpPageView(
-            key: viewKey,
-            page: p,
-            controller: view,
-            layout: layout,
-            paper: pal.paper,
-            defaultInk: ink,
-            onWordTap: (w, hit) {
-              lastHitUs =
-                  hit.distance; // distance in page units of the gap-aware hit
-              selectWord(w.index);
-            },
-            onDecorationTap: (d, _) {
-              if (d.ayah > 0) selectAyah(d.surah, d.ayah);
-            },
-            onEmptyTap: () => selectWord(-1),
-            onSelectionChanged: _onDragSelection,
+          child: Listener(
+            onPointerUp: (e) => tapAt = e.localPosition,
+            child: QvpPageView(
+              key: viewKey,
+              page: p,
+              controller: view,
+              layout: layout,
+              paper: pal.paper,
+              defaultInk: ink,
+              onWordTap: (w, hit) {
+                lastHitUs =
+                    hit.distance; // distance in page units of the gap-aware hit
+                _letterTaps ? _letterTap() : selectWord(w.index);
+              },
+              onDecorationTap: (d, _) {
+                if (_letterTaps) {
+                  _letterTap();
+                } else if (d.ayah > 0) {
+                  selectAyah(d.surah, d.ayah);
+                }
+              },
+              onEmptyTap: () => _letterTaps ? _letterTap() : selectWord(-1),
+              onSelectionChanged: _onDragSelection,
+            ),
           ),
         );
         final panel = _panel(wide);
@@ -936,11 +1045,13 @@ class _ReaderPageState extends State<ReaderPage>
       ('Dress', _dressSection),
       ('Page', _pageSection),
       ('Engine', _engineSection),
+      ('Letters', _lettersSection),
     ];
     if (wide) {
       return Material(
         color: pal.panel,
         child: ListView(
+          key: const ValueKey('panel'),
           padding: const EdgeInsets.all(12),
           children: [
             for (final s in sections) ...[
@@ -981,17 +1092,17 @@ class _ReaderPageState extends State<ReaderPage>
   }
 
   Widget _h2(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Text(
-      t.toUpperCase(),
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.6,
-        color: pal.muted,
-      ),
-    ),
-  );
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(
+          t.toUpperCase(),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.6,
+            color: pal.muted,
+          ),
+        ),
+      );
   Widget _hint(String t) =>
       Text(t, style: TextStyle(color: pal.muted, fontSize: 12));
   TextStyle get _ar => const TextStyle(fontSize: 26, height: 1.6);
@@ -1454,9 +1565,8 @@ class _ReaderPageState extends State<ReaderPage>
                 max: revealOn && revealStepCount > 0
                     ? (revealStepCount - 1).toDouble()
                     : 0,
-                divisions: revealOn && revealStepCount > 0
-                    ? revealStepCount
-                    : null,
+                divisions:
+                    revealOn && revealStepCount > 0 ? revealStepCount : null,
                 onChanged: revealOn
                     ? (v) {
                         revealPos = v.round();
@@ -1491,27 +1601,28 @@ class _ReaderPageState extends State<ReaderPage>
       int div,
       String text,
       ValueChanged<double> f,
-    ) => Row(
-      children: [
-        SizedBox(
-          width: 84,
-          child: Text(label, style: const TextStyle(fontSize: 12)),
-        ),
-        Expanded(
-          child: Slider(
-            value: v,
-            min: min,
-            max: max,
-            divisions: div,
-            onChanged: f,
-          ),
-        ),
-        SizedBox(
-          width: 44,
-          child: Text(text, style: const TextStyle(fontSize: 12)),
-        ),
-      ],
-    );
+    ) =>
+        Row(
+          children: [
+            SizedBox(
+              width: 84,
+              child: Text(label, style: const TextStyle(fontSize: 12)),
+            ),
+            Expanded(
+              child: Slider(
+                value: v,
+                min: min,
+                max: max,
+                divisions: div,
+                onChanged: f,
+              ),
+            ),
+            SizedBox(
+              width: 44,
+              child: Text(text, style: const TextStyle(fontSize: 12)),
+            ),
+          ],
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1609,8 +1720,7 @@ class _ReaderPageState extends State<ReaderPage>
     final chosen = [
       for (final i in picks.values) i == null ? null : set.list[i].style,
     ];
-    final same =
-        chosen.every((s) => s == chosen.first) &&
+    final same = chosen.every((s) => s == chosen.first) &&
         (chosen.first == null || presets.any((s) => s.style == chosen.first));
     final styleValue = same ? chosen.first : 'mixed';
 
@@ -1626,22 +1736,23 @@ class _ReaderPageState extends State<ReaderPage>
       V value,
       List<DropdownMenuItem<V>> items,
       ValueChanged<V?> f,
-    ) => Row(
-      children: [
-        SizedBox(
-          width: 84,
-          child: Text(text, style: const TextStyle(fontSize: 12)),
-        ),
-        Expanded(
-          child: DropdownButton<V>(
-            isExpanded: true,
-            value: value,
-            items: items,
-            onChanged: f,
-          ),
-        ),
-      ],
-    );
+    ) =>
+        Row(
+          children: [
+            SizedBox(
+              width: 84,
+              child: Text(text, style: const TextStyle(fontSize: 12)),
+            ),
+            Expanded(
+              child: DropdownButton<V>(
+                isExpanded: true,
+                value: value,
+                items: items,
+                onChanged: f,
+              ),
+            ),
+          ],
+        );
     Widget slider(
       String text,
       double v,
@@ -1650,27 +1761,28 @@ class _ReaderPageState extends State<ReaderPage>
       int div,
       String shown,
       ValueChanged<double> f,
-    ) => Row(
-      children: [
-        SizedBox(
-          width: 84,
-          child: Text(text, style: const TextStyle(fontSize: 12)),
-        ),
-        Expanded(
-          child: Slider(
-            value: v,
-            min: min,
-            max: max,
-            divisions: div,
-            onChanged: f,
-          ),
-        ),
-        SizedBox(
-          width: 76,
-          child: Text(shown, style: const TextStyle(fontSize: 12)),
-        ),
-      ],
-    );
+    ) =>
+        Row(
+          children: [
+            SizedBox(
+              width: 84,
+              child: Text(text, style: const TextStyle(fontSize: 12)),
+            ),
+            Expanded(
+              child: Slider(
+                value: v,
+                min: min,
+                max: max,
+                divisions: div,
+                onChanged: f,
+              ),
+            ),
+            SizedBox(
+              width: 76,
+              child: Text(shown, style: const TextStyle(fontSize: 12)),
+            ),
+          ],
+        );
 
     // One colour well per part of each chosen ornament. A kind drawn as line art has one ink.
     final wells = <Widget>[];
@@ -1748,13 +1860,8 @@ class _ReaderPageState extends State<ReaderPage>
     } else if (info == null) {
       readout = 'the engine refused that dress';
     } else {
-      readout =
-          '${info.ayahMarks} medallions · ${info.surahHeaders} band(s) · '
-          '${info.pageFrame == null
-              ? 'no border'
-              : info.frameStretched
-              ? 'the whole frame is stretched (no slices)'
-              : '${info.frameRepeats} border repeats tiled to this page'}'
+      readout = '${info.ayahMarks} medallions · ${info.surahHeaders} band(s) · '
+          '${info.pageFrame == null ? 'no border' : info.frameStretched ? 'the whole frame is stretched (no slices)' : '${info.frameRepeats} border repeats tiled to this page'}'
           '\nviewBox ${info.viewBox.map((v) => v.toStringAsFixed(1)).join(' ')}';
       for (final i in picks.values) {
         if (i == null) continue;
@@ -1788,19 +1895,23 @@ class _ReaderPageState extends State<ReaderPage>
           },
         ),
         for (final k in QvpOrnamentKind.values)
-          dropdown<int?>(_kindLabel[k]!, picks[k], [
-            DropdownMenuItem(
-              value: null,
-              child: Text(
-                k == QvpOrnamentKind.pageFrame ? 'none' : 'as printed',
-              ),
-            ),
-            for (final o in set.ofKind(k))
-              DropdownMenuItem(
-                value: o.index,
-                child: Text(label(o), overflow: TextOverflow.ellipsis),
-              ),
-          ], (v) => pick(k, v)),
+          dropdown<int?>(
+              _kindLabel[k]!,
+              picks[k],
+              [
+                DropdownMenuItem(
+                  value: null,
+                  child: Text(
+                    k == QvpOrnamentKind.pageFrame ? 'none' : 'as printed',
+                  ),
+                ),
+                for (final o in set.ofKind(k))
+                  DropdownMenuItem(
+                    value: o.index,
+                    child: Text(label(o), overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              (v) => pick(k, v)),
         Wrap(
           spacing: 6,
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -1916,6 +2027,65 @@ class _ReaderPageState extends State<ReaderPage>
     }
     t += '\nayahs: ${p.ayahKeys().map((k) => '${k.$1}:${k.$2}').join(' ')}';
     return _hint(t);
+  }
+
+  // ── Letters ──
+  Widget _lettersSection() {
+    final on = hasLetterLayer;
+    return Column(
+      key: const ValueKey('letters'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'word', label: Text('word')),
+            ButtonSegment(value: 'letter', label: Text('letter')),
+            ButtonSegment(value: 'mark', label: Text('mark')),
+          ],
+          selected: {letterTarget},
+          showSelectedIcon: false,
+          onSelectionChanged:
+              on ? (v) => setState(() => letterTarget = v.single) : null,
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final c in kLetterColors)
+              InkWell(
+                onTap: on ? () => setState(() => letterColor = c) : null,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: QvpColor.toColor(rgba(c, on ? 1 : 0.35)),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: letterColor == c
+                          ? Theme.of(context).colorScheme.primary
+                          : pal.line,
+                      width: letterColor == c ? 2 : 1,
+                    ),
+                  ),
+                ),
+              ),
+            FilterChip(
+              label: const Text('every match on the page'),
+              selected: letterEvery,
+              onSelected: on ? (v) => setState(() => letterEvery = v) : null,
+            ),
+            ActionChip(
+              label: const Text('clear letters'),
+              onPressed: on ? clearLetters : null,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _hint(on ? letterInfo : 'no letter layer for this page'),
+      ],
+    );
   }
 
   // ── Engine HUD ──

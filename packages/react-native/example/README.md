@@ -12,12 +12,19 @@ page metadata and engine stats, and a dress panel: a mushaf preset, a picker for
 art per kind, gap, band gap, medallion and border size, a colour well for each part, "As printed",
 and the engine's readout with each ornament's licence.
 
+The Letters panel colours single letters and marks (`docs/EXAMPLE-APP.md`, feature 12). Pick
+what a tap colours (word, letter or mark), one of four colours, and "Every match" to colour each
+letter or mark of the page that is the same. "Clear letters" removes the letter rules. A line
+shows the last hit. The view attaches `NNN.qvl` from the pages folder. When the page has no
+letter layer, or the engine refuses it, the controls are disabled.
+
 ## Data
 
 The package ships no page data. The example copies a subset from `dist/pages` (built by
 `cargo run -p qvp-convert --release -- batch pages dist/pages` at the repo root) into
 `android/app/src/main/assets/pages/` and `ios/QvpExample/pages/` (both gitignored): pages 001–021, 440–445, 582, 604 (`.qvp` +
-`.words.json`), `atlas.qva` and `ornaments.qvo` when the release has one.
+`.words.json`, and `.qvl` when `dist/letters` has the page's letter layer), `atlas.qva` and
+`ornaments.qvo` when the release has one.
 `scripts/sync-example-data.sh react-native` copies them to both. The iOS project bundles
 `ios/QvpExample/pages` as a folder, so `asset://pages/001.qvp` names the same file on both
 platforms. The dress panel works without the ornament set.
@@ -76,3 +83,4 @@ after an `npm install` there, and two copies of React break every hook.
 
 `npm test` runs Jest. `jest/qvpModule.js` stands in for the native module, so the tests check
 what the JavaScript side sends and reads back. `__tests__/dress.test.tsx` covers the dress calls.
+`__tests__/letterControls.test.tsx` covers the Letters panel, with a layer and without one.

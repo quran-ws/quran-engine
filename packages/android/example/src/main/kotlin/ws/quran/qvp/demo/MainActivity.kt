@@ -91,9 +91,24 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dressInfo: TextView
     private lateinit var dressMarkSlider: Slider
     private lateinit var dressMarkValue: TextView
+
+    // letters: what a tap colours, in which colour, and the handle of each rule it added
+    private var letterTarget = LetterTarget.WORD
+    private var letterColor = LETTER_COLORS[0]
+    private var letterEvery = false
+    private val letterHandles = ArrayList<Int>()
+    private val letterControls = ArrayList<View>()
+    private lateinit var letterInfo: TextView
+    /** Where the last finger went down, in view px: the letter hit test reads this point. */
+    private var tapX = 0f; private var tapY = 0f
     private val themes = mapOf("light" to Triple(0x231f20ff.toInt(), 0xFFFFFDF7.toInt(), 0xFFF6F1E7.toInt()), "sepia" to Triple(0x3b2a14ff.toInt(), 0xFFF3E7CF.toInt(), 0xFFE9DCC3.toInt()), "dark" to Triple(0xe8e4dcff.toInt(), 0xFF1E2126.toInt(), 0xFF15171B.toInt()))
     private val d get() = resources.displayMetrics.density
-    private companion object { const val KEY_PAGE = "page"; const val KEY_SHEET = "sheet" }
+    private enum class LetterTarget { WORD, LETTER, MARK }
+    private companion object {
+        const val KEY_PAGE = "page"; const val KEY_SHEET = "sheet"
+        /** The letter colours of docs/EXAMPLE-APP.md, feature 12, as RGBA. */
+        val LETTER_COLORS = intArrayOf(0xc62828ff.toInt(), 0x1a73e8ff, 0x0a7d32ff, 0xef6c00ff.toInt())
+    }
     private fun dp(v: Int) = (v * d).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,9 +153,11 @@ class MainActivity : AppCompatActivity() {
         // the page: everything under the app bar, with the sheet floating over it
         view = QvpPageView(this).apply {
             padTop = dp(12).toFloat(); padBottom = dp(12).toFloat(); padSide = dp(8).toFloat()
-            onWordTap = { w, _ -> selectWord(w.index) }
-            onDecorationTap = { dec, _ -> if (dec.ayah != 0) selectAyah(dec.surah, dec.ayah) }
-            onEmptyTap = { if (!chromeOn) setChrome(true) else selectWord(-1) }
+            onWordTap = { w, _ -> if (letterMode()) letterTap() else selectWord(w.index) }
+            onDecorationTap = { dec, _ -> if (letterMode()) letterTap() else if (dec.ayah != 0) selectAyah(dec.surah, dec.ayah) }
+            onEmptyTap = { if (!chromeOn) setChrome(true) else if (letterMode()) letterTap() else selectWord(-1) }
+            // only note where the finger went. The view still handles every gesture.
+            setOnTouchListener { _, e -> if (e.actionMasked == android.view.MotionEvent.ACTION_DOWN) { tapX = e.x; tapY = e.y }; false }
             onSelectionChanged = { showSelection() }
             // a sideways flick on a page with no sideways travel turns it: the engine says when
             onSwipe = { pages -> stepPage(pages) }
@@ -267,6 +284,10 @@ class MainActivity : AppCompatActivity() {
             toggleButton("Fill screen height") { view.fillHeight = it; view.relayout(); view.resetView(); hud() },
             textButton("Leading to fill") { page?.let { p -> view.fillHeight = false; view.lineSpacing = p.layoutLineSpacingToFill(view.layoutSpec()); view.relayout(); view.resetView(); hud() } }))
         panel.addSpaced(hint("Leading only grows \u2014 the printed lineSpacing is the floor, so the lines never close up \u2014 and the text width is always the screen's."))
+
+        // letters
+        panel.addSpaced(divider()); panel.addSpaced(section("Letters"))
+        buildLetterPanel(panel)
 
         panel.addSpaced(divider()); panel.addSpaced(section("Page")); meta = body(""); panel.addSpaced(meta)
         panel.addSpaced(divider()); panel.addSpaced(section("Engine")); hud = body("").apply { typeface = Typeface.MONOSPACE; textSize = 10.5f }; panel.addSpaced(hud)
@@ -635,6 +656,98 @@ class MainActivity : AppCompatActivity() {
         return Triple(r, s, v)
     }
 
+    // ---- letters: colour single letters and marks (docs/EXAMPLE-APP.md, feature 12) -------
+    // The engine finds the letter under the finger and the paths of each rule. This panel only
+    // says which rule to add.
+
+    private fun buildLetterPanel(panel: LinearLayout) {
+        val targets = MaterialButtonToggleGroup(this).apply { isSingleSelection = true; isSelectionRequired = true }
+        LetterTarget.entries.forEach { t ->
+            val b = segButton(t.name.lowercase()) { letterTarget = t }.apply { id = View.generateViewId() }
+            targets.addView(b); letterControls.add(b)
+        }
+        targets.check(targets.getChildAt(0).id)
+        panel.addSpaced(row(body("Tap"), targets))
+
+        val colours = ChipGroup(this).apply { isSingleSelection = true; isSelectionRequired = true; isSingleLine = true }
+        LETTER_COLORS.forEach { c ->
+            val chip = Chip(this).apply {
+                id = View.generateViewId()
+                text = "#%06X".format(c ushr 8); isCheckable = true; isChecked = c == letterColor
+                chipIcon = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(QvpColor.argb(c)); setStroke(dp(1), Color.GRAY) }
+                isChipIconVisible = true
+                setOnCheckedChangeListener { _, on -> if (on) letterColor = c }
+            }
+            colours.addView(chip); letterControls.add(chip)
+        }
+        panel.addSpaced(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(colours) })
+
+        val every = toggleButton("Every match on the page") { letterEvery = it }
+        val clear = textButton("Clear letters") { clearLetters() }
+        letterControls.add(every); letterControls.add(clear)
+        panel.addSpaced(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(row(every, clear)) })
+
+        letterInfo = body("")
+        panel.addSpaced(letterInfo)
+    }
+
+    /** Attach the page's letter layer, NNN.qvl, when the example has it. The engine refuses a
+     * layer of another page file, and then the page has none. */
+    private fun attachLetters(p: QvpPage, name: String) {
+        val bytes = runCatching { assets.open("pages/$name.qvl").use { it.readBytes() } }.getOrNull() ?: return
+        p.attachLetters(bytes)
+    }
+
+    /** A tap colours letters only when the reader asked for it and the page has a layer. */
+    private fun letterMode() = letterTarget != LetterTarget.WORD && page?.hasLetters() == true
+
+    /** Enable the controls when the page has a layer, and show the last hit. */
+    private fun showLetters(text: String?) {
+        val on = page?.hasLetters() == true
+        letterControls.forEach { it.isEnabled = on }
+        letterInfo.text = if (!on) "no letter layer for this page" else text ?: "tap a letter or a mark"
+    }
+
+    /** Colour what the tap hit, as feature 12 says. Each tap adds at most one rule. */
+    private fun letterTap() {
+        val p = page ?: return
+        val hit = view.letterAt(tapX, tapY)
+        val letter = hit?.takeIf { it.letter >= 0 }?.let { p.letter(it.word, it.letter) }
+        if (hit == null || letter == null) {
+            showLetters(if (hit == null) "no letter here" else "a word-level mark (${hit.markName}) of ${p.words[hit.word].wordKey}: no letter")
+            return
+        }
+        // a tap on the ink of a mark. Each other hit with a letter counts as a tap on the body
+        val onMark = hit.isExact && !hit.isBody && hit.mark != 0
+        val layer = QvpLayer.TOP
+        val handle = when (letterTarget) {
+            LetterTarget.LETTER ->
+                if (letterEvery) p.styleLetters(QvpLetterQuery(Target.page(), letter.text, part = QvpLetterPart.BODY_AND_DOTS), letterColor, 200, layer)
+                else p.style(Selector.letter(hit.word, hit.letter, QvpLetterPart.BODY_AND_DOTS), letterColor, 200, layer)
+            LetterTarget.MARK -> when {
+                letterEvery && onMark -> p.styleLetters(QvpLetterQuery(Target.page(), mark = hit.mark, part = QvpLetterPart.MARKS), letterColor, 200, layer)
+                letterEvery -> 0
+                onMark -> p.style(Selector.letterMarkNamed(hit.word, hit.letter, hit.mark), letterColor, 200, layer)
+                else -> p.style(Selector.letter(hit.word, hit.letter, QvpLetterPart.MARKS), letterColor, 200, layer)
+            }
+            LetterTarget.WORD -> 0
+        }
+        if (handle != 0) letterHandles.add(handle)
+        showLetters(buildString {
+            append("${letter.text} U+%04X · word ${p.words[hit.word].wordKey} · letter ${letter.index} · offset ${letter.at} · ${letter.nMarks} marks".format(letter.codePoint))
+            if (onMark) append(" · mark ${hit.markName}")
+            append(if (hit.isExact) " · exact" else " · near")
+        })
+        view.invalidate()
+    }
+
+    /** Remove the letter rules alone: every other style of the page stays. */
+    private fun clearLetters() {
+        val p = page ?: return
+        letterHandles.forEach { p.removeStyle(it) }; letterHandles.clear()
+        showLetters(null); view.invalidate()
+    }
+
     private fun stepPage(dir: Int) {
         val i = pages.indexOf(pageNo)
         pages.getOrNull(i + dir)?.let { turnDir = dir; loadPage(it) }
@@ -661,6 +774,7 @@ class MainActivity : AppCompatActivity() {
             val p = runCatching { QvpPage(bytes) }.getOrNull() ?: return@Thread
             val ms = (System.nanoTime() - t0) / 1e6
             runCatching { p.attachWords(assets.open("pages/$name.words.json").readBytes()) }
+            attachLetters(p, name)
             runOnUiThread {
                 // another turn may have overtaken this one while it loaded, or the screen itself
                 // may be gone: switching paper between day and night builds the activity again
@@ -691,6 +805,7 @@ class MainActivity : AppCompatActivity() {
             Thread {
                 val p = runCatching { QvpPage(assets.open("pages/$name.qvp").readBytes()) }.getOrNull()
                 runCatching { p?.attachWords(assets.open("pages/$name.words.json").readBytes()) }
+                p?.let { attachLetters(it, name) }
                 runOnUiThread {
                     if (isFinishing || isDestroyed) { p?.close(); return@runOnUiThread }
                     if (p == null) { ready.remove(n); return@runOnUiThread }
@@ -708,6 +823,7 @@ class MainActivity : AppCompatActivity() {
         p.setDefaultColor(themes[theme]!!.first)
         view.page = p
         applyDress()
+        letterHandles.clear(); showLetters(null)
         showSelection(); showMeta(); runSearch()
         slideIn(); prepareNeighbours()
     }
@@ -804,7 +920,7 @@ class MainActivity : AppCompatActivity() {
     private fun clearAll() {
         val p = page ?: return
         p.clearStyles(); p.clearHighlights(); p.unmask(); p.revealStop(); view.clearSelection()
-        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajwid = 0; hideMarksH = 0; ayahMarksH = 0; pathHandles.clear(); selWordIdx = -1; selAyah = null; revealOn = false; revealSeek.isEnabled = false
+        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajwid = 0; hideMarksH = 0; ayahMarksH = 0; pathHandles.clear(); letterHandles.clear(); selWordIdx = -1; selAyah = null; revealOn = false; revealSeek.isEnabled = false
         searchField.setText(""); stopPlay(); showSelection(); view.invalidate()
     }
     private fun startPlay() {

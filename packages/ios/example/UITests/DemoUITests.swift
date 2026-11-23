@@ -1,6 +1,6 @@
 // Gesture checks against the running demo: tap → word highlight (exposed as the page's accessibility
 // value), tap on empty paper → cleared, pinch → zoom (the engine stats keep reporting), search sheet,
-// fill-screen mode hides the bars behind a floating button. Run:
+// fill-screen mode hides the bars behind a floating button, the letter controls. Run:
 //   xcodebuild test -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:DemoUITests
 import XCTest
 
@@ -65,6 +65,27 @@ final class DemoUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Page 441 · Juz 22"].waitForExistence(timeout: 5), "swipe right did not flip to page 441")
         app.otherElements["qvpPage"].swipeLeft()
         XCTAssertTrue(app.staticTexts["Page 440 · Juz 22"].waitForExistence(timeout: 5), "swipe left did not flip back")
+    }
+
+    /// Feature 12. With a letter layer, a tap in letter mode shows the letter it hit and selects
+    /// no word. With none (the CI data), the letter controls are disabled and say so.
+    func testLetterControls() {
+        let app = launch(["-qvpLetters", "1"])
+        let bar = app.staticTexts["letterBar"]
+        if bar.waitForExistence(timeout: 3) {
+            app.otherElements["qvpPage"].coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.40)).tap()
+            let t0 = Date()
+            while Date().timeIntervalSince(t0) < 5 && !bar.label.contains("U+") { usleep(200_000) }
+            XCTAssertTrue(bar.label.contains("U+"), "a letter tap did not show its letter: \(bar.label)")
+            XCTAssertTrue(pageValue(app).isEmpty, "a letter tap selected a word: \(pageValue(app))")
+        } else {
+            app.buttons["Settings"].tap()
+            let info = app.staticTexts["letterInfo"]
+            for _ in 0..<4 where !info.exists { app.swipeUp() }
+            XCTAssertTrue(info.waitForExistence(timeout: 5))
+            XCTAssertEqual(info.label, "no letter layer for this page")
+            XCTAssertFalse(app.buttons["Clear letters"].isEnabled, "the letter controls should be disabled without a layer")
+        }
     }
 
     func testSearchSheetFindsWords() {

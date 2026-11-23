@@ -309,6 +309,14 @@ class QvpPageView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         lastHitUs = (System.nanoTime() - t0) / 1000.0
         return h
     }
+    /** The letter or the mark under a point of this view, through the reader's pan and zoom
+     * and the layout: [QvpPage.hitTestLetterView]. Null with no letter layer. [o] defaults to
+     * [hitOptions]. */
+    fun letterAt(x: Float, y: Float, o: QvpHitOptions? = null): QvpLetterHit? {
+        val p = page ?: return null
+        val (lx, ly) = p.viewToLayout(currentView, x, y)
+        return p.hitTestLetterView(lx, ly, o ?: hitOptions)
+    }
     private fun extendSelection(x: Float, y: Float) {
         val p = page ?: return
         val (lx, ly) = p.viewToLayout(currentView, x, y)

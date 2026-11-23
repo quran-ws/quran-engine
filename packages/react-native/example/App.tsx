@@ -6,8 +6,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
-  QvpPageView, QvpAtlas, QvpOrnaments, Qvp, useQvp, Sel, T, KIND, DECORATION, LAYER, DEFAULTS, rgba,
-  type Dress, type DressInfo, type Ornament, type OrnamentKind,
+  QvpPageView, QvpAtlas, QvpOrnaments, Qvp, useQvp, Sel, T, KIND, DECORATION, LAYER, LETTER_PART, DEFAULTS, rgba,
+  type Dress, type LetterHit, type DressInfo, type Ornament, type OrnamentKind,
   type Word, type Deco, type Highlight, type StyleRule, type Theme, type Mask, type Reveal, type Match, type SelectionInfo, type PageInfo, type Stats, type HighlightMode, type Selector,
 } from '@quran.ws/qvp-react-native';
 
@@ -24,14 +24,18 @@ const DRESS_KINDS = [['ayah_mark', 'ayahMark', 'medallion'], ['surah_header', 's
 type DressKey = (typeof DRESS_KINDS)[number][1];
 /** A colour well has no native picker here: a tap steps through these, then back to the design's own. */
 const WELL_COLORS = ['#b8860b', '#1a73e8', '#0a7d32', '#c62828', '#7b1fa2', '#231f20'];
+/** Feature 12 of docs/EXAMPLE-APP.md: what a tap colours, and the four colours of a letter rule. */
+type TapTarget = 'word' | 'letter' | 'mark';
+const LETTER_COLORS = ['#c62828', '#1a73e8', '#0a7d32', '#ef6c00'];
+const NO_LETTERS = 'no letter layer for this page';
 const partColor = (rgbaValue: number) => '#' + (rgbaValue >>> 8).toString(16).padStart(6, '0');
 
 // ── tiny UI atoms ──
 const FgCtx = React.createContext('#444');
-function Btn({ label, on, onPress, small }: { label: string; on?: boolean; onPress: () => void; small?: boolean }) {
+function Btn({ label, on, onPress, small, disabled }: { label: string; on?: boolean; onPress: () => void; small?: boolean; disabled?: boolean }) {
   const fg = React.useContext(FgCtx);
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [st.btn, small && st.btnSmall, on && st.btnOn, pressed && { opacity: 0.6 }]}>
+    <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [st.btn, small && st.btnSmall, on && st.btnOn, pressed && { opacity: 0.6 }, disabled && { opacity: 0.35 }]}>
       <Text style={[st.btnText, { color: fg }, small && { fontSize: 11 }, on && { color: '#fff' }]}>{label}</Text>
     </Pressable>
   );
@@ -107,6 +111,17 @@ function Demo() {
   const [lineArt, setLineArt] = useState<OrnamentKind[]>([]);
   const [dressColors, setDressColors] = useState<[number, number, string][]>([]);
   const [dressInfo, setDressInfo] = useState<DressInfo | null>(null);
+  // letters: the tap target, the colour, "every match", the rules each tap adds, and the last hit
+  const [hasLetters, setHasLetters] = useState(false);
+  const [tapTarget, setTapTarget] = useState<TapTarget>('word');
+  const [letterColor, setLetterColor] = useState(LETTER_COLORS[0]);
+  const [everyMatch, setEveryMatch] = useState(false);
+  const [letterRules, setLetterRules] = useState<StyleRule[]>([]);
+  const [letterLine, setLetterLine] = useState(NO_LETTERS);
+  const letterRuleNo = useRef(0);
+  const shownPage = useRef(PAGES[0]);
+  // The native view sends no point with a tap, so the example keeps the last touch point (view dp).
+  const touchAt = useRef<{ x: number; y: number } | null>(null);
   const pendingAyah = useRef<[number, number] | null>(null);
   const pageViewH = useRef(0);
   const th = THEMES[theme];
@@ -120,7 +135,9 @@ function Demo() {
   // ── page navigation (atlas) ──
   const loadPage = (n: number) => {
     const target = PAGES.includes(n) ? n : PAGES.reduce((a, b) => (Math.abs(b - n) < Math.abs(a - n) ? b : a));
-    setPageNo(target); setPageField(String(target));
+    // the letter rules belong to the page in view: drop them before the next page takes the styles
+    if (target !== shownPage.current) { setLetterRules([]); setHasLetters(false); setLetterLine(NO_LETTERS); }
+    shownPage.current = target; setPageNo(target); setPageField(String(target));
   };
   const stepPage = (d: number) => { const i = PAGES.indexOf(pageNo); if (PAGES[i + d] != null) loadPage(PAGES[i + d]); };
   const goto = async (s: string) => {
@@ -143,6 +160,34 @@ function Demo() {
     setAyahInfo({ text, ...wc });
   }, [qvp]);
 
+  // ── letters (feature 12): the engine hit-tests the letter, and the example picks the rule ──
+  const letterTap = async () => {
+    const pt = touchAt.current;
+    if (!hasLetters || !pt) return;
+    const hit: LetterHit | null = await qvp.hitTestLetterView(pt.x, pt.y).catch(() => null);
+    if (!hit || hit.letter < 0) { setLetterLine(hit ? 'a word-level mark: no letter' : 'no letter here'); return; }
+    const [letters, word] = await Promise.all([qvp.letters(hit.word), qvp.word(hit.word)]);
+    const l = letters[hit.letter];
+    if (!l) return;
+    // a tap on the ink of a mark member hits a mark. A body or a near hit counts as the letter.
+    const onMark = hit.isExact && !hit.isBody && hit.mark !== 0;
+    const mark = hit.markName || hit.mark;
+    const code = 'U+' + l.codePoint.toString(16).toUpperCase().padStart(4, '0');
+    setLetterLine(`${l.text} ${code} · ${word?.wordKey ?? hit.word} · letter ${l.index} · offset ${l.at} · ${l.nMarks} marks` +
+      (onMark ? ` · ${mark}` : '') + (hit.isExact ? ' · exact' : ' · near'));
+    let rule: Omit<StyleRule, 'id'> | null = null;
+    if (tapTarget === 'letter') {
+      rule = everyMatch ? { letters: { scope: 'page', text: l.text, part: LETTER_PART.BODY_AND_DOTS } } : { selector: Sel.letter(hit.word, hit.letter, LETTER_PART.BODY_AND_DOTS) };
+    } else if (onMark) {
+      rule = everyMatch ? { letters: { scope: 'page', mark, part: LETTER_PART.MARKS } } : { selector: Sel.letterMarkNamed(hit.word, hit.letter, mark) };
+    } else if (!everyMatch) {
+      rule = { selector: Sel.letter(hit.word, hit.letter, LETTER_PART.MARKS) };
+    }
+    if (rule) { const r = rule; setLetterRules(prev => [...prev, { id: `letter:${++letterRuleNo.current}`, ...r, color: letterColor, ms: 200, layer: LAYER.TOP }]); }
+  };
+  // In letter and mark mode a tap goes to the letter hit test, not to the word.
+  const lettersTakeTap = hasLetters && tapTarget !== 'word';
+
   const onPageLoad = useCallback(async (e: PageInfo) => {
     setInfo(e); setSelWord(null); setSelAyah(null); setAyahInfo(null); setSelection(null); setPathOn(new Map()); setRevealOn(false); setRevealAt(-1); setMask(null);
     const [surahs, divisions, keys] = await Promise.all([qvp.surahs(), qvp.divisions(), qvp.ayahKeys()]);
@@ -151,6 +196,11 @@ function Demo() {
     if (atlas && keys.length) { const j = await atlas.juzOf(keys[0].surah, keys[0].ayah); if (j) { const pr = await atlas.pagesOfJuz(j); t += `\njuz ${j} · pages ${pr ? pr.join('–') : ''}`; } }
     t += '\nayahs: ' + keys.map(k => k.ayahKey).join(' ');
     setMeta(t);
+    // The view attaches NNN.qvl before it reports the load. A missing or refused layer leaves none.
+    setLetterRules([]);
+    const letters = await qvp.hasLetters().catch(() => false);
+    setHasLetters(letters); setLetterLine(letters ? 'tap a letter or a mark' : NO_LETTERS);
+    if (!letters) setTapTarget('word');
     if (query.trim()) setMatches(await qvp.search(query.trim()));
     if (pendingAyah.current) { const [s, a] = pendingAyah.current; pendingAyah.current = null; selectAyah(s, a); }
     if (playing) setPlayIdx(0);
@@ -191,8 +241,9 @@ function Demo() {
     if (hideMarks) out.push({ id: 'hide-marks', selector: Sel.kind(KIND.MARK), hide: true });
     if (gold) out.push({ id: 'ayahMarks', selector: Sel.decoration(DECORATION.AYAH_MARK), color: '#b8860b', ms: 300, layer: LAYER.THEME + 1 });
     for (const [i, selector] of pathOn) out.push({ id: `path:${i}`, selector, color: '#ef6c00', ms: 200, layer: LAYER.TOP });
+    out.push(...letterRules);
     return out;
-  }, [hideMarks, gold, pathOn]);
+  }, [hideMarks, gold, pathOn, letterRules]);
   const markTheme = useMemo<Theme | null>(() => (tajwid ? { diacritics: '#1a73e8', dots: '#c62828', waqf: '#0a7d32', sifr: '#ef6c00', ms: 200 } : null), [tajwid]);
   const reveal = useMemo<Reveal | null>(() => (revealOn ? { lit: 2, grey: theme === 'dark' ? '#4a4f57' : '#c9c4b8', ink: th.ink, ms: 150, at: revealPosition } : null), [revealOn, revealPosition, theme, th.ink]);
   const dress = useMemo<Dress | null>(() => {
@@ -294,15 +345,17 @@ function Demo() {
         onLayout={e => (pageViewH.current = e.nativeEvent.layout.height)}
         pageUri={`asset://pages/${pad3(pageNo)}.qvp`}
         wordsUri={`asset://pages/${pad3(pageNo)}.words.json`}
+        lettersUri={`asset://pages/${pad3(pageNo)}.qvl`}
         padTop={padTop} padBottom={padBottom} padSide={8}
         lineSpacing={lineSpacing} fillHeight={fillHeight}
         paperColor={th.paper} defaultInk={th.ink}
         theme={markTheme} styles={styles} highlights={highlights} mask={mask} reveal={reveal} dress={dress}
         onDressChanged={e => setDressInfo(e.info)}
         onPageLoad={onPageLoad}
-        onWordTap={e => selectWord(e.word)}
-        onDecorationTap={(e: { decoration: Deco }) => { if (e.decoration.ayah) selectAyah(e.decoration.surah, e.decoration.ayah); }}
-        onEmptyTap={() => selectWord(null)}
+        onTouchStart={e => (touchAt.current = { x: e.nativeEvent.locationX, y: e.nativeEvent.locationY })}
+        onWordTap={e => (lettersTakeTap ? letterTap() : selectWord(e.word))}
+        onDecorationTap={(e: { decoration: Deco }) => { if (lettersTakeTap) letterTap(); else if (e.decoration.ayah) selectAyah(e.decoration.surah, e.decoration.ayah); }}
+        onEmptyTap={() => (lettersTakeTap ? letterTap() : selectWord(null))}
         onSelectionChanged={e => { setSelection(e); if (e.words.length > 1) { setSelWord(null); setSelAyah(null); setAyahInfo(null); } }}
         onRevealChanged={e => setRevealSteps(e.steps)}
         onError={e => flash('error: ' + e.message)}
@@ -350,6 +403,22 @@ function Demo() {
           {(Object.keys(THEMES) as ThemeName[]).map(t => <Btn key={t} small label={t} on={theme === t} onPress={() => setTheme(t)} />)}
           <Btn label="Clear all" onPress={clearAll} />
         </View>
+
+        <Section title="Letters" fg={th.fg} />
+        <View style={st.row}>
+          <Text style={[st.small, { color: th.fg }]}>tap </Text>
+          {(['word', 'letter', 'mark'] as TapTarget[]).map(t => <Btn key={t} small label={t} on={tapTarget === t} disabled={!hasLetters} onPress={() => setTapTarget(t)} />)}
+          {LETTER_COLORS.map(c => (
+            <Pressable key={c} accessibilityLabel={`letter colour ${c}`} disabled={!hasLetters} onPress={() => setLetterColor(c)} style={[st.well, !hasLetters && { opacity: 0.35 }]}>
+              <View style={[st.wellSwatch, { backgroundColor: c, borderColor: letterColor === c ? th.fg : th.line, borderWidth: letterColor === c ? 2 : 1 }]} />
+            </Pressable>
+          ))}
+        </View>
+        <View style={st.row}>
+          <Btn label="Every match" on={everyMatch} disabled={!hasLetters} onPress={() => setEveryMatch(!everyMatch)} />
+          <Btn label="Clear letters" disabled={!hasLetters} onPress={() => setLetterRules([])} />
+        </View>
+        <Text style={[st.small, { color: th.fg, opacity: 0.8 }]}>{letterLine}</Text>
 
         <Section title="Memorisation" fg={th.fg} />
         <View style={st.row}>

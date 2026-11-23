@@ -119,6 +119,7 @@ page.style(Selector.letterMarkNamed(4, lam.index, "shaddah"), QvpColor.parse("#1
 page.style(Selector.wordChars(4, 0, 2), QvpColor.parse("#2e7d32"))           // qpc offsets 0 to 2
 page.styleLetters(QvpLetterQuery.of(text = "ن", mark = "shaddah"), QvpColor.parse("#8e44ad"))
 val hit = page.hitTestLetterView(x, y)       // the letter or mark under a tap, or null: mark and markName
+val same = view.letterAt(x, y)               // the same from a point of the view, through pan and zoom
 ```
 
 `QvpPageView` draws a page with a layer with no extra work. A cut path draws as its pieces
@@ -151,6 +152,9 @@ scripts/sync-android-test-data.sh
 cd packages/android
 ./gradlew :qvp:connectedDebugAndroidTest
 ```
+
+The script also copies the letter scenarios (`conformance/scenarios/letters.json`) and the
+synthetic pages and letter layers that they load. `QvpLettersConformanceTest` replays them.
 
 `QvpAndroidBenchmarkTest` reports `QvpBenchmark` JSON containing median page-load, Android Path
 construction, first-draw, and cached-draw times. It deliberately has no duration threshold because
