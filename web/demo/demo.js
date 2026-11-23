@@ -484,89 +484,94 @@
     await st.load(1);
     mask();
 
-    // The reader's voice. TajweedFormer V4 runs in a frame of Quran Lab's on this device and
-    // gives the sounds it heard. It does not judge: finding the place and following the
-    // words are this demo's own. The place is found from the strong consonants of the text.
-    // A doubled letter is heard once, so equal neighbours count once on both sides.
-    const once = a => a.filter((c, i) => c !== a[i - 1]);
-    // The lam of the article before a sun letter is written and not said, so it does not count.
-    const strong = s => once([...s.normalize('NFC').replace(/([ٱا])ل(?=[تثدذرزسشصضطظلن][\u064b-\u0650\u0652-\u065f\u0670\u08f0-\u08f2]*\u0651)/g, '$1')].filter(c => /\p{L}/u.test(c) && !/[ـاأإآٱوؤيىئءة]/.test(c)));
-    // The whole Quran as one run of strong consonants, with the word of each letter. The text
-    // is quran-text's Hafs file, which also gives the first word of each page, ayah and surah.
+    // The reader's voice. TajweedFormer V4 runs in a frame of Quran Lab's on this device. It
+    // hears, and it reports what it heard: the sounds, and how probable each one is in each
+    // frame. It does not judge. Finding the place, following the words and marking a word
+    // that did not come are this demo's own work on that output.
+    //
+    // The whole Quran as one run of sounds, with the word of each sound. The sounds are the
+    // model's own reference (`model.reference`): what a correct recitation of each ayah has.
+    // The text file gives the first word of each page, ayah and surah.
     const TEXT = CFG.quranText || 'https://text.quran.ws/files/mushaf/hafs.json';
     let quran = null;
     async function wholeQuran() {
       if (quran) return quran;
-      const d = await json(TEXT), letters = [], wordOf = [];
-      d.words.forEach((w, i) => { for (const c of strong(w)) if (c !== letters[letters.length - 1]) { letters.push(c); wordOf.push(i); } });
+      const d = await json(TEXT), BAR = model.tokens.wordBar, jobs = [];
       // the last start at or before a word: its page, its ayah or its surah, counted from 1
       const at = (starts, w) => { let lo = 0, hi = starts.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (starts[mid] <= w) lo = mid; else hi = mid - 1; } return lo + 1; };
-      return (quran = { text: letters.join(''), wordOf, page: w => at(d.page_starts, w), firstOf: pg => d.page_starts[pg - 1], surah: w => at(d.surah_starts, w),
-        ayah: w => { const a = at(d.ayah_starts, w), s = at(d.surah_starts, w); return a - at(d.ayah_starts, d.surah_starts[s - 1]) + 1; },
-        // the letters of the basmalah: the first four words of the text
-        basmalah: letters.slice(0, wordOf.indexOf(4)) });
+      const surah = w => at(d.surah_starts, w), ayah = w => at(d.ayah_starts, w) - at(d.ayah_starts, d.surah_starts[surah(w) - 1]) + 1;
+      d.ayah_starts.forEach(w => jobs.push(model.reference.units(surah(w), ayah(w))));
+      const refs = await Promise.all(jobs), sounds = [], wordOf = [];
+      refs.forEach((ref, i) => {
+        const first = d.ayah_starts[i], words = (i + 1 < d.ayah_starts.length ? d.ayah_starts[i + 1] : d.words.length) - first;
+        // The reference counts each letter name of an opening such as alif lam mim as a word,
+        // and the mushaf writes them as one. The extra words are at the start of the ayah.
+        const extra = ref.wordCount - words;
+        for (let k = 0; k < ref.units.length; k++) if (ref.units[k] !== BAR) { sounds.push(ref.units[k]); wordOf.push(first + Math.max(0, ref.words[k] - extra)); }
+      });
+      const basmalah = []; for (let k = 0; k < sounds.length && wordOf[k] < 4; k++) basmalah.push(sounds[k]);
+      // the isti'adhah is in no ayah, so its sounds are named here, as the model names them
+      const istiadhah = 'ء a ع uu ذ u ب i ل aa ه i م i ن a ش a ي ط aa ن i ر a ج ii م'.split(' ').map(name => model.tokens.id(name));
+      return (quran = { sounds: Uint8Array.from(sounds), wordOf, basmalah, istiadhah, page: w => at(d.page_starts, w), firstOf: pg => d.page_starts[pg - 1], surah, ayah,
+        // the words of an ayah as the mushaf has them, for the sounds of one ayah of the reference
+        shift: (s, a, ref) => ref.wordCount - ((() => { const i = at(d.ayah_starts, d.surah_starts[s - 1]) - 1 + a - 1; return (i + 1 < d.ayah_starts.length ? d.ayah_starts[i + 1] : d.words.length) - d.ayah_starts[i]; })()) });
     }
-    // the edits between two runs of letters
+    // the edits between two runs of sounds
     function edits(a, b) {
       let row = Array.from({ length: b.length + 1 }, (_, j) => j);
       for (let i = 1; i <= a.length; i++) { const next = [i]; for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1), row[j] + 1, next[j - 1] + 1); row = next; }
       return row[b.length];
     }
-    // Every place where a run of letters ends in the Quran with at most `k` edits (Sellers'
-    // search). A letter that is written and not said, or a sound heard as another, is an
-    // edit, so an exact search would miss the place. Ends that are close are one place.
+    // Every place where a run of sounds ends in the Quran with at most `k` edits (Sellers'
+    // search). The model can hear one sound as another, or miss one, so an exact search
+    // would lose the place. Ends that are close are one place.
     function ends(run, k) {
-      const text = quran.text, m = run.length, col = Array.from({ length: m + 1 }, (_, i) => i), out = [];
+      const text = quran.sounds, m = run.length, col = new Int16Array(m + 1), out = [];
+      for (let i = 0; i <= m; i++) col[i] = i;
       for (let j = 0; j < text.length; j++) {
         let diag = col[0];   // col[0] stays 0: a match can start anywhere
-        for (let i = 1; i <= m; i++) { const up = col[i]; col[i] = Math.min(diag + (run[i - 1] === text[j] ? 0 : 1), up + 1, col[i - 1] + 1); diag = up; }
+        const c = text[j];
+        for (let i = 1; i <= m; i++) { const up = col[i]; let v = diag + (run[i - 1] === c ? 0 : 1); if (up + 1 < v) v = up + 1; if (col[i - 1] + 1 < v) v = col[i - 1] + 1; col[i] = v; diag = up; }
         if (col[m] <= k) { const last = out[out.length - 1]; if (last && j - last.at <= m) { if (col[m] < last.cost) { last.at = j; last.cost = col[m]; } } else out.push({ at: j, cost: col[m] }); }
       }
       return out;
     }
-    // The place of what was heard: where its last letters end, when they are in the Quran in
-    // one place only. A long run is tried first. Two places or more mean the reader must say
-    // more, and fourteen letters is the least: fewer are in many places.
+    // The place of what was heard: where it ends, as soon as it is in the Quran in one place
+    // only. All that was heard is tried first, so a short phrase that is in one place is found
+    // at once. When that is in no place, a later part is tried, because the reader can have
+    // said something else first. Eight sounds are the least: fewer are in many places.
     function locate(heard) {
-      for (const m of [24, 18, 14]) {
-        if (heard.length < m) continue;
-        const found = ends(heard.slice(-m), Math.floor(m / 7));
+      for (const part of [1, 0.75, 0.5]) {
+        const m = Math.min(48, Math.floor(heard.length * part));
+        if (m < 8) return null;
+        const found = ends(heard.slice(-m), Math.floor(m / 6));
         if (found.length === 1) return { end: found[0].at, m };
         if (found.length > 1) return null;
       }
       return null;
     }
-    // The word where the recitation began. First the start of the found run in the text: the
-    // length that fits best. Then back from it, while the letters heard before the run agree.
+    // The word where the recitation began: the start of the found run in the Quran, by the
+    // length that fits best.
     function begin(heard, hit) {
-      const text = quran.text, run = heard.slice(-hit.m); let start = hit.end - hit.m + 1, best = Infinity;
-      for (let len = hit.m - 3; len <= hit.m + 3; len++) { const from = hit.end - len + 1; if (from < 0) continue; const c = edits(run, [...text.slice(from, hit.end + 1)]) + Math.abs(len - hit.m) * 0.01; if (c < best) { best = c; start = from; } }
-      let q = start - 1, h = heard.length - hit.m - 1;
-      while (q >= 0 && h >= 0) {
-        if (text[q] === heard[h]) { start = q; q--; h--; continue; }
-        if (q > 0 && h > 0 && text[q - 1] === heard[h - 1]) { q--; h--; continue; }                 // one letter heard as another
-        if (q > 1 && text[q - 1] === heard[h] && text[q - 2] === heard[h - 1]) { q--; continue; }    // a letter not said
-        if (h > 1 && text[q] === heard[h - 1] && text[q - 1] === heard[h - 2]) { h--; continue; }    // a sound that is no letter
-        break;
-      }
-      // a word counts from its first letter
+      const run = heard.slice(-hit.m); let start = hit.end - hit.m + 1, best = Infinity;
+      for (let len = hit.m - 4; len <= hit.m + 4; len++) { const from = hit.end - len + 1; if (from < 0) continue; const c = edits(run, Array.from(quran.sounds.subarray(from, hit.end + 1))) + Math.abs(len - hit.m) * 0.01; if (c < best) { best = c; start = from; } }
+      // a word counts from its first sound
       let w = quran.wordOf[start]; if (start > 0 && quran.wordOf[start - 1] === w) w++;
       return w;
     }
     // The isti'adhah and the basmalah come before a recitation and are not its place: the
     // basmalah is before every surah. They are cut from the start of what was heard. The
     // answer is null while what was heard can still be only the start of one of them.
-    const ISTIADHAH = [...'عذبلهمنشطنرجم'];
     function afterOpening(heard) {
       let cut = 0, basmalah = false;
-      for (const formula of [ISTIADHAH, quran.basmalah]) {
-        const rest = heard.slice(cut);
-        if (rest.length < formula.length + 2) { if (rest.length && edits(rest.slice(0, formula.length), formula.slice(0, rest.length)) <= 2) return null; continue; }
+      for (const formula of [quran.istiadhah, quran.basmalah]) {
+        const rest = heard.slice(cut), slack = Math.ceil(formula.length / 6);
+        if (rest.length < formula.length + slack) { if (rest.length && edits(rest.slice(0, formula.length), formula.slice(0, rest.length)) <= slack) return null; continue; }
         let best = Infinity, len = 0;
-        for (let n = formula.length - 2; n <= formula.length + 2; n++) { const c = edits(rest.slice(0, n), formula); if (c < best) { best = c; len = n; } }
-        if (best <= 2) { cut += len; if (formula === quran.basmalah) basmalah = true; }
+        for (let n = formula.length - slack; n <= formula.length + slack; n++) { const c = edits(rest.slice(0, n), formula); if (c < best) { best = c; len = n; } }
+        if (best <= slack) { cut += len; if (formula === quran.basmalah) basmalah = true; }
       }
-      return { letters: heard.slice(cut), basmalah };
+      return { sounds: heard.slice(cut), basmalah };
     }
     // A mistake, as the reader hears and sees it: two short low tones, and a red mark on the
     // place of the word that was expected. The word stays hidden.
@@ -647,9 +652,9 @@
       const at = new Map(expect.map((w, i) => [`${w.surah}:${w.ayah}:${w.word}`, i])), units = [], wordOfUnit = [];
       const ayahs = [...new Set(expect.map(w => `${w.surah}:${w.ayah}`))];
       for (const key of ayahs) {
-        const [surah, ayah] = key.split(':').map(Number), ref = await model.reference.units(surah, ayah);
+        const [surah, ayah] = key.split(':').map(Number), ref = await model.reference.units(surah, ayah), extra = quran.shift(surah, ayah, ref);
         for (let i = 0; i < ref.units.length; i++) {
-          const w = at.get(`${surah}:${ayah}:${ref.words[i] + 1}`);
+          const w = at.get(`${surah}:${ayah}:${Math.max(0, ref.words[i] - extra) + 1}`);
           // the word bar is no sound, and a word of this ayah can be on another page
           if (ref.units[i] !== model.tokens.wordBar && w !== undefined) { units.push(ref.units[i]); wordOfUnit.push(w); }
         }
@@ -661,15 +666,13 @@
     // place is known. `lost` counts mistakes in a row: after three the place is sought again.
     let place = null, mistakes = 0, follow = null, frames = [], lost = 0, skip = 0;
     const maskPage = () => { st.page.maskOptions({ blockColor: '#d9cfb8' }); st.page.mask(T.page(), mode); };
-    async function startFollowing(from, replay) {
+    // `from` is the word where the recitation began, and `sinceMs` the time of its first
+    // sound: the follower reads the frames again from that time, and not the words said
+    // before it, such as the basmalah.
+    async function startFollowing(from, sinceMs) {
       const { units, wordOfUnit } = await pageSounds();
-      // The reader can have begun before the word that was found: at any word from the start
-      // of the ayah before it. The follower finds which.
-      const ayahOf = i => `${expect[i].surah}:${expect[i].ayah}`;
-      let earliest = from; const back = new Set([ayahOf(from)]);
-      while (earliest > 0 && (back.has(ayahOf(earliest - 1)) || back.size < 2)) { back.add(ayahOf(earliest - 1)); earliest--; }
-      said = earliest; follow = units.length ? follower(units, wordOfUnit, from, earliest) : null;
-      if (replay) for (const f of frames) for (let i = 0; i < f.n; i++) advance(follow && follow.step(f.lp, i * f.classes));
+      said = from; follow = units.length ? follower(units, wordOfUnit, from) : null;
+      if (sinceMs !== undefined && follow) for (const f of frames) for (let i = 0; i < f.n; i++) if ((f.first + i) * f.ms >= sinceMs) advance(follow.step(f.lp, i * f.classes));
     }
     function advance(change) {
       if (!change) return;
@@ -680,63 +683,69 @@
     }
     async function hear(chunk) {
       const head = chunk.heads && chunk.heads.get('log_probs');
-      if (head) frames.push({ lp: head.values, n: head.frames, classes: head.classes });
+      if (head) frames.push({ lp: head.values, n: head.frames, classes: head.classes, first: chunk.firstFrame, ms: head.frameMs });
       if (follow) {
         if (head) for (let i = 0; i < head.frames; i++) advance(follow.step(head.values, i * head.classes));
         // every word of this page was said: the recitation goes on to the next page
-        if (said >= expect.length && has(st.n + 1) && st.n < 604) { await st.load(st.n + 1); maskPage(); frames = []; await startFollowing(0, false); }
+        if (said >= expect.length && has(st.n + 1) && st.n < 604) { await st.load(st.n + 1); maskPage(); frames = []; await startFollowing(0); }
         // the reader left this place: seek the place again, in what is heard from now on
         if (lost >= 3) { follow = null; place = null; lost = 0; skip = (chunk.decoded.tokens || []).length; frames = []; }
       }
       if (!follow) {
-        const tokens = (chunk.decoded.tokens || []).slice(skip);
-        const all = once(tokens.map(t => t.name).filter(x => /^\p{L}$/u.test(x) && /[؀-ۿ]/.test(x) && !/[ءوي]/.test(x)));
+        // the sounds heard so far: every token but the rest, the word bar and a foreign sound
+        const tokens = (chunk.decoded.tokens || []).slice(skip).filter(t => t.id !== model.tokens.blank && t.id !== model.tokens.wordBar && t.id < model.tokens.count - 1);
+        const all = tokens.map(t => t.id);
         // nothing was heard yet: the invitation to recite stays on the card
         if (!all.length) return;
         const opening = afterOpening(all);
-        const hit = opening ? locate(opening.letters) : null;
+        const hit = opening ? locate(opening.sounds) : null;
         if (!hit) { card('hzCard', '', tr('جارٍ الاستماع وتحديد الموضع.')); return; }
         // The reader can recite from any page, and from any word of it. Nothing shows until
         // what was heard is in one place only.
-        let first = begin(opening.letters, hit);
+        let first = begin(opening.sounds, hit);
         // in the first surah the basmalah is the first ayah, so there it is part of the recitation
         if (opening.basmalah && first === 4) first = 0;
         const pg = quran.page(first);
         if (!has(pg)) { card('hzCard', '', tt`سورة ${quran.surah(first)}، الآية ${quran.ayah(first)}`, tt`الصفحة ${pg} غير متوفرة في هذا العرض.`); return; }
         if (pg !== st.n) await st.load(pg);
         maskPage(); place = first;
-        // the words before the first word stay hidden, and the follower reads every frame again
-        await startFollowing(Math.min(expect.length - 1, first - quran.firstOf(pg)), true);
+        // The words before the first word stay hidden. The follower reads again from the first
+        // sound of the run that was found.
+        const since = tokens[Math.max(0, all.length - hit.m)].firstMs - 240;
+        await startFollowing(Math.min(expect.length - 1, first - quran.firstOf(pg)), since);
       }
       const now = expect[Math.min(said, expect.length - 1)];
       card('hzCard', '', tt`سورة ${now.surah}، الآية ${now.ayah} · الصفحة ${st.n}`, tt`الكلمات المقروءة حتى الكلمة ${said} من ${expect.length} · الأخطاء: ${mistakes}`);
     }
-    let model = null, busy = false;
-    async function voice() {
-      if (model) return model;
-      status(tr('جارٍ تجهيز النموذج. قد يستغرق التحميل الأول بعض الوقت.'));
+    // One Client for the page, and the model asked for early: the download starts when the
+    // reader comes to this scene, before the first press. The Quran's sounds and the recorded
+    // sample are made ready then too, so a press has nothing to wait for.
+    const RATE = 16000;
+    let model = null, sample = null, busy = false, live = null;
+    async function prepare() {
       await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://web.quranlab.ai/4/loader.js'; s.crossOrigin = 'anonymous'; s.onload = ok; s.onerror = () => bad(new Error('loader')); document.head.append(s); });
       const client = await window.QuranLab.TajweedClient.create({ key: CFG.quranlabKey });
-      return (model = await client.model());
-    }
-    // A recorded recitation, as the model takes its own audio: mono at 16 kHz.
-    const RATE = 16000;
-    async function recorded(m) {
-      // Surah 112, which is on the last page: the demo starts on the first page, so the
-      // reader sees it find the place.
-      // Al-Husary's murattal recitation is slow and clear, which suits a model that hears each sound.
-      const info = await json(`${API}/v4/recitations/mahmoud-husary/r1/surahs/112`), files = info.data.files;
+      model = await client.model();
+      await wholeQuran();
+      // A recorded recitation, as the model takes its own audio: mono at 16 kHz. Surah 112 is
+      // on the last page, so the reader sees the demo find the place. Al-Husary's murattal
+      // recitation is slow and clear.
+      // `?sample=95` takes another surah, to try another place.
+      const surah = Math.min(114, Math.max(1, +new URLSearchParams(location.search).get('sample') || 112));
+      const info = await json(`${API}/v4/recitations/mahmoud-husary/r1/surahs/${surah}`), files = info.data.files;
       const url = (files.mp3_64 || files.original || Object.values(files)[0]).url;
       const decoded = await new OfflineAudioContext(1, RATE, RATE).decodeAudioData((await bytes(url)).buffer);
       const off = new OfflineAudioContext(1, Math.ceil(decoded.duration * RATE), RATE), src = off.createBufferSource();
       src.buffer = decoded; src.connect(off.destination); src.start();
-      const samples = (await off.startRendering()).getChannelData(0);
-      const session = m.session(), audio = new Audio(url);
+      sample = { url, samples: (await off.startRendering()).getChannelData(0) };
+    }
+    // The recorded sample: the model gets the samples that the reader has already heard, and
+    // no more, so a word never shows before its sound. The browser can refuse to play sound:
+    // then the feed keeps its own clock, and the words still show at the reciter's pace.
+    function recorded() {
+      const session = model.session(), audio = new Audio(sample.url), played = audio.play().then(() => true, () => false);
       const feed = (async () => {
-        // The model gets the samples that the reader has already heard, and no more, so a word
-        // never shows before its sound. The browser can refuse to play sound: then the feed
-        // keeps its own clock, and the words still show at the reciter's pace.
-        const playing = await audio.play().then(() => true, () => false), t0 = performance.now();
+        const playing = await played, t0 = performance.now(), samples = sample.samples;
         for (let sent = 0; sent < samples.length && busy;) {
           const heardTo = playing ? (audio.ended ? Infinity : audio.currentTime) : (performance.now() - t0) / 1000;
           const upTo = Math.min(samples.length, Math.floor(heardTo * RATE));
@@ -748,23 +757,37 @@
       feed.catch(e => { console.error(e); status(tr('تعذّر تشغيل القراءة بالصوت: ') + (e.code || e.message)); });
       return { session, feed };
     }
+    const buttons = () => {
+      $('hzListen').textContent = busy === 'mic' ? tr('إيقاف') : tr('القراءة بالصوت');
+      $('hzClip').textContent = busy === 'sample' ? tr('إيقاف') : tr('تجربة بتلاوة مسجّلة');
+      $('hzListen').disabled = busy === 'sample'; $('hzClip').disabled = busy === 'mic';
+    };
+    // A second press, or a page that the reader left, ends the take.
+    function stop() { if (!busy) return; busy = false; if (live) live.finish().catch(() => {}); }
     async function take(fromRecording) {
-      if (busy) { busy = false; return; }   // a second press stops the take
-      busy = true;
+      if (busy) { stop(); return; }
+      busy = fromRecording ? 'sample' : 'mic';
       try {
-        const m = await voice();
-        await wholeQuran(); place = null; mistakes = 0; follow = null; frames = []; lost = 0; skip = 0;
+        // The browser gives the microphone, and lets sound play, only in answer to a press. So
+        // the take starts as the first thing in the handler, with nothing to wait for before it.
         try { tones = tones || new AudioContext(); } catch { /* the mistake sound is optional */ }
-        mask(); status(fromRecording ? tr('جارٍ تحليل التلاوة المسجّلة.') : tr('ابدأ القراءة من أي موضع في المصحف.'));
-        const { session, feed } = fromRecording ? await recorded(m) : { session: await m.listen({ endOnSilenceMs: 2500 }), feed: null };
-        for await (const chunk of session.chunks) { if (chunk.decoded) await hear(chunk); if (!busy && !fromRecording) break; }
+        let feed = null;
+        if (fromRecording) ({ session: live, feed } = recorded());
+        // The take goes on through the reader's pauses, until the reader stops it.
+        else live = await model.listen();
+        place = null; mistakes = 0; follow = null; frames = []; lost = 0; skip = 0;
+        buttons(); mask(); status(fromRecording ? tr('جارٍ تحليل التلاوة المسجّلة.') : tr('ابدأ القراءة من أي موضع في المصحف.'));
+        for await (const chunk of live.chunks) if (chunk.decoded) await hear(chunk);
         if (feed) await feed;
       } catch (e) { console.error(e); status(tr('تعذّر تشغيل القراءة بالصوت: ') + (e.code || e.message)); }
-      busy = false;
+      busy = false; live = null; buttons();
     }
     if (CFG.quranlabKey) {
-      $('hzListen').disabled = false; $('hzClip').disabled = false;
       $('hzListen').onclick = () => take(false); $('hzClip').onclick = () => take(true);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
+      status(tr('جارٍ تجهيز النموذج. قد يستغرق التحميل الأول بعض الوقت.'));
+      prepare().then(() => { $('hzListen').disabled = false; $('hzClip').disabled = false; status(); },
+        e => { console.error(e); status(tr('تعذّر تشغيل القراءة بالصوت: ') + (e.code || e.message)); });
     } else {
       $('hzFine').prepend(tr('تحتاج القراءة بالصوت إلى مفتاح Quran Lab في الملف config.local.js. '));
     }
