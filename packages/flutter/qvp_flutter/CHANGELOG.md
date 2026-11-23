@@ -1,5 +1,8 @@
 ## Unreleased
 
+### Added
+- `QvpPageView.onSwipe` reports released horizontal drags in pages (+1 next, -1 previous in muṣḥaf reading order).
+
 ## 0.10.0
 
 ### Added

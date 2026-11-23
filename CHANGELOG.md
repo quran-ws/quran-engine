@@ -7,6 +7,7 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- Flutter: `QvpPageView.onSwipe` reports released horizontal drags in pages (+1 next, -1 previous in muṣḥaf reading order).
 - `data-v0.7.0` holds the ornaments of eight mushafs of the King Fahd Glorious Qur'an Printing
   Complex: ayah markers, surah headers and page frames. The Complex permits reuse and
   republication for any purpose other than printing (`docs/DATA.md`). The pages and the letter

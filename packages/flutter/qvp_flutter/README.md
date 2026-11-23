@@ -116,6 +116,7 @@ QvpPageView(
   // spacing only opens up: lineSpacing < 1 is clamped to "as printed"
   paper: Color(0xfffffdf7), defaultInk: '#231f20', controller: QvpViewController(),
   onWordTap: (word, hit) {}, onDecorationTap: (decoration, hit) {}, onEmptyTap: () {}, onSelectionChanged: (words) {},
+  onSwipe: (pages) {},
 )
 ```
 
@@ -126,7 +127,8 @@ layout changes) → styled paths → mask boxes. Each frame calls
 `page.tick()` first and keeps a `Ticker` running while it returns true. Tap →
 `hitTestView` (gap-aware); long-press-drag → whole-word selection via
 `page.select` with a band highlight in `QvpLayer.selection`; pinch / pan on
-top of the engine layout; double-tap fits.
+top of the engine layout; sideways flick flips pages through `onSwipe` (+1 next
+page, -1 previous in mushaf reading order); double-tap fits.
 
 ## Letters
 
