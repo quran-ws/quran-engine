@@ -1166,7 +1166,8 @@ layout); a host that rasterises the layer keys its cache on that number.
 of the assets whose licence is confirmed (`docs/DATA.md`). A fuller set is built from a
 `quran-ws/quran-assets` checkout by `qvp-convert ornaments`. Each ornament carries its own
 `licence` (`{id, status, redistributable, attribution}`) and the engine reports it so a host
-can say so on screen. Read it before you publish a dressed page.
+can say so on screen. Read it before you publish a dressed page. The terms of the mushaf
+ornaments do not cover printing, and `redistributable` does not say so.
 
 ## Atlas (cross-page)
 

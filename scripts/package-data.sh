@@ -113,6 +113,18 @@ if [ "$letters" = 604 ]; then
   printf '\n%s\n%s\n' 'Letter division by DigitalKhatt medinamushafanalyzer (commit 056191f),' \
     'MIT licence. https://github.com/DigitalKhatt/medinamushafanalyzer' >> "$stage/NOTICE.txt"
 fi
+if [ -f dist/pages/ornaments.qvo ]; then
+  cat >> "$stage/NOTICE.txt" <<'TXT'
+
+ORNAMENTS (ornaments.qvo)
+The ornaments with a style name that starts with mushaf- are traced from mushafs printed by
+the King Fahd Glorious Qur'an Printing Complex. The designs belong to the Complex, which
+permits reuse and republication for any purpose other than printing. Name the Complex.
+The ornaments with a style name that starts with font- are outlines of fonts under the SIL
+Open Font License 1.1. The notice of each font is in sources/licenses/ of
+https://github.com/quran-ws/quran-assets, at the commit that VERSION.json names.
+TXT
+fi
 mkdir -p dist
 tar -czf "dist/$name.tar.gz" -C "$(dirname "$stage")" "$name"
 (cd dist && shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256")

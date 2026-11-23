@@ -18,7 +18,7 @@ and under what terms an app may use it.
 | `surah-names/surah-names.woff2` | all titles as OpenType/CFF glyphs at private-use code points |
 | `surah-names/surah-names.css`, `surah-names/map.json` | browser classes and the code-point and metadata map |
 | `VERSION.json` | provenance: data version, source release, engine commit, format version, page and surah-name counts, digests of every generated data file, and, when a set was packaged, an `ornaments` record (source, source commit, redistributable only) |
-| `ornaments.qvo` | the ornament set in the QVO1 format: every asset of `quran-ws/quran-assets` whose licence is confirmed, today the 40 font-derived ayah markers |
+| `ornaments.qvo` | the ornament set in the QVO1 format: every asset of `quran-ws/quran-assets` whose licence is confirmed. From `data-v0.7.0`: the 24 ornaments of eight mushafs and 40 font-derived ayah markers. Before: the markers only |
 
 The data covers 604 pages, 77,432 words, 6,236 ayahs and 114 surahs. The individual QVPs
 add about 0.35 MB, the WOFF2 font about 0.13 MB, and the optional SVG and combined forms
@@ -41,11 +41,26 @@ and fixed there; the converter never patches data.
 --redistributable` from a pinned commit of `quran-ws/quran-assets`, recorded in
 `VERSION.json` under `ornaments.source_commit`. Only assets whose catalogue licence status
 is `confirmed` go in. `scripts/package-data.sh` refuses a set that holds any ornament
-whose licence is not confirmed. The scanned ornaments of other printed mushafs are traced from
-designs that belong to their publishers and stay at CC BY-NC-SA 4.0, provisional, until
-each publisher settles permission. They are not in any release. Build a local set without
-`--redistributable` to use them, and read each ornament's licence, which the engine
-reports, before you publish a page wearing it.
+whose licence is not confirmed.
+
+From `data-v0.7.0` the set has the ayah marker, the surah header and the page frame of eight
+mushafs of the King Fahd Glorious Qur'an Printing Complex. The designs belong to the
+Complex, which permits reuse and republication for any purpose other than printing. Their
+licence id is `LicenseRef-KFGQPC`. `redistributable` is true for them, and it does not cover
+printing. The evidence is in `sources/licenses/` of `quran-ws/quran-assets`.
+
+| style | mushaf |
+|---|---|
+| `mushaf-douri` | Duri |
+| `mushaf-hafs-adi` | Hafs, the ordinary mushaf |
+| `mushaf-hafs-madinah-kabir` | Hafs, Madinah, large |
+| `mushaf-hafs-madinah-mumtaza` | Hafs, Madinah, mumtaza |
+| `mushaf-qalon` | Qalun |
+| `mushaf-shubah` | Shu'bah |
+| `mushaf-sousi` | Susi |
+| `mushaf-warsh` | Warsh |
+
+Seven font markers have unverified terms and are in no release.
 
 The format has no arc, so the converter writes each arc, circle, ellipse and rounded
 corner in an ornament as cubic curves. The cubics follow the source curve to within 0.1

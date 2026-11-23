@@ -25,7 +25,7 @@ The repository holds no data, no font and no key. `build.py` reads these variabl
 | variable | what it names | without it |
 |---|---|---|
 | `QVP_PAGES_DIR`, `QVP_LETTERS_DIR` | pages and letter layers from the same build (`docs/DATA.md`) | `dist/pages`, `dist/letters` |
-| `QVP_ORNAMENTS` | an ornament set (`.qvo`) | the set beside the pages, which has ayah markers only |
+| `QVP_ORNAMENTS` | an ornament set (`.qvo`) | the set beside the pages |
 | `QVP_FONT_QURAN` | a `.woff2` font for a word of the Quran outside the page | a web font |
 | `QVP_FONT_QPC`, `QVP_SVG_DIR` | QPC page fonts and page SVGs, for the comparison | those two rows show no measure |
 | `QVP_TAJWID` | a file of tajwid rulings | `quran-ws/quran-tajweed` at a fixed commit |
@@ -76,9 +76,8 @@ and makes an nginx image from `web/demo/site/`. An image-bump pull request in th
 repository then deploys it, as for the other sites of quran.ws.
 
 The site's dress scene shows the ornaments of the Madinah mushafs. The job builds that
-set from `quran-ws/quran-assets` without `--redistributable`, with the approval that the
-site's owner has for this site. A data release does not hold these ornaments. Before you
-show them on another site, read each ornament's licence, which the scene prints.
+set from a fixed commit of `quran-ws/quran-assets`, the one that `data-v0.7.0` names. The King
+Fahd Complex permits reuse for any purpose other than printing (`docs/DATA.md`).
 
 The site's key of Quran Lab is the repository secret `QURANLAB_WEB_KEY`. Its one allowed
 origin is `https://engine.quran.ws`.

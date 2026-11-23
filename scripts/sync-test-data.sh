@@ -12,6 +12,9 @@
 #
 # Environment:
 #   QVP_DATA_TAG   data release tag (default data-v0.5.0)
+#   QVP_ORNAMENTS_TAG  data release that dist/pages/ornaments.qvo comes from (default
+#                  data-v0.7.0, the first with the ornaments of the mushafs). An ornament set
+#                  does not depend on the page files, so its release can be newer than theirs.
 #   QVP_SVG_TAG    quran-svg-elements release tag (default v2.0.0)
 #   QVP_KEEP_PAGES keep dist/pages as it is, whatever built it
 #   QVP_SYNC       what to fetch: `all` (default), `pages` or `letters`. `pages` fetches the
@@ -38,7 +41,6 @@ if [ "$sync" = letters ]; then
 fi
 
 tag="${QVP_DATA_TAG:-data-v0.5.0}"
-pages_fetched=""
 asset="quran-engine-pages-hafs-kfgqpc.tar.gz"
 base="https://github.com/quran-ws/quran-engine/releases/download/$tag"
 
@@ -55,38 +57,26 @@ else
   rm -rf dist/pages && mkdir -p dist/pages
   tar -xzf "dist/$asset" -C dist/pages --strip-components=1
   echo "$tag" > dist/pages/.tag
-  pages_fetched=1
   echo "fetched  dist/pages ($tag, checksum verified)"
 fi
 
-# The ornament set. A data tarball that carries it has its checksum verified with the
-# tarball, so use that copy. An older release can have the set only as a separate asset,
-# or have none. Only HTTP 404 means none. Any other failure stops the script.
+# The ornament set, from its own release. It replaces the copy in the data tarball.
+orn_tag="${QVP_ORNAMENTS_TAG:-data-v0.7.0}"
+orn_url="https://github.com/quran-ws/quran-engine/releases/download/$orn_tag/ornaments.qvo"
 if [ -n "${QVP_KEEP_PAGES:-}" ] && [ -f dist/pages/atlas.qva ]; then
   echo "skipped  dist/pages/ornaments.qvo (QVP_KEEP_PAGES is set)"
-elif [ -f dist/pages/ornaments.qvo ]; then
-  if [ -n "$pages_fetched" ]; then
-    echo "fetched  dist/pages/ornaments.qvo ($tag, from the data tarball)"
-  else
-    echo "kept     dist/pages/ornaments.qvo ($tag)"
-  fi
+elif [ -f dist/pages/ornaments.qvo ] && [ "$(cat dist/pages/.ornaments-tag 2>/dev/null)" = "$orn_tag" ]; then
+  echo "kept     dist/pages/ornaments.qvo ($orn_tag)"
 else
   part="dist/pages/ornaments.qvo.part"
-  status="$(curl --location --retry 3 --silent --show-error --write-out '%{http_code}' \
-    "$base/ornaments.qvo" --output "$part")" || {
+  curl --fail --location --retry 3 --silent --show-error "$orn_url" --output "$part" || {
     rm -f "$part"
-    echo "error: could not fetch $base/ornaments.qvo" >&2
+    echo "error: could not fetch $orn_url" >&2
     exit 1
   }
-  case "$status" in
-    200) mv "$part" dist/pages/ornaments.qvo
-         echo "fetched  dist/pages/ornaments.qvo ($tag)" ;;
-    404) rm -f "$part"
-         echo "skipped  dist/pages/ornaments.qvo ($tag has none)" ;;
-    *)   rm -f "$part"
-         echo "error: $base/ornaments.qvo returned HTTP $status" >&2
-         exit 1 ;;
-  esac
+  mv "$part" dist/pages/ornaments.qvo
+  echo "$orn_tag" > dist/pages/.ornaments-tag
+  echo "fetched  dist/pages/ornaments.qvo ($orn_tag)"
 fi
 
 if [ "$sync" = pages ]; then
