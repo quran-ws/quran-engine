@@ -61,7 +61,23 @@
     "ayah-markers",
     "surah-headers",
     "page-frames",
-    "mushaf-qalon"
+    "mushaf-qalon",
+    "TajweedFormer",
+    "TajweedClient",
+    "tajweed\\.css",
+    "madda_[a-z]+",
+    "tajwid-rules",
+    "word-timings",
+    "mushaf-douri",
+    "mushaf-sousi",
+    "audio\\.pause",
+    "'(madd|idgham|ikhfa|iqlab|qalqalah|noon|meem|mutajanisain|mutamathilain)-[a-z-]*'",
+    "rules\\.hukums",
+    "Al-Fatihah",
+    "Al-Duri",
+    "Al-Susi",
+    "'Madd Lazim'",
+    "'Madd Muttasil'"
   ],
   "_external_names": [
     "ayah_markers  — the id of the medallion layer in the quran-svg-elements source SVG; a locator in their file, not our name.",
@@ -76,7 +92,17 @@
     "Tarteel    — the organisation named beside QUL in the docs/SEARCH-FOLD.md section 9 survey, not the recitation quality.",
     "quran-tajweed — the quran-ws repository of that name, which supplies four conformance vectors. The repository is named quran-tajweed on GitHub; the concept it works on is written tajwid everywhere else here.",
     "ayah-markers, surah-headers, page-frames — the folder names of the quran-assets catalogue, which the ornament converter reads; locators in their tree, not names this project chose.",
-    "mushaf-qalon — a style key of the quran-assets catalogue, stored in the ornament set as the design's style name. The key is the catalogue's own spelling; the riwayah is written qalun everywhere else here."
+    "mushaf-qalon — a style key of the quran-assets catalogue, stored in the ornament set as the design's style name. The key is the catalogue's own spelling; the riwayah is written qalun everywhere else here.",
+    "TajweedFormer, TajweedClient — the product and class names of Quran Lab's recitation model, which the Arabic showcase (web/demo) loads; their spelling, not a name this project chose.",
+    "tajweed.css, madda_* — the stylesheet of quranpedia.net and its colour classes, which the showcase names as the source of its tajwid colours.",
+    "tajwid-rules — the npm package name `@quran.ws/tajwid-rules` of quran-ws/quran-tajweed, quoted in a URL.",
+    "word-timings — a path of the MP3Quran API, version 4, quoted in a URL.",
+    "mushaf-douri, mushaf-sousi — style keys of the quran-assets catalogue, as mushaf-qalon above; the rawis are written duri and susi everywhere else here.",
+    "audio.pause — the DOM method of an audio element; nothing to do with waqf.",
+    "'madd-…', 'idgham-…', 'ikhfa-…' and the like, in quotes — hukum ids of quran-ws/quran-tajweed, which the showcase matches rule ids against. The ids are that corpus's own spelling.",
+    "rules.hukums — the key of rules.json in quran-ws/quran-tajweed that lists the rulings; the showcase reads it, and the key is that file's own spelling.",
+    "Al-Fatihah, Al-Duri, Al-Susi — English display names in the string table of the showcase (web/demo/en.js): a surah label, as Ya-Sin above, and the names of two mushafs by their rawi. They are text a reader sees, not names in code.",
+    "'Madd Lazim', 'Madd Muttasil', in quotes — the standard's own display forms, as labels of the tajwid legend in web/demo/en.js. The audit reads a .js file as code and splits the two words."
   ],
   "compatibility": [
     "crates/qvp-core/src/sidecar.rs"

@@ -76,3 +76,6 @@ dist/ios/
 .cursor/
 *.qvo
 *.log
+
+# the keys of this machine for the Arabic showcase
+web/demo/config.local.js

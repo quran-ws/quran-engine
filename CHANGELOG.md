@@ -86,6 +86,12 @@ All notable changes to the engine and its packages. The format follows
   they are there, and `QVP_PAGES_DIR` and `QVP_LETTERS_DIR` name other directories.
 - The web example shows one topic at a time in its side panel, and a strip under the page
   shows each call that the app makes to the engine, as source text to copy.
+- A showcase in Arabic and English, `web/demo/`: live scenes on one page. They show a page that
+  writes itself, tajwid rulings coloured on their own letters, a player whose highlight
+  follows the reciter by word or by letter, memorisation, zoom with reflow, and the
+  ornaments of another mushaf. A comparison sets the engine against SVG, images, page fonts
+  and the Hafs font with text, and measures each on the reader's device. `web/demo/README.md`
+  names the data that each scene reads at run time. The showcase commits no data and no key.
 - QvpKit: `QvpPage.attachLetters(_:)`, `hasLetters`, `letters(_:)`, `letter(_:_:)`,
   `letterCount(_:)`, `letterMembers(_:_:)`, `pathLetter(_:)`, `letterAtOffset(_:_:)`,
   `findLetters(_:)`, `styleLetters(_:_:)`, `hitTestLetter`, `hitTestLetterView`,
