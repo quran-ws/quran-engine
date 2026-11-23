@@ -812,7 +812,10 @@
   scene('dress', async () => {
     const st = new Stage($('drStage'));
     // a set that the build names, or the one that comes with the pages
-    const ob = await maybe('ornaments.qvo') || await maybe('pages/ornaments.qvo'), set = ob ? engine.loadOrnaments(ob) : null;
+    // The set keeps its address when its content changes, so the browser asks the server each
+    // time if its copy is still the newest.
+    const fresh = async url => { try { const r = await fetch(url, { cache: 'no-cache' }); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } };
+    const ob = await fresh('ornaments.qvo') || await fresh('pages/ornaments.qvo'), set = ob ? engine.loadOrnaments(ob) : null;
     let style = null, lineArt = false;
     function apply() {
       const p = st.page;
@@ -824,7 +827,7 @@
       }
       // the source of the ornaments on the page, and their licence, as the set states them
       const worn = set && style ? set.list.find(o => o.style === style) : null;
-      $('drFine').textContent = worn ? [tr('مصدر الزخارف: مشروع quran-assets.'), worn.lineage === 'scan' ? tr('الزخارف منقولة عن مصحف مطبوع، وتصميمها ملك لناشره.') : '', worn.licence.id ? tr('الرخصة: ') + worn.licence.id + '.' : ''].filter(Boolean).join(' ') : '';
+      $('drFine').textContent = worn ? [tr('مصدر الزخارف: مشروع quran-assets.'), worn.lineage === 'scan' ? tr('الزخارف منقولة عن مصاحف مجمع الملك فهد لطباعة المصحف الشريف.') : '', worn.licence.id ? tr('الرخصة: ') + worn.licence.id + '.' : ''].filter(Boolean).join(' ') : '';
       for (const c of $('drStyles').children) c.classList.toggle('on', c.dataset.style === style);
       $('drLine').classList.toggle('on', lineArt);
       st.fit();
