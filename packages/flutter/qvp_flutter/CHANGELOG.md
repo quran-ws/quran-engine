@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.10.0
+
 ### Added
 - Flutter: `QvpPage.attachLetters(bytes)`, `hasLetters`, `letterCount`, `letter`, `letters`,
   `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`, `styleLetters`,
@@ -42,6 +44,8 @@
 ### Removed
 
 ### Fixed
+- The block and blur boxes of a memorisation mask have one height in a printed line: the
+  top and the bottom of the tallest ink of the line's words.
 - Flutter: the styled pass of `QvpPageView` draws each styled entry of the draw list, in its
   order and under its own placement. It drew each styled path once, at its first placement,
   so a styled path that a reflowed layout draws twice, such as a sajdah line over two rows,

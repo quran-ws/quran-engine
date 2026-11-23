@@ -4,6 +4,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-23
+
 ### Added
 - Kotlin: `QvpPage.attachLetters`, the letter reads (`hasLetters`, `letterCount`, `letters`,
   `letter`, `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`), `styleLetters`,
@@ -48,6 +50,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ### Removed
 
 ### Fixed
+- The block and blur boxes of a memorisation mask have one height in a printed line: the
+  top and the bottom of the tallest ink of the line's words.
 - Android: the styled pass of `QvpPageView` draws a styled path only where the engine's draw
   list puts it. Before, it drew every styled path. It put a styled path that the list leaves
   out, such as a page number under reflow, at its printed line, and it drew a path once when

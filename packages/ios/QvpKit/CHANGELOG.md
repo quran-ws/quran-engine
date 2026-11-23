@@ -4,6 +4,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-23
+
 ### Added
 - QvpKit: `QvpPage.attachLetters(_:)`, `hasLetters`, `letters(_:)`, `letter(_:_:)`,
   `letterCount(_:)`, `letterMembers(_:_:)`, `pathLetter(_:)`, `letterAtOffset(_:_:)`,
@@ -48,6 +50,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ### Fixed
 
+- The block and blur boxes of a memorisation mask have one height in a printed line: the
+  top and the bottom of the tallest ink of the line's words.
 ## [0.9.1] - 2026-11-23
 
 ### Fixed
