@@ -109,7 +109,11 @@ extras=""
 for f in README.md NOTICE.txt; do
   if [ -f "$SRC/$f" ]; then extras="$extras $f"; fi
 done
-for f in "${pages[@]}" "${sidecars[@]}" "$SRC"/atlas.qva "$SRC"/atlas.json "$SRC"/VERSION.json "${surah_name_assets[@]}"; do
+# The letter layers are optional. A release has all 604 or none. They go up as single objects
+# and are not in the bundle: a reader that needs letters fetches the layer of its page.
+layers=( "$SRC"/[0-9][0-9][0-9].qvl )
+[ "${#layers[@]}" = 0 ] || [ "${#layers[@]}" = 604 ] || { echo "expected 604 letter layers or none in $SRC, found ${#layers[@]}" >&2; exit 1; }
+for f in "${pages[@]}" "${layers[@]}" "${sidecars[@]}" "$SRC"/atlas.qva "$SRC"/atlas.json "$SRC"/VERSION.json "${surah_name_assets[@]}"; do
   name="${f#"$SRC/"}"
   printf '%s\t%s\t%s\n' "$name" "$(wc -c < "$f" | tr -d ' ')" "$(sha256 "$f")" >> "$STAGE/.files.tsv"
 done
