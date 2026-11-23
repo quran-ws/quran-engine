@@ -11,6 +11,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ### Removed
 
 ### Fixed
+
+## [0.9.1] - 2026-11-23
+
+### Fixed
 - A pinch or a step on a page dressed in a border lands on the new layout's resting scale. The
   printed page rests shrunk so its border fits across the width, and a reflowed page rests at
   scale 1 because its rows are narrowed instead. The zoom control kept the view's scale across
