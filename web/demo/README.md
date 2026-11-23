@@ -36,10 +36,11 @@ The showcase commits no data. It reads these at run time:
   name other directories.
 - **Tajwid rulings** from `@quran.ws/tajwid-annotations` and `@quran.ws/tajwid-rules`
   (`quran-ws/quran-tajweed`, CC BY 4.0), through a public CDN. The colours are the colour
-  classes of quranpedia.net. A span of the published package, 0.1.0, covers a letter and
-  its condition, so a qalqalah or a madd colours the next letter too. A newer span adds a
-  focus, the letters that the ruling is about, and the scene colours the focus alone.
-  `QVP_TAJWID` names such a file until the package has it.
+  classes of quranpedia.net. The showcase reads the repository at one commit, because the
+  npm packages, 0.1.0, are older: a span of theirs covers a letter and its condition, so a
+  qalqalah or a madd colours the next letter too. A span of the commit adds a focus, the
+  letters that the ruling is about, and the scene colours the focus alone. `QVP_TAJWID`
+  names another file of rulings.
 - **Audio and timings** from the MP3Quran API, version 4. It needs no key. The showcase uses
   the staging API until the API has a public address.
 - **Ornaments** from `ornaments.qvo` beside the pages. The released set has ayah markers
@@ -60,6 +61,10 @@ python3 web/demo/build.py
 Serif Display. `QVP_FONT_QURAN` is the typeface for a word of the Quran outside the page:
 the KFGQPC Hafs font, so the word looks as it does in the mushaf. Without a file, the page
 uses a web font.
+
+`QVP_FONT_QPC` names the QPC font of page 3 (`p3.woff2`). The comparison measures how long
+that font and the Hafs font take to show the page. It needs fontTools to list the font's
+code points.
 
 ## The reader's voice
 

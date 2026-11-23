@@ -71,7 +71,8 @@
     "mushaf-douri",
     "mushaf-sousi",
     "audio\\.pause",
-    "'(madd|idgham|ikhfa|iqlab|qalqalah|noon|meem|mutajanisain|mutamathilain)-[a-z-]*'"
+    "'(madd|idgham|ikhfa|iqlab|qalqalah|noon|meem|mutajanisain|mutamathilain)-[a-z-]*'",
+    "rules\\.hukums"
   ],
   "_external_names": [
     "ayah_markers  — the id of the medallion layer in the quran-svg-elements source SVG; a locator in their file, not our name.",
@@ -93,7 +94,8 @@
     "word-timings — a path of the MP3Quran API, version 4, quoted in a URL.",
     "mushaf-douri, mushaf-sousi — style keys of the quran-assets catalogue, as mushaf-qalon above; the rawis are written duri and susi everywhere else here.",
     "audio.pause — the DOM method of an audio element; nothing to do with waqf.",
-    "'madd-…', 'idgham-…', 'ikhfa-…' and the like, in quotes — hukum ids of quran-ws/quran-tajweed, which the showcase matches rule ids against. The ids are that corpus's own spelling."
+    "'madd-…', 'idgham-…', 'ikhfa-…' and the like, in quotes — hukum ids of quran-ws/quran-tajweed, which the showcase matches rule ids against. The ids are that corpus's own spelling.",
+    "rules.hukums — the key of rules.json in quran-ws/quran-tajweed that lists the rulings; the showcase reads it, and the key is that file's own spelling."
   ],
   "compatibility": [
     "crates/qvp-core/src/sidecar.rs"

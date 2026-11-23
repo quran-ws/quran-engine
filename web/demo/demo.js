@@ -238,12 +238,14 @@
 
   // ── 2. tajwid: each ruling on its own letters ──
   // The colour classes of quranpedia.net (resources/css/pages/tajweed.css), and the rulings
-  // of quran-tajweed that go under each. A ruling with no class keeps the page's ink.
+  // of quran-tajweed that go under each. A ruling goes under a class only when the class
+  // names it. So `madd_al_iwad`, which is read at a stop only, and `madd_al_badal` are not under
+  // the natural madd, and they keep the page's ink. A tap still names each of them.
   const TAJWID = [
     ['ghn', 'غنّة', '#FF7E1E', ['noon-mushaddadah', 'meem-mushaddadah']],
     ['qlq', 'قلقلة', '#DD0008', ['qalqalah-']],
-    ['idgh_ghn', 'إدغام بغنّة', '#169200', ['idgham-bi-ghunnah', 'idgham-naqis']],
-    ['idgh_w_ghn', 'إدغام بغير غنّة', '#0E6B00', ['idgham-bila-ghunnah', 'idgham-kamil']],
+    ['idgh_ghn', 'إدغام بغنّة', '#169200', ['idgham-bi-ghunnah']],
+    ['idgh_w_ghn', 'إدغام بغير غنّة', '#0E6B00', ['idgham-bila-ghunnah']],
     ['iqlb', 'إقلاب', '#26BFFD', ['iqlab-']],
     ['ikhf', 'إخفاء', '#9400A8', ['ikhfa-haqiqi', 'ikhfa-ghunnah']],
     ['ikhf_shfw', 'إخفاء شفوي', '#D500B7', ['ikhfa-shafawi', 'mutajanisain-ikhfa-shafawi']],
@@ -251,19 +253,24 @@
     ['madda_necessary', 'مدّ لازم', '#000EBC', ['madd-lazim']],
     ['madda_obligatory', 'مدّ واجب متّصل', '#2144C1', ['madd-muttasil']],
     ['madda_permissible', 'مدّ جائز', '#4050FF', ['madd-munfasil', 'madd-arid', 'madd-silah-kubra']],
-    ['madda_normal', 'مدّ طبيعي', '#537FFF', ['madd-tabee', 'madd-badal', 'madd-iwad', 'madd-silah-sughra']],
+    ['madda_normal', 'مدّ طبيعي', '#537FFF', ['madd-tabee']],
     ['idgh_mus', 'إدغام متماثلين ومتجانسين', '#A1A1A1', ['mutamathilain-idgham', 'mutajanisain-idgham']],
   ];
-  const TAJWID_DATA = 'https://cdn.jsdelivr.net/npm/@quran.ws/tajwid-annotations@0.1.0/uthmani-hafs.json';
-  const TAJWID_RULINGS = 'https://cdn.jsdelivr.net/npm/@quran.ws/tajwid-rules@0.1.0/rules.json';
+  // quran-ws/quran-tajweed at the commit that gave each span its focus: the letters that the
+  // ruling is about. The npm package 0.1.0 is older and has no focus.
+  const TAJWID_AT = 'https://cdn.jsdelivr.net/gh/quran-ws/quran-tajweed@b8e45f4e0a10fc72ffb31568db0e0309d5195c05/packages/';
+  const TAJWID_DATA = TAJWID_AT + 'annotations/uthmani-hafs.json';
+  const TAJWID_RULINGS = TAJWID_AT + 'rules/rules.json';
   scene('tajwid', async () => {
     const off = new Set(); let marks = [], handles = new Map(), picked = 0;
-    // The build can name a newer file of rulings (QVP_TAJWID). A span of the published package
-    // covers the letter and its condition. A newer span adds a focus, the letters that the
-    // ruling is about, and the scene colours the focus when the span has one.
+    // The build can name another file of rulings (QVP_TAJWID). A span covers the letter and
+    // its condition, and its focus is the letters that the ruling is about. The scene colours
+    // the focus.
     const [ann, rules] = await Promise.all([json('tajwid.json').catch(() => json(TAJWID_DATA)), json(TAJWID_RULINGS).catch(() => null)]);
     const family = ann.ruleIds.map(id => TAJWID.findIndex(f => f[3].some(start => id.startsWith(start))));
     const label = new Map((rules && rules.rules || []).map(r => [r.id, r.label && r.label.ar]));
+    // the corpus's own name of each ruling: the card shows it, so a ruling is never renamed here
+    const rulingName = new Map((rules && rules.hukums || []).map(h => [h.id, h.label && h.label.ar]));
     const st = new Stage($('tjStage'), {
       onLoad: p => {
         marks = [];
@@ -293,7 +300,11 @@
         here.sort((a, b) => (b.fam >= 0) - (a.fam >= 0));
         const m = here[0], id = ann.ruleIds[m.rule];
         picked = p.highlight(T.word(h.word), { mode: 'band', band: rgba('#c9a44c', 0.2), radius: 1.5, ms: 180 });
-        card('tjCard', m.fam >= 0 ? TAJWID[m.fam][1] : 'حكم بلا لون', label.get(id) || '', ['الكلمة: ', p.wordForm(h.word, 'qpc')]);
+        const own = rulingName.get(id.split('.')[0]) || (m.fam >= 0 ? TAJWID[m.fam][1] : 'حكم');
+        // the other rulings on the same letter, by name
+        const more = [...new Set(here.slice(1).map(x => rulingName.get(ann.ruleIds[x.rule].split('.')[0])).filter(Boolean))].filter(x => x !== own);
+        card('tjCard', '', label.get(id) || '', ['الكلمة: ', p.wordForm(h.word, 'qpc')], more.length ? 'وعلى الحرف نفسه: ' + more.join('، ') : '');
+        $('tjCard').prepend(el('div', 'name', own));
         st.draw();
       },
     });
@@ -546,23 +557,61 @@
       const tImg = performance.now() - t;
       $('cmpImg').textContent = ms(tImg); $('cmpPng').textContent = '≈ ' + (blob.size * 604 / 1048576).toFixed(0) + ' MB';
       cell('صورة PNG', ms(tImg), `الصورة ${kb(blob.size)} بعرض ${W} بكسل. لا كلمات فيها ولا حروف.`);
+      // the words of the page as text, for the Hafs font: the sidecar gives them, and no measure counts it
+      const wb = await maybe(`pages/${pad(n)}.words.json`); if (wb) p.attachWords(wb);
+      const pageText = p.words.map(w => p.wordForm(w.index, 'qpc') || w.text).join(' ');
       p.free();
-      // SVG: put the file in the page, as an app must to reach its words, and let the browser lay it out
+      // A box that the browser lays out and paints. It is almost clear, so the paint still
+      // happens, and the second frame starts after the browser painted the first.
+      const box = () => { const h = document.body.appendChild(el('div')); h.style.cssText = `position:fixed;opacity:0.01;pointer-events:none;inset-inline-start:0;top:0;width:${W}px;z-index:-1;direction:rtl;text-align:justify;font-size:46px;line-height:2.1`; return h; };
+      const twoFrames = async () => { await frame(); await frame(); };
+      // Two frames pass even when the browser has nothing to do. That wait is not work, so the
+      // measures of SVG and of the fonts leave it out: the least of three idle waits.
+      let idle = Infinity;
+      for (let i = 0; i < 3; i++) { const t0 = performance.now(); await twoFrames(); idle = Math.min(idle, performance.now() - t0); }
+      // The work the page can time itself comes first: reading, and the layout that the box
+      // forces. The paint comes with the frames, and it counts where it took longer than the
+      // idle wait. So the measure is never less than the work that was timed.
+      const painted = async (h, t0) => {
+        h.getBoundingClientRect(); const timed = performance.now() - t0;
+        await twoFrames();
+        return Math.max(timed, performance.now() - t0 - idle);
+      };
+      // SVG: put the file in the page, as an app must to reach its words
       const sb = await maybe(`svg/${pad(n)}.svg`);
       if (sb) {
-        const text = new TextDecoder().decode(sb), host = document.body.appendChild(el('div'));
-        // almost clear, so the browser still paints it: the measure must hold the paint
-        host.style.cssText = `position:fixed;opacity:0.01;pointer-events:none;inset-inline-start:0;top:0;width:${W}px;z-index:-1`;
+        const host = box();
         t = performance.now();
-        host.innerHTML = text;   // the file is this project's own page source, served by the build
-        host.getBoundingClientRect(); const count = host.querySelectorAll('*').length;
-        // the second frame starts after the browser painted the first
-        await frame(); await frame();
-        const tSvg = performance.now() - t;
+        const doc = new DOMParser().parseFromString(new TextDecoder().decode(sb), 'image/svg+xml');
+        const tParse = performance.now() - t;
+        // The file is data. Nothing in it may run: no script, no foreign content, no handler.
+        for (const bad of doc.querySelectorAll('script, foreignObject, iframe, object, embed')) bad.remove();
+        for (const node of doc.querySelectorAll('*')) for (const a of [...node.attributes]) if (/^on/i.test(a.name) || /^\s*javascript:/i.test(a.value)) node.removeAttribute(a.name);
+        t = performance.now();
+        host.append(document.importNode(doc.documentElement, true));
+        const count = host.querySelectorAll('*').length;
+        const tSvg = tParse + await painted(host, t);
         host.remove();
         $('cmpSvg').textContent = ms(tSvg);
         cell('SVG', ms(tSvg), `الملف ${kb(sb.length)}، و${count} عنصرًا في الصفحة.`);
       } else { $('cmpSvg').textContent = '—'; cell('SVG', '—', 'ملفات SVG ليست مع هذا البناء.'); }
+      // a font: decode it, set the page's text in it, and let the browser lay it out and paint it
+      const withFont = async (id, title, url, text, note) => {
+        const fb = await maybe(url);
+        if (!fb) { $(id).textContent = '—'; cell(title, '—', 'هذا الخط ليس مع هذا البناء.'); return; }
+        const host = box(), name = 'bench-' + id;
+        t = performance.now();
+        const face = new FontFace(name, fb); await face.load(); document.fonts.add(face);
+        host.style.fontFamily = name; host.textContent = text;
+        const took = await painted(host, t);
+        host.remove(); document.fonts.delete(face);
+        $(id).textContent = ms(took);
+        cell(title, ms(took), note(fb.length, new TextEncoder().encode(text).length));
+      };
+      // a page font holds one glyph for each word of its page, at the code points the build lists
+      const codes = await json(`fonts/qpc-${pad(n)}.json`).catch(() => null);
+      await withFont('cmpQpc', 'خط الصفحة (QPC)', codes ? `fonts/qpc-${pad(n)}.woff2` : '', codes ? codes.map(c => String.fromCodePoint(c)).join(' ') : '', (f, x) => `خط الصفحة ${kb(f)}، و${codes.length} محرفًا لكلماتها.`);
+      await withFont('cmpHafs', 'خط حفص مع النص', 'fonts/quran.woff2', pageText, (f, x) => `الخط ${kb(f)} مرة واحدة للمصحف كله، ونص الصفحة ${kb(x)}.`);
       $('cmpNote').textContent = 'هذه أرقام جهازك الآن. تتغير من جهاز إلى جهاز ومن مرة إلى مرة.';
     } catch (e) { console.error(e); $('cmpNote').textContent = 'تعذّر القياس: ' + e.message; }
     btn.disabled = false;

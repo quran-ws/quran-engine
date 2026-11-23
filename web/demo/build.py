@@ -12,14 +12,15 @@ QVP_LETTERS_DIR name other directories, and QVP_ORNAMENTS names an ornament set 
 the dress scene, and QVP_TAJWID a file of tajwid rulings (uthmani-hafs.json of
 quran-tajweed) in the place of the published package. QVP_FONT_TITLE and QVP_FONT_QURAN name two .woff2 files: the typeface of
 the titles, and the typeface for a word of the Quran outside the page. The page falls back
-to web fonts without them. A layer attaches only to the page file it was built
+to web fonts without them. QVP_FONT_QPC names the QPC font of page 3, which the comparison
+measures. A layer attaches only to the page file it was built
 with, so take the pages and the layers from the same build. The tajwid and recitation
 scenes need the layers.
 
 web/demo/config.local.js is optional and git-ignored: it holds the keys of this machine
 (web/demo/README.md). The build copies it when it is there.
 """
-import hashlib, os, shutil
+import hashlib, json, os, shutil
 
 root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 web = os.path.join(root, 'web'); demo = os.path.join(web, 'demo')
@@ -73,6 +74,19 @@ for var, name in (('QVP_FONT_TITLE', 'title.woff2'), ('QVP_FONT_QURAN', 'quran.w
     if os.environ.get(var):
         os.makedirs(fonts, exist_ok=True)
         shutil.copy(os.path.expanduser(os.environ[var]), os.path.join(fonts, name))
+# QVP_FONT_QPC names the QPC font of page 3 (.woff2), for the comparison's measure. A page
+# font has one glyph for each word of its page, in the private use area. The list of those
+# code points goes beside it, and it needs fontTools.
+if os.environ.get('QVP_FONT_QPC'):
+    try:
+        from fontTools.ttLib import TTFont
+        src = os.path.expanduser(os.environ['QVP_FONT_QPC'])
+        codes = sorted(c for c in TTFont(src).getBestCmap() if 0xE000 <= c <= 0xF8FF or c >= 0xFB50)
+        os.makedirs(fonts, exist_ok=True)
+        shutil.copy(src, os.path.join(fonts, 'qpc-003.woff2'))
+        json.dump(codes, open(os.path.join(fonts, 'qpc-003.json'), 'w'))
+    except ImportError:
+        print('skipped  QVP_FONT_QPC: fontTools is not installed (pip install fonttools brotli)')
 link(pages_dir, os.path.join(out, 'pages'))
 link(letters_dir, os.path.join(out, 'letters'))
 # the page SVGs, for the comparison's measure: the engine's own source (scripts/sync-test-data.sh)

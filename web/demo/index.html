@@ -65,6 +65,7 @@
   .card .big { font-size:34px; line-height:1.9 }
   .q { font-size:1.35em; line-height:1 }
   .card .sub { font-size:13px; color:var(--muted) }
+  .card .name { font:700 24px/1.6 var(--display); color:#fff }
   .card b { color:var(--gold); font-weight:600 }
   .time { font:13px var(--mono); color:var(--muted); direction:ltr; min-width:9ch; text-align:center }
 
@@ -230,7 +231,8 @@
       </tr></thead>
       <tbody>
         <tr><th>حجم المصحف كاملًا</th>
-          <td><span class="num">92.6 MB</span><small>مضغوطًا صفحةً صفحة: <span class="num">41.8 MB</span>، والمحرّك نفسه <span class="num">0.6 MB</span></small></td>
+          <td><span class="num">92.6 MB</span><small>مضغوطًا صفحةً صفحة: <span class="num">41.8 MB</span>، والمحرّك نفسه <span class="num">0.6 MB</span></small>
+            <small>مع طبقة الحروف: <span class="num">100.9 MB</span>. الطبقة اختيارية: <span class="num">8.3 MB</span>، ومضغوطةً <span class="num">3.9 MB</span></small></td>
           <td><span class="num">441 MB</span><small>مضغوطًا: <span class="num">109 MB</span></small></td>
           <td><span class="num" id="cmpPng">—</span><small>تقدير من قياس صفحة واحدة على جهازك، بعرض 1080 بكسل</small></td>
           <td><span class="num">50.9 MB</span><small>604 خطوط مضغوطة (نسخة التجويد الملوّنة)</small></td>
@@ -250,20 +252,20 @@
         <tr><th>تطبيقات الجوال بلا متصفح</th>
           <td class="y">نعم: Android و iOS و Flutter و React Native</td><td class="n">يحتاج متصفحًا داخل التطبيق</td><td class="y">نعم</td><td class="y">نعم</td><td class="y">نعم</td></tr>
         <tr><th>زمن فتح الصفحة</th>
-          <td><span class="num" id="cmpQvp">—</span></td><td><span class="num" id="cmpSvg">—</span></td><td><span class="num" id="cmpImg">—</span></td><td class="h">لم نقِسه هنا</td><td class="h">لم نقِسه هنا</td></tr>
+          <td><span class="num" id="cmpQvp">—</span></td><td><span class="num" id="cmpSvg">—</span></td><td><span class="num" id="cmpImg">—</span></td><td><span class="num" id="cmpQpc">—</span></td><td><span class="num" id="cmpHafs">—</span></td></tr>
       </tbody>
     </table>
   </div>
-  <div class="bench"><button class="go" id="cmpRun">قِس على جهازك</button><span class="fine" id="cmpNote">يفتح الصفحة ٣ من المصحف بثلاث طرق على هذا الجهاز ويقيس الحجم والزمن.</span></div>
+  <div class="bench"><button class="go" id="cmpRun">قِس على جهازك</button><span class="fine" id="cmpNote">يفتح الصفحة ٣ من المصحف بخمس طرق على هذا الجهاز ويقيس الحجم والزمن.</span></div>
   <div class="cells" id="cmpCells"></div>
   <details class="how"><summary>كيف قِسنا</summary>
     <ul>
-      <li>محرّك المصحف: 604 ملفات صفحات مع نصوصها من إصدار البيانات، والأرقام من ملف README في المستودع.</li>
+      <li>محرّك المصحف: 604 ملفات صفحات مع نصوصها من إصدار البيانات، والأرقام من ملف README في المستودع. طبقة الحروف 604 ملفات أخرى، وحجمها من docs/MEASURED.md، والمضغوط بضغط brotli.</li>
       <li>SVG: 604 ملفات من أرشيف الكلمات في quran-svg-elements الإصدار 2.0.0، والمضغوط حجم الأرشيف.</li>
       <li>الصور: لا نملك مجموعة صور مرجعية. الرقم تقدير: حجم صورة PNG للصفحة ٣ يرسمها متصفحك بعرض 1080 بكسل، مضروبًا في 604.</li>
       <li>خطوط الصفحات: 604 خطوط woff2 من نسخة التجويد الملوّنة (V4). لم نقِس النسختين V1 و V2.</li>
       <li>خط حفص: خط KFGQPC بصيغة woff2، مع ملف نص المصحف من quran-text.</li>
-      <li>الزمن يُقاس على جهازك عند الضغط على الزر: للمحرّك فكّ الملف وبناء الخطوط ورسم الصفحة، ولـ SVG وضعه في الصفحة ورسمه، وللصورة فكّها ورسمها. لا يدخل زمن التحميل من الشبكة.</li>
+      <li>الزمن يُقاس على جهازك عند الضغط على الزر: للمحرّك فكّ الملف وبناء المسارات ورسم الصفحة، ولـ SVG قراءته ووضعه في الصفحة ورسمه، وللصورة فكّها ورسمها، وللخطّين فكّ الخط ووضع نص الصفحة به ورسمه. لا يدخل زمن التحميل من الشبكة، ولا انتظار المتصفح لإطار الشاشة التالي. رسم المتصفح لـ SVG وللخطوط لا يُقاس بدقة من داخل الصفحة، فأرقامها حدّ أدنى. خط الصفحة يرسم كلمات الصفحة كلها، لكن ليس بسطورها كما في المصحف.</li>
     </ul>
   </details>
 </section>
