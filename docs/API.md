@@ -1444,3 +1444,72 @@ Use a page from one thread at a time. A call that takes a `const QvpPage*` can s
 the page's caches, such as the draw list, so two threads must not call into one page at
 the same time. Different pages can be on different threads.
 `qvp_alloc/qvp_dealloc` exist for hosts without `malloc` (wasm).
+
+## The lite decoder on the web
+
+For a small Canvas-only reader that needs page drawing and word bands, import
+the dependency-free QVP decoder. It loads the original page files directly and
+does not load Wasm:
+
+```js
+import { loadPage } from '@quran.ws/engine/lite'
+
+const page = await loadPage('/pages/042.qvp')
+const canvas = document.querySelector('canvas')
+page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
+```
+
+### Canvas resolution
+
+Canvas2D rasterises these unhinted vector outlines. Give the canvas at least two backing
+pixels per CSS pixel. Above that floor, use the display's device-pixel ratio rather than a
+multiple of it. Extra supersampling makes the browser downsample the result and can leave
+thin strokes and diacritics soft or uneven.
+
+```js
+const rect = canvas.getBoundingClientRect()
+const pixelRatio = Math.max(2, window.devicePixelRatio || 1)
+canvas.width = Math.round(rect.width * pixelRatio)
+canvas.height = Math.round(rect.height * pixelRatio)
+canvas.style.width = `${rect.width}px`
+canvas.style.height = `${rect.height}px`
+page.draw(canvas.getContext('2d'), page.fit(canvas, 24 * pixelRatio))
+```
+
+An app may cap the backing dimensions or total pixel count to control memory use. The web
+example uses this rule and caps its ratio at three.
+
+Page files are served from `cdn.quran.ws` under immutable, versioned URLs, so a
+browser can load one page without shipping the data — `docs/CDN.md`:
+
+```js
+const page = await loadPage('https://cdn.quran.ws/qvp/v0.5.0/042.qvp')
+```
+
+`cdn.quran.ws` mirrors the signed releases of the stack. This repo publishes two
+kinds of artifact, each on its own version line:
+
+| folder | holds |
+|---|---|
+| `qvp/<version>/` | page data, atlas, text sidecars, QVP/SVG/font surah-name assets, the brotli bundle |
+| `engine/wasm/<version>/`, `engine/apple/<version>/`, `engine/android/<version>/` | engine builds |
+
+`latest.json` beside each names the current version. Other repositories of the
+stack publish their own folders on the same host — `docs/CDN.md` has the layout.
+
+`qvp.quran.ws/<version>/` redirects to `cdn.quran.ws/qvp/<version>/`, so URLs
+published before the move still resolve.
+
+Decoded words include their `surah`, `ayah`, `word` and page-coordinate `box`.
+`page.hitTestExact(x, y)` returns the word at a point in those same page coordinates.
+`drawWords(ctx, wordIndices, options)` draws selected words with their dots,
+diacritics and pause marks. `drawDecorations(ctx, options)` draws non-word page
+elements such as ayah markers, surah banners, basmalahs, division and sajdah
+marks, running heads and page numbers. Both accept the same `scale`, `x`, `y`
+and `ink` options as `draw()` and leave clearing and sizing to the caller.
+
+A passage is a verse excerpt that wraps to its container: the core lays it out (`qvp_passage_*`, bound as `QvpPassage` in QvpKit, `qvp.js`, the Android SDK and the Flutter plugin). For a passage without Wasm, import the optional `QvpPassage` from `@quran.ws/engine/lite/passage`, a JavaScript port of the same layout. It takes `decodeGeometry()` pages and a complete ayah range, including ranges across pages, and preserves verse medallions and sajdah signs. See [Lite passages](docs/LITE-PASSAGES.md). The base lite import does not load this layout code.
+
+Use the main package for full-page layout, exact hit-testing, search, styling, selection,
+masks and animation. With an optional letter layer (`NNN.qvl`, `docs/API.md` "Letters"), it
+also colours, reads and hit-tests single letters and marks.

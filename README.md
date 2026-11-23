@@ -1,130 +1,71 @@
 <div align="center">
 
-<img src=".github/banner.svg" alt="Quran Engine — Rendering, Beta" width="820">
+<img src=".github/banner.svg" alt="Quran Engine" width="820">
 
-**A rendering engine for interactive Mushaf pages that uses each platform's native graphics APIs.**
+### Mushaf pages that an app can read, colour and touch, down to one letter.
 
-<a href="https://quran.ws/blocks/quran-engine"><img alt="See it work" src="https://img.shields.io/badge/See_it_work-15705D?style=for-the-badge&labelColor=102F29"></a>
-<a href="https://quran.ws/docs/reference/quran-engine"><img alt="Documentation" src="https://img.shields.io/badge/Documentation-102F29?style=for-the-badge&labelColor=102F29"></a>
+Quran Engine draws each page of the mushaf as vectors with the platform's own graphics.
+The page looks as it does in print, and the app can act on every word, letter and mark.
+
+<a href="https://engine.quran.ws/?lang=en"><img alt="Open the live demo" src="https://img.shields.io/badge/Open_the_live_demo_%E2%86%92-D4A94E?style=for-the-badge&labelColor=102F29" height="54"></a>
+
+<a href="https://engine.quran.ws/?lang=en"><img src=".github/showcase.png" alt="The live demo: a mushaf page with tajwid colours on each letter" width="820"></a>
+
+[العرض بالعربية](https://engine.quran.ws/) · [Documentation](https://quran.ws/docs/reference/quran-engine) · [npm](https://www.npmjs.com/package/@quran.ws/engine)
 
 </div>
 
-Use it when building Quran applications for mobile or desktop and you need fast, lightweight page rendering with interactive access to page elements.
+> **محرّك عرض صفحات المصحف.** يرسم Quran Engine صفحة المصحف كما طُبعت، ويتيح للتطبيق التعامل مع كل كلمة وحرف وعلامة فيها. [افتح العرض التفاعلي](https://engine.quran.ws/).
 
-> محرّك لعرض صفحات المصحف التفاعلية بكفاءة باستخدام الرسم الأصلي لكل منصة.
->
-> استخدمه عند بناء تطبيقات القرآن على الجوال أو سطح المكتب عندما تحتاج عرضًا سريعًا وخفيفًا لصفحات المصحف مع إمكانية التفاعل مع عناصرها.
+## What an app can do with it
 
 | | |
 |---|---|
-| **Package** | `@quran.ws/engine` · `0.9.1` |
-| **Whole mushaf** | 26 MB as one bundle · 41.8 MB page by page · 92.6 MB raw |
-| **Wasm engine** | 530 KB in the 0.7.0 release |
-| **Licence** | MIT (the code) · source bundle terms (the data) |
+| **Tajwid colours** | Colour each ruling on its own letter. |
+| **Recitation** | Highlight the word, or the letter, that the reciter says. |
+| **Memorisation** | Hide ayahs and show them word by word, by touch or by voice. |
+| **Reading** | Zoom, reflow the lines for a small screen, and change paper and ink. |
+| **Touch and search** | Know the word or letter under a finger. Search the text and select a range. |
 
-```sh
-npm install @quran.ws/engine
-```
+Each of these runs in the [live demo](https://engine.quran.ws/?lang=en).
 
-For a small Canvas-only reader that needs page drawing and word bands, import
-the dependency-free QVP decoder. It loads the original page files directly and
-does not load Wasm:
+## Why use it
 
-```js
-import { loadPage } from '@quran.ws/engine/lite'
+- **Sharp at every size.** The pages are lossless vectors of the printed mushaf.
+- **Small.** The whole mushaf is 26 MB as one bundle, and the web engine is about 0.6 MB.
+- **The same on every platform.** One Rust core computes the layout. Each platform draws it natively.
 
-const page = await loadPage('/pages/042.qvp')
-const canvas = document.querySelector('canvas')
-page.draw(canvas.getContext('2d'), page.fit(canvas, 24))
-```
+The demo compares it with page images, SVG files and fonts, and measures each on your device.
 
-### Canvas resolution
+## Platforms
 
-Canvas2D rasterises these unhinted vector outlines. Give the canvas at least two backing
-pixels per CSS pixel. Above that floor, use the display's device-pixel ratio rather than a
-multiple of it. Extra supersampling makes the browser downsample the result and can leave
-thin strokes and diacritics soft or uneven.
-
-```js
-const rect = canvas.getBoundingClientRect()
-const pixelRatio = Math.max(2, window.devicePixelRatio || 1)
-canvas.width = Math.round(rect.width * pixelRatio)
-canvas.height = Math.round(rect.height * pixelRatio)
-canvas.style.width = `${rect.width}px`
-canvas.style.height = `${rect.height}px`
-page.draw(canvas.getContext('2d'), page.fit(canvas, 24 * pixelRatio))
-```
-
-An app may cap the backing dimensions or total pixel count to control memory use. The web
-example uses this rule and caps its ratio at three.
-
-Page files are served from `cdn.quran.ws` under immutable, versioned URLs, so a
-browser can load one page without shipping the data — `docs/CDN.md`:
-
-```js
-const page = await loadPage('https://cdn.quran.ws/qvp/v0.5.0/042.qvp')
-```
-
-`cdn.quran.ws` mirrors the signed releases of the stack. This repo publishes two
-kinds of artifact, each on its own version line:
-
-| folder | holds |
+| platform | package |
 |---|---|
-| `qvp/<version>/` | page data, atlas, text sidecars, QVP/SVG/font surah-name assets, the brotli bundle |
-| `engine/wasm/<version>/`, `engine/apple/<version>/`, `engine/android/<version>/` | engine builds |
+| Web | `npm install @quran.ws/engine` |
+| iOS and macOS | Swift package `QvpKit`, from this repository |
+| Android | `packages/android` |
+| Flutter | `packages/flutter` |
+| React Native | `packages/react-native` |
 
-`latest.json` beside each names the current version. Other repositories of the
-stack publish their own folders on the same host — `docs/CDN.md` has the layout.
+The setup for each platform is in [the platform guide](https://quran.ws/docs/build/platforms).
 
-`qvp.quran.ws/<version>/` redirects to `cdn.quran.ws/qvp/<version>/`, so URLs
-published before the move still resolve.
-
-Decoded words include their `surah`, `ayah`, `word` and page-coordinate `box`.
-`page.hitTestExact(x, y)` returns the word at a point in those same page coordinates.
-`drawWords(ctx, wordIndices, options)` draws selected words with their dots,
-diacritics and pause marks. `drawDecorations(ctx, options)` draws non-word page
-elements such as ayah markers, surah banners, basmalahs, division and sajdah
-marks, running heads and page numbers. Both accept the same `scale`, `x`, `y`
-and `ink` options as `draw()` and leave clearing and sizing to the caller.
-
-A passage is a verse excerpt that wraps to its container: the core lays it out (`qvp_passage_*`, bound as `QvpPassage` in QvpKit, `qvp.js`, the Android SDK and the Flutter plugin). For a passage without Wasm, import the optional `QvpPassage` from `@quran.ws/engine/lite/passage`, a JavaScript port of the same layout. It takes `decodeGeometry()` pages and a complete ayah range, including ranges across pages, and preserves verse medallions and sajdah signs. See [Lite passages](docs/LITE-PASSAGES.md). The base lite import does not load this layout code.
-
-Use the main package for full-page layout, exact hit-testing, search, styling, selection,
-masks and animation. With an optional letter layer (`NNN.qvl`, `docs/API.md` "Letters"), it
-also colours, reads and hit-tests single letters and marks.
-
-On iOS and macOS, add the repository as a Swift package and use its `QvpKit` product:
-
-```swift
-.package(url: "https://github.com/quran-ws/quran-engine.git", from: "0.9.1")
-```
-
-SwiftPM downloads the release XCFramework and verifies its checksum. Page data remains a
-separate app or CDN resource.
-
-## Where the documentation is
-
-Everything about using it lives on the site. This repository is the source.
+## Documentation
 
 | | |
 |---|---|
-| **Overview and demo** | [quran.ws/blocks/quran-engine](https://quran.ws/blocks/quran-engine) |
-| **Showcase, in Arabic and English** | [engine.quran.ws](https://engine.quran.ws/) · source in [`web/demo/`](web/demo/README.md) |
 | **Reference** | [quran.ws/docs/reference/quran-engine](https://quran.ws/docs/reference/quran-engine) |
 | **Make words clickable** | [quran.ws/docs/build/clickable-words](https://quran.ws/docs/build/clickable-words) |
-| **Render on iOS, Android, Flutter and React Native** | [quran.ws/docs/build/platforms](https://quran.ws/docs/build/platforms) |
 | **Work offline** | [quran.ws/docs/build/offline](https://quran.ws/docs/build/offline) |
-| **Licensing in full** | [quran.ws/docs/reference/licensing](https://quran.ws/docs/reference/licensing) |
+| **How the engine works** | [`docs/HOW-IT-WORKS.md`](docs/HOW-IT-WORKS.md) |
+| **The API** | [`docs/API.md`](docs/API.md) |
+| **Page data and the CDN** | [`docs/DATA.md`](docs/DATA.md) · [`docs/CDN.md`](docs/CDN.md) |
+| **The demo's source** | [`web/demo/`](web/demo/README.md) |
 
-## What is in here
+## Contribute
 
-| | |
-|---|---|
-| `crates/` | the Rust core: `qvp-format`, `qvp-core`, `qvp-convert`, `qvp-ffi` |
-| `packages/` | the thin platform wrappers — iOS, Android, Flutter, React Native |
-| `web/` | the reference web harness the browser demo runs on |
-| `conformance/` | the gates that must stay green |
-| `scripts/` | build and packaging |
-| `docs/` | `HOW-IT-WORKS.md` (start here), the API, the standards, and the measured numbers |
+Issues and pull requests are welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the rules.
 
-Issues and pull requests are welcome here. `CONTRIBUTING.md` says how; `docs/HOW-IT-WORKS.md` describes the engine's components and data flow. `npm test` runs the web tests and builds `web/qvp_ffi.wasm` when it is missing; after an engine change, `npm run build:wasm` refreshes it. Everything that is not about *changing* this repository is on the site.
+## Licence
+
+The code is MIT. The page data has the terms of its source bundle:
+[licensing in full](https://quran.ws/docs/reference/licensing).
