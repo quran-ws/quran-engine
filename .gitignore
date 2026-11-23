@@ -79,3 +79,6 @@ dist/ios/
 
 # the keys of this machine for the Arabic showcase
 web/demo/config.local.js
+
+# the built page of the showcase site: .github/workflows/showcase.yml makes it
+web/demo/site/public/

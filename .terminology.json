@@ -18,9 +18,10 @@
     "**/node_modules/**",
     "**/package-lock.json",
     "**/assets/pages/**",
-    "docs/design/**"
+    "docs/design/**",
+    "web/demo/site/public/**"
   ],
-  "_exclude": "Data and build output, not code. pages/ and index/ are the quran-svg bundle verbatim, and pages-letters/ is the letters archive of the same bundle, verbatim; dist/ and web/pages/ are generated from it. docs/design/ holds the dated design spec, a historical record that should keep its original wording.",
+  "_exclude": "Data and build output, not code. pages/ and index/ are the quran-svg bundle verbatim, and pages-letters/ is the letters archive of the same bundle, verbatim; dist/ and web/pages/ are generated from it. docs/design/ holds the dated design spec, a historical record that should keep its original wording. web/demo/site/public/ is the built page of the showcase site with its page data, which the showcase workflow generates; git ignores it.",
   "ignore_words": [
     "pos",
     "stop",

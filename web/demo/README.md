@@ -5,6 +5,8 @@ mushaf page that the engine draws: tajwid colours, a recitation player, memorisa
 voice, zoom with reflow, ornaments, a comparison with other ways to show a page, and the
 platforms.
 
+It is live at https://engine.quran.ws/.
+
 ## Run it
 
 ```sh
@@ -61,6 +63,17 @@ The model does not judge a recitation. `demo.js` does the rest:
 
 It can be wrong, and it does not replace a qualified teacher. The model's licence (NPL-1.2)
 does not let anyone charge for a feature that it powers.
+
+## The site
+
+`.github/workflows/showcase.yml` builds the showcase as an image and deploys it to
+`engine.quran.ws`, on each push to `main` that changes the engine or the page. The job
+converts all 604 pages and their letter layers from `quran-svg-elements`, builds the page,
+and makes an nginx image from `web/demo/site/`. An image-bump pull request in the server's
+repository then deploys it, as for the other sites of quran.ws.
+
+The site's key of Quran Lab is the repository secret `QURANLAB_WEB_KEY`. Its one allowed
+origin is `https://engine.quran.ws`.
 
 ## Languages
 
