@@ -105,6 +105,9 @@ class Palette {
 }
 
 /// Mark-category colours (the "Mark colours" theme + legend).
+/// The colours of the letter controls (docs/EXAMPLE-APP.md, feature 12).
+const List<String> kLetterColors = ['#c62828', '#1a73e8', '#0a7d32', '#ef6c00'];
+
 const Map<int, String> kPalette = {
   QvpCategory.harakah: '#1a73e8',
   QvpCategory.tanwin: '#8e24aa',
@@ -229,7 +232,13 @@ class _ReaderPageState extends State<ReaderPage>
       dressFrameScale = 1;
   Set<QvpOrnamentKind> dressLineArt = {};
   List<(int, int, int)> dressColors = [];
-  late final TabController tabs = TabController(length: 9, vsync: this);
+  // ── letters: the optional letter layer NNN.qvl ──
+  bool hasLetterLayer = false, letterEvery = false;
+  String letterTarget = 'word', letterColor = kLetterColors.first;
+  final List<int> letterHandles = [];
+  String letterInfo = '';
+  Offset? tapAt; // where the last tap went up, in the page view's local space
+  late final TabController tabs = TabController(length: 10, vsync: this);
 
   Palette get pal => widget.palette;
 
@@ -317,6 +326,12 @@ class _ReaderPageState extends State<ReaderPage>
       );
       np.attachWords(json);
     } catch (_) {}
+    // The letter layer is optional. A missing file or a refused attach disables the controls.
+    var letters = false;
+    try {
+      final qvl = await rootBundle.load('assets/pages/${_pad(target)}.qvl');
+      letters = np.attachLetters(qvl.buffer.asUint8List());
+    } catch (_) {}
     loadMs = sw.elapsedMicroseconds / 1000;
     final old = page;
     _stopPlay(notify: false);
@@ -333,6 +348,10 @@ class _ReaderPageState extends State<ReaderPage>
       revealPos = -1;
       tajwidHandle = hideHandle = ayahMarksHandle = 0;
       cropInfo = null;
+      // the rules of the old page go with it
+      hasLetterLayer = letters;
+      letterHandles.clear();
+      letterInfo = '';
       pageCtl.text = '$target';
     });
     if (old != null) {
@@ -698,6 +717,8 @@ class _ReaderPageState extends State<ReaderPage>
     hlSel = hlAyah = hlSearch = hlPlay = 0;
     tajwidHandle = hideHandle = ayahMarksHandle = 0;
     pathHandles.clear();
+    letterHandles.clear();
+    letterInfo = '';
     selWord = -1;
     selAyah = null;
     revealOn = false;
@@ -747,6 +768,87 @@ class _ReaderPageState extends State<ReaderPage>
     setState(() {});
   }
 
+  // ── letters: the engine finds the letter and its paths. This code only picks the rule. ──
+  bool get _letterTaps => hasLetterLayer && letterTarget != 'word';
+
+  void _letterTap() {
+    final p = page!, at = tapAt;
+    if (at == null) return;
+    final v = view.toView(at);
+    final h = p.hitTestLetterView(
+      v.dx,
+      v.dy,
+      const QvpHitOptions(maxDistance: QvpDefaults.tapDistance),
+    );
+    final l = h == null || h.letter < 0 ? null : p.letter(h.word, h.letter);
+    if (h == null || l == null) {
+      setState(
+        () => letterInfo = h == null
+            ? 'no letter here'
+            : 'a word-level mark of ${h.wordKey}${h.markName.isNotEmpty ? ' (${h.markName})' : ''}',
+      );
+      return;
+    }
+    final onMark = h.isExact && !h.isBody && h.mark != 0;
+    final cp =
+        'U+${l.codePoint.toRadixString(16).toUpperCase().padLeft(4, '0')}';
+    letterInfo =
+        '${l.text} $cp · ${h.wordKey} · letter ${l.index} · at ${l.at} · '
+        '${l.nMarks} mark${l.nMarks == 1 ? '' : 's'}'
+        '${onMark ? ' · ${h.markName}' : ''} · ${h.isExact ? 'exact' : 'near'}';
+    int handle = 0;
+    if (letterTarget == 'letter') {
+      handle = letterEvery
+          ? p.styleLetters(
+              QvpLetterQuery(
+                text: l.codePoint,
+                part: QvpLetterPart.bodyAndDots,
+              ),
+              letterColor,
+              ms: 200,
+              layer: QvpLayer.top,
+            )
+          : p.style(
+              Sel.letter(h.word, h.letter, QvpLetterPart.bodyAndDots),
+              letterColor,
+              ms: 200,
+              layer: QvpLayer.top,
+            );
+    } else if (onMark) {
+      handle = letterEvery
+          ? p.styleLetters(
+              QvpLetterQuery(mark: h.mark, part: QvpLetterPart.marks),
+              letterColor,
+              ms: 200,
+              layer: QvpLayer.top,
+            )
+          : p.style(
+              Sel.letterMarkNamed(h.word, h.letter, h.mark),
+              letterColor,
+              ms: 200,
+              layer: QvpLayer.top,
+            );
+    } else if (!letterEvery) {
+      handle = p.style(
+        Sel.letter(h.word, h.letter, QvpLetterPart.marks),
+        letterColor,
+        ms: 200,
+        layer: QvpLayer.top,
+      );
+    }
+    if (handle != 0) letterHandles.add(handle);
+    setState(() {});
+  }
+
+  void clearLetters() {
+    final p = page!;
+    for (final h in letterHandles) {
+      p.removeStyle(h);
+    }
+    letterHandles.clear();
+    setState(() {});
+  }
+
   // ── layout ──
   void _setLayout(QvpViewLayout l) => setState(() => layout = l);
 
@@ -781,23 +883,30 @@ class _ReaderPageState extends State<ReaderPage>
         final wide = c.maxWidth >= 800;
         final stage = Container(
           color: pal.bg,
-          child: QvpPageView(
-            key: viewKey,
-            page: p,
-            controller: view,
-            layout: layout,
-            paper: pal.paper,
-            defaultInk: ink,
-            onWordTap: (w, hit) {
-              lastHitUs =
-                  hit.distance; // distance in page units of the gap-aware hit
-              selectWord(w.index);
-            },
-            onDecorationTap: (d, _) {
-              if (d.ayah > 0) selectAyah(d.surah, d.ayah);
-            },
-            onEmptyTap: () => selectWord(-1),
-            onSelectionChanged: _onDragSelection,
+          child: Listener(
+            onPointerUp: (e) => tapAt = e.localPosition,
+            child: QvpPageView(
+              key: viewKey,
+              page: p,
+              controller: view,
+              layout: layout,
+              paper: pal.paper,
+              defaultInk: ink,
+              onWordTap: (w, hit) {
+                lastHitUs =
+                    hit.distance; // distance in page units of the gap-aware hit
+                _letterTaps ? _letterTap() : selectWord(w.index);
+              },
+              onDecorationTap: (d, _) {
+                if (_letterTaps) {
+                  _letterTap();
+                } else if (d.ayah > 0) {
+                  selectAyah(d.surah, d.ayah);
+                }
+              },
+              onEmptyTap: () => _letterTaps ? _letterTap() : selectWord(-1),
+              onSelectionChanged: _onDragSelection,
+            ),
           ),
         );
         final panel = _panel(wide);
@@ -936,11 +1045,13 @@ class _ReaderPageState extends State<ReaderPage>
       ('Dress', _dressSection),
       ('Page', _pageSection),
       ('Engine', _engineSection),
+      ('Letters', _lettersSection),
     ];
     if (wide) {
       return Material(
         color: pal.panel,
         child: ListView(
+          key: const ValueKey('panel'),
           padding: const EdgeInsets.all(12),
           children: [
             for (final s in sections) ...[
@@ -1916,6 +2027,66 @@ class _ReaderPageState extends State<ReaderPage>
     }
     t += '\nayahs: ${p.ayahKeys().map((k) => '${k.$1}:${k.$2}').join(' ')}';
     return _hint(t);
+  }
+
+  // ── Letters ──
+  Widget _lettersSection() {
+    final on = hasLetterLayer;
+    return Column(
+      key: const ValueKey('letters'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'word', label: Text('word')),
+            ButtonSegment(value: 'letter', label: Text('letter')),
+            ButtonSegment(value: 'mark', label: Text('mark')),
+          ],
+          selected: {letterTarget},
+          showSelectedIcon: false,
+          onSelectionChanged: on
+              ? (v) => setState(() => letterTarget = v.single)
+              : null,
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final c in kLetterColors)
+              InkWell(
+                onTap: on ? () => setState(() => letterColor = c) : null,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: QvpColor.toColor(rgba(c, on ? 1 : 0.35)),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: letterColor == c
+                          ? Theme.of(context).colorScheme.primary
+                          : pal.line,
+                      width: letterColor == c ? 2 : 1,
+                    ),
+                  ),
+                ),
+              ),
+            FilterChip(
+              label: const Text('every match on the page'),
+              selected: letterEvery,
+              onSelected: on ? (v) => setState(() => letterEvery = v) : null,
+            ),
+            ActionChip(
+              label: const Text('clear letters'),
+              onPressed: on ? clearLetters : null,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _hint(on ? letterInfo : 'no letter layer for this page'),
+      ],
+    );
   }
 
   // ── Engine HUD ──

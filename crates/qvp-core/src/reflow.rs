@@ -308,26 +308,7 @@ pub(crate) fn prepare(page: &Page) -> Prepared {
         .filter(|(_, deco)| matches!(deco.kind, DecoKind::PageNumber | DecoKind::RunningHead))
         .map(|(di, _)| di as u32)
         .collect();
-    // one group per word, then one per decoration, then one per decoration's sajdah line:
-    // a path's group follows the job it does, not only the record it belongs to
-    let (n_words, n_decos) = (d.words.len() as u32, d.decorations.len() as u32);
-    let path_group: Arc<[u32]> = (0..d.paths.len())
-        .map(|i| {
-            let g = &page.geometry().table[i];
-            if g.word != NONE {
-                g.word
-            } else if page.path_deco(i as u32) != NONE {
-                let di = page.path_deco(i as u32);
-                if d.paths[i].mark == Mark::SajdahLine {
-                    n_words + n_decos + di
-                } else {
-                    n_words + di
-                }
-            } else {
-                0
-            }
-        })
-        .collect();
+    let path_group = path_groups(page);
     Prepared {
         median,
         block,
@@ -339,6 +320,36 @@ pub(crate) fn prepare(page: &Page) -> Prepared {
         surah_frame_paths: page.surah_name_ornament_paths(),
         path_group,
     }
+}
+
+/// The group each path is drawn under on a reflowed page: its word, or its decoration, or
+/// its decoration's sajdah line. It covers the whole path table, so a letter layer's pieces
+/// are in it: a piece's group is its word's.
+pub(crate) fn path_groups(page: &Page) -> Arc<[u32]> {
+    let d = page.data();
+    // one group per word, then one per decoration, then one per decoration's sajdah line:
+    // a path's group follows the job it does, not only the record it belongs to
+    let (n_words, n_decos) = (d.words.len() as u32, d.decorations.len() as u32);
+    page.geometry()
+        .table
+        .iter()
+        .enumerate()
+        .map(|(i, g)| {
+            let di = page.path_deco(i as u32);
+            if g.word != NONE {
+                g.word
+            } else if di != NONE {
+                // a piece always has a word, so `i` is a page path here
+                if d.paths[i].mark == Mark::SajdahLine {
+                    n_words + n_decos + di
+                } else {
+                    n_words + di
+                }
+            } else {
+                0
+            }
+        })
+        .collect()
 }
 
 impl Page {

@@ -1,12 +1,53 @@
 ## Unreleased
 
 ### Added
+- Flutter: `QvpPage.attachLetters(bytes)`, `hasLetters`, `letterCount`, `letter`, `letters`,
+  `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`, `styleLetters`,
+  `hitTestLetter`, `hitTestLetterView` and `layoutDrawRevision()`, on both backends.
+  `Sel.letter`, `Sel.letterMark`, `Sel.letterMarkNamed` and `Sel.wordChars` select letters.
+  New types: `QvpLetter`, `QvpLetterMember`, `QvpLetterHit`, `QvpLetterQuery` and
+  `QvpLetterPart`. `QvpPageView` keys its draw list on the draw revision, and its base ink on
+  the draw list.
+- With a letter layer and no letter rule, every view draws what it drew before. A page with no
+  layer makes no new engine call per frame in any wrapper.
+- Every wrapper gives a letter the same names. A letter's `text` is its character, and
+  `codePoint` is the same as a number. A member and a letter hit give the mark as its id,
+  `mark`, and its name, `markName`. A letter's `marks` are its members that are not body, in
+  the engine's order. Every letter also gives `nMembers` and `nMarks`. The web letter gives
+  its box as `box`, and the other wrappers as `x0`, `y0`, `x1` and `y1`. A query's `text`
+  takes one character, or `''` for any letter. A string of more than one character is an
+  error in the wrapper's usual form. After an attach that succeeds, each array that a host
+  got from the page before it is stale: geometry, colours, built paths and each array sized
+  from the path count. In React Native, the letter hit tests take `DEFAULTS.TAP_DISTANCE` as
+  the default `maxDistance`, as its `hitTest` does.
+- `test/shared/letter_cases.dart` replays `conformance/scenarios/letters.json` on both
+  backends.
 
 ### Changed
+- Flutter: the `QvpBackend` interface has 13 new members for the letter layer, and a new
+  type, `QvpPageGeometry`. This is a source-breaking change for a class outside the package
+  that implements `QvpBackend`: it must add the members. An app that uses the package's own
+  backends needs no change.
+- An attach of a letter layer makes stale what the host read before it. The pointers that
+  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
+  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
+  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
+  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
+  `qvp_colors` does. On a page with no layer they do not.
+- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
+  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
+  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
+  An array that an app copied from them before an attach does not hold the pieces.
 
 ### Removed
 
 ### Fixed
+- Flutter: the styled pass of `QvpPageView` draws each styled entry of the draw list, in its
+  order and under its own placement. It drew each styled path once, at its first placement,
+  so a styled path that a reflowed layout draws twice, such as a sajdah line over two rows,
+  lost its second copy. The base ink and the styled pass now draw each entry of the draw list
+  once between them, and a hidden path not at all. Now every view draws only what the draw
+  list holds.
 
 ## 0.9.1
 

@@ -13,6 +13,11 @@
     atlas: async () => { if (EMB) return EMB.atlas ? b64(EMB.atlas) : null; try { const r = await fetch('pages/atlas.qva'); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } },
     pages: EMB ? Object.keys(EMB.pages).map(Number).sort((a, b) => a - b) : Array.from({ length: 604 }, (_, i) => i + 1),
     page: async n => EMB ? b64(EMB.pages[pad(n)]) : new Uint8Array(await (await fetch(`pages/${pad(n)}.qvp`)).arrayBuffer()),
+    // the letter layer of a page is optional: build.py links letters/ when the layers are built
+    letters: async n => {
+      if (EMB) return EMB.letters && EMB.letters[pad(n)] ? b64(EMB.letters[pad(n)]) : null;
+      try { const r = await fetch(`letters/${pad(n)}.qvl`); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; }
+    },
   };
 
   const t0 = performance.now();
@@ -42,7 +47,23 @@
     hlMode: 'both', hlMs: 250, revealOn: false, level: 1, levels: null,
     // the reader's zoom control, which the engine owns: mode, step and the size in force
     zoom: { mode: 'stepped', step: 0, zoom: 1 },
+    // letters (docs/EXAMPLE-APP.md, feature 12): the page has a layer, what a tap selects, and the letter rules
+    letters: false, tap: 'word', letterColor: '#c62828', letterEvery: false, letterHandles: [], letterHit: null,
   };
+  const LETTER_COLORS = ['#c62828', '#1a73e8', '#0a7d32', '#ef6c00'];
+
+  // ── the call tape: each action prints the wrapper call it made, so a developer can copy it ──
+  const tape = $('tapeLines');
+  // an argument as source text: single quotes, bare keys
+  const lit = v => JSON.stringify(v).replace(/"([A-Za-z_]\w*)":/g, '$1: ').replace(/"/g, "'").replace(/,/g, ', ').replace(/^\{(.+)\}$/, '{ $1 }');
+  function say(code) {
+    if (tape.lastChild && tape.lastChild.textContent === code) return;
+    const el = document.createElement('div'); el.textContent = code; el.title = 'Copy';
+    el.onclick = async () => { try { await navigator.clipboard.writeText(code); el.textContent = 'copied'; setTimeout(() => { el.textContent = code; }, 700); } catch { /* the line stays readable */ } };
+    tape.appendChild(el);
+    while (tape.childElementCount > 40) tape.firstChild.remove();
+    tape.scrollTop = tape.scrollHeight;
+  }
   const INK = { light: '#231f20', sepia: '#3b2a14', dark: '#e8e4dc' };
   const PALETTE = { [CATEGORY.HARAKAH]: '#1a73e8', [CATEGORY.TANWIN]: '#8e24aa', [CATEGORY.LETTER_DOT]: '#c62828', [CATEGORY.WAQF]: '#0a7d32', [CATEGORY.DABT]: '#ef6c00', [CATEGORY.ORTHOGRAPHIC]: '#00838f', [CATEGORY.STANDALONE]: '#6d4c41' };
 
@@ -127,10 +148,16 @@
   }
   async function loadPage(n) {
     if (!src.pages.includes(n)) n = src.pages.reduce((a, b) => Math.abs(b - n) < Math.abs(a - n) ? b : a);
-    const bytes = await src.page(n);
+    const [bytes, layer] = await Promise.all([src.page(n), src.letters(n)]);
     const t = performance.now();
-    const page = engine.loadPage(bytes); page.buildPaths();
+    const page = engine.loadPage(bytes);
+    // the layer adds its pieces to the path table, so it goes on before the paths are built
+    const attached = !!layer && page.attachLetters(layer);
+    page.buildPaths();
     S.loadMs = performance.now() - t;
+    say(`const page = engine.loadPage(bytes)   // ${pad(n)}.qvp`);
+    if (layer) say(`page.attachLetters(layer)   // ${pad(n)}.qvl → ${attached}`);
+    S.letters = attached; S.letterHandles = []; S.letterHit = null;
     if (S.page) S.page.free();
     S.page = page; S.n = n; S.bytes = bytes.length; S.levels = null;
     S.selWord = -1; S.selAyah = null; S.hover = -1; S.playIdx = 0; S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.pathHandles.clear(); S.revealOn = false;
@@ -141,7 +168,7 @@
     renderer.baseKey = '';
     applyDress(false);
     fit(false);
-    showSelection(); showMeta(); runSearch();
+    showSelection(); showMeta(); runSearch(); showLetters();
     draw();
   }
   function showMeta() {
@@ -186,6 +213,8 @@
         if (S.pathHandles.has(i)) { p.removeStyle(S.pathHandles.get(i)); S.pathHandles.delete(i); }
         else S.pathHandles.set(i, kind === KIND.MARK && nth >= 0 ? p.style(Sel.wordMark(w.index, nth), '#ef6c00', { ms: 200, layer: LAYER.TOP }) : p.style(Sel.path(i), '#ef6c00', { ms: 200, layer: LAYER.TOP }));
         el.classList.toggle('on'); draw();
+        if (S.pathHandles.has(i)) say(kind === KIND.MARK && nth >= 0 ? `page.style(Sel.wordMark(${w.index}, ${nth}), '#ef6c00', { ms: 200 })` : `page.style(Sel.path(${i}), '#ef6c00', { ms: 200 })`);
+        else say('page.removeStyle(handle)');
       };
       chips.appendChild(el);
     }
@@ -199,7 +228,8 @@
     else {
       S.selWord = i;
       const st = { mode: S.hlMode, ink: '#1a73e8', band: rgba('#1a73e8', 0.18), radius: 1.5, ms: S.hlMs, layer: LAYER.SELECTION };
-      if (S.hlSel) p.moveHighlight(S.hlSel, T.word(i)); else S.hlSel = p.highlight(T.word(i), st);
+      if (S.hlSel) { p.moveHighlight(S.hlSel, T.word(i)); say(`page.moveHighlight(handle, T.word(${i}))   // ${p.wordKey(i)}`); }
+      else { S.hlSel = p.highlight(T.word(i), st); say(`page.highlight(T.word(${i}), ${lit({ mode: st.mode, ink: st.ink, ms: st.ms })})   // ${p.wordKey(i)}`); }
     }
     showSelection(); draw();
   }
@@ -209,6 +239,7 @@
     S.selAyah = [s, a];
     const st = { mode: S.hlMode, ink: '#0a7d32', band: rgba('#0a7d32', 0.14), radius: 1.5, ms: S.hlMs, layer: LAYER.SELECTION };
     if (S.hlAyah) p.moveHighlight(S.hlAyah, T.ayah(s, a)); else S.hlAyah = p.highlight(T.ayah(s, a), st);
+    say(`page.highlight(T.ayah(${s}, ${a}), ${lit({ mode: st.mode, ink: st.ink, ms: st.ms })})`);
     showSelection(); draw();
   }
 
@@ -218,6 +249,7 @@
     if (S.hlSearch) { p.removeHighlight(S.hlSearch); S.hlSearch = 0; }
     if (!q) { draw(); return; }
     const m = p.search(q, { mode: $('qmode').value });
+    say(`page.search('${q}', { mode: '${$('qmode').value}' })   // ${m.length} match${m.length === 1 ? '' : 'es'}`);
     if (m.length) S.hlSearch = p.highlight(T.words(m.map(x => x.word)), { mode: 'both', ink: '#c62828', band: rgba('#c62828', 0.12), height: 'ink', padY: 1, radius: 1, ms: S.hlMs });
     box.innerHTML = m.length ? m.map(x => `<div data-w="${x.word}">${x.text} <span class="hint">${x.wordKey}${x.isLooseMatch ? ' ~' : ''}</span></div>`).join('') : `<div class="hint">no match on this page${atlas ? ' — try the goto box for surah names' : ''}</div>`;
     box.querySelectorAll('[data-w]').forEach(el => el.onclick = () => selectWord(+el.dataset.w));
@@ -244,7 +276,8 @@
     const h = S.page.hitTestView(x, y, { maxDistance: 6 });
     if (pts.size === 1) {
       drag = { x: e.clientX, y: e.clientY, offsetX: S.view.offsetX, offsetY: S.view.offsetY };
-      selecting = h && h.word >= 0 && (e.shiftKey || e.pointerType !== 'touch') ? { anchor: h.word, active: false } : null;
+      const words = !(S.letters && S.tap !== 'word');
+      selecting = words && h && h.word >= 0 && (e.shiftKey || e.pointerType !== 'touch') ? { anchor: h.word, active: false } : null;
     }
     // The pinch is measured from where it began: the control, the view and the focal point then,
     // and the fingers' distance. `base` is the view the engine works from under the reflowing
@@ -327,6 +360,7 @@
       }
       if (drag && !moved) {
         const r = stage.getBoundingClientRect(); const [x, y] = toView(e.clientX - r.left, e.clientY - r.top);
+        if (S.letters && S.tap !== 'word') { letterTap(x, y); drag = null; selecting = null; return; }
         const t = performance.now(); const h = S.page.hitTestView(x, y, { maxDistance: 6 }); S.lastHitUs = (performance.now() - t) * 1000;
         if (h && h.word >= 0) selectWord(h.word);
         else if (h && h.decoration >= 0) { const d = S.page.decorations[h.decoration]; if (d.ayah) selectAyah(d.surah, d.ayah); }
@@ -362,6 +396,7 @@
     const target = sel.length ? T.words(sel) : S.selAyah ? T.ayah(...S.selAyah) : S.selWord >= 0 ? T.word(S.selWord) : null;
     if (!target) return;
     const svg = p.cropSvg(target, { pad: 3, keepAyahMarks: true, background: getComputedStyle(document.body).getPropertyValue('--paper').trim() });
+    say(`const svg = page.cropSvg(${lit(target).replace(/^\{ (.+) \}$/, '{ $1 }')}, { pad: 3, keepAyahMarks: true })   // ${svg.length} bytes`);
     const img = $('cropPreview'); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); img.hidden = false;
   };
 
@@ -388,15 +423,20 @@
   function applyToggles() {
     const p = S.page;
     if (S.tajwidHandle) { p.removeStyle(S.tajwidHandle); S.tajwidHandle = 0; }
-    if ($('tajwid').classList.contains('on')) S.tajwidHandle = p.theme({ marks: {}, ms: 200, ...Object.fromEntries([]) , diacritics: PALETTE[CATEGORY.HARAKAH], dots: PALETTE[CATEGORY.LETTER_DOT], waqf: PALETTE[CATEGORY.WAQF], sifr: PALETTE[CATEGORY.DABT] });
+    if ($('tajwid').classList.contains('on')) S.tajwidHandle = p.theme({ marks: {}, ms: 200, diacritics: PALETTE[CATEGORY.HARAKAH], dots: PALETTE[CATEGORY.LETTER_DOT], waqf: PALETTE[CATEGORY.WAQF], sifr: PALETTE[CATEGORY.DABT] });
     if (S.hideHandle) { p.removeStyle(S.hideHandle); S.hideHandle = 0; }
     if ($('hideMarks').classList.contains('on')) S.hideHandle = p.hide(Sel.kind(KIND.MARK));
     if (S.ayahMarksHandle) { p.removeStyle(S.ayahMarksHandle); S.ayahMarksHandle = 0; }
     if ($('ayahMarks').classList.contains('on')) S.ayahMarksHandle = p.style(Sel.decoration(DECORATION.AYAH_MARK), '#b8860b', { ms: 300, layer: LAYER.THEME + 1 });
     draw();
   }
-  for (const id of ['tajwid', 'hideMarks', 'ayahMarks']) $(id).onclick = () => { $(id).classList.toggle('on'); applyToggles(); };
-  $('clear').onclick = () => { for (const id of ['tajwid', 'hideMarks', 'ayahMarks']) $(id).classList.remove('on'); S.page.clearStyles(); S.page.clearHighlights(); S.page.unmask(); S.page.revealStop(); S.page.clearSelection(); S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.themeHandle = S.tajwidHandle = S.hideHandle = S.ayahMarksHandle = 0; S.pathHandles.clear(); S.selWord = -1; S.selAyah = null; S.revealOn = false; $('revealMode').classList.remove('on'); $('revealPos').disabled = true; $('q').value = ''; $('results').innerHTML = ''; stopPlay(); applyTheme(); showSelection(); draw(); };
+  const TOGGLE_CALLS = {
+    tajwid: `page.theme({ diacritics: '${PALETTE[CATEGORY.HARAKAH]}', dots: '${PALETTE[CATEGORY.LETTER_DOT]}', waqf: '${PALETTE[CATEGORY.WAQF]}', sifr: '${PALETTE[CATEGORY.DABT]}', ms: 200 })`,
+    hideMarks: 'page.hide(Sel.kind(KIND.MARK))',
+    ayahMarks: "page.style(Sel.decoration(DECORATION.AYAH_MARK), '#b8860b', { ms: 300 })",
+  };
+  for (const id of ['tajwid', 'hideMarks', 'ayahMarks']) $(id).onclick = () => { const on = $(id).classList.toggle('on'); applyToggles(); say(on ? TOGGLE_CALLS[id] : 'page.removeStyle(handle)'); };
+  $('clear').onclick = () => { for (const id of ['tajwid', 'hideMarks', 'ayahMarks']) $(id).classList.remove('on'); S.page.clearStyles(); S.page.clearHighlights(); S.page.unmask(); S.page.revealStop(); S.page.clearSelection(); S.hlSel = S.hlAyah = S.hlSearch = S.hlPlay = 0; S.themeHandle = S.tajwidHandle = S.hideHandle = S.ayahMarksHandle = 0; S.pathHandles.clear(); S.selWord = -1; S.selAyah = null; S.revealOn = false; $('revealMode').classList.remove('on'); $('revealPos').disabled = true; $('q').value = ''; $('results').innerHTML = ''; S.letterHandles = []; S.letterHit = null; stopPlay(); applyTheme(); showSelection(); showLetters(); draw(); say('page.clearStyles(); page.clearHighlights(); page.unmask(); page.revealStop(); page.clearSelection()'); };
   function applyTheme() {
     const p = S.page; if (!p) return;
     document.body.setAttribute('data-qvp-theme', S.theme);
@@ -411,20 +451,29 @@
   $('legend').innerHTML = Object.entries(PALETTE).slice(0, 5).map(([c, col]) => `<span class="hint"><i class="sw" style="background:${col}"></i>${engine.categoryName(+c)}</span>`).join('');
 
   // ── memorisation ──
-  $('maskAyah').onclick = () => { const p = S.page; const t = S.selAyah ? T.ayah(...S.selAyah) : S.selWord >= 0 ? T.ayah(p.words[S.selWord].surah, p.words[S.selWord].ayah) : T.page(); p.maskOptions({ blockColor: getComputedStyle(document.body).getPropertyValue('--line').trim() }); p.mask(t, $('maskMode').value); draw(); };
-  $('unmaskNext').onclick = () => { S.page.unmaskNext(1); draw(); };
-  $('maskBack').onclick = () => { S.page.maskBack(1); draw(); };
-  $('unmask').onclick = () => { S.page.unmask(); draw(); };
+  $('maskAyah').onclick = () => { const p = S.page; const t = S.selAyah ? T.ayah(...S.selAyah) : S.selWord >= 0 ? T.ayah(p.words[S.selWord].surah, p.words[S.selWord].ayah) : T.page(); p.maskOptions({ blockColor: getComputedStyle(document.body).getPropertyValue('--line').trim() }); p.mask(t, $('maskMode').value); draw(); say(`page.mask(${lit(t)}, '${$('maskMode').value}')`); };
+  $('unmaskNext').onclick = () => { S.page.unmaskNext(1); draw(); say('page.unmaskNext(1)'); };
+  $('maskBack').onclick = () => { S.page.maskBack(1); draw(); say('page.maskBack(1)'); };
+  $('unmask').onclick = () => { S.page.unmask(); draw(); say('page.unmask()'); };
   $('revealMode').onclick = () => {
     const p = S.page; S.revealOn = !S.revealOn; $('revealMode').classList.toggle('on', S.revealOn);
-    if (S.revealOn) { const steps = p.revealStart({ lit: 2, grey: S.theme === 'dark' ? '#4a4f57' : '#c9c4b8', ink: $('ink').value, ms: 150 }); const r = $('revealPos'); r.max = steps - 1; r.value = -1; r.disabled = false; $('revealVal').textContent = `−/${steps}`; }
-    else { p.revealStop(); $('revealPos').disabled = true; $('revealVal').textContent = ''; }
+    if (S.revealOn) { const steps = p.revealStart({ lit: 2, grey: S.theme === 'dark' ? '#4a4f57' : '#c9c4b8', ink: $('ink').value, ms: 150 }); const r = $('revealPos'); r.max = steps - 1; r.value = -1; r.disabled = steps < 2; $('revealVal').textContent = `−/${steps}`; say(`page.revealStart({ lit: 2, ms: 150 })   // ${steps} steps`); }
+    else { p.revealStop(); $('revealPos').disabled = true; $('revealVal').textContent = ''; say('page.revealStop()'); }
     draw();
   };
-  $('revealPos').oninput = e => { S.page.revealGoto(+e.target.value); $('revealVal').textContent = `${+e.target.value + 1}/${S.page.revealStepCount()}`; draw(); };
+  $('revealPos').oninput = e => { S.page.revealGoto(+e.target.value); say(`page.revealGoto(${+e.target.value})`); $('revealVal').textContent = `${+e.target.value + 1}/${S.page.revealStepCount()}`; draw(); };
 
   // ── layout ──
-  const relayoutUI = () => { $('spacingVal').textContent = '×' + S.layout.lineSpacing.toFixed(2); fit(); };
+  // the layout call as source: only what the reader changed from the defaults
+  const sayLayout = () => {
+    const ls = S.layout, r = S.reflow, spec = { viewportW: Math.round(stage.clientWidth), viewportH: Math.round(stage.clientHeight), padTop: ls.padTop, padBottom: ls.padBottom };
+    if (ls.fillHeight) spec.fillHeight = true; else if (ls.lineSpacing !== 1) spec.lineSpacing = +ls.lineSpacing.toFixed(2);
+    if (!ls.surahFrames) spec.surahFrames = false;
+    if (r.on) spec.reflow = { zoom: +r.zoom.toFixed(2), fill: r.fill, breaks: r.breaks, gaps: r.gaps, wordGap: r.wordGap, relax: r.relax, maxStretch: r.maxStretch };
+    const L = S.page && S.page.currentLayout;
+    say(`page.layout(${lit(spec)})${L && L.reflowed ? `   // ${L.rows} rows` : ''}`);
+  };
+  const relayoutUI = () => { $('spacingVal').textContent = '×' + S.layout.lineSpacing.toFixed(2); fit(); sayLayout(); };
   $('spacing').oninput = e => { S.layout.lineSpacing = +e.target.value; S.layout.fillHeight = false; $('fillH').classList.remove('on'); relayoutUI(); };
   $('fillH').onclick = () => { S.layout.fillHeight = !S.layout.fillHeight; $('fillH').classList.toggle('on', S.layout.fillHeight); relayoutUI(); };
   $('surahFrames').onclick = () => { S.layout.surahFrames = !S.layout.surahFrames; $('surahFrames').classList.toggle('on', S.layout.surahFrames); relayoutUI(); };
@@ -450,7 +499,7 @@
     $('lvlVal').textContent = lv.length ? lv.map(z => '×' + z.toFixed(2)).join(' · ') : '';
     $('zoomVal').textContent = `${$('zMode').value === 'stepped' ? 'step ' + S.zoom.step : ''} ×${S.zoom.zoom.toFixed(2)}`;
   };
-  const reflowUI = () => reflowReadout(true);
+  const reflowUI = () => { reflowReadout(true); sayLayout(); };
   $('reflow').onclick = () => { S.reflow.on = !S.reflow.on; reflowUI(); };
   // the engine says how far this page can zoom before a word outgrows its row
   const clampReflowZoom = () => {
@@ -468,6 +517,7 @@
     const c = S.page.zoomToStep(layoutSpec(), S.zoom, n - 1, S.view);
     S.zoom = c.zoom; S.view = c.view;
     syncZoomUI();
+    say(`page.zoomToStep(spec, zoom, ${n - 1}, view)   // ×${c.zoom.zoom.toFixed(2)}`);
   };
   // The control owns the zoom; the sliders own everything else about a reflowed row. This
   // keeps the two in step, so the readout and the zoom slider follow a pinch.
@@ -522,6 +572,7 @@
       $('dressInfo').textContent = ornaments ? 'as printed' : 'no ornament set (put ornaments.qvo beside the pages)';
     } else {
       const info = p.dress(ornaments, d);
+      say(`page.dress(ornaments, ${lit({ ayahMark: d.ayahMark, surahHeader: d.surahHeader, pageFrame: d.pageFrame, gap: d.gap })})`);
       const chosen = [d.ayahMark, d.surahHeader, d.pageFrame].filter(i => i !== null).map(i => ornaments.list[i]);
       $('dressInfo').textContent = info
         ? `${info.ayahMarks} medallions · ${info.surahHeaders} band(s) · ` +
@@ -606,7 +657,81 @@
   for (const [id, kind] of [['dressLineMark', 'ayah_mark'], ['dressLineHeader', 'surah_header'], ['dressLineFrame', 'page_frame']]) {
     $(id).onchange = e => { S.dress.lineArt = S.dress.lineArt.filter(k => k !== kind); if (e.target.checked) S.dress.lineArt.push(kind); S.dress.colors = []; dressSwatches(); applyDress(); };
   }
-  window.__qvp = { S, engine, atlas, renderer, loadPage, fit, selectWord, selectAyah, draw };
+  // ── letters (docs/EXAMPLE-APP.md, feature 12) ──
+  // The engine finds the letter and colours it. The app only chooses the selector.
+  function letterTap(x, y) {
+    const p = S.page, opt = { ms: 200, layer: LAYER.TOP }, c = S.letterColor;
+    const t = performance.now(); const h = p.hitTestLetterView(x, y, { maxDistance: 6 }); S.lastHitUs = (performance.now() - t) * 1000;
+    S.letterHit = h;
+    say(`const hit = page.hitTestLetterView(${x.toFixed(1)}, ${y.toFixed(1)}, { maxDistance: 6 })`);
+    if (h && h.letter >= 0) {
+      const w = h.word, l = h.letter, o = "{ ms: 200 }";
+      // a tap on the ink of a mark; any other hit with a letter counts as a tap on the body
+      const onMark = h.isExact && !h.isBody && h.mark !== 0;
+      let handle = 0;
+      if (S.tap === 'letter') {
+        const text = p.letter(w, l).text;
+        if (S.letterEvery) { handle = p.styleLetters({ scope: 'page', text, part: 'bodyAndDots' }, c, opt); say(`page.styleLetters({ scope: 'page', text: '${text}', part: 'bodyAndDots' }, '${c}', ${o})`); }
+        else { handle = p.style(Sel.letter(w, l, 'bodyAndDots'), c, opt); say(`page.style(Sel.letter(${w}, ${l}, 'bodyAndDots'), '${c}', ${o})`); }
+      } else if (onMark) {
+        if (S.letterEvery) { handle = p.styleLetters({ scope: 'page', mark: h.mark, part: 'marks' }, c, opt); say(`page.styleLetters({ scope: 'page', mark: '${h.markName}', part: 'marks' }, '${c}', ${o})`); }
+        else { handle = p.style(Sel.letterMarkNamed(w, l, h.mark), c, opt); say(`page.style(Sel.letterMarkNamed(${w}, ${l}, '${h.markName}'), '${c}', ${o})`); }
+      } else if (!S.letterEvery) { handle = p.style(Sel.letter(w, l, 'marks'), c, opt); say(`page.style(Sel.letter(${w}, ${l}, 'marks'), '${c}', ${o})`); }
+      if (handle) S.letterHandles.push(handle);
+    }
+    showLetters(); draw();
+  }
+  function showLetters() {
+    const p = S.page, on = S.letters, h = S.letterHit;
+    for (const b of $('tapTarget').querySelectorAll('button')) {
+      b.classList.toggle('on', b.dataset.tap === (on ? S.tap : 'word'));
+      if (b.dataset.tap !== 'word') { b.disabled = !on; b.title = on ? '' : 'no letter layer for this page'; }
+    }
+    for (const b of $('letterColors').children) { b.disabled = !on; b.classList.toggle('on', b.dataset.color === S.letterColor); }
+    $('letterEvery').disabled = !on; $('letterClear').disabled = !on || !S.letterHandles.length;
+    $('letterNote').textContent = !on ? 'no letter layer for this page'
+      : S.tap === 'word' ? 'Set "tap selects" on the page to letter or mark, then tap the page.'
+      : S.tap === 'letter' ? 'Tap a letter to colour its body and dots.' : 'Tap a mark to colour it. Tap a body to colour all the marks of that letter.';
+    const info = $('letterInfo'); info.textContent = '';
+    if (!on) { info.textContent = 'no letter layer for this page'; return; }
+    if (!h) { info.textContent = S.tap === 'word' ? '—' : 'no letter there'; return; }
+    if (h.letter < 0) { info.textContent = `${h.wordKey || ''} · a mark of the word, not of a letter${h.markName ? ' · ' + h.markName : ''}`; return; }
+    const L = p.letter(h.word, h.letter), cp = 'U+' + L.codePoint.toString(16).toUpperCase().padStart(4, '0');
+    const ar = document.createElement('span'); ar.className = 'ar'; ar.textContent = L.text;
+    const mark = h.isExact && !h.isBody && h.mark !== 0 ? ` · ${h.markName}` : '';
+    info.append(ar, `${cp} · ${h.wordKey} · letter ${L.index} · offset ${L.at} · ${L.nMarks} mark${L.nMarks === 1 ? '' : 's'}${mark} · ${h.isExact ? 'exact' : 'near'}`);
+  }
+  for (const c of LETTER_COLORS) {
+    const b = document.createElement('button'); b.dataset.color = c; b.style.background = c; b.title = c.toUpperCase();
+    b.onclick = () => { S.letterColor = c; showLetters(); };
+    $('letterColors').append(b);
+  }
+  // the switch sits on the page: its own clicks are not taps, drags or zooms of the page
+  for (const type of ['pointerdown', 'pointerup', 'dblclick', 'wheel']) $('tapbar').addEventListener(type, e => e.stopPropagation());
+  for (const b of $('tapTarget').querySelectorAll('button')) b.onclick = () => {
+    S.tap = b.dataset.tap; S.letterHit = null;
+    if (S.tap !== 'word') { if (S.selWord >= 0) selectWord(-1); showTab('letters'); }
+    showLetters();
+  };
+  $('letterEvery').onchange = e => { S.letterEvery = e.target.checked; };
+  $('letterClear').onclick = () => {
+    for (const h of S.letterHandles) S.page.removeStyle(h);
+    if (S.letterHandles.length) say('for (const handle of letterHandles) page.removeStyle(handle)');
+    S.letterHandles = []; S.letterHit = null; showLetters(); draw();
+  };
+
+  // ── the side panel shows one topic at a time ──
+  function showTab(name) {
+    $('panel').dataset.tab = name;
+    for (const b of $('tabs').children) b.classList.toggle('on', b.dataset.tab === name);
+    try { localStorage.setItem('qvp.tab', name); } catch { /* the tab is a convenience */ }
+  }
+  for (const b of $('tabs').children) b.onclick = () => showTab(b.dataset.tab);
+  try { const t = localStorage.getItem('qvp.tab'); if (t && $('tabs').querySelector(`[data-tab="${t}"]`)) showTab(t); } catch { /* start on the first tab */ }
+  // the tape and the page share the column, so the page is laid out again when the tape folds
+  $('tapeToggle').onclick = () => { const shut = $('tape').classList.toggle('shut'); $('tapeToggle').textContent = shut ? 'Show' : 'Hide'; resize(); };
+
+  window.__qvp = { S, engine, atlas, renderer, loadPage, fit, selectWord, selectAyah, letterTap, showTab, draw };
   const prefersDark = document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
   if (prefersDark) { S.theme = 'dark'; $('theme').value = 'dark'; $('ink').value = INK.dark; }
   themeToggleLabel();

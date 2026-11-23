@@ -5,8 +5,33 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- React Native: `<QvpPageView />` takes a `lettersUri` prop, which the view attaches after
+  the page and its words sidecar. A new value attaches that layer in place of the one before.
+  A removed prop keeps the layer until the next page, because the engine has no detach. The
+  module adds `attachLetters(tag, uri)`, `hasLetters`, `letters(tag, word)` (each letter with
+  its members and marks), `pathLetter`, `letterAtOffset`, `findLetters`, `hitTestLetter` and
+  `hitTestLetterView`, and the page-bound forms of each. `Sel.letter`, `Sel.letterMark`,
+  `Sel.letterMarkNamed` and `Sel.wordChars` make the selectors 16 to 19, and `LETTER_PART`
+  holds the parts. A `styles` rule with `letters` (a letter query) colours letters. The
+  Android and iOS modules have the same method names and result shapes.
+- With a letter layer and no letter rule, every view draws what it drew before. A page with no
+  layer makes no new engine call per frame in any wrapper.
+- Every wrapper gives a letter the same names. A letter's `text` is its character, and
+  `codePoint` is the same as a number. A member and a letter hit give the mark as its id,
+  `mark`, and its name, `markName`. A letter's `marks` are its members that are not body, in
+  the engine's order. Every letter also gives `nMembers` and `nMarks`. The web letter gives
+  its box as `box`, and the other wrappers as `x0`, `y0`, `x1` and `y1`. A query's `text`
+  takes one character, or `''` for any letter. A string of more than one character is an
+  error in the wrapper's usual form. After an attach that succeeds, each array that a host
+  got from the page before it is stale: geometry, colours, built paths and each array sized
+  from the path count. In React Native, the letter hit tests take `DEFAULTS.TAP_DISTANCE` as
+  the default `maxDistance`, as its `hitTest` does.
 
 ### Changed
+- React Native: on a page with a letter layer, the module runs the letter calls, and every
+  query on that page, on the UI thread, in queue order. With a layer, the view's draw changes
+  the page, and the query thread must not call into it at the same time. A page with no layer
+  keeps its queries on the query thread, as before.
 
 ### Removed
 

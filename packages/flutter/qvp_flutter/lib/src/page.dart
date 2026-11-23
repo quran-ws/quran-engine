@@ -20,11 +20,11 @@ class QvpPage extends ChangeNotifier {
       nLines = data.nLines,
       nAyahs = data.nAyahs,
       nWords = data.nWords,
-      nPaths = data.nPaths,
+      _nPaths = data.nPaths,
       nDecorations = data.nDecorations,
-      ops = data.ops,
-      pts = data.pts,
-      table = data.table,
+      _ops = data.ops,
+      _pts = data.pts,
+      _table = data.table,
       words = data.words,
       ayahs = data.ayahs,
       lines = data.lines,
@@ -61,20 +61,27 @@ class QvpPage extends ChangeNotifier {
   /// How many words the page has: the length of [words].
   final int nWords;
 
-  /// How many paths the page has: the rows of [table], and the length of [colors].
-  final int nPaths;
+  /// How many paths the page has: the rows of [table], and the length of [colors]. After
+  /// [attachLetters], it counts the letter layer's pieces, which come after the page's own
+  /// paths.
+  int get nPaths => _nPaths;
+  int _nPaths;
 
   /// How many decorations the page has: the length of [decorations].
   final int nDecorations;
 
-  /// Opcode stream (see [QvpOp]).
-  final Uint8List ops;
+  /// Opcode stream (see [QvpOp]). [attachLetters] makes it longer.
+  Uint8List get ops => _ops;
+  Uint8List _ops;
 
-  /// x,y pairs consumed in order by the opcodes.
-  final Float32List pts;
+  /// x,y pairs consumed in order by the opcodes. [attachLetters] makes it longer.
+  Float32List get pts => _pts;
+  Float32List _pts;
 
-  /// `nPaths × 8`: op_start, op_count, pt_start, pt_count, flags, word, line, extra.
-  final Uint32List table;
+  /// `nPaths × 8`: op_start, op_count, pt_start, pt_count, flags, word, line, extra. The rows
+  /// of the page's own paths stay the same after [attachLetters], which adds rows after them.
+  Uint32List get table => _table;
+  Uint32List _table;
 
   /// Every word on the page in reading order. A word index is a position in this list.
   final List<QvpWordInfo> words;
@@ -362,6 +369,122 @@ class QvpPage extends ChangeNotifier {
   /// Checks if a text form is attached to this page.
   bool hasForm(Object form) => _backend.hasForm(handle, QvpForm.of(form));
 
+  // ── Letters: the optional letter layer (NNN.qvl) ──
+  // Offsets (`at`, `moreAt`) are code-point offsets in the word's qpc text; -1 is none. With a
+  // words sidecar that gives the qpc text, an offset past it counts as none.
+
+  bool _lettersAttached = false;
+
+  /// Attaches the page's letter layer: the bytes of an `NNN.qvl` file, which the engine copies.
+  /// The layer's pieces join the path table after the page's own paths, so [nPaths], [ops],
+  /// [pts], [table] and [colors] grow, and [path] builds the paths again. A [QvpPageView]
+  /// that shows the page draws the layer on its next frame. A second attach replaces the first,
+  /// and the style rules stay. Returns false, and changes nothing, for a bad file, the layer of
+  /// another page, a file over 1 MiB, or a page whose words share paths.
+  bool attachLetters(List<int> bytes) {
+    if (!_backend.attachLetters(handle, bytes)) return false;
+    // the engine's geometry grew, and the pointers behind the old copy are no longer valid
+    final g = _backend.pageGeometry(handle);
+    _nPaths = g.nPaths;
+    _ops = g.ops;
+    _pts = g.pts;
+    _table = g.table;
+    _lazyPaths = null;
+    _lettersAttached = true;
+    _touch();
+    return true;
+  }
+
+  /// True when a letter layer is attached.
+  bool hasLetters() => _backend.hasLetters(handle);
+
+  /// How many letters word [w] has; 0 with no layer.
+  int letterCount(int w) => _backend.letterCount(handle, w);
+
+  /// Letter [i] of word [w], with its members, or null when there is no such letter.
+  QvpLetter? letter(int w, int i) => _backend.letterInfo(handle, w, i);
+
+  /// Every letter of word [w], in the word's order. Empty with no layer.
+  List<QvpLetter> letters(int w) => [
+    for (var i = 0, n = letterCount(w); i < n; i++)
+      if (letter(w, i) case final l?) l,
+  ];
+
+  /// The paths of letter [i] of word [w]: the bodies first, then the marks in text order, so
+  /// the nth mark here is the one [Sel.letterMark] takes. Empty when there is no such letter.
+  List<QvpLetterMember> letterMembers(int w, int i) =>
+      _backend.letterMembers(handle, w, i);
+
+  /// The letter and the offset that path [i] draws, in the path's word. `letter` is -1 for a
+  /// word-level mark, and `at` is -1 when the path has no offset. Null for a cut path (its
+  /// pieces have the role), a path with no letter role such as a decoration, a path past the
+  /// table, or a page with no layer.
+  ({int letter, int at})? pathLetter(int i) => _backend.pathLetter(handle, i);
+
+  /// The letter of word [w] that draws the character at offset [at] (its own or a `moreAt`),
+  /// or holds a mark at it. Null when no letter has it.
+  int? letterAtOffset(int w, int at) => _backend.letterAtOffset(handle, w, at);
+
+  /// The letters [query] finds, in word order and then letter order. The query's part does not
+  /// filter. Empty for a bad query (a part above 2, a text that is not a code point) and with
+  /// no layer.
+  List<({int word, int letter})> findLetters(QvpLetterQuery query) =>
+      _backend.findLetters(handle, query);
+
+  /// Colours the letters [query] finds, and of each the query's part, and returns one handle;
+  /// 0 for a bad query. With no layer the rule selects nothing until one is attached, and it
+  /// takes a second layer too.
+  int styleLetters(
+    QvpLetterQuery query,
+    Object color, {
+    int ms = 0,
+    int layer = QvpLayer.base,
+  }) {
+    final h = _backend.styleLetters(
+      handle,
+      query,
+      rgba(color),
+      ms: ms,
+      layer: layer,
+    );
+    _touch();
+    return h;
+  }
+
+  /// The letter or mark under a point, page units, or null. On ink, the hit is exact and in
+  /// the ink's word. Off ink, it is the nearest letter of the word [hitTest] finds with the
+  /// same options, which can be far: check [QvpLetterHit.isExact] or its distance. Null
+  /// [options] take the engine's defaults. Null with no layer.
+  QvpLetterHit? hitTestLetter(double x, double y, [QvpHitOptions? options]) =>
+      _enrichLetterHit(_backend.hitTestLetter(handle, x, y, options));
+
+  /// The same, viewport px through the current layout, printed or reflowed.
+  QvpLetterHit? hitTestLetterView(
+    double viewX,
+    double viewY, [
+    QvpHitOptions? options,
+  ]) => _enrichLetterHit(
+    _backend.hitTestLetterView(handle, viewX, viewY, options),
+  );
+
+  QvpLetterHit? _enrichLetterHit(QvpLetterHit? h) {
+    if (h == null) return null;
+    final w = h.word;
+    return QvpLetterHit(
+      word: w,
+      letter: h.letter,
+      path: h.path,
+      at: h.at,
+      line: h.line,
+      distance: h.distance,
+      mark: h.mark,
+      markName: h.markName,
+      isExact: h.isExact,
+      isBody: h.isBody,
+      wordKey: w >= 0 && w < words.length ? words[w].wordKey : null,
+    );
+  }
+
   // ── Hit Testing ──
 
   /// Exact hit, page units: the outline under the point, else the box of a word
@@ -499,6 +622,14 @@ class QvpPage extends ChangeNotifier {
 
   /// What a draw list's `placement` indexes: the groups, then the repeats.
   List<QvpPlacement> layoutPlacements() => _backend.layoutPlacements(handle);
+
+  /// Counts up when the draw list can change while the layout and the band stay the same: a
+  /// letter layer is attached, or a cut path starts or stops drawing as its pieces. It stays 0
+  /// on a page with no layer. A host that keeps a draw list keys it on this number, the layout
+  /// and the band. Per frame: [tick], then [colors] or [styledPaths], then this, then
+  /// [layoutDrawList] when the revision, the layout or the band changed. [QvpPageView] does
+  /// this itself.
+  int layoutDrawRevision() => _backend.layoutDrawRevision(handle);
 
   /// The layout the page already has, without computing one, or null when it has none. A zoom
   /// call lays the page out again, so this is how a host reads what it must now draw.
@@ -1042,3 +1173,8 @@ class QvpPage extends ChangeNotifier {
 /// The page view keys what it read from the engine on it, so a tick from any caller reaches
 /// every view. The package does not export it.
 int pageClock(QvpPage page) => page._clock;
+
+/// True once [page] took a letter layer. The page view reads the draw revision only then: with
+/// no layer the revision stays 0, so a page with no layer costs no extra call. The package
+/// does not export it.
+bool pageHasLetters(QvpPage page) => page._lettersAttached;

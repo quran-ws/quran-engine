@@ -1,7 +1,7 @@
 //! Styles, the clock and the display list: layered colour rules and the colours they produce.
 
 use crate::abi::{fill, fill_with, guard};
-use crate::convert::{selector, target};
+use crate::convert::{letter_query, selector, target};
 use crate::types::*;
 use qvp_core::qvp_format::Mark;
 use qvp_core::*;
@@ -28,6 +28,26 @@ pub unsafe extern "C" fn qvp_style_add_target(
     transition_ms: u32,
 ) -> u32 {
     guard(|| (*page).style_target(layer, &target(t), Paint::fade(rgba, transition_ms)))
+}
+/// One rule, under one handle, for the letters a query finds. 0 for a NULL page, a NULL or bad
+/// query. With no layer the rule selects nothing until one is attached.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_style_add_letters(
+    page: *mut Page,
+    layer: i32,
+    query: *const QvpLetterQuery,
+    rgba: u32,
+    transition_ms: u32,
+) -> u32 {
+    guard(|| {
+        if page.is_null() {
+            return 0;
+        }
+        match letter_query(query) {
+            Some(q) => (*page).style_letters(layer, &q, Paint::fade(rgba, transition_ms)),
+            None => 0,
+        }
+    })
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_style_remove(page: *mut Page, handle: u32) -> u32 {

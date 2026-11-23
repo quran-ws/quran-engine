@@ -10,6 +10,7 @@
 
 pub mod atlas;
 pub mod codec;
+pub mod letters;
 pub mod ornaments;
 mod validate;
 
@@ -591,6 +592,16 @@ pub enum Error {
     BadVersion(u16),
     Truncated(&'static str),
     Corrupt(&'static str),
+    /// Not a letter layer: the file does not start with `QVL1`.
+    NotLetterLayer,
+    /// A letter layer of a version this reader does not know.
+    LetterLayerVersion(u16),
+    /// A letter layer built for another page: its page number, `quant`, a count or its page
+    /// digest differs from the page's.
+    OtherPage(&'static str),
+    /// A letter layer whose bytes are damaged: its body digest differs, it is too short, or
+    /// its structure breaks a rule of the format.
+    Damaged(&'static str),
 }
 
 impl fmt::Display for Error {
@@ -601,6 +612,10 @@ impl fmt::Display for Error {
             Error::BadVersion(v) => write!(f, "unsupported QVP version {v}"),
             Error::Truncated(w) => write!(f, "truncated at {w}"),
             Error::Corrupt(w) => write!(f, "corrupt: {w}"),
+            Error::NotLetterLayer => write!(f, "not a QVL letter layer"),
+            Error::LetterLayerVersion(v) => write!(f, "unsupported QVL version {v}"),
+            Error::OtherPage(w) => write!(f, "a letter layer for another page: {w}"),
+            Error::Damaged(w) => write!(f, "damaged letter layer: {w}"),
         }
     }
 }

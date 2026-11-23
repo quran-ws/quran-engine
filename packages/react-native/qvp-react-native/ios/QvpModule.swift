@@ -15,6 +15,11 @@ import React
 /// Every call that reads or changes the layout, the view, styles, colours, the selection, the
 /// mask, the reveal or the dress runs on the main thread, where the view draws.
 ///
+/// A page with a letter layer changes as it draws: its draw list and draw revision bring the
+/// engine's style state up to date, and the engine allows one thread at a time per page. On such
+/// a page every query runs on the main thread too, in the order the queries were queued. The
+/// letter calls always run there, after the queries queued before them.
+///
 /// The view methods take and return points, the iOS form of the dp the Android module uses.
 @objc(QvpModule)
 final class QvpModule: NSObject {
@@ -51,12 +56,24 @@ final class QvpModule: NSObject {
     /// Android looks it up through the UIManager, and the query runs there.
     private func readPage(_ tag: NSNumber, _ resolve: @escaping RCTPromiseResolveBlock, _ reject: @escaping RCTPromiseRejectBlock,
                           _ block: @escaping (QvpRnPageState, QvpPage, _ loadMs: Double, _ bytes: Int) throws -> Any?) {
-        let run = { (s: QvpRnPageState) in
+        let onMain = { (s: QvpRnPageState) in
             self.settle(resolve, reject) {
                 try s.read { p, ms, bytes in
                     guard let p else { throw QvpRnError("QvpPageView \(tag) has no page loaded") }
                     return try block(s, p, ms, bytes)
                 }
+            }
+        }
+        let run = { (s: QvpRnPageState) in
+            let ran = s.readShared { p, ms, bytes in
+                self.settle(resolve, reject) {
+                    guard let p else { throw QvpRnError("QvpPageView \(tag) has no page loaded") }
+                    return try block(s, p, ms, bytes)
+                }
+            }
+            // The page has a letter layer, so the view's draws change it: run the query where it draws.
+            if !ran {
+                if Thread.isMainThread { onMain(s) } else { DispatchQueue.main.sync { onMain(s) } }
             }
         }
         queries.async {
@@ -138,6 +155,50 @@ final class QvpModule: NSObject {
     }
     @objc func attachWords(_ tag: NSNumber, json: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         inOrder(tag, resolve, reject) { v, p in v.attachWords(p, json) }
+    }
+
+    // ── letters: the optional letter layer (NNN.qvl) ──
+    // On the main thread, in order with the queries: the attach grows the page's path table, and
+    // with a layer the view's draw changes the page (see the class comment). A `styles` rule with
+    // `letters` colours letters; the hosted view reads the draw revision as it draws.
+    /// Attach the layer a URI names. The bytes are read on the query queue. True when the engine took it.
+    @objc func attachLetters(_ tag: NSNumber, uri: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        queries.async {
+            let bytes: Data
+            do { bytes = try QvpRnBytes.read(uri) } catch { reject("qvp", error.localizedDescription, error); return }
+            DispatchQueue.main.sync {
+                self.settle(resolve, reject) { let v = try self.view(tag); return v.attachLetters(try self.loaded(v, tag), bytes, uri: uri) }
+            }
+        }
+    }
+    @objc func hasLetters(_ tag: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        inOrder(tag, resolve, reject) { _, p in p.hasLetters }
+    }
+    @objc func letters(_ tag: NSNumber, word: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        inOrder(tag, resolve, reject) { _, p in p.letters(word.intValue).map { QvpRnMarshal.letter($0) } }
+    }
+    @objc func pathLetter(_ tag: NSNumber, path: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        inOrder(tag, resolve, reject) { _, p in p.pathLetter(path.intValue).map { QvpRnMarshal.pathLetter($0) } }
+    }
+    @objc func letterAtOffset(_ tag: NSNumber, word: NSNumber, at: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        inOrder(tag, resolve, reject) { _, p in p.letterAtOffset(word.intValue, at.intValue) }
+    }
+    @objc func findLetters(_ tag: NSNumber, query: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        let q = opt(query)
+        inOrder(tag, resolve, reject) { _, p in try QvpRnMarshal.foundLetters(p.findLetters(QvpRnMarshal.letterQuery(q, p))) }
+    }
+    /// The letter or mark under a point in page units.
+    @objc func hitTestLetter(_ tag: NSNumber, x: NSNumber, y: NSNumber, opts: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        let o = opt(opts)
+        inOrder(tag, resolve, reject) { _, p in p.hitTestLetter(x.floatValue, y.floatValue, self.hitOptions(o)).map { QvpRnMarshal.letterHit($0) } }
+    }
+    /// The same at a point in view points, as `hitTestView` takes it.
+    @objc func hitTestLetterView(_ tag: NSNumber, x: NSNumber, y: NSNumber, opts: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        let o = opt(opts)
+        inOrder(tag, resolve, reject) { v, p in
+            let l = p.viewToLayout(self.viewOf(v), x.floatValue, y.floatValue)
+            return p.hitTestLetterView(l.x, l.y, self.hitOptions(o)).map { QvpRnMarshal.letterHit($0) }
+        }
     }
 
     // ── metadata ──

@@ -1,5 +1,6 @@
 //! Style engine: layered rules with handles that undo exactly, sub-word
 //! selectors, and per-path colour transitions driven by the engine clock.
+use crate::letters::{LetterPart, LetterQuery, LetterSelection, LetterView};
 use crate::{Page, Rgba, DEFAULT_INK, NONE};
 use qvp_format::*;
 
@@ -29,6 +30,27 @@ pub enum Selector {
     Kind(PathKind),
     Deco(DecoKind),
     DecoIdx(u32),
+    /// A letter of a word: (word, letter index in the word, part). The parts go by offset
+    /// ([`LetterPart`]): `BodyAndDots` takes every member at the letter's own offset, so it
+    /// takes the same paths as `WordChars(word, at, at)` for that offset. With no letter
+    /// layer it selects nothing.
+    Letter(u32, u16, LetterPart),
+    /// The nth mark of a letter: (word, letter, n). The marks count in text order: by
+    /// offset, then in the layer's member order, and a mark with no offset comes last. Dots
+    /// count, and a body never counts. This is the order of the marks in
+    /// [`Page::letter_members`]. No part limits it: a hamzah sign at the letter's own offset
+    /// is still one of its marks.
+    LetterMark(u32, u16, u16),
+    /// Every member of a letter whose path has that mark: (word, letter, mark). A body that
+    /// the page stores as a mark counts. No part limits it. `Mark::None` selects nothing.
+    LetterMarkNamed(u32, u16, Mark),
+    /// The ink of a word's `qpc` characters, by code-point offset: (word, from, to), both
+    /// ends in. An offset takes every member at that offset, and an extra offset the body
+    /// draws takes the body. A word-level mark is taken by its own offset. A character with
+    /// no ink, or a mark with no offset, is never taken.
+    WordChars(u32, u16, u16),
+    /// Letters by what they are: the rule [`Page::style_letters`] adds.
+    Letters(Box<LetterSelection>),
 }
 
 impl Selector {
@@ -44,7 +66,12 @@ impl Selector {
             Selector::DecoIdx(_) => 7,
             Selector::Word(_) => 8,
             Selector::WordBody(_) | Selector::WordMarks(_) => 9,
+            Selector::Letters(_) => 9,
             Selector::WordMark(..) | Selector::WordMarkNamed(..) | Selector::WordPath(..) => 10,
+            Selector::Letter(..)
+            | Selector::LetterMark(..)
+            | Selector::LetterMarkNamed(..)
+            | Selector::WordChars(..) => 10,
             Selector::Path(_) => 11,
         }
     }
@@ -70,13 +97,18 @@ impl Paint {
 /// Opaque handle returned by every mutating style call; `remove(handle)` undoes exactly that call.
 pub type Handle = u32;
 
+/// One rule. The engine keeps its rules in the order they were added, and a later rule
+/// wins a tie of layer and specificity: its place in the list is its order, so a rule
+/// holds no count of its own. That keeps it at 32 bytes, the size it had before
+/// [`Selector::Letters`] made a selector 16 bytes; the matcher reads every rule for every
+/// path, and a larger rule made it measurably slower.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Rule {
     pub handle: Handle,
     pub layer: i32,
     pub sel: Selector,
     pub paint: Paint,
-    seq: u64,
 }
 
 /// Well-known layers (higher wins). Apps may use any i32.
@@ -97,14 +129,13 @@ pub(crate) const LAYER_ENGINE: i32 = i32::MAX;
 pub struct StyleEngine {
     pub(crate) rules: Vec<Rule>,
     next_handle: Handle,
-    seq: u64,
     pub(crate) dirty: bool,
     pub default_ink: Rgba,
 }
 
 impl StyleEngine {
     pub fn new() -> Self {
-        StyleEngine { rules: vec![], next_handle: 1, seq: 0, dirty: true, default_ink: DEFAULT_INK }
+        StyleEngine { rules: vec![], next_handle: 1, dirty: true, default_ink: DEFAULT_INK }
     }
     fn alloc(&mut self) -> Handle {
         let h = self.next_handle;
@@ -135,8 +166,8 @@ impl StyleEngine {
         h
     }
     pub(crate) fn push(&mut self, handle: Handle, layer: i32, sel: Selector, paint: Paint) {
-        self.seq += 1;
-        self.rules.push(Rule { handle, layer, sel, paint, seq: self.seq });
+        // appended, never inserted: the list's order is the order the rules were added
+        self.rules.push(Rule { handle, layer, sel, paint });
         self.dirty = true;
     }
     /// Add a rule under an existing handle, on a host layer: `LAYER_ENGINE` becomes
@@ -241,10 +272,15 @@ pub(crate) struct PathCtx {
 }
 
 impl Rule {
-    fn matches(&self, c: &PathCtx, pi: u32) -> bool {
+    /// True when the rule takes path `pi`, whose context is `c`. `lx` holds the letter
+    /// layer, which the letter selectors need. `LAYER` is false on a page with no layer:
+    /// the letter selectors then take nothing and `lx` is not read, so the matcher is the
+    /// one the page ran before the layer existed.
+    fn matches<const LAYER: bool>(&self, c: &PathCtx, pi: u32, lx: LetterView<'_>) -> bool {
         match &self.sel {
             Selector::Page => true,
-            Selector::Path(p) => *p == pi,
+            // a piece follows the path it is cut from: hiding a body hides its pieces
+            Selector::Path(p) => *p == pi || (LAYER && lx.letters.is_some_and(|lt| lt.source_of(pi) == *p)),
             Selector::WordPath(w, n) => c.word == *w && c.nth_in_word == *n,
             Selector::WordMark(w, n) => c.word == *w && c.kind == PathKind::Mark && c.nth_mark == *n,
             Selector::WordMarkNamed(w, m, n) => c.word == *w && c.mark == *m && c.nth_mark_named == *n,
@@ -259,6 +295,11 @@ impl Rule {
             Selector::Kind(k) => c.kind == *k,
             Selector::Deco(k) => c.decoration != NONE && c.deco_kind == *k,
             Selector::DecoIdx(d) => c.decoration == *d,
+            Selector::Letter(..)
+            | Selector::LetterMark(..)
+            | Selector::LetterMarkNamed(..)
+            | Selector::WordChars(..)
+            | Selector::Letters(_) => LAYER && lx.takes(&self.sel, pi, c),
         }
     }
 }
@@ -304,6 +345,18 @@ pub(crate) fn ease_in_out(t: f64) -> f64 {
     t * t * (3.0 - 2.0 * t)
 }
 
+/// The paint of a cut path: its own, or the colour all its pieces resolve to when they agree
+/// on one. Then a rule on each letter of a joined outline, all in one colour, draws the outline
+/// whole in that colour. The cut path's transition is the longest of its pieces', so it never
+/// settles before them. With no pieces, or pieces that do not agree, the path keeps its own.
+fn shared_paint(own: Paint, pieces: &[Paint]) -> Paint {
+    let Some(first) = pieces.first() else { return own };
+    if first.color == own.color || pieces.iter().any(|p| p.color != first.color) {
+        return own;
+    }
+    Paint { color: first.color, transition_ms: pieces.iter().map(|p| p.transition_ms).max().unwrap_or(0) }
+}
+
 pub fn lerp_rgba(a: Rgba, b: Rgba, t: f64) -> Rgba {
     if t <= 0.0 {
         return a;
@@ -320,18 +373,21 @@ pub fn lerp_rgba(a: Rgba, b: Rgba, t: f64) -> Rgba {
 }
 
 impl Page {
-    /// Winning rule paint for a path, or None when no rule applies.
-    pub(crate) fn rule_paint(&self, pi: u32) -> Option<Paint> {
+    /// Winning rule paint for a path, or None when no rule applies. `LAYER` says whether a
+    /// letter layer is attached: see [`Rule::matches`].
+    pub(crate) fn rule_paint<const LAYER: bool>(&self, pi: u32) -> Option<Paint> {
         let c = &self.path_ctx[pi as usize];
+        let lx = LetterView { letters: self.letters.as_deref(), ctx: &self.path_ctx };
         let mut best: Option<(&Rule, u8)> = None;
         for r in &self.styles.rules {
-            if !r.matches(c, pi) {
+            if !r.matches::<LAYER>(c, pi, lx) {
                 continue;
             }
             let sp = r.sel.specificity();
+            // the rules are in the order they were added: a later rule wins a tie
             let better = match best {
                 None => true,
-                Some((b, bsp)) => (r.layer, sp, r.seq) > (b.layer, bsp, b.seq),
+                Some((b, bsp)) => (r.layer, sp) >= (b.layer, bsp),
             };
             if better {
                 best = Some((r, sp));
@@ -340,8 +396,9 @@ impl Page {
         best.map(|(r, _)| r.paint)
     }
 
-    /// Resolve the *target* colour of a path: mask → rules → reveal → default.
-    pub(crate) fn target_paint(&self, pi: u32) -> Paint {
+    /// Resolve the *target* colour of a path: mask → rules → reveal → default. `LAYER` says
+    /// whether a letter layer is attached: see [`Rule::matches`].
+    pub(crate) fn target_paint<const LAYER: bool>(&self, pi: u32) -> Paint {
         let c = &self.path_ctx[pi as usize];
         if c.word != NONE && self.mask.hidden.contains(&c.word) && self.mask.mode == crate::memorize::MaskMode::Hide {
             // a fade keeps the ink's colour and moves only its alpha; a reveal fades back
@@ -351,7 +408,7 @@ impl Page {
                 ms => Paint::fade(self.styles.default_ink & 0xffff_ff00, ms),
             };
         }
-        if let Some(p) = self.rule_paint(pi) {
+        if let Some(p) = self.rule_paint::<LAYER>(pi) {
             return p;
         }
         if let Some(rv) = &self.reveal {
@@ -372,7 +429,7 @@ impl Page {
         // every listed path has a transition running: `refresh_targets` compacts the list
         // when it settles one before its time
         let (anim, colors, now) = (&mut self.anim, &mut self.colors, self.clock_ms);
-        self.animating.retain(|&pi| {
+        let mut advance = |pi: u32| {
             let a = &mut anim[pi as usize];
             let t = (now - a.t0) / a.dur;
             let moving = t < 1.0;
@@ -384,37 +441,60 @@ impl Page {
             }
             colors[pi as usize] = a.cur;
             moving
-        });
+        };
+        match self.letters.as_deref() {
+            // a page with no layer advances its paths as before the layer existed
+            None => self.animating.retain(|&pi| advance(pi)),
+            Some(lt) => {
+                // the cut paths of the paths that settle in this tick: only they can go back
+                // to whole
+                let mut settled: Vec<u32> = Vec::new();
+                self.animating.retain(|&pi| {
+                    let moving = advance(pi);
+                    if !moving {
+                        settled.extend(lt.slot_of_path(lt.source_of(pi)));
+                    }
+                    moving
+                });
+                if !settled.is_empty() {
+                    self.update_swaps(Some(&settled));
+                }
+            }
+        }
         !self.animating.is_empty() | self.highlights_moving()
     }
 
     /// Recompute targets when rules changed; start transitions where targets moved.
+    ///
+    /// The check is inlined into every caller, so a frame with nothing to do makes no call.
+    #[inline]
     pub(crate) fn refresh_targets(&mut self) {
-        if !self.styles.dirty && !self.state_dirty {
-            return;
+        if self.styles.dirty || self.state_dirty {
+            self.refresh_targets_now();
         }
+    }
+
+    /// The work of [`Page::refresh_targets`], once a rule or the state has changed.
+    fn refresh_targets_now(&mut self) {
         self.styles.dirty = false;
         self.state_dirty = false;
         // words under a fading mask (revealed ones included) ease in and out
         let fading: std::collections::HashSet<u32> =
             if self.mask.transition_ms > 0 { self.mask.words.iter().copied().collect() } else { Default::default() };
         let mut cut_short = false;
-        for pi in 0..self.anim.len() {
-            let p = self.target_paint(pi as u32);
-            let word = self.path_ctx[pi].word;
-            let a = &mut self.anim[pi];
-            if p.color != a.target {
-                let prev_ms = a.target_ms;
-                a.target = p.color;
-                a.target_ms = p.transition_ms;
-                let ms = p.transition_ms.max(prev_ms) as f64;
-                if ms > 0.0 {
-                    self.start_transition(pi, p.color, ms, word != NONE && fading.contains(&word));
-                } else {
-                    cut_short |= self.settle(pi, p.color);
+        // with a letter layer every paint resolves first, so a cut path can take the colour its
+        // pieces share; with none, each path resolves in the loop, as before the layer existed
+        match self.letters.as_deref().map(|lt| self.layer_paints(lt)) {
+            None => {
+                for pi in 0..self.anim.len() {
+                    let p = self.target_paint::<false>(pi as u32);
+                    cut_short |= self.retarget(pi, p, &fading);
                 }
-            } else if p.transition_ms != a.target_ms {
-                a.target_ms = p.transition_ms;
+            }
+            Some(paints) => {
+                for (pi, p) in paints.into_iter().enumerate() {
+                    cut_short |= self.retarget(pi, p, &fading);
+                }
             }
         }
         // a path settled mid-transition leaves the list here, once for the whole pass, so
@@ -423,6 +503,42 @@ impl Page {
             let anim = &self.anim;
             self.animating.retain(|&pi| anim[pi as usize].dur > 0.0);
         }
+        // a change of rules or state is the one time a cut path can start to differ from its
+        // pieces; the clock only brings them back together, which `tick` checks
+        self.update_swaps(None);
+    }
+
+    /// Give path `pi` the target paint `p`: start its transition, or settle it now. True when
+    /// this cut a running transition short; the caller then compacts the animating list.
+    #[inline(always)]
+    fn retarget(&mut self, pi: usize, p: Paint, fading: &std::collections::HashSet<u32>) -> bool {
+        let word = self.path_ctx[pi].word;
+        let a = &mut self.anim[pi];
+        if p.color != a.target {
+            let prev_ms = a.target_ms;
+            a.target = p.color;
+            a.target_ms = p.transition_ms;
+            let ms = p.transition_ms.max(prev_ms) as f64;
+            if ms > 0.0 {
+                self.start_transition(pi, p.color, ms, word != NONE && fading.contains(&word));
+            } else {
+                return self.settle(pi, p.color);
+            }
+        } else if p.transition_ms != a.target_ms {
+            a.target_ms = p.transition_ms;
+        }
+        false
+    }
+
+    /// The target paint of every path of a page with a letter layer: each path's own, and
+    /// then each cut path takes the colour its pieces share.
+    fn layer_paints(&self, lt: &crate::letters::Letters) -> Vec<Paint> {
+        let mut paints: Vec<Paint> = (0..self.anim.len()).map(|pi| self.target_paint::<true>(pi as u32)).collect();
+        for &(src, first, n) in &lt.sources {
+            let shared = shared_paint(paints[src as usize], &paints[first as usize..(first + n) as usize]);
+            paints[src as usize] = shared;
+        }
+        paints
     }
 
     /// Start a path's colour moving to `to` over `ms` from where it is now, and list it as
@@ -467,10 +583,25 @@ impl Page {
     }
 
     /// Paths whose current colour differs from the default ink (overlay repaint).
+    ///
+    /// With a letter layer, a path the draw list cannot hold now is left out: a piece whose
+    /// cut path is drawn whole, or a cut path drawn as its pieces. So a host that paints this
+    /// list over its cached ink never paints a cut path and its pieces both. [`Page::colors`]
+    /// still gives every path a colour, the pieces that are not drawn included.
     pub fn styled_paths(&mut self) -> Vec<(u32, Rgba)> {
         self.refresh_targets();
         let d = self.styles.default_ink;
-        self.colors.iter().enumerate().filter(|(_, &c)| c != d).map(|(i, &c)| (i as u32, c)).collect()
+        // a page with no layer runs the loop it ran before the layer existed
+        match self.letters.as_deref() {
+            None => self.colors.iter().enumerate().filter(|(_, &c)| c != d).map(|(i, &c)| (i as u32, c)).collect(),
+            Some(lt) => self
+                .colors
+                .iter()
+                .enumerate()
+                .filter(|&(i, &c)| c != d && lt.is_drawn(i as u32))
+                .map(|(i, &c)| (i as u32, c))
+                .collect(),
+        }
     }
 
     // ── convenience API (what apps call) ──
@@ -485,6 +616,19 @@ impl Page {
     pub fn style_target(&mut self, layer: i32, target: &crate::Target, paint: Paint) -> Handle {
         let words = self.target_words(target);
         self.styles.add_many(layer, words.into_iter().map(Selector::Word), paint)
+    }
+    /// Recolour the letters a query finds, under one handle and one rule.
+    ///
+    /// The scope resolves to words now. The rest of the query is kept and resolved per path
+    /// each time the rules are evaluated, so the rule takes the letters of a layer attached
+    /// later, and of a second attach too. A handle is returned with no layer: the rule then
+    /// selects nothing until a layer is attached. `part` says which members of each letter
+    /// found take the paint.
+    pub fn style_letters(&mut self, layer: i32, q: &LetterQuery, paint: Paint) -> Handle {
+        // sorted and with no repeat: the rule looks a word up by binary search
+        let words = self.target_words(&q.scope);
+        let sel = LetterSelection { words, text: q.text, mark: q.mark, part: q.part };
+        self.styles.add(layer, Selector::Letters(Box::new(sel)), paint)
     }
     pub fn remove_style(&mut self, handle: Handle) -> usize {
         self.styles.remove(handle)
@@ -582,6 +726,20 @@ mod tests {
         assert_eq!(s.rules[0].paint, Paint::HIDDEN);
         assert_eq!(s.remove_engine(engine), 1);
         assert!(s.is_empty());
+    }
+
+    /// The matcher reads every rule for every path, and the refresh reads every path's
+    /// context. On `main`, before the letter layer, a selector took 8 bytes, a rule 32 and a
+    /// path context 24. A selector now takes 16: [`Selector::Letters`] holds a pointer. A rule
+    /// keeps its 32 because it no longer stores its order, and a context keeps its 24
+    /// because the letter facts are in the layer. A larger rule measurably slowed the
+    /// refresh of a page with no layer.
+    #[test]
+    fn the_matcher_reads_no_more_bytes_than_before_the_letter_layer() {
+        assert!(std::mem::size_of::<Selector>() <= 16);
+        assert!(std::mem::size_of::<Rule>() <= 32);
+        assert!(std::mem::size_of::<PathCtx>() <= 24);
+        assert!(std::mem::size_of::<PathAnim>() <= 40);
     }
 
     #[test]

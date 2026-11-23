@@ -36,10 +36,10 @@ source SVG ──converter──▶ page file ──engine──▶ outlines + c
    arcs as close cubic curves (`docs/DATA.md`).
 3. **The page file** (`.qvp`, Quran Vector Page) holds the outlines, plus tables that say
    which outline belongs to which word, which word to which line and ayah, and where each
-   one sits on the page. A page is about 210 KB, a quarter of the SVG. Coordinates are
+   one sits on the page. A page is about 134 KB, a fifth of the SVG. Coordinates are
    *page units*: the printed page's own coordinate space, 345 by 550 for this mushaf.
 4. **The engine** (`crates/qvp-core`, written in Rust) loads a page file and holds its
-   tables and outlines in memory. It exposes about 170 functions through a C header, and
+   tables and outlines in memory. It exposes about 190 functions through a C header, and
    `crates/qvp-ffi/include/qvp.h` is the list. So the same engine runs inside iOS, Android,
    Flutter and React Native, and in the browser through WebAssembly.
 5. **The wrapper** is a thin layer in each language. It passes your calls to the engine,
@@ -55,6 +55,20 @@ calligraphic title ink, for reuse in a list without loading its full page. A hos
 individual or combined QVP and SVG files, or one WOFF2 font. The same engine that draws a
 page loads the QVP forms. The page file still owns the frame. Printed layouts render it by default; a host
 that supplies its own frame sets `surahFrames: false`.
+
+The converter can also build a **letter layer** (`NNN.qvl`) from the letters archive of
+`quran-svg-elements`. For each word it lists the letters and the page paths that draw each
+one. Some page paths are one outline that joins several letters. Such a path is a **cut
+path**: the converter cuts it where the letters archive divides it, and the layer holds one
+**piece** for each letter. The page file does not change. A layer codes each piece against
+the cut path it came from, so it is about a tenth of the size of the page file. It holds a
+digest of the paths of the page it was built for, and the engine refuses it for a page whose
+paths differ.
+
+The layer is optional. An app attaches it to a loaded page when it colours, reads or taps
+single letters. The engine then adds the pieces to the page's path table, after the page's
+own paths, so no page path changes its number. `docs/DATA.md` says where the layer comes from
+and states its limits, and `docs/MEASURED.md` gives its size and what its gates measured.
 
 ## Load, draw, tap
 
@@ -80,6 +94,15 @@ because that is where the trailing ink goes in this print. There is no dead zone
 line. This is *gap-aware* hit testing. The exact-only variant exists for when you need
 it.
 
+### Which letter is under a finger
+
+With a letter layer, the engine also finds the letter under a finger. It tests ink first.
+On the ink of a word, the hit is the letter or the mark that draws that ink, in the word that
+owns the ink. On a cut path it tests the pieces, so a tap on a joined outline names one
+letter. Off the ink, a point inside the hole of a letter, such as the loop of a waw, names that
+letter. Anywhere else, the gap-aware word test picks the word, and the hit is the nearest
+letter of that word. The hit says whether it found the letter's body or a mark on it.
+
 ### How the lines spread on a tall screen
 
 A printed page fitted to a phone's width leaves empty paper above and below. The engine can
@@ -96,6 +119,13 @@ outlines, this colour, fade over this many milliseconds". A rule can address a w
 a line, an ayah, a word, or one diacritic of one word. Every rule returns a **handle**;
 removing the handle undoes exactly that rule. The engine resolves all rules into one colour
 per outline, and your app renders those colours.
+
+With a letter layer, a rule can also address one letter, one mark of a letter, or a range of
+the word's characters. The engine keeps drawing a cut path whole while all its letters have
+one colour. When one letter of it gets a different colour, the engine draws the path's
+pieces in its place, each in its own colour, and goes back to the whole path when the colours
+agree again. The draw list says which to draw. A number, the draw revision, changes each time
+the engine swaps, so an app that keeps its draw list knows when to ask again.
 
 Mark colouring for tajwid-style display is one such rule set: colour the diacritics blue,
 the dots red, the pause marks green.
@@ -164,3 +194,8 @@ or the colour of an outline.
 | handle | the number a style or highlight call returns. Removing it undoes that call |
 | atlas | the whole-mushaf index: pages, surahs, divisions |
 | words sidecar | the JSON file with each word's other spellings |
+| letter layer | the optional file per page (`NNN.qvl`) that lists each word's letters and the paths that draw each one |
+| cut path | a page path that joins several letters in one outline. The letter layer divides it into pieces |
+| piece | the part of a cut path that draws one letter. The engine numbers the pieces after the page's own paths |
+| counter | the hole inside the body of a letter, such as the loop of a waw or a meem |
+| draw revision | a number that changes when the draw list changes while the layout stays the same, such as when a cut path starts or stops drawing its pieces |

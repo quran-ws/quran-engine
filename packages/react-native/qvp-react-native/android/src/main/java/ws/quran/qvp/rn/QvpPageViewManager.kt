@@ -20,6 +20,7 @@ class QvpPageViewManager : SimpleViewManager<QvpRnPageView>() {
     @ReactProp(name = "pageUri") fun setPageUri(v: QvpRnPageView, s: String?) { v.pageUri = s }
     @ReactProp(name = "pageBase64") fun setPageBase64(v: QvpRnPageView, s: String?) { v.pageBase64 = s }
     @ReactProp(name = "wordsUri") fun setWordsUri(v: QvpRnPageView, s: String?) { v.wordsUri = s }
+    @ReactProp(name = "lettersUri") fun setLettersUri(v: QvpRnPageView, s: String?) { v.lettersUri = s }
     @ReactProp(name = "padTop", defaultFloat = 0f) fun setPadTop(v: QvpRnPageView, f: Float) = v.setPadTopDp(f)
     @ReactProp(name = "padBottom", defaultFloat = 0f) fun setPadBottom(v: QvpRnPageView, f: Float) = v.setPadBottomDp(f)
     @ReactProp(name = "padSide", defaultFloat = 0f) fun setPadSide(v: QvpRnPageView, f: Float) = v.setPadSideDp(f)

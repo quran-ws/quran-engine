@@ -28,6 +28,10 @@ enum QvpRnCodes {
     static let SELECTOR_KIND = 13
     static let SELECTOR_DECORATION = 14
     static let SELECTOR_DECORATION_INDEX = 15
+    static let SELECTOR_LETTER = 16
+    static let SELECTOR_LETTER_MARK = 17
+    static let SELECTOR_LETTER_MARK_NAMED = 18
+    static let SELECTOR_WORD_CHARS = 19
     /// QVP_SELECTOR_*: the kind of a selector, by name.
-    static let SELECTORS: [String: Int] = ["page": SELECTOR_PAGE, "path": SELECTOR_PATH, "wordPath": SELECTOR_WORD_PATH, "wordMark": SELECTOR_WORD_MARK, "wordMarkNamed": SELECTOR_WORD_MARK_NAMED, "wordBody": SELECTOR_WORD_BODY, "wordMarks": SELECTOR_WORD_MARKS, "word": SELECTOR_WORD, "ayah": SELECTOR_AYAH, "line": SELECTOR_LINE, "mark": SELECTOR_MARK, "category": SELECTOR_CATEGORY, "family": SELECTOR_FAMILY, "kind": SELECTOR_KIND, "decoration": SELECTOR_DECORATION, "decorationIndex": SELECTOR_DECORATION_INDEX]
+    static let SELECTORS: [String: Int] = ["page": SELECTOR_PAGE, "path": SELECTOR_PATH, "wordPath": SELECTOR_WORD_PATH, "wordMark": SELECTOR_WORD_MARK, "wordMarkNamed": SELECTOR_WORD_MARK_NAMED, "wordBody": SELECTOR_WORD_BODY, "wordMarks": SELECTOR_WORD_MARKS, "word": SELECTOR_WORD, "ayah": SELECTOR_AYAH, "line": SELECTOR_LINE, "mark": SELECTOR_MARK, "category": SELECTOR_CATEGORY, "family": SELECTOR_FAMILY, "kind": SELECTOR_KIND, "decoration": SELECTOR_DECORATION, "decorationIndex": SELECTOR_DECORATION_INDEX, "letter": SELECTOR_LETTER, "letterMark": SELECTOR_LETTER_MARK, "letterMarkNamed": SELECTOR_LETTER_MARK_NAMED, "wordChars": SELECTOR_WORD_CHARS]
 }

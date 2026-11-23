@@ -2,6 +2,9 @@
 # Fill example/pages/ with the complete mushaf (604 × .qvp + .words.json, plus atlas.qva, plus
 # ornaments.qvo when the source has one), which the app bundles as a folder reference. example/pages/ is a build artefact (gitignored); the Swift
 # package ships no data.
+# The letter layers (NNN.qvl) come from $QVP_LETTERS, else dist/letters, when there are any.
+# They are optional: without them the letter controls of the app are disabled. A layer
+# attaches only to the page file it was built with (docs/EXAMPLE-APP.md).
 #
 # Source, in order:
 #   $QVP_PAGES     — a directory of converter output (dist/pages) to use as-is
@@ -17,19 +20,32 @@ TAG="${QVP_DATA_TAG:-data-v0.5.0}"
 ASSET=quran-engine-pages-hafs-kfgqpc.tar.gz
 BASE="https://github.com/$REPO/releases/download/$TAG"
 SRC="${QVP_PAGES:-$ROOT/dist/pages}"
+LETTERS="${QVP_LETTERS:-$ROOT/dist/letters}"
 
 # The ornament set for the dress panel. It is optional: the demo works without it.
 copy_ornaments() {
   if [ -f "$1/ornaments.qvo" ]; then cp "$1/ornaments.qvo" pages/; fi
 }
 
-# 604 pages + 604 sidecars + atlas.qva
+# The letter layers. They are optional too. Copy them again on each run, so the bundle has
+# the layers that $LETTERS has now and no others.
+copy_letters() {
+  rm -f pages/*.qvl
+  if [ -d "$LETTERS" ]; then
+    find "$LETTERS" -maxdepth 1 -name '[0-9][0-9][0-9].qvl' -exec cp {} pages/ \;
+  fi
+}
+
+letter_count() { find pages -maxdepth 1 -name '*.qvl' | wc -l | tr -d ' '; }
+
+# 604 pages + 604 sidecars + atlas.qva. The letter layers do not count.
 want=1209
-have=$( (ls pages 2>/dev/null || true) | wc -l | tr -d ' ')
+have=$( (ls pages 2>/dev/null || true) | grep -vc '\.qvl$' || true)
 if [ "$have" -ge "$want" ] && [ -f pages/atlas.qva ] && [ -z "${QVP_FORCE_SYNC:-}" ] \
    && [ "$(cat pages/.tag 2>/dev/null)" = "$TAG" ]; then
   copy_ornaments "$SRC"
-  echo "demo pages already synced ($have files, $TAG)"; exit 0
+  copy_letters
+  echo "demo pages already synced ($have files, $TAG, $(letter_count) letter layers)"; exit 0
 fi
 
 if [ ! -f "$SRC/atlas.qva" ]; then
@@ -68,7 +84,8 @@ for n in $(seq 1 604); do
 done
 cp "$SRC/atlas.qva" pages/
 copy_ornaments "$SRC"
+copy_letters
 # Record where the bundle came from: the tag its source directory records, or "local"
 # for page data built on this machine. A mismatch makes the next run re-sync.
 cat "$SRC/.tag" 2>/dev/null > pages/.tag || echo local > pages/.tag
-echo "demo pages synced: $(find pages -mindepth 1 -maxdepth 1 ! -name '.*' | wc -l | tr -d ' ') files from $SRC"
+echo "demo pages synced: $(find pages -mindepth 1 -maxdepth 1 ! -name '.*' | wc -l | tr -d ' ') files from $SRC, $(letter_count) letter layers"

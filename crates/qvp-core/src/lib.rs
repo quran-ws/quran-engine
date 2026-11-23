@@ -10,6 +10,7 @@ pub mod dress;
 pub mod highlight;
 pub mod hit;
 pub mod layout;
+pub mod letters;
 mod load;
 pub mod memorize;
 pub mod meta;
@@ -32,6 +33,7 @@ pub use dress::{
 pub use highlight::{BandBox, BandHeight, HighlightMode, HighlightStyle, ViewBox};
 pub use hit::{Hit, HitArea, HitOptions, LineBand};
 pub use layout::{Draw, Grid, Layout, LayoutSpec};
+pub use letters::{LetterHit, LetterInfo, LetterMember, LetterPart, LetterQuery, LetterSelection};
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahHeader, SurahInfo};
 pub use passage::{
@@ -155,6 +157,11 @@ pub struct Page {
     /// The current colour of every path, kept equal to `anim[i].cur` as the clock moves it,
     /// so a display list is read and never rebuilt.
     colors: Vec<Rgba>,
+    /// The letter layer, once one is attached. Its pieces are the paths after the page's own.
+    pub(crate) letters: Option<Box<letters::Letters>>,
+    /// Counts up when the draw list can change while the layout and the band stay the same.
+    /// See [`Page::draw_revision`].
+    pub(crate) draw_revision: u32,
 }
 
 impl Page {
@@ -206,6 +213,8 @@ impl Page {
             animating: Vec::new(),
             state_dirty: true,
             colors: vec![DEFAULT_INK; n],
+            letters: None,
+            draw_revision: 0,
         })
     }
 
@@ -682,16 +691,10 @@ impl Page {
 
     /// Exact containment test against the flattened outline.
     pub fn point_in_path(&self, pi: u32, x: f32, y: f32) -> bool {
-        let g = &self.geom.table[pi as usize];
-        let ops = &self.geom.ops[g.op_start as usize..(g.op_start + g.op_count) as usize];
-        let pts = &self.geom.pts[g.pt_start as usize..(g.pt_start + g.pt_count) as usize];
-        let evenodd = g.flags >> 24 & 1 == 1;
+        let evenodd = self.geom.table[pi as usize].flags >> 24 & 1 == 1;
         let mut wn: i32 = 0;
         let mut crossings = 0u32;
-        let (mut cx, mut cy) = (0f32, 0f32);
-        let (mut sx, mut sy) = (0f32, 0f32);
-        let mut k = 0usize;
-        let mut seg = |x0: f32, y0: f32, x1: f32, y1: f32| {
+        self.path_segments(pi, |_, x0: f32, y0: f32, x1: f32, y1: f32| {
             if (y0 <= y) != (y1 <= y) {
                 let t = (y - y0) / (y1 - y0);
                 let xi = x0 + t * (x1 - x0);
@@ -700,13 +703,33 @@ impl Page {
                     wn += if y1 > y0 { 1 } else { -1 };
                 }
             }
-        };
+        });
+        if evenodd {
+            crossings % 2 == 1
+        } else {
+            wn != 0
+        }
+    }
+
+    /// Call `seg` with each straight segment of a path's flattened outline, every subpath
+    /// closed, and the index of its subpath. A curve is cut into 8 segments.
+    pub(crate) fn path_segments(&self, pi: u32, mut seg: impl FnMut(u32, f32, f32, f32, f32)) {
+        let g = &self.geom.table[pi as usize];
+        let ops = &self.geom.ops[g.op_start as usize..(g.op_start + g.op_count) as usize];
+        let pts = &self.geom.pts[g.pt_start as usize..(g.pt_start + g.pt_count) as usize];
+        let (mut cx, mut cy) = (0f32, 0f32);
+        let (mut sx, mut sy) = (0f32, 0f32);
+        let mut k = 0usize;
+        let mut sub = 0u32;
         const N: usize = 8;
         for &op in ops {
             match op {
                 OP_MOVE => {
                     if (cx, cy) != (sx, sy) {
-                        seg(cx, cy, sx, sy);
+                        seg(sub, cx, cy, sx, sy);
+                    }
+                    if k > 0 {
+                        sub += 1;
                     }
                     cx = pts[k];
                     cy = pts[k + 1];
@@ -716,7 +739,7 @@ impl Page {
                 }
                 OP_LINE => {
                     let (nx, ny) = (pts[k], pts[k + 1]);
-                    seg(cx, cy, nx, ny);
+                    seg(sub, cx, cy, nx, ny);
                     cx = nx;
                     cy = ny;
                     k += 2;
@@ -729,7 +752,7 @@ impl Page {
                         let u = 1.0 - t;
                         let bx = u * u * cx + 2.0 * u * t * x1 + t * t * x2;
                         let by = u * u * cy + 2.0 * u * t * y1 + t * t * y2;
-                        seg(px, py, bx, by);
+                        seg(sub, px, py, bx, by);
                         px = bx;
                         py = by;
                     }
@@ -745,7 +768,7 @@ impl Page {
                         let u = 1.0 - t;
                         let bx = u * u * u * cx + 3.0 * u * u * t * x1 + 3.0 * u * t * t * x2 + t * t * t * x3;
                         let by = u * u * u * cy + 3.0 * u * u * t * y1 + 3.0 * u * t * t * y2 + t * t * t * y3;
-                        seg(px, py, bx, by);
+                        seg(sub, px, py, bx, by);
                         px = bx;
                         py = by;
                     }
@@ -754,7 +777,7 @@ impl Page {
                     k += 6;
                 }
                 OP_CLOSE => {
-                    seg(cx, cy, sx, sy);
+                    seg(sub, cx, cy, sx, sy);
                     cx = sx;
                     cy = sy;
                 }
@@ -762,30 +785,38 @@ impl Page {
             }
         }
         if (cx, cy) != (sx, sy) {
-            seg(cx, cy, sx, sy);
-        }
-        if evenodd {
-            crossings % 2 == 1
-        } else {
-            wn != 0
+            seg(sub, cx, cy, sx, sy);
         }
     }
 
     /// Drive a renderer over the whole page (bands first, then ink).
+    ///
+    /// The ink is the page's own paths in order. A cut path whose pieces differ in colour is
+    /// drawn as its pieces, in its place, as the draw list holds it.
     pub fn render<R: Renderer>(&mut self, r: &mut R) {
         r.begin(self.width(), self.height());
         for b in self.highlight_boxes_view() {
             r.fill_rect(b.x0, b.y0, b.x1, b.y1, b.radius, b.color);
         }
         self.colors();
-        for (i, g) in self.geom.table.iter().enumerate() {
-            let c = self.colors[i];
-            if c & 0xff == 0 {
-                continue;
+        let draw = |r: &mut R, i: u32, g: &PathGeom| {
+            let c = self.colors[i as usize];
+            if c & 0xff != 0 {
+                let ops = &self.geom.ops[g.op_start as usize..(g.op_start + g.op_count) as usize];
+                let pts = &self.geom.pts[g.pt_start as usize..(g.pt_start + g.pt_count) as usize];
+                r.fill_path(i, ops, pts, c, g.flags >> 24 & 1 == 1);
             }
-            let ops = &self.geom.ops[g.op_start as usize..(g.op_start + g.op_count) as usize];
-            let pts = &self.geom.pts[g.pt_start as usize..(g.pt_start + g.pt_count) as usize];
-            r.fill_path(i as u32, ops, pts, c, g.flags >> 24 & 1 == 1);
+        };
+        match self.letters.as_deref() {
+            // a page with no layer draws every path in order, as before the layer existed
+            None => self.geom.table.iter().enumerate().for_each(|(i, g)| draw(r, i as u32, g)),
+            Some(lt) => {
+                for path in 0..lt.first_piece {
+                    for i in lt.drawn_pieces(path).unwrap_or(path..path + 1) {
+                        draw(r, i, &self.geom.table[i as usize]);
+                    }
+                }
+            }
         }
         for b in self.mask_boxes_view() {
             r.fill_rect(b.x0, b.y0, b.x1, b.y1, b.radius, b.color);

@@ -951,6 +951,212 @@ class QvpWebBackend implements QvpBackend {
         Uint8List.fromList(bytes).toJS,
       )).toDartInt;
 
+  // ── Letters ──
+  // qvp.js answers -1 for QVP_NONE and gives a mark as its id and its name.
+
+  /// -1 and every other negative index as `QVP_NONE`, as qvp.js reads it.
+  static int _index(int v) => v < 0 ? qvpNone : v;
+
+  @override
+  bool attachLetters(PageHandle handle, List<int> bytes) =>
+      (_page(handle).callMethod<JSBoolean>(
+        'attachLetters'.toJS,
+        Uint8List.fromList(bytes).toJS,
+      )).toDart;
+
+  @override
+  QvpPageGeometry pageGeometry(PageHandle handle) {
+    final p = _page(handle);
+    return QvpPageGeometry(
+      nPaths: (p['nPaths'] as JSNumber).toDartInt,
+      ops: (p['ops'] as JSUint8Array).toDart,
+      pts: (p['pts'] as JSFloat32Array).toDart,
+      table: (p['table'] as JSUint32Array).toDart,
+    );
+  }
+
+  @override
+  bool hasLetters(PageHandle handle) =>
+      (_page(handle).callMethod<JSBoolean>('hasLetters'.toJS)).toDart;
+
+  @override
+  int letterCount(PageHandle handle, int word) => (_page(
+    handle,
+  ).callMethod<JSNumber>('letterCount'.toJS, _index(word).toJS)).toDartInt;
+
+  static List<QvpLetterMember> _readMembers(JSArray arr) =>
+      List<QvpLetterMember>.generate(arr.length, (i) {
+        final m = arr[i] as JSObject;
+        return QvpLetterMember(
+          path: (m['path'] as JSNumber).toDartInt,
+          at: (m['at'] as JSNumber).toDartInt,
+          mark: (m['mark'] as JSNumber).toDartInt,
+          markName: (m['markName'] as JSString).toDart,
+          isBody: (m['isBody'] as JSBoolean).toDart,
+          isCut: (m['isCut'] as JSBoolean).toDart,
+        );
+      }, growable: false);
+
+  @override
+  QvpLetter? letterInfo(PageHandle handle, int word, int letter) {
+    final l = _page(handle).callMethod<JSObject?>(
+      'letter'.toJS,
+      _index(word).toJS,
+      _index(letter).toJS,
+    );
+    if (l == null) return null;
+    final box = l['box'] as JSObject;
+    int n(JSObject o, String k) => (o[k] as JSNumber).toDartInt;
+    double f(String k) => (box[k] as JSNumber).toDartDouble;
+    final members = _readMembers(l['members'] as JSArray);
+    return QvpLetter(
+      word: n(l, 'word'),
+      index: n(l, 'index'),
+      at: n(l, 'at'),
+      codePoint: n(l, 'codePoint'),
+      nMembers: n(l, 'nMembers'),
+      nMarks: n(l, 'nMarks'),
+      moreAt: n(l, 'moreAt'),
+      nMoreAt: n(l, 'nMoreAt'),
+      x0: f('x0'),
+      y0: f('y0'),
+      x1: f('x1'),
+      y1: f('y1'),
+      hasInk: (l['hasInk'] as JSBoolean).toDart,
+      members: members,
+    );
+  }
+
+  @override
+  List<QvpLetterMember> letterMembers(
+    PageHandle handle,
+    int word,
+    int letter,
+  ) => _readMembers(
+    _page(handle).callMethod<JSArray>(
+      'letterMembers'.toJS,
+      _index(word).toJS,
+      _index(letter).toJS,
+    ),
+  );
+
+  @override
+  ({int letter, int at})? pathLetter(PageHandle handle, int path) {
+    final r = _page(handle)
+        .callMethod<JSObject?>('pathLetter'.toJS, _index(path).toJS);
+    if (r == null) return null;
+    return (
+      letter: (r['letter'] as JSNumber).toDartInt,
+      at: (r['at'] as JSNumber).toDartInt,
+    );
+  }
+
+  @override
+  int? letterAtOffset(PageHandle handle, int word, int at) {
+    final l = (_page(handle).callMethod<JSNumber>(
+      'letterAtOffset'.toJS,
+      _index(word).toJS,
+      // qvp.js takes -1 for none
+      (at < 0 ? -1 : at).toJS,
+    )).toDartInt;
+    return l < 0 ? null : l;
+  }
+
+  JSObject _letterQueryToJs(QvpLetterQuery q) => JSObject()
+    ..['scope'] = _targetToJs(q.target)
+    ..['text'] = q.codePoint.toJS
+    ..['mark'] = q.markId.toJS
+    ..['part'] = q.part.toJS;
+
+  @override
+  List<({int word, int letter})> findLetters(
+    PageHandle handle,
+    QvpLetterQuery query,
+  ) {
+    final arr = _page(handle)
+        .callMethod<JSArray>('findLetters'.toJS, _letterQueryToJs(query));
+    return List<({int word, int letter})>.generate(arr.length, (i) {
+      final o = arr[i] as JSObject;
+      return (
+        word: (o['word'] as JSNumber).toDartInt,
+        letter: (o['letter'] as JSNumber).toDartInt,
+      );
+    }, growable: false);
+  }
+
+  @override
+  int styleLetters(
+    PageHandle handle,
+    QvpLetterQuery query,
+    int color, {
+    int ms = 0,
+    int layer = 0,
+  }) {
+    final opt = JSObject()
+      ..['ms'] = ms.toJS
+      ..['layer'] = layer.toJS;
+    return (_page(handle).callMethod<JSNumber>(
+      'styleLetters'.toJS,
+      _letterQueryToJs(query),
+      color.toJS,
+      opt,
+    )).toDartInt;
+  }
+
+  static JSObject? _hitOptionsToJs(QvpHitOptions? o) => o == null
+      ? null
+      : (JSObject()
+          ..['maxDistance'] = o.maxDistance.toJS
+          ..['gapBias'] = o.gapBias.toJS
+          ..['preferExact'] = o.preferExact.toJS);
+
+  static QvpLetterHit? _readLetterHit(JSObject? h) {
+    if (h == null) return null;
+    int n(String k) => (h[k] as JSNumber).toDartInt;
+    return QvpLetterHit(
+      word: n('word'),
+      letter: n('letter'),
+      path: n('path'),
+      at: n('at'),
+      line: n('line'),
+      distance: (h['distance'] as JSNumber).toDartDouble,
+      mark: n('mark'),
+      markName: (h['markName'] as JSString).toDart,
+      isExact: (h['isExact'] as JSBoolean).toDart,
+      isBody: (h['isBody'] as JSBoolean).toDart,
+    );
+  }
+
+  @override
+  QvpLetterHit? hitTestLetter(
+    PageHandle handle,
+    double x,
+    double y,
+    QvpHitOptions? options,
+  ) => _readLetterHit(
+    _page(handle).callMethod<JSObject?>(
+      'hitTestLetter'.toJS,
+      x.toJS,
+      y.toJS,
+      _hitOptionsToJs(options),
+    ),
+  );
+
+  @override
+  QvpLetterHit? hitTestLetterView(
+    PageHandle handle,
+    double viewX,
+    double viewY,
+    QvpHitOptions? options,
+  ) => _readLetterHit(
+    _page(handle).callMethod<JSObject?>(
+      'hitTestLetterView'.toJS,
+      viewX.toJS,
+      viewY.toJS,
+      _hitOptionsToJs(options),
+    ),
+  );
+
   @override
   bool hasForm(PageHandle handle, int form) =>
       (_page(handle).callMethod<JSBoolean>(
@@ -1179,6 +1385,10 @@ class QvpWebBackend implements QvpBackend {
     )).toDart;
     return res == 'turnPage' ? QvpSideways.turnPage : QvpSideways.pan;
   }
+
+  @override
+  int layoutDrawRevision(PageHandle handle) =>
+      (_page(handle).callMethod<JSNumber>('layoutDrawRevision'.toJS)).toDartInt;
 
   @override
   List<QvpDraw> layoutDrawList(

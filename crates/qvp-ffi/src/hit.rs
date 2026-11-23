@@ -90,6 +90,62 @@ pub unsafe extern "C" fn qvp_hit_test_view(
         None => 0,
     })
 }
+fn letter_hit(h: LetterHit) -> QvpLetterHit {
+    QvpLetterHit {
+        word: h.word,
+        letter: h.letter,
+        path: h.path,
+        at: h.at,
+        line: h.line,
+        distance: h.distance,
+        mark: h.mark as u8,
+        is_exact: h.is_exact as u8,
+        is_body: h.is_body as u8,
+        _pad: 0,
+    }
+}
+/// The letter, or the mark, under a point in page units. On ink, the word of that ink. Off
+/// ink, the word `qvp_hit_test` finds with the same options. 0 with no layer, no word, or a
+/// decoration: `out` is then left as it was, and it may be NULL.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_hit_test_letter(
+    page: *const Page,
+    x: f32,
+    y: f32,
+    opt: *const QvpHitOptions,
+    out: *mut QvpLetterHit,
+) -> i32 {
+    guard(|| {
+        if page.is_null() {
+            return 0;
+        }
+        let Some(h) = (*page).hit_test_letter(x, y, &hopt(opt)) else { return 0 };
+        if !out.is_null() {
+            *out = letter_hit(h);
+        }
+        1
+    })
+}
+/// The same for a point in layout px, as `qvp_hit_test_view` takes it.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_hit_test_letter_view(
+    page: *const Page,
+    view_x: f32,
+    view_y: f32,
+    opt: *const QvpHitOptions,
+    out: *mut QvpLetterHit,
+) -> i32 {
+    guard(|| {
+        if page.is_null() {
+            return 0;
+        }
+        let Some(h) = (*page).hit_test_letter_view(view_x, view_y, &hopt(opt)) else { return 0 };
+        if !out.is_null() {
+            *out = letter_hit(h);
+        }
+        1
+    })
+}
 #[no_mangle]
 pub unsafe extern "C" fn qvp_line_bands(page: *const Page, out: *mut QvpLineBand, cap: u32) -> u32 {
     guard(|| {

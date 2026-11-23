@@ -32,6 +32,14 @@ public enum QvpLayer {
     /// The ids by name, as qvp.h numbers them.
     public static let BASE = 0, THEME = 10, HIGHLIGHT = 50, SELECTION = 60, TOP = 100
 }
+/// What part of a letter a letter selector or a letter query takes (QVP_LETTER_PART_*). ALL
+/// takes every member of the letter. BODY_AND_DOTS takes each member at the letter's own offset:
+/// the body, its dots, and a sign that is part of the code point, such as a hamzah. MARKS takes
+/// every other member.
+public enum QvpLetterPart {
+    /// The ids by name, as qvp.h numbers them.
+    public static let ALL = 0, BODY_AND_DOTS = 1, MARKS = 2
+}
 
 public enum Form: Int { case rasmUthmani = 0, rasmImlai, qpc, rasm, search }
 public enum SearchMode: Int { case includes = 0, exact, prefix }
@@ -202,6 +210,63 @@ public struct Selector {
     public static func decoration(_ k: Int) -> Selector { Selector(14, k) }
     /// Every path of one decoration, by its index on the page.
     public static func decorationIndex(_ i: Int) -> Selector { Selector(15, i) }
+    /// A part (`QvpLetterPart`) of letter `letter` of word `w`. Needs a letter layer
+    /// (`QvpPage.attachLetters`). With none it selects nothing, and the rule takes the layer
+    /// when it comes. A part above 2 is a bad selector.
+    public static func letter(_ w: Int, _ letter: Int, _ part: Int = QvpLetterPart.ALL) -> Selector { Selector(16, w, letter, part) }
+    /// The nth mark of a letter in text order, counting from 0. Dots count. A body never does.
+    public static func letterMark(_ w: Int, _ letter: Int, _ nth: Int) -> Selector { Selector(17, w, letter, nth) }
+    /// Each member of a letter whose path has this mark, by its name, a body the page stores as
+    /// a mark included.
+    public static func letterMarkNamed(_ w: Int, _ letter: Int, _ mark: String) -> Selector { Selector(18, w, letter, markId(mark)) }
+    /// Each member of a letter whose path has this mark, by its id.
+    public static func letterMarkNamed(_ w: Int, _ letter: Int, _ id: Int) -> Selector { Selector(18, w, letter, id) }
+    /// The ink of the qpc characters of word `w` from offset `first` to offset `last`, both
+    /// included, a word-level mark included. `first` above `last` is a bad selector.
+    public static func wordChars(_ w: Int, _ first: Int, _ last: Int) -> Selector { Selector(19, w, first, last) }
+}
+
+/// Letters by what they are (`QvpPage.findLetters`, `QvpPage.styleLetters`): the letters in
+/// `scope` that are one character, carry one mark, or both.
+public struct QvpLetterQuery {
+    /// The words to look in.
+    public var scope: Target
+    /// The letter's character as a code point. 0 takes any letter.
+    public var codePoint: UInt32
+    /// A mark id that one of the letter's members must carry. 0 takes any letter.
+    public var mark: Int
+    /// What of each letter a style rule takes (`QvpLetterPart`). It does not filter `findLetters`.
+    public var part: Int
+    /// A query by code point and mark id, as the C struct holds them.
+    public init(scope: Target = .page(), codePoint: UInt32 = 0, mark: Int = 0, part: Int = QvpLetterPart.ALL) {
+        self.scope = scope; self.codePoint = codePoint; self.mark = mark; self.part = part
+    }
+    /// A query by character and mark name: `QvpLetterQuery("ن", mark: "shaddah")`. A nil
+    /// character takes any letter, and a nil mark any mark.
+    public init(_ text: Unicode.Scalar?, mark: String? = nil, scope: Target = .page(), part: Int = QvpLetterPart.ALL) {
+        self.init(scope: scope, codePoint: text?.value ?? 0, mark: mark.map(markId) ?? 0, part: part)
+    }
+    /// A query by the letter's character as a string: one Unicode scalar, or "" for any letter.
+    /// A string of more than one scalar is a programmer error, as a bad target string is.
+    public init(text: String, mark: String? = nil, scope: Target = .page(), part: Int = QvpLetterPart.ALL) {
+        let scalars = Array(text.unicodeScalars)
+        precondition(scalars.count <= 1, "a letter query's text is one character, not \"\(text)\"")
+        self.init(scalars.first, mark: mark, scope: scope, part: part)
+    }
+    /// The letter's character: `codePoint` as a string, "" for 0 and for a number that is no
+    /// Unicode scalar.
+    public var text: String { codePoint == 0 ? "" : (Unicode.Scalar(codePoint).map { String(Character($0)) } ?? "") }
+    /// Run `body` with a C QvpLetterQuery whose scope's `words` pointer is valid for the call.
+    func withC<R>(_ body: (UnsafePointer<QvpFFI.QvpLetterQuery>) -> R) -> R {
+        scope.withC { (tp: UnsafePointer<QvpTarget>) -> R in
+            var q = QvpFFI.QvpLetterQuery()
+            q.scope = tp.pointee
+            q.text = codePoint
+            q.mark = UInt8(truncatingIfNeeded: mark)
+            q.part = UInt8(truncatingIfNeeded: part)
+            return withUnsafePointer(to: &q, body)
+        }
+    }
 }
 
 /// What resolves to a word list (mirrors T in web/qvp.js and Target in Kotlin).
@@ -291,6 +356,58 @@ public struct QvpDecoration: Equatable {
 }
 /// The one hit shape for every hit test; the exact variants report distance 0. `isExact` is true only when the point is inside an outline. Indices are -1 when absent.
 public struct QvpHit: Equatable { public let word: Int, path: Int, decoration: Int, line: Int, distance: Float, isExact: Bool }
+/// One path of a letter (`QvpPage.letterMembers`): a page path, or a piece cut from an outline
+/// that joins letters, at an index past the page's own paths. Draw it with the page's geometry
+/// and colours, as any other path.
+public struct QvpLetterMember: Equatable {
+    /// The path index. `at` is its qpc code-point offset, -1 when none: a body and its dots carry
+    /// the letter's. `mark` is the mark id of the path, 0 for body ink.
+    public let path: Int, at: Int, mark: Int
+    /// True for a body member of the letter, and for a piece cut from a joined outline.
+    public let isBody: Bool, isCut: Bool
+    /// The mark's name, from the engine. It is "" for body ink.
+    public var markName: String { QvpEngine.markName(mark) }
+}
+/// One letter of a word (`QvpPage.letter`, `QvpPage.letters`).
+public struct QvpLetter: Equatable {
+    /// The word, the letter's index in it, and the letter's qpc code-point offset (-1 when none).
+    public let word: Int, index: Int, at: Int
+    /// The letter's character, as a code point.
+    public let codePoint: UInt32
+    /// How many members the letter has, and how many of them are not body (dots included).
+    public let nMembers: Int, nMarks: Int
+    /// The first other offset the body draws, such as a tatweel (-1 when none), and how many such
+    /// offsets there are. `QvpPage.letterAtOffset` gives the letter of each one.
+    public let moreAt: Int, nMoreAt: Int
+    /// The letter's box in page units: the union of its members' boxes. A piece can reach past
+    /// its word's box.
+    public let x0: Float, y0: Float, x1: Float, y1: Float
+    /// False when no member has an outline.
+    public let hasInk: Bool
+    /// The paths of the letter, in the engine's order: the bodies first, then the marks in text order.
+    public let members: [QvpLetterMember]
+    /// The letter's character, as a string.
+    public var text: String { Unicode.Scalar(codePoint).map { String(Character($0)) } ?? "" }
+    /// The members that are not body, in the engine's order: `marks[n]` is what
+    /// `Selector.letterMark(word, index, n)` takes.
+    public var marks: [QvpLetterMember] { members.filter { !$0.isBody } }
+}
+/// The letter under a point (`QvpPage.hitTestLetter`). Indices are -1 when absent. `letter` is -1
+/// for a word-level mark. `line` is the word's printed line index. `distance` is in page units: 0
+/// on ink and in a letter's counter, else the distance to the letter's box. `mark` is the mark id
+/// of the path hit. `isBody` is true when the path is a body member of its letter.
+public struct QvpLetterHit: Equatable {
+    /// The word, the letter's index in it, the path hit, its offset and the word's line.
+    public let word: Int, letter: Int, path: Int, at: Int, line: Int
+    /// The distance to the letter's box, page units.
+    public let distance: Float
+    /// The mark id of the path hit. 0 for body ink and a near hit.
+    public let mark: Int
+    /// True when the point is on the ink of the path, and when the path is a body member.
+    public let isExact: Bool, isBody: Bool
+    /// The mark's name, from the engine. It is "" for body ink.
+    public var markName: String { QvpEngine.markName(mark) }
+}
 public struct QvpHitOptions: Equatable {
     public var maxDistance: Float, gapBias: Float, preferExact: Bool
     public init(maxDistance: Float = 0, gapBias: Float = QvpDefaults.GAP_BIAS, preferExact: Bool = true) { self.maxDistance = maxDistance; self.gapBias = gapBias; self.preferExact = preferExact }

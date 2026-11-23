@@ -5,12 +5,53 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 ## [Unreleased]
 
 ### Added
+- Kotlin: `QvpPage.attachLetters`, the letter reads (`hasLetters`, `letterCount`, `letters`,
+  `letter`, `letterMembers`, `pathLetter`, `letterAtOffset`, `findLetters`), `styleLetters`,
+  `hitTestLetter`, `hitTestLetterView`, `layoutDrawRevision`, and `Selector.letter`,
+  `letterMark`, `letterMarkNamed` and `wordChars`. New types: `QvpLetterPart`, `QvpLetter`,
+  `QvpLetterMember`, `QvpPathLetter`, `QvpLetterHit` and `QvpLetterQuery`. The Android
+  `QvpPageView` keys its draw list on the draw revision and sizes its per-path state after an
+  attach. `QvpPageView.letterAt(x, y)` gives the letter or the mark under a point of the view,
+  through the reader's pan and zoom, as `letterAt(_:)` does in QvpKit.
+- With a letter layer and no letter rule, every view draws what it drew before. A page with no
+  layer makes no new engine call per frame in any wrapper.
+- Every wrapper gives a letter the same names. A letter's `text` is its character, and
+  `codePoint` is the same as a number. A member and a letter hit give the mark as its id,
+  `mark`, and its name, `markName`. A letter's `marks` are its members that are not body, in
+  the engine's order. Every letter also gives `nMembers` and `nMarks`. The web letter gives
+  its box as `box`, and the other wrappers as `x0`, `y0`, `x1` and `y1`. A query's `text`
+  takes one character, or `''` for any letter. A string of more than one character is an
+  error in the wrapper's usual form. After an attach that succeeds, each array that a host
+  got from the page before it is stale: geometry, colours, built paths and each array sized
+  from the path count. In React Native, the letter hit tests take `DEFAULTS.TAP_DISTANCE` as
+  the default `maxDistance`, as its `hitTest` does.
 
 ### Changed
+- `qvp.h` states three rules that hosts must follow. After a change of rules or state,
+  call `qvp_tick` before any call that reads colours, styled paths, the draw revision or the
+  draw list, or a transition starts at the time of the last tick. That was already how
+  `qvp_colors` worked, and the header now says so. Use a page from one thread at a time,
+  const calls included, because a const call can update the page's caches. Each frame, call
+  `qvp_tick`, then `qvp_colors` or `qvp_styled_paths`, then `qvp_layout_draw_revision`, then
+  `qvp_layout_draw_list` when the revision, the layout or the band changed.
+- An attach of a letter layer makes stale what the host read before it. The pointers that
+  `qvp_geometry` and `qvp_colors` returned are invalid after `qvp_attach_letters` returns 0,
+  and `n_paths` of `qvp_page_info` and `qvp_geometry`, the length of `qvp_colors` and
+  `qvp_layout_path_groups` grow by the pieces. On a page with a layer, `qvp_layout_draw_list`
+  and `qvp_layout_draw_revision` apply pending rule changes before they answer, as
+  `qvp_colors` does. On a page with no layer they do not.
+- The geometry of a page is now read again after an attach in Kotlin, Swift and Dart:
+  `nPaths`, `ops`, `pts` and `table` of `QvpPage` are `var` with a private setter in Kotlin,
+  `public private(set) var` in Swift, and getters in Dart. Code that reads them is unchanged.
+  An array that an app copied from them before an attach does not hold the pieces.
 
 ### Removed
 
 ### Fixed
+- Android: the styled pass of `QvpPageView` draws a styled path only where the engine's draw
+  list puts it. Before, it drew every styled path. It put a styled path that the list leaves
+  out, such as a page number under reflow, at its printed line, and it drew a path once when
+  the list holds it twice. `lastOverlayPaths` now counts the styled draws.
 
 ## [0.9.1] - 2026-11-23
 

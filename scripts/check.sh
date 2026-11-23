@@ -42,8 +42,17 @@ for check in "$@"; do
       cargo test --workspace --release
       ;;
     gates)
-      step "data gates: identity (8 pages), line shift, zoom control, passages, dress fit, ABI, conformance, zoom steps, web replays"
+      step "data gates: identity (8 pages), letter layer, ink and engine (8 pages, with pages-letters/), line shift, zoom control, passages, dress fit, ABI, conformance, zoom steps, web replays"
       QVP_REQUIRE_DATA=1 cargo test -p qvp-convert --release --test identity
+      # The letter gates need pages-letters/, which only QVP_SYNC=letters fetches. When it
+      # is there, a gate that cannot read it fails. QVP_LETTERS_DIR names another copy.
+      letters_dir="${QVP_LETTERS_DIR:-pages-letters}"
+      if [ -f "$letters_dir/001.svg" ]; then
+        QVP_REQUIRE_LETTERS=1 QVP_LETTERS_DIR="$letters_dir" cargo test -p qvp-convert --release --test letters
+        QVP_REQUIRE_LETTERS=1 QVP_LETTERS_DIR="$letters_dir" cargo test -p qvp-convert --release --test letters_engine
+      else
+        echo "skipped  letter gates and letter engine test (no $letters_dir/; QVP_SYNC=letters scripts/sync-test-data.sh fetches it)"
+      fi
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test line_shift
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test zoom_control
       QVP_REQUIRE_DATA=1 cargo test -p qvp-core --release --test passage
@@ -166,6 +175,8 @@ for check in "$@"; do
         node web/lite-passage.test.mjs
       fi
       node web/lite.test.mjs
+      # The letter layer replay reads the synthetic fixtures in conformance/, so it needs no data.
+      node web/letters.test.mjs
       # The example is plain JavaScript that no test loads, so parse it here. This is a
       # syntax check, not a typecheck; it catches the file being left unrunnable.
       node --check web/example/app.js

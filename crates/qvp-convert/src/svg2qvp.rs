@@ -25,6 +25,8 @@ pub struct WordText {
     pub qpc: String,
     pub rasm: String,
     pub search: String,
+    /// The word's number in the quran-text release (`data-w`). Not a key: its numbering has gaps.
+    pub w: Option<u32>,
 }
 
 pub struct Converted {
@@ -115,6 +117,44 @@ pub fn convert(svg: &str) -> Result<Converted, String> {
     cx.link_markers();
     cx.page.canonicalize_ops();
     Ok(Converted { page: cx.page, words_text: cx.words_text, report: cx.report })
+}
+
+/// Parse a path's `d` into page-space commands: apply `tf` to every point, then quantise
+/// it (`round(v * quant)`). The converter uses it for every path, and the letter layer
+/// uses it for every cut piece, so that a point quantises the same way in both.
+pub(crate) fn parse_d(d: &str, tf: &Affine, quant: f64) -> Result<Vec<Cmd>, String> {
+    let mut cmds = Vec::new();
+    let q = |x: f64, y: f64| {
+        let (px, py) = tf.apply(x, y);
+        ((px * quant).round() as i32, (py * quant).round() as i32)
+    };
+    for seg in svgtypes::SimplifyingPathParser::from(d) {
+        let seg = seg.map_err(|e| format!("path d: {e}"))?;
+        use svgtypes::SimplePathSegment as S;
+        cmds.push(match seg {
+            S::MoveTo { x, y } => {
+                let (x, y) = q(x, y);
+                Cmd::MoveTo(x, y)
+            }
+            S::LineTo { x, y } => {
+                let (x, y) = q(x, y);
+                Cmd::LineTo(x, y)
+            }
+            S::Quadratic { x1, y1, x, y } => {
+                let (x1, y1) = q(x1, y1);
+                let (x, y) = q(x, y);
+                Cmd::QuadTo(x1, y1, x, y)
+            }
+            S::CurveTo { x1, y1, x2, y2, x, y } => {
+                let (x1, y1) = q(x1, y1);
+                let (x2, y2) = q(x2, y2);
+                let (x, y) = q(x, y);
+                Cmd::CubicTo(x1, y1, x2, y2, x, y)
+            }
+            S::ClosePath => Cmd::Close,
+        });
+    }
+    Ok(cmds)
 }
 
 fn class<'a, 'i>(n: Node<'a, 'i>) -> &'a str {
@@ -285,6 +325,13 @@ impl<'a> Ctx<'a> {
         let mut it = word_key.split(':').map(|s| s.parse::<u16>().unwrap_or(0));
         let (surah, ayah, word) = (it.next().unwrap_or(0), it.next().unwrap_or(0), it.next().unwrap_or(0));
         let rasm_uthmani = n.attribute("data-rasm-uthmani").unwrap_or("");
+        let w = n.attribute("data-w").and_then(|s| {
+            let parsed = s.parse().ok();
+            if parsed.is_none() {
+                self.warn(format!("word {word_key}: data-w {s:?} is not a number"));
+            }
+            parsed
+        });
         self.words_text.push(WordText {
             word_key: word_key.to_owned(),
             rasm_uthmani: rasm_uthmani.to_owned(),
@@ -292,6 +339,7 @@ impl<'a> Ctx<'a> {
             qpc: n.attribute("data-qpc").unwrap_or("").to_owned(),
             rasm: n.attribute("data-rasm").unwrap_or("").to_owned(),
             search: n.attribute("data-search").unwrap_or("").to_owned(),
+            w,
         });
         let text = if rasm_uthmani.is_empty() { NONE_U16 } else { self.intern(rasm_uthmani) };
         // Dev-profile pages carry the derived forms inline; production pages do not,
@@ -482,40 +530,7 @@ impl<'a> Ctx<'a> {
         }
         let d = n.attribute("d").ok_or("path without d")?;
         let quant = self.quant;
-        let parse = |tf: &Affine| -> Result<Vec<Cmd>, String> {
-            let mut cmds = Vec::new();
-            let q = |x: f64, y: f64| {
-                let (px, py) = tf.apply(x, y);
-                ((px * quant).round() as i32, (py * quant).round() as i32)
-            };
-            for seg in svgtypes::SimplifyingPathParser::from(d) {
-                let seg = seg.map_err(|e| format!("path d: {e}"))?;
-                use svgtypes::SimplePathSegment as S;
-                cmds.push(match seg {
-                    S::MoveTo { x, y } => {
-                        let (x, y) = q(x, y);
-                        Cmd::MoveTo(x, y)
-                    }
-                    S::LineTo { x, y } => {
-                        let (x, y) = q(x, y);
-                        Cmd::LineTo(x, y)
-                    }
-                    S::Quadratic { x1, y1, x, y } => {
-                        let (x1, y1) = q(x1, y1);
-                        let (x, y) = q(x, y);
-                        Cmd::QuadTo(x1, y1, x, y)
-                    }
-                    S::CurveTo { x1, y1, x2, y2, x, y } => {
-                        let (x1, y1) = q(x1, y1);
-                        let (x2, y2) = q(x2, y2);
-                        let (x, y) = q(x, y);
-                        Cmd::CubicTo(x1, y1, x2, y2, x, y)
-                    }
-                    S::ClosePath => Cmd::Close,
-                });
-            }
-            Ok(cmds)
-        };
+        let parse = |tf: &Affine| parse_d(d, tf, quant);
         let geom = match self.shared_d.get(d).copied() {
             Some(slot) => {
                 let gi = match slot {

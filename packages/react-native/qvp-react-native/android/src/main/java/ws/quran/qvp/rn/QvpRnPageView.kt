@@ -20,8 +20,13 @@ import ws.quran.qvp.Target
  *
  * The module reads the page from its query thread while this view draws on the UI thread (see
  * [read]). Those reads touch only what the page fixed when it loaded, so the two do not meet,
- * except where the page is closed, replaced, or given a words sidecar: each of these holds
- * [lock] for writing, and waits for a query in progress to finish.
+ * except where the page is closed, replaced, or given a words sidecar or a letter layer: each of
+ * these holds [lock] for writing, and waits for a query in progress to finish.
+ *
+ * A page with a letter layer is different. Its draw list and draw revision bring the engine's
+ * style state up to date while the view draws, so a draw changes the page, and the engine allows
+ * one thread at a time per page. The module's queries on such a page run on the UI thread
+ * instead ([readShared]).
  */
 class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     private val density = ctx.resources.displayMetrics.density
@@ -36,6 +41,22 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     /** Run [block] on the page in view, held open until the block returns: null when no page is loaded.
      * The block must not wait for the UI thread, which can be waiting for this lock. */
     fun <T> read(block: (QvpPage?) -> T): T = lock.read { block(page) }
+    /** The page in view while it has a letter layer, else null. Written under [lock]. */
+    private var lettersOn: QvpPage? = null
+    /** As [read], while the page in view has no letter layer. True when [block] ran; false, with
+     * [block] not run, when the page has a layer: the caller then runs it on the UI thread. */
+    fun readShared(block: (QvpPage?) -> Unit): Boolean = lock.read {
+        val p = page
+        if (p != null && p === lettersOn) false else { block(p); true }
+    }
+    /** Attach a letter layer to [p]: true when the engine took it. Queries in progress finish
+     * first, since the attach grows the page's path table. The view draws the pieces next frame. */
+    fun attachLetters(p: QvpPage, bytes: ByteArray): Boolean =
+        lock.write { p.attachLetters(bytes).also { if (it) lettersOn = p } }.also { inner.invalidate() }
+    /** The module's attach of the layer [uri] names, on the UI thread. On success [uri] is the
+     * applied `lettersUri`, so the prop set back to an earlier value attaches that one again. */
+    fun attachLetters(p: QvpPage, bytes: ByteArray, uri: String): Boolean =
+        attachLetters(p, bytes).also { if (it) appliedLetters = uri }
     /** Attach a words sidecar. Queries in progress finish first, and the word records built
      * before it are dropped, since the forms they hold have changed. */
     fun attachWords(p: QvpPage, json: String): Int = lock.write { p.attachWords(json).also { dropWords() } }
@@ -66,6 +87,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     var pageUri: String? = null
     var pageBase64: String? = null
     var wordsUri: String? = null
+    var lettersUri: String? = null
     var defaultInkProp: String? = null
     var themeProp: Map<String, Any?>? = null
     var stylesProp: List<Any?>? = null
@@ -77,6 +99,8 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
 
     // ── applied state ──
     private var loadedKey: String? = null
+    /** The `lettersUri` the page in view last took, attached or refused. */
+    private var appliedLetters: String? = null
     private var appliedTheme: Map<String, Any?>? = null
     private var themeHandle = 0
     private class Rule(val handle: Int, val entry: Map<*, *>)
@@ -105,7 +129,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
     override fun onAttachedToWindow() { super.onAttachedToWindow(); QvpRegistry.register(this) }
     override fun onDetachedFromWindow() { QvpRegistry.unregister(this); super.onDetachedFromWindow() }
 
-    fun destroy() { QvpRegistry.unregister(this); lock.write { page?.close(); page = null; dropWords() }; loadedKey = null }
+    fun destroy() { QvpRegistry.unregister(this); lock.write { page?.close(); page = null; lettersOn = null; dropWords() }; loadedKey = null }
 
     /** Padding props arrive in dp. */
     fun setPadTopDp(v: Float) { inner.padTop = v * density; layoutDirty = true }
@@ -150,6 +174,7 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
             ensurePage()
             val p = page
             if (p != null) {
+                applyLetters(p)
                 applyInk(p); applyTheme(p); applyStyles(p); applyHighlights(p); applyMask(p); applyReveal(p)
             }
             var fit = false
@@ -171,12 +196,13 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         // drop everything bound to the old page: handles die with it
         themeHandle = 0; appliedTheme = null; styleHandles.clear(); highlightHandles.clear(); appliedMask = null; appliedReveal = null; appliedRevealAt = null; appliedInk = null; appliedDress = null; revealStepCount = 0
         loadedKey = key
-        if (key == null) { lock.write { page?.close(); page = null; dropWords() }; return }
+        if (key == null) { lock.write { page?.close(); page = null; lettersOn = null; dropWords() }; appliedLetters = null; return }
         // Load the new page before the swap, so a query sees the old page or the new one and
         // never a view with no page. A load that fails leaves no page, as before.
         val p: QvpPage
         val bytes: ByteArray
         val ms: Double
+        val letters: Boolean
         try {
             bytes = pageBase64?.let { Base64.decode(it, Base64.DEFAULT) } ?: readUri(pageUri!!)
             val t0 = System.nanoTime()
@@ -184,13 +210,38 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
             ms = (System.nanoTime() - t0) / 1e6
             // No query sees the page before the swap below, so the sidecar needs no lock.
             wordsUri?.let { runCatching { p.attachWords(readUri(it)) }.onFailure { e -> Log.w("QvpRn", "words sidecar: $e") } }
+            // The letter layer after the sidecar, as the sidecar's offsets check the layer's.
+            // No query sees the page yet, so the layer needs no lock either.
+            letters = lettersUri?.let { uri -> letterLayer(uri) { p.attachLetters(it) } } ?: false
+            appliedLetters = lettersUri
         } catch (e: Exception) {
-            lock.write { page?.close(); page = null; dropWords() }
+            lock.write { page?.close(); page = null; lettersOn = null; dropWords() }
             throw e
         }
-        lock.write { val old = page; page = p; dropWords(); loadMs = ms; pageBytes = bytes.size; old?.close() }
+        lock.write { val old = page; page = p; lettersOn = if (letters) p else null; dropWords(); loadMs = ms; pageBytes = bytes.size; old?.close() }
         layoutDirty = true
         emit("onPageLoad", Marshal.pageInfo(p, words(p).forms) + mapOf("loadMs" to loadMs, "bytes" to pageBytes, "uri" to pageUri))
+    }
+
+    /** Read the layer [uri] names and [attach] it: true when the engine took it. A layer that does
+     * not load or that the engine refuses is logged, as a words sidecar is. */
+    private fun letterLayer(uri: String, attach: (ByteArray) -> Boolean): Boolean {
+        val ok = try { attach(readUri(uri)) } catch (e: Exception) { Log.w("QvpRn", "letter layer $uri: $e"); return false }
+        if (!ok) Log.w("QvpRn", "letter layer $uri: the engine refused it")
+        return ok
+    }
+
+    /**
+     * The `lettersUri` prop on the page in view. A new value attaches that layer in place of the
+     * one before. The engine has no detach, so a prop set to null keeps the layer until the next
+     * page loads.
+     */
+    private fun applyLetters(p: QvpPage) {
+        val uri = lettersUri
+        if (uri == appliedLetters) return
+        appliedLetters = uri
+        if (uri == null) return
+        letterLayer(uri) { attachLetters(p, it) }
     }
 
     private fun applyInk(p: QvpPage) {
@@ -214,7 +265,8 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
         for ((id, e) in want) {
             val old = styleHandles[id]
             if (old != null && old.entry == e) continue
-            val sameShape = old != null && old.entry["selector"] == e["selector"] && old.entry["target"] == e["target"] && old.entry["layer"] == e["layer"] && old.entry["hide"] == e["hide"] && e["hide"] != true
+            val sameShape = old != null && old.entry["selector"] == e["selector"] && old.entry["letters"] == e["letters"] && old.entry["target"] == e["target"] &&
+                old.entry["layer"] == e["layer"] && old.entry["hide"] == e["hide"] && e["hide"] != true
             if (sameShape) { p.recolorStyle(old!!.handle, Marshal.color(e["color"], 0), (e["ms"] as? Number)?.toInt() ?: 0); styleHandles[id] = Rule(old.handle, e); continue }
             if (old != null) p.removeStyle(old.handle)
             val ms = (e["ms"] as? Number)?.toInt() ?: 0
@@ -223,6 +275,8 @@ class QvpRnPageView(private val ctx: ThemedReactContext) : FrameLayout(ctx) {
             val h = when {
                 e["hide"] == true -> Marshal.selector(e["selector"])?.let { p.hide(it) } ?: 0
                 e["selector"] != null -> Marshal.selector(e["selector"])?.let { p.style(it, color, ms, layer) } ?: 0
+                // a query whose text is not one character adds no rule, as a bad selector does
+                e["letters"] != null -> runCatching { Marshal.letterQuery(e["letters"], p) }.getOrNull()?.let { p.styleLetters(it, color, ms, layer) } ?: 0
                 e["target"] != null -> p.styleTarget(Marshal.target(e["target"], p), color, ms, layer)
                 else -> 0
             }

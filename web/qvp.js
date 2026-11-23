@@ -22,6 +22,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     ZOOM_SNAP_HYSTERESIS: 0.03, ZOOM_QUANTUM: 0.01, REFLOW_RELAX: 0.5, REFLOW_MAX_STRETCH: 2, MAX_INK_HEIGHT: 4096 };
   /** The path kinds (QVP_KIND_*): what a path draws. */
   const KIND = { BODY: 0, MARK: 1, AYAH_NUMBER: 2, AYAH_MARK_ORNAMENT: 3, HEADER_INK: 4, ORNAMENT: 5, PAGE_NUMBER: 6, RUNNING_HEAD: 7, OTHER: 255 };
+  /** What part of a letter a selector or a query takes (QVP_LETTER_PART_*). `BODY_AND_DOTS` is every
+   * member at the letter's own offset; `MARKS` is every other member. */
+  const LETTER_PART = { ALL: 0, BODY_AND_DOTS: 1, MARKS: 2 };
+  // a part as the engine's code: a number passes through, so the engine refuses one above 2
+  const PART_NAMES = { all: 0, bodyAndDots: 1, marks: 2, ...LETTER_PART };
+  const partId = part => {
+    if (typeof part !== 'string') return part;
+    if (!(part in PART_NAMES)) throw new TypeError(`bad letter part ${part}: one of 'all', 'bodyAndDots', 'marks'`);
+    return PART_NAMES[part];
+  };
   /** The mark families (QVP_FAMILY_*) that a theme colours as one. */
   const FAMILY = { NONE: 0, DIACRITIC: 1, TANWIN: 2, DOTS: 3, WAQF: 4, SIFR: 5, SAJDAH: 6, READING_SIGN: 7 };
   /** The mark categories (QVP_CATEGORY_*). `engine.markCategory(mark)` gives a mark's. */
@@ -80,6 +90,16 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     kind: k => ({ selector: 13, a: idOf('kind', k) }),
     decoration: k => ({ selector: 14, a: idOf('decoration', k) }),
     decorationIndex: i => ({ selector: 15, a: i }),
+    // The letter selectors read the page's letter layer (`page.attachLetters`). With no layer
+    // they select nothing, and a rule added before the layer takes it when it comes.
+    /** a letter of a word: `part` is a `LETTER_PART` code or 'all', 'bodyAndDots', 'marks' */
+    letter: (w, l, part = 'all') => ({ selector: 16, a: w, b: l, c: partId(part) }),
+    /** the nth mark of a letter, in text order; dots count, a body never does */
+    letterMark: (w, l, n) => ({ selector: 17, a: w, b: l, c: n }),
+    /** every member of a letter whose path has that mark (an id or a name), a body stored as a mark included */
+    letterMarkNamed: (w, l, mark) => ({ selector: 18, a: w, b: l, c: markId(mark) }),
+    /** every path that draws one of the word's qpc characters `from` to `to` (code-point offsets, both included) */
+    wordChars: (w, from, to = from) => ({ selector: 19, a: w, b: from, c: to }),
   };
   const markId = m => idOf('mark', m);
 
@@ -331,6 +351,25 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     d.setUint8(at, s.selector); d.setUint32(at + 4, s.a >>> 0 || 0, true); d.setUint32(at + 8, s.b >>> 0 || 0, true); d.setUint32(at + 12, s.c >>> 0 || 0, true);
     return at;
   }
+  /** Write a letter query (QvpLetterQuery, 32 bytes on wasm32) at `at`: the scope's QvpTarget at 0
+   * (24 bytes), the code point at 24, the mark at 28 and the part at 29. `scope` is a target
+   * already resolved by the page (`page._target`); `text` the letter's character (one Unicode
+   * scalar, '' for any letter) or its code point (0 for any letter); `mark` an id or a name, 0
+   * for any; `part` as in `Sel.letter`. A string that is not one Unicode scalar throws. */
+  function writeLetterQuery(e, at, q, writeScope) {
+    const text = q.text ?? 0, mark = q.mark ?? 0;
+    let cp = text;
+    if (typeof text === 'string') {
+      const chars = [...text];
+      cp = chars.length ? text.codePointAt(0) : 0;
+      if (chars.length > 1 || (cp >= 0xd800 && cp <= 0xdfff)) throw new TypeError(`a letter query's text is one character, not ${JSON.stringify(text)}`);
+    }
+    const part = partId(q.part ?? 'all');
+    writeScope(at, q.scope ?? 'page');
+    const d = e.dv();
+    d.setUint32(at + 24, cp >>> 0, true); d.setUint8(at + 28, markId(mark)); d.setUint8(at + 29, part); d.setUint16(at + 30, 0, true);
+    return at;
+  }
   const HL_DEFAULT = { mode: 'band', height: 'lineSpacing', ink: DEFAULTS.HIGHLIGHT_INK, band: DEFAULTS.HIGHLIGHT_BAND, padX: DEFAULTS.HIGHLIGHT_PAD_X, padY: DEFAULTS.HIGHLIGHT_PAD_Y, radius: 0, seam: DEFAULTS.HIGHLIGHT_SEAM, ms: 0, layer: LAYER.HIGHLIGHT };
   function writeHl(e, at, st) {
     st = { ...HL_DEFAULT, ...st };
@@ -357,16 +396,12 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.e = engine; this._h = handle;
       const ex = engine.ex, s = engine.scratch;
       ex.qvp_page_info(handle, s);
-      let d = engine.dv();
+      const d = engine.dv();
       this.width = d.getFloat32(s, true); this.height = d.getFloat32(s + 4, true); this.page = d.getUint32(s + 8, true);
-      this.nLines = d.getUint32(s + 12, true); this.nAyahs = d.getUint32(s + 16, true); this.nWords = d.getUint32(s + 20, true); this.nPaths = d.getUint32(s + 24, true); this.nDecorations = d.getUint32(s + 28, true);
-      ex.qvp_geometry(handle, s);
-      d = engine.dv();
-      const opsPtr = d.getUint32(s, true), opsLen = d.getUint32(s + 4, true), ptsPtr = d.getUint32(s + 8, true), ptsLen = d.getUint32(s + 12, true), tabPtr = d.getUint32(s + 16, true), nPaths = d.getUint32(s + 20, true);
-      this.ops = new Uint8Array(engine.mem.buffer, opsPtr, opsLen).slice();
-      this.pts = new Float32Array(engine.mem.buffer.slice(ptsPtr, ptsPtr + ptsLen * 4));
-      this.table = new Uint32Array(engine.mem.buffer.slice(tabPtr, tabPtr + nPaths * 32));
-      this.paths = null;
+      this.nLines = d.getUint32(s + 12, true); this.nAyahs = d.getUint32(s + 16, true); this.nWords = d.getUint32(s + 20, true); this.nDecorations = d.getUint32(s + 28, true);
+      this._readGeometry();
+      // true once a letter layer is attached: the renderer then keys its draw list on the draw revision
+      this._letters = false;
       this.ornaments = null; this.ornamentsRevision = -1;
       this.words = Array.from({ length: this.nWords }, (_, i) => this._word(i));
       this.ayahs = Array.from({ length: this.nAyahs }, (_, i) => this._ayah(i));
@@ -376,6 +411,21 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.currentLayout = null;
       this._defaultInk = DEFAULTS.INK;
       engine._live.add(this);   // last: a page the engine refuses to describe is freed by loadPage, not by engine.free
+    }
+    /** Copy the path count, the outlines and the path table out of the engine, and drop the
+     * built paths. The page's load reads them, and so does a letter layer's attach, which adds
+     * its pieces after the page's own paths. */
+    _readGeometry() {
+      const e = this.e, ex = e.ex, s = e.scratch;
+      ex.qvp_page_info(this._h, s);
+      this.nPaths = e.dv().getUint32(s + 24, true);
+      ex.qvp_geometry(this._h, s);
+      const d = e.dv();
+      const opsPtr = d.getUint32(s, true), opsLen = d.getUint32(s + 4, true), ptsPtr = d.getUint32(s + 8, true), ptsLen = d.getUint32(s + 12, true), tabPtr = d.getUint32(s + 16, true), nPaths = d.getUint32(s + 20, true);
+      this.ops = new Uint8Array(e.mem.buffer, opsPtr, opsLen).slice();
+      this.pts = new Float32Array(e.mem.buffer.slice(ptsPtr, ptsPtr + ptsLen * 4));
+      this.table = new Uint32Array(e.mem.buffer.slice(tabPtr, tabPtr + nPaths * 32));
+      this.paths = null;
     }
     /** the engine's handle; a freed page has none */
     get h() { if (!this._h) throw new Error('QvpPage was freed'); return this._h; }
@@ -570,11 +620,11 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     }
     wordForm(i, form = 'rasm_uthmani') { const s = this.e.scratch; if (!this.e.ex.qvp_word_form(this.h, i, FORM[form] ?? 0, s)) return ''; return this.e.qstr(s); }
     findWord(surah, ayah, word) { const i = this.e.ex.qvp_find_word(this.h, surah, ayah, word); return i < 0 ? -1 : i; }
-    _target(t) {
+    _target(t, at = this.e.scratch2 + 4096) {
       if (typeof t === 'string') t = parseTarget(t);
       if (t.wordKey) { const i = this.findWord(...t.wordKey); t = i >= 0 ? T.word(i) : T.words([]); }
       if (t instanceof Array) t = T.words(t);
-      return writeTarget(this.e, this.e.scratch2 + 4096, t);
+      return writeTarget(this.e, at, t);
     }
     targetWords(t) { const [at, n] = this.e._withInputs(() => { const tp = this._target(t); return this.e.collect(4, (o, c) => this.e.ex.qvp_target_words(this.h, tp, o, c)); }); return Array.from(new Uint32Array(this.e.mem.buffer, at, n)); }
 
@@ -654,6 +704,118 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     attachWords(sidecar) { const s = typeof sidecar === 'string' ? sidecar : sidecar instanceof Uint8Array ? this.e.td.decode(sidecar) : JSON.stringify(sidecar); const b = this.e.te.encode(s); const p = this.e.ex.qvp_alloc(b.length); new Uint8Array(this.e.mem.buffer, p, b.length).set(b); const n = this.e.ex.qvp_attach_words(this.h, p, b.length); this.e.ex.qvp_dealloc(p, b.length); return n; }
     hasForm(form) { return !!this.e.ex.qvp_has_form(this.h, FORM[form] ?? 0); }
     citation(words) { this.e._withInputs(() => this.e.ex.qvp_citation(this.h, this.e.putU32(Uint32Array.from(words)), words.length, this.e.scratch)); return this.e.qstr(this.e.scratch); }
+
+    // ── letters: the optional letter layer (NNN.qvl) ──
+    // Offsets (`at`, `moreAt`) are code-point offsets in the word's qpc text; -1 is none. An
+    // index the layer has no record of, or a page with no layer, answers null, -1 or [].
+    /**
+     * Attach a letter layer from the bytes of an `NNN.qvl` file; the engine copies them. The
+     * layer's pieces join the path table after the page's own paths, so `nPaths`, `table`,
+     * `colors()` and `buildPaths()` cover them afterwards. A second attach replaces the first,
+     * and the style rules stay. Returns false when the engine refuses the file (it does not
+     * decode, it is another page's layer, or it is over 1 MiB); the page then keeps what it had.
+     */
+    attachLetters(bytes) {
+      const ex = this.e.ex, p = ex.qvp_alloc(bytes.length);
+      new Uint8Array(this.e.mem.buffer, p, bytes.length).set(bytes);
+      const r = ex.qvp_attach_letters(this.h, p, bytes.length);
+      ex.qvp_dealloc(p, bytes.length);
+      if (r !== 0) return false;
+      // the pieces grew the geometry, the colours and a reflowed layout's path groups
+      this._readGeometry();
+      this._letters = true;
+      if (this.currentLayout) this.layoutCurrent();
+      return true;
+    }
+    /** true when a letter layer is attached */
+    hasLetters() { return !!this.e.ex.qvp_has_letters(this.h); }
+    /** Get how many letters a word has; 0 with no layer. */
+    letterCount(w) { return this.e.ex.qvp_letter_count(this.h, w); }
+    /** Get every letter of a word, in order: the shape `letter` gives. */
+    letters(w) { return Array.from({ length: this.letterCount(w) }, (_, i) => this.letter(w, i)); }
+    /**
+     * Get one letter of a word, or null: {word, index, at, codePoint, text, nMembers, nMarks,
+     * moreAt, nMoreAt, box: {x0, y0, x1, y1}, hasInk, members, marks}. `text` is the character
+     * and `codePoint` its code point. `nMembers` counts the members and `nMarks` the members
+     * that are not body, dots included. `moreAt` is the first other offset the body draws (a tatweel), -1 when none, and
+     * `nMoreAt` counts those offsets. The box is in page units, the union of the members' boxes.
+     * `members` is `letterMembers(w, i)`; `marks` is its members that are not body, in the same
+     * order, so `marks[n]` is what `Sel.letterMark(w, i, n)` takes.
+     */
+    letter(w, i) {
+      const s = this.e.scratch;
+      if (!this.e.ex.qvp_letter_info(this.h, w, i, s)) return null;
+      const d = this.e.dv(), u = k => d.getUint32(s + k, true), f = k => d.getFloat32(s + k, true), none = v => (v === NONE ? -1 : v);
+      const cp = u(12);
+      const out = { word: u(0), index: u(4), at: none(u(8)), codePoint: cp, text: String.fromCodePoint(cp), nMembers: u(16), nMarks: u(20), moreAt: none(u(24)), nMoreAt: u(28),
+        box: { x0: f(32), y0: f(36), x1: f(40), y1: f(44) }, hasInk: !!d.getUint8(s + 48) };
+      out.members = this.letterMembers(w, i);
+      out.marks = out.members.filter(m => !m.isBody);
+      return out;
+    }
+    /** Get the paths of a letter: [{path, at, mark, markName, isBody, isCut}], the bodies first,
+     * then the marks in text order. `mark` is the id of the path's mark (0 for none) and
+     * `markName` its name from `engine.markName` ('' for none); `isCut` is a piece cut from an
+     * outline that joins letters, at an index past the page's own paths. */
+    letterMembers(w, i) {
+      const [at, n] = this.e.collect(12, (o, c) => this.e.ex.qvp_letter_members(this.h, w, i, o, c));
+      const d = this.e.dv(), raw = [];
+      for (let k = 0; k < n; k++) { const o = at + k * 12; raw.push([d.getUint32(o, true), d.getUint32(o + 4, true), d.getUint8(o + 8), d.getUint8(o + 9), d.getUint8(o + 10)]); }
+      // read every record before the names: a name is one more engine call
+      return raw.map(([path, a, mark, isBody, isCut]) => ({ path, at: a === NONE ? -1 : a, mark, markName: this.e.markName(mark), isBody: !!isBody, isCut: !!isCut }));
+    }
+    /** Get the letter role of a path: {letter, at}, with `letter` -1 for a word-level mark and
+     * `at` -1 when none. Null for a cut path (its pieces have the role), a path with no letter
+     * role such as a decoration, a path past the table, or no layer. */
+    pathLetter(p) {
+      const s = this.e.scratch;
+      if (!this.e.ex.qvp_path_letter(this.h, p, s, s + 4)) return null;
+      const d = this.e.dv(), l = d.getUint32(s, true), a = d.getUint32(s + 4, true);
+      return { letter: l === NONE ? -1 : l, at: a === NONE ? -1 : a };
+    }
+    /** Get the index of the letter that draws the character at that offset of the word (its own
+     * or a `moreAt`) or holds a mark at it; -1 when none, as `findWord` does. */
+    letterAtOffset(w, at) { const s = this.e.scratch; return this.e.ex.qvp_letter_at_offset(this.h, w, at < 0 ? NONE : at, s) ? this.e.dv().getUint32(s, true) : -1; }
+    /** write a letter query into scratch2, its scope resolved as every target is */
+    _letterQuery(q) { return writeLetterQuery(this.e, this.e.scratch2 + 28672, q, (at, t) => this._target(t, at)); }
+    /**
+     * Find letters by what they are: [{word, letter}], in word order, then letter order. The
+     * query is {scope, text, mark, part}: `scope` takes what every target takes ('page' when
+     * left out), `text` the letter's character or its code point ('', 0 or left out: any
+     * letter), `mark` a mark id or name that one of the letter's members carries (0 or left
+     * out: any). `part` does not filter here. A text string that is not one Unicode scalar
+     * throws a TypeError. A bad query (a part above 2, a code point that is no Unicode scalar)
+     * finds nothing.
+     */
+    findLetters(query) {
+      const [at, n] = this.e._withInputs(() => { const q = this._letterQuery(query); return this.e.collect(8, (o, c) => this.e.ex.qvp_find_letters(this.h, q, o, c)); });
+      const v = new Uint32Array(this.e.mem.buffer, at, n * 2), out = new Array(n);
+      for (let i = 0; i < n; i++) out[i] = { word: v[i * 2], letter: v[i * 2 + 1] };
+      return out;
+    }
+    /** Colour the letters a query finds (see `findLetters`), and of each the query's `part`.
+     * Returns one handle, or 0 for a bad query. With no layer the rule selects nothing until one
+     * is attached, and it takes a second layer too. */
+    styleLetters(query, color, { ms = 0, layer = LAYER.BASE } = {}) { return this.e._withInputs(() => this.e.ex.qvp_style_add_letters(this.h, layer, this._letterQuery(query), rgba(color), ms)); }
+    /** the one shape of a letter hit: indices -1 for none, the mark as its id and its name, and the word's key */
+    _letterHit(s) {
+      const d = this.e.dv(), f = v => (v === NONE ? -1 : v);
+      const h = { word: f(d.getUint32(s, true)), letter: f(d.getUint32(s + 4, true)), path: f(d.getUint32(s + 8, true)), at: f(d.getUint32(s + 12, true)), line: f(d.getUint32(s + 16, true)),
+        distance: d.getFloat32(s + 20, true), mark: d.getUint8(s + 24), isExact: !!d.getUint8(s + 25), isBody: !!d.getUint8(s + 26) };
+      h.markName = this.e.markName(h.mark);
+      if (h.word >= 0 && h.word < this.nWords) h.wordKey = this.wordKey(h.word);
+      return h;
+    }
+    /**
+     * The letter or mark under a point in page units, or null: {word, letter, path, at, line,
+     * distance, mark, markName, isExact, isBody, wordKey}. The hit prefers ink. `letter` is -1
+     * for a word-level mark. `mark` is the id of the path's mark and `markName` its name. A near hit (`isExact` false) has the distance to the letter's box, and
+     * `opt` ({maxDistance, gapBias, preferExact}, as in `hitTest`) chooses its word; null takes
+     * the engine's defaults. Null with no layer.
+     */
+    hitTestLetter(x, y, opt = null) { return this.e.ex.qvp_hit_test_letter(this.h, x, y, opt == null ? 0 : this._hitOpt(opt), this.e.scratch) ? this._letterHit(this.e.scratch) : null; }
+    /** The same in viewport px through the current layout, printed or reflowed (see `hitTestView`). */
+    hitTestLetterView(viewX, viewY, opt = null) { return this.e.ex.qvp_hit_test_letter_view(this.h, viewX, viewY, opt == null ? 0 : this._hitOpt(opt), this.e.scratch) ? this._letterHit(this.e.scratch) : null; }
 
     // ── hit testing ──
     hitTestExact(x, y) { return this.e.ex.qvp_hit_test_exact(this.h, x, y, this.e.scratch) ? this._hit(this.e.scratch) : null; }
@@ -834,6 +996,11 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const p = this.e.buf(n * 8); this.e.ex.qvp_layout_draw_list(this.h, bandTop, bandBottom, p, n);
       return new Uint32Array(this.e.mem.buffer.slice(p, p + n * 8));
     }
+    /** A number that counts up when the draw list can change with the same layout and band: a
+     * letter layer is attached, or a cut path starts or stops drawing as its pieces. 0 with no
+     * layer. Key a cached draw list on it. Per frame: `tick`, then `colors()` or `styledPaths()`,
+     * then this, then `layoutDrawList` when it, the layout or the band changed. */
+    layoutDrawRevision() { return this.e.ex.qvp_layout_draw_revision(this.h); }
     /** what a draw list's `placement` indexes: every group, then every repeat */
     layoutPlacements() {
       const n = this.e.ex.qvp_layout_placements(this.h, 0, 0);
@@ -1156,7 +1323,7 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       this.canvas = canvas; this.ctx = canvas.getContext('2d');
       this.base = document.createElement('canvas'); this.baseKey = '';
       // the engine's draw list for the band in hand, kept until the band moves
-      this.list = null; this.places = null; this.listKey = '';
+      this.list = null; this.places = null; this.listKey = ''; this.listPage = null;
       /// How much ink to keep ready at once: a page that fits is drawn once and scrolling never
       /// draws again. About 17 MB for a page of this mushaf at the first zoom step.
       this.inkBudget = 64 << 20;
@@ -1262,7 +1429,12 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      */
     draw(page, view, dpr) {
       const paths = page.buildPaths();
+      // the header's order: the styled paths, then the draw revision, then the draw list
       const styled = page.styledPaths();
+      // With a letter layer the draw list can change with no layout change: a cut path draws as
+      // its pieces while its letters differ in colour. With none the revision stays 0, so a page
+      // with no layer makes no extra call.
+      const revision = page._letters ? page.layoutDrawRevision() : 0;
       const styledSet = new Set(styled.map(s => s[0]));
       const L = page.currentLayout || { scale: 1, offsetX: 0, offsetY: 0, lineDy: null, lineSpacing: 0 };
       const ink = page.defaultInk;
@@ -1280,15 +1452,19 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const bandTop = band.top * scale, bandH = band.height * scale;   // view px
       // the view the band is rendered under: the reader's, less where the band starts
       const bandView = { ...view, offsetY: -bandTop };
-      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${bandTop.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.lineSpacing}|${L.lineDy ? L.lineDy[0] : ''}|${L.groups ? L.groups.length + ':' + L.groups[1] : ''}|${(L.repeats || []).length}|${L.omitted ? L.omitted.size : 0}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
+      const key = `${view.scale.toFixed(4)}|${view.offsetX.toFixed(1)}|${bandTop.toFixed(1)}|${dpr}|${ink}|${L.scale}|${L.lineSpacing}|${L.lineDy ? L.lineDy[0] : ''}|${L.groups ? L.groups.length + ':' + L.groups[1] : ''}|${(L.repeats || []).length}|${L.omitted ? L.omitted.size : 0}|${revision}|${[...styledSet].sort((a, b) => a - b).join(',')}`;
       // The engine says what is drawn and where: each path once under its placement, again for
       // every row a decoration repeats over, and nothing for a path this layout leaves out. It
       // is asked once per band, not once per frame: a scroll inside the band changes neither.
-      const listKey = `${page.page}|${cullTop.toFixed(1)}|${cullBottom.toFixed(1)}|${L.scale}|${L.rows}|${L.contentH}`;
-      if (listKey !== this.listKey) {
+      // The list is the page object's own: another page of the same number, at the same draw
+      // revision, can draw a cut path whole where this one draws its pieces.
+      const listKey = `${cullTop.toFixed(1)}|${cullBottom.toFixed(1)}|${L.scale}|${L.rows}|${L.contentH}|${revision}`;
+      if (page !== this.listPage || listKey !== this.listKey) {
         this.list = page.layoutDrawList(cullTop, cullBottom);
         this.places = page.layoutPlacements();
-        this.listKey = listKey;
+        this.listPage = page; this.listKey = listKey;
+        // the base ink is drawn from the list, so a new list draws it again
+        this.baseKey = null;
       }
       const list = this.list, places = this.places;
       const setPlace = (c, g, v = view) => {
@@ -1332,5 +1508,5 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     }
   }
 
-  global.QVP = { QvpEngine, QvpPage, QvpAtlas, QvpOrnaments, QvpPassage, CanvasRenderer, Sel, T, KIND, FAMILY, CATEGORY, DECORATION, FORM, LAYER, NAMES_TABLE, DEFAULTS, NONE, css, rgba, parseTarget };
+  global.QVP = { QvpEngine, QvpPage, QvpAtlas, QvpOrnaments, QvpPassage, CanvasRenderer, Sel, T, KIND, LETTER_PART, FAMILY, CATEGORY, DECORATION, FORM, LAYER, NAMES_TABLE, DEFAULTS, NONE, css, rgba, parseTarget };
 })(typeof window !== 'undefined' ? window : globalThis);

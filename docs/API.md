@@ -28,6 +28,8 @@ and `qvp_hit_test(...)` in C.
   `Sel.wordBody(i)`, `Sel.wordMarks(i)`, `Sel.wordMark(i, nth)`, `Sel.wordMarkNamed(i, 'fathah', nth)`,
   `Sel.wordPath(i, nth)`, `Sel.path(p)`, `Sel.mark('shaddah')`, `Sel.category('harakah')`,
   `Sel.family('dots')`, `Sel.kind('mark')`, `Sel.decoration('ayah-mark')`, `Sel.decorationIndex(d)`.
+  With a letter layer: `Sel.letter(i, l, part)`, `Sel.letterMark(i, l, nth)`,
+  `Sel.letterMarkNamed(i, l, 'hamzah')`, `Sel.wordChars(i, first, last)` ("Letters" below).
 - **Freed objects.** A call on a freed page, atlas, ornament set or passage throws the
   platform's ordinary error with the object's name (`Error` in JavaScript, a rejected promise in
   React Native, `IllegalStateException` in Kotlin, `StateError` in Dart in every build mode, a
@@ -126,7 +128,8 @@ They find the outline under the point, else the box of a word or a decoration, a
 the gaps. Every hit has a `line`: the word's line, or the line of a decoration. `isExact` is true
 only when the point is inside an outline, so a hit on a box alone has `isExact` false.
 A negative `gapBias` means the engine default, 0.6, in the hit tests and in `hitAreas()`, as a
-`maxDistance` of 0 or less means no limit.
+`maxDistance` of 0 or less means no limit. For the letter or the mark under a point, use
+`hitTestLetter` and `hitTestLetterView` with a letter layer ("Letters" below).
 
 ## Layout
 
@@ -707,6 +710,320 @@ at the display list. The native bindings build paths against their own platform 
 paths that differ from the default ink, which is what the cached-base-layer renderer
 repaints. `highlightBoxesView()` and `maskBoxesView()` are viewport-px rectangles.
 
+A renderer draws what `layoutDrawList` holds, and nothing else. With a letter layer the list
+can change while the layout and the band stay the same, so key a kept list on
+`layoutDrawRevision()` too. "Letters" below gives the order of calls in a frame.
+
+## Letters
+
+A page can take an optional letter layer, `NNN.qvl` (`docs/FORMAT.md` "QVL1",
+`docs/DATA.md`). The layer names the letters of each word, the paths that draw each letter,
+and the marks of each letter. Where one outline of the page joins two or more letters, the
+layer holds that outline cut into pieces, one piece for each letter. The outline is a *cut
+path*, and each part of it is a *piece*.
+
+Attach a layer when the app colours, reads or taps single letters: a tajwid colour on one
+letter, the letter under a finger, the ink of a range of characters. A page with no layer does
+everything else on this page, and it draws, colours and hit-tests exactly as it did before
+letters existed.
+
+```js
+page.attachLetters(await fetchBytes('letters/042.qvl'));  // true, or false when the engine refuses the file
+page.letters(w)                // [{word, index, at, codePoint, text, nMembers, nMarks, moreAt, nMoreAt, box, hasInk, members, marks}]
+page.letterMembers(w, 1)       // [{path, at, mark, markName, isBody, isCut}]: mark is the id, markName its name
+page.style(Sel.letter(w, 1), '#d02020');                  // the second letter of word w
+page.style(Sel.wordChars(w, 2, 4), '#d02020');            // the ink of qpc characters 2 to 4
+page.styleLetters({scope: 'page', text: 'ن', mark: 'shaddah'}, '#0a7d32');
+page.hitTestLetterView(viewX, viewY)
+// → {word, letter, path, at, line, distance, mark, markName, isExact, isBody, wordKey} | null
+```
+
+Every wrapper uses the same names. A letter's `text` is its character, and `codePoint` is the
+same as a number. A letter's `marks` are its members that are not body, in the engine's
+order. The web letter gives its box as `box`, and the other wrappers as `x0`, `y0`, `x1` and
+`y1`. A member and a hit give the mark as its id, `mark`, and its name, `markName`. A query's
+`text` takes one character, or `''` for any letter. A wrapper that takes a code point there
+also takes 0 for any letter. A string of more than one character is an error in the
+wrapper's usual form.
+
+### Attaching a layer
+
+`qvp_attach_letters` copies the bytes and returns 0, or −1 when it refuses the layer. It
+refuses these:
+
+- A NULL page or NULL bytes.
+- A file over 1 MiB (`MAX_LETTER_LAYER_BYTES`). The engine checks the size before it decodes.
+- A file that does not decode, or that breaks a limit of the format (`docs/FORMAT.md`, "Limits").
+- Damaged bytes: the layer's own digest differs.
+- The layer of another page: the page number, `quant`, path count or word count differs.
+- A layer built for other bytes of this page: the page digest differs. The page's paths or
+  word runs are not the ones the layer was built for.
+- A page whose words share paths (overlapping word runs).
+
+A layer belongs to one exact page file. Of the 604 layers built from `quran-svg-elements`
+v2.0.0, all attach to the pages built from v2.0.0, and 29 attach to the `data-v0.5.0` pages.
+Load the layers that were built with the pages you load.
+
+On −1 nothing changes. The page keeps the layer it had, and every pointer and count stays
+valid.
+
+A second attach replaces the first: the engine drops the old pieces and adds the new
+ones at the same index. The rules stay, and they take the new layer. There is no detach. To
+drop a layer, load the page again.
+
+You can attach a layer at any time: before or after a layout, the words sidecar, styles,
+highlights, a mask or a reveal. Nothing moves on the screen. A piece starts at its cut path's
+colour state, so only a letter rule makes a piece look different from its path.
+
+**The path table.** The attach adds the pieces to the path table after the page's own paths.
+A page with `N` paths and a layer with `P` pieces has the paths `0` to `N + P - 1`. No page path
+changes its index. No word range (`firstPath`, `nPaths`) holds a piece, so every word loop
+stays on the page's own paths. `qvp_letter_members` gives the pieces.
+
+**What an attach makes stale.** After `qvp_attach_letters` returns 0, read these again:
+
+- `qvp_geometry`: its pointers and `n_paths`.
+- `qvp_colors`: its pointer and its length.
+- `n_paths` of `qvp_page_info`.
+- `qvp_layout_path_groups`, when the page is reflowed.
+- A draw list that you keep. `qvp_layout_draw_revision` counts up.
+- Each array that you sized from `n_paths`.
+
+The pointers that `qvp_geometry` and `qvp_colors` gave before the attach are not valid after
+it. Each wrapper reads them again in its `attachLetters`. An app that uses a wrapper must not
+keep its own copy of `ops`, `pts`, `table` or `nPaths` across an attach. The same is true for
+the built paths (`buildPaths()` and its equivalents), the colours (`colors()`), and each array
+that the app sized from `nPaths`: read them again after an attach that returns true.
+
+### Reading letters
+
+`qvp_letter_count` gives the letters of a word. `qvp_letter_info` gives one letter, by its
+index in the word:
+
+- `at`: the letter's offset. An offset is a code-point offset in the word's `qpc` text.
+- `text`: the letter's character, as a code point.
+- `more_at`: the first other offset that the letter's body draws, such as a tatweel that the
+  body stretches into (2:97:5). `QVP_NONE` when there is none. `n_more_at` counts these
+  offsets. In the Hafs data a letter has at most one. `qvp_letter_at_offset` finds the letter
+  from any of them.
+- `n_members` and `n_marks`: the letter's paths, and how many of them are not body. Dots
+  count as marks here.
+- The box, in page units: the union of the members' boxes. A piece can reach past the box of
+  its word.
+- `has_ink` 0: no member has an outline, because the artwork draws it off the page.
+
+`qvp_letter_members` gives the paths of a letter in the engine's order: the body members
+first, then the marks in text order. Text order is by offset, then by the layer's order, and a
+mark with no offset comes last. So the nth mark in this list is the one that
+`QVP_SELECTOR_LETTER_MARK` n takes.
+
+Each member has its path (a piece has `is_cut` 1), its offset (`QVP_NONE` when it has none),
+its mark id, and `is_body`. A body and its dots carry the letter's offset. A piece has the
+mark of its cut path, 0.
+
+Some marks belong to a word and to no letter of it, such as a waqf sign. `qvp_path_letter`
+gives such a *word-level mark* the letter `QVP_NONE` and its own offset. For every other path
+it gives the letter and the offset. It returns 0 for a cut path (its pieces have the letter
+role), for a path with no letter role, such as a decoration, and for a path past the table.
+
+`qvp_letter_at_offset` gives the letter that draws the character at an offset, as its own
+offset or a `more_at`, or that holds a mark at it. It returns 0 for an offset no letter has,
+for the offset of a word-level mark, and for `QVP_NONE`.
+
+**Offsets and the words sidecar.** When the words sidecar gives the word's `qpc` text, an
+offset at or past its length counts as no offset, `QVP_NONE`. The engine checks again when the
+sidecar comes after the layer. Without the sidecar, the engine uses each offset as the layer
+stores it. A letter keeps its index either way, so `QVP_SELECTOR_LETTER` still takes it.
+
+**No layer.** With no layer, each letter call returns 0 and writes nothing. The same is true
+for a word or a letter that does not exist. A letter rule still gets a handle, and it selects
+nothing until a layer is attached.
+
+### Addressing letters
+
+The canonical address of a letter's ink is a word and a `qpc` character offset. Four
+selectors and one query address letters:
+
+| address | `a`, `b`, `c` | what it takes |
+|---|---|---|
+| `QVP_SELECTOR_LETTER` (16) | word, letter, part | A part of one letter. `QVP_LETTER_PART_ALL` takes every member. `QVP_LETTER_PART_BODY_AND_DOTS` takes each member at the letter's own offset: the body, its dots, and a sign that is part of the code point, such as a hamzah or a `hamzat_al_wasl` sign. These are the paths of `WORD_CHARS` over that one offset. `QVP_LETTER_PART_MARKS` takes the other members, a mark with no offset included. |
+| `QVP_SELECTOR_LETTER_MARK` (17) | word, letter, n | The nth mark of the letter, in text order. Dots count, and a body never does. A mark at the letter's own offset counts too. |
+| `QVP_SELECTOR_LETTER_MARK_NAMED` (18) | word, letter, mark id | Each member whose path has that mark, a body that the page stores as a mark included, such as `omitted_alif` (12). Mark id 0, or an id above 255, takes nothing. An id with no name (36 to 254) counts as 255, `unknown`, as in `QVP_SELECTOR_MARK`. |
+| `QVP_SELECTOR_WORD_CHARS` (19) | word, first, last | Every path that draws one of the `qpc` characters from `first` to `last`, both included. |
+| `qvp_style_add_letters` | a `QvpLetterQuery` | The letters of a scope that are one character, carry one mark, or both, and the query's part of each. |
+
+`WORD_CHARS` in detail:
+
+- A member is taken when its offset is in the range. A body is also taken when one of its
+  letter's `more_at` offsets is in the range. A word-level mark is taken by its own offset.
+- A character that no path draws takes nothing. A mark with no offset is never taken.
+- `first` above `last` is a bad selector: `qvp_style_add` returns 0. An offset above 0xFFFE
+  counts as 0xFFFE.
+- With the words sidecar, an offset at or past the end of the text takes nothing, because no
+  member has one. Without the sidecar, the stored offsets decide.
+
+`qvp_style_add` also returns 0 for `QVP_SELECTOR_LETTER` with a part above 2. A word or a
+letter past the page selects nothing, as `QVP_SELECTOR_WORD` does.
+
+A selector takes a cut path only when it takes each piece of the path. So a rule over every
+letter of a joined outline draws the outline whole, with no seam. In the order of rules, the
+four letter selectors are as specific as `QVP_SELECTOR_WORD_MARK`, and a query rule is as
+specific as `QVP_SELECTOR_WORD_BODY`.
+
+**The letter query.** `QvpLetterQuery` has a scope, a text, a mark and a part:
+
+- `scope`: a target. It resolves to words when the rule is added.
+- `text`: a code point, or 0 for any letter.
+- `mark`: a mark id that one member of the letter carries, or 0 for any. An id with no name
+  counts as 255, `unknown`.
+- `part`: `QVP_LETTER_PART_*`, what of each letter a rule takes.
+
+`qvp_find_letters` returns the letters as (word, letter) pairs, in word order and then letter
+order. Its text and mark filter, and its part does not.
+
+`qvp_style_add_letters` adds one rule
+for the letters the query finds, and returns one handle. The engine matches the text, mark and
+part against the layer each time it applies the rules. So a query rule added with no layer
+takes the layer when it comes, and it takes a second layer too. Both calls return 0 for a NULL
+query, a part above 2, or a text that is not a Unicode scalar value.
+
+### What is drawn
+
+With a layer and no letter rule, the draw list is the list of the page with no layer: each
+cut path draws whole, as word ink. A cut path draws as its pieces only while its pieces differ
+from it in colour, now or as the target of a running transition. Then the draw list holds the
+pieces in the place of the path, under its placement, and leaves out the path. When the
+pieces agree again and their transitions end, the path draws whole again.
+
+`qvp_styled_paths` leaves out what the draw list does not hold now: a cut path drawn as its
+pieces, and a piece whose path draws whole. `qvp_crop_svg` writes the pieces of a cut path
+that draws as its pieces, never both. `qvp_colors` covers every path and every piece, drawn or
+not. A cut path whose pieces all resolve to one colour has that colour.
+
+A host draws a page only through the draw list. It never decides itself which of a cut path
+and its pieces to draw.
+
+**The draw revision.** `qvp_layout_draw_revision` counts up, and wraps, when the draw list
+can change while the layout and the band stay the same: a layer is attached, or a cut path
+starts or stops drawing its pieces. It never stays the same when the drawn set changes.
+
+It can
+count up with no visible change, for example on a second attach of the same layer or a swap
+outside the band. Colours that move leave it alone. On a page with no layer it stays 0. Key a
+draw list that you keep on the revision, the layout and the band.
+
+**Tick first.** After you change the rules or the state (a style, a theme, a highlight, a
+mask, a reveal), call `qvp_tick` with the time now before any call that reads colours, styled
+paths, the draw revision or the draw list. Those calls apply a pending change at the time of
+the last tick. If one of them comes first, a transition starts at that earlier time, and it
+can be over before the next tick shows it. This is how `qvp_colors` always worked.
+
+**Each frame.** Call these in this order:
+
+1. `qvp_tick`.
+2. `qvp_colors` or `qvp_styled_paths`.
+3. `qvp_layout_draw_revision`.
+4. `qvp_layout_draw_list`, when the revision, the layout or the band is different from the
+   list that you keep.
+
+On a page with a layer, the draw list and the revision apply the rule changes that are
+pending, as `qvp_colors` does. So the swap in their answers holds each change made before the
+call. On a page with no layer, they do not touch the rules, because the list does not depend
+on them, and a host needs no new call per frame.
+
+### The letter under a point
+
+`qvp_hit_test_letter` takes a point in page units, and `qvp_hit_test_letter_view` a point in
+viewport px through the current layout, printed or reflowed. Both prefer ink.
+
+- **On ink.** A point on the ink of a word path gives an exact hit (`is_exact` 1) on that
+  path, in that path's word, at distance 0. Ink that the page stores as a mark wins over body
+  ink, and of two paths of the same ink, the one drawn last wins, in any word. The engine
+  tests the pieces of a cut path, never the cut path, whether it draws whole or as its pieces.
+  A point that the cut path holds and no piece holds (a seam between two pieces) is an exact
+  hit on the nearest piece.
+- **In a counter.** A counter is the hole in the body of a letter, such as a waw or a meem.
+  A point in a counter, on no ink, gives a near hit (`is_exact` 0) on that letter, in its
+  word, at distance 0. The counter decides the word, also where the box of another word
+  reaches over it.
+- **Anywhere else.** The word is the one `qvp_hit_test` finds with the same options. The hit
+  is near, on the letter of that word with the nearest box. When several boxes hold the
+  point, the letter whose body ink is nearest wins. `path` is the letter's first body member.
+
+The options act only off ink and out of a counter. There, `max_distance`, `gap_bias` and
+`prefer_exact` choose the word, as in `qvp_hit_test`. `max_distance` limits the distance to the
+word, not to the letter. `distance` is the distance to the letter's box in page units, 0 inside
+the box.
+
+A tap between words gives the nearest letter of the chosen word, which can be far. A
+host that wants only close letters checks `is_exact` or filters on `distance`.
+
+The word of a letter hit can differ from the word of `qvp_hit_test` at the same point. On ink
+it is the ink's word. The gap-aware word hit test can pick a neighbouring word on ink, for
+example under reflow, or with `prefer_exact` 0, where it goes by the word boxes and the gaps
+alone.
+
+In a counter it is the counter's word. Everywhere else the two agree.
+
+The hit returns 0 with no layer. Off ink and out of a counter it also returns 0 when
+`qvp_hit_test` finds no word within `max_distance`, finds a decoration, or finds a word with no
+letter that has a box.
+
+`letter` is `QVP_NONE` for a word-level mark. `at` is the offset of the path hit, or of the
+letter, `QVP_NONE` when none. `mark` is the mark id of the path that the point hit. Body ink
+has 0, but a body that the page stores as a mark, such as `omitted_alif` (12), has that id.
+
+`is_body` is 1 when the path is a body member of its letter. It is 0 for a mark member, a
+word-level mark and a near hit. So a host tells the letter itself from a mark on it by
+`is_body`, not by `mark`.
+
+### Limits and threads
+
+The engine refuses a file over 1 MiB before it decodes it. The largest of the 604 layers built
+from `quran-svg-elements` v2.0.0 is 17,057 bytes. The format limits the commands, operations
+and pieces of a layer (`docs/FORMAT.md`, "Limits"), so the work and memory of an attach are
+bounded.
+
+Use a page from one thread at a time, const calls included. On a page with a layer, the draw
+list and the draw revision apply pending rule changes, so they write to the page although they
+take a `const QvpPage*`.
+
+A host that runs queries on another thread must not let them overlap
+a frame on the same page. Different pages can be on different threads.
+
+### Example in C
+
+```c
+QvpPage* page = qvp_page_load(page_bytes, page_len);
+qvp_attach_words(page, words_json, words_len);           /* optional: checks the offsets */
+if (qvp_attach_letters(page, qvl_bytes, qvl_len) != 0) {
+  /* refused: the page draws and hit-tests as before, with no letters */
+}
+QvpGeometry g; qvp_geometry(page, &g);                   /* read again: the pieces are in it */
+
+/* colour the second letter of word 5, body and dots, over 200 ms */
+QvpSelector sel = { QVP_SELECTOR_LETTER, 5, 1, QVP_LETTER_PART_BODY_AND_DOTS };
+uint32_t h = qvp_style_add(page, QVP_LAYER_HIGHLIGHT, &sel, 0xd02020ff, 200);
+
+/* each frame */
+uint8_t moving = qvp_tick(page, now_ms);
+const uint32_t* colors = qvp_colors(page);
+uint32_t rev = qvp_layout_draw_revision(page);
+if (rev != kept_rev || layout_changed || band_changed) {
+  kept_n = qvp_layout_draw_list(page, band_top, band_bottom, kept, kept_cap /* pairs */);
+  kept_rev = rev;
+}
+/* draw kept[i] = {path, placement} with colors[path] and g's outlines */
+
+/* a tap, in viewport px */
+QvpHitOptions opt = { 6.0f, -1.0f, 1 };
+QvpLetterHit hit;
+if (qvp_hit_test_letter_view(page, tap_x, tap_y, &opt, &hit) && hit.is_exact) {
+  /* hit.word, hit.letter (QVP_NONE for a word-level mark), hit.is_body */
+}
+qvp_style_remove(page, h);
+```
+
 ## Highlights
 
 ```js
@@ -935,8 +1252,8 @@ function in the header has no row here, or a row names a function the header lac
 | memory | `qvp_dealloc` | engine internal | Free bytes from `qvp_alloc`. |
 | page | `qvp_page_load` | `engine.loadPage(bytes)` | Decode a page file into a page handle; null on a malformed file; the bytes are copied. |
 | page | `qvp_page_free` | `page.free()` | Free the page handle. |
-| page | `qvp_page_info` | `page.width`, `.height`, `.page`, `.nLines`, `.nAyahs`, `.nWords`, `.nPaths`, `.nDecorations` | Return the page's dimensions and element counts. |
-| page | `qvp_geometry` | `page.paths`, `page.buildPaths()` | Return the outline streams and the per-path table a renderer draws from; they live as long as the page. Ink outside the page's box gets no outline, so a host draws the page and not what the artwork left beyond it. |
+| page | `qvp_page_info` | `page.width`, `.height`, `.page`, `.nLines`, `.nAyahs`, `.nWords`, `.nPaths`, `.nDecorations` | Return the page's dimensions and element counts. `n_paths` counts a letter layer's pieces. |
+| page | `qvp_geometry` | `page.paths`, `page.buildPaths()` | Return the outline streams and the per-path table a renderer draws from; they live as long as the page, or until `qvp_attach_letters` returns 0. With a letter layer the table holds its pieces after the page's own paths. Ink outside the page's box gets no outline, so a host draws the page and not what the artwork left beyond it. |
 | page | `qvp_word_info` | `page.words[i]` | Return one word: key, line, ayah fragment, bounds, text and its path range. |
 | page | `qvp_word_form` | `page.wordForm(i, form)` | Return one of a word's text forms; the derived forms need the words sidecar. |
 | page | `qvp_ayah_info` | `page.ayahs[i]` | Return one ayah fragment: key, fragment index and count, flags, word range, ayah-mark decoration, bounds. |
@@ -966,10 +1283,20 @@ function in the header has no row here, or a row names a function the header lac
 | text and search | `qvp_citation` | `page.citation(words)` | Return a citation such as `2:255-257, 3:1` for a word list. |
 | text and search | `qvp_attach_words` | `page.attachWords(json)` | Attach the words sidecar's text forms; returns the number of words updated, −1 on bad JSON. |
 | text and search | `qvp_has_form` | `page.hasForm(form)` | Return whether a text form is available (the derived forms need the sidecar). |
+| letters | `qvp_attach_letters` | `page.attachLetters(bytes)` | Attach the letter layer of the page, and add its pieces to the path table. Returns −1, and changes nothing, for one of these: a bad file, damaged bytes, a layer of another page, a layer built for other page bytes, a file over 1 MiB, a page whose words share paths. A second attach replaces the first; there is no detach. |
+| letters | `qvp_has_letters` | `page.hasLetters()` | Return whether a letter layer is attached. |
+| letters | `qvp_letter_count` | `page.letterCount(word)` | Return how many letters a word has. 0 with no layer. |
+| letters | `qvp_letter_info` | `page.letter(word, i)` | Return one letter: its offset, character, member and mark counts, the other offset its body draws, and its box. |
+| letters | `qvp_letter_members` | `page.letterMembers(word, i)`, `page.letters(word)[i].members` | Return the paths of one letter: the bodies first, then the marks in text order. |
+| letters | `qvp_path_letter` | `page.pathLetter(path)` | Return the letter and the offset that a path draws. A word-level mark has no letter. |
+| letters | `qvp_letter_at_offset` | `page.letterAtOffset(word, at)` | Return the letter that draws the character at an offset, or holds a mark at it. |
+| letters | `qvp_find_letters` | `page.findLetters(query)` | Return the letters of a scope with a given character, mark, or both, as word and letter pairs. |
 | hit testing | `qvp_hit_test` | `page.hitTest(x, y, options)` | Gap-aware: resolve a point to the nearest word by line band and gap bias, with the distance and whether the hit was exact. |
 | hit testing | `qvp_hit_test_view` | `page.hitTestView(viewX, viewY, options)` | The same for viewport pixels. |
 | hit testing | `qvp_hit_test_exact` | `page.hitTestExact(x, y)` | Return the word, path or decoration whose exact outline contains a point in page units. |
 | hit testing | `qvp_hit_test_exact_view` | `page.hitTestExactView(viewX, viewY)` | The same for a point in viewport pixels through the current layout. |
+| hit testing | `qvp_hit_test_letter` | `page.hitTestLetter(x, y, options)` | Return the letter, or the mark, under a point in page units. It prefers ink: on ink, an exact hit in the ink's word; in a letter's counter, that letter; elsewhere, the nearest letter of the word that `qvp_hit_test` finds. |
+| hit testing | `qvp_hit_test_letter_view` | `page.hitTestLetterView(viewX, viewY, options)` | The same for a point in viewport pixels through the current layout. |
 | hit testing | `qvp_line_bands` | `page.lineBands()` | Return every line's vertical band in page units. |
 | hit testing | `qvp_hit_areas` | `page.hitAreas(gapBias)` | Return the gap-aware rectangle of every word, a partition of each line with no dead zone. |
 | hit testing | `qvp_hit_areas_view` | `page.hitAreasView(gapBias)` | The same for the gap-aware word rectangles, in viewport pixels; a reflowed page gives its rows. |
@@ -994,7 +1321,8 @@ function in the header has no row here, or a row names a function the header lac
 | layout | `qvp_layout_repeats` | `layout.repeats` | Return the paths drawn again elsewhere, such as a sajdah line over two rows, with their placements. |
 | layout | `qvp_layout_path_groups` | `layout.pathGroup` | Return the group of every path; empty unless the page is reflowed. |
 | layout | `qvp_layout_omitted_paths` | `layout.omitted` | Return the paths this layout does not draw: sheet furniture, and a native surah frame when reflowed. |
-| layout | `qvp_layout_draw_list` | `page.layoutDrawList(bandTop, bandBottom)` | Return every path that the layout draws inside a band, with its placement, in drawing order. |
+| layout | `qvp_layout_draw_list` | `page.layoutDrawList(bandTop, bandBottom)` | Return every path that the layout draws inside a band, with its placement, in drawing order. A cut path whose letters differ in colour is listed as its pieces. |
+| layout | `qvp_layout_draw_revision` | `page.layoutDrawRevision()` | Return a number that counts up when the draw list can change with the same layout and band. Key a cached draw list on it. |
 | layout | `qvp_layout_ink_band` | `page.layoutInkBand(view, viewportW, viewportH, {maxHeight, maxPixels})` | Return the band of the layout to keep drawn for a view: the whole page when it fits, otherwise two screens around the reader, with a top that moves in steps. |
 | layout | `qvp_layout_placements` | `page.layoutPlacements()` | Return what a draw list's placement indexes: the groups, then the repeats. |
 | layout | `qvp_layout_row_words` | `page.rowWords(row)` | Return the words of a reflowed row, in reading order. |
@@ -1008,6 +1336,7 @@ function in the header has no row here, or a row names a function the header lac
 | layout | `qvp_layout_printed_height` | `page.layoutPrintedHeight(spec)` | Return the page's height laid out for a spec at the printed pitch, in viewport px: `contentH` before fill-height adds any leading. On a page dressed in a border, the dressed box fitted to the viewport width. |
 | layout | `qvp_word_bounds_view` | `page.wordBoundsView(i)` | Return a word's bounds in viewport pixels through the current layout. |
 | styles | `qvp_style_add` | `page.style(selector, colour, ms, layer)` | Add a colour rule for a selector on a layer; returns a handle, 0 for a bad selector. |
+| styles | `qvp_style_add_letters` | `page.styleLetters(query, colour, {ms, layer})` | Add one colour rule for the letters that a query finds. Returns a handle, or 0 for a bad query. |
 | styles | `qvp_style_add_target` | `page.styleTarget(target, colour, ms, layer)` | Add a colour rule for a target's words. |
 | styles | `qvp_style_remove` | `page.removeStyle(handle)` | Remove a rule by handle; returns how many rules were removed. |
 | styles | `qvp_style_recolor` | `page.recolorStyle(handle, colour, ms)` | Change a rule's colour in place, with a transition. |
@@ -1018,8 +1347,8 @@ function in the header has no row here, or a row names a function the header lac
 | styles | `qvp_theme` | `page.theme(theme)` | Apply a theme (ink, mark families, headers) as one rule set with one handle. |
 | styles | `qvp_style_handles` | `page.styleHandles()` | Return the handles of every live rule. |
 | clock and colours | `qvp_tick` | `page.tick(nowMs)` | Advance transitions to a time; returns 1 while anything is still animating. |
-| clock and colours | `qvp_colors` | `page.colors()` | Return the current colour of every path, mid-transition included. |
-| clock and colours | `qvp_styled_paths` | `page.styledPaths()` | Return the (path, colour) pairs whose colour differs from the default ink. |
+| clock and colours | `qvp_colors` | `page.colors()` | Return the current colour of every path, mid-transition included, a letter layer's pieces too; valid until `qvp_attach_letters` returns 0. |
+| clock and colours | `qvp_styled_paths` | `page.styledPaths()` | Return the (path, colour) pairs whose colour differs from the default ink, leaving out what the draw list does not hold now: a cut path drawn as its pieces, and a piece whose path draws whole. |
 | clock and colours | `qvp_color_of` | `page.colorOf(path)` | Return one path's current colour. |
 | highlights | `qvp_highlight_add` | `page.highlight(target, style)` | Add a highlight (ink, band or both) for a target; returns a handle. |
 | highlights | `qvp_highlight_move` | `page.moveHighlight(handle, target)` | Move a highlight to another target: the band slides, the ink cross-fades. |
@@ -1111,4 +1440,7 @@ function in the header has no row here, or a row names a function the header lac
 Struct layouts, enums and every function signature are in `qvp.h`. Arrays are
 returned through `(out, cap)` and the call returns the total count; strings through
 `QvpStr {ptr, len}` valid until the next string-returning call on the same thread.
+Use a page from one thread at a time. A call that takes a `const QvpPage*` can still update
+the page's caches, such as the draw list, so two threads must not call into one page at
+the same time. Different pages can be on different threads.
 `qvp_alloc/qvp_dealloc` exist for hosts without `malloc` (wasm).

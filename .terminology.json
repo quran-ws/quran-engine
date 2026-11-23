@@ -10,6 +10,7 @@
   ],
   "exclude": [
     "pages/**",
+    "pages-letters/**",
     "index/**",
     "dist/**",
     "target/**",
@@ -19,7 +20,7 @@
     "**/assets/pages/**",
     "docs/design/**"
   ],
-  "_exclude": "Data and build output, not code. pages/ and index/ are the quran-svg bundle verbatim; dist/ and web/pages/ are generated from it. docs/design/ holds the dated design spec, a historical record that should keep its original wording.",
+  "_exclude": "Data and build output, not code. pages/ and index/ are the quran-svg bundle verbatim, and pages-letters/ is the letters archive of the same bundle, verbatim; dist/ and web/pages/ are generated from it. docs/design/ holds the dated design spec, a historical record that should keep its original wording.",
   "ignore_words": [
     "pos",
     "stop",

@@ -61,6 +61,22 @@ class QvpPageData {
   final List<QvpDecorationInfo> decorations;
 }
 
+/// The path count and the geometry of a page, copied out of the engine. A letter layer's
+/// attach grows them, so the page reads them again after it.
+class QvpPageGeometry {
+  const QvpPageGeometry({
+    required this.nPaths,
+    required this.ops,
+    required this.pts,
+    required this.table,
+  });
+
+  final int nPaths;
+  final Uint8List ops;
+  final Float32List pts;
+  final Uint32List table;
+}
+
 /// Abstract contract for QVP engine platform operations.
 ///
 /// Implemented by [QvpNativeBackend] on native platforms via `dart:ffi` and by
@@ -144,6 +160,39 @@ abstract interface class QvpBackend {
   int attachWords(PageHandle handle, List<int> bytes);
   bool hasForm(PageHandle handle, int form);
 
+  // ── Letters ──
+  bool attachLetters(PageHandle handle, List<int> bytes);
+  QvpPageGeometry pageGeometry(PageHandle handle);
+  bool hasLetters(PageHandle handle);
+  int letterCount(PageHandle handle, int word);
+  QvpLetter? letterInfo(PageHandle handle, int word, int letter);
+  List<QvpLetterMember> letterMembers(PageHandle handle, int word, int letter);
+  ({int letter, int at})? pathLetter(PageHandle handle, int path);
+  int? letterAtOffset(PageHandle handle, int word, int at);
+  List<({int word, int letter})> findLetters(
+    PageHandle handle,
+    QvpLetterQuery query,
+  );
+  int styleLetters(
+    PageHandle handle,
+    QvpLetterQuery query,
+    int color, {
+    int ms = 0,
+    int layer = 0,
+  });
+  QvpLetterHit? hitTestLetter(
+    PageHandle handle,
+    double x,
+    double y,
+    QvpHitOptions? options,
+  );
+  QvpLetterHit? hitTestLetterView(
+    PageHandle handle,
+    double viewX,
+    double viewY,
+    QvpHitOptions? options,
+  );
+
   // ── Page hit-testing ──
   QvpHit? hitTestExact(PageHandle handle, double x, double y);
   QvpHit? hitTestExactView(PageHandle handle, double viewX, double viewY);
@@ -203,6 +252,7 @@ abstract interface class QvpBackend {
     double bandBottom = 0,
   });
   List<QvpPlacement> layoutPlacements(PageHandle handle);
+  int layoutDrawRevision(PageHandle handle);
   QvpLayout? readLayout(PageHandle handle);
   int? layoutWordRow(PageHandle handle, int word);
   Uint32List layoutRowWords(PageHandle handle, int row);

@@ -13,6 +13,12 @@ The example bundles 29 pages as gitignored assets, provisioned by
 001 to 021, 440 to 445, 582, 604    (.qvp and .words.json)  +  atlas.qva
 ```
 
+The script also copies the letter layer of each page, `NNN.qvl`, when `dist/letters/` holds
+it (`docs/DATA.md`). A layer attaches only to the page file it was built with, so build the
+pages and the layers from the same source. `QVP_PAGES_DIR` and `QVP_LETTERS_DIR` name other
+directories than `dist/pages` and `dist/letters`. An example works without the layers: its
+letter controls are then disabled.
+
 The iOS example may bundle all 604 pages for the shareable zip, but its default build uses
 the same 29.
 
@@ -48,6 +54,37 @@ the same 29.
 9. **Layout**: sliders for line spacing and padding, a fill-height switch.
 10. **Crop**: crop the selection to SVG and share it.
 11. **Metadata and engine stats**: page info, surahs on the page, load and hit-test durations.
+12. **Letters**: colour single letters and marks. The example attaches `NNN.qvl` when it
+    opens a page. The controls, and what a tap does, are the same on every platform:
+
+    | control | values | default |
+    |---|---|---|
+    | tap target | word, letter, mark | word |
+    | colour | `#C62828`, `#1A73E8`, `#0A7D32`, `#EF6C00` | `#C62828` |
+    | every match on the page | off, on | off |
+    | clear letters | removes every letter rule of the page | |
+
+    - **word**: a tap does what feature 2 does.
+    - **letter**: a tap runs the letter hit test in view coordinates. A hit with a letter
+      colours that letter's body and dots: the `letter` selector with the part `body and
+      dots`. With "every match" on, the tap colours each letter of the page that has the same
+      character: the letter query with scope page, that `text` and the same part.
+    - **mark**: a tap on the ink of a mark colours that mark on its letter: the `letter mark
+      named` selector with the hit's `mark`. A tap on a body colours all the marks of that
+      letter: the `letter` selector with the part `marks`. With "every match" on, a tap on a
+      mark colours that mark on each letter of the page: the letter query with scope page,
+      that `mark` and the part `marks`. A tap on a body then does nothing.
+    - A tap is on a mark when the hit is exact, is not on a body, and has a mark id that is
+      not 0. Each other hit with a letter counts as a tap on the body.
+    - A hit with no letter (a word-level mark, or no hit) colours nothing.
+    - Each tap adds one rule in the chosen colour with a 200 ms transition, on the top
+      style layer, so a mark theme does not cover it. The rules stay
+      until "clear letters", or until the example opens another page.
+    - A line of text shows the last hit: the letter's character and code point, the word
+      key, the letter's index, its offset, its mark count, the mark name when the tap hit a
+      mark, and whether the hit was exact.
+    - When the page has no layer, or the engine refuses it, the controls are disabled and
+      the line says "no letter layer for this page".
 
 This list is closed: a platform may add a feature only after adding it here and to the
 other platforms.

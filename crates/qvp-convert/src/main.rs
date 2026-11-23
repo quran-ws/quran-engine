@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 fn usage() -> ! {
     eprintln!(
-        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg> [ornaments.qvo ayah_mark,surah_header,page_frame]\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert zoom-levels <pages_dir> <out.rs> [--check]\n  qvp-convert ornaments <assets_dir> <out.qvo> [--redistributable] [--style NAME]...\n  qvp-convert ornaments-info <set.qvo>\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out.\n\n<assets_dir> is a quran-assets checkout: catalog.json with the assets/ tree beside it.\n--redistributable keeps only assets whose licence is confirmed.\nornaments-info lists a set and ends with `redistributable: <n> of <total>`."
+        "usage:\n  qvp-convert svg2qvp <in.svg> <out.qvp> [out.words.json] [words-index.json]\n  qvp-convert qvp2svg <in.qvp> <out.svg> [ornaments.qvo ayah_mark,surah_header,page_frame]\n  qvp-convert info <in.qvp>\n  qvp-convert batch <svg_dir> <out_dir> [words_index_dir]\n  qvp-convert letters <letters_svg_dir> <words_svg_dir> <out_dir> [words_index_dir] [letters_index_dir]\n  qvp-convert zoom-levels <pages_dir> <out.rs> [--check]\n  qvp-convert ornaments <assets_dir> <out.qvo> [--redistributable] [--style NAME]...\n  qvp-convert ornaments-info <set.qvo>\n\nThe words index is the quran-svg bundle's index/by-page; batch finds it next to\n<svg_dir> when the argument is left out.\n\nletters writes <out_dir>/NNN.qvl, the letter layer of each page, from the letters archive\nand the words archive. It finds the words index as batch does, and the letters index at\n<letters_svg_dir>/index/by-page. A missing index is an error. It removes every .qvl file\nin <out_dir> whose page did not convert in this run. With no page SVG in either\ndirectory, it stops with an error and removes nothing.\n\n<assets_dir> is a quran-assets checkout: catalog.json with the assets/ tree beside it.\n--redistributable keeps only assets whose licence is confirmed.\nornaments-info lists a set and ends with `redistributable: <n> of <total>`."
     );
     std::process::exit(2)
 }
@@ -237,6 +237,60 @@ fn main() {
                 min,
                 qvp_total / n.max(1),
                 max
+            );
+            if errs != 0 {
+                std::process::exit(1);
+            }
+        }
+        // the letter layer of each page: convert the words page in memory, then map the
+        // letters page onto it. A page with an error has no file in <out_dir> afterwards.
+        "letters" => {
+            expect_args(&args, 3, 5);
+            let letters_svg = PathBuf::from(&args[2]);
+            let words_svg = PathBuf::from(&args[3]);
+            let out_dir = PathBuf::from(&args[4]);
+            // the words index as `batch` finds it, unless the argument names one
+            let words_index = args
+                .get(5)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| words_svg.parent().unwrap_or(Path::new("")).join("index").join("by-page"));
+            let letters_index =
+                args.get(6).map(PathBuf::from).unwrap_or_else(|| letters_svg.join("index").join("by-page"));
+            for (what, d) in [("words", &words_index), ("letters", &letters_index)] {
+                if !d.is_dir() {
+                    eprintln!("error: no {what} index at {}", d.display());
+                    std::process::exit(1);
+                }
+            }
+            println!("words index: {}", words_index.display());
+            println!("letters index: {}", letters_index.display());
+            let dirs = letter_page::LetterDirs { letters_svg, words_svg, words_index, letters_index };
+            let run = letter_page::write_letters(&dirs, &out_dir).unwrap_or_else(|e| {
+                eprintln!("error: {e}");
+                std::process::exit(1)
+            });
+            println!("removed {} stale files from {}", run.removed, out_dir.display());
+            let (mut n, mut letters, mut pieces, mut bytes, mut warns, mut errs) = (0, 0, 0, 0, 0, 0);
+            for (stem, r) in run.pages {
+                match r {
+                    Ok(w) => {
+                        n += 1;
+                        letters += w.letters;
+                        pieces += w.pieces;
+                        bytes += w.bytes;
+                        for x in w.warnings {
+                            warns += 1;
+                            eprintln!("warn: page {stem}: {x}");
+                        }
+                    }
+                    Err(e) => {
+                        errs += 1;
+                        eprintln!("error: page {stem}: {e}");
+                    }
+                }
+            }
+            println!(
+                "letters: {n} pages, {letters} letters, {pieces} pieces, {bytes} bytes, {warns} warnings, {errs} errors"
             );
             if errs != 0 {
                 std::process::exit(1);

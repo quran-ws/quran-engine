@@ -1,27 +1,70 @@
 <meta charset="utf-8">
 <title>Mushaf Vector Reader</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  :root { --bg:#f6f1e7; --paper:#fffdf7; --fg:#1f1b16; --muted:#6b6257; --panel:#fff; --line:#e6ded0; --accent:#0a7d32; --accent2:#1a73e8; --sel:rgba(26,115,232,.16); --hover:rgba(10,125,50,.12); }
-  [data-qvp-theme="dark"] { --bg:#15171b; --paper:#1e2126; --fg:#e8e4dc; --muted:#9a948b; --panel:#1b1e23; --line:#2c3138; --sel:rgba(120,170,255,.22); --hover:rgba(80,200,120,.18); }
-  [data-qvp-theme="sepia"] { --bg:#e9dcc3; --paper:#f3e7cf; --fg:#3b2a14; --muted:#7a6a52; --panel:#f8efdd; --line:#d9c9a8; }
+  :root { --bg:#f6f1e7; --paper:#fffdf7; --fg:#1f1b16; --muted:#6b6257; --panel:#fffdf9; --line:#e6ded0; --field:#fff; --accent:#0a7d32; --accent2:#1a73e8; --sel:rgba(26,115,232,.16); --hover:rgba(10,125,50,.12); --tape:#1b1e23; --tape-fg:#d8d3c8; --tape-dim:#8c867b; --tape-key:#8fd3a5; }
+  [data-qvp-theme="dark"] { --bg:#15171b; --paper:#1e2126; --fg:#e8e4dc; --muted:#9a948b; --panel:#1b1e23; --line:#2c3138; --field:#22262c; --sel:rgba(120,170,255,.22); --hover:rgba(80,200,120,.18); --tape:#101215; }
+  [data-qvp-theme="sepia"] { --bg:#e9dcc3; --paper:#f3e7cf; --fg:#3b2a14; --muted:#7a6a52; --panel:#f8efdd; --line:#d9c9a8; --field:#fbf5e8; }
   * { box-sizing:border-box }
   body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden }
-  header { display:flex; align-items:center; gap:12px; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap }
-  header h1 { font-size:15px; margin:0; font-weight:600 }
+  :focus-visible { outline:2px solid var(--accent2); outline-offset:1px }
+
+  /* controls */
+  button, select, input[type=number], input[type=text], input[type=search] { font:inherit; color:var(--fg); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:5px 10px }
+  button { cursor:pointer } button:hover:not(:disabled) { border-color:var(--muted) } button.on { background:var(--accent); color:#fff; border-color:var(--accent) }
+  button:disabled, input:disabled, select:disabled { opacity:.45; cursor:not-allowed }
+  input[type=number] { width:60px; text-align:center }
+  input[type=range] { accent-color:var(--accent); min-width:0 }
+  label { display:inline-flex; align-items:center; gap:6px }
+
+  /* top bar: where you are in the mushaf */
+  header { display:flex; align-items:center; gap:10px; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line) }
+  header h1 { font-size:15px; margin:0; font-weight:600; white-space:nowrap }
   header .sub { color:var(--muted); font-size:12px }
-  .nav { display:flex; align-items:center; gap:6px; margin-inline-start:auto; flex-wrap:wrap }
-  button, select, input[type=number], input[type=text], input[type=search] { font:inherit; color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:5px 10px }
-  button { cursor:pointer } button:hover { border-color:var(--muted) } button.on { background:var(--accent); color:#fff; border-color:var(--accent) }
-  input[type=number] { width:64px; text-align:center }
-  main { flex:1; display:grid; grid-template-columns:1fr 360px; min-height:0 }
-  #stage { position:relative; overflow:hidden; touch-action:none; cursor:grab }
+  .nav { display:flex; align-items:center; gap:6px; margin-inline-start:auto; flex-wrap:wrap; justify-content:flex-end }
+  .nav .sep { width:1px; height:20px; background:var(--line); margin:0 4px }
+
+  main { flex:1; display:grid; grid-template-columns:1fr 380px; min-height:0 }
+  .work { display:flex; flex-direction:column; min-width:0; min-height:0 }
+  #stage { position:relative; flex:1; min-height:0; overflow:hidden; touch-action:none; cursor:grab }
   #stage.dragging { cursor:grabbing } #stage.selecting { cursor:text }
   canvas { display:block; position:absolute; inset:0 }
   #paper { position:absolute; background:var(--paper); box-shadow:0 8px 30px rgba(0,0,0,.12); border-radius:4px; pointer-events:none }
-  aside { border-inline-start:1px solid var(--line); background:var(--panel); overflow:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px }
-  section h2 { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:0 0 6px }
-  .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center }
+
+  /* what a tap on the page does: it sits on the page because it changes the page's behaviour */
+  .tapbar { position:absolute; top:10px; inset-inline-start:10px; z-index:2; display:flex; align-items:center; gap:8px; padding:4px 4px 4px 10px; background:var(--panel); border:1px solid var(--line); border-radius:9px; box-shadow:0 2px 10px rgba(0,0,0,.08); font-size:12px; color:var(--muted) }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:7px; overflow:hidden }
+  .seg button { border:0; border-radius:0; padding:4px 11px; background:transparent; font-size:12px }
+  .seg button + button { border-inline-start:1px solid var(--line) }
+  .seg button.on { background:var(--fg); color:var(--panel) }
+
+  /* the call tape: every action prints the wrapper call it made */
+  #tape { background:var(--tape); color:var(--tape-fg); font:12px/1.55 'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace; border-top:1px solid var(--line) }
+  #tape .bar { display:flex; align-items:center; gap:10px; padding:5px 12px; color:var(--tape-dim); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:11px; letter-spacing:.5px; text-transform:uppercase }
+  #tape .bar b { color:var(--tape-key); font-weight:600 }
+  #tape .bar span { text-transform:none; letter-spacing:0 }
+  #tape .bar button { margin-inline-start:auto; font-size:11px; padding:2px 9px; background:transparent; color:var(--tape-fg); border-color:#3a3f47 }
+  #tape .bar button + button { margin-inline-start:0 }
+  #tapeLines { height:92px; overflow:auto; padding:0 12px 8px; display:flex; flex-direction:column }
+  #tapeLines div { white-space:pre; cursor:copy; padding:0 4px; border-radius:3px; color:var(--tape-dim) }
+  #tapeLines div:last-child { color:var(--tape-fg) }
+  #tapeLines div:hover { background:#2a2e35; color:#fff }
+  #tapeLines:empty::before { content:'Tap a word on the page. The call that the app makes shows here.'; color:var(--tape-dim); padding:0 4px; font-family:'IBM Plex Sans',system-ui,sans-serif }
+  #tape.shut #tapeLines { display:none }
+
+  /* the side panel: one topic at a time */
+  aside { border-inline-start:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0 }
+  .tabs { display:flex; border-bottom:1px solid var(--line); padding:0 6px; overflow-x:auto; scrollbar-width:none }
+  .tabs button { border:0; border-radius:0; background:transparent; padding:10px 9px 8px; font-size:13px; color:var(--muted); border-bottom:2px solid transparent; white-space:nowrap }
+  .tabs button:hover:not(:disabled) { color:var(--fg) }
+  .tabs button.on { background:transparent; color:var(--fg); border-bottom-color:var(--accent); font-weight:600 }
+  .panel { flex:1; overflow:auto; padding:14px 16px 18px; display:flex; flex-direction:column; gap:18px }
+  .panel > section { display:none; flex-direction:column; gap:8px }
+  .panel[data-tab="inspect"] > [data-tab="inspect"], .panel[data-tab="letters"] > [data-tab="letters"], .panel[data-tab="colour"] > [data-tab="colour"],
+  .panel[data-tab="memorise"] > [data-tab="memorise"], .panel[data-tab="layout"] > [data-tab="layout"], .panel[data-tab="dress"] > [data-tab="dress"] { display:flex }
+  section h2 { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:0 }
+  section h2 code { text-transform:none; letter-spacing:0; font:11px 'IBM Plex Mono',ui-monospace,monospace; color:var(--accent); margin-inline-start:6px }
+  .row { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center }
   .ar { font-size:28px; line-height:1.6; direction:rtl; text-align:right; font-family:"Amiri","KFGQPC Uthmanic Script HAFS","Scheherazade New","Noto Naskh Arabic",serif }
   .kv { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; font-size:13px }
   .kv b { color:var(--muted); font-weight:500 }
@@ -30,155 +73,235 @@
   .chip { font-size:11px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; cursor:pointer; user-select:none }
   .chip.on { background:var(--accent2); color:#fff; border-color:var(--accent2) }
   button.lvl { padding:5px 12px; min-width:38px }
-  .hud { font:11px/1.6 'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace; color:var(--muted); white-space:pre }
+  .hud { font:11px/1.6 'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace; color:var(--muted); white-space:pre; overflow-x:auto }
   .hint { color:var(--muted); font-size:12px }
   .sw { width:14px; height:14px; border-radius:3px; display:inline-block; vertical-align:-2px; margin-inline-end:4px }
-  .results { max-height:120px; overflow:auto; font-size:13px; direction:rtl }
+  .results { max-height:140px; overflow:auto; font-size:13px; direction:rtl }
   .results div { padding:2px 4px; cursor:pointer; border-radius:4px } .results div:hover { background:var(--hover) }
-  .grid3 { display:grid; grid-template-columns:auto 1fr auto; gap:4px 8px; align-items:center; font-size:12px }
+  .grid3 { display:grid; grid-template-columns:auto 1fr auto; gap:6px 8px; align-items:center; font-size:12px }
+  .grid3 b { font-weight:500; color:var(--muted) }
   #cropPreview { max-width:100%; border:1px solid var(--line); border-radius:6px; background:#fff }
-  @media (max-width: 800px) { main { grid-template-columns:1fr; grid-template-rows:1fr 280px } aside { border-inline-start:0; border-top:1px solid var(--line) } }
+  /* the long explanations stay one click away */
+  details.more { font-size:12px; color:var(--muted) }
+  details.more summary { cursor:pointer; width:max-content; color:var(--muted) }
+  details.more summary:hover { color:var(--fg) }
+  details.more p { margin:6px 0 0 }
+  /* letter colours */
+  .swatches { display:inline-flex; gap:6px }
+  .swatches button { width:24px; height:24px; padding:0; border-radius:50%; border:2px solid var(--panel); box-shadow:0 0 0 1px var(--line) }
+  .swatches button.on { box-shadow:0 0 0 2px var(--fg) }
+  #letterInfo { font:12px/1.6 'IBM Plex Mono',ui-monospace,monospace; padding:8px 10px; border:1px solid var(--line); border-radius:7px; background:var(--field); min-height:36px }
+  #letterInfo .ar { font-size:22px; line-height:1; vertical-align:-3px; margin-inline-end:6px }
+  .foot { border-top:1px solid var(--line); padding:8px 16px }
+  .foot summary { cursor:pointer; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; color:var(--muted) }
+  @media (max-width: 860px) {
+    main { grid-template-columns:1fr; grid-template-rows:1fr 46vh }
+    aside { border-inline-start:0; border-top:1px solid var(--line) }
+    header .sub { display:none }
+    #tapeLines { height:44px }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important } }
 </style>
 <header>
-  <div><h1>Mushaf Vector Reader</h1><div class="sub">QVP engine in wasm · host Canvas2D · every decision in the engine</div></div>
+  <div><h1>Mushaf Vector Reader</h1><div class="sub">the QVP engine in wasm, drawn on a canvas</div></div>
   <div class="nav">
-    <button id="themeToggle" title="dark / light">dark</button>
-    <input id="goto" type="text" placeholder="2:255 · Yasin · juz 30" style="width:150px" title="ayah key, surah name or 'juz N'">
+    <input id="goto" type="text" placeholder="2:255 · Yasin · juz 30" style="width:160px" title="Go to an ayah key, a surah name or 'juz N'">
+    <span class="sep"></span>
     <button id="prev" title="Previous page">◀</button>
-    <input id="pageNo" type="number" min="1" max="604" value="1">
+    <input id="pageNo" type="number" min="1" max="604" value="1" title="Page number">
     <span class="sub">/ <span id="pageMax">604</span></span>
     <button id="next" title="Next page">▶</button>
-    <button id="fit" title="Fit page">Fit</button>
+    <span class="sep"></span>
+    <button id="fit" title="Fit the page to the view (or double-click the page)">Fit</button>
+    <button id="themeToggle" title="Switch between dark and light">dark</button>
   </div>
 </header>
 <main>
-  <div id="stage"><div id="paper"></div><canvas id="cv"></canvas></div>
+  <div class="work">
+    <div id="stage">
+      <div id="paper"></div><canvas id="cv"></canvas>
+      <div class="tapbar" id="tapbar" title="What a tap on the page selects">
+        <span>tap selects</span>
+        <span class="seg" id="tapTarget"><button data-tap="word" class="on">word</button><button data-tap="letter">letter</button><button data-tap="mark">mark</button></span>
+      </div>
+    </div>
+    <div id="tape">
+      <div class="bar"><b>Calls</b><span>what the app asked the engine · click a line to copy it</span><button id="clear" title="Remove every style, highlight, mask and selection">Reset page</button><button id="tapeToggle">Hide</button></div>
+      <div id="tapeLines"></div>
+    </div>
+  </div>
   <aside>
-    <section>
-      <h2>Search this page</h2>
-      <div class="row"><input id="q" type="search" placeholder="الله · الرحمان · كتاب" style="flex:1; direction:rtl"><select id="qmode"><option value="includes">includes</option><option value="exact">exact</option><option value="prefix">prefix</option></select></div>
-      <div id="results" class="results"></div>
-    </section>
-    <section>
-      <h2>Selection</h2>
-      <div id="selWord" class="ar">—</div>
-      <div id="selInfo" class="kv"></div>
-      <div id="selPaths" class="paths"></div>
-      <div class="row" style="margin-top:4px"><button id="copy">Copy with citation</button><button id="cropBtn">Crop → SVG</button><span id="copied" class="hint"></span></div>
-      <img id="cropPreview" alt="" hidden>
-      <div class="hint">Tap a word. Drag across words to select (whole words, gap-aware). Tap an ayah mark for the ayah. Chips recolour one path — e.g. the 2nd diacritic only.</div>
-    </section>
-    <section>
-      <h2>Highlights (engine-animated)</h2>
-      <div class="row">
-        <label>mode <select id="hlMode"><option value="both">band + ink</option><option value="band">band only</option><option value="ink">ink only</option></select></label>
-        <label>fade <input id="hlMs" type="range" min="0" max="800" step="50" value="250"><span id="hlMsVal">250 ms</span></label>
-        <button id="play">▶ Follow words</button>
-      </div>
-    </section>
-    <section>
-      <h2>Styling</h2>
-      <div class="row">
-        <button id="tajwid">Mark colours</button>
-        <button id="hideMarks">Hide marks</button>
-        <button id="ayahMarks">Gold ayah marks</button>
-        <button id="clear">Clear all</button>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <label>Theme <select id="theme"><option value="light">Light</option><option value="sepia">Sepia</option><option value="dark">Dark</option></select></label>
-        <label>Ink <input id="ink" type="color" value="#231f20"></label>
-      </div>
-      <div class="row" style="margin-top:6px" id="legend"></div>
-    </section>
-    <section>
-      <h2>Memorisation</h2>
-      <div class="row">
-        <button id="maskAyah">Mask selected ayah</button>
-        <select id="maskMode"><option value="hide">hide</option><option value="block">block</option></select>
-        <button id="unmaskNext">Reveal next</button>
-        <button id="maskBack">Hide back</button>
-        <button id="unmask">Unmask</button>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <button id="revealMode">Greyed page</button>
-        <input id="revealPos" type="range" min="-1" max="0" value="-1" style="flex:1" disabled>
-        <span id="revealVal" class="hint"></span>
-      </div>
-    </section>
-    <section>
-      <h2>Layout (engine)</h2>
-      <div class="grid3">
-        <b>line spacing</b><input id="spacing" type="range" min="1" max="2.2" step="0.05" value="1"><span id="spacingVal">×1.00</span>
-        <b>pad top</b><input id="padTop" type="range" min="0" max="120" step="4" value="24"><span id="padTopVal">24</span>
-        <b>pad bottom</b><input id="padBottom" type="range" min="0" max="120" step="4" value="24"><span id="padBottomVal">24</span>
-      </div>
-      <div class="row" style="margin-top:6px"><button id="fillH">Fill screen height</button><button id="fitGap">Leading to fill</button></div>
-      <div class="row" style="margin-top:6px"><button id="surahFrames" class="on">Native surah frame</button></div>
-      <div class="hint">Turn the native frame off and the host draws its own, around the boxes <code>page.surahHeadersView()</code> reports: one for the frame, one for the title ink. This mushaf's artwork carries no frame yet, so only the host frame shows.</div>
-      <div class="hint">Leading only grows: the printed lineSpacing is the floor, so the lines can never close up, and the text width is always the viewport's. The knobs spend the empty paper a tall screen leaves above and below the printed page.</div>
-    </section>
-    <section>
-      <h2>Dress (another mushaf's ornaments)</h2>
-      <div class="row">
-        <label>mushaf <select id="dressStyle"><option value="">as printed</option></select></label>
-        <span class="hint">medallion, band and border together; mix below</span>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <label>medallion <select id="dressMark"><option value="">as printed</option></select></label>
-        <label>band <select id="dressHeader"><option value="">as printed</option></select></label>
-        <label>border <select id="dressFrame"><option value="">none</option></select></label>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <b>line art</b>
-        <label><input id="dressLineMark" type="checkbox"> medallion</label>
-        <label><input id="dressLineHeader" type="checkbox"> band</label>
-        <label><input id="dressLineFrame" type="checkbox"> border</label>
-        <b>breathing space</b><input id="dressGap" type="range" min="0" max="24" step="1" value="5" style="flex:1"><span id="dressGapVal" class="hint">5</span>
-        <b>band to border</b><input id="dressBandGap" type="range" min="0" max="24" step="1" value="5" style="flex:1"><span id="dressBandGapVal" class="hint">5</span>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <b>medallion size</b><input id="dressMarkScale" type="range" min="0.5" max="2.5" step="0.05" value="1" style="flex:1"><span id="dressMarkScaleVal" class="hint">×1.00</span>
-        <b>border size</b><input id="dressFrameScale" type="range" min="0.5" max="2.5" step="0.05" value="1" style="flex:1"><span id="dressFrameScaleVal" class="hint">×1.00</span>
-        <button id="undress">As printed</button>
-      </div>
-      <div class="row" style="margin-top:6px" id="dressParts"></div>
-      <div id="dressInfo" class="hint" style="white-space:pre-line"></div>
-    </section>
-    <section>
-      <h2>Reflow (engine)</h2>
-      <div class="row"><button id="reflow">Reflow the page</button><span class="hint" id="reflowRows"></span></div>
-      <div class="row" style="margin-top:6px">
-        <b style="font-size:12px;color:var(--muted)">size</b>
-        <button id="lv1" class="lvl">printed</button><button id="lv2" class="lvl">2</button><button id="lv3" class="lvl">3</button><button id="lv4" class="lvl">4</button>
-        <span class="hint" id="lvlVal"></span>
-      </div>
-      <div class="hint">The steps a reader gets instead of a free zoom. The rows only rearrange at certain zooms, so the engine searches a band around each step for the zoom whose rows come out best on this page. The sizes differ a little from page to page for that reason.</div>
-      <div class="row" style="margin-top:6px">
-        <label>pinch <select id="zMode"><option value="stepped">steps, reflowed</option><option value="continuous">free, reflowed</option><option value="magnify">magnify the print</option></select></label>
-        <span class="hint" id="zoomVal"></span>
-      </div>
-      <div class="hint">What two fingers do to the page. Stepped is what a reader gets: the pinch lands on one of the sizes above and the page breaks its rows again. Free reflows to whatever the fingers ask for. Magnify scales the printed page and leaves every row where the print has it.</div>
-      <div class="grid3" style="margin-top:6px">
-        <b>zoom</b><input id="rZoom" type="range" min="1" max="4" step="0.05" value="1.6"><span id="rZoomVal">×1.60</span>
-        <b>word gap</b><input id="rGap" type="range" min="0.5" max="3" step="0.05" value="1"><span id="rGapVal">×1.00</span>
-        <b>relax short rows</b><input id="rRelax" type="range" min="0" max="1" step="0.05"><span id="rRelaxVal">50%</span>
-        <b>gap cap</b><input id="rStretch" type="range" min="1" max="3.5" step="0.1"><span id="rStretchVal">×2.0</span>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <label>fill <select id="rFill"><option value="centred">centred</option><option value="ragged">ragged</option><option value="justified">justified</option></select></label>
-        <label>gaps <select id="rGaps"><option value="uniform">even</option><option value="printed">as printed</option></select></label>
-        <label>breaks <select id="rBreaks"><option value="fitted">fitted rows</option><option value="even">even rows</option><option value="greedy">greedy</option></select></label>
-      </div>
-      <div class="hint">Relaxing gives a row's gaps a share of the space it has left over, so the emptier a row is the more it opens. The gap cap bounds that: a row of few words has few gaps and so opens less, whatever the slider says.</div>
-      <div class="hint">The page keeps the viewport width and the ink grows: fewer words fit a row, the rest move down, and the page scrolls. Words are never reshaped, an ayah keeps its medallion, and a surah banner keeps a row of its own.</div>
-    </section>
-    <section>
-      <h2>Page</h2>
-      <div id="meta" class="hint"></div>
-    </section>
-    <section>
-      <h2>Engine</h2>
+    <nav class="tabs" id="tabs">
+      <button data-tab="inspect" class="on">Inspect</button>
+      <button data-tab="letters">Letters</button>
+      <button data-tab="colour">Colour</button>
+      <button data-tab="memorise">Memorise</button>
+      <button data-tab="layout">Layout</button>
+      <button data-tab="dress">Dress</button>
+    </nav>
+    <div class="panel" id="panel" data-tab="inspect">
+
+      <!-- Inspect -->
+      <section data-tab="inspect">
+        <h2>Selection <code>page.hitTestView()</code></h2>
+        <div id="selWord" class="ar">—</div>
+        <div id="selInfo" class="kv"></div>
+        <div id="selPaths" class="paths"></div>
+        <div class="row"><button id="copy">Copy with citation</button><button id="cropBtn">Crop to SVG</button><span id="copied" class="hint"></span></div>
+        <img id="cropPreview" alt="" hidden>
+        <details class="more"><summary>How to select</summary>
+          <p>Tap a word. Drag across words to select whole words. Tap an ayah marker to select the ayah. Each chip is one path of the word: click a chip to colour that path alone, such as the second diacritic.</p>
+        </details>
+      </section>
+      <section data-tab="inspect">
+        <h2>Search this page <code>page.search()</code></h2>
+        <div class="row"><input id="q" type="search" placeholder="الله · الرحمان · كتاب" style="flex:1; direction:rtl"><select id="qmode"><option value="includes">includes</option><option value="exact">exact</option><option value="prefix">prefix</option></select></div>
+        <div id="results" class="results"></div>
+      </section>
+      <section data-tab="inspect">
+        <h2>Page</h2>
+        <div id="meta" class="hint" style="white-space:pre-line"></div>
+      </section>
+
+      <!-- Letters -->
+      <section data-tab="letters">
+        <h2>Letter colours <code>page.attachLetters()</code></h2>
+        <div id="letterNote" class="hint">Set "tap selects" on the page to letter or mark, then tap the page.</div>
+        <div class="row">
+          <span class="hint">colour</span>
+          <span class="swatches" id="letterColors"></span>
+        </div>
+        <div class="row">
+          <label title="Colour each letter of the page that has the same character, or that carries the same mark"><input id="letterEvery" type="checkbox"> every match on the page</label>
+          <button id="letterClear">Clear letters</button>
+        </div>
+        <div id="letterInfo">—</div>
+        <details class="more"><summary>How it works</summary>
+          <p>A letter layer is an optional file for each page, <code>NNN.qvl</code>. With it the engine knows the letters of each word and the paths that draw them. Where one outline joins two letters, the layer holds the outline cut into pieces.</p>
+          <p><b>letter</b> colours the body and dots of the letter under the tap. <b>mark</b> colours the mark under the tap, or all the marks of a letter when the tap is on its body. A layer attaches only to the page file it was built with.</p>
+        </details>
+      </section>
+
+      <!-- Colour -->
+      <section data-tab="colour">
+        <h2>Highlight <code>page.highlight()</code></h2>
+        <div class="row">
+          <label>mode <select id="hlMode"><option value="both">band and ink</option><option value="band">band</option><option value="ink">ink</option></select></label>
+          <button id="play">▶ Follow words</button>
+        </div>
+        <div class="grid3"><b>fade</b><input id="hlMs" type="range" min="0" max="800" step="50" value="250"><span id="hlMsVal">250 ms</span></div>
+      </section>
+      <section data-tab="colour">
+        <h2>Marks <code>page.theme()</code></h2>
+        <div class="row">
+          <button id="tajwid">Mark colours</button>
+          <button id="hideMarks">Hide marks</button>
+          <button id="ayahMarks">Gold ayah markers</button>
+        </div>
+        <div class="row" id="legend"></div>
+      </section>
+      <section data-tab="colour">
+        <h2>Theme <code>page.setDefaultColor()</code></h2>
+        <div class="row">
+          <label>theme <select id="theme"><option value="light">Light</option><option value="sepia">Sepia</option><option value="dark">Dark</option></select></label>
+          <label>ink <input id="ink" type="color" value="#231f20"></label>
+        </div>
+      </section>
+
+      <!-- Memorise -->
+      <section data-tab="memorise">
+        <h2>Mask <code>page.mask()</code></h2>
+        <div class="row">
+          <button id="maskAyah">Mask selected ayah</button>
+          <select id="maskMode"><option value="hide">hide</option><option value="block">block</option></select>
+        </div>
+        <div class="row">
+          <button id="unmaskNext">Reveal next</button>
+          <button id="maskBack">Hide back</button>
+          <button id="unmask">Unmask</button>
+        </div>
+        <div class="hint">With no selection the mask takes the whole page.</div>
+      </section>
+      <section data-tab="memorise">
+        <h2>Reveal step by step <code>page.revealStart()</code></h2>
+        <div class="row">
+          <button id="revealMode">Greyed page</button>
+          <input id="revealPos" type="range" min="-1" max="0" value="-1" style="flex:1" disabled>
+          <span id="revealVal" class="hint"></span>
+        </div>
+      </section>
+
+      <!-- Layout -->
+      <section data-tab="layout">
+        <h2>Printed page <code>page.layout()</code></h2>
+        <div class="grid3">
+          <b>line spacing</b><input id="spacing" type="range" min="1" max="2.2" step="0.05" value="1"><span id="spacingVal">×1.00</span>
+          <b>pad top</b><input id="padTop" type="range" min="0" max="120" step="4" value="24"><span id="padTopVal">24</span>
+          <b>pad bottom</b><input id="padBottom" type="range" min="0" max="120" step="4" value="24"><span id="padBottomVal">24</span>
+        </div>
+        <div class="row"><button id="fillH">Fill screen height</button><button id="fitGap">Leading to fill</button><button id="surahFrames" class="on">Native surah frame</button></div>
+        <details class="more"><summary>How it works</summary>
+          <p>Leading only grows: the printed line spacing is the floor, so the lines never close up, and the text width is always the viewport's. The controls spend the empty paper that a tall screen leaves above and below the printed page.</p>
+          <p>With the native frame off, the host draws its own around the boxes that <code>page.surahHeadersView()</code> reports: one for the frame, one for the title ink. This mushaf's artwork carries no frame yet, so only the host frame shows.</p>
+        </details>
+      </section>
+      <section data-tab="layout">
+        <h2>Reflow <code>layout({ reflow })</code></h2>
+        <div class="row"><button id="reflow">Reflow the page</button><span class="hint" id="reflowRows"></span></div>
+        <div class="row">
+          <span class="hint">size</span>
+          <button id="lv1" class="lvl">printed</button><button id="lv2" class="lvl">2</button><button id="lv3" class="lvl">3</button><button id="lv4" class="lvl">4</button>
+        </div>
+        <div class="hint" id="lvlVal"></div>
+        <div class="row">
+          <label>pinch <select id="zMode"><option value="stepped">steps, reflowed</option><option value="continuous">free, reflowed</option><option value="magnify">magnify the print</option></select></label>
+          <span class="hint" id="zoomVal"></span>
+        </div>
+        <div class="grid3">
+          <b>zoom</b><input id="rZoom" type="range" min="1" max="4" step="0.05" value="1.6"><span id="rZoomVal">×1.60</span>
+          <b>word gap</b><input id="rGap" type="range" min="0.5" max="3" step="0.05" value="1"><span id="rGapVal">×1.00</span>
+          <b>relax short rows</b><input id="rRelax" type="range" min="0" max="1" step="0.05"><span id="rRelaxVal">50%</span>
+          <b>gap cap</b><input id="rStretch" type="range" min="1" max="3.5" step="0.1"><span id="rStretchVal">×2.0</span>
+        </div>
+        <div class="row">
+          <label>fill <select id="rFill"><option value="centred">centred</option><option value="ragged">ragged</option><option value="justified">justified</option></select></label>
+          <label>gaps <select id="rGaps"><option value="uniform">even</option><option value="printed">as printed</option></select></label>
+          <label>breaks <select id="rBreaks"><option value="fitted">fitted rows</option><option value="even">even rows</option><option value="greedy">greedy</option></select></label>
+        </div>
+        <details class="more"><summary>How it works</summary>
+          <p>The page keeps the viewport width and the ink grows: fewer words fit a row, the rest move down, and the page scrolls. Words are never reshaped, an ayah keeps its medallion, and a surah banner keeps a row of its own.</p>
+          <p><b>Size.</b> The steps a reader gets instead of a free zoom. The rows only rearrange at certain zooms, so the engine searches a band around each step for the zoom whose rows come out best on this page. The sizes differ a little from page to page for that reason.</p>
+          <p><b>Pinch.</b> What two fingers do to the page. Stepped is what a reader gets: the pinch lands on one of the sizes and the page breaks its rows again. Free reflows to whatever the fingers ask for. Magnify scales the printed page and leaves every row where the print has it.</p>
+          <p><b>Relax.</b> Relaxing gives a row's gaps a share of the space it has left over, so the emptier a row is the more it opens. The gap cap bounds that: a row of few words has few gaps and so opens less, whatever the slider says.</p>
+        </details>
+      </section>
+
+      <!-- Dress -->
+      <section data-tab="dress">
+        <h2>Another mushaf's ornaments <code>page.dress()</code></h2>
+        <div class="row">
+          <label>mushaf <select id="dressStyle"><option value="">as printed</option></select></label>
+          <button id="undress">As printed</button>
+        </div>
+        <div class="hint">A mushaf sets the medallion, the band and the border together. Mix them below.</div>
+        <div class="grid3" style="grid-template-columns:auto 1fr auto">
+          <b>medallion</b><select id="dressMark"><option value="">as printed</option></select><label><input id="dressLineMark" type="checkbox"> line art</label>
+          <b>band</b><select id="dressHeader"><option value="">as printed</option></select><label><input id="dressLineHeader" type="checkbox"> line art</label>
+          <b>border</b><select id="dressFrame"><option value="">none</option></select><label><input id="dressLineFrame" type="checkbox"> line art</label>
+        </div>
+        <div class="grid3">
+          <b>breathing space</b><input id="dressGap" type="range" min="0" max="24" step="1" value="5"><span id="dressGapVal" class="hint">5</span>
+          <b>band to border</b><input id="dressBandGap" type="range" min="0" max="24" step="1" value="5"><span id="dressBandGapVal" class="hint">5</span>
+          <b>medallion size</b><input id="dressMarkScale" type="range" min="0.5" max="2.5" step="0.05" value="1"><span id="dressMarkScaleVal" class="hint">×1.00</span>
+          <b>border size</b><input id="dressFrameScale" type="range" min="0.5" max="2.5" step="0.05" value="1"><span id="dressFrameScaleVal" class="hint">×1.00</span>
+        </div>
+        <div class="row" id="dressParts"></div>
+        <div id="dressInfo" class="hint" style="white-space:pre-line"></div>
+      </section>
+    </div>
+    <details class="foot" id="statsBox">
+      <summary>Engine stats</summary>
       <div id="hud" class="hud">loading…</div>
-    </section>
+    </details>
   </aside>
 </main>

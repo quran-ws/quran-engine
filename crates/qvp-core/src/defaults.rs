@@ -128,6 +128,11 @@ pub const ZOOM_LEVEL_BAND: f32 = 0.06;
 /// The search step, in zoom.
 pub const ZOOM_LEVEL_STEP: f32 = 0.015;
 
+/// The largest letter layer (`NNN.qvl`) the engine accepts, in bytes. The engine refuses a
+/// larger file before it decodes it. The largest real layer is 17,057 bytes. A layer at the
+/// format's limit of 65,535 commands takes about 110 KB.
+pub const MAX_LETTER_LAYER_BYTES: usize = 1 << 20;
+
 /// How many rows either side of a row are compared with it when a short row is opened up
 /// (`ReflowSpec::relax`). A fixed count, so the same page is set the same way on any screen.
 pub const RELAX_NEIGHBOURS: usize = 3;

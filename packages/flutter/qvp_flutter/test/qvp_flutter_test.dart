@@ -6,7 +6,10 @@
 // Data: <repo>/dist/pages/042.qvp, 042.words.json, atlas.qva
 // (`cargo run -p qvp-convert --release -- batch pages dist/pages`).
 //
-// The cases in shared/api_cases.dart run here and in qvp_web_test.dart. This file keeps
+// The letter replay reads <repo>/conformance/scenarios/letters.json and its hex fixtures.
+//
+// The cases in shared/api_cases.dart and shared/letter_cases.dart run here and in
+// qvp_web_test.dart. This file keeps
 // what needs a library path, dart:io or the native backend.
 @TestOn('vm')
 library;
@@ -21,8 +24,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvp_flutter/qvp_flutter.dart';
+import 'package:qvp_flutter/src/styled_draws.dart';
 
 import 'shared/api_cases.dart';
+import 'shared/letter_cases.dart';
 
 /// The repository root: `QVP_REPO` if set, else the nearest ancestor of the working
 /// directory that holds the engine header.
@@ -97,6 +102,21 @@ void main() {
           .readAsStringSync(),
     ),
   );
+
+  letterCases(() {
+    final scenario = File('$repo/conformance/scenarios/letters.json')
+        .readAsStringSync();
+    return LetterFixture(
+      engine: engine,
+      scenario: scenario,
+      hex: {
+        for (final f in letterHexFiles(scenario))
+          f: File('$repo/conformance/$f').readAsStringSync(),
+      },
+      maskTransition: (p, ms) => (engine.backend as QvpNativeBackend).b
+          .maskTransition((p.handle as NativePageHandle).pointer, ms),
+    );
+  });
 
   test('zoom scenarios match the engine (conformance/scenarios/zoom.json)', () {
     final json = jsonDecode(
@@ -1347,6 +1367,137 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     p.dispose();
   });
+
+  test('the styled pass takes the draw list\'s styled entries, each at its own placement', () {
+    const draws = [
+      QvpDraw(0, 0),
+      QvpDraw(1, 0),
+      QvpDraw(2, 0),
+      // path 1 again, under another placement: a line the layout repeats over two rows
+      QvpDraw(1, 3),
+      QvpDraw(4, 1),
+    ];
+    final styled = <QvpStyledPath>[
+      (path: 1, color: 0xff0000ff),
+      // hidden: neither pass draws it
+      (path: 2, color: 0x00000000),
+      // not in the draw list: culled, omitted, or a cut path drawn as its pieces
+      (path: 7, color: 0x00ff00ff),
+      (path: 4, color: 0x0000ffff),
+    ];
+    final got = styledDraws(draws, styled);
+    expect(got, [
+      (path: 1, placement: 0, color: 0xff0000ff),
+      (path: 1, placement: 3, color: 0xff0000ff),
+      (path: 4, placement: 1, color: 0x0000ffff),
+    ]);
+    // the base ink draws the entries whose path is not styled: between them the two passes
+    // draw every entry once, and the hidden one not at all
+    final styledSet = {for (final s in styled) s.path};
+    final base = [
+      for (final d in draws)
+        if (!styledSet.contains(d.path)) d,
+    ];
+    expect(base.length + got.length, draws.length - 1);
+    expect(styledDraws(draws, const []), isEmpty);
+    // the base ink's key follows the list, placements included
+    expect(drawListHash(draws), drawListHash(List.of(draws)));
+    expect(
+      drawListHash(draws),
+      isNot(drawListHash([...draws.take(3), const QvpDraw(1, 2), draws[4]])),
+    );
+  });
+
+  testWidgets('a styled path the layout draws twice is drawn twice', (
+    tester,
+  ) async {
+    // a sajdah page reflowed draws one path twice: a line over two rows
+    late QvpPage p;
+    late QvpPageViewState state;
+    int? repeated;
+    for (final n in const [251, 334, 379, 416, 454, 480]) {
+      p = engine.loadPage(File('$repo/dist/pages/$n.qvp').readAsBytesSync());
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: SizedBox(
+            key: ValueKey(n),
+            width: 400,
+            height: 640,
+            child: QvpPageView(page: p),
+          ),
+        ),
+      );
+      state = tester.state<QvpPageViewState>(find.byType(QvpPageView));
+      final steps = p.zoomSteps(
+        const QvpLayoutSpec(viewportW: 400, viewportH: 640),
+      );
+      for (var step = 1; step <= steps.length && repeated == null; step++) {
+        state.zoomToStep(step);
+        await tester.pump();
+        final seen = <int>{};
+        for (final d in p.layoutDrawList()) {
+          if (!seen.add(d.path)) repeated = d.path;
+        }
+      }
+      if (repeated != null) break;
+      await tester.pumpWidget(const SizedBox());
+      p.dispose();
+    }
+    expect(repeated, isNotNull, reason: 'no sajdah page repeats a path');
+    final draws = p.layoutDrawList();
+    final times = draws.where((d) => d.path == repeated).length;
+    expect(times, greaterThan(1));
+    p.style(Sel.path(repeated!), '#c62828');
+    await tester.pump();
+    expect(p.styledPaths().map((s) => s.path), [repeated]);
+    expect(state.stats.overlayPaths, times);
+    expect(state.stats.basePaths, draws.length - times);
+
+    await tester.pumpWidget(const SizedBox());
+    p.dispose();
+  });
+
+  testWidgets(
+    'a letter layer attached under a view draws its pieces as they change colour',
+    (tester) async {
+      String hex(String f) => File('$repo/conformance/$f').readAsStringSync();
+      final p = engine.loadPage(fromHex(hex('qvp1-letters.hex')));
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: SizedBox(width: 200, height: 200, child: QvpPageView(page: p)),
+        ),
+      );
+      final state = tester.state<QvpPageViewState>(find.byType(QvpPageView));
+      expect(state.stats.basePaths, 8);
+      expect(p.attachLetters(fromHex(hex('qvl1-letters.hex'))), isTrue);
+      await tester.pump();
+      // the pieces join the table, and the draw list holds the page's own paths until a letter
+      // differs in colour
+      expect(state.stats.basePaths, 8);
+      expect(state.stats.overlayPaths, 0);
+
+      // the lam's colour: the draw list swaps path 0 for its two pieces with no layout change,
+      // so the view must follow the draw revision
+      final lam = p.style(Sel.letter(0, 1), '#c62828');
+      await tester.pump();
+      expect(p.layoutDrawList().map((d) => d.path).take(2), [8, 9]);
+      expect(state.stats.overlayPaths, 1);
+      expect(state.stats.basePaths, 8);
+
+      // the word's colour on top: every piece one colour, so the path draws whole again
+      p.removeStyle(lam);
+      p.style(Sel.word(0), '#c62828');
+      await tester.pump();
+      expect(p.layoutDrawList().map((d) => d.path).first, 0);
+      expect(state.stats.overlayPaths, 3);
+      expect(state.stats.basePaths, 5);
+
+      await tester.pumpWidget(const SizedBox());
+      p.dispose();
+    },
+  );
 
   testWidgets('benchmark: 200 frames of a page where nothing moves', (
     tester,

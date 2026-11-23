@@ -16,7 +16,7 @@ Output
   Android header copy, a symbol that a wrapper neither binds nor declares as a gap, a
   header function without a row in the "Every symbol" table of docs/API.md (or a row
   without a function), a wrapper that leaves out a QVP_KIND_*, QVP_FAMILY_*,
-  QVP_CATEGORY_* or QVP_DECORATION_* code or gives it another value, an abbreviated field name in a published JavaScript entry point, or
+  QVP_CATEGORY_*, QVP_DECORATION_* or QVP_LETTER_PART_* code or gives it another value, an abbreviated field name in a published JavaScript entry point, or
   React Native code files that differ from what scripts/gen-rn-enums.py writes from the
   header.
 
@@ -242,6 +242,7 @@ ENUMS = {
     "FAMILY": ("FAMILY", "QvpFamily"),
     "CATEGORY": ("CATEGORY", "QvpCategory"),
     "DECORATION": ("DECORATION", "QvpDecorationKind"),
+    "LETTER_PART": ("LETTER_PART", "QvpLetterPart"),
 }
 # Where each wrapper declares them, and how a declaration starts: {js} or {cls} is the name.
 ENUM_SITES = {

@@ -168,11 +168,42 @@ pub unsafe extern "C" fn qvp_layout_draw_list(
     cap: u32,
 ) -> u32 {
     guard(|| {
+        if page.is_null() {
+            return 0;
+        }
         let band = (band_bottom > band_top).then_some((band_top, band_bottom));
+        let page = refreshed(page);
         // The list a count call built is the one this fill copies.
-        (*page)
-            .with_layout_draw_list(band, |list| fill_with(out.cast(), cap, list.iter().map(|d| [d.path, d.placement])))
+        page.with_layout_draw_list(band, |list| fill_with(out.cast(), cap, list.iter().map(|d| [d.path, d.placement])))
     })
+}
+
+/// Counts up when the draw list can change while the layout and the band stay the same: a
+/// cut path starts or stops drawing its pieces, or a letter layer is attached. A host keys a
+/// cached draw list on it. 0 for a NULL page.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_layout_draw_revision(page: *const Page) -> u32 {
+    guard(|| if page.is_null() { 0 } else { refreshed(page).draw_revision() })
+}
+
+/// The page with every pending rule change applied when it has a letter layer, so the swap
+/// state and the draw revision answer for every change made so far, as `qvp_colors` does.
+///
+/// A page with no layer is not touched: its draw list does not depend on the rules, and a
+/// refresh would start a pending transition at the last tick's time, so a fade added before
+/// the next `qvp_tick` would end before it is seen. Such a page behaves exactly as before the
+/// letter layer existed.
+///
+/// The header keeps these calls' `const QvpPage*`: the page is the one `qvp_page_load` made
+/// mutable, and the header's thread rule (one thread at a time per page) means no other call
+/// holds it. The refresh does nothing when no rule or state changed since the last one.
+unsafe fn refreshed<'a>(page: *const Page) -> &'a Page {
+    if !(*page).has_letters() {
+        return &*page;
+    }
+    let page = &mut *page.cast_mut();
+    page.refresh_display();
+    page
 }
 
 /// The band of the current layout a host keeps drawn, in layout px: the space of

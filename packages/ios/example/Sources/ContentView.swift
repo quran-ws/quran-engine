@@ -50,7 +50,10 @@ struct ReaderView: View {
                                 .offset(x: m.flipOffset).shadow(radius: 8).allowsHitTesting(false)
                         }
                     }
-                if m.revealOn { revealBar }
+                VStack(spacing: 0) {
+                    if m.lettersOn && m.letterTarget != 0 { letterBar }
+                    if m.revealOn { revealBar }
+                }
             }
             .background(m.bgColor.ignoresSafeArea())
             .overlay(alignment: .topTrailing) { if immersive { showControlsButton } }
@@ -131,6 +134,18 @@ struct ReaderView: View {
             Divider()
             Toggle(isOn: $m.revealOn) { Label("Greyed page", systemImage: "circle.lefthalf.filled") }
         } label: { Label("Memorise", systemImage: m.revealOn ? "brain.head.profile.fill" : "brain.head.profile") }
+    }
+
+    /// The last letter hit, over the page while a tap takes a letter or a mark.
+    private var letterBar: some View {
+        Text(m.letterInfo.isEmpty ? "Tap a letter or a mark." : m.letterInfo)
+            .font(.caption.monospacedDigit()).lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal).padding(.vertical, 10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal).padding(.bottom, 8)
+            .allowsHitTesting(false)
+            .accessibilityIdentifier("letterBar")
     }
 
     private var revealBar: some View {
@@ -281,6 +296,21 @@ struct SettingsSheet: View {
     @ObservedObject var m: DemoModel
     @Environment(\.dismiss) private var dismiss
 
+    /// Colour single letters and marks: docs/EXAMPLE-APP.md, feature 12. A separate property,
+    /// so the type checker does not see the whole form as one expression.
+    @ViewBuilder private var lettersSection: some View {
+        Section("Letters") {
+            Picker("Tap", selection: $m.letterTarget) { Text("Word").tag(0); Text("Letter").tag(1); Text("Mark").tag(2) }
+                .pickerStyle(.segmented).disabled(!m.lettersOn)
+            Picker("Colour", selection: $m.letterColorIdx) { Text("Red").tag(0); Text("Blue").tag(1); Text("Green").tag(2); Text("Orange").tag(3) }
+                .pickerStyle(.segmented).disabled(!m.lettersOn)
+            Toggle("Every match on the page", isOn: $m.letterEveryMatch).disabled(!m.lettersOn)
+            Button("Clear letters") { m.clearLetters() }.disabled(!m.lettersOn)
+            Text(m.letterInfo.isEmpty ? "Pick letter or mark, then tap the page." : m.letterInfo)
+                .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("letterInfo")
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -323,6 +353,7 @@ struct SettingsSheet: View {
                     Slider(value: $m.hlMs, in: 0...800, step: 50) { Text("Fade") }
                 }
                 Section("This page") { Text(m.meta).font(.caption).foregroundStyle(.secondary) }
+                lettersSection
                 Section("Engine") {
                     Text(m.hudText).font(.caption.monospaced()).foregroundStyle(.secondary).accessibilityIdentifier("engineStats")
                 }

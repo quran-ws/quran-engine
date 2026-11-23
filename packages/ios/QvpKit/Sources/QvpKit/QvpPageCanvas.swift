@@ -311,6 +311,9 @@ public final class QvpCanvasController {
         let colors: [Int: UInt32]
         let bands: [QvpBox]
         let masks: [QvpBox]
+        /// `QvpPage.layoutDrawRevision`, read after the styled paths as the engine asks. 0 with
+        /// no letter layer.
+        let drawRevision: Int
     }
     private struct FrameToken: Equatable { let page: ObjectIdentifier; let revision: Int; let layout: Int; let date: Date }
     @ObservationIgnored private var frameMemo: (token: FrameToken, inputs: FrameInputs)?
@@ -321,7 +324,8 @@ public final class QvpCanvasController {
         let styled = p.styledPaths()
         let inputs = FrameInputs(moving: moving, styled: styled, styledSet: Set(styled.map { $0.path }),
                                  colors: Dictionary(styled, uniquingKeysWith: { a, _ in a }),
-                                 bands: p.highlightBoxesView(), masks: p.maskBoxesView())
+                                 bands: p.highlightBoxesView(), masks: p.maskBoxesView(),
+                                 drawRevision: p.viewDrawRevision)
         if let token { frameMemo = (token, inputs) }
         return inputs
     }
@@ -555,7 +559,7 @@ public final class QvpCanvasController {
     /// What the layout in hand draws and where: the engine's own answer, read once per layout.
     /// A printed page and a reflowed one come back in the same shape, so nothing here has to
     /// know which it is looking at.
-    struct DrawList { let draws: [QvpDraw], places: [QvpPlacement], band: ClosedRange<Float> }
+    struct DrawList { let draws: [QvpDraw], places: [QvpPlacement], band: ClosedRange<Float>, revision: Int }
     /// One draw list per band asked for — a page drawn as a stack of canvases asks for each
     /// slice's in turn, and a single slot rebuilt on every alternation. Cleared with the layout.
     /// Written from the renderer, so kept out of observation like `cache`.
@@ -570,14 +574,18 @@ public final class QvpCanvasController {
         let s = viewScale == 0 ? 1 : viewScale
         return (Float(top / s), Float((top + height) / s))
     }
-    func drawListNow(band b: (top: Float, bottom: Float)) -> DrawList? {
+    /// `revision` is the frame's draw revision (`FrameInputs.drawRevision`). Nil reads it now.
+    /// With a letter layer the drawn set can change while the band stays: a cut path draws its
+    /// pieces. So a kept list is used only at the same revision.
+    func drawListNow(band b: (top: Float, bottom: Float), revision: Int? = nil) -> DrawList? {
         let range = b.top...b.bottom
         // a list read from a layout the engine has since replaced (a dress lays the page out
         // again) holds the old placements
         if placementsLayout !== page?.currentLayout { placements.removeAll(); placementsLayout = page?.currentLayout }
-        if let q = placements[range] { return q }
         guard let p = page, p.isOpen, p.currentLayout != nil else { return nil }
-        let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: range)
+        let rev = revision ?? p.viewDrawRevision
+        if let q = placements[range], q.revision == rev { return q }
+        let q = DrawList(draws: p.layoutDrawList(band: b), places: p.layoutPlacements(), band: range, revision: rev)
         if placements.count >= 4 { placements.removeAll() }
         placements[range] = q; return q
     }
@@ -606,6 +614,14 @@ public final class QvpCanvasController {
         let h = p.hitTestView(at.x, at.y, o ?? hitOptions)
         lastHitUs = (now() - t0) * 1e6
         return h
+    }
+    /// The letter or the mark under a point of the canvas, through the reader's pan and zoom and
+    /// the layout: `QvpPage.hitTestLetterView`. Nil with no letter layer. `o` defaults to
+    /// `hitOptions`.
+    public func letterAt(_ pt: CGPoint, _ o: QvpHitOptions? = nil) -> QvpLetterHit? {
+        guard let p = page, p.isOpen else { return nil }
+        let at = p.viewToLayout(currentView, Float(pt.x), Float(pt.y))
+        return p.hitTestLetterView(at.x, at.y, o ?? hitOptions)
     }
     func tap(_ pt: CGPoint) {
         guard let p = page, p.isOpen else { return }
@@ -764,7 +780,7 @@ public final class QvpCanvasController {
         let (top, bandH) = sliced.map { ($0.top - viewOy, $0.height) } ?? band(displayScale: displayScale)
         let band = layoutBand(top: top, height: bandH)
         let bandPx = Int((bandH * displayScale).rounded(.up))
-        let key = "\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(zoom.zoom)|\(l.rows)"
+        let key = "\(viewScale)|\(viewOx)|\(top)|\(ink)|\(l.lineSpacing)|\(l.scale)|\(hasher.finalize())|\(W)x\(bandPx)|\(zoom.zoom)|\(l.rows)|\(inputs.drawRevision)"
 
         if let paper = paperColor {
             ctx.fill(Path(p.paperRect(l, scale: viewScale, ox: viewOx, oy: viewOy)),
@@ -782,7 +798,7 @@ public final class QvpCanvasController {
         drawBoxes(ctx, bands)
 
         var img: CGImage?
-        if W > 0, bandPx > 0, let q = drawListNow(band: band) {
+        if W > 0, bandPx > 0, let q = drawListNow(band: band, revision: inputs.drawRevision) {
             let t0 = now()
             if let entry = cache.entry(slot: slot), entry.key == key,
                entry.image.width == W, entry.image.height == bandPx, styledSet.isSubset(of: entry.styled) {
@@ -819,7 +835,7 @@ public final class QvpCanvasController {
                                 width: CGFloat(img.width) / displayScale, height: CGFloat(img.height) / displayScale))
         }
         let t1 = now()
-        if let q = drawListNow(band: band) {
+        if let q = drawListNow(band: band, revision: inputs.drawRevision) {
             let colors = inputs.colors
             for d in q.draws {
                 guard let col = colors[d.path], col & 0xff != 0 else { continue }

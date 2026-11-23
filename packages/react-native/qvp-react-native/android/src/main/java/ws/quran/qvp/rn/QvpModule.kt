@@ -20,6 +20,11 @@ import ws.quran.qvp.Target
  * up a frame. The view keeps the page open while a query reads it ([QvpRnPageView.read]). Every
  * call that reads or changes the layout, the view, styles, colours, the selection, the mask, the
  * reveal or the dress runs on the UI thread, where the view draws.
+ *
+ * A page with a letter layer changes as it draws: its draw list and draw revision bring the
+ * engine's style state up to date, and the engine allows one thread at a time per page. On such
+ * a page every query runs on the UI thread too, in the order the queries were queued. The letter
+ * calls always run there, after the queries queued before them.
  */
 @ReactModule(name = QvpModule.NAME)
 class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
@@ -49,15 +54,19 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
      */
     private fun readPage(tag: Int, promise: Promise, block: (QvpRnPageView, QvpPage) -> Any?) = queue(promise) {
         val v = QvpRegistry.get(tag)
-        if (v == null) withPage(tag, promise, block)
-        else settle(promise) { v.read { p -> block(v, p ?: throw IllegalStateException("QvpPageView $tag has no page loaded")) } }
+        if (v == null) { withPage(tag, promise, block); return@queue }
+        val ran = v.readShared { p -> settle(promise) { block(v, p ?: throw IllegalStateException("QvpPageView $tag has no page loaded")) } }
+        // The page has a letter layer, so the view's draws change it: run the query where it draws.
+        if (!ran) onUiAndWait(tag, promise, block)
     }
     /**
      * A page call on the UI thread that the queries queued before it see done, and that is done
      * before the queries queued after it start: the query thread waits for it. It holds no page
      * open while it waits, so the UI thread never waits for it in turn.
      */
-    private fun inOrder(tag: Int, promise: Promise, block: (QvpRnPageView, QvpPage) -> Any?) = queue(promise) {
+    private fun inOrder(tag: Int, promise: Promise, block: (QvpRnPageView, QvpPage) -> Any?) = queue(promise) { onUiAndWait(tag, promise, block) }
+    /** The body of [inOrder], on the query thread: run [block] on the UI thread and wait for it. */
+    private fun onUiAndWait(tag: Int, promise: Promise, block: (QvpRnPageView, QvpPage) -> Any?) {
         val done = CountDownLatch(1)
         UiThreadUtil.runOnUiThread {
             try {
@@ -97,6 +106,30 @@ class QvpModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun wordForm(tag: Int, index: Int, form: String?, promise: Promise) = readPage(tag, promise) { _, p -> p.wordForm(index, Marshal.form(form)) }
     @ReactMethod fun hasForm(tag: Int, form: String?, promise: Promise) = readPage(tag, promise) { _, p -> p.hasForm(Marshal.form(form)) }
     @ReactMethod fun attachWords(tag: Int, json: String, promise: Promise) = inOrder(tag, promise) { v, p -> v.attachWords(p, json) }
+
+    // ── letters: the optional letter layer (NNN.qvl) ──
+    // On the UI thread, in order with the queries: the attach grows the page's path table, and
+    // with a layer the view's draw changes the page (see the class comment). A `styles` rule with
+    // `letters` colours letters; the hosted view reads the draw revision as it draws.
+    /** Attach the layer a URI names. The bytes are read on the query thread. True when the engine took it. */
+    @ReactMethod fun attachLetters(tag: Int, uri: String, promise: Promise) = queue(promise) {
+        val bytes = try { QvpRnBytes.read(ctx, uri) } catch (e: Exception) { promise.reject("qvp", e.message ?: e.toString(), e); return@queue }
+        onUiAndWait(tag, promise) { v, p -> v.attachLetters(p, bytes, uri) }
+    }
+    @ReactMethod fun hasLetters(tag: Int, promise: Promise) = inOrder(tag, promise) { _, p -> p.hasLetters() }
+    @ReactMethod fun letters(tag: Int, word: Int, promise: Promise) = inOrder(tag, promise) { _, p -> p.letters(word).map { Marshal.letter(it) } }
+    @ReactMethod fun pathLetter(tag: Int, path: Int, promise: Promise) = inOrder(tag, promise) { _, p -> p.pathLetter(path)?.let { Marshal.pathLetter(it) } }
+    @ReactMethod fun letterAtOffset(tag: Int, word: Int, at: Int, promise: Promise) = inOrder(tag, promise) { _, p -> p.letterAtOffset(word, at) }
+    @ReactMethod fun findLetters(tag: Int, query: ReadableMap?, promise: Promise) { val q = opt(query)
+        inOrder(tag, promise) { _, p -> Marshal.foundLetters(p.findLetters(Marshal.letterQuery(q, p))) } }
+    /** The letter or mark under a point in page units. */
+    @ReactMethod fun hitTestLetter(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) { val o = opt(opts)
+        inOrder(tag, promise) { _, p -> p.hitTestLetter(x.toFloat(), y.toFloat(), hitOptions(o))?.let { Marshal.letterHit(it) } } }
+    /** The same at a point in view dp, as [hitTestView] takes it. */
+    @ReactMethod fun hitTestLetterView(tag: Int, x: Double, y: Double, opts: ReadableMap?, promise: Promise) { val o = opt(opts)
+        inOrder(tag, promise) { v, p -> val d = v.resources.displayMetrics.density
+            val (lx, ly) = p.viewToLayout(QvpView(v.inner.viewScale, v.inner.viewOx, v.inner.viewOy), (x * d).toFloat(), (y * d).toFloat())
+            p.hitTestLetterView(lx, ly, hitOptions(o))?.let { Marshal.letterHit(it) } } }
 
     // ── metadata ──
     @ReactMethod fun surahs(tag: Int, promise: Promise) = readPage(tag, promise) { _, p -> p.surahs().map { Marshal.surah(it) } }

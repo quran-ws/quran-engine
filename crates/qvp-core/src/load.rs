@@ -206,10 +206,6 @@ pub(crate) fn path_contexts(data: &PageData, path_word: &[u32], path_deco: &[u32
 pub(crate) fn flatten(data: &PageData, path_word: &[u32], path_line: &[u32], path_ctx: &[PathCtx]) -> Geometry {
     let q = data.header.quant as f32;
     let mut geom = Geometry::default();
-    let on_page = |bb: &IBox| -> bool {
-        let (w, h) = (data.header.width, data.header.height);
-        (bb.x1 as f32 / q) > 0.0 && (bb.y1 as f32 / q) > 0.0 && (bb.x0 as f32 / q) < w && (bb.y0 as f32 / q) < h
-    };
     for (i, p) in data.paths.iter().enumerate() {
         let op_start = geom.ops.len() as u32;
         let pt_start = geom.pts.len() as u32;
@@ -217,7 +213,7 @@ pub(crate) fn flatten(data: &PageData, path_word: &[u32], path_line: &[u32], pat
             geom.pts.push(x);
             geom.pts.push(y);
         };
-        if !on_page(&p.bbox) {
+        if !on_page(data, &p.bbox) {
             // no outline: every host draws it as nothing, without knowing to ask
         } else if let Some(inst) = data.path_inst(i) {
             let m = |x: i32, y: i32| -> (f32, f32) {
@@ -309,7 +305,16 @@ pub(crate) fn line_baselines(data: &PageData, line_words: &[Vec<(i32, u32)>], li
         .collect()
 }
 
-fn emit(ops: &mut Vec<u8>, push: &mut impl FnMut(f32, f32), c: Cmd, m: impl Fn(i32, i32) -> (f32, f32)) {
+/// True when a box reaches inside the page's viewBox. A path whose box does not gets no
+/// outline (see [`flatten`]).
+pub(crate) fn on_page(data: &PageData, bb: &IBox) -> bool {
+    let q = data.header.quant as f32;
+    let (w, h) = (data.header.width, data.header.height);
+    (bb.x1 as f32 / q) > 0.0 && (bb.y1 as f32 / q) > 0.0 && (bb.x0 as f32 / q) < w && (bb.y0 as f32 / q) < h
+}
+
+/// Append one command to `ops` and its points, mapped by `m`, through `push`.
+pub(crate) fn emit(ops: &mut Vec<u8>, push: &mut impl FnMut(f32, f32), c: Cmd, m: impl Fn(i32, i32) -> (f32, f32)) {
     match c {
         Cmd::MoveTo(x, y) => {
             ops.push(OP_MOVE);

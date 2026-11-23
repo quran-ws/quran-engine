@@ -1,6 +1,8 @@
 pub mod affine;
 pub mod atlas;
 pub mod json;
+pub mod letter_page;
+pub mod letters;
 pub mod ornaments;
 pub mod qvp2svg;
 mod surah_font;
@@ -97,8 +99,66 @@ pub fn words_json(words: &[WordText]) -> String {
         s.push_str(&json_str(&w.rasm));
         s.push_str(",\"search\":");
         s.push_str(&json_str(&w.search));
+        if let Some(n) = w.w {
+            s.push_str(",\"w\":");
+            s.push_str(&n.to_string());
+        }
         s.push('}');
     }
     s.push('}');
     s
+}
+
+#[cfg(test)]
+mod words_number_tests {
+    use super::*;
+
+    const SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" data-page="3">
+      <g class="line" data-line="1">
+        <g class="ayah-fragment" data-ayah-key="2:6" data-fragment="1" data-ayah-fragments="1">
+          <g class="word" data-word-key="2:6:2" data-w="67" data-rasm-uthmani="ٱلَّذِينَ">
+            <path data-kind="body" d="M10 10H20V20H10Z"/>
+          </g>
+          <g class="word" data-word-key="2:6:3" data-rasm-uthmani="كَفَرُواْ">
+            <path data-kind="body" d="M30 10H40V20H30Z"/>
+          </g>
+        </g>
+      </g>
+    </svg>"#;
+
+    #[test]
+    fn the_word_number_reaches_the_sidecar() {
+        let c = convert(SVG).expect("convert");
+        assert_eq!(c.words_text[0].w, Some(67));
+        assert_eq!(c.words_text[1].w, None);
+        let json = words_json(&c.words_text);
+        assert!(json.contains(r#""search":"","w":67}"#), "{json}");
+        // a word with no number writes no field
+        assert!(json.ends_with(r#""search":""}}"#), "{json}");
+    }
+
+    #[test]
+    fn a_reader_that_does_not_know_the_number_reads_the_sidecar() {
+        let c = convert(SVG).expect("convert");
+        let json = words_json(&c.words_text);
+        let forms = qvp_core::text::parse_words_sidecar(json.as_bytes()).expect("the sidecar parses");
+        assert_eq!(forms.len(), 2);
+        assert_eq!(forms[0].0, "2:6:2");
+        assert_eq!(forms[0].1.rasm_uthmani.as_deref(), Some("ٱلَّذِينَ"));
+        // the word after the number still parses
+        assert_eq!(forms[1].0, "2:6:3");
+        assert_eq!(forms[1].1.rasm_uthmani.as_deref(), Some("كَفَرُواْ"));
+    }
+
+    #[test]
+    fn a_number_that_does_not_parse_is_reported_and_not_written() {
+        let good = convert(SVG).expect("convert");
+        assert!(!good.report.warnings.iter().any(|w| w.contains("data-w")), "{:?}", good.report.warnings);
+
+        let bad = convert(&SVG.replace(r#"data-w="67""#, r#"data-w="6x""#)).expect("convert");
+        assert_eq!(bad.words_text[0].w, None);
+        let found: Vec<_> = bad.report.warnings.iter().filter(|w| w.contains("data-w")).collect();
+        assert_eq!(found.len(), 1, "{:?}", bad.report.warnings);
+        assert!(found[0].contains("2:6:2") && found[0].contains(r#""6x""#), "{}", found[0]);
+    }
 }

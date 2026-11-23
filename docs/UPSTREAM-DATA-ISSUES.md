@@ -24,14 +24,13 @@ and each fix is verified here rather than taken on trust:
 
 ## Still open
 
-### 1. No per-letter segmentation
+### 1. Per-letter segmentation: provided by v2.0.0
 
-Body paths are per connected stroke, not per letter. Tajwid colouring by letter
-(e.g. colouring only the noon of an ikhfa) is not possible from this data. The
-dev profile's `<g class="ligature">` is a rendering run, not a spelling — the
-bundle's own `schema/FORMAT.md` §10.3 says so — and the production profile drops
-it. If letter colouring is a product goal, the pipeline needs to emit letter
-boundaries (or at least glyph ids) per body path.
+The words archive has body paths per connected stroke, not per letter. The letters
+archive of `quran-svg-elements` v2.0.0 divides every word into letters, and cuts an
+outline that joins several letters into pieces. The converter builds the letter layer
+from it, and an app attaches the layer to a page in the engine (`docs/API.md`, "Letters").
+`docs/DATA.md`, section "The letter layer", says how and what its limits are.
 
 ### 2. Ayah numbers are one merged outline per number
 
@@ -69,3 +68,64 @@ Two things that look wrong and are not, both documented in the bundle's
 - **A mark can be drawn outside its own word** (§9.9) — a word-final tanwin
   floats into the gap toward the next word. Word bounding boxes therefore
   overlap. Ownership is the enclosing `g.word`, never proximity.
+
+## Fixed in quran-svg-elements v2.0.0
+
+The words archive of v2.0.0 fixes ink that v1.1.2 filed with the wrong word. Upstream
+records each item in `docs/defects/reported.json`.
+
+- p232 `11:91:12` drew two letters short: a waqf sign was counted as a letter piece of the
+  word before it.
+- p540 `57:22:12`: one stroke of its tanwin al-kasr was filed with the word on the line below.
+- p470 `40:27:9`, p567 `69:10:5`, p437 `35:29:14`: the tanwin was paired from strokes of
+  two different letters.
+- p526: three words beside a hizb rosette held ink of a neighbouring word.
+
+In page data built from the words archive of v2.0.0, the paths of these words compare as
+follows with data-v0.5.0. Each count is the number of words on the page whose set of path
+`d` strings is different:
+
+- p437: 2 words, `35:24:12` and `35:29:14`. Each has a `mark` path with a new outline or
+  position.
+- p470: 1 word, `40:27:9`.
+- p540: 1 word, `57:22:21`, on the line below `57:22:12`. The paths of `57:22:12` do not
+  change.
+- p567: 1 word, `69:10:5`.
+- p232 and p526: 0 words. The built page holds the same paths per word as before. Only the
+  order of paths differs.
+
+When the converter builds the pages from the words archive of v2.0.0, 575 of the 604 page
+files differ from data-v0.5.0. On 470 of these pages, only the paint order changes: the
+page holds the same elements in a different order. On the other 105 pages, some marks have
+a new outline or position. The identity gate passes on all 604 pages.
+
+### The letters archive
+
+- Page 001, word 1:2:1, page path 47: the source outline ends with a closed subpath of
+  three points, 0.05 by 0.01 units, with an area of 0.00025 square units. The one piece of
+  this outline does not draw it. The ink gate pins this as its one exception
+  (`KNOWN_LEFT_OUT` in `crates/qvp-convert/tests/letters.rs`).
+- At some cuts, the sides of two neighbouring pieces do not coincide: 116 cut sides in 32
+  outlines, each within 0.0200 units of its neighbour's side.
+
+### The `qpc` text changed
+
+The words index of v2.0.0 takes its text from the quran-text release. Its `qpc` form is
+different from v1.1.2 in 4159 words on 603 of the 604 pages, in page data built from
+v2.0.0. The word keys and the other four text forms do not change. Each count below is the
+number of places that have the edit:
+
+- 2945: U+0622 ARABIC LETTER ALEF WITH MADDA ABOVE becomes U+0627 ARABIC LETTER ALEF and <!-- terminology: ignore (Unicode character names) -->
+  U+0653 ARABIC MADDAH ABOVE.
+- 397 and 393: the text gains a U+0651 ARABIC SHADDA in 397 places and loses one in 393. <!-- terminology: ignore (Unicode character names) -->
+  397 words have such an edit. In 385 of them, the old and new text are equal
+  without U+0651: the shaddah moves to a different place in the word.
+- 277: U+064E ARABIC FATHA becomes U+0653 ARABIC MADDAH ABOVE. <!-- terminology: ignore (Unicode character names) -->
+- 206: a U+0640 ARABIC TATWEEL now comes between
+  U+06E1 ARABIC SMALL HIGH DOTLESS HEAD OF KHAH and U+0654 ARABIC HAMZA ABOVE. <!-- terminology: ignore (Unicode character names) -->
+- 132: a U+0640 ARABIC TATWEEL now comes between U+0650 ARABIC KASRA and <!-- terminology: ignore (Unicode character names) -->
+  U+0654 ARABIC HAMZA ABOVE. <!-- terminology: ignore (Unicode character names) -->
+
+This is an upstream change to the text of record. The converter copies the text as it is.
+An app that stores `qpc` strings or offsets into them from an older data release must not
+mix them with the `qpc` text of a data release built from v2.0.0.

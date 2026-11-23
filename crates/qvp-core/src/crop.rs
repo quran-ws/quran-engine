@@ -91,21 +91,43 @@ impl Page {
             let dc = &d.decorations[cb.ayah_mark_decoration as usize];
             path_ids.extend(dc.first_path..dc.first_path + dc.n_paths as u32);
         }
-        for pi in path_ids {
-            let c = colors[pi as usize];
-            if c & 0xff == 0 {
-                continue;
-            }
-            let cmds = d.path_cmds(pi as usize).ok()?;
-            let p = &d.paths[pi as usize];
-            write!(s, "<path d=\"{}\" fill=\"{}\"", svg_path_d(&cmds, quant), css_hex(c)).unwrap();
+        // one `<path>`: the commands `cmds` in colour `c`, filled by the rule of page path `pi`
+        let write_path = |s: &mut String, pi: u32, cmds: &[Cmd], c: Rgba| {
+            write!(s, "<path d=\"{}\" fill=\"{}\"", svg_path_d(cmds, quant), css_hex(c)).unwrap();
             if c & 0xff != 0xff {
                 write!(s, " fill-opacity=\"{:.3}\"", (c & 0xff) as f32 / 255.0).unwrap();
             }
-            if p.flags & PF_EVENODD != 0 {
+            if d.paths[pi as usize].flags & PF_EVENODD != 0 {
                 s.push_str(" fill-rule=\"evenodd\"");
             }
             s.push_str("/>");
+        };
+        let Some(lt) = self.letters.as_deref() else {
+            // a page with no layer writes its paths as before the layer existed
+            for pi in path_ids {
+                let c = colors[pi as usize];
+                if c & 0xff != 0 {
+                    write_path(&mut s, pi, &d.path_cmds(pi as usize).ok()?, c);
+                }
+            }
+            s.push_str("</svg>");
+            return Some(s);
+        };
+        // a cut path whose pieces differ in colour writes its pieces, each in its own colour;
+        // a piece fills by its source's rule
+        for pi in path_ids {
+            for drawn in lt.drawn_pieces(pi).unwrap_or(pi..pi + 1) {
+                let c = colors[drawn as usize];
+                if c & 0xff == 0 {
+                    continue;
+                }
+                if drawn >= lt.first_piece {
+                    // a piece is stored as page-space commands in the page's own quant
+                    write_path(&mut s, pi, &lt.data.pieces[(drawn - lt.first_piece) as usize].cmds, c);
+                } else {
+                    write_path(&mut s, pi, &d.path_cmds(pi as usize).ok()?, c);
+                }
+            }
         }
         s.push_str("</svg>");
         Some(s)

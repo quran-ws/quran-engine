@@ -128,6 +128,40 @@ layout changes) → styled paths → mask boxes. Each frame calls
 `page.select` with a band highlight in `QvpLayer.selection`; pinch / pan on
 top of the engine layout; double-tap fits.
 
+## Letters
+
+A page can take its letter layer (`NNN.qvl`). The layer names the letters of each word and
+the paths that draw them. It also cuts an outline that joins two letters into pieces, so one
+letter can take its own colour.
+
+```dart
+page.attachLetters(qvlBytes);                             // false: the engine refused the file
+final ba = page.letter(0, 0);                             // ba.text, ba.codePoint, ba.at, ba.members, ba.marks
+page.style(Sel.letter(0, 0), '#c62828');                  // QvpLetterPart.bodyAndDots or .marks for a part
+page.style(Sel.letterMarkNamed(0, 0, 'fathah'), '#1a73e8');
+page.style(Sel.wordChars(0, 0, 1), '#0a7d32');            // qpc code-point offsets, both included
+page.findLetters(const QvpLetterQuery(text: 'ل'));        // [(word: 0, letter: 1), …]
+page.styleLetters(const QvpLetterQuery(text: 'ن', mark: 'shaddah'), '#c62828');
+final hit = page.hitTestLetterView(viewX, viewY);         // hit.word, hit.letter, hit.path, hit.mark, hit.markName, hit.isExact
+```
+
+`QvpPageView` draws the layer with no extra code. A host that draws the page itself calls,
+per frame: `tick`, then `colors()` or `styledPaths()`, then `layoutDrawRevision()`, then
+`layoutDrawList` when the revision, the layout or the band changed.
+
+After a successful attach, the arrays that you got from the page before it are stale:
+`ops`, `pts`, `table`, `colors()`, the paths from `buildPaths()` and every array that you sized
+from `nPaths`. Read them again.
+
+A letter's `text` is its character and `codePoint` the same as a number. A query's `text` is
+one character or a code point. '' and 0 are any letter. A string of more than one character
+throws an `ArgumentError`. A letter's `marks` are its members that are not body, in
+the engine's order. A member and a hit give the mark as its id (`mark`) and its name
+(`markName`).
+
+The letter layer adds members to the exported `QvpBackend` interface. A class outside this
+package that implements `QvpBackend` does not compile until it adds them.
+
 ## Passages
 
 ```dart
@@ -183,7 +217,9 @@ cd packages/flutter/qvp_flutter && flutter test        # uses $QVP_LIB or target
 flutter test --platform chrome test/qvp_web_test.dart  # the web backend: assets/js/qvp.js, assets/wasm/qvp_ffi.wasm + the same data
 ```
 
-`test/shared/api_cases.dart` holds the cases that drive the public API alone. Both
+`test/shared/api_cases.dart` and `test/shared/letter_cases.dart` hold the cases that
+drive the public API alone. The letter cases replay `conformance/scenarios/letters.json`
+and need no page data. Both
 backends run them: `qvp_flutter_test.dart` on `dart:ffi` and `qvp_web_test.dart` on the
 web engine, so the two must give the same answers. A case that needs `dart:io`, a library
 path or the native backend stays in `qvp_flutter_test.dart`. Name the web file in a Chrome

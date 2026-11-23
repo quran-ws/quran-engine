@@ -78,6 +78,23 @@ final class DemoModel: ObservableObject {
     /// True while one pick sets several of the knobs above: the dress is applied once, after.
     private var dressBatching = false
 
+    // ── letters: the letter layer NNN.qvl beside the page (docs/EXAMPLE-APP.md, feature 12) ──
+    static let letterColors: [UInt32] = [0xc62828ff, 0x1a73e8ff, 0x0a7d32ff, 0xef6c00ff]
+    static let noLetterLayer = "no letter layer for this page"
+    /// What a tap on the page takes: 0 a word, 1 a letter, 2 a mark.
+    @Published var letterTarget = 0
+    @Published var letterColorIdx = 0
+    @Published var letterEveryMatch = false
+    /// True when the engine took the page's letter layer. Without one the letter controls are disabled.
+    @Published var lettersOn = false
+    /// The last letter hit, as text.
+    @Published var letterInfo = DemoModel.noLetterLayer
+    /// The handles of the letter rules, so "clear letters" removes only these.
+    private var letterRules: [Int] = []
+    private var letterTapper: LetterTapper?
+    /// A tap goes to the letter hit test, not to the word hit test.
+    private var letterTapsOn: Bool { lettersOn && letterTarget != 0 }
+
     private var loadMs = 0.0, pageBytes = 0
     private var selWordIdx = -1, selAyah: (Int, Int)?
     private var hlSel = 0, hlAyah = 0, hlSearch = 0, hlPlay = 0
@@ -95,9 +112,12 @@ final class DemoModel: ObservableObject {
         view.onSwipe = { [weak self] dir in self?.flip(dir) }   // mushaf order: finger right → next page
         view.isAccessibilityElement = true; view.accessibilityIdentifier = "qvpPage"; view.accessibilityLabel = "mushaf page"
         view.selectionEnabled = false                       // a reader: tap highlights, no text selection
-        view.onWordTap = { [weak self] w, _ in self?.selectWord(w.index) }
-        view.onDecorationTap = { [weak self] d, _ in if d.ayah != 0 { self?.selectAyah(d.surah, d.ayah) } }
-        view.onEmptyTap = { [weak self] in self?.selectWord(-1) }
+        view.onWordTap = { [weak self] w, _ in if self?.letterTapsOn == false { self?.selectWord(w.index) } }
+        view.onDecorationTap = { [weak self] d, _ in if d.ayah != 0, self?.letterTapsOn == false { self?.selectAyah(d.surah, d.ayah) } }
+        view.onEmptyTap = { [weak self] in if self?.letterTapsOn == false { self?.selectWord(-1) } }
+        let tapper = LetterTapper { [weak self] pt in self?.tapLetter(pt) }
+        tapper.attach(to: view)
+        letterTapper = tapper
         applyTheme()
         loadPage(Self.pages.lowerBound)
         hudTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.hud() } }
@@ -107,7 +127,8 @@ final class DemoModel: ObservableObject {
     /// `-qvpFill 0` turns fill-screen off; `-qvpControls 1` starts with the bars visible in fill-screen mode.
     /// `-qvpPinch 0|1|2` picks steps / free / magnify; `-qvpZoom 2` opens at that zoom step;
     /// `-qvpScroll 900` scrolls that many points down a reflowed page; `-qvpTurns 6` turns
-    /// that many pages forward, to check what a page turn keeps.
+    /// that many pages forward, to check what a page turn keeps. `-qvpLetters 1|2` makes a tap
+    /// take a letter or a mark, when the page has a letter layer.
     private func applyLaunchArguments() {
         let d = UserDefaults.standard
         if let t = d.string(forKey: "qvpTheme"), Self.themes[t] != nil { theme = t }
@@ -132,6 +153,7 @@ final class DemoModel: ObservableObject {
         }
         if d.bool(forKey: "qvpControls") { controlsShown = true }
         if let s = d.string(forKey: "qvpDress") { dressStyle = s }
+        if let t = d.string(forKey: "qvpLetters").flatMap(Int.init), lettersOn { letterTarget = min(max(t, 0), 2) }
         if d.bool(forKey: "qvpLineArt") { dressLineArt = Set(OrnamentKind.allCases) }
     }
 
@@ -171,10 +193,15 @@ final class DemoModel: ObservableObject {
         _ = p.buildPaths()
         loadMs = (CACurrentMediaTime() - t0) * 1000; pageBytes = bytes.count
         if let wu = Bundle.main.url(forResource: "\(name).words", withExtension: "json", subdirectory: "pages"), let wd = try? Data(contentsOf: wu) { _ = p.attachWords(wd) }
+        // the letter layer is optional: with none, or one the engine refuses, the letter controls are disabled
+        var hasLetters = false
+        if let lu = Bundle.main.url(forResource: name, withExtension: "qvl", subdirectory: "pages"), let ld = try? Data(contentsOf: lu) { hasLetters = p.attachLetters(ld) }
         stopPlay(); playing = false; page?.close(); page = p; pageNo = target
         pageField = "\(target)"
         selWordIdx = -1; selAyah = nil; hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0
         tajwid = 0; hideMarksH = 0; ayahMarksH = 0; markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false
+        letterRules = []; lettersOn = hasLetters; letterInfo = hasLetters ? "" : Self.noLetterLayer
+        if !hasLetters { letterTarget = 0 }
         p.setDefaultColor(themeSpec.ink)
         view.page = p
         applyDress()
@@ -292,9 +319,50 @@ final class DemoModel: ObservableObject {
     func clearAll() {
         guard let p = page else { return }
         p.clearStyles(); p.clearHighlights(); p.unmask(); p.revealStop()
-        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajwid = 0; hideMarksH = 0; ayahMarksH = 0; selWordIdx = -1; selAyah = nil
+        hlSel = 0; hlAyah = 0; hlSearch = 0; hlPlay = 0; tajwid = 0; hideMarksH = 0; ayahMarksH = 0; selWordIdx = -1; selAyah = nil; letterRules = []
         markColours = false; hideMarks = false; goldAyahMarks = false; revealOn = false; playing = false
         searchField = ""; stopPlay(); announce(); view.setNeedsDisplay()
+    }
+
+    // ── letters ──
+    /// A tap in letter or mark mode. The engine finds the letter under the point, and the
+    /// example adds one rule for it in the chosen colour.
+    func tapLetter(_ pt: CGPoint) {
+        guard letterTapsOn, let p = page, p.isOpen else { return }
+        guard let h = view.letterAt(pt) else { letterInfo = "no letter under the tap"; return }
+        guard h.word >= 0, h.letter >= 0, let l = p.letter(h.word, h.letter) else {
+            // a word-level mark, such as a waqf sign: it has no letter, so it takes no colour
+            letterInfo = h.word >= 0 ? "\(p.wordKey(h.word)) · a mark of the word (\(h.markName)) · no letter" : "no letter under the tap"
+            return
+        }
+        let onMark = h.isExact && !h.isBody && h.mark != 0
+        var info = "\(l.text) " + String(format: "U+%04X", l.codePoint) + " · \(p.wordKey(h.word)) · letter \(l.index) · at \(l.at) · marks \(l.nMarks)"
+        if onMark { info += " · \(h.markName)" }
+        letterInfo = info + (h.isExact ? " · exact" : " · near")
+
+        let rgba = Self.letterColors[letterColorIdx]
+        var rule = 0
+        if letterTarget == 1 {
+            rule = letterEveryMatch
+                ? p.styleLetters(QvpLetterQuery(scope: .page(), codePoint: l.codePoint, part: QvpLetterPart.BODY_AND_DOTS), rgba, transitionMs: 200, layer: QvpLayer.TOP)
+                : p.style(QvpKit.Selector.letter(h.word, h.letter, QvpLetterPart.BODY_AND_DOTS), rgba, transitionMs: 200, layer: QvpLayer.TOP)
+        } else if onMark {
+            rule = letterEveryMatch
+                ? p.styleLetters(QvpLetterQuery(scope: .page(), mark: h.mark, part: QvpLetterPart.MARKS), rgba, transitionMs: 200, layer: QvpLayer.TOP)
+                : p.style(QvpKit.Selector.letterMarkNamed(h.word, h.letter, h.mark), rgba, transitionMs: 200, layer: QvpLayer.TOP)
+        } else if !letterEveryMatch {
+            // a tap on a body: all the marks of that letter
+            rule = p.style(QvpKit.Selector.letter(h.word, h.letter, QvpLetterPart.MARKS), rgba, transitionMs: 200, layer: QvpLayer.TOP)
+        }
+        if rule != 0 { letterRules.append(rule) }
+        view.setNeedsDisplay()
+    }
+    /// Remove the letter rules of the page, and no other rule.
+    func clearLetters() {
+        guard let p = page else { return }
+        for h in letterRules { p.removeStyle(h) }
+        letterRules = []
+        view.setNeedsDisplay()
     }
 
     // ── dress ──
@@ -438,6 +506,28 @@ final class DemoModel: ObservableObject {
         toastTimer?.invalidate()
         toastTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: false) { [weak self] _ in Task { @MainActor in self?.toast = nil } }
     }
+}
+
+/// Gives the model the point of a tap on the page. QvpPageView reports the word of a tap,
+/// and the letter hit test needs the point.
+@MainActor
+final class LetterTapper: NSObject, UIGestureRecognizerDelegate {
+    private let onTap: (CGPoint) -> Void
+    init(_ onTap: @escaping (CGPoint) -> Void) { self.onTap = onTap }
+    func attach(to v: UIView) {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
+        // wait for a double tap to fail, as the view's own tap does
+        for g in v.gestureRecognizers ?? [] {
+            if let t = g as? UITapGestureRecognizer, t.numberOfTapsRequired == 2 { tap.require(toFail: t) }
+        }
+        tap.delegate = self
+        v.addGestureRecognizer(tap)
+    }
+    @objc private func tapped(_ g: UITapGestureRecognizer) {
+        if let v = g.view { onTap(g.location(in: v)) }
+    }
+    /// The view's own tap runs too. The model decides which of the two acts.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
 }
 
 extension UIColor {

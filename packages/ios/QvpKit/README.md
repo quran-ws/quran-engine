@@ -14,11 +14,11 @@ packages/ios/
 │   ├── Sources/QvpKit/
 │   │   ├── Types.swift             constants, Selector, Target, QvpColor, records, QvpHighlightStyle, QvpTheme, QvpLayoutSpec
 │   │   ├── QvpEngine.swift         names, Arabic tools
-│   │   ├── QvpPage.swift           QvpPage (geometry copied once, CGPath per path built once) and QvpAtlas
+│   │   ├── QvpPage.swift           QvpPage (geometry copied at load and again after a letter-layer attach, CGPath per path built once) and QvpAtlas
 │   │   ├── QvpDress.swift          QvpOrnaments (ornaments.qvo) and the page's dress, undress and display list
 │   │   ├── QvpPageView.swift       UIView renderer: ornament layer → bands → cached base ink → styled ink → mask boxes; gestures; CADisplayLink
 │   │   └── QvpPageCanvas.swift     the same frame as SwiftUI Canvas (iOS 17+): QvpCanvasController + QvpPageCanvas
-│   └── Tests/QvpKitTests/          XCTest: the same assertions as the Flutter/Dart test (page 042, atlas)
+│   └── Tests/QvpKitTests/          XCTest: the same assertions as the Flutter/Dart test (page 042, atlas), and the letter replay
 └── example/                        SwiftUI app (`xcodegen generate` → Demo.xcodeproj, not committed)
     ├── Sources/                    DemoModel (engine state, a port of the Android MainActivity) + ContentView (the reader UI)
     ├── UITests/                    XCUITest: tap, swipe page flip, pinch, search sheet on the real view
@@ -116,6 +116,42 @@ QvpColor.withAlpha(rgba, 0.18); QvpColor.cgColor(rgba); QvpColor.rgba(cgColor)
 
 Colours are `0xRRGGBBAA` everywhere (alpha 0 = hidden / leave alone). Page units are the
 printed viewBox (345 × 550, y down); anything `…View` is viewport px through the current layout.
+
+### Letters
+
+A page can take an optional letter layer, `NNN.qvl` (`docs/API.md`, "Letters"). The layer names
+the letters of each word, the paths that draw each letter, and the pieces cut from an outline
+that joins letters.
+
+```swift
+page.attachLetters(qvlData)                // true, or false for a bad file; nothing changes then
+page.hasLetters; page.nPaths               // nPaths now counts the pieces after the page's own paths
+page.letters(w)                            // [QvpLetter]: index, text, codePoint, at, moreAt, x0…y1, hasInk, members, marks
+page.letter(w, 1)?.marks[0].markName       // the first mark of the second letter, in text order
+page.style(.letter(w, 1), 0xd02020ff)      // also .letterMark(w, l, n), .letterMarkNamed(w, l, "shaddah"), .wordChars(w, 2, 4)
+page.style(.letter(w, 1, QvpLetterPart.MARKS), rgba)
+page.styleLetters(QvpLetterQuery("ن", mark: "shaddah", scope: page.target("2:255")), 0x0a7d32ff)
+page.findLetters(QvpLetterQuery(text: "ن"))   // [(word, letter)]; QvpLetterQuery(codePoint:) takes the number
+page.pathLetter(path); page.letterAtOffset(w, at)
+page.hitTestLetter(x, y); page.hitTestLetterView(viewX, viewY)   // QvpLetterHit: word, letter, path, at, mark, markName, isExact, isBody
+view.letterAt(point); controller.letterAt(point)                  // the same from a point of the view, through pan and zoom
+```
+
+After an attach, the page reads its geometry again and builds its paths again on the next
+`buildPaths()`. The arrays that you got from the page before a successful attach are stale:
+`ops`, `pts`, `table`, `colors()`, the paths from `buildPaths()` and every array that you
+sized from `nPaths`. Read them again.
+
+A letter's `text` is its character and `codePoint` the same as a number. A query's `text` is
+one character, or "" for any letter. A string of more than one character fails a
+precondition. A letter's `marks` are its members that are not body, in the engine's order. A
+member and a hit give the mark as its id (`mark`) and its name (`markName`). Call `setNeedsDisplay()` on a `QvpPageView`, or `invalidate()` on a
+`QvpCanvasController`, as after a style. A joined outline draws as its pieces only while one
+piece has another colour. Both views key their kept draw list and ink on
+`layoutDrawRevision()`, which counts up when that changes. A host that draws the page itself
+calls, per frame: `tick`, then `colors()` or `styledPaths()`, then `layoutDrawRevision()`, then
+`layoutDrawList` when the revision, the layout or the band changed. With no layer the revision
+stays 0, and a page draws as before.
 
 ### QvpPageView (UIKit)
 
@@ -252,7 +288,7 @@ no data pipeline.
 ## Tests
 
 ```sh
-cd packages/ios/QvpKit && swift test                                                          # macOS slice, 13 tests
+cd packages/ios/QvpKit && swift test                                                          # macOS slice
 xcodebuild test -scheme QvpKit -destination 'platform=iOS Simulator,name=iPhone 17'           # same on the simulator
 cd ../Demo && xcodebuild test -scheme Demo -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:DemoUITests   # 5 gesture/UI tests
 ```
@@ -261,4 +297,5 @@ cd ../Demo && xcodebuild test -scheme Demo -destination 'platform=iOS Simulator,
 words / 1061 paths / 15 lines, `search("الله")` → 7, `targetWords("2:255")` → 50 words, layout
 690×1100 fill-height → scale 2, highlight tick / 6 band boxes, mask / reveal, selection, crop,
 atlas `pageOf(2, 255)` = 42 and `pagesOfJuz(30)` = 582…604. It reads `dist/pages` from the repo
-(or `$QVP_REPO`).
+(or `$QVP_REPO`). `QvpLettersTests` replays `conformance/scenarios/letters.json` on the
+synthetic pages and letter layers beside it, so it needs no page data.

@@ -1,5 +1,7 @@
 // The web example's UI smoke test (docs/standards/TESTING.md): open page 440, click a word,
-// and check that the app highlights it. Chromium runs the built example from dist/web.
+// and check that the app highlights it. Then the letter controls: a letter tap when the page
+// has a letter layer, the disabled state when it has none. Chromium runs the built example
+// from dist/web.
 //
 // Run:
 //   python3 web/example/build.py dev        # dist/web, with pages/ linked to dist/pages
@@ -74,7 +76,9 @@ try {
   if (!shown.includes(word)) throw new Error(`the selection panel does not show ${word}: ${shown}`);
   console.log(`ok  the click selects word ${word}, and the panel shows it`);
 
-  const boxes = await page.evaluate(() => window.__qvp.S.page.highlightBoxesView().length);
+  // The engine gives the boxes of a highlight from the next tick, so wait for a frame to pass.
+  const boxes = await page.waitForFunction(() => window.__qvp.S.page.highlightBoxesView().length, null, { timeout: 5000 })
+    .then(h => h.jsonValue(), () => 0);
   if (!boxes) throw new Error('the engine has no highlight boxes after the click');
   // The highlight fades in over the app's transition time; wait for the canvas to show it.
   const after = await page.waitForFunction(bluePixels, 200, { timeout: 5000 }).then(h => h.jsonValue());
@@ -86,6 +90,31 @@ try {
   // The highlight fades out over the app's transition time, then the engine drops its boxes.
   await page.waitForFunction(() => window.__qvp.S.page.highlightBoxesView().length === 0, null, { timeout: 5000 });
   console.log('ok  a second click on the word clears the selection and its highlight');
+
+  // Letters (docs/EXAMPLE-APP.md, feature 12). The layer is optional data: with it, a tap in
+  // letter mode adds one letter rule. Without it, the controls are disabled and say so.
+  if (await page.evaluate(() => window.__qvp.S.letters)) {
+    await page.click('#tapTarget [data-tap="letter"]');
+    await stage.click({ position: at });
+    const hit = await page.waitForFunction(() => {
+      const { S } = window.__qvp;
+      return S.letterHandles.length === 1 && S.letterHit && S.letterHit.letter >= 0 && S.letterHit.wordKey;
+    }, null, { timeout: 5000 }).then(h => h.jsonValue());
+    const shown = await page.locator('#letterInfo').innerText();
+    if (!shown.includes(hit) || !/U\+[0-9A-F]{4}/.test(shown)) throw new Error(`the letter line does not show the hit in ${hit}: ${shown}`);
+    if (await page.evaluate(() => window.__qvp.S.selWord) !== -1) throw new Error('a tap in letter mode selected a word');
+    // the rule is in the engine: the page's style handles hold the one the app kept
+    const kept = await page.evaluate(() => { const { S } = window.__qvp; return S.page.styleHandles().includes(S.letterHandles[0]); });
+    if (!kept) throw new Error('the engine does not hold the letter rule');
+    await page.click('#letterClear');
+    await page.waitForFunction(() => window.__qvp.S.letterHandles.length === 0, null, { timeout: 5000 });
+    console.log(`ok  a tap in letter mode colours one letter of ${hit}, and "Clear letters" removes the rule`);
+  } else {
+    const off = await page.evaluate(() => [...document.querySelectorAll('#tapTarget [data-tap="letter"], #tapTarget [data-tap="mark"], #letterEvery, #letterClear, #letterColors button')].every(el => el.disabled));
+    const line = await page.evaluate(() => document.getElementById('letterInfo').textContent);
+    if (!off || line !== 'no letter layer for this page') throw new Error(`with no letter layer the controls are not disabled (${off}) or the line is wrong: ${line}`);
+    console.log('ok  no letter layer for page 440: the letter controls are disabled and say so');
+  }
 
   if (errors.length) throw new Error(`the page threw: ${errors.join('; ')}`);
 } finally {
