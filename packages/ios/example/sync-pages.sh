@@ -23,8 +23,18 @@ SRC="${QVP_PAGES:-$ROOT/dist/pages}"
 LETTERS="${QVP_LETTERS:-$ROOT/dist/letters}"
 
 # The ornament set for the dress panel. It is optional: the demo works without it.
+# dist/pages has it from scripts/sync-test-data.sh. The data tarball of an older release has
+# the font markers only, so a set that this script downloads comes from its own release.
+ORNAMENTS_TAG="${QVP_ORNAMENTS_TAG:-data-v0.7.0}"
 copy_ornaments() {
-  if [ -f "$1/ornaments.qvo" ]; then cp "$1/ornaments.qvo" pages/; fi
+  if [ -f "$1/.ornaments-tag" ] || [ -n "${QVP_PAGES:-}" ]; then
+    if [ -f "$1/ornaments.qvo" ]; then cp "$1/ornaments.qvo" pages/; fi
+  elif curl -fsL "https://github.com/$REPO/releases/download/$ORNAMENTS_TAG/ornaments.qvo" -o pages/ornaments.qvo.part; then
+    mv pages/ornaments.qvo.part pages/ornaments.qvo
+  else
+    rm -f pages/ornaments.qvo.part
+    if [ -f "$1/ornaments.qvo" ]; then cp "$1/ornaments.qvo" pages/; fi
+  fi
 }
 
 # The letter layers. They are optional too. Copy them again on each run, so the bundle has

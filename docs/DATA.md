@@ -51,13 +51,13 @@ printing. The evidence is in `sources/licenses/` of `quran-ws/quran-assets`.
 
 | style | mushaf |
 |---|---|
-| `mushaf-douri` | al-Duri |
+| `mushaf-douri` | Duri |
 | `mushaf-hafs-adi` | Hafs, the ordinary mushaf |
 | `mushaf-hafs-madinah-kabir` | Hafs, Madinah, large |
 | `mushaf-hafs-madinah-mumtaza` | Hafs, Madinah, mumtaza |
 | `mushaf-qalon` | Qalun |
 | `mushaf-shubah` | Shu'bah |
-| `mushaf-sousi` | al-Susi |
+| `mushaf-sousi` | Susi |
 | `mushaf-warsh` | Warsh |
 
 Seven font markers have unverified terms and are in no release.

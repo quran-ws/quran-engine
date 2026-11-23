@@ -92,22 +92,34 @@ jobs:
           cargo run -p qvp-convert --release -- batch pages dist/site-pages
           cargo run -p qvp-convert --release -- letters pages-letters pages dist/site-letters
 
-      # The ornaments of the Madinah mushafs, for the dress scene. They are traced from the
-      # printed mushafs, and the owner of this site has the approvals to show them here. A data release does not hold them: its set has only the
-      # ornaments whose licence the catalogue confirms. So the site builds the whole set from
-      # a fixed commit of quran-ws/quran-assets.
+      # The ornaments of the Madinah mushafs, for the dress scene: the set that the data
+      # release holds, built from the same commit of quran-ws/quran-assets.
       - uses: actions/checkout@v7
         with:
           repository: quran-ws/quran-assets
-          ref: d4cae845c9aae1fbe56ee69d04bc7d8964419373
+          ref: e7e1528ab4d7fb4f2118a21adea44f326690ad7d
           path: quran-assets
       - name: Build the ornament set
-        run: cargo run -p qvp-convert --release -- ornaments quran-assets dist/site-pages/ornaments.qvo
+        run: cargo run -p qvp-convert --release -- ornaments quran-assets dist/site-pages/ornaments.qvo --redistributable
 
       - name: Build the wasm engine
         run: |
           cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown
           cp target/wasm32-unknown-unknown/dist/qvp_ffi.wasm web/
+
+      # The comparison measures pages 3 to 52. Their SVGs are the page source, and the QPC
+      # page fonts are the V4 fonts of the King Fahd Complex. The digest covers all 50 fonts.
+      - name: Collect the files of the comparison
+        run: |
+          mkdir -p dist/site-svg dist/site-qpc
+          for n in $(seq 3 52); do
+            cp "pages/$(printf '%03d' "$n").svg" dist/site-svg/
+            curl -fsSL --retry 3 "https://quranpedia.net/fonts/v4-tajweed/p$n.woff2" -o "dist/site-qpc/p$n.woff2"
+          done
+          got="$(for n in $(seq 3 52); do cat "dist/site-qpc/p$n.woff2"; done | sha256sum | cut -d' ' -f1)"
+          [ "$got" = "9d39c6987f198913d54bb1ed1c5fbed69965dc403c32263e2b359f3ee0881891" ] || { echo "QPC fonts digest mismatch: $got" >&2; exit 1; }
+          python3 -m venv "$RUNNER_TEMP/fonttools"
+          "$RUNNER_TEMP/fonttools/bin/pip" install -q fonttools==4.65.0 brotli==1.1.0
 
       - name: Build the page
         env:
@@ -120,14 +132,17 @@ jobs:
           else
             echo "::notice::QURANLAB_WEB_KEY is not set: the page has no recitation by voice"
           fi
-          QVP_PAGES_DIR=dist/site-pages QVP_LETTERS_DIR=dist/site-letters QVP_SVG_DIR=/nonexistent \
+          QVP_PAGES_DIR=dist/site-pages QVP_LETTERS_DIR=dist/site-letters QVP_SVG_DIR=dist/site-svg QVP_FONT_QPC=dist/site-qpc \
           QVP_FONT_QURAN="$RUNNER_TEMP/hafs.woff2" QVP_DEMO_CONFIG="$RUNNER_TEMP/config.js" QVP_DEMO_OUT=dist/site \
-            python3 web/demo/build.py
+            "$RUNNER_TEMP/fonttools/bin/python" web/demo/build.py
           # build.py links the data; the image needs the files themselves
           rm -rf web/demo/site/public
           cp -rL dist/site web/demo/site/public
           test -f web/demo/site/public/pages/604.qvp
           test -f web/demo/site/public/letters/604.qvl
+          test -f web/demo/site/public/svg/052.svg
+          test -f web/demo/site/public/fonts/qpc-052.woff2
+          test -f web/demo/site/public/fonts/qpc-052.json
           du -sh web/demo/site/public
 
       - uses: docker/setup-buildx-action@v3
