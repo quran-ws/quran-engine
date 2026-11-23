@@ -13,6 +13,10 @@ All notable changes to the engine and its packages. The format follows
 ### Removed
 
 ### Fixed
+
+## [0.9.1] - 2026-11-23
+
+### Fixed
 - A pinch or a step on a page dressed in a border lands on the new layout's resting scale. The
   printed page rests shrunk so its border fits across the width, and a reflowed page rests at
   scale 1 because its rows are narrowed instead. The zoom control kept the view's scale across
@@ -1189,7 +1193,8 @@ gate, the engine and its 110-function C ABI, the web reference wrapper, and the 
 Flutter, React Native and iOS packages with demos. Page data published as the `v0.1.0`
 data release.
 
-[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/quran-ws/quran-engine/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/quran-ws/quran-engine/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/quran-ws/quran-engine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/quran-ws/quran-engine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/quran-ws/quran-engine/compare/v0.6.1...v0.7.0
