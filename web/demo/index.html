@@ -129,14 +129,35 @@
   .foot { padding:48px clamp(18px,5vw,72px) 64px; color:var(--muted); font-size:14px; display:grid; gap:8px; max-width:900px }
   .foot h3 { font:700 24px var(--display); color:var(--gold); margin:0 0 4px }
 
+  /* A phone or a narrow window. The header has two rows: the name and the buttons, then the
+     sections as a strip that moves sideways. In a scene the page comes right after the
+     heading, and the controls follow it, so the reader sees the page first. */
   @media (max-width:900px) {
-    .scene { grid-template-columns:1fr; padding-top:76px; align-items:start }
-    .stage { height:70vh; order:2 }
-    .rail a { padding:3px 9px; font-size:12px }
-    .rail { overflow-x:auto; max-width:46vw }
-    .top { gap:8px; padding:8px 10px } .brand { font-size:17px }
-    .top .tools a { padding:4px 9px; font-size:12px }
-    html { scroll-snap-type:none }
+    html { scroll-snap-type:none; scroll-padding-top:98px }
+    .top { flex-wrap:wrap; gap:8px 10px; padding:8px 12px 10px; background:var(--night); border-bottom:1px solid var(--night-3) }
+    .brand { font-size:18px; margin-inline-end:auto }
+    .top .tools a { padding:6px 12px; font-size:13px }
+    .rail { order:3; flex:0 0 100%; margin:0; overflow-x:auto; scrollbar-width:none; overscroll-behavior-x:contain; backdrop-filter:none }
+    .rail::-webkit-scrollbar { display:none }
+    .rail a { padding:7px 14px; font-size:13px }
+    .scene { min-height:0; grid-template-columns:minmax(0,1fr); gap:14px; padding:28px 16px 40px; align-items:start }
+    #hero { padding-top:124px }
+    .scene:not(.wide) > .say { display:contents }
+    .scene:not(.wide) > .say > * { order:2 }
+    .scene:not(.wide) > .say > .kicker, .scene:not(.wide) > .say > h1, .scene:not(.wide) > .say > h2,
+    .scene:not(.wide) > .say > p:not(.fine), .scene:not(.wide) > .say > .ctl:has(.cta) { order:0 }
+    .scene:not(.wide) > .say > p { max-width:none }
+    .stage { order:1; height:auto; min-height:0; aspect-ratio:5 / 7.7; max-height:78vh; width:100%; justify-self:center; border-radius:16px }
+    .stage .bed { inset:10px }
+    .stage .hint { top:auto; bottom:12px; max-width:calc(100% - 150px); line-height:1.5; padding:4px 12px; border-radius:12px; color:var(--mist); background:rgba(11,32,34,.88) }
+    h1 { font-size:32px } h2 { font-size:25px }
+    .ctl { gap:8px }
+    .ctl button, .ctl .btn, .ctl select { min-height:42px }
+    .cmp th, .cmp td { padding:10px 11px }
+    table.cmp { font-size:13px; min-width:760px }
+    /* the names of the rows stay in view while the table moves sideways */
+    .cmp tbody th, .cmp thead th:first-child { position:sticky; inset-inline-start:0; z-index:1; background:var(--night-2); white-space:normal; width:auto; min-width:104px; max-width:124px }
+    .foot { padding:36px 16px 48px }
   }
   @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto } * { transition:none !important } }
 </style>
