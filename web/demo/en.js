@@ -3,8 +3,7 @@
 // language is English, and warns in the console about a string that the map does not hold.
 window.DEMO_EN = {
   // the bar at the top
-  'محرّك المصحف': 'Quran Engine',
-  'محرّك المصحف: عرض تفاعلي': 'Quran Engine: an interactive demo',
+  'Quran Engine: عرض تفاعلي': 'Quran Engine: an interactive demo',
   'مقدمة': 'Intro',
   'التجويد': 'Tajwid',
   'التلاوة': 'Recitation',
@@ -78,11 +77,13 @@ window.DEMO_EN = {
   '{} · سورة يس · المدة {}': '{} · Surah Ya-Sin · {} long',
   'تعذّر تحميل هذه التلاوة: ': 'This recitation did not load: ',
   'لا توجد تلاوات متاحة حاليًا.': 'No recitation is available now.',
+  'الصفحة {} غير متوفرة في هذا العرض.': 'This demo does not hold page {}.',
+  'سورة {}، الآية {}': 'Surah {}, ayah {}',
 
   // memorisation
   'إخفاء الآيات وكشفها': 'Hide the ayahs and reveal them',
-  'يخفي المحرّك كلمات الصفحة لاختبار الحفظ، ويحافظ على مواضعها. اكشف الكلمات واحدة تلو الأخرى، أو اقرأ بصوتك لتظهر كل كلمة عند نطقها.':
-    'The engine hides the words of the page to test what you memorised, and it keeps their places. Reveal the words one at a time, or recite aloud and each word appears as you say it.',
+  'يخفي المحرّك كلمات الصفحة لاختبار الحفظ، ويحافظ على مواضعها. اكشف الكلمات واحدة تلو الأخرى، أو اقرأ بصوتك من أي موضع في المصحف: يفتح العرض صفحة ما سمعه، وتظهر كل كلمة عند نطقها.':
+    'The engine hides the words of the page to test what you memorised, and it keeps their places. Reveal the words one at a time, or recite aloud from any place in the mushaf: the demo opens the page of what it heard, and each word appears as you say it.',
   'الطريقة': 'Mode',
   'تغطية': 'Cover',
   'كشف كلمة': 'Reveal a word',
@@ -90,16 +91,18 @@ window.DEMO_EN = {
   'إعادة': 'Start again',
   'إظهار الصفحة': 'Show the page',
   'القراءة بالصوت': 'Recite aloud',
-  'تجربة بمقطع صوتي': 'Try a sample clip',
+  'تجربة بتلاوة مسجّلة': 'Try a recorded recitation',
   'سورة الفاتحة.': 'Surah Al-Fatihah.',
   'تعمل القراءة بالصوت بنموذج TajweedFormer V4 من': 'Recitation by voice uses the TajweedFormer V4 model of',
   'على جهازك مباشرة. نتائج التعرّف الآلي قد تخطئ، ولا تغني عن معلّم متقن.': ', which runs on your device. Automatic recognition can be wrong, and it does not replace a qualified teacher.',
   'الكلمات المخفية: {}. اضغط على الصفحة لكشف كلمة.': 'Hidden words: {}. Tap the page to reveal a word.',
   'جميع الكلمات ظاهرة.': 'All the words show.',
-  'النص المسموع: {}': 'Heard: {}',
+  'الكلمات المقروءة حتى الكلمة {} من {} · الأخطاء: {}': 'Recited up to word {} of {} · mistakes: {}',
   'جارٍ تجهيز النموذج. قد يستغرق التحميل الأول بعض الوقت.': 'The model is loading. The first load can take some time.',
-  'جارٍ تحليل المقطع الصوتي.': 'The model reads the sample clip.',
-  'ابدأ القراءة.': 'Start to recite.',
+  'جارٍ تحليل التلاوة المسجّلة.': 'The model listens to the recorded recitation.',
+  'ابدأ القراءة من أي موضع في المصحف.': 'Start to recite, from any place in the mushaf.',
+  'جارٍ الاستماع وتحديد الموضع.': 'Listening, and finding the place.',
+  'سورة {}، الآية {} · الصفحة {}': 'Surah {}, ayah {} · page {}',
   'تعذّر تشغيل القراءة بالصوت: ': 'Recitation by voice did not start: ',
   'تحتاج القراءة بالصوت إلى مفتاح Quran Lab في الملف config.local.js. ': 'Recitation by voice needs a Quran Lab key in the file config.local.js. ',
 
@@ -203,7 +206,7 @@ window.DEMO_EN = {
   '50 صفحة': '50 pages',
   'يفتح الصفحات بالطرق الخمس على جهازك، ويقيس الحجم والزمن والذاكرة.': 'It opens the pages in the five ways on your device, and it measures size, time and memory.',
   'طريقة القياس': 'How it is measured',
-  'محرّك المصحف: 604 ملفات للصفحات مع نصوصها من إصدار البيانات. المصدر: ملف README في المستودع.':
+  'Quran Engine: 604 ملفات للصفحات مع نصوصها من إصدار البيانات. المصدر: ملف README في المستودع.':
     'Quran Engine: 604 page files with their text, from the data release. Source: the README of the repository.',
   'SVG: 604 ملفات من أرشيف الكلمات في quran-svg-elements، الإصدار 2.0.0. الحجم المضغوط هو حجم الأرشيف.':
     'SVG: 604 files from the words archive of quran-svg-elements, version 2.0.0. The compressed size is the size of the archive.',
@@ -254,7 +257,7 @@ window.DEMO_EN = {
 
   // footer
   'عن المحرّك': 'About the engine',
-  'محرّك المصحف مكتبة مفتوحة المصدر للويب و Android و iOS و Flutter و React Native:': 'Quran Engine is an open source library for the web, Android, iOS, Flutter and React Native:',
+  'Quran Engine مكتبة مفتوحة المصدر للويب و Android و iOS و Flutter و React Native:': 'Quran Engine is an open source library for the web, Android, iOS, Flutter and React Native:',
   'مصدر صفحات المصحف:': 'Source of the mushaf pages:',
   '، عن خط مجمع الملك فهد لطباعة المصحف الشريف.': ', from the typeface of the King Fahd Complex for the Printing of the Holy Quran.',
 };
