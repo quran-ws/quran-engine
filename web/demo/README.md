@@ -62,9 +62,9 @@ Serif Display. `QVP_FONT_QURAN` is the typeface for a word of the Quran outside 
 the KFGQPC Hafs font, so the word looks as it does in the mushaf. Without a file, the page
 uses a web font.
 
-`QVP_FONT_QPC` names the QPC font of page 3 (`p3.woff2`). The comparison measures how long
-that font and the Hafs font take to show the page. It needs fontTools to list the font's
-code points.
+`QVP_FONT_QPC` names a directory of QPC page fonts (`p3.woff2` to `p52.woff2`). The
+comparison measures how long those fonts and the Hafs font take to show 1, 10 or 50 pages.
+The build needs fontTools to list each font's code points.
 
 ## The reader's voice
 

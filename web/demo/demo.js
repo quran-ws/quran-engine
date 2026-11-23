@@ -289,6 +289,12 @@
             });
           }
         }
+        // The corpus marks the natural madd on every madd letter, also where another madd
+        // applies to the same letter: munfasil, muttasil, lazim, arid, badal, iwad. The other
+        // madd is the ruling of that letter, so the natural madd gives way to it.
+        const isMadd = m => ann.ruleIds[m.rule].startsWith('madd-'), natural = m => ann.ruleIds[m.rule].startsWith('madd-tabee');
+        const others = marks.filter(m => isMadd(m) && !natural(m));
+        marks = marks.filter(m => !(natural(m) && others.some(o => o.word === m.word && o.from <= m.to && o.to >= m.from)));
         paint();
       },
       onTap: (x, y) => {
@@ -531,42 +537,28 @@
   // ── 7. the comparison: the same page three ways, measured on this device ──
   scenes.push('compare');
   $('cmpRun').onclick = async () => {
-    const n = 3, W = 1080, cells = $('cmpCells'), btn = $('cmpRun');
+    const first = 3, count = +$('cmpPages').value, W = 1080, cells = $('cmpCells'), btn = $('cmpRun');
     btn.disabled = true; cells.textContent = '';
-    const kb = b => (b / 1024).toFixed(0) + ' KB', ms = t => t.toFixed(1) + ' ms';
-    const cell = (title, value, note) => { const c = cells.appendChild(el('div', 'cell')); c.append(el('h4', '', title), el('div', 'v', value), el('p', '', note)); };
+    const mb = b => (b / 1048576).toFixed(b < 10485760 ? 2 : 1) + ' MB', ms = t => t.toFixed(t < 100 ? 1 : 0) + ' ms';
     const frame = () => new Promise(r => requestAnimationFrame(() => r()));
     // Each run reads every file again from the server, and no measure reuses the work of a
-    // run before it: a new page, a new renderer, a new image, and a font under a new name.
+    // run before it: a new engine, new pages, new images, and fonts under new names.
     const run = Date.now();
     const fresh = async url => { try { const r = await fetch(`${url}?run=${run}`, { cache: 'no-store' }); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } };
+    // One result: the time for all the pages, the bytes that came from the server, and the
+    // memory when the page can know it.
+    const show = (id, title, r, note) => {
+      $(id).textContent = r ? `${ms(r.time / count)}` : '—';
+      const c = cells.appendChild(el('div', 'cell')); c.append(el('h4', '', title));
+      if (!r) { c.append(el('div', 'v', '—'), el('p', '', note)); return; }
+      c.append(el('div', 'v', ms(r.time)));
+      c.append(el('p', '', `${arNum(count)} صفحة · ${ms(r.time / count)} للصفحة · الملفات ${mb(r.bytes)}`));
+      c.append(el('p', '', 'الذاكرة: ' + r.memory));
+      if (note) c.append(el('p', '', note));
+    };
+    const pagesOf = n => Array.from({ length: n }, (_, i) => first + i);
     try {
-      // the engine: decode the page file, build its paths, lay it out and draw it
-      const pb = await fresh(`pages/${pad(n)}.qvp`); if (!pb) throw new Error('page file');
-      const canvas = document.createElement('canvas');
-      let t = performance.now();
-      const p = engine.loadPage(pb); p.buildPaths();
-      const L = p.layout({ viewportW: W, viewportH: W * 2, padTop: 0, padBottom: 0, padLeft: 0, padRight: 0, lineSpacing: 1, fillHeight: false, surahFrames: true, maxAspectSlack: DEFAULTS.ASPECT_SLACK, reflow: null });
-      canvas.width = W; canvas.height = Math.ceil(L.contentH * L.fitScale);
-      p.tick(performance.now());
-      new CanvasRenderer(canvas).draw(p, { scale: L.fitScale, offsetX: L.fitX, offsetY: 0 }, 1);
-      const tQvp = performance.now() - t;
-      $('cmpQvp').textContent = ms(tQvp);
-      cell('محرّك المصحف', ms(tQvp), `ملف الصفحة ${kb(pb.length)}. فكّ الملف وبناء ${p.nPaths} مسارًا ورسمها.`);
-      // an image: the same pixels as a PNG, then the time to decode and draw it
-      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
-      t = performance.now();
-      const bmp = await createImageBitmap(blob);
-      document.createElement('canvas').getContext('2d').drawImage(bmp, 0, 0);
-      const tImg = performance.now() - t;
-      $('cmpImg').textContent = ms(tImg); $('cmpPng').textContent = '≈ ' + (blob.size * 604 / 1048576).toFixed(0) + ' MB';
-      cell('صورة PNG', ms(tImg), `الصورة ${kb(blob.size)} بعرض ${W} بكسل. لا كلمات فيها ولا حروف.`);
-      // the words of the page as text, for the Hafs font: the sidecar gives them, and no measure counts it
-      const wb = await fresh(`pages/${pad(n)}.words.json`); if (wb) p.attachWords(wb);
-      const pageText = p.words.map(w => p.wordForm(w.index, 'qpc') || w.text).join(' ');
-      p.free();
-      // A box that the browser lays out and paints. It is almost clear, so the paint still
-      // happens, and the second frame starts after the browser painted the first.
+      // a box that the browser lays out and paints: almost clear, so the paint still happens
       const box = () => { const h = document.body.appendChild(el('div')); h.style.cssText = `position:fixed;opacity:0.01;pointer-events:none;inset-inline-start:0;top:0;width:${W}px;z-index:-1;direction:rtl;text-align:justify;font-size:46px;line-height:2.1`; return h; };
       const twoFrames = async () => { await frame(); await frame(); };
       // Two frames pass even when the browser has nothing to do. That wait is not work, so the
@@ -576,46 +568,85 @@
       // The work the page can time itself comes first: reading, and the layout that the box
       // forces. The paint comes with the frames, and it counts where it took longer than the
       // idle wait. So the measure is never less than the work that was timed.
-      const painted = async (h, t0) => {
-        h.getBoundingClientRect(); const timed = performance.now() - t0;
-        await twoFrames();
-        return Math.max(timed, performance.now() - t0 - idle);
-      };
-      // SVG: put the file in the page, as an app must to reach its words
-      const sb = await fresh(`svg/${pad(n)}.svg`);
-      if (sb) {
-        const host = box();
-        t = performance.now();
-        const doc = new DOMParser().parseFromString(new TextDecoder().decode(sb), 'image/svg+xml');
-        const tParse = performance.now() - t;
-        // The file is data. Nothing in it may run: no script, no foreign content, no handler.
-        for (const bad of doc.querySelectorAll('script, foreignObject, iframe, object, embed')) bad.remove();
-        for (const node of doc.querySelectorAll('*')) for (const a of [...node.attributes]) if (/^on/i.test(a.name) || /^\s*javascript:/i.test(a.value)) node.removeAttribute(a.name);
-        t = performance.now();
-        host.append(document.importNode(doc.documentElement, true));
-        const count = host.querySelectorAll('*').length;
-        const tSvg = tParse + await painted(host, t);
+      const painted = async (h, t0) => { h.getBoundingClientRect(); const timed = performance.now() - t0; await twoFrames(); return Math.max(timed, performance.now() - t0 - idle); };
+
+      // ── the engine: decode each page file, build its paths, lay it out and draw it. Every
+      // page stays open, as in a reader that holds its pages. ──
+      const files = [];
+      for (const n of pagesOf(count)) { const f = await fresh(`pages/${pad(n)}.qvp`); if (!f) throw new Error(`pages/${pad(n)}.qvp`); files.push(f); }
+      const own = await QvpEngine.init(await fresh('qvp_ffi.wasm')), before = own.mem.buffer.byteLength;
+      const open = [], canvases = []; let paths = 0, pixels = 0;
+      let t = performance.now();
+      for (const f of files) {
+        const p = own.loadPage(f); p.buildPaths();
+        const L = p.layout({ viewportW: W, viewportH: W * 2, padTop: 0, padBottom: 0, padLeft: 0, padRight: 0, lineSpacing: 1, fillHeight: false, surahFrames: true, maxAspectSlack: DEFAULTS.ASPECT_SLACK, reflow: null });
+        const c = document.createElement('canvas'); c.width = W; c.height = Math.ceil(L.contentH * L.fitScale);
+        p.tick(performance.now());
+        new CanvasRenderer(c).draw(p, { scale: L.fitScale, offsetX: L.fitX, offsetY: 0 }, 1);
+        open.push(p); canvases.push(c); paths += p.nPaths; pixels += c.width * c.height * 4;
+      }
+      const engineTime = performance.now() - t, grown = own.mem.buffer.byteLength - before;
+      show('cmpQvp', 'محرّك المصحف', { time: engineTime, bytes: files.reduce((a, f) => a + f.length, 0), memory: `${mb(grown)} للصفحات المفتوحة في ذاكرة المحرّك، و${mb(pixels)} لبكسلات الرسم` }, `فكّ الملفات وبناء ${arNum(paths)} مسارًا ورسمها.`);
+
+      // ── images: the same pixels as PNG files, then decode and draw each one ──
+      const blobs = []; for (const c of canvases) blobs.push(await new Promise(r => c.toBlob(r, 'image/png')));
+      const bitmaps = []; let decoded = 0;
+      t = performance.now();
+      for (const blob of blobs) { const bmp = await createImageBitmap(blob); document.createElement('canvas').getContext('2d').drawImage(bmp, 0, 0); bitmaps.push(bmp); decoded += bmp.width * bmp.height * 4; }
+      const pngBytes = blobs.reduce((a, x) => a + x.size, 0);
+      show('cmpImg', 'صور PNG', { time: performance.now() - t, bytes: pngBytes, memory: `${mb(decoded)} للصور بعد فكّها` }, `بعرض ${W} بكسل. لا كلمات فيها ولا حروف.`);
+      $('cmpPng').textContent = '≈ ' + (pngBytes / count * 604 / 1048576).toFixed(0) + ' MB';
+      // the words of each page as text, for the Hafs font. The sidecar gives them, and no measure counts it.
+      const texts = [];
+      for (const [i, p] of open.entries()) { const wb = await fresh(`pages/${pad(first + i)}.words.json`); if (wb) p.attachWords(wb); texts.push(p.words.map(w => p.wordForm(w.index, 'qpc') || w.text).join(' ')); }
+      for (const p of open) p.free();
+      for (const x of bitmaps) x.close();
+
+      // what a page can say about the memory of content that the browser itself holds
+      const heap = () => (performance.memory ? performance.memory.usedJSHeapSize : null);
+      const domMemory = (h0, nodes) => `${arNum(nodes)} عنصرًا في الصفحة. ` + (h0 === null ? 'هذا المتصفح لا يتيح للصفحة قياسها.' : 'المتصفح يحفظها خارج ما تراه الصفحة، فلا تُقاس من هنا.');
+
+      // ── SVG: read each file and put it in the page, as an app must to reach its words ──
+      const svgs = []; for (const n of pagesOf(count)) { const f = await fresh(`svg/${pad(n)}.svg`); if (!f) break; svgs.push(f); }
+      if (svgs.length === count) {
+        const host = box(); let time = 0, nodes = 0; const h0 = heap();
+        for (const f of svgs) {
+          t = performance.now();
+          const doc = new DOMParser().parseFromString(new TextDecoder().decode(f), 'image/svg+xml');
+          const parse = performance.now() - t;
+          // The file is data. Nothing in it may run: no script, no foreign content, no handler.
+          for (const bad of doc.querySelectorAll('script, foreignObject, iframe, object, embed')) bad.remove();
+          for (const node of doc.querySelectorAll('*')) for (const at of [...node.attributes]) if (/^on/i.test(at.name) || /^\s*javascript:/i.test(at.value)) node.removeAttribute(at.name);
+          t = performance.now();
+          host.append(document.importNode(doc.documentElement, true));
+          time += parse + await painted(host, t);
+        }
+        nodes = host.querySelectorAll('*').length;
+        show('cmpSvg', 'SVG', { time, bytes: svgs.reduce((a, f) => a + f.length, 0), memory: domMemory(h0, nodes) }, 'قراءة الملفات ووضعها في الصفحة.');
         host.remove();
-        $('cmpSvg').textContent = ms(tSvg);
-        cell('SVG', ms(tSvg), `الملف ${kb(sb.length)}، و${count} عنصرًا في الصفحة.`);
-      } else { $('cmpSvg').textContent = '—'; cell('SVG', '—', 'ملفات SVG ليست مع هذا البناء.'); }
-      // a font: decode it, set the page's text in it, and let the browser lay it out and paint it
-      const withFont = async (id, title, url, text, note) => {
-        const fb = url ? await fresh(url) : null;
-        if (!fb) { $(id).textContent = '—'; cell(title, '—', 'هذا الخط ليس مع هذا البناء.'); return; }
-        const host = box(), name = `bench-${id}-${run}`;
-        t = performance.now();
-        const face = new FontFace(name, fb); await face.load(); document.fonts.add(face);
-        host.style.fontFamily = name; host.textContent = text;
-        const took = await painted(host, t);
-        host.remove(); document.fonts.delete(face);
-        $(id).textContent = ms(took);
-        cell(title, ms(took), note(fb.length, new TextEncoder().encode(text).length));
+      } else show('cmpSvg', 'SVG', null, 'ملفات SVG ليست مع هذا البناء.');
+
+      // ── fonts: decode a font, set a page's text in it, and let the browser lay it out and paint it ──
+      const withFonts = async (id, title, fontOf, textOf, note) => {
+        const host = box(), faces = []; let time = 0, size = 0; const seen = new Map();
+        for (let i = 0; i < count; i++) {
+          const url = fontOf(i), text = textOf(i); if (!url || text === null) { host.remove(); for (const f of faces) document.fonts.delete(f); show(id, title, null, 'هذا الخط ليس مع هذا البناء.'); return; }
+          const line = host.appendChild(el('div'));
+          let fam = seen.get(url), fb = null;
+          if (!fam) { fb = await fresh(url); if (!fb) { host.remove(); show(id, title, null, 'هذا الخط ليس مع هذا البناء.'); return; } size += fb.length; }
+          size += new TextEncoder().encode(text).length;
+          t = performance.now();
+          if (!fam) { fam = `bench-${id}-${run}-${i}`; const face = new FontFace(fam, fb); await face.load(); document.fonts.add(face); faces.push(face); seen.set(url, fam); }
+          line.style.fontFamily = fam; line.textContent = text;
+          time += await painted(host, t);
+        }
+        show(id, title, { time, bytes: size, memory: `${arNum(faces.length)} خطًّا مفتوحًا. المتصفح يحفظ الخطوط خارج ما تراه الصفحة، فلا تُقاس من هنا.` }, note);
+        host.remove(); for (const f of faces) document.fonts.delete(f);
       };
       // a page font holds one glyph for each word of its page, at the code points the build lists
-      const cb = await fresh(`fonts/qpc-${pad(n)}.json`), codes = cb ? JSON.parse(new TextDecoder().decode(cb)) : null;
-      await withFont('cmpQpc', 'خط الصفحة (QPC)', codes ? `fonts/qpc-${pad(n)}.woff2` : '', codes ? codes.map(c => String.fromCodePoint(c)).join(' ') : '', (f, x) => `خط الصفحة ${kb(f)}، و${codes.length} محرفًا لكلماتها.`);
-      await withFont('cmpHafs', 'خط حفص مع النص', 'fonts/quran.woff2', pageText, (f, x) => `الخط ${kb(f)} مرة واحدة للمصحف كله، ونص الصفحة ${kb(x)}.`);
+      const codes = []; for (const n of pagesOf(count)) { const cb = await fresh(`fonts/qpc-${pad(n)}.json`); codes.push(cb ? JSON.parse(new TextDecoder().decode(cb)) : null); }
+      await withFonts('cmpQpc', 'خطوط الصفحات (QPC)', i => (codes[i] ? `fonts/qpc-${pad(first + i)}.woff2` : ''), i => (codes[i] ? codes[i].map(c => String.fromCodePoint(c)).join(' ') : null), 'خط لكل صفحة، وكلماتها محارف فيه.');
+      await withFonts('cmpHafs', 'خط حفص مع النص', () => 'fonts/quran.woff2', i => texts[i], 'خط واحد للمصحف كله، ونص كل صفحة.');
       $('cmpNote').textContent = 'هذه أرقام جهازك الآن. تتغير من جهاز إلى جهاز ومن مرة إلى مرة.';
     } catch (e) { console.error(e); $('cmpNote').textContent = 'تعذّر القياس: ' + e.message; }
     btn.disabled = false;
