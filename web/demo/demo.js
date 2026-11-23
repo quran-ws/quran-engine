@@ -536,9 +536,13 @@
     const kb = b => (b / 1024).toFixed(0) + ' KB', ms = t => t.toFixed(1) + ' ms';
     const cell = (title, value, note) => { const c = cells.appendChild(el('div', 'cell')); c.append(el('h4', '', title), el('div', 'v', value), el('p', '', note)); };
     const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+    // Each run reads every file again from the server, and no measure reuses the work of a
+    // run before it: a new page, a new renderer, a new image, and a font under a new name.
+    const run = Date.now();
+    const fresh = async url => { try { const r = await fetch(`${url}?run=${run}`, { cache: 'no-store' }); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } };
     try {
       // the engine: decode the page file, build its paths, lay it out and draw it
-      const pb = await bytes(`pages/${pad(n)}.qvp`);
+      const pb = await fresh(`pages/${pad(n)}.qvp`); if (!pb) throw new Error('page file');
       const canvas = document.createElement('canvas');
       let t = performance.now();
       const p = engine.loadPage(pb); p.buildPaths();
@@ -558,7 +562,7 @@
       $('cmpImg').textContent = ms(tImg); $('cmpPng').textContent = '≈ ' + (blob.size * 604 / 1048576).toFixed(0) + ' MB';
       cell('صورة PNG', ms(tImg), `الصورة ${kb(blob.size)} بعرض ${W} بكسل. لا كلمات فيها ولا حروف.`);
       // the words of the page as text, for the Hafs font: the sidecar gives them, and no measure counts it
-      const wb = await maybe(`pages/${pad(n)}.words.json`); if (wb) p.attachWords(wb);
+      const wb = await fresh(`pages/${pad(n)}.words.json`); if (wb) p.attachWords(wb);
       const pageText = p.words.map(w => p.wordForm(w.index, 'qpc') || w.text).join(' ');
       p.free();
       // A box that the browser lays out and paints. It is almost clear, so the paint still
@@ -578,7 +582,7 @@
         return Math.max(timed, performance.now() - t0 - idle);
       };
       // SVG: put the file in the page, as an app must to reach its words
-      const sb = await maybe(`svg/${pad(n)}.svg`);
+      const sb = await fresh(`svg/${pad(n)}.svg`);
       if (sb) {
         const host = box();
         t = performance.now();
@@ -597,9 +601,9 @@
       } else { $('cmpSvg').textContent = '—'; cell('SVG', '—', 'ملفات SVG ليست مع هذا البناء.'); }
       // a font: decode it, set the page's text in it, and let the browser lay it out and paint it
       const withFont = async (id, title, url, text, note) => {
-        const fb = await maybe(url);
+        const fb = url ? await fresh(url) : null;
         if (!fb) { $(id).textContent = '—'; cell(title, '—', 'هذا الخط ليس مع هذا البناء.'); return; }
-        const host = box(), name = 'bench-' + id;
+        const host = box(), name = `bench-${id}-${run}`;
         t = performance.now();
         const face = new FontFace(name, fb); await face.load(); document.fonts.add(face);
         host.style.fontFamily = name; host.textContent = text;
@@ -609,7 +613,7 @@
         cell(title, ms(took), note(fb.length, new TextEncoder().encode(text).length));
       };
       // a page font holds one glyph for each word of its page, at the code points the build lists
-      const codes = await json(`fonts/qpc-${pad(n)}.json`).catch(() => null);
+      const cb = await fresh(`fonts/qpc-${pad(n)}.json`), codes = cb ? JSON.parse(new TextDecoder().decode(cb)) : null;
       await withFont('cmpQpc', 'خط الصفحة (QPC)', codes ? `fonts/qpc-${pad(n)}.woff2` : '', codes ? codes.map(c => String.fromCodePoint(c)).join(' ') : '', (f, x) => `خط الصفحة ${kb(f)}، و${codes.length} محرفًا لكلماتها.`);
       await withFont('cmpHafs', 'خط حفص مع النص', 'fonts/quran.woff2', pageText, (f, x) => `الخط ${kb(f)} مرة واحدة للمصحف كله، ونص الصفحة ${kb(x)}.`);
       $('cmpNote').textContent = 'هذه أرقام جهازك الآن. تتغير من جهاز إلى جهاز ومن مرة إلى مرة.';
