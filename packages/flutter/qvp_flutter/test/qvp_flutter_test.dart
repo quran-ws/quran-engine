@@ -1510,6 +1510,94 @@ void main() {
     },
   );
 
+  testWidgets(
+    'QvpPageView onSwipe callback reports horizontal drag and obeys invariants',
+    (tester) async {
+      int? swiped;
+      final p = engine.loadPage(File(pagePath).readAsBytesSync());
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: SizedBox(
+            width: 400,
+            height: 640,
+            child: QvpPageView(page: p, onSwipe: (pages) => swiped = pages),
+          ),
+        ),
+      );
+
+      // 1. Right flick: +1 in mushaf reading order (next page)
+      await tester.fling(find.byType(QvpPageView), const Offset(200, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(swiped, 1);
+
+      // 2. Left flick: -1 in mushaf reading order (previous page)
+      swiped = null;
+      await tester.fling(find.byType(QvpPageView), const Offset(-200, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(swiped, -1);
+
+      // 3. Vertical drag: answers 0 (does not turn page)
+      swiped = null;
+      await tester.fling(find.byType(QvpPageView), const Offset(0, 200), 1000);
+      await tester.pumpAndSettle();
+      expect(swiped, isNull);
+
+      // 4. Diagonal drag: (90, 300) is mostly vertical, engine answers 0
+      swiped = null;
+      await tester.fling(find.byType(QvpPageView), const Offset(90, 300), 1000);
+      await tester.pumpAndSettle();
+      expect(swiped, isNull);
+
+      // 5. Second finger lands: ends gesture without turning page
+      swiped = null;
+      final gesture1 = await tester.startGesture(
+        tester.getCenter(find.byType(QvpPageView)),
+      );
+      await gesture1.moveBy(const Offset(100, 0));
+      final gesture2 = await tester.startGesture(
+        tester.getCenter(find.byType(QvpPageView)) + const Offset(20, 20),
+      );
+      await tester.pump();
+      await gesture1.up();
+      await gesture2.up();
+      await tester.pumpAndSettle();
+      expect(swiped, isNull);
+
+      // 6. Selection drag: long press on word to start selection, drag horizontally
+      swiped = null;
+      final word = p.hitAreasView().first;
+      final wordPt = Offset((word.x0 + word.x1) / 2, (word.y0 + word.y1) / 2);
+      final selGesture = await tester.startGesture(wordPt);
+      await tester.pump(const Duration(milliseconds: 600));
+      await selGesture.moveBy(const Offset(200, 0));
+      await selGesture.up();
+      await tester.pumpAndSettle();
+      expect(swiped, isNull);
+
+      // 7. Magnify mode at rest: sidewaysDrag answers turnPage so onSwipe fires
+      swiped = null;
+      final state = tester.state<QvpPageViewState>(find.byType(QvpPageView));
+      state.setZoomMode(QvpZoomMode.magnify);
+      await tester.pumpAndSettle();
+      await tester.fling(find.byType(QvpPageView), const Offset(200, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(swiped, 1);
+
+      // 8. Reflowed page: stepped layout answers turnPage so onSwipe fires
+      swiped = null;
+      state.setZoomMode(QvpZoomMode.stepped);
+      state.zoomToStep(1);
+      await tester.pumpAndSettle();
+      await tester.fling(find.byType(QvpPageView), const Offset(200, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(swiped, 1);
+
+      await tester.pumpWidget(const SizedBox());
+      p.dispose();
+    },
+  );
+
   testWidgets('benchmark: 200 frames of a page where nothing moves', (
     tester,
   ) async {

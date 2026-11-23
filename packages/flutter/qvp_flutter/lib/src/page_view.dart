@@ -236,6 +236,7 @@ class QvpPageView extends StatefulWidget {
     this.onDecorationTap,
     this.onEmptyTap,
     this.onSelectionChanged,
+    this.onSwipe,
     this.hitMaxDistance = QvpDefaults.tapDistance,
     this.selectionEnabled = true,
     this.panZoomEnabled = true,
@@ -275,6 +276,10 @@ class QvpPageView extends StatefulWidget {
 
   /// Whole-word selection changed through long-press-drag (empty list = cleared).
   final void Function(List<int> words)? onSelectionChanged;
+
+  /// A sideways flick, in pages: +1 the page after this one, -1 the page before it. The
+  /// muṣḥaf's own order, so a host adds it to the page it is on.
+  final void Function(int pages)? onSwipe;
 
   /// Max distance (page units) for the gap-aware tap.
   final double hitMaxDistance;
@@ -547,9 +552,14 @@ class QvpPageViewState extends State<QvpPageView>
     }
   }
 
+  double _swipeDx = 0.0;
+  double _swipeDy = 0.0;
+
   /// The fingers went down, or their number changed: Flutter starts the scale gesture again
   /// then, with `scale` back at 1, so this is where every pinch is measured from.
   void _onScaleStart(ScaleStartDetails d) {
+    _swipeDx = 0.0;
+    _swipeDy = 0.0;
     _gView = _ctl.view;
     _gFocal = d.localFocalPoint;
     // where the control stood when the fingers went down: the engine measures them against this,
@@ -565,8 +575,11 @@ class QvpPageViewState extends State<QvpPageView>
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
-    if (!widget.panZoomEnabled || _size == Size.zero) return;
+    if (_size == Size.zero) return;
     if (d.pointerCount < 2) {
+      _swipeDx += d.focalPointDelta.dx;
+      _swipeDy += d.focalPointDelta.dy;
+      if (!widget.panZoomEnabled) return;
       // One finger: a drag. A page with no sideways travel to spend scrolls up and down only;
       // the engine says which, and holds the page against the viewport either way.
       final sideways =
@@ -580,6 +593,7 @@ class QvpPageViewState extends State<QvpPageView>
       );
       return;
     }
+    if (!widget.panZoomEnabled) return;
     // the fingers' drift since the pinch began: it pans the page, so two fingers drag it
     final drift = d.localFocalPoint - _gFocal;
     if (_gZoom.mode == QvpZoomMode.magnify) {
@@ -621,6 +635,25 @@ class QvpPageViewState extends State<QvpPageView>
       widget.onZoomChanged?.call(c.zoom);
     }
     _hold(page.engine.viewPan(c.view, drift.dx, drift.dy));
+  }
+
+  void _onScaleEnd(ScaleEndDetails d) {
+    if (widget.onSwipe != null && d.pointerCount == 0 && !_selecting) {
+      final sideways = page.sidewaysDrag(_zoom, _ctl.view, _fitScale);
+      if (sideways == QvpSideways.turnPage) {
+        final pages = page.engine.swipePages(
+          _swipeDx,
+          _swipeDy,
+          d.velocity.pixelsPerSecond.dx,
+          d.velocity.pixelsPerSecond.dy,
+        );
+        if (pages != 0) {
+          widget.onSwipe!(pages);
+        }
+      }
+    }
+    _swipeDx = 0.0;
+    _swipeDy = 0.0;
   }
 
   /// Move the control to one of the page's steps: 0 is the printed page.
@@ -731,6 +764,7 @@ class QvpPageViewState extends State<QvpPageView>
           _ctl._fitRequested = true;
         }
         if (_ctl._fitRequested) _fit(size);
+        final scaleEnabled = widget.panZoomEnabled || widget.onSwipe != null;
         return ClipRect(
           child: Semantics(
             label: 'Quran Mushaf page ${page.page}',
@@ -739,8 +773,9 @@ class QvpPageViewState extends State<QvpPageView>
               behavior: HitTestBehavior.opaque,
               onTapUp: _onTapUp,
               onDoubleTap: widget.panZoomEnabled ? fit : null,
-              onScaleStart: widget.panZoomEnabled ? _onScaleStart : null,
-              onScaleUpdate: widget.panZoomEnabled ? _onScaleUpdate : null,
+              onScaleStart: scaleEnabled ? _onScaleStart : null,
+              onScaleUpdate: scaleEnabled ? _onScaleUpdate : null,
+              onScaleEnd: scaleEnabled ? _onScaleEnd : null,
               onLongPressStart: widget.selectionEnabled
                   ? _onLongPressStart
                   : null,

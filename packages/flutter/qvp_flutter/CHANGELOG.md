@@ -6,6 +6,7 @@
   included. `QvpPassageSpec.omitAyahMarks` and `QvpPassage.ayahMark(pages, surah, ayah)` lay an
   ayah out with no medallion and give its medallion alone, on both backends.
   `QvpPassageDraw` compares by value.
+- `QvpPageView.onSwipe` reports released horizontal drags in pages (+1 next, -1 previous in muṣḥaf reading order).
 
 ## 0.10.0
 
