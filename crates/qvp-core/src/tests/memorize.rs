@@ -60,3 +60,19 @@ fn mask_transition_fades_on_the_engine_clock() {
     let style_quarter = p.color_of(1) & 0xff;
     assert!(style_quarter < 0x80, "a style fade eases out, {style_quarter:02x}");
 }
+
+#[test]
+fn mask_boxes_of_a_line_share_top_and_bottom() {
+    let mut p = page();
+    p.mask(&Target::Page, MaskMode::Block);
+    let boxes = p.mask_boxes_view();
+    assert!(boxes.len() > 1);
+    let mut lines = std::collections::BTreeMap::new();
+    for b in &boxes {
+        lines.entry(b.line).or_insert_with(Vec::new).push((b.y0, b.y1));
+    }
+    assert!(lines.values().any(|row| row.len() > 1), "the fixture has a line with two words");
+    for row in lines.values() {
+        assert!(row.iter().all(|&(y0, y1)| y0 == row[0].0 && y1 == row[0].1), "one height in a line: {row:?}");
+    }
+}

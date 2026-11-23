@@ -5,6 +5,8 @@
 # Usage: scripts/package-data.sh X.Y.Z
 # Inputs: dist/pages/ (604 pages and sidecars, atlas.qva, generated surah-name assets),
 #         pages/.tag (the quran-svg-elements tag).
+#         Optional: dist/letters/ (604 letter layers, NNN.qvl, built from the same source
+#         release as the pages).
 #         Optional: dist/pages/ornaments.qvo, built with --redistributable, and
 #         QVP_ASSETS_COMMIT. The script refuses a set with any ornament whose licence
 #         is not confirmed.
@@ -56,6 +58,16 @@ if [ -f dist/pages/ornaments.qvo ]; then
   fi
 fi
 
+# The letter layers are optional. A layer is built for one exact page file, so the engine
+# must accept each layer for its page before the release carries them.
+letters=0
+if [ -d dist/letters ]; then
+  letters="$(find dist/letters -maxdepth 1 -type f -name '[0-9][0-9][0-9].qvl' | wc -l | tr -d ' ')"
+  [ "$letters" = 604 ] || { echo "error: expected 604 letter layers in dist/letters, found $letters" >&2; exit 1; }
+  [ "$(cat pages-letters/.tag 2>/dev/null)" = "$(cat pages/.tag 2>/dev/null)" ] || {
+    echo "error: pages/ and pages-letters/ are not from the same quran-svg-elements release" >&2; exit 1; }
+fi
+
 stage="$(mktemp -d)/$name"; trap 'rm -rf "$(dirname "$stage")"' EXIT
 mkdir -p "$stage/surah-names"
 if [ -f dist/pages/ornaments.qvo ]; then
@@ -63,6 +75,7 @@ if [ -f dist/pages/ornaments.qvo ]; then
 fi
 cp dist/pages/*.qvp dist/pages/*.words.json dist/pages/atlas.qva dist/pages/atlas.json "$stage/"
 cp -R dist/pages/surah-names/. "$stage/surah-names/"
+if [ "$letters" = 604 ]; then cp dist/letters/[0-9][0-9][0-9].qvl "$stage/"; fi
 python3 - "$stage" "$v" "$(cat pages/.tag 2>/dev/null || echo unknown)" "$(git rev-parse HEAD)" "$ornaments_commit" <<'PY'
 import hashlib, json, pathlib, sys, datetime
 stage, v, svg_tag, commit, assets_commit = sys.argv[1:6]
@@ -81,15 +94,26 @@ version = {
         "combined": ["surah-names/qvp/all.qvp", "surah-names/svg/all.svg"],
         "font": "surah-names/surah-names.woff2",
     },
+    "letters": ({"count": sum(1 for p in files if p.parent == root and p.suffix == ".qvl"), "format": "QVL1",
+                 "source": "the letters archive of quran-ws/quran-svg-elements " + svg_tag,
+                 "division": "DigitalKhatt medinamushafanalyzer, commit 056191f, MIT licence"}
+                if any(p.suffix == ".qvl" for p in files) else None),
     "ornaments": ({"source": "quran-ws/quran-assets", "source_commit": assets_commit, "redistributable_only": True}
                   if (root / "ornaments.qvo").exists() else None),
     "files": {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
 }
 (root / "VERSION.json").write_text(json.dumps(version, indent=1) + "\n")
 PY
-awk '/^## Third-party/,0' LICENSE > "$stage/NOTICE.txt" 2>/dev/null || cp LICENSE "$stage/NOTICE.txt"
+# The notice: the third-party part of LICENSE, up to the full licence texts. It must not be
+# empty, so a LICENSE that no longer has these headings stops the release.
+awk '/^THIRD-PARTY MATERIAL/{on=1} /^FULL LICENCE TEXTS/{on=0} on' LICENSE | sed '$d' > "$stage/NOTICE.txt"
+[ -s "$stage/NOTICE.txt" ] || { echo "error: LICENSE has no third-party section for NOTICE.txt" >&2; exit 1; }
+if [ "$letters" = 604 ]; then
+  printf '\n%s\n%s\n' 'Letter division by DigitalKhatt medinamushafanalyzer (commit 056191f),' \
+    'MIT licence. https://github.com/DigitalKhatt/medinamushafanalyzer' >> "$stage/NOTICE.txt"
+fi
 mkdir -p dist
 tar -czf "dist/$name.tar.gz" -C "$(dirname "$stage")" "$name"
 (cd dist && shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256")
 extra=""; [ -f dist/pages/ornaments.qvo ] && extra=" dist/pages/ornaments.qvo"
-echo "packaged dist/$name.tar.gz ($count pages, $sidecars word sidecars, $surah_names surah names, data version $v); next: gh release create data-v$v dist/$name.tar.gz dist/$name.tar.gz.sha256$extra"
+echo "packaged dist/$name.tar.gz ($letters letter layers, $count pages, $sidecars word sidecars, $surah_names surah names, data version $v); next: gh release create data-v$v dist/$name.tar.gz dist/$name.tar.gz.sha256$extra"

@@ -75,8 +75,10 @@ The layers built from `quran-svg-elements` v2.0.0 match the pages built from v2.
 So a data release that carries the layers must carry pages built from the same source
 release, and the layers are built again whenever the page data is built again.
 
-A data release carries the layers only when its `VERSION.json` lists them. `data-v0.5.0`
-does not. Until a release carries them, build the layers and the pages from the same source:
+A data release carries the layers only when its `VERSION.json` lists them. `data-v0.6.0` is
+the first that does, with pages built from the same source release. `scripts/package-data.sh`
+adds the layers of `dist/letters/` to a release. To build the layers and the pages from the
+same source:
 
 ```sh
 QVP_SYNC=letters scripts/sync-test-data.sh   # what the default sync fetches, then pages-letters/

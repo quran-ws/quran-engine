@@ -23,7 +23,8 @@ full page. The atlas supplies aggregate lookup and search metadata. A service wo
 whole data set up front.
 
 A data release serves letter layers (`NNN.qvl`, `docs/DATA.md`) only when its `VERSION.json`
-and its manifest list them. `data-v0.5.0` does not.
+and its manifest list them. `data-v0.6.0` is the first that does: `qvp/v0.6.0/042.qvl` is the
+layer of `qvp/v0.6.0/042.qvp`. The layers are single objects and are not in the bundle.
 
 ## The layout
 
