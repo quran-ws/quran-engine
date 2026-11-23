@@ -135,6 +135,11 @@ All notable changes to the engine and its packages. The format follows
 - `qvp-convert` writes `w`, each word's number in the quran-text release, to
   `NNN.words.json` when the page source is the words archive of `quran-svg-elements`
   v2.0.0. An engine that does not know the field ignores it.
+- `scripts/package-data.sh` adds the letter layers of `dist/letters/` to a data release and
+  lists them in `VERSION.json`, and `scripts/publish-cdn.sh` uploads them as single objects.
+  `data-v0.6.0` is the first data release with layers, with pages built from
+  `quran-svg-elements` v2.0.0.
+- The showcase in `web/demo/`, live at https://engine.quran.ws/, in Arabic and English.
 
 ### Changed
 - **Breaking.** Rust: the letter layer adds variants to two public enums and a field to one
@@ -187,6 +192,11 @@ All notable changes to the engine and its packages. The format follows
 ### Removed
 
 ### Fixed
+- The block and blur boxes of a memorisation mask have one height in a printed line: the
+  top and the bottom of the tallest ink of the line's words. Before, each box was as tall as
+  its own word, so a row was ragged and showed how tall each hidden word is.
+- The `NOTICE.txt` of a data release was empty. It now holds the third-party part of
+  `LICENSE`, and the DigitalKhatt attribution when the release has letter layers.
 - Android: the styled pass of `QvpPageView` draws a styled path only where the engine's draw
   list puts it. Before, it drew every styled path. It put a styled path that the list leaves
   out, such as a page number under reflow, at its printed line, and it drew a path once when
