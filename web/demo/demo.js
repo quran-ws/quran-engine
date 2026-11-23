@@ -523,7 +523,7 @@
     let full = all.filter(s => s.ayahMark && s.surahHeader && s.pageFrame);
     const whole = full.length > 0;
     // with markers only, one design of each family is enough to show the idea
-    if (!whole) { const seen = new Set(); full = all.filter(s => s.ayahMark && !seen.has(s.style.slice(0, 8)) && seen.add(s.style.slice(0, 8))).slice(0, 10); $('drSay').textContent = 'يبقى نص مصحف المدينة كما هو، وتتغيّر علامات الآيات. يضع المحرّك كل علامة في موضع العلامة المطبوعة وبحجمها.'; }
+    if (!whole) { const seen = new Set(); full = all.filter(s => s.ayahMark && !seen.has(s.style.slice(0, 8)) && seen.add(s.style.slice(0, 8))).slice(0, 10); $('drSay').textContent = 'يستخدم المحرّك علامات آيات بتصميم آخر مع نص مصحف المدينة، ويضع كل علامة في موضع العلامة المطبوعة وبحجمها.'; }
     // the Arabic name of a style of the set, or its own name when the list has none
     const NAMES = { 'mushaf-douri': 'مصحف الدوري', 'mushaf-hafs-adi': 'مصحف حفص العادي', 'mushaf-hafs-madinah-kabir': 'مصحف المدينة الكبير', 'mushaf-hafs-madinah-mumtaza': 'مصحف المدينة الممتاز', 'mushaf-qalon': 'مصحف قالون', 'mushaf-shubah': 'مصحف شعبة', 'mushaf-sousi': 'مصحف السوسي', 'mushaf-warsh': 'مصحف ورش' };
     const name = (st0, i) => NAMES[st0] || (whole ? st0 : `التصميم ${i + 1}`);
