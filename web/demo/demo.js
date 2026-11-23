@@ -478,25 +478,96 @@
     mask();
 
     // The reader's voice. TajweedFormer V4 runs in a frame of Quran Lab's on this device and
-    // gives the sounds it heard. It does not judge. The match below is this demo's own: a
-    // word shows when most of its strong consonants came, in order, in what was heard.
-    const strong = s => [...s.normalize('NFC')].filter(c => /\p{L}/u.test(c) && !/[ـاأإآٱوؤيىئءة]/.test(c));
-    function hear(decoded) {
-      const tokens = decoded.tokens || [], n = decoded.isFinal ? tokens.length : (decoded.settled ?? tokens.length);
-      const heard = tokens.slice(0, n).map(t => t.name).filter(x => /^\p{L}$/u.test(x) && /[؀-ۿ]/.test(x) && !/[ءوي]/.test(x));
-      let at = 0, k = 0;
-      for (; k < expect.length; k++) {
-        const need = strong(expect[k].qpc); if (!need.length) continue;
-        let got = 0, j = at, end = at;
-        for (const c of need) { const f = heard.indexOf(c, j); if (f >= 0 && f - j <= 2) { got++; j = f + 1; end = j; } }
-        if (got < (need.length <= 2 ? need.length : Math.ceil(need.length * 0.7))) break;
-        at = end;
+    // gives the sounds it heard. It does not judge. The match below is this demo's own, and it
+    // is simple: it aligns the strong consonants of the page's words with what was heard.
+    // A doubled letter is heard once, so equal neighbours count once on both sides.
+    const once = a => a.filter((c, i) => c !== a[i - 1]);
+    const strong = s => once([...s.normalize('NFC')].filter(c => /\p{L}/u.test(c) && !/[ـاأإآٱوؤيىئءة]/.test(c)));
+    // The words said so far: the longest run of whole words, from the first, whose letters
+    // align with some stretch of what was heard. The stretch can start anywhere, so words
+    // before the page's first word, such as the isti'adhah, do not count. A word must itself
+    // be there (one letter in three can differ), and the whole run must hold (one in four).
+    function wordsSaid(heard, from = 0) {
+      // cost[j]: the least edits that align the letters so far with a stretch that ends at j
+      let cost = new Array(heard.length + 1).fill(0), letters = 0, before = 0, words = 0;
+      for (const w of expect.slice(from)) {
+        const need = strong(w.qpc);
+        for (const c of need) {
+          const next = new Array(heard.length + 1); next[0] = cost[0] + 1;
+          for (let j = 1; j <= heard.length; j++) next[j] = Math.min(cost[j - 1] + (c === heard[j - 1] ? 0 : 1), cost[j] + 1, next[j - 1] + 1);
+          cost = next;
+        }
+        letters += need.length;
+        const now = Math.min(...cost);
+        if (now - before > Math.floor(need.length / 3) || now > Math.floor(letters / 4)) break;
+        before = now; words++;
       }
-      for (let i = said; i < k; i++) st.page.unmaskWord(expect[i].index);
-      if (k > said) { said = k; st.draw(); }
-      status(tt`النص المسموع: ${decoded.text || '…'}`);
+      return words;
     }
-    let model = null;
+    // The whole Quran as one run of strong consonants, with the word of each letter. The text
+    // is quran-text's Hafs file, which also gives the first word of each page, ayah and surah.
+    const TEXT = CFG.quranText || 'https://text.quran.ws/files/mushaf/hafs.json';
+    let quran = null;
+    async function wholeQuran() {
+      if (quran) return quran;
+      const d = await json(TEXT), letters = [], wordOf = [];
+      d.words.forEach((w, i) => { for (const c of strong(w)) if (c !== letters[letters.length - 1]) { letters.push(c); wordOf.push(i); } });
+      // the last start at or before a word: its page, its ayah or its surah, counted from 1
+      const at = (starts, w) => { let lo = 0, hi = starts.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (starts[mid] <= w) lo = mid; else hi = mid - 1; } return lo + 1; };
+      return (quran = { letters: letters.join(''), wordOf, page: w => at(d.page_starts, w), surah: w => at(d.surah_starts, w), ayah: w => { const a = at(d.ayah_starts, w), s = at(d.surah_starts, w); return a - at(d.ayah_starts, d.surah_starts[s - 1]) + 1; } });
+    }
+    // The place of what was heard: the word where its last letters end, when those letters
+    // are in the Quran exactly once. The longest ending is tried first, and a shorter one
+    // serves when the longer holds a letter that the model heard wrong. Twelve letters is the
+    // least: fewer are in many places.
+    function locate(heard) {
+      for (let n = Math.min(heard.length, 40); n >= 12; n--) {
+        const run = heard.slice(-n).join(''), first = quran.letters.indexOf(run);
+        if (first < 0) continue;
+        return quran.letters.indexOf(run, first + 1) < 0 ? quran.wordOf[first + n - 1] : null;
+      }
+      return null;
+    }
+    // A mistake, as the reader hears and sees it: two short low tones, and a red mark on the
+    // place of the word that was expected. The word stays hidden.
+    let tones = null;
+    function wrong(word) {
+      try {
+        tones = tones || new AudioContext();
+        [[220, 0], [165, 0.16]].forEach(([hz, at]) => { const o = tones.createOscillator(), g = tones.createGain(); o.type = 'square'; o.frequency.value = hz; g.gain.setValueAtTime(0.08, tones.currentTime + at); g.gain.exponentialRampToValueAtTime(0.001, tones.currentTime + at + 0.14); o.connect(g).connect(tones.destination); o.start(tones.currentTime + at); o.stop(tones.currentTime + at + 0.15); });
+      } catch { /* no sound on this device: the mark still shows */ }
+      const p = st.page, h = p.highlight(T.word(word), { mode: 'band', band: rgba('#c62828', 0.45), radius: 1.5, ms: 120 });
+      st.draw(); setTimeout(() => { if (st.page === p) { p.removeHighlight(h); st.draw(); } }, 700);
+    }
+    // `kept` is where the match starts again after a mistake: the letters heard before it are
+    // set aside, and the words before `said` stay as they are.
+    let place = null, kept = 0, mistakes = 0, progressAt = 0;
+    async function hear(decoded) {
+      const tokens = decoded.tokens || [], n = decoded.isFinal ? tokens.length : (decoded.settled ?? tokens.length);
+      const heard = once(tokens.slice(0, n).map(t => t.name).filter(x => /^\p{L}$/u.test(x) && /[؀-ۿ]/.test(x) && !/[ءوي]/.test(x)));
+      // the reader can recite from any page: open the page of what was heard
+      const w = quran ? locate(heard) : null;
+      if (w !== null) {
+        place = w;
+        if (quran.page(w) !== st.n) { await st.load(quran.page(w)); st.page.maskOptions({ blockColor: '#d9cfb8' }); st.page.mask(T.page(), mode); said = 0; kept = 0; progressAt = 0; }
+      }
+      // every word of this page was said: the recitation goes on to the next page
+      if (said === expect.length && expect.length && st.n < 604 && place !== null && quran.page(place) > st.n) {
+        await st.load(st.n + 1); st.page.maskOptions({ blockColor: '#d9cfb8' }); st.page.mask(T.page(), mode); said = 0; kept = 0; progressAt = 0;
+      }
+      // Before the first mistake the match can start anywhere in what was heard. After one, it
+      // goes on from the word that was expected, with the letters heard since.
+      const k = kept ? said + wordsSaid(heard.slice(kept), said) : wordsSaid(heard);
+      if (k > said) { for (let i = said; i < k; i++) st.page.unmaskWord(expect[i].index); said = k; progressAt = heard.length; st.draw(); }
+      // The place is known and the reader went on, but the next word did not come: a mistake.
+      // The letters heard so far are set aside, so the reader can say the word again.
+      else if (place !== null && quran.page(place) === st.n && said < expect.length) {
+        const need = strong(expect[said].qpc).length;
+        if (heard.length - Math.max(progressAt, kept) >= Math.max(5, need + 3)) { mistakes++; wrong(expect[said].index); kept = heard.length; progressAt = heard.length; }
+      }
+      card('hzCard', '', place === null ? tr('جارٍ الاستماع وتحديد الموضع.') : tt`سورة ${quran.surah(place)}، الآية ${quran.ayah(place)} · الصفحة ${st.n}`, tt`الكلمات المقروءة: ${said} من ${expect.length} · الأخطاء: ${mistakes}`);
+    }
+    let model = null, busy = false;
     async function voice() {
       if (model) return model;
       status(tr('جارٍ تجهيز النموذج. قد يستغرق التحميل الأول بعض الوقت.'));
@@ -504,13 +575,47 @@
       const client = await window.QuranLab.TajweedClient.create({ key: CFG.quranlabKey });
       return (model = await client.model());
     }
-    async function take(clip) {
+    // A recorded recitation of this surah, as the model takes its own audio: mono at 16 kHz.
+    // The samples go in at the pace of the playback, so the words show as the reciter says them.
+    const RATE = 16000;
+    async function recorded(m) {
+      // Surah 112, which is on the last page: the demo starts on the first page, so the
+      // reader sees it find the place.
+      const info = await json(`${API}/v4/recitations/1/surahs/112`), files = info.data.files;
+      const url = (files.mp3_64 || files.original || Object.values(files)[0]).url;
+      const decoded = await new OfflineAudioContext(1, RATE, RATE).decodeAudioData((await bytes(url)).buffer);
+      const off = new OfflineAudioContext(1, Math.ceil(decoded.duration * RATE), RATE), src = off.createBufferSource();
+      src.buffer = decoded; src.connect(off.destination); src.start();
+      const samples = (await off.startRendering()).getChannelData(0);
+      const session = m.session(), audio = new Audio(url);
+      const feed = (async () => {
+        // The browser can refuse to play sound. The feed keeps its own clock, so the words
+        // still show at the reciter's pace.
+        await audio.play().catch(() => {});
+        const t0 = performance.now();
+        for (let sent = 0; sent < samples.length && busy;) {
+          const upTo = Math.min(samples.length, Math.ceil(((performance.now() - t0) / 1000 + 0.3) * RATE));
+          if (upTo > sent) { await session.push(samples.subarray(sent, upTo)); sent = upTo; }
+          await new Promise(r => setTimeout(r, 120));
+        }
+        audio.pause(); await session.finish();
+      })();
+      feed.catch(e => { console.error(e); status(tr('تعذّر تشغيل القراءة بالصوت: ') + (e.code || e.message)); });
+      return { session, feed };
+    }
+    async function take(fromRecording) {
+      if (busy) { busy = false; return; }   // a second press stops the take
+      busy = true;
       try {
         const m = await voice();
-        mask(); status(clip ? tr('جارٍ تحليل المقطع الصوتي.') : tr('ابدأ القراءة.'));
-        const session = await m.listen(clip ? { from: m.sampleClips[0] } : { endOnSilenceMs: 2500 });
-        for await (const chunk of session.chunks) if (chunk.decoded) hear(chunk.decoded);
+        await wholeQuran(); place = null; kept = 0; mistakes = 0; progressAt = 0;
+        try { tones = tones || new AudioContext(); } catch { /* the mistake sound is optional */ }
+        mask(); status(fromRecording ? tr('جارٍ تحليل التلاوة المسجّلة.') : tr('ابدأ القراءة من أي موضع في المصحف.'));
+        const { session, feed } = fromRecording ? await recorded(m) : { session: await m.listen({ endOnSilenceMs: 2500 }), feed: null };
+        for await (const chunk of session.chunks) { if (chunk.decoded) await hear(chunk.decoded); if (!busy && !fromRecording) break; }
+        if (feed) await feed;
       } catch (e) { console.error(e); status(tr('تعذّر تشغيل القراءة بالصوت: ') + (e.code || e.message)); }
+      busy = false;
     }
     if (CFG.quranlabKey) {
       $('hzListen').disabled = false; $('hzClip').disabled = false;

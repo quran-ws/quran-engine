@@ -18,13 +18,16 @@ with, so take the pages and the layers from the same build. The tajwid and recit
 scenes need the layers.
 
 web/demo/config.local.js is optional and git-ignored: it holds the keys of this machine
-(web/demo/README.md). The build copies it when it is there.
+(web/demo/README.md). The build copies it when it is there. QVP_DEMO_CONFIG names another
+config file, and QVP_DEMO_OUT another output directory: a build to share has its own key,
+because a key of Quran Lab works on the origins it names and on no other.
 """
 import hashlib, json, os, shutil
 
 root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 web = os.path.join(root, 'web'); demo = os.path.join(web, 'demo')
-dist = os.path.join(root, 'dist'); out = os.path.join(dist, 'demo')
+dist = os.path.join(root, 'dist')
+out = os.path.abspath(os.environ.get('QVP_DEMO_OUT') or os.path.join(dist, 'demo'))
 pages_dir = os.path.abspath(os.environ.get('QVP_PAGES_DIR') or os.path.join(dist, 'pages'))
 letters_dir = os.path.abspath(os.environ.get('QVP_LETTERS_DIR') or os.path.join(dist, 'letters'))
 
@@ -52,7 +55,7 @@ for name in ('qvp.js', 'demo.js', 'en.js'):
 open(os.path.join(out, 'index.html'), 'w').write(html)
 for name, src in (('qvp.js', web), ('demo.js', demo), ('en.js', demo), ('qvp_ffi.wasm', web)):
     shutil.copy(os.path.join(src, name), os.path.join(out, name))
-local = os.path.join(demo, 'config.local.js')
+local = os.path.abspath(os.environ.get('QVP_DEMO_CONFIG') or os.path.join(demo, 'config.local.js'))
 if os.path.exists(local):
     shutil.copy(local, os.path.join(out, 'config.local.js'))
 elif os.path.exists(os.path.join(out, 'config.local.js')):
@@ -97,4 +100,4 @@ link(letters_dir, os.path.join(out, 'letters'))
 # the page SVGs, for the comparison's measure: the engine's own source (scripts/sync-test-data.sh)
 svg_dir = os.path.abspath(os.environ.get('QVP_SVG_DIR') or os.path.join(root, 'pages'))
 link(svg_dir if os.path.exists(os.path.join(svg_dir, '003.svg')) else '', os.path.join(out, 'svg'))
-print('dist/demo/ written; serve it: (cd dist/demo && python3 -m http.server 8771), open http://localhost:8771/')
+print(f'{os.path.relpath(out, root)}/ written; serve it: (cd {os.path.relpath(out, root)} && python3 -m http.server 8771), open http://localhost:8771/')

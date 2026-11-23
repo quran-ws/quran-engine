@@ -1,30 +1,9 @@
 # The showcase
 
 One page, in Arabic and English, that shows what the engine can do. Each scene is a live
-mushaf page that the engine draws through `web/qvp.js`.
-
-| scene | what it shows | engine calls |
-|---|---|---|
-| البداية | the page appears word by word, and a tap names a word and its letters | `mask`, `unmaskNext`, `hitTestView`, `letters` |
-| التجويد | tajwid rulings coloured on their own letters, a legend, and a tap that names the ruling | `style(Sel.wordChars(...))`, `hitTestLetterView` |
-| التلاوة | a player whose highlight follows the reciter by word or by letter | `highlight`, `moveHighlight`, `style(Sel.letter(...))`, `letterAtOffset` |
-| الحفظ | hide the words, then reveal them by a tap or by the reader's voice | `mask`, `unmaskNext`, `maskBack`, `unmaskWord` |
-| القراءة | zoom steps with reflow, pinch modes and paper themes | `zoomToStep`, `zoomPinch`, `zoomMode`, `setDefaultColor` |
-| الزخرفة | the same text in the ornaments of another mushaf | `dress`, `undress` |
-| المقارنة | the engine against SVG, images, page fonts and the Hafs font with text: size, features, and a measure on the reader's device | `loadPage`, `buildPaths`, `CanvasRenderer.draw` |
-
-| المنصات | the package of each platform, and the links to start |  |
-
-Every page takes a pinch, Ctrl with the mouse wheel, and the zoom buttons on its frame.
-
-## Languages
-
-The page is written in Arabic. `en.js` maps each Arabic string to its English one, and
-`demo.js` uses the map when the address has `?lang=en`. The link in the top bar changes the
-language, and the page keeps the reader's choice. A string that `en.js` does not hold stays
-Arabic and shows as a warning in the console. So when you add or change a string, add its
-English to `en.js`. The rule descriptions of the tajwid corpus are Arabic in both languages,
-because the corpus has them in Arabic only.
+mushaf page that the engine draws: tajwid colours, a recitation player, memorisation by
+voice, zoom with reflow, ornaments, a comparison with other ways to show a page, and the
+platforms.
 
 ## Run it
 
@@ -37,61 +16,43 @@ python3 web/demo/build.py && (cd dist/demo && python3 -m http.server 8771)
 Open http://localhost:8771/. Use `localhost`, not `127.0.0.1`: a development key of Quran
 Lab works only there.
 
-## Data
+## What the build takes
 
-The showcase commits no data. It reads these at run time:
+The repository holds no data, no font and no key. `build.py` reads these variables:
 
-- **Pages and letter layers** from `dist/pages/` and `dist/letters/`, which `build.py` links.
-  The tajwid scene and the letter highlight need the letter layers, and a layer attaches only
-  to the page file it was built with (`docs/DATA.md`). `QVP_PAGES_DIR` and `QVP_LETTERS_DIR`
-  name other directories.
-- **Tajwid rulings** from `@quran.ws/tajwid-annotations` and `@quran.ws/tajwid-rules`
-  (`quran-ws/quran-tajweed`, CC BY 4.0), through a public CDN. The colours are the colour
-  classes of quranpedia.net. The showcase reads the repository at one commit, because the
-  npm packages, 0.1.0, are older: a span of theirs covers a letter and its condition, so a
-  qalqalah or a madd colours the next letter too. A span of the commit adds a focus, the
-  letters that the ruling is about, and the scene colours the focus alone. `QVP_TAJWID`
-  names another file of rulings.
-- **Audio and timings** from the MP3Quran API, version 4. It needs no key. The showcase uses
-  the staging API until the API has a public address.
-- **Ornaments** from `ornaments.qvo` beside the pages. The released set has ayah markers
-  only, so the scene then changes the markers alone. `QVP_ORNAMENTS` names another set.
+| variable | what it names | without it |
+|---|---|---|
+| `QVP_PAGES_DIR`, `QVP_LETTERS_DIR` | pages and letter layers from the same build (`docs/DATA.md`) | `dist/pages`, `dist/letters` |
+| `QVP_ORNAMENTS` | an ornament set (`.qvo`) | the set beside the pages, which has ayah markers only |
+| `QVP_FONT_TITLE`, `QVP_FONT_QURAN` | two `.woff2` fonts: the titles, and a word of the Quran outside the page | web fonts |
+| `QVP_FONT_QPC`, `QVP_SVG_DIR` | QPC page fonts and page SVGs, for the comparison | those two rows show no measure |
+| `QVP_TAJWID` | a file of tajwid rulings | `quran-ws/quran-tajweed` at a fixed commit |
+| `QVP_DEMO_CONFIG`, `QVP_DEMO_OUT` | a config file and an output directory, for a build to share | `config.local.js`, `dist/demo` |
 
-## Fonts
-
-The titles and the words of the Quran beside the page can use two fonts of your machine.
-The repository does not hold them, because their licences do not allow that:
-
-```sh
-QVP_FONT_TITLE=/path/to/thmanyahserifdisplay-Bold.woff2 \
-QVP_FONT_QURAN=/path/to/hafs.woff2 \
-python3 web/demo/build.py
-```
-
-`QVP_FONT_TITLE` is the typeface of the titles, and the showcase is designed with Thmanyah
-Serif Display. `QVP_FONT_QURAN` is the typeface for a word of the Quran outside the page:
-the KFGQPC Hafs font, so the word looks as it does in the mushaf. Without a file, the page
-uses a web font.
-
-`QVP_FONT_QPC` names a directory of QPC page fonts (`p3.woff2` to `p52.woff2`). The
-comparison measures how long those fonts and the Hafs font take to show 1, 10 or 50 pages.
-The build needs fontTools to list each font's code points.
+At run time the page reads tajwid rulings from a public CDN, audio and timings from the
+MP3Quran API, and the text of the Quran from `text.quran.ws`.
 
 ## The reader's voice
 
-The memorisation scene can listen to the reader with TajweedFormer V4 of Quran Lab. The
-model runs on the reader's device, in a frame that Quran Lab serves. The showcase loads
-Quran Lab's script at run time and holds none of its files.
+The memorisation scene listens with TajweedFormer V4 of Quran Lab. The model runs on the
+reader's device, in a frame that Quran Lab serves.
 
-1. Get a web key from https://sdk.quranlab.ai.
+1. Make a web key at https://sdk.quranlab.ai.
 2. Copy `config.example.js` to `config.local.js` and put the key in the copy.
 3. Build again.
 
-`config.local.js` is ignored by git. Do not commit a key, and do not add any file of the
-model to this repository.
+A web key is public by design: it works only on the origins that you list for it. So give
+each address its own key, and do not allow `localhost` on a key that a public page uses.
+Git ignores `config.local.js`. Do not commit a key or any file of the model.
 
-The model gives the sounds that it heard. It does not judge a recitation. The match in
-`demo.js` is the showcase's own and it is simple: a word shows when most of its strong
-consonants came, in order. It can be wrong, and it does not replace a qualified teacher.
-The licence of the model (NPL-1.2) does not let anyone charge for the model or for a
-feature that it powers.
+The model gives the sounds that it heard and does not judge. `demo.js` does the rest, and
+it is simple: it finds the one place in the Quran that matches what it heard, opens that
+page, shows each word that the reader says, and marks a word that did not come. It can be
+wrong, and it does not replace a qualified teacher. The model's licence (NPL-1.2) does not
+let anyone charge for a feature that it powers.
+
+## Languages
+
+The page is written in Arabic. `en.js` maps each Arabic string to its English one, and
+`?lang=en` selects it. When you add or change a string, add its English to `en.js`: a
+string with no English stays Arabic and shows as a warning in the console.
