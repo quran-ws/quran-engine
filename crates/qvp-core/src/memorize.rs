@@ -210,11 +210,29 @@ impl Page {
             Some(l) => l.word_placement(wi, li),
             None => crate::Placement::IDENTITY,
         };
+        // Every box of a printed line has the same top and bottom: those of the tallest ink of
+        // the line's words. A box as tall as its own word shows the reader how tall the hidden
+        // word is, and makes a ragged row.
+        let words = &self.data().words;
+        let rows: Vec<(i32, i32)> = self
+            .line_words
+            .iter()
+            .map(|ws| {
+                ws.iter().fold((i32::MAX, i32::MIN), |(y0, y1), &(_, wi)| {
+                    let b = &words[wi as usize].bbox;
+                    (y0.min(b.y0), y1.max(b.y1))
+                })
+            })
+            .collect();
         out.extend(self.mask.hidden.iter().map(|&wi| {
-            let w = &self.data().words[wi as usize];
+            let w = &words[wi as usize];
+            let (row_y0, row_y1) = match rows.get(w.line_index as usize) {
+                Some(&(y0, y1)) if y0 <= y1 => (y0 as f32, y1 as f32),
+                _ => (w.bbox.y0 as f32, w.bbox.y1 as f32),
+            };
             let p = place(wi, w.line_index as usize);
-            let (bx0, by0) = p.apply(w.bbox.x0 as f32 / q - self.mask.pad_x, w.bbox.y0 as f32 / q - self.mask.pad_y);
-            let (bx1, by1) = p.apply(w.bbox.x1 as f32 / q + self.mask.pad_x, w.bbox.y1 as f32 / q + self.mask.pad_y);
+            let (bx0, by0) = p.apply(w.bbox.x0 as f32 / q - self.mask.pad_x, row_y0 / q - self.mask.pad_y);
+            let (bx1, by1) = p.apply(w.bbox.x1 as f32 / q + self.mask.pad_x, row_y1 / q + self.mask.pad_y);
             crate::highlight::ViewBox {
                 highlight: 0,
                 line: w.line_index as u32,
@@ -226,7 +244,7 @@ impl Page {
                 radius: crate::highlight::clamp_radius(
                     self.mask.radius * scale,
                     (w.bbox.x1 - w.bbox.x0) as f32 / q + 2.0 * self.mask.pad_x,
-                    (w.bbox.y1 - w.bbox.y0) as f32 / q + 2.0 * self.mask.pad_y,
+                    (row_y1 - row_y0) / q + 2.0 * self.mask.pad_y,
                     scale,
                 ),
             }
