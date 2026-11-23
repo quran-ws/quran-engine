@@ -25,6 +25,11 @@ All notable changes to the engine and its packages. The format follows
   canvas the host had not yet resized for the new layout.
 - `scripts/check.sh gates`, and so CI, runs `crates/qvp-core/tests/dress_fit.rs`, which
   needs the data release. It skipped in CI before.
+- `QvpCanvasController` under `hostScrolls` paints everything the canvas shows while a pinch
+  runs. The band a pinch paints was held to the scaled content from its origin, so on a page
+  dressed in a border, which rests shrunk with its border's top above that origin, the
+  border's top and the page's bottom went unpainted until the fingers lifted. The band is now
+  held to the canvas's rows instead; an undressed page at rest gets the band it had.
 
 ## [0.9.0] - 2026-11-22
 

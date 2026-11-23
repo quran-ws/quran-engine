@@ -346,6 +346,39 @@ final class QvpDressTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(c.hostPageSize).height, Self.box.height, accuracy: 0.01, "the printed page fills its box again")
     }
 
+    /// While a pinch runs on a bordered page in a canvas the host scrolls, everything the canvas
+    /// shows stays painted: the border's top, which stands above the content's origin, the text,
+    /// and the border's bottom, though the page rests shrunk. Pinching smaller on the printed page
+    /// leaves the view at its rest, so the frame is the one at rest.
+    @MainActor func testHostScrolledPinchPaintsTheWholeBorderedPage() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpPageCanvas needs macOS 14 / iOS 17") }
+        let page = try Self.page604(); defer { page.close() }
+        let set = try QvpOrnaments(bytes: Self.ornamentBytes)
+        let c = QvpCanvasController()
+        c.hostScrolls = true
+        c.fillHeight = true
+        c.hostViewportHeight = Self.box.height
+        c.paperColor = 0xffffffff
+        c.page = page
+        c.setBounds(Self.box, fromCanvas: 1)
+        XCTAssertNotNil(page.dress(set, Self.redBorder(set)))
+        c.resetView()
+        c.setBounds(try XCTUnwrap(c.hostPageSize), fromCanvas: 1)
+        XCTAssertLessThan(c.viewScale, 1); XCTAssertGreaterThan(c.viewOy, 0)
+        let atRest = try Self.render(c)
+        c.pinch(0.8, at: CGPoint(x: Self.box.width / 2, y: Self.box.height / 2))
+        XCTAssertTrue(c.isPinching)
+        // the band reaches the canvas's top and bottom, in the band's own space (canvas y less the pan)
+        let b = c.band(displayScale: 1)
+        XCTAssertLessThanOrEqual(b.top, -c.viewOy + 0.5, "the border's top is in the band")
+        XCTAssertGreaterThanOrEqual(b.top + b.height, Self.box.height - c.viewOy - 0.5, "so is the border's bottom")
+        let pinching = try Self.render(c)
+        XCTAssertEqual(Self.redPixels(pinching), Self.redPixels(atRest), "every part of the border is painted")
+        let worst = zip(pinching.pixels, atRest.pixels).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        XCTAssertLessThanOrEqual(worst, 2, "the frame under the fingers is the frame at rest")
+        c.pinchEnded()
+    }
+
     /// A dress lays a printed page out again inside the engine. `resetView()` alone, as the
     /// header asks, draws what a `relayout()` draws: the controller takes up the engine's layout.
     @MainActor func testResetViewAfterADressTakesUpTheNewLayout() throws {
