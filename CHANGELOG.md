@@ -13,10 +13,15 @@ All notable changes to the engine and its packages. The format follows
   layers are byte-identical to `data-v0.6.0`.
 
 ### Fixed
+- The comparison of the showcase uses one timer for its five methods. Before, SVG and the
+  fonts could be charged up to one frame of waiting per page, and the engine and the images
+  were not.
 - The showcase measures the SVG and QPC page-font methods of its comparison: the site build
   now includes the SVGs and the fonts of pages 3 to 52.
 
 ### Changed
+- Each platform in the showcase links to its package.
+- The player of the showcase colours the recited word red, as it does the letter.
 - `scripts/sync-test-data.sh` takes `ornaments.qvo` from `QVP_ORNAMENTS_TAG`, by default
   `data-v0.7.0`, and the pages from `QVP_DATA_TAG` as before. So the dress controls of every
   example app list the eight mushafs.

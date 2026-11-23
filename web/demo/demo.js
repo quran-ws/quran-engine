@@ -415,7 +415,7 @@
       if (i !== cur) {
         cur = i;
         // by word, the ink alone takes the colour. By letter, a faint band holds the word and the letter takes the colour.
-        const style = byLetter ? { mode: 'band', band: rgba('#c9a44c', 0.22), radius: 1.5, ms: 120 } : { mode: 'ink', ink: '#0a7d32', ms: 120 };
+        const style = byLetter ? { mode: 'band', band: rgba('#c9a44c', 0.22), radius: 1.5, ms: 120 } : { mode: 'ink', ink: '#c62828', ms: 120 };
         if (hl) p.moveHighlight(hl, T.word(w)); else hl = p.highlight(T.word(w), style);
         card('plCard', p.wordForm(w, 'qpc'), tt`سورة يس، الآية ${ayah}، الكلمة ${pos}`, recitation && recitation.reciter.name);
       }
@@ -858,7 +858,6 @@
     // A number with its unit reads left to right. The isolate keeps it whole inside Arabic text.
     const ltr = s => '\u2066' + s + '\u2069';
     const mb = b => ltr((b / 1048576).toFixed(b < 10485760 ? 2 : 1) + ' MB'), ms = t => ltr(t.toFixed(t < 100 ? 1 : 0) + ' ms');
-    const frame = () => new Promise(r => requestAnimationFrame(() => r()));
     // Each run reads every file again from the server, and no measure reuses the work of a
     // run before it: a new engine, new pages, new images, and fonts under new names.
     const run = Date.now();
@@ -878,15 +877,27 @@
     try {
       // a box that the browser lays out and paints: almost clear, so the paint still happens
       const box = () => { const h = document.body.appendChild(el('div')); h.style.cssText = `position:fixed;opacity:0.01;pointer-events:none;inset-inline-start:0;top:0;width:${W}px;z-index:-1;direction:rtl;text-align:justify;font-size:46px;line-height:2.1`; return h; };
-      const twoFrames = async () => { await frame(); await frame(); };
-      // Two frames pass even when the browser has nothing to do. That wait is not work, so the
-      // measures of SVG and of the fonts leave it out: the least of three idle waits.
-      let idle = Infinity;
-      for (let i = 0; i < 3; i++) { const t0 = performance.now(); await twoFrames(); idle = Math.min(idle, performance.now() - t0); }
-      // The work the page can time itself comes first: reading, and the layout that the box
-      // forces. The paint comes with the frames, and it counts where it took longer than the
-      // idle wait. So the measure is never less than the work that was timed.
-      const painted = async (h, t0) => { h.getBoundingClientRect(); const timed = performance.now() - t0; await twoFrames(); return Math.max(timed, performance.now() - t0 - idle); };
+      // One timer for the five methods. The work runs at the start of a frame. A message that
+      // the work posts arrives after the browser has laid the frame out and painted it, so the
+      // time holds the work, the layout and the paint, and no wait for the next frame. The
+      // raster comes after that, on another thread, and no method's time holds it.
+      const timed = work => new Promise((resolve, reject) => requestAnimationFrame(() => {
+        const t0 = performance.now();
+        try { work(); } catch (e) { reject(e); return; }
+        const ch = new MessageChannel();
+        ch.port1.onmessage = () => { resolve(performance.now() - t0); ch.port1.close(); };
+        ch.port2.postMessage(0);
+      }));
+      // Each page has its own place at the top of the box, so a page is inside the part of the
+      // box that the browser paints, and it does not move the pages before it. A page that was
+      // measured stays laid out but hidden, so the next measure does not paint it again.
+      let last = null;
+      const painted = async work => {
+        const time = await timed(work);
+        if (last) { last.style.visibility = 'hidden'; await timed(() => {}); }
+        return time;
+      };
+      const sheet = (host, tag) => { const e = host.appendChild(el(tag)); e.style.cssText = 'position:absolute;top:0;left:0;width:100%'; return (last = e); };
 
       // ── the engine: decode each page file, build its paths, lay it out and draw it. Every
       // page stays open, as in a reader that holds its pages. ──
@@ -894,25 +905,28 @@
       for (const n of pagesOf(count)) { const f = await fresh(`pages/${pad(n)}.qvp`); if (!f) throw new Error(`pages/${pad(n)}.qvp`); files.push(f); }
       const own = await QvpEngine.init(await fresh('qvp_ffi.wasm')), before = own.mem.buffer.byteLength;
       const open = [], canvases = []; let paths = 0, pixels = 0;
-      let t = performance.now();
-      for (const f of files) {
+      let t = 0, engineTime = 0;
+      const stage = box();
+      for (const f of files) engineTime += await painted(() => {
         const p = own.loadPage(f); p.buildPaths();
         const L = p.layout({ viewportW: W, viewportH: W * 2, padTop: 0, padBottom: 0, padLeft: 0, padRight: 0, lineSpacing: 1, fillHeight: false, surahFrames: true, maxAspectSlack: DEFAULTS.ASPECT_SLACK, reflow: null });
-        const c = document.createElement('canvas'); c.width = W; c.height = Math.ceil(L.contentH * L.fitScale);
+        const c = sheet(stage, 'canvas'); c.width = W; c.height = Math.ceil(L.contentH * L.fitScale);
         p.tick(performance.now());
         new CanvasRenderer(c).draw(p, { scale: L.fitScale, offsetX: L.fitX, offsetY: 0 }, 1);
         open.push(p); canvases.push(c); paths += p.nPaths; pixels += c.width * c.height * 4;
-      }
-      const engineTime = performance.now() - t, grown = own.mem.buffer.byteLength - before;
+      });
+      stage.remove();
+      const grown = own.mem.buffer.byteLength - before;
       show('cmpQvp', tr('Quran Engine'), { time: engineTime, bytes: files.reduce((a, f) => a + f.length, 0), memory: tt`ذاكرة المحرّك للصفحات المفتوحة ${mb(grown)}، وبكسلات الرسم ${mb(pixels)}` }, tt`يشمل فك الملفات وبناء المسارات ورسمها. عدد المسارات: ${paths}.`);
 
       // ── images: the same pixels as PNG files, then decode and draw each one ──
       const blobs = []; for (const c of canvases) blobs.push(await new Promise(r => c.toBlob(r, 'image/png')));
-      const bitmaps = []; let decoded = 0;
-      t = performance.now();
-      for (const blob of blobs) { const bmp = await createImageBitmap(blob); document.createElement('canvas').getContext('2d').drawImage(bmp, 0, 0); bitmaps.push(bmp); decoded += bmp.width * bmp.height * 4; }
+      const bitmaps = []; let decoded = 0, imgTime = 0;
+      const wall = box();
+      for (const blob of blobs) { t = performance.now(); const bmp = await createImageBitmap(blob); imgTime += performance.now() - t; imgTime += await painted(() => { const c = sheet(wall, 'canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0); }); bitmaps.push(bmp); decoded += bmp.width * bmp.height * 4; }
+      wall.remove();
       const pngBytes = blobs.reduce((a, x) => a + x.size, 0);
-      show('cmpImg', tr('صور PNG'), { time: performance.now() - t, bytes: pngBytes, memory: tt`الصور بعد فك ضغطها ${mb(decoded)}` }, tt`بعرض ${W} بكسل، دون بيانات للكلمات أو الحروف.`);
+      show('cmpImg', tr('صور PNG'), { time: imgTime, bytes: pngBytes, memory: tt`الصور بعد فك ضغطها ${mb(decoded)}` }, tt`بعرض ${W} بكسل، دون بيانات للكلمات أو الحروف.`);
       $('cmpPng').textContent = '≈ ' + (pngBytes / count * 604 / 1048576).toFixed(0) + ' MB';   // this cell is set left to right in the page
       // the words of each page as text, for the Hafs font. The sidecar gives them, and no measure counts it.
       const texts = [];
@@ -934,9 +948,7 @@
           // The file is data. Nothing in it may run: no script, no foreign content, no handler.
           for (const bad of doc.querySelectorAll('script, foreignObject, iframe, object, embed')) bad.remove();
           for (const node of doc.querySelectorAll('*')) for (const at of [...node.attributes]) if (/^on/i.test(at.name) || /^\s*javascript:/i.test(at.value)) node.removeAttribute(at.name);
-          t = performance.now();
-          host.append(document.importNode(doc.documentElement, true));
-          time += parse + await painted(host, t);
+          time += parse + await painted(() => { sheet(host, 'div').append(document.importNode(doc.documentElement, true)); });
         }
         nodes = host.querySelectorAll('*').length;
         show('cmpSvg', 'SVG', { time, bytes: svgs.reduce((a, f) => a + f.length, 0), memory: domMemory(nodes) }, tr('يشمل قراءة الملفات وإضافتها إلى الصفحة.'));
@@ -948,14 +960,13 @@
         const host = box(), faces = []; let time = 0, size = 0; const seen = new Map();
         for (let i = 0; i < count; i++) {
           const url = fontOf(i), text = textOf(i); if (!url || text === null) { host.remove(); for (const f of faces) document.fonts.delete(f); show(id, title, null, tr('هذا الخط غير متوفر في هذا البناء.')); return; }
-          const line = host.appendChild(el('div'));
           let fam = seen.get(url), fb = null;
           if (!fam) { fb = await fresh(url); if (!fb) { host.remove(); show(id, title, null, tr('هذا الخط غير متوفر في هذا البناء.')); return; } size += fb.length; }
           size += new TextEncoder().encode(text).length;
           t = performance.now();
           if (!fam) { fam = `bench-${id}-${run}-${i}`; const face = new FontFace(fam, fb); await face.load(); document.fonts.add(face); faces.push(face); seen.set(url, fam); }
-          line.style.fontFamily = fam; line.textContent = text;
-          time += await painted(host, t);
+          time += performance.now() - t;
+          time += await painted(() => { const line = sheet(host, 'div'); line.style.fontFamily = fam; line.textContent = text; });
         }
         show(id, title, { time, bytes: size, memory: tt`عدد الخطوط المفتوحة ${faces.length}. لا يتيح المتصفح قياس ذاكرتها من داخل الصفحة.` }, note);
         host.remove(); for (const f of faces) document.fonts.delete(f);
