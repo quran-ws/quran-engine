@@ -5,18 +5,17 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Quran Engine: عرض تفاعلي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  /* Two fonts come from the build (build.py, QVP_FONT_TITLE and QVP_FONT_QURAN). They are not
-     in the repository. When a file is not there, the next family of the list is used. */
-  @font-face { font-family:'Demo Title'; src:url('fonts/title.woff2') format('woff2'); font-weight:400 900; font-display:swap }
+  /* One font comes from the build (build.py, QVP_FONT_QURAN). It is not in the repository.
+     When the file is not there, the next family of the list is used. */
   @font-face { font-family:'Demo Quran'; src:url('fonts/quran.woff2') format('woff2'); font-display:swap }
   /* The mushaf's own world: the deep green of its cover, the gold of its tooling, the paper of its page. */
   :root {
     --night:#0b2022; --night-2:#102b2c; --night-3:#173a39; --line:#24504d;
     --mist:#e3ece8; --muted:#8eaaa3; --gold:#c9a44c; --gold-soft:rgba(201,164,76,.16);
     --paper:#fffdf7; --ink:#231f20; --hover:rgba(201,164,76,.22);
-    --display:'Demo Title','Fraunces','Aref Ruqaa','Amiri',serif; --quran:'Demo Quran','KFGQPC Uthmanic Script HAFS','Amiri','Scheherazade New',serif; --body:'IBM Plex Sans Arabic','IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --display:'IBM Plex Sans Arabic','IBM Plex Sans',system-ui,sans-serif; --quran:'Demo Quran','KFGQPC Uthmanic Script HAFS','Amiri','Scheherazade New',serif; --body:'IBM Plex Sans Arabic','IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
   }
   * { box-sizing:border-box }
   html { scroll-behavior:smooth; scroll-snap-type:y proximity }
@@ -57,8 +56,8 @@
   .say { display:flex; flex-direction:column; gap:14px }
   .kicker { font:500 13px/1 var(--body); color:var(--gold); letter-spacing:.02em }
   h1, h2 { font-family:var(--display); font-weight:700; color:#fff; margin:0; line-height:1.35 }
-  h1 { font-size:clamp(40px,5.4vw,72px) }
-  h2 { font-size:clamp(30px,3.4vw,46px) }
+  h1 { font-size:clamp(34px,4vw,54px) }
+  h2 { font-size:clamp(26px,2.7vw,38px) }
   .say p { margin:0; color:var(--mist); font-weight:300; max-width:36ch }
   .say .fine { font-size:13px; color:var(--muted); max-width:44ch }
   code { font:13px var(--mono); color:var(--gold); direction:ltr; unicode-bidi:isolate }

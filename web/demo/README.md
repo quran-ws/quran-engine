@@ -24,7 +24,7 @@ The repository holds no data, no font and no key. `build.py` reads these variabl
 |---|---|---|
 | `QVP_PAGES_DIR`, `QVP_LETTERS_DIR` | pages and letter layers from the same build (`docs/DATA.md`) | `dist/pages`, `dist/letters` |
 | `QVP_ORNAMENTS` | an ornament set (`.qvo`) | the set beside the pages, which has ayah markers only |
-| `QVP_FONT_TITLE`, `QVP_FONT_QURAN` | two `.woff2` fonts: the titles, and a word of the Quran outside the page | web fonts |
+| `QVP_FONT_QURAN` | a `.woff2` font for a word of the Quran outside the page | a web font |
 | `QVP_FONT_QPC`, `QVP_SVG_DIR` | QPC page fonts and page SVGs, for the comparison | those two rows show no measure |
 | `QVP_TAJWID` | a file of tajwid rulings | `quran-ws/quran-tajweed` at a fixed commit |
 | `QVP_DEMO_CONFIG`, `QVP_DEMO_OUT` | a config file and an output directory, for a build to share | `config.local.js`, `dist/demo` |
@@ -48,11 +48,19 @@ A web key is public by design: it works only on the origins that you list for it
 each address its own key, and do not allow `localhost` on a key that a public page uses.
 Git ignores `config.local.js`. Do not commit a key or any file of the model.
 
-The model gives the sounds that it heard and does not judge. `demo.js` does the rest, and
-it is simple: it finds the one place in the Quran that matches what it heard, opens that
-page, shows each word that the reader says, and marks a word that did not come. It can be
-wrong, and it does not replace a qualified teacher. The model's licence (NPL-1.2) does not
-let anyone charge for a feature that it powers.
+The model does not judge a recitation. `demo.js` does the rest:
+
+1. **Find the place.** It searches the whole Quran for the consonants of what was heard, and
+   opens the page when they are in one place only. The isti'adhah and the basmalah do not
+   count, because they come before every recitation.
+2. **Follow the words.** For each frame of the model's output it lines up the sounds that a
+   correct recitation of the page has (`model.reference`). A word shows in the frame where
+   its last sound is heard.
+3. **Mark a mistake.** When six sounds come with no step forward, the word that was
+   expected gets a sound and a red mark, and the reader can say it again.
+
+It can be wrong, and it does not replace a qualified teacher. The model's licence (NPL-1.2)
+does not let anyone charge for a feature that it powers.
 
 ## Languages
 
