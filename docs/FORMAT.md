@@ -2,11 +2,13 @@
 
 This page specifies the four binary formats the engine reads, byte by byte, so that a
 decoder can be written from it without the Rust source. The reference implementation is
-`crates/qvp-format/src/codec.rs` (pages), `crates/qvp-format/src/atlas.rs` (atlas) and
+`crates/qvp-format/src/codec.rs` (pages), `crates/qvp-format/src/atlas.rs` (atlas),
 `crates/qvp-format/src/ornaments.rs` (ornaments) and `crates/qvp-format/src/letters.rs`
 (letter layers);
 `conformance/qvp1-lite.hex` is a small page written by the encoder, and
-`web/lite.mjs` is a second decoder written against this specification.
+`web/lite.mjs` is a second decoder written against this specification. For letter layers,
+`scripts/gen-conformance.sh` writes synthetic layers, `conformance/qvl1-letters*.hex`, for
+the synthetic pages `conformance/qvp1-letters*.hex`.
 
 ## Conventions
 

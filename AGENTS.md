@@ -10,9 +10,11 @@ scripts/check.sh                      # everything CI runs
 scripts/check.sh test                 # unit tests, no data
 scripts/sync-test-data.sh             # pages/, index/ (quran-svg-elements) and dist/pages/ (data release)
 QVP_SYNC=pages scripts/sync-test-data.sh   # dist/pages/ only: enough for every wrapper build and test
-scripts/check.sh gates                # identity gate (8 pages), line-shift gate, ABI test, conformance
+QVP_SYNC=letters scripts/sync-test-data.sh # also pages-letters/, the letters archive the letter gates read
+scripts/check.sh gates                # identity gate (8 pages), letter gates (with pages-letters/), line-shift gate, ABI test, conformance
 QVP_TEST_ALL=1 cargo test -p qvp-convert --release --test identity   # all 604 pages
 cargo run -p qvp-convert --release -- batch pages dist/pages          # rebuild page data
+cargo run -p qvp-convert --release -- letters pages-letters pages dist/letters   # the letter layers (NNN.qvl)
 cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown # the wasm engine
 scripts/build-engine-android.sh       # native libs for Android and Flutter
 scripts/build-engine-ios.sh           # QvpEngine.xcframework
@@ -54,6 +56,7 @@ scripts/check-parity.py               # header vs Rust vs every wrapper
 |---|---|
 | how the engine works | `docs/HOW-IT-WORKS.md` |
 | the API | `docs/API.md`, `crates/qvp-ffi/include/qvp.h` |
+| the letter layer | `docs/API.md` "Letters", `docs/FORMAT.md` "QVL1", `docs/DATA.md` |
 | which wrapper binds what | `docs/API-PARITY.md` |
 | source data problems | `docs/UPSTREAM-DATA-ISSUES.md` |
 | platform toolchains | `docs/MACOS.md`, `packages/ios/AGENTS.md`, `packages/android/AGENTS.md` |

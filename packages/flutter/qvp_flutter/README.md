@@ -150,7 +150,7 @@ per frame: `tick`, then `colors()` or `styledPaths()`, then `layoutDrawRevision(
 `layoutDrawList` when the revision, the layout or the band changed.
 
 After a successful attach, the arrays that you got from the page before it are stale:
-`nPaths`, `table`, `colors()`, the paths from `buildPaths()` and every array that you sized
+`ops`, `pts`, `table`, `colors()`, the paths from `buildPaths()` and every array that you sized
 from `nPaths`. Read them again.
 
 A letter's `text` is its character and `codePoint` the same as a number. A query's `text` is

@@ -66,7 +66,8 @@ Requirements: RN ≥ 0.76 (legacy view manager / native module through the inter
 CMake 3.22. iOS: iOS 15.1, CocoaPods and Xcode 16.
 
 Page data: `cargo run -p qvp-convert --release -- batch pages dist/pages` → `NNN.qvp`,
-`NNN.words.json`, `atlas.qva`. Put them wherever you like (assets, files dir, downloads) and pass
+`NNN.words.json`, `atlas.qva`. The optional letter layers, `NNN.qvl`, come from
+`qvp-convert letters` (`docs/DATA.md`). Put them wherever you like (assets, files dir, downloads) and pass
 URIs: `asset://pages/042.qvp`, `file:///…`, `/abs/path`, or `base64:…`. On iOS an `asset://`
 URI names a file in the app bundle: `asset://pages/042.qvp` is `pages/042.qvp` under the
 bundle's resources, for example a folder reference named `pages`.
@@ -82,6 +83,7 @@ const qvp = useQvp();
   style={{ flex: 1 }}
   pageUri="asset://pages/042.qvp"
   wordsUri="asset://pages/042.words.json"                       // optional sidecar (rasm_imlai/qpc/rasm/search forms)
+  lettersUri="asset://pages/042.qvl"                             // optional letter layer (see Letters)
   padTop={12} padBottom={12} padSide={8}                        // dp
   lineSpacing={1} fillHeight={false}                            // engine layout knobs
   // spacing only opens up: lineSpacing < 1 is clamped to "as printed"
@@ -111,7 +113,7 @@ const qvp = useQvp();
 
 Reconciliation: each `highlights` entry maps to one engine handle. A new id → `highlight`; a changed
 `target` → `moveHighlight` (the band slides); a changed `style` → `restyleHighlight`; a removed id →
-`removeHighlight` (fades out). `styles` works the same over `style` / `styleTarget` / `hide` / `recolorStyle` /
+`removeHighlight` (fades out). `styles` works the same over `style` / `styleLetters` / `styleTarget` / `hide` / `recolorStyle` /
 `removeStyle`; `theme` is one handle; `mask` re-applies `maskOptions` + `mask` when the object changes
 (`null` → `unmask`); `reveal` calls `revealStart` when its config changes and `revealGoto` when `at`
 changes (`null` → `revealStop`). When `pageUri` changes, the old page is freed and every declarative

@@ -22,9 +22,9 @@ The layout is part of the public interface. A consumer reads paths. A contributo
 | build, package, publish, sync and check scripts | `scripts/` | one script per artifact, named `build-*`, `package-*`, `publish-*`, `sync-*`, `check-*` |
 | doc-block linter configs | `scripts/lint/` (eslint, a private npm package), `packages/android/detekt.yml`, `packages/ios/QvpKit/.swiftlint.yml` | each with its baseline next to it. `docs/standards/CODE-STYLE.md` says what each one checks |
 | generated page data | `dist/pages/` (gitignored) → GitHub release → CDN | never committed; `scripts/package-data.sh` writes `VERSION.json` |
-| source data | `pages/` and `index/` at the root (gitignored) | the `quran-svg-elements` release, fetched by `scripts/sync-test-data.sh`. `docs/DATA.md` records its version |
+| source data | `pages/` and `index/` at the root (gitignored), and `pages-letters/` for the letter layer | the `quran-svg-elements` release, fetched by `scripts/sync-test-data.sh`. `pages-letters/` is its letters archive, which only `QVP_SYNC=letters` fetches. `docs/DATA.md` records its version |
 | API reference | `docs/API.md` | JavaScript notation, one section per object-model noun |
-| format specification | `docs/FORMAT.md` | byte layout of QVP1 and QVA1 |
+| format specification | `docs/FORMAT.md` | byte layout of QVP1, QVA1, QVO1 and QVL1 |
 | data provenance and rights | `docs/DATA.md` | which mushaf, source bundle version, licence, where to download |
 | how it all works | `docs/HOW-IT-WORKS.md` | components and data flow for a developer new to the project; linked first from the README |
 | design history | `docs/design/` | dated, banner "historical", never edited to match current code |
@@ -53,6 +53,9 @@ dist/pages/*.qvp, atlas.qva, *.words.json, surah-names/  (generated, never commi
       ▼
 apps load pages by bytes, path or URL          (the developer surface)
 ```
+
+`qvp-convert letters` builds the optional letter layers, `dist/letters/*.qvl`, from
+`pages-letters/` and `pages/` (`docs/DATA.md`). No data release carries them yet.
 
 Dependencies flow one way: source → pipeline → published data → packages. Nothing in the
 pipeline reads `dist/` as its input.

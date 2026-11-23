@@ -90,7 +90,8 @@ and `ink` options as `draw()` and leave clearing and sizing to the caller.
 A passage is a verse excerpt that wraps to its container: the core lays it out (`qvp_passage_*`, bound as `QvpPassage` in QvpKit, `qvp.js`, the Android SDK and the Flutter plugin). For a passage without Wasm, import the optional `QvpPassage` from `@quran.ws/engine/lite/passage`, a JavaScript port of the same layout. It takes `decodeGeometry()` pages and a complete ayah range, including ranges across pages, and preserves verse medallions and sajdah signs. See [Lite passages](docs/LITE-PASSAGES.md). The base lite import does not load this layout code.
 
 Use the main package for full-page layout, exact hit-testing, search, styling, selection,
-masks and animation.
+masks and animation. With an optional letter layer (`NNN.qvl`, `docs/API.md` "Letters"), it
+also colours, reads and hit-tests single letters and marks.
 
 On iOS and macOS, add the repository as a Swift package and use its `QvpKit` product:
 

@@ -740,7 +740,8 @@ page.hitTestLetterView(viewX, viewY)
 
 Every wrapper uses the same names. A letter's `text` is its character, and `codePoint` is the
 same as a number. A letter's `marks` are its members that are not body, in the engine's
-order. A member and a hit give the mark as its id, `mark`, and its name, `markName`. A query's
+order. The web letter gives its box as `box`, and the other wrappers as `x0`, `y0`, `x1` and
+`y1`. A member and a hit give the mark as its id, `mark`, and its name, `markName`. A query's
 `text` takes one character, or `''` for any letter. A wrapper that takes a code point there
 also takes 0 for any letter. A string of more than one character is an error in the
 wrapper's usual form.
@@ -1286,7 +1287,7 @@ function in the header has no row here, or a row names a function the header lac
 | letters | `qvp_has_letters` | `page.hasLetters()` | Return whether a letter layer is attached. |
 | letters | `qvp_letter_count` | `page.letterCount(word)` | Return how many letters a word has. 0 with no layer. |
 | letters | `qvp_letter_info` | `page.letter(word, i)` | Return one letter: its offset, character, member and mark counts, the other offset its body draws, and its box. |
-| letters | `qvp_letter_members` | `page.letters(word)[i].members` | Return the paths of one letter: the bodies first, then the marks in text order. |
+| letters | `qvp_letter_members` | `page.letterMembers(word, i)`, `page.letters(word)[i].members` | Return the paths of one letter: the bodies first, then the marks in text order. |
 | letters | `qvp_path_letter` | `page.pathLetter(path)` | Return the letter and the offset that a path draws. A word-level mark has no letter. |
 | letters | `qvp_letter_at_offset` | `page.letterAtOffset(word, at)` | Return the letter that draws the character at an offset, or holds a mark at it. |
 | letters | `qvp_find_letters` | `page.findLetters(query)` | Return the letters of a scope with a given character, mark, or both, as word and letter pairs. |
