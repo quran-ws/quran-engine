@@ -822,6 +822,9 @@
         const info = p.dress(set, whole ? { style, lineArt } : { ayahMark: style, lineArt });
         card('drCard', '', info ? tt`علامات الآيات: ${info.ayahMarks}. رؤوس السور: ${info.surahHeaders}. الإطار: ${info.pageFrame === null ? tr('لا يوجد') : tr('موجود')}.` : tr('تعذّر تطبيق هذه الزخارف.'));
       }
+      // the source of the ornaments on the page, and their licence, as the set states them
+      const worn = set && style ? set.list.find(o => o.style === style) : null;
+      $('drFine').textContent = worn ? [tr('مصدر الزخارف: مشروع quran-assets.'), worn.lineage === 'scan' ? tr('الزخارف منقولة عن مصحف مطبوع، وتصميمها ملك لناشره.') : '', worn.licence.id ? tr('الرخصة: ') + worn.licence.id + '.' : ''].filter(Boolean).join(' ') : '';
       for (const c of $('drStyles').children) c.classList.toggle('on', c.dataset.style === style);
       $('drLine').classList.toggle('on', lineArt);
       st.fit();
