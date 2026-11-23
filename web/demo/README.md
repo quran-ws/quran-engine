@@ -52,14 +52,17 @@ Git ignores `config.local.js`. Do not commit a key or any file of the model.
 
 The model does not judge a recitation. `demo.js` does the rest:
 
-1. **Find the place.** It searches the whole Quran for the consonants of what was heard, and
-   opens the page when they are in one place only. The isti'adhah and the basmalah do not
+1. **Find the place.** It searches the whole Quran for the sounds that were heard, and opens
+   the page as soon as they are in one place only. The isti'adhah and the basmalah do not
    count, because they come before every recitation.
 2. **Follow the words.** For each frame of the model's output it lines up the sounds that a
    correct recitation of the page has (`model.reference`). A word shows in the frame where
    its last sound is heard.
 3. **Mark a mistake.** When six sounds come with no step forward, the word that was
    expected gets a sound and a red mark, and the reader can say it again.
+
+The SDK asks each reader whether to share recordings of their recitation with Quran Lab,
+and the choice is the reader's. A site that uses it must say so in its privacy policy.
 
 It can be wrong, and it does not replace a qualified teacher. The model's licence (NPL-1.2)
 does not let anyone charge for a feature that it powers.

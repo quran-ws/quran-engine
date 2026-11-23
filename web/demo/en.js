@@ -91,6 +91,7 @@ window.DEMO_EN = {
   'إعادة': 'Start again',
   'إظهار الصفحة': 'Show the page',
   'القراءة بالصوت': 'Recite aloud',
+  'إيقاف': 'Stop',
   'تجربة بتلاوة مسجّلة': 'Try a recorded recitation',
   'سورة الفاتحة.': 'Surah Al-Fatihah.',
   'تعمل القراءة بالصوت بنموذج TajweedFormer V4 من': 'Recitation by voice uses the TajweedFormer V4 model of',
