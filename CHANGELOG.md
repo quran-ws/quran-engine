@@ -20,6 +20,7 @@ All notable changes to the engine and its packages. The format follows
   now includes the SVGs and the fonts of pages 3 to 52.
 
 ### Changed
+- Each platform in the showcase links to its package.
 - `scripts/sync-test-data.sh` takes `ornaments.qvo` from `QVP_ORNAMENTS_TAG`, by default
   `data-v0.7.0`, and the pages from `QVP_DATA_TAG` as before. So the dress controls of every
   example app list the eight mushafs.

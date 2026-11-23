@@ -49,6 +49,7 @@
   .plat .cell h4 { font-size:19px }
   .plat .cell code { display:block; margin:8px 0 6px; font-size:12.5px; word-break:break-all; text-align:start }
   .plat .cell p { font-size:13px }
+  .plat .cell a { display:inline-block; margin-top:8px; font-size:13px }
 
   /* a scene: words on one side, a live page on the other */
   .scene { min-height:100vh; display:grid; grid-template-columns:minmax(300px,400px) minmax(0,1fr); gap:clamp(20px,4vw,64px); align-items:center; padding:84px clamp(18px,5vw,72px) 36px; scroll-snap-align:start; border-bottom:1px solid var(--night-2) }
@@ -328,11 +329,11 @@
     <p>المحرّك مكتوب بلغة Rust، وله حزمة لكل منصة. تعرض الحزم كلها الصفحة نفسها بالنتيجة نفسها.</p>
   </div>
   <div class="plat">
-    <div class="cell"><h4>الويب</h4><code dir="ltr">npm install @quran.ws/engine</code><p>JavaScript و WebAssembly. يعمل في المتصفح وفي Node.</p></div>
-    <div class="cell"><h4>Android</h4><code dir="ltr">ws.quran:qvp-android</code><p>مكتبة Kotlin من Maven Central، مع عنصر عرض جاهز.</p></div>
-    <div class="cell"><h4>iOS و macOS</h4><code dir="ltr">github.com/quran-ws/quran-engine</code><p>حزمة QvpKit عبر Swift Package Manager، لـ UIKit و SwiftUI.</p></div>
-    <div class="cell"><h4>Flutter</h4><code dir="ltr">qvp_flutter</code><p>من pub.dev. يعمل على Android و iOS و macOS و Windows و Linux والويب.</p></div>
-    <div class="cell"><h4>React Native</h4><code dir="ltr">npm install @quran.ws/qvp-react-native</code><p>يعمل على Android و iOS.</p></div>
+    <div class="cell"><h4>الويب</h4><code dir="ltr">npm install @quran.ws/engine</code><p>JavaScript و WebAssembly. يعمل في المتصفح وفي Node.</p><a href="https://www.npmjs.com/package/@quran.ws/engine">الحزمة على npm</a></div>
+    <div class="cell"><h4>Android</h4><code dir="ltr">ws.quran:qvp-android</code><p>مكتبة Kotlin من Maven Central، مع عنصر عرض جاهز.</p><a href="https://central.sonatype.com/artifact/ws.quran/qvp-android">الحزمة على Maven Central</a></div>
+    <div class="cell"><h4>iOS و macOS</h4><code dir="ltr">github.com/quran-ws/quran-engine</code><p>حزمة QvpKit عبر Swift Package Manager، لـ UIKit و SwiftUI.</p><a href="https://github.com/quran-ws/quran-engine/tree/main/packages/ios/QvpKit">الحزمة على GitHub</a></div>
+    <div class="cell"><h4>Flutter</h4><code dir="ltr">qvp_flutter</code><p>من pub.dev. يعمل على Android و iOS و macOS و Windows و Linux والويب.</p><a href="https://pub.dev/packages/qvp_flutter">الحزمة على pub.dev</a></div>
+    <div class="cell"><h4>React Native</h4><code dir="ltr">npm install @quran.ws/qvp-react-native</code><p>يعمل على Android و iOS.</p><a href="https://www.npmjs.com/package/@quran.ws/qvp-react-native">الحزمة على npm</a></div>
   </div>
   <div class="ctl"><a class="btn cta" href="https://quran.ws/docs/build/platforms">البدء بالاستخدام</a><a class="btn" href="https://github.com/quran-ws/quran-engine">المستودع على GitHub</a><a class="btn" href="https://quran.ws/docs/reference/quran-engine">مرجع الواجهة البرمجية</a></div>
 </section>
