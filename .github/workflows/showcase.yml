@@ -1,0 +1,203 @@
+# Builds the showcase (web/demo) as a site and deploys it to engine.quran.ws.
+#
+# The flow is the one of quran.ws-server's docs/site-templates/_site-deploy.yml, with one
+# stage before it: the page data is not in the repository, so the job converts it first.
+#
+#   push main -> convert 604 pages and their letter layers from quran-svg-elements
+#             -> build the wasm engine and the page (web/demo/build.py)
+#             -> build the image -> push to GHCR
+#             -> open an image-bump PR in the infra repo (auto-merge), which deploys it
+#
+# The image is built on a GitHub runner: the job needs Rust, and nothing of the server.
+#
+# Requires (one-time, by a person):
+#   - infra/sites/engine/site.yaml in the infra repo: an image-bump PR only rewrites the
+#     `image:` line of a site that is there.
+#   - The repo secret INFRA_REPO_PAT: a fine-grained PAT with `Contents: write` and
+#     `Pull requests: write` on the infra repo. Without it the job builds and pushes the
+#     image, and says that it opened no PR.
+#   - The repo secret QURANLAB_WEB_KEY: a web key of Quran Lab whose one allowed origin is
+#     https://engine.quran.ws. A web key is public by design: the page holds it, and it
+#     works on that origin only. Without it the page has no recitation by voice.
+
+name: showcase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/sync-test-data.sh"
+      - ".github/workflows/showcase.yml"
+  workflow_dispatch:
+
+env:
+  SLUG: engine
+  INFRA_REPO: AbdullahObaid/quran.ws-server
+  INFRA_BRANCH: main
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: meta
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${{ github.repository }}:sha-$short_sha" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Cache the page source
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist/pages
+            pages
+            pages-letters
+            index
+          key: test-data-letters-${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}-${{ vars.QVP_SVG_TAG || 'v2.0.0' }}-${{ hashFiles('scripts/sync-test-data.sh') }}
+      - name: Fetch the page source
+        env:
+          QVP_DATA_TAG: ${{ vars.QVP_DATA_TAG || 'data-v0.5.0' }}
+          QVP_SVG_TAG: ${{ vars.QVP_SVG_TAG || 'v2.0.0' }}
+          QVP_SYNC: letters
+        run: scripts/sync-test-data.sh
+
+      # A letter layer attaches only to the page file it was built with, and no data release
+      # has the layers yet. So the pages and the layers are converted here, from one source.
+      - name: Convert the pages and the letter layers
+        run: |
+          cargo run -p qvp-convert --release -- batch pages dist/site-pages
+          cargo run -p qvp-convert --release -- letters pages-letters pages dist/site-letters
+          # the ornament set of the data release: its redistributable part
+          if [ -f dist/pages/ornaments.qvo ]; then cp dist/pages/ornaments.qvo dist/site-pages/; fi
+
+      - name: Build the wasm engine
+        run: |
+          cargo build -p qvp-ffi --profile dist --target wasm32-unknown-unknown
+          cp target/wasm32-unknown-unknown/dist/qvp_ffi.wasm web/
+
+      - name: Build the page
+        env:
+          QURANLAB_WEB_KEY: ${{ secrets.QURANLAB_WEB_KEY }}
+        run: |
+          # The Hafs font for a word of the Quran outside the page: the one quran.ws serves.
+          curl -fsSL https://quran.ws/demo/fonts/hafs.woff2 -o "$RUNNER_TEMP/hafs.woff2"
+          if [ -n "$QURANLAB_WEB_KEY" ]; then
+            printf 'window.QVP_DEMO = { quranlabKey: %s };\n' "$(python3 -c 'import json, os; print(json.dumps(os.environ["QURANLAB_WEB_KEY"]))')" > "$RUNNER_TEMP/config.js"
+          else
+            echo "::notice::QURANLAB_WEB_KEY is not set: the page has no recitation by voice"
+          fi
+          QVP_PAGES_DIR=dist/site-pages QVP_LETTERS_DIR=dist/site-letters QVP_SVG_DIR=/nonexistent \
+          QVP_FONT_QURAN="$RUNNER_TEMP/hafs.woff2" QVP_DEMO_CONFIG="$RUNNER_TEMP/config.js" QVP_DEMO_OUT=dist/site \
+            python3 web/demo/build.py
+          # build.py links the data; the image needs the files themselves
+          rm -rf web/demo/site/public
+          cp -rL dist/site web/demo/site/public
+          test -f web/demo/site/public/pages/604.qvp
+          test -f web/demo/site/public/letters/604.qvl
+          du -sh web/demo/site/public
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: web/demo/site
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ghcr.io/${{ github.repository }}:latest
+          platforms: linux/amd64
+
+  bump:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open an image-bump PR in the infra repo
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_REPO_PAT }}
+          IMAGE: ${{ needs.build.outputs.image }}
+          SHORT: ${{ needs.build.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::notice::INFRA_REPO_PAT is not set: the image is ${IMAGE}, and no PR was opened"
+            exit 0
+          fi
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          cd "$workdir"
+
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${INFRA_REPO}.git" infra
+          cd infra
+
+          git config user.name  "site-bot (${SLUG})"
+          git config user.email "bot+${SLUG}@users.noreply.github.com"
+
+          branch="image-bump/${SLUG}/${SHORT}"
+          git checkout -b "$branch"
+
+          python3 <<PY
+          import pathlib, re
+          p = pathlib.Path("infra/sites/${SLUG}/site.yaml")
+          text = p.read_text()
+          new = re.sub(
+              r'^(\s*image:\s*).*$',
+              lambda m: f"{m.group(1)}${IMAGE}",
+              text, count=1, flags=re.MULTILINE,
+          )
+          if new == text:
+              raise SystemExit(f"failed to rewrite image line in {p}")
+          p.write_text(new)
+          PY
+
+          if git diff --quiet; then
+            echo "no change (image already at this tag); skipping PR"
+            exit 0
+          fi
+
+          git add "infra/sites/${SLUG}/site.yaml"
+          git commit -m "image-bump(${SLUG}): ${SHORT}
+
+          Auto-generated by ${GITHUB_REPOSITORY}@${GITHUB_SHA}."
+          git push -u origin "$branch"
+
+          pr_url="$(gh pr create \
+            --repo  "${INFRA_REPO}" \
+            --base  "${INFRA_BRANCH}" \
+            --head  "$branch" \
+            --title "image-bump(${SLUG}): ${SHORT}" \
+            --body  "Auto-generated from ${GITHUB_REPOSITORY}@\`${GITHUB_SHA}\`.\n\nDeploys \`${IMAGE}\`." \
+            --label image-bump)"
+
+          gh pr merge --repo "${INFRA_REPO}" --auto --squash "$pr_url"
+          echo "::notice title=opened image-bump PR::${pr_url}"

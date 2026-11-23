@@ -91,7 +91,8 @@ All notable changes to the engine and its packages. The format follows
   follows the reciter by word or by letter, memorisation, zoom with reflow, and the
   ornaments of another mushaf. A comparison sets the engine against SVG, images, page fonts
   and the Hafs font with text, and measures each on the reader's device. `web/demo/README.md`
-  names the data that each scene reads at run time. In the memorisation scene the reader
+  names the data that each scene reads at run time. `.github/workflows/showcase.yml` builds
+  it as a site image for `engine.quran.ws`. In the memorisation scene the reader
   recites from any place: the page finds the one place in the Quran that matches what it
   heard, opens it, shows each word as the reader says it, and marks a word that did not come. The showcase commits no data and no key.
 - QvpKit: `QvpPage.attachLetters(_:)`, `hasLetters`, `letters(_:)`, `letter(_:_:)`,

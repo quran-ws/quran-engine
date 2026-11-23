@@ -109,7 +109,7 @@ Everything about using it lives on the site. This repository is the source.
 | | |
 |---|---|
 | **Overview and demo** | [quran.ws/blocks/quran-engine](https://quran.ws/blocks/quran-engine) |
-| **Showcase, in Arabic and English** | [`web/demo/`](web/demo/README.md) |
+| **Showcase, in Arabic and English** | [engine.quran.ws](https://engine.quran.ws/) · source in [`web/demo/`](web/demo/README.md) |
 | **Reference** | [quran.ws/docs/reference/quran-engine](https://quran.ws/docs/reference/quran-engine) |
 | **Make words clickable** | [quran.ws/docs/build/clickable-words](https://quran.ws/docs/build/clickable-words) |
 | **Render on iOS, Android, Flutter and React Native** | [quran.ws/docs/build/platforms](https://quran.ws/docs/build/platforms) |
