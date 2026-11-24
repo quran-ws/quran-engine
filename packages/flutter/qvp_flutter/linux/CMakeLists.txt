@@ -3,7 +3,13 @@ project(qvp_flutter LANGUAGES CXX)
 
 set(PLUGIN_NAME "qvp_flutter_plugin")
 
-set(QVP_SO_PATH "${CMAKE_CURRENT_SOURCE_DIR}/libqvp_ffi.so")
+# The pub.dev package carries one library for each architecture.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$" OR FLUTTER_TARGET_PLATFORM STREQUAL "linux-arm64")
+  set(QVP_ARCH "arm64")
+else()
+  set(QVP_ARCH "x64")
+endif()
+set(QVP_SO_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${QVP_ARCH}/libqvp_ffi.so")
 
 # If not present in plugin directory, check the Cargo build: target/dist (the shipped
 # profile) or target/release (a host build for tests), whichever is newer
@@ -24,7 +30,7 @@ if(NOT EXISTS "${QVP_SO_PATH}")
 endif()
 
 if(NOT EXISTS "${QVP_SO_PATH}")
-  message(FATAL_ERROR "libqvp_ffi.so not found in ${CMAKE_CURRENT_SOURCE_DIR}, target/dist or target/release. Build the Cargo crate first.")
+  message(FATAL_ERROR "libqvp_ffi.so not found in ${CMAKE_CURRENT_SOURCE_DIR}/${QVP_ARCH}, target/dist or target/release. Build the Cargo crate first.")
 endif()
 message(STATUS "qvp_flutter: bundling ${QVP_SO_PATH}")
 

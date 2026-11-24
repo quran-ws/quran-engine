@@ -16,9 +16,9 @@ android/local.properties
 !android/src/main/jniLibs/
 !android/src/main/jniLibs/**
 !windows/*.dll
-!ios/qvp_flutter/QvpEngine.xcframework/
-!ios/qvp_flutter/QvpEngine.xcframework/**
-!macos/qvp_flutter/QvpEngine.xcframework/
-!macos/qvp_flutter/QvpEngine.xcframework/**
+!linux/*/libqvp_ffi.so
 !assets/wasm/qvp_ffi.wasm
 !assets/js/qvp.js
+# the podspec and Package.swift download the framework from the GitHub release
+ios/qvp_flutter/QvpEngine.xcframework/
+macos/qvp_flutter/QvpEngine.xcframework/

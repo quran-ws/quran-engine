@@ -1,6 +1,6 @@
 # The Flutter package: analyze, run the tests on the dart:ffi backend (Linux and macOS) and
 # on the web backend (Chrome), and build the example for Android, web, macOS, the iOS
-# simulator and Windows.
+# simulator, Windows and Linux.
 name: Flutter
 
 on:
@@ -18,6 +18,8 @@ on:
       - "scripts/build-engine-android.sh"
       - "scripts/build-engine-ios.sh"
       - "scripts/build-engine-windows.ps1"
+      - "scripts/stage-flutter-apple.sh"
+      - "Package.swift"
       - "scripts/check-darwin-engine-symbols.sh"
       - "scripts/sync-example-data.sh"
       - "scripts/sync-test-data.sh"
@@ -273,6 +275,60 @@ jobs:
           ../../../../scripts/check-darwin-engine-symbols.sh build/macos/Build/Products/Release/qvp_flutter_example.app
           flutter build ios --simulator --no-codesign
           ../../../../scripts/check-darwin-engine-symbols.sh build/ios/iphonesimulator/Runner.app
+
+      # As an app that takes the package from pub.dev: a copy outside the repository with no
+      # framework. Both tools download the release that Package.swift names. On a release
+      # branch that release is not public yet, and the step skips.
+      - name: Build the example as from pub.dev, with the downloaded framework
+        run: |
+          url="$(sed -n 's/.*url: "\(.*\)",/\1/p' Package.swift)"
+          curl -fsSIL "$url" >/dev/null || { echo "::notice::$url is not public yet; skipped"; exit 0; }
+          git -C packages/flutter/qvp_flutter checkout -- .
+          pkg="$RUNNER_TEMP/qvp_flutter"
+          rsync -a --exclude QvpEngine.xcframework --exclude build \
+            --exclude .dart_tool --exclude Pods --exclude ephemeral packages/flutter/qvp_flutter/ "$pkg"
+          check="$PWD/scripts/check-darwin-engine-symbols.sh"
+          scripts/stage-flutter-apple.sh "$pkg"
+          cp -R "$pkg" "$pkg-pods"
+          flutter config --enable-swift-package-manager
+          (cd "$pkg/example" && flutter pub get && flutter build macos &&
+            "$check" build/macos/Build/Products/Release/qvp_flutter_example.app &&
+            flutter build ios --simulator --no-codesign && "$check" build/ios/iphonesimulator/Runner.app)
+          flutter config --no-enable-swift-package-manager
+          (cd "$pkg-pods/example" && flutter pub get && flutter build macos &&
+            "$check" build/macos/Build/Products/Release/qvp_flutter_example.app &&
+            flutter build ios --simulator --no-codesign && "$check" build/ios/iphonesimulator/Runner.app)
+
+  # linux/CMakeLists.txt finds libqvp_ffi.so and hands it to the app bundle. The job puts the
+  # library where the pub.dev package has it.
+  linux:
+    name: Linux example build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+      - name: Install the Flutter Linux toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+      - name: Build the engine library
+        run: |
+          cargo build -p qvp-ffi --profile dist
+          mkdir -p packages/flutter/qvp_flutter/linux/x64
+          mv target/dist/libqvp_ffi.so packages/flutter/qvp_flutter/linux/x64/
+      - name: Build the example
+        working-directory: packages/flutter/qvp_flutter/example
+        run: |
+          flutter pub get
+          flutter build linux
+          test -s build/linux/x64/release/bundle/lib/libqvp_ffi.so
 
   # windows/CMakeLists.txt finds qvp_ffi.dll and hands it to the app bundle. Only a Windows
   # build runs it. The job stages the DLL the way the package README says to, builds the

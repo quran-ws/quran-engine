@@ -22,7 +22,7 @@ packages/android/qvp/src/androidTest/assets/
 packages/android/example/src/main/assets/pages/
 packages/flutter/**/android/src/main/jniLibs/
 packages/flutter/**/windows/*.dll
-packages/flutter/**/linux/*.so
+packages/flutter/**/linux/**/*.so
 # scripts/build-engine-ios.sh copies QvpEngine.xcframework into the plugin's ios/qvp_flutter
 # and macos/qvp_flutter
 packages/flutter/**/*.xcframework/

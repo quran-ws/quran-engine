@@ -137,6 +137,29 @@ jobs:
           name: android-prebuilt
           path: packages/android/qvp/prebuilt
 
+  # The engine libraries that the Flutter package carries for Windows and Linux. Ubuntu 22.04
+  # keeps the glibc requirement of the Linux libraries low.
+  flutter-desktop:
+    name: Flutter engine (${{ matrix.name }})
+    needs: verify
+    strategy:
+      matrix:
+        include:
+          - { name: windows-x64, os: windows-latest, lib: qvp_ffi.dll }
+          - { name: linux-x64, os: ubuntu-22.04, lib: libqvp_ffi.so }
+          - { name: linux-arm64, os: ubuntu-22.04-arm, lib: libqvp_ffi.so }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build -p qvp-ffi --profile dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flutter-${{ matrix.name }}
+          path: target/dist/${{ matrix.lib }}
+          if-no-files-found: error
+
   maven:
     name: Maven Central
     needs: [verify, android]
@@ -176,7 +199,7 @@ jobs:
 
   publish:
     name: GitHub release and registries
-    needs: [verify, xcframework, android]
+    needs: [verify, xcframework, android, flutter-desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -276,14 +299,34 @@ jobs:
           mkdir -p packages/flutter/qvp_flutter/assets/wasm packages/flutter/qvp_flutter/assets/js
           cp artifacts/qvp_ffi.wasm/qvp_ffi.wasm packages/flutter/qvp_flutter/assets/wasm/qvp_ffi.wasm
           cp web/qvp.js packages/flutter/qvp_flutter/assets/js/qvp.js
-          for f in assets/wasm/qvp_ffi.wasm assets/js/qvp.js; do
-            test -s "packages/flutter/qvp_flutter/$f" || {
-              echo "::error::packages/flutter/qvp_flutter/$f is missing or empty; the pub.dev package would ship no web engine"
+          # The Windows and Linux libraries are not tracked either. iOS and macOS download the
+          # XCFramework from this GitHub release, which is public by now.
+          cd packages/flutter/qvp_flutter
+          mkdir -p linux/x64 linux/arm64
+          cp ../../../artifacts/flutter-windows-x64/qvp_ffi.dll windows/qvp_ffi.dll
+          cp ../../../artifacts/flutter-linux-x64/libqvp_ffi.so linux/x64/libqvp_ffi.so
+          cp ../../../artifacts/flutter-linux-arm64/libqvp_ffi.so linux/arm64/libqvp_ffi.so
+          for f in assets/wasm/qvp_ffi.wasm assets/js/qvp.js windows/qvp_ffi.dll \
+            linux/x64/libqvp_ffi.so linux/arm64/libqvp_ffi.so; do
+            test -s "$f" || {
+              echo "::error::packages/flutter/qvp_flutter/$f is missing or empty; the pub.dev package would ship no engine for its platform"
               exit 1
             }
           done
-          cd packages/flutter/qvp_flutter
-          flutter pub publish --dry-run
+          set -o pipefail
+          ../../../scripts/stage-flutter-apple.sh
+          # pub warns about changed files, so the runner commits them. Nothing is pushed.
+          git -c user.name=release -c user.email=release@quran.ws commit -qam "stage the Flutter package"
+          flutter pub publish --dry-run 2>&1 | tee "$RUNNER_TEMP/pub.txt"
+          # An ignore rule can drop a file that is in place. The dry run lists what it packs:
+          # three Android libraries and two Linux ones, one DLL and one wasm file.
+          for want in "5 libqvp_ffi.so" "1 qvp_ffi.dll" "1 qvp_ffi.wasm"; do
+            n="$(grep -c " ${want#* } (" "$RUNNER_TEMP/pub.txt" || true)"
+            [ "$n" = "${want%% *}" ] || {
+              echo "::error::the package holds $n ${want#* }, want ${want%% *}"
+              exit 1
+            }
+          done
           flutter pub publish --force
 
   # The React Native package takes its Kotlin library, ws.quran:qvp-android, from Maven
