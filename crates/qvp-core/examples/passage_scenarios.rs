@@ -1,6 +1,6 @@
-//! Write the cross-wrapper passage scenarios: the engine's layouts of fixed ayah ranges, and of
-//! two surahs' basmalahs, at fixed specs, which every wrapper that binds passages replays and
-//! compares.
+//! Write the cross-wrapper passage scenarios: the engine's layouts of fixed ayah ranges, of
+//! two surahs' basmalahs and of three ayahs' medallions, at fixed specs, which every wrapper
+//! that binds passages replays and compares.
 //!
 //! Run: cargo run -p qvp-core --release --example passage_scenarios -- dist/pages conformance/scenarios/passage.json
 use qvp_core::{Align, Page, Passage, PassageSpec};
@@ -20,13 +20,19 @@ const PASSAGES: [(&[u32], u16, u16, u16); 6] = [
 /// The basmalahs: the first in the book, on the smaller lines of page 2, and the last.
 const BASMALAHS: [(&[u32], u16); 2] = [(&[2], 2), (&[604], 114)];
 
-/// One thing to lay out at every spec of its list: an ayah range, or a surah's basmalah.
+/// The medallions alone: the Fatihah's last on the smaller lines of page 1, 2:255's, and the
+/// medallion of a sajdah ayah, whose sajdah sign stays out.
+const AYAH_MARKS: [(&[u32], u16, u16); 3] = [(&[1], 1, 7), (&[42], 2, 255), (&[272], 16, 50)];
+
+/// One thing to lay out at every spec of its list: an ayah range, a surah's basmalah, or the
+/// medallion of ayah `from`.
 struct Run<'a> {
     pages: &'a [u32],
     surah: u16,
     from: u16,
     to: u16,
     basmalah: bool,
+    ayah_mark: bool,
     specs: &'a [PassageSpec],
 }
 
@@ -60,6 +66,17 @@ fn main() {
             ellipsis_width: 9.0,
             ..Default::default()
         },
+        // No medallions: a word that closes an ayah keeps no room for one, and a cut keeps none.
+        PassageSpec { width: 366.0, scale: 0.9, omit_ayah_marks: true, ..Default::default() },
+        PassageSpec {
+            width: 200.0,
+            scale: 0.9,
+            max_rows: 1,
+            keep_ayah_mark: true,
+            omit_ayah_marks: true,
+            ellipsis_width: 9.0,
+            ..Default::default()
+        },
     ];
     let basmalah_specs = [
         PassageSpec { width: 366.0, scale: 0.9, align: Align::Center, ..Default::default() },
@@ -76,7 +93,15 @@ fn main() {
     };
     let mut runs: Vec<Run> = PASSAGES
         .iter()
-        .map(|&(pages, surah, from, to)| Run { pages, surah, from, to, basmalah: false, specs: &specs })
+        .map(|&(pages, surah, from, to)| Run {
+            pages,
+            surah,
+            from,
+            to,
+            basmalah: false,
+            ayah_mark: false,
+            specs: &specs,
+        })
         .collect();
     runs.extend(BASMALAHS.iter().map(|&(pages, surah)| Run {
         pages,
@@ -84,14 +109,27 @@ fn main() {
         from: 0,
         to: 0,
         basmalah: true,
+        ayah_mark: false,
+        specs: &basmalah_specs,
+    }));
+    // A medallion lays out as a basmalah does, at the same specs.
+    runs.extend(AYAH_MARKS.iter().map(|&(pages, surah, ayah)| Run {
+        pages,
+        surah,
+        from: ayah,
+        to: ayah,
+        basmalah: false,
+        ayah_mark: true,
         specs: &basmalah_specs,
     }));
     let mut cases = Vec::new();
-    for Run { pages: numbers, surah, from, to, basmalah, specs } in runs {
+    for Run { pages: numbers, surah, from, to, basmalah, ayah_mark, specs } in runs {
         let pages = load(numbers);
         let refs: Vec<&Page> = pages.iter().collect();
         let mut passage = if basmalah {
             Passage::load_basmalah(&refs, surah).expect("load basmalah")
+        } else if ayah_mark {
+            Passage::load_ayah_mark(&refs, surah, from).expect("load ayah mark")
         } else {
             Passage::load(&refs, surah, from, to).expect("load passage")
         };
@@ -124,22 +162,22 @@ fn main() {
                 l.ellipsis.map_or("null".to_owned(), |e| format!("[{}, {}, {}, {}]", e[0], e[1], e[2], e[3]));
             cases.push(format!(
                 concat!(
-                    "    {{\"pages\": {:?}, \"surah\": {}, \"from\": {}, \"to\": {}, \"basmalah\": {},\n",
+                    "    {{\"pages\": {:?}, \"surah\": {}, \"from\": {}, \"to\": {}, \"basmalah\": {}, \"ayahMark\": {},\n",
                     "     \"spec\": {{\"width\": {}, \"scale\": {}, \"lineSpacing\": {}, \"padding\": {}, \"align\": \"{}\", ",
-                    "\"maxRows\": {}, \"keepAyahMark\": {}, \"ellipsisWidth\": {}, \"maxStretch\": {}}},\n",
+                    "\"maxRows\": {}, \"keepAyahMark\": {}, \"omitAyahMarks\": {}, \"ellipsisWidth\": {}, \"maxStretch\": {}}},\n",
                     "     \"layout\": {{\"width\": {}, \"height\": {}, \"scale\": {}, \"lineSpacing\": {}, \"isTruncated\": {}, ",
                     "\"ellipsis\": {}, \"draws\": {},\n",
                     "      \"rows\": [{}],\n",
                     "      \"words\": [{}]}}}}"
                 ),
-                numbers, surah, from, to, basmalah,
+                numbers, surah, from, to, basmalah, ayah_mark,
                 spec.width, spec.scale, spec.line_spacing, spec.padding,
                 match spec.align {
                     Align::Right => "right",
                     Align::Center => "center",
                     Align::Justified => "justified",
                 },
-                spec.max_rows, spec.keep_ayah_mark, spec.ellipsis_width, spec.max_stretch,
+                spec.max_rows, spec.keep_ayah_mark, spec.omit_ayah_marks, spec.ellipsis_width, spec.max_stretch,
                 l.width, l.height, l.scale, l.line_spacing, l.is_truncated, ellipsis, l.draws.len(),
                 rows.join(", "),
                 words.join(", ")

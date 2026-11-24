@@ -105,6 +105,10 @@ passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing, align
 let basmalah = try QvpPassage(basmalahOf: 2, pages: [page])   // a surah's basmalah, one row, no words; throws for surahs 1 and 9
 l?.draws; l?.placements; l?.words; l?.ellipsis           // draw page `page`'s path `path` at scale·(kx·x+dx), scale·(ky·y+dy)
 l?.draw(in: ctx, pages: [page.pageNo: page])            // or let the layout fill itself into a CGContext, in its fill colour
+// the letters the page colours (tajweed), in their colours: the last layout's draws as the page styles them
+l?.draw(in: ctx, pages: [page.pageNo: page], draws: passage.styledDrawList(pages: [page]), pageColors: true)
+let bare = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing, omitAyahMarks: true))  // no medallions, no room for them
+let mark = try QvpPassage(ayahMarkOf: 255, surah: 2, pages: [page])   // 2:255's medallion alone; lay it out at bare!.scale
 
 let atlas = try QvpAtlas(bytes: atlasData)
 atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36)
@@ -166,6 +170,7 @@ view.onZoomChanged = { zoom in }          // a pinch committed, or zoomToStep mo
 view.onSwipe = { dir in }                 // horizontal swipe while not zoomed (+1 finger right, −1 left): flip pages; view.isZoomed
 view.onDoubleTap = { hit in }              // nil (default) resets the view; a host that repurposes it calls resetView() itself
 view.onLongPress = { hit in }              // only while selectionEnabled is false; longPressDuration (0.35)
+view.onLongPressAt = { point, hit in view.letterAt(point) }   // the same press with its point: the letter under the finger
 view.zoomSpringsBack = true               // zoom lasts only while pinching: on release the page eases back to its fitted size
 view.page = page                          // lays out, fits and centres; setNeedsDisplay() after engine calls
 view.relayout(); view.resetView(); view.clearSelection(); view.lineTransform(line)
@@ -224,6 +229,7 @@ controller.reflowMaxStretch = 4           // how far a justified row's gaps may 
 controller.onWordTap = { word, hit in }; controller.onDecorationTap = { decoration, hit in }; controller.onEmptyTap = { }
 controller.onDoubleTap = { hit in }        // nil (default) resets the view
 controller.onLongPress = { hit in }        // only while selectionEnabled is false — a UIKit recognizer on iOS, never takes a pager's swipe
+controller.onLongPressAt = { point, hit in controller.letterAt(point) }   // the same press with its point; either one installs it
 controller.zoomSpringsBack = true         // zoom lasts only while pinching, as on the UIKit view
 controller.invalidate()                   // after engine calls the controller cannot see (highlight, style, mask, …)
 controller.resetView(); controller.relayout(); controller.clearSelection(); controller.lineTransform(line); controller.isZoomed

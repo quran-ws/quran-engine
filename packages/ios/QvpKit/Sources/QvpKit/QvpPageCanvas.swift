@@ -85,6 +85,11 @@ public final class QvpCanvasController {
     /// long-press otherwise. On iOS it is UIKit's recognizer, which fails on movement,
     /// so it never takes a swipe from an enclosing pager.
     public var onLongPress: ((QvpHit?) -> Void)?
+    /// The same long-press, with where the finger is in the canvas's points as well. Pass the
+    /// point to `letterAt(_:)` for the letter or the mark under the finger, such as a letter a
+    /// tajweed rule colours, or place a popover at it. It fires with `onLongPress`, after it,
+    /// when both are set. Either one installs the recognizer.
+    public var onLongPressAt: ((CGPoint, QvpHit?) -> Void)?
     public var longPressDuration: Double = 0.35
     public var zoomEnabled = true {
         // A canvas that may not zoom must not take up a zoom handed to it before it had a
@@ -631,7 +636,11 @@ public final class QvpCanvasController {
         else { onEmptyTap?() }
     }
     func doubleTap(_ pt: CGPoint) { if let cb = onDoubleTap { cb(hitAt(pt)) } else { resetView() } }
-    func longPress(_ pt: CGPoint) { onLongPress?(hitAt(pt)) }
+    func longPress(_ pt: CGPoint) {
+        let hit = hitAt(pt)
+        onLongPress?(hit)
+        onLongPressAt?(pt, hit)
+    }
     /// The reader's pan and zoom as the engine has it.
     var currentView: QvpView { QvpView(scale: Float(viewScale), offsetX: Float(viewOx), offsetY: Float(viewOy)) }
     /// Take what a gesture produced: the page is already laid out at the new size, and the view
@@ -1023,7 +1032,7 @@ private struct QvpLongPressAttachment: ViewModifier {
 
     func body(content: Content) -> some View {
         #if canImport(UIKit)
-        if #available(iOS 18.0, *), controller.onLongPress != nil, !controller.selectionEnabled {
+        if #available(iOS 18.0, *), controller.onLongPress != nil || controller.onLongPressAt != nil, !controller.selectionEnabled {
             content.gesture(QvpLongPressRecognizer(duration: controller.longPressDuration) { controller.longPress($0) })
         } else {
             content

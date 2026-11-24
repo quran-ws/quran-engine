@@ -55,6 +55,20 @@ class QvpPassage private constructor(handle: Long, surah: Int, from: Int) : Auto
             require(handle != 0L) { "qvp_passage_load_basmalah failed (surah 1 or 9, or no page given prints it)" }
             return QvpPassage(handle, surah, 1)
         }
+
+        /** Load the medallion that closes ayah [ayah] of [surah] from whichever of the pages prints
+         * it. It lays out as one piece on one row and has no ayahs and no words. It sits on the
+         * baseline of the line its ayah ends on, so at the scale of the ayah's own layout it has the
+         * size it has after the ayah's last word. Lay the ayah out with
+         * [QvpPassageSpec.omitAyahMarks] to show it apart. It is the page's printed medallion, not
+         * a dress's marker. Throws when no page given prints it. */
+        fun ayahMark(pages: List<QvpPage>, surah: Int, ayah: Int): QvpPassage {
+            require(pages.all { it.isOpen }) { "every page of a passage must be open" }
+            require(surah in 1..MAX_U16 && ayah in 1..MAX_U16) { "bad ayah $surah:$ayah" }
+            val handle = QvpNative.passageLoadAyahMark(LongArray(pages.size) { pages[it].handle }, surah, ayah)
+            require(handle != 0L) { "qvp_passage_load_ayah_mark failed (no page given prints the medallion)" }
+            return QvpPassage(handle, surah, ayah)
+        }
     }
 
     /** False once [close] has been called. */
@@ -88,22 +102,42 @@ class QvpPassage private constructor(handle: Long, surah: Int, from: Int) : Auto
         ).also { currentLayout = it }
     }
 
+    /** The draw list of the last layout as its pages style it now. With a letter layer, a cut path
+     * whose pieces differ in colour on its page is listed as its pieces, in its place and under its
+     * placement. Draw each path in its page's colour ([QvpPage.colors]) to show a letter coloured on
+     * its own: [QvpPassageLayout.draw] with `pageColors = true` does. [pages] are the open pages the
+     * passage was loaded from; a draw whose page is not given is listed as the layout has it. */
+    fun styledDrawList(pages: List<QvpPage>): List<QvpPassageDraw> {
+        require(pages.all { it.isOpen }) { "every page of a passage must be open" }
+        val v = QvpNative.passageStyledDrawList(h, LongArray(pages.size) { pages[it].handle })
+        return List(v.size / 3) { k -> QvpPassageDraw(v[k * 3], v[k * 3 + 1], v[k * 3 + 2]) }
+    }
+
     /** Free the native passage. A second call does nothing. */
     override fun close() = nativeHandle.close()
 }
 
 /**
- * Draw the layout on [canvas] with its top-left corner at ([x], [y]), in one colour. [pages] maps a
+ * Draw the layout on [canvas] with its top-left corner at ([x], [y]), in [paint]'s colour. [pages] maps a
  * page number to the open page it was loaded from, which holds the outlines. The helper skips a
  * draw whose page is not in the map. The ellipsis after a cut is the host's to draw, at
- * [QvpPassageLayout.ellipsis].
+ * [QvpPassageLayout.ellipsis]. [draws] replaces the layout's own list: pass
+ * [QvpPassage.styledDrawList] with [pageColors] true to fill each path in its page's colour, so the
+ * letters the pages colour show in the passage. [paint] keeps its other settings.
  */
-fun QvpPassageLayout.draw(canvas: Canvas, pages: Map<Int, QvpPage>, paint: Paint, x: Float = 0f, y: Float = 0f) {
+fun QvpPassageLayout.draw(canvas: Canvas, pages: Map<Int, QvpPage>, paint: Paint, x: Float = 0f, y: Float = 0f,
+                          draws: List<QvpPassageDraw> = this.draws, pageColors: Boolean = false) {
     val m = Matrix()
     var cur = -1
+    val colors = HashMap<Int, IntArray>()
+    val ink = paint.color
     canvas.save()
     for (d in draws) {
         val page = pages[d.page] ?: continue
+        if (pageColors) {
+            val c = colors.getOrPut(d.page) { page.colors() }
+            paint.color = if (d.path < c.size) QvpColor.argb(c[d.path]) else ink
+        }
         if (d.placement != cur) {
             // A point p of a path lands at scale · (k · p + d): the placement first, then the scale.
             val q = placements.getOrElse(d.placement) { QvpPlacement.IDENTITY }
@@ -114,4 +148,5 @@ fun QvpPassageLayout.draw(canvas: Canvas, pages: Map<Int, QvpPage>, paint: Paint
         canvas.drawPath(page.path(d.path), paint)
     }
     canvas.restore()
+    paint.color = ink
 }

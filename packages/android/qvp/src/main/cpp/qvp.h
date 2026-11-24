@@ -499,7 +499,8 @@ void      qvp_atlas_json(const QvpAtlas*, QvpStr* out);
    scale·(kx·x + dx), scale·(ky·y + dy), with the layout's scale. The getters read the last layout. */
 enum { QVP_ALIGN_RIGHT = 0, QVP_ALIGN_CENTER, QVP_ALIGN_JUSTIFIED };   /* justified: every row but the last reaches both edges; what is left over is split between the sides */
 typedef struct { float width /* <= 0: one row, as wide as the passage */, scale /* layout px per page unit */, line_spacing /* >= 1 */, padding;
-                 uint8_t align /* QVP_ALIGN_* */, keep_ayah_mark /* after a cut, the last ayah's medallion follows the ellipsis */, _pad[2];
+                 uint8_t align /* QVP_ALIGN_* */, keep_ayah_mark /* after a cut, the last ayah's medallion follows the ellipsis */,
+                 omit_ayah_marks /* no medallions, and no room kept for them: qvp_passage_load_ayah_mark draws one alone */, _pad[1];
                  uint32_t max_rows /* 0 = every row */; float ellipsis_width /* room the host needs for its ellipsis */;
                  float max_stretch /* how far a justified row's gaps may open, times the usual air between words: 0 = the default, negative = no cap */; } QvpPassageSpec;
 typedef struct { float width, height, scale, line_spacing /* page units */; uint32_t n_rows, n_words, n_ayahs, n_draws;
@@ -510,6 +511,10 @@ typedef struct { uint16_t surah, ayah, word, page; uint32_t row; float x0, y0, x
 typedef struct { uint16_t surah, ayah; float x0, y0, x1, y1; } QvpPassageAyah;                            /* the ayahs with a word shown */
 QvpPassage* qvp_passage_load(const QvpPage* const* pages, uint32_t n_pages, uint16_t surah, uint16_t from, uint16_t to);   /* NULL: an ayah missing or incomplete, a page repeated, over 4096 words, over the measuring budget */
 QvpPassage* qvp_passage_load_basmalah(const QvpPage* const* pages, uint32_t n_pages, uint16_t surah);   /* the basmalah printed above a surah, on one row; no ayahs, no words. NULL: surah 1 or 9, not on the pages, a page repeated */
+QvpPassage* qvp_passage_load_ayah_mark(const QvpPage* const* pages, uint32_t n_pages, uint16_t surah, uint16_t ayah);   /* the medallion that closes an ayah, on one row; no ayahs, no words */
+/* It sits on the baseline of the line its ayah ends on and has its page's line spacing, so at the scale of the ayah's layout
+   it has the size it has after the ayah's last word. It is the page's printed medallion, not a dress's marker. NULL: the
+   medallion is not on the pages, a page repeated. */
 void     qvp_passage_free(QvpPassage*);
 uint32_t qvp_passage_ayah_count(const QvpPassage*);
 void     qvp_passage_ayah_text(const QvpPassage*, uint32_t index, QvpStr* out);         /* the page's own word texts; empty outside the range */
@@ -519,6 +524,12 @@ uint32_t qvp_passage_rows(const QvpPassage*, QvpPassageRow* out, uint32_t cap);
 uint32_t qvp_passage_words(const QvpPassage*, QvpPassageWord* out, uint32_t cap);      /* the words shown, in reading order */
 uint32_t qvp_passage_ayahs(const QvpPassage*, QvpPassageAyah* out, uint32_t cap);
 uint32_t qvp_passage_draw_list(const QvpPassage*, uint32_t* out /* n × {page, path, placement} */, uint32_t cap);   /* in drawing order */
+uint32_t qvp_passage_styled_draw_list(const QvpPassage*, const QvpPage* const* pages, uint32_t n_pages, uint32_t* out /* n × {page, path, placement} */, uint32_t cap);
+/* The draw list as the pages style it now. With a letter layer, a cut path whose pieces differ in colour on its page is listed
+   as its pieces, in its place and under its placement, as qvp_layout_draw_list lists them. Draw each path in its page's colour
+   (qvp_colors) to show a letter coloured on its own. Pass the pages the passage was loaded from. Each page with a layer applies
+   its pending rule changes first. A draw whose page is not given is listed as qvp_passage_draw_list has it; a NULL page is
+   skipped. A host that keeps the list keys it on the layout and on each page's qvp_layout_draw_revision. */
 uint32_t qvp_passage_placements(const QvpPassage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);
 
 /* names --------------------------------------------------------------------------------- */

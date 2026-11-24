@@ -20,10 +20,13 @@ const close = (a, b, what) => assert.ok(Math.abs(a - b) <= scenarios.tolerance, 
 let n = 0
 for (const c of scenarios.cases) {
   const pages = c.pages.map(p => engine.loadPage(readFileSync(pagePath(p))))
-  const passage = c.basmalah ? engine.loadBasmalah(pages, c.surah) : engine.loadPassage(pages, c.surah, c.from, c.to)
+  const passage = c.basmalah ? engine.loadBasmalah(pages, c.surah)
+    : c.ayahMark ? engine.loadAyahMark(pages, c.surah, c.from)
+    : engine.loadPassage(pages, c.surah, c.from, c.to)
   // The passage keeps what it needs, so the pages go before the layout.
   for (const p of pages) p.free()
-  const tag = `${c.basmalah ? 'basmalah of ' : ''}${c.surah}:${c.from}-${c.to} at ${c.spec.width} ${c.spec.align} rows ${c.spec.maxRows}`
+  const kind = c.basmalah ? 'basmalah of ' : c.ayahMark ? 'medallion of ' : ''
+  const tag = `${kind}${c.surah}:${c.from}-${c.to} at ${c.spec.width} ${c.spec.align} rows ${c.spec.maxRows}${c.spec.omitAyahMarks ? ' no medallions' : ''}`
   const L = passage.layout(c.spec)
   assert.ok(L, `${tag}: the spec was refused`)
   assert.equal(passage.currentLayout, L, tag)
@@ -50,7 +53,9 @@ for (const c of scenarios.cases) {
     assert.ok(c.pages.includes(d.page), `${tag} draw names page ${d.page}`)
     assert.ok(d.placement < L.placements.length, `${tag} draw placement ${d.placement}`)
   }
-  if (c.basmalah) assert.equal(passage.ayahs.length, 0, tag)
+  // With no page given, the styled list is the draw list.
+  assert.deepEqual(passage.styledDrawList([]), L.draws, `${tag} styled draws`)
+  if (c.basmalah || c.ayahMark) assert.equal(passage.ayahs.length, 0, tag)
   else assert.deepEqual(passage.ayahs.map(a => [a.surah, a.ayah]), Array.from({ length: c.to - c.from + 1 }, (_, i) => [c.surah, c.from + i]), tag)
   passage.free()
   passage.free()

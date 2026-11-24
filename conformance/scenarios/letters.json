@@ -203,11 +203,12 @@
       {"call": "letterAtOffset", "word": 1, "at": 2, "value": null},
       {"call": "letterAtOffset", "word": 2, "at": 1, "value": null}
     ]},
-    {"name": "a letter colour draws the pieces, a word colour draws the path whole", "fixture": "letters", "steps": [
+    {"name": "a letter colour draws the pieces, a word colour draws the path whole, on the page and in a passage", "fixture": "letters", "steps": [
       {"call": "attach", "letters": "letters", "result": 0},
       {"call": "layout", "spec": "printed"},
       {"call": "tick", "ms": 0, "animating": false},
       {"call": "drawList", "value": [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 1], [7, 1]]},
+      {"call": "passageDrawList", "surah": 1, "from": 1, "to": 2, "value": [[1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 3, 1], [1, 4, 1], [1, 5, 1], [1, 6, 2], [1, 7, 2]]},
       {"call": "drawRevision", "value": 1},
       {"call": "style", "selector": {"selector": 16, "a": 0, "b": 1, "c": 0}, "rgba": 3491766527, "ms": 0, "as": "lam", "handle": true},
       {"call": "tick", "ms": 0, "animating": false},
@@ -215,16 +216,19 @@
       {"call": "styledPaths", "value": [[9, 3491766527]]},
       {"call": "drawRevision", "value": 2},
       {"call": "drawList", "value": [[8, 0], [9, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 1], [7, 1]]},
+      {"call": "passageDrawList", "surah": 1, "from": 1, "to": 2, "value": [[1, 8, 0], [1, 9, 0], [1, 1, 0], [1, 2, 0], [1, 3, 1], [1, 4, 1], [1, 5, 1], [1, 6, 2], [1, 7, 2]]},
       {"call": "remove", "handle": "lam", "result": 1},
       {"call": "tick", "ms": 0, "animating": false},
       {"call": "drawRevision", "value": 3},
       {"call": "drawList", "value": [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 1], [7, 1]]},
+      {"call": "passageDrawList", "surah": 1, "from": 1, "to": 2, "value": [[1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 3, 1], [1, 4, 1], [1, 5, 1], [1, 6, 2], [1, 7, 2]]},
       {"call": "style", "selector": {"selector": 7, "a": 0, "b": 0, "c": 0}, "rgba": 3491766527, "ms": 0, "as": "word", "handle": true},
       {"call": "tick", "ms": 0, "animating": false},
       {"call": "colors", "value": [3491766527, 3491766527, 3491766527, 589242623, 589242623, 589242623, 589242623, 589242623, 3491766527, 3491766527]},
       {"call": "styledPaths", "value": [[0, 3491766527], [1, 3491766527], [2, 3491766527]]},
       {"call": "drawRevision", "value": 3},
-      {"call": "drawList", "value": [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 1], [7, 1]]}
+      {"call": "drawList", "value": [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 1], [7, 1]]},
+      {"call": "passageDrawList", "surah": 1, "from": 1, "to": 2, "value": [[1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 3, 1], [1, 4, 1], [1, 5, 1], [1, 6, 2], [1, 7, 2]]}
     ]},
     {"name": "the pieces stay until the fade ends", "fixture": "letters", "steps": [
       {"call": "attach", "letters": "letters", "result": 0},
@@ -371,6 +375,7 @@
     {"symbol": "qvp_hit_test_letter", "keys": ["hits", "sequences"]},
     {"symbol": "qvp_hit_test_letter_view", "keys": ["hits", "sequences"]},
     {"symbol": "qvp_layout_draw_revision", "keys": ["selections", "sequences"]},
+    {"symbol": "qvp_passage_styled_draw_list", "keys": ["sequences"]},
     {"symbol": "qvp_style_add_letters", "keys": ["queries", "sequences"]},
     {"symbol": "QVP_SELECTOR_LETTER", "keys": ["selections", "sequences"]},
     {"symbol": "QVP_SELECTOR_LETTER_MARK", "keys": ["selections"]},

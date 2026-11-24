@@ -2479,6 +2479,36 @@ class QvpBindings {
         )
       >();
 
+  ffi.Pointer<QvpPassageC> passageLoadAyahMark(
+    ffi.Pointer<ffi.Pointer<QvpPageC>> pages,
+    int nPages,
+    int surah,
+    int ayah,
+  ) {
+    return _passageLoadAyahMark(pages, nPages, surah, ayah);
+  }
+
+  late final _passageLoadAyahMarkPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<QvpPassageC> Function(
+            ffi.Pointer<ffi.Pointer<QvpPageC>>,
+            ffi.Uint32,
+            ffi.Uint16,
+            ffi.Uint16,
+          )
+        >
+      >('qvp_passage_load_ayah_mark');
+  late final _passageLoadAyahMark = _passageLoadAyahMarkPtr
+      .asFunction<
+        ffi.Pointer<QvpPassageC> Function(
+          ffi.Pointer<ffi.Pointer<QvpPageC>>,
+          int,
+          int,
+          int,
+        )
+      >();
+
   ffi.Pointer<QvpPassageC> passageLoadBasmalah(
     ffi.Pointer<ffi.Pointer<QvpPageC>> pages,
     int nPages,
@@ -2550,6 +2580,39 @@ class QvpBindings {
   late final _passageRows = _passageRowsPtr
       .asFunction<
         int Function(ffi.Pointer<QvpPassageC>, ffi.Pointer<QvpPassageRowC>, int)
+      >();
+
+  int passageStyledDrawList(
+    ffi.Pointer<QvpPassageC> arg0,
+    ffi.Pointer<ffi.Pointer<QvpPageC>> pages,
+    int nPages,
+    ffi.Pointer<ffi.Uint32> out,
+    int cap,
+  ) {
+    return _passageStyledDrawList(arg0, pages, nPages, out, cap);
+  }
+
+  late final _passageStyledDrawListPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Uint32 Function(
+            ffi.Pointer<QvpPassageC>,
+            ffi.Pointer<ffi.Pointer<QvpPageC>>,
+            ffi.Uint32,
+            ffi.Pointer<ffi.Uint32>,
+            ffi.Uint32,
+          )
+        >
+      >('qvp_passage_styled_draw_list');
+  late final _passageStyledDrawList = _passageStyledDrawListPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<QvpPassageC>,
+          ffi.Pointer<ffi.Pointer<QvpPageC>>,
+          int,
+          ffi.Pointer<ffi.Uint32>,
+          int,
+        )
       >();
 
   int passageWords(
@@ -5541,7 +5604,10 @@ final class QvpPassageSpecC extends ffi.Struct {
   @ffi.Uint8()
   external int keepAyahMark;
 
-  @ffi.Array.multi([2])
+  @ffi.Uint8()
+  external int omitAyahMarks;
+
+  @ffi.Array.multi([1])
   external ffi.Array<ffi.Uint8> pad;
 
   @ffi.Uint32()

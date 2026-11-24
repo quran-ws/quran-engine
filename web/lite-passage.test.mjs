@@ -151,11 +151,12 @@ if (!has_data) {
   console.log(`ok  604 pages at three widths; prepare + layouts median ${durations[302].toFixed(1)}ms, p95 ${durations[573].toFixed(1)}ms`)
 
   // The engine's passage layout is the reference. Replay its scenarios that this module
-  // supports: ayahs (not a basmalah), a width, and no row limit.
+  // supports: ayahs (not a basmalah or a medallion alone), a width, no row limit, and the
+  // medallions kept.
   const scenarios = JSON.parse(await readFile(new URL('../conformance/scenarios/passage.json', import.meta.url), 'utf8'))
   let replayed = 0
-  for (const { pages: numbers, surah, from, to, basmalah, spec, layout: golden } of scenarios.cases) {
-    if (basmalah || spec.maxRows > 0 || spec.width <= 0) continue
+  for (const { pages: numbers, surah, from, to, basmalah, ayahMark, spec, layout: golden } of scenarios.cases) {
+    if (basmalah || ayahMark || spec.omitAyahMarks || spec.maxRows > 0 || spec.width <= 0) continue
     const scenario_pages = await Promise.all(numbers.map(n =>
       readFile(new URL(`${String(n).padStart(3, '0')}.qvp`, data_root)).then(decodeGeometry)))
     const got = new QvpPassage(scenario_pages, { surah, from, to })

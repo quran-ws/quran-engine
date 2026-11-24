@@ -4,6 +4,12 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+### Added
+- Android: `QvpPassage.styledDrawList(pages)`, and `draws` and `pageColors` on
+  `QvpPassageLayout.draw`, to fill a passage in its pages' colours, a letter coloured on its
+  own included. `QvpPassageSpec.omitAyahMarks` and `QvpPassage.ayahMark(pages, surah, ayah)`
+  lay an ayah out with no medallion and give its medallion alone.
+
 ## [0.10.0] - 2026-11-23
 
 ### Added

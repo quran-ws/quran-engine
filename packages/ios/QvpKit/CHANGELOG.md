@@ -4,6 +4,16 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+### Added
+- QvpKit: `QvpPassage.styledDrawList(pages:)`, and `draws:` and `pageColors:` on
+  `QvpPassageLayout.draw(in:pages:x:y:)`, to fill a passage in its pages' colours, a letter
+  coloured on its own included. `QvpPassageSpec.omitAyahMarks` and
+  `QvpPassage(ayahMarkOf:surah:pages:)` lay an ayah out with no medallion and give its
+  medallion alone.
+- QvpKit: `onLongPressAt` on `QvpCanvasController` and `QvpPageView` gives the point of a long
+  press with its hit. Pass it to `letterAt(_:)` for the letter under the finger. Either
+  callback installs the canvas's long-press recognizer.
+
 ## [0.10.0] - 2026-11-23
 
 ### Added

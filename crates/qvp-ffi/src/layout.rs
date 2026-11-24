@@ -197,7 +197,7 @@ pub unsafe extern "C" fn qvp_layout_draw_revision(page: *const Page) -> u32 {
 /// The header keeps these calls' `const QvpPage*`: the page is the one `qvp_page_load` made
 /// mutable, and the header's thread rule (one thread at a time per page) means no other call
 /// holds it. The refresh does nothing when no rule or state changed since the last one.
-unsafe fn refreshed<'a>(page: *const Page) -> &'a Page {
+pub(crate) unsafe fn refreshed<'a>(page: *const Page) -> &'a Page {
     if !(*page).has_letters() {
         return &*page;
     }

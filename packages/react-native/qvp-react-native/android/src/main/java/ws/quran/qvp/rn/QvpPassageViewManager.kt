@@ -20,6 +20,7 @@ class QvpPassageViewManager : SimpleViewManager<QvpRnPassageView>() {
     @ReactProp(name = "from", defaultInt = 0) fun setFrom(v: QvpRnPassageView, i: Int) { v.fromProp = i }
     @ReactProp(name = "to", defaultInt = 0) fun setTo(v: QvpRnPassageView, i: Int) { v.toProp = i }
     @ReactProp(name = "basmalah", defaultBoolean = false) fun setBasmalah(v: QvpRnPassageView, b: Boolean) { v.basmalahProp = b }
+    @ReactProp(name = "ayahMark", defaultBoolean = false) fun setAyahMark(v: QvpRnPassageView, b: Boolean) { v.ayahMarkProp = b }
     @ReactProp(name = "scale", defaultFloat = 1f) fun setScale(v: QvpRnPassageView, f: Float) { v.scaleProp = f }
     @ReactProp(name = "lineHeight", defaultFloat = 0f) fun setLineHeight(v: QvpRnPassageView, f: Float) { v.lineHeightProp = f }
     @ReactProp(name = "lineSpacing", defaultFloat = 1f) fun setLineSpacing(v: QvpRnPassageView, f: Float) { v.lineSpacingProp = f }
@@ -27,6 +28,7 @@ class QvpPassageViewManager : SimpleViewManager<QvpRnPassageView>() {
     @ReactProp(name = "align") fun setAlign(v: QvpRnPassageView, s: String?) { v.alignProp = s }
     @ReactProp(name = "maxRows", defaultInt = 0) fun setMaxRows(v: QvpRnPassageView, i: Int) { v.maxRowsProp = i }
     @ReactProp(name = "keepAyahMark", defaultBoolean = false) fun setKeepAyahMark(v: QvpRnPassageView, b: Boolean) { v.keepAyahMarkProp = b }
+    @ReactProp(name = "omitAyahMarks", defaultBoolean = false) fun setOmitAyahMarks(v: QvpRnPassageView, b: Boolean) { v.omitAyahMarksProp = b }
     @ReactProp(name = "ellipsisWidth", defaultFloat = 0f) fun setEllipsisWidth(v: QvpRnPassageView, f: Float) { v.ellipsisWidthProp = f }
     @ReactProp(name = "maxStretch", defaultFloat = 0f) fun setMaxStretch(v: QvpRnPassageView, f: Float) { v.maxStretchProp = f }
     @ReactProp(name = "ink") fun setInk(v: QvpRnPassageView, s: String?) { v.inkProp = s }

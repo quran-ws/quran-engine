@@ -207,6 +207,13 @@ for (const seq of S.sequences) {
       case 'styledPaths': assert.deepEqual(p.styledPaths(), st.value, what); break
       case 'drawRevision': assert.equal(p.layoutDrawRevision(), st.value, what); break
       case 'drawList': assert.deepEqual(drawList(p), st.value, what); break
+      case 'passageDrawList': {
+        const passage = engine.loadPassage([p], st.surah, st.from, st.to)
+        passage.layout({ width: 0 })
+        assert.deepEqual(passage.styledDrawList([p]).map(d => [d.page, d.path, d.placement]), st.value, what)
+        passage.free()
+        break
+      }
       case 'letterCount': assert.equal(p.letterCount(st.word), st.value, what); break
       case 'letterInfo': {
         const got = p.letter(st.word, st.letter)

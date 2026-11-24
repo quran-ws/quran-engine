@@ -458,9 +458,12 @@ data class QvpPassageSpec(
     /** How far a justified row's gaps may open, as a multiple of the passage's usual air between
      * two words. A negative value lifts the cap. */
     val maxStretch: Float = QvpDefaults.REFLOW_MAX_STRETCH,
+    /** Lay the words out with no ayah medallions, and no room kept for them. A division mark and
+     * a sajdah sign stay. [QvpPassage.ayahMark] gives the medallion of an ayah alone. */
+    val omitAyahMarks: Boolean = false,
 ) {
     internal fun floats() = floatArrayOf(width, scale, lineSpacing, padding, align.id.toFloat(), if (keepAyahMark) 1f else 0f,
-                                         maxRows.toFloat(), ellipsisWidth, maxStretch)
+                                         maxRows.toFloat(), ellipsisWidth, maxStretch, if (omitAyahMarks) 1f else 0f)
 }
 /** One row of a laid-out passage, in layout px: the box of its ink, and the height its words sit on. */
 data class QvpPassageRow(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val baseline: Float)

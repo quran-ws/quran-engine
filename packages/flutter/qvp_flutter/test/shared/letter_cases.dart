@@ -547,6 +547,23 @@ void letterCases(FutureOr<LetterFixture> Function() load) {
             expect(p.layoutDrawRevision(), value(), reason: what);
           case 'drawList':
             expect(drawList(p), value(), reason: what);
+          case 'passageDrawList':
+            final passage = QvpPassage.load(
+              [p],
+              st['surah'] as int,
+              st['from'] as int,
+              to: st['to'] as int,
+            );
+            passage.layout(const QvpPassageSpec(width: 0));
+            expect(
+              [
+                for (final d in passage.styledDrawList([p]))
+                  [d.page, d.path, d.placement],
+              ],
+              value(),
+              reason: what,
+            );
+            passage.close();
           case 'letterCount':
             expect(p.letterCount(st['word'] as int), value(), reason: what);
           case 'letterInfo':

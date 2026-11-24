@@ -314,6 +314,18 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       if (!h) throw new Error('qvp_passage_load_basmalah failed');
       return new QvpPassage(this, h, surah, 1);
     }
+    /** Load the medallion that closes ayah `ayah` of `surah`, from whichever of the pages
+     * prints it. It lays out on one row and has no ayahs and no words. It sits on the baseline
+     * of the line its ayah ends on, so at the scale of the ayah's own layout it has the size it
+     * has after the ayah's last word. Lay the ayah out with `omitAyahMarks` to show it apart.
+     * It is the page's printed medallion, not a dress's marker. Throws when no page given
+     * prints it. */
+    loadAyahMark(pages, surah, ayah) {
+      const [p, n] = this._pageHandles(pages);
+      const h = this.ex.qvp_passage_load_ayah_mark(p, n, surah, ayah);
+      if (!h) throw new Error('qvp_passage_load_ayah_mark failed');
+      return new QvpPassage(this, h, surah, ayah);
+    }
     /** the pages' handles as an array in wasm memory: [ptr, count]. A freed page throws here
      * (`page.h`), so none reaches the engine, where it would trap. */
     _pageHandles(pages) {
@@ -1222,7 +1234,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const d = this.e.dv();
       d.setFloat32(at, spec.width ?? 0, true); d.setFloat32(at + 4, spec.scale ?? 1, true);
       d.setFloat32(at + 8, spec.lineSpacing ?? 1, true); d.setFloat32(at + 12, spec.padding ?? 2, true);
-      d.setUint8(at + 16, align); d.setUint8(at + 17, spec.keepAyahMark ? 1 : 0); d.setUint16(at + 18, 0, true);
+      d.setUint8(at + 16, align); d.setUint8(at + 17, spec.keepAyahMark ? 1 : 0);
+      d.setUint8(at + 18, spec.omitAyahMarks ? 1 : 0); d.setUint8(at + 19, 0);
       d.setUint32(at + 20, spec.maxRows || 0, true); d.setFloat32(at + 24, spec.ellipsisWidth || 0, true);
       d.setFloat32(at + 28, spec.maxStretch ?? 0, true);
       return at;
@@ -1236,7 +1249,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     /** Lay the passage out at `spec` and keep the layout: {width, height, scale, lineSpacing,
      * isTruncated, ellipsis, rows, words, ayahs, draws, placements}. Null when the spec is out
      * of range, and the last layout then stays. Spec: {width, scale, lineSpacing, padding, align:
-     * 'right'|'center'|'justified', maxRows, keepAyahMark, ellipsisWidth, maxStretch}. */
+     * 'right'|'center'|'justified', maxRows, keepAyahMark, omitAyahMarks, ellipsisWidth,
+     * maxStretch}. `omitAyahMarks` lays the words out with no medallions and no room for them;
+     * `engine.loadAyahMark` gives one alone. */
     layout(spec = {}) {
       if (spec.maxRows < 0) return null;
       const ex = this.e.ex, s = this.e.scratch;
@@ -1258,6 +1273,22 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       const nPlacements = ex.qvp_passage_placements(this.h, 0, 0);
       L.placements = this._collect(ex.qvp_passage_placements, nPlacements, 16, (v, o) => ({ dx: v.getFloat32(o, true), dy: v.getFloat32(o + 4, true), kx: v.getFloat32(o + 8, true), ky: v.getFloat32(o + 12, true) }));
       return (this.currentLayout = L);
+    }
+    /** The draw list of the last layout as its pages style it now: [{page, path, placement}].
+     * With a letter layer, a cut path whose pieces differ in colour on its page is listed as its
+     * pieces, in its place and under its placement. Draw each path in its page's colour
+     * (`page.colors()`) to show a letter coloured on its own: pass it to
+     * `CanvasRenderer.drawPassage` with `{ draws, ink: 'page' }`. `pages` are the pages the
+     * passage was loaded from (an array, a Map or an object of page number to QvpPage); a draw
+     * whose page is not given is listed as `layout.draws` has it. Empty with no layout. */
+    styledDrawList(pages) {
+      const list = pages instanceof Map ? [...pages.values()] : Array.isArray(pages) ? pages : Object.values(pages || {});
+      const ex = this.e.ex;
+      return this.e._withInputs(() => {
+        const [p, n] = list.length ? this.e._pageHandles(list) : [0, 0];
+        const call = (h, out, cap) => ex.qvp_passage_styled_draw_list(h, p, n, out, cap);
+        return this._collect(call, call(this.h, 0, 0), 12, (v, o) => ({ page: v.getUint32(o, true), path: v.getUint32(o + 4, true), placement: v.getUint32(o + 8, true) }));
+      });
     }
   }
 
@@ -1390,21 +1421,27 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     lineTransform(page, view, line, dpr) { const [a, , tx, ty] = this.groupTransform(page, view, line, dpr); return [a, tx, ty]; }
     /** Draw a passage layout into a context, its top left at (x, y) in CSS px: every draw under
      * its placement, with the path from the page the draw names. `pages` maps a page number to
-     * its QvpPage (a Map or an object). `ink` is one colour, or `(page, path) => colour` to pick
-     * an ink per path, from its page's `pathKind` for instance. */
-    static drawPassage(c, layout, pages, { x = 0, y = 0, dpr = 1, ink = DEFAULTS.INK } = {}) {
+     * its QvpPage (a Map or an object). `ink` is one colour, `(page, path) => colour` to pick
+     * an ink per path, from its page's `pathKind` for instance, or `'page'` for each path's
+     * colour on its page (`page.colors()`). `draws` replaces `layout.draws`: pass
+     * `passage.styledDrawList(pages)` with `ink: 'page'` to show the letters the pages colour. */
+    static drawPassage(c, layout, pages, { x = 0, y = 0, dpr = 1, ink = DEFAULTS.INK, draws = layout.draws } = {}) {
       const pageOf = n => { const p = pages instanceof Map ? pages.get(n) : pages[n]; if (!p) throw new Error('the passage draws page ' + n + ', which was not given'); return p; };
-      const k = dpr * layout.scale, perPath = typeof ink === 'function';
+      const colors = new Map();
+      const colorOf = ink === 'page'
+        ? (page, path) => { let c = colors.get(page.page); if (!c) colors.set(page.page, (c = page.colors())); return c[path] }
+        : ink;
+      const k = dpr * layout.scale, perPath = typeof colorOf === 'function';
       if (!perPath) c.fillStyle = css(rgba(ink));
       let page = null, paths = null, cur = -1;
-      for (const dr of layout.draws) {
+      for (const dr of draws) {
         if (!page || page.page !== dr.page) { page = pageOf(dr.page); paths = page.buildPaths(); }
         if (dr.placement !== cur) {
           const p = layout.placements[dr.placement];
           c.setTransform(k * p.kx, 0, 0, k * p.ky, dpr * (x + layout.scale * p.dx), dpr * (y + layout.scale * p.dy));
           cur = dr.placement;
         }
-        if (perPath) c.fillStyle = css(rgba(ink(page, dr.path)));
+        if (perPath) c.fillStyle = css(rgba(colorOf(page, dr.path)));
         c.fill(paths[dr.path], page.pathEvenOdd(dr.path) ? 'evenodd' : 'nonzero');
       }
     }

@@ -1465,8 +1465,10 @@ final class QvpKitTests: XCTestCase {
             let numbers = (c["pages"] as! [NSNumber]).map(\.intValue)
             let (surah, from, to) = ((c["surah"] as! NSNumber).intValue, (c["from"] as! NSNumber).intValue, (c["to"] as! NSNumber).intValue)
             let pages = try numbers.map { try QvpPage(bytes: Data(contentsOf: Self.pages.appendingPathComponent(String(format: "%03d.qvp", $0)))) }
-            let basmalah = c["basmalah"] as? Bool ?? false
-            let passage = basmalah ? try QvpPassage(basmalahOf: surah, pages: pages) : try QvpPassage(pages: pages, surah: surah, from: from, to: to)
+            let basmalah = c["basmalah"] as? Bool ?? false, ayahMark = c["ayahMark"] as? Bool ?? false
+            let passage = basmalah ? try QvpPassage(basmalahOf: surah, pages: pages)
+                : ayahMark ? try QvpPassage(ayahMarkOf: from, surah: surah, pages: pages)
+                : try QvpPassage(pages: pages, surah: surah, from: from, to: to)
             // The passage keeps what it needs.
             pages.forEach { $0.close() }
             let s = c["spec"] as! [String: Any], want = c["layout"] as! [String: Any]
@@ -1474,8 +1476,10 @@ final class QvpKitTests: XCTestCase {
             let align: QvpPassageAlign = switch s["align"] as! String { case "center": .center; case "justified": .justified; default: .right }
             let spec = QvpPassageSpec(width: f("width"), scale: f("scale"), lineSpacing: f("lineSpacing"), padding: f("padding"),
                                       align: align, maxRows: (s["maxRows"] as! NSNumber).intValue,
-                                      keepAyahMark: s["keepAyahMark"] as! Bool, ellipsisWidth: f("ellipsisWidth"), maxStretch: f("maxStretch"))
-            let tag = "\(basmalah ? "basmalah of " : "")\(surah):\(from)-\(to) at \(spec.width) \(s["align"]!) rows \(spec.maxRows)"
+                                      keepAyahMark: s["keepAyahMark"] as! Bool, ellipsisWidth: f("ellipsisWidth"), maxStretch: f("maxStretch"),
+                                      omitAyahMarks: s["omitAyahMarks"] as? Bool ?? false)
+            let kind = basmalah ? "basmalah of " : ayahMark ? "medallion of " : ""
+            let tag = "\(kind)\(surah):\(from)-\(to) at \(spec.width) \(s["align"]!) rows \(spec.maxRows)\(spec.omitAyahMarks ? " no medallions" : "")"
             let l = try XCTUnwrap(passage.layout(spec), tag)
             close(l.width, want["width"]!, "\(tag) width"); close(l.height, want["height"]!, "\(tag) height")
             close(l.scale, want["scale"]!, "\(tag) scale"); close(l.lineSpacing, want["lineSpacing"]!, "\(tag) lineSpacing")
@@ -1497,8 +1501,11 @@ final class QvpKitTests: XCTestCase {
             } else {
                 XCTAssertNil(l.ellipsis, tag)
             }
+            // With no page given, the styled list is the draw list.
+            XCTAssertEqual(passage.styledDrawList(pages: []), l.draws, tag)
+            if basmalah || ayahMark { XCTAssertTrue(passage.ayahs.isEmpty, tag) }
         }
-        XCTAssertEqual(cases.count, 58)
+        XCTAssertEqual(cases.count, 76)
     }
 
     /// A surah's basmalah is a passage with no ayahs; surah 1 has none of its own and surah 9

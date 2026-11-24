@@ -35,8 +35,13 @@ class QvpPassageConformanceTest {
             val c = cases.getJSONObject(i)
             val surah = c.getInt("surah"); val from = c.getInt("from"); val to = c.getInt("to")
             val basmalah = c.optBoolean("basmalah", false)
+            val ayahMark = c.optBoolean("ayahMark", false)
             val pages = c.getJSONArray("pages").ints().map { page(it) }
-            val passage = if (basmalah) QvpPassage.basmalah(pages, surah) else QvpPassage.load(pages, surah, from, to)
+            val passage = when {
+                basmalah -> QvpPassage.basmalah(pages, surah)
+                ayahMark -> QvpPassage.ayahMark(pages, surah, from)
+                else -> QvpPassage.load(pages, surah, from, to)
+            }
             // The passage keeps what it needs.
             pages.forEach { it.close() }
             val s = c.getJSONObject("spec"); val want = c.getJSONObject("layout")
@@ -44,8 +49,10 @@ class QvpPassageConformanceTest {
             val spec = QvpPassageSpec(width = s.getDouble("width").toFloat(), scale = s.getDouble("scale").toFloat(),
                                       lineSpacing = s.getDouble("lineSpacing").toFloat(), padding = s.getDouble("padding").toFloat(),
                                       align = align, maxRows = s.getInt("maxRows"), keepAyahMark = s.getBoolean("keepAyahMark"),
-                                      ellipsisWidth = s.getDouble("ellipsisWidth").toFloat(), maxStretch = s.getDouble("maxStretch").toFloat())
-            val tag = "${if (basmalah) "basmalah of " else ""}$surah:$from-$to at ${spec.width} ${s.getString("align")} rows ${spec.maxRows}"
+                                      ellipsisWidth = s.getDouble("ellipsisWidth").toFloat(), maxStretch = s.getDouble("maxStretch").toFloat(),
+                                      omitAyahMarks = s.optBoolean("omitAyahMarks", false))
+            val kind = if (basmalah) "basmalah of " else if (ayahMark) "medallion of " else ""
+            val tag = "$kind$surah:$from-$to at ${spec.width} ${s.getString("align")} rows ${spec.maxRows}${if (spec.omitAyahMarks) " no medallions" else ""}"
             val l = passage.layout(spec)
             assertNotNull(tag, l); l!!
             close(l.width, want.getDouble("width"), "$tag width"); close(l.height, want.getDouble("height"), "$tag height")
@@ -72,9 +79,11 @@ class QvpPassageConformanceTest {
                 listOf(e.left, e.top, e.right, e.bottom).zip(want.getJSONArray("ellipsis").doubles()).forEach { (v, w) -> close(v, w, "$tag ellipsis") }
             }
             assertTrue(tag, l.placements.size > (l.draws.maxOfOrNull { it.placement } ?: -1))
+            // With no page given, the styled list is the draw list.
+            assertEquals(tag, l.draws, passage.styledDrawList(emptyList()))
             passage.close()
         }
-        assertEquals(58, cases.length())
+        assertEquals(76, cases.length())
     }
 
     /** A surah's basmalah is a passage with no ayahs. Surah 1 has none of its own, and a page that

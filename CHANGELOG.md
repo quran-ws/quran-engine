@@ -7,6 +7,30 @@ All notable changes to the engine and its packages. The format follows
 ## [Unreleased]
 
 ### Added
+- A passage shows the letters that its pages colour. `qvp_passage_styled_draw_list` gives the
+  draw list of a passage's last layout as the given pages style it now: with a letter layer, a
+  joined outline whose letters differ in colour is listed as its pieces, in its place and under
+  its placement, as the page's own draw list lists them. Fill each path in its page's colour
+  (`qvp_colors`), and a tajweed colouring on the page shows in a passage cut from it. Bound in
+  every wrapper as `styledDrawList`. The passage drawers take the list and the page colours:
+  `draws` and `pageColors` in QvpKit, Android and Flutter, and `draws` with `ink: 'page'` in
+  `CanvasRenderer.drawPassage`.
+- `QvpPassageSpec.omit_ayah_marks` lays the words out with no ayah medallions. A word that closes
+  an ayah keeps no room for its medallion, and no medallion is drawn. A division mark and a
+  sajdah sign stay. The field takes a padding byte, so no field of the spec moves. In Rust, a
+  `PassageSpec` written out field by field takes the new field, and `PassageError` has a new
+  variant, `NoAyahMark`.
+- `qvp_passage_load_ayah_mark` loads the medallion of one ayah as a passage of one piece, with
+  no ayahs and no words. It sits on the baseline of the line its ayah ends on, so at the scale
+  of the ayah's own layout it has the size it has after the words. With `omit_ayah_marks`, a
+  host shows an ayah's number apart from its words. React Native's `<QvpPassageView />` takes
+  `omitAyahMarks` and `ayahMark`.
+- QvpKit: `onLongPressAt` on `QvpCanvasController` and `QvpPageView` gives the point of a long
+  press with its hit, so a host can name the letter under the finger with `letterAt(_:)` and
+  place a popover there.
+- `conformance/scenarios/passage.json` has 18 more cases: the six passages with no medallions,
+  laid out whole and cut, and three medallions alone. `letters.json` has a new step,
+  `passageDrawList`, that every wrapper replays.
 - `data-v0.7.0` holds the ornaments of eight mushafs of the King Fahd Glorious Qur'an Printing
   Complex: ayah markers, surah headers and page frames. The Complex permits reuse and
   republication for any purpose other than printing (`docs/DATA.md`). The pages and the letter

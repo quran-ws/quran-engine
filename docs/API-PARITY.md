@@ -120,6 +120,8 @@ is owed.
 | `qvp_mask_transition` | react-native | issue (to open): a binding is owed; the fade landed on iOS first |
 | `qvp_passage_load` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 | `qvp_passage_load_basmalah` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_load_ayah_mark` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
+| `qvp_passage_styled_draw_list` | react-native | not applicable: `QvpRnPassageView` opens its own pages, with no letter layer and no rules, so the styled list is its draw list |
 | `qvp_passage_free` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 | `qvp_passage_ayah_count` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 | `qvp_passage_ayah_text` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
@@ -273,12 +275,12 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | view policy helpers | iOS, `QvpViewPolicy` | `maxZoom`, `clampZoom(_:fit:ceiling:)` and `swipeDirection` hand the engine's answers on: `QVP_DEFAULT_MAX_ZOOM`, `qvp_view_zoom_about` and `qvp_swipe_pages`. The zoomed threshold is the engine's `zoomIsZoomed` |
 | zoom spring | iOS, `QvpZoomSpring` | eases a released pinch back to the fitted transform on a display link of its own |
 | page cache | iOS, `QvpPageCache` | the policy in `docs/EXAMPLE-APP.md`; the other platforms follow it in their examples |
-| long press, double tap, tap callbacks | every page view | gesture recognition only. The hit comes from `qvp_hit_test`. `onWordTap` passes the word and the hit, and `onDecorationTap` the decoration and the hit, on Android, iOS and Flutter. React Native carries the same pair in one event |
+| long press, double tap, tap callbacks | every page view | gesture recognition only. The hit comes from `qvp_hit_test`. `onWordTap` passes the word and the hit, and `onDecorationTap` the decoration and the hit, on Android, iOS and Flutter. React Native carries the same pair in one event. On iOS, `onLongPressAt` passes the point of the press with the hit, for `letterAt` (`qvp_hit_test_letter_view`) |
 
 ## Matrix
 
 <!-- parity:begin -->
-186 symbols in the header, 186 Rust exports. web: 185 bound, android: 183 bound, flutter: 177 bound, ios: 180 bound, react-native: 104 bound.
+188 symbols in the header, 188 Rust exports. web: 187 bound, android: 185 bound, flutter: 179 bound, ios: 182 bound, react-native: 104 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -400,9 +402,11 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_passage_layout` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_line_spacing` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_load` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_load_ayah_mark` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_load_basmalah` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_placements` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_rows` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_styled_draw_list` | yes | yes | yes | yes | gap (not applicable: `QvpRnPassageView` opens its own pages, with no letter layer and no rules, so the styled list is its draw list) |
 | `qvp_passage_words` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_path_letter` | yes | yes | yes | yes | yes |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |

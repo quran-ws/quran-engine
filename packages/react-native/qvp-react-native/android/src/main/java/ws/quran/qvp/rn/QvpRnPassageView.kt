@@ -8,7 +8,7 @@ import com.facebook.react.uimanager.ThemedReactContext
 import ws.quran.qvp.*
 
 /**
- * The React Native host of a passage: a range of complete ayahs, or a surah's basmalah, laid out on
+ * The React Native host of a passage: a range of complete ayahs, a surah's basmalah or an ayah's medallion, laid out on
  * rows of this view's width and drawn here. The engine loads, measures and places every word; this
  * class reads the pages the props name, hands the engine a spec in dp, draws the layout and reports
  * it to JS. Nothing is decided here.
@@ -23,6 +23,7 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
     var fromProp = 0
     var toProp = 0
     var basmalahProp = false
+    var ayahMarkProp = false
     /** dp per page unit; [lineHeightProp] wins when it is set. */
     var scaleProp = 1f
     /** dp per printed line: the scale is this over the passage's printed line spacing. */
@@ -32,6 +33,7 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
     var alignProp: String? = null
     var maxRowsProp = 0
     var keepAyahMarkProp = false
+    var omitAyahMarksProp = false
     var ellipsisWidthProp = 0f
     var maxStretchProp = 0f
     var inkProp: String? = null
@@ -69,7 +71,7 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
     }
 
     private fun ensurePassage() {
-        val key = "${pageUris.joinToString("|")}#$surahProp:$fromProp-$toProp:$basmalahProp"
+        val key = "${pageUris.joinToString("|")}#$surahProp:$fromProp-$toProp:$basmalahProp:$ayahMarkProp"
         if (key == loadedKey) return
         destroy()
         loadedKey = key
@@ -81,8 +83,11 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
         pages = loaded
         for (uri in pageUris) loaded.add(QvpPage(QvpRnBytes.read(ctx, uri)).also { p -> p.buildPaths() })
         pagesByNumber = loaded.associateBy { it.pageNo }
-        passage = if (basmalahProp) QvpPassage.basmalah(loaded, surahProp)
-                  else QvpPassage.load(loaded, surahProp, fromProp, if (toProp > 0) toProp else fromProp)
+        passage = when {
+            basmalahProp -> QvpPassage.basmalah(loaded, surahProp)
+            ayahMarkProp -> QvpPassage.ayahMark(loaded, surahProp, fromProp)
+            else -> QvpPassage.load(loaded, surahProp, fromProp, if (toProp > 0) toProp else fromProp)
+        }
     }
 
     private fun relayout() {
@@ -105,7 +110,7 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
         }
         val spec = QvpPassageSpec(width = widthDp, scale = scale, lineSpacing = lineSpacingProp, padding = paddingProp,
                                   align = align, maxRows = maxRows, keepAyahMark = keepAyahMarkProp,
-                                  ellipsisWidth = ellipsisWidth, maxStretch = maxStretchProp)
+                                  ellipsisWidth = ellipsisWidth, maxStretch = maxStretchProp, omitAyahMarks = omitAyahMarksProp)
         val key = spec.toString()
         if (key == layoutKey) return
         val l = p.layout(spec)

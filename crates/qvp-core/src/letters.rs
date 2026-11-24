@@ -596,6 +596,13 @@ impl Page {
             .collect()
     }
 
+    /// The pieces the page draws in place of page path `path` now: `Some` for a cut path whose
+    /// pieces differ in colour, as of the last refresh. `None` for every other path, and with
+    /// no layer.
+    pub(crate) fn drawn_pieces(&self, path: u32) -> Option<std::ops::Range<u32>> {
+        self.letters.as_deref()?.drawn_pieces(path)
+    }
+
     /// The letter a path draws: (letter index in the word, or `NONE` for a word-level mark;
     /// the checked offset, or `NONE`). `None` for a cut path, a decoration path, a path out
     /// of range, or with no layer.

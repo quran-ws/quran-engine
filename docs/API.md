@@ -1192,14 +1192,22 @@ let layout = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineS
                                            maxRows: 2, keepAyahMark: true, ellipsisWidth: 12))
 for draw in layout!.draws {   // draw page draw.page's path draw.path under placements[draw.placement]
 }
+// the last layout's draws as the page styles them: the letters it colours, in their colours
+layout!.draw(in: ctx, pages: [42: page], draws: passage.styledDrawList(pages: [page]), pageColors: true)
 let basmalah = try QvpPassage(basmalahOf: 2, pages: [page])          // a surah's basmalah, sized like an ayah
+let bare = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing, omitAyahMarks: true))
+let mark = try QvpPassage(ayahMarkOf: 255, surah: 2, pages: [page])  // 2:255's medallion alone
+mark.layout(QvpPassageSpec(scale: bare!.scale))                      // the size it has after the words
 ```
 
 ```js
 const passage = engine.loadPassage([page], 2, 255)       // the pages can be freed after this
 const layout = passage.layout({ width: 366, scale: 22 / passage.lineSpacing, maxRows: 2, keepAyahMark: true, ellipsisWidth: 12 })
 CanvasRenderer.drawPassage(ctx, layout, { 42: page }, { dpr })   // every draw under its placement
+// the letters the page colours, in their colours
+CanvasRenderer.drawPassage(ctx, layout, { 42: page }, { dpr, draws: passage.styledDrawList([page]), ink: 'page' })
 const basmalah = engine.loadBasmalah([page], 2)
+const mark = engine.loadAyahMark([page], 2, 255)   // with passage.layout({ ..., omitAyahMarks: true })
 ```
 
 - `width` ≤ 0 puts the passage on one row, as wide as it is.
@@ -1227,6 +1235,21 @@ const basmalah = engine.loadBasmalah([page], 2)
   out like any passage, on one row; it has no ayahs and no words. Its `lineSpacing` is its
   page's, so it is sized by the printed line as an ayah is. Surah 1, whose basmalah is its first
   ayah, and surah 9, which has none, fail the load, as does a page list that does not print it.
+- `omitAyahMarks` lays the words out with no ayah medallions. A word that closes an ayah keeps no
+  room for its medallion, and no medallion is drawn. A division mark and a sajdah sign stay with
+  their words. With it, `keepAyahMark` has no medallion to keep.
+- An ayah's medallion loads alone from the page that prints it (`qvp_passage_load_ayah_mark`),
+  for a host that shows the ayah's number apart from its words. It lays out like a basmalah, on
+  one row, with no ayahs and no words. It sits on the baseline of the line its ayah ends on, so
+  at the scale of the ayah's own layout (`layout.scale`) it has the size it has after the words.
+  It is the medallion the page prints: a dressed page's marker comes from the dress.
+- To show the letters that the pages colour (a tajweed colouring with `styleLetters` or the
+  letter selectors, "Letters" above), draw the passage with the pages it was loaded from, each
+  with its letter layer and its rules. `passage.styledDrawList(pages)` (`qvp_passage_styled_draw_list`)
+  is the draw list as those pages style it now: a joined outline whose letters differ in colour
+  is listed as its pieces, as the page's own draw list lists them. Fill each path in its page's
+  colour, `page.colors()`. The passage then shows what the page shows, highlights and masks
+  included, so give it pages that carry only the rules the passage needs.
 
 ## Names
 
@@ -1415,6 +1438,7 @@ function in the header has no row here, or a row names a function the header lac
 | atlas | `qvp_atlas_json` | `atlas.json()` | Return the atlas as JSON. |
 | passage | `qvp_passage_load` | `engine.loadPassage(pages, surah, from, to)` | Load a range of complete ayahs from the pages that print them; null when an ayah is missing or incomplete. |
 | passage | `qvp_passage_load_basmalah` | `engine.loadBasmalah(pages, surah)` | Load the basmalah printed above a surah, from whichever of the pages prints it; null for surahs 1 and 9, and when no page prints it. |
+| passage | `qvp_passage_load_ayah_mark` | `engine.loadAyahMark(pages, surah, ayah)` | Load the medallion that closes an ayah, from whichever of the pages prints it, as a passage of one piece; null when no page prints it. |
 | passage | `qvp_passage_free` | `passage.free()` | Free the passage. |
 | passage | `qvp_passage_ayah_count` | `passage.ayahs.length` | Return how many ayahs the passage has. |
 | passage | `qvp_passage_ayah_text` | `passage.ayahs[i].text` | Return an ayah's text, from the page's own word records. |
@@ -1424,6 +1448,7 @@ function in the header has no row here, or a row names a function the header lac
 | passage | `qvp_passage_words` | `layout.words` | Return the words that the last layout shows, with the box of each and its signs, and the box of the word alone (`word_x0` to `word_y1`), which leaves out the signs. |
 | passage | `qvp_passage_ayahs` | `layout.ayahs` | Return the bounds of each ayah that the last layout shows. |
 | passage | `qvp_passage_draw_list` | `layout.draws` | Return every path that the last layout draws, as page, path and placement. |
+| passage | `qvp_passage_styled_draw_list` | `passage.styledDrawList(pages)` | Return the same list as the given pages style it now: a cut path whose pieces differ in colour on its page is listed as its pieces. |
 | passage | `qvp_passage_placements` | `layout.placements` | Return what a passage draw list's placement indexes. |
 | names | `qvp_name_count` | `engine.nameCount(table)` | Return how many ids a name table has. |
 | names | `qvp_name` | `engine.name(table, id)` | Return the name of an id in a table; empty outside the table. |

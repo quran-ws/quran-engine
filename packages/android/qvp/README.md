@@ -83,7 +83,10 @@ val passage = QvpPassage.load(listOf(page), surah = 2, from = 255)
 val layout = passage.layout(QvpPassageSpec(width = 366f, scale = 22f / passage.lineSpacing,
                                            maxRows = 2, keepAyahMark = true, ellipsisWidth = 12f))
 layout?.draw(canvas, mapOf(42 to page), paint)       // every path under its placement
+// the letters the page colours, in their colours: the last layout's draws as the page styles them
+layout?.draw(canvas, mapOf(42 to page), paint, draws = passage.styledDrawList(listOf(page)), pageColors = true)
 val basmalah = QvpPassage.basmalah(listOf(page), surah = 2)   // one row, no words; throws for surahs 1 and 9
+val mark = QvpPassage.ayahMark(listOf(page), surah = 2, ayah = 255)   // the medallion alone, for omitAyahMarks = true
 passage.close()
 ```
 

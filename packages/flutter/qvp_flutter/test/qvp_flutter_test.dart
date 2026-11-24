@@ -599,9 +599,12 @@ void main() {
           from = c['from'] as int,
           to = c['to'] as int;
       final basmalah = c['basmalah'] as bool? ?? false;
+      final ayahMark = c['ayahMark'] as bool? ?? false;
       final pages = [for (final n in numbers) load(n)];
       final passage = basmalah
           ? QvpPassage.basmalah(pages, surah)
+          : ayahMark
+          ? QvpPassage.ayahMark(pages, surah, from)
           : QvpPassage.load(pages, surah, from, to: to);
       // The passage keeps what it needs.
       for (final p in pages) {
@@ -620,9 +623,15 @@ void main() {
         keepAyahMark: s['keepAyahMark'] as bool,
         ellipsisWidth: f('ellipsisWidth'),
         maxStretch: f('maxStretch'),
+        omitAyahMarks: s['omitAyahMarks'] as bool? ?? false,
       );
+      final kind = basmalah
+          ? 'basmalah of '
+          : ayahMark
+          ? 'medallion of '
+          : '';
       final tag =
-          '${basmalah ? 'basmalah of ' : ''}$surah:$from-$to at ${spec.width} ${s['align']} rows ${spec.maxRows}';
+          '$kind$surah:$from-$to at ${spec.width} ${s['align']} rows ${spec.maxRows}${spec.omitAyahMarks ? ' no medallions' : ''}';
       final l = passage.layout(spec);
       expect(l, isNotNull, reason: tag);
       expect(passage.currentLayout, same(l));
@@ -675,7 +684,9 @@ void main() {
         expect(numbers, contains(d.page), reason: tag);
         expect(d.placement, lessThan(l.placements.length), reason: tag);
       }
-      if (basmalah) {
+      // With no page given, the styled list is the draw list.
+      expect(passage.styledDrawList(const []), l.draws, reason: tag);
+      if (basmalah || ayahMark) {
         expect(passage.ayahs, isEmpty, reason: tag);
       } else {
         expect(passage.ayahs.length, to - from + 1, reason: tag);
@@ -685,7 +696,7 @@ void main() {
       passage.close();
       expect(passage.isDisposed, isTrue);
     }
-    expect(cases.length, 58);
+    expect(cases.length, 76);
   });
 
   test('a basmalah passage has no ayahs; surah 1, surah 9 and a page without it fail to load', () {

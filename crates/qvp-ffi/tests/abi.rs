@@ -441,13 +441,17 @@ fn passage_end_to_end() {
             padding: 2.0,
             align: 0, // QVP_ALIGN_RIGHT
             keep_ayah_mark: 0,
-            _pad: [0; 2],
+            omit_ayah_marks: 0,
+            _pad: [0; 1],
             max_rows: 0,
             ellipsis_width: 0.0,
             max_stretch: 0.0, // the default
         };
-        // The spec grew by its last field, the justified gaps' cap.
+        // The spec grew by its last field, the justified gaps' cap. `omit_ayah_marks` took a
+        // padding byte, so no field moved.
         assert_eq!(std::mem::size_of::<QvpPassageSpec>(), 32);
+        assert_eq!(std::mem::offset_of!(QvpPassageSpec, omit_ayah_marks), 18);
+        assert_eq!(std::mem::offset_of!(QvpPassageSpec, max_rows), 20);
         let mut layout = QvpPassageLayout::default();
         assert_eq!(qvp_passage_layout(passage, &spec, &mut layout), 1);
         assert!(layout.n_rows > 1 && layout.n_words > 40 && layout.is_truncated == 0);
@@ -468,6 +472,44 @@ fn passage_end_to_end() {
         assert_eq!(qvp_passage_draw_list(passage, draws.as_mut_ptr(), layout.n_draws), layout.n_draws);
         let n_placements = qvp_passage_placements(passage, std::ptr::null_mut(), 0);
         assert!(draws.chunks(3).all(|d| d[0] == 42 && d[2] < n_placements));
+        // With no letter layer, the styled list is the draw list. The pages are given again, so
+        // the page this test freed above is loaded once more.
+        let again = qvp_page_load(bytes.as_ptr(), bytes.len());
+        let styled_pages = [again as *const _];
+        let mut styled = vec![0u32; layout.n_draws as usize * 3];
+        assert_eq!(
+            qvp_passage_styled_draw_list(passage, styled_pages.as_ptr(), 1, styled.as_mut_ptr(), layout.n_draws),
+            layout.n_draws
+        );
+        assert_eq!(styled, draws);
+        assert_eq!(qvp_passage_styled_draw_list(passage, std::ptr::null(), 0, std::ptr::null_mut(), 0), layout.n_draws);
+
+        // With no medallions, the word that closes the ayah takes no room for one, and its
+        // paths are not drawn.
+        spec.omit_ayah_marks = 1;
+        let mut bare = QvpPassageLayout::default();
+        assert_eq!(qvp_passage_layout(passage, &spec, &mut bare), 1);
+        assert_eq!(bare.n_words, layout.n_words);
+        assert!(bare.n_draws < layout.n_draws, "{} {}", bare.n_draws, layout.n_draws);
+        let mut bare_words = vec![std::mem::zeroed::<QvpPassageWord>(); bare.n_words as usize];
+        qvp_passage_words(passage, bare_words.as_mut_ptr(), bare.n_words);
+        let closing = bare_words[bare_words.len() - 1];
+        assert!((closing.word_x0 - closing.x0).abs() < 0.01, "{} {}", closing.x0, closing.word_x0);
+        spec.omit_ayah_marks = 0;
+
+        // The medallion of 2:255 alone: one piece on one row, no words, no ayahs. Its draws are
+        // the ones the full layout drew after the last word and the bare one left out.
+        assert!(qvp_passage_load_ayah_mark(styled_pages.as_ptr(), 1, 2, 280).is_null());
+        assert!(qvp_passage_load_ayah_mark(styled_pages.as_ptr(), 1, 2, 0).is_null());
+        let mark = qvp_passage_load_ayah_mark(styled_pages.as_ptr(), 1, 2, 255);
+        assert!(!mark.is_null());
+        assert_eq!(qvp_passage_ayah_count(mark), 0);
+        let mut mark_layout = QvpPassageLayout::default();
+        assert_eq!(qvp_passage_layout(mark, &spec, &mut mark_layout), 1);
+        assert_eq!((mark_layout.n_rows, mark_layout.n_words, mark_layout.n_ayahs), (1, 0, 0));
+        assert_eq!(mark_layout.n_draws, layout.n_draws - bare.n_draws);
+        qvp_passage_free(mark);
+        qvp_page_free(again);
 
         // Two rows, then an ellipsis and the medallion.
         spec.max_rows = 2;
@@ -533,7 +575,8 @@ fn basmalah_end_to_end() {
             padding: 2.0,
             align: 1, // QVP_ALIGN_CENTER
             keep_ayah_mark: 0,
-            _pad: [0; 2],
+            omit_ayah_marks: 0,
+            _pad: [0; 1],
             max_rows: 0,
             ellipsis_width: 0.0,
             max_stretch: 0.0,
