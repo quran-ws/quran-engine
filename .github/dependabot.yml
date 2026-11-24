@@ -12,6 +12,12 @@ updates:
   - package-ecosystem: npm
     directory: /packages/react-native/qvp-react-native
     schedule: { interval: monthly }
+  - package-ecosystem: npm
+    directory: /packages/react-native/example
+    schedule: { interval: monthly }
+  - package-ecosystem: npm
+    directory: /scripts/lint
+    schedule: { interval: monthly }
   - package-ecosystem: gradle
     directory: /packages/android
     schedule: { interval: monthly }
