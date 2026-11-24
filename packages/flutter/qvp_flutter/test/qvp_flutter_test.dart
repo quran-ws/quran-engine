@@ -1510,6 +1510,190 @@ void main() {
     },
   );
 
+  group('QvpPageView.onSwipe', () {
+    late QvpPage p;
+    final turns = <int>[];
+    final selected = <int>[];
+    final view = find.byType(QvpPageView);
+
+    Future<QvpPageViewState> show(
+      WidgetTester tester, {
+      bool panZoom = true,
+    }) async {
+      turns.clear();
+      selected.clear();
+      p = engine.loadPage(File(pagePath).readAsBytesSync());
+      addTearDown(p.dispose);
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 400,
+              height: 640,
+              child: QvpPageView(
+                page: p,
+                panZoomEnabled: panZoom,
+                onSwipe: turns.add,
+                onSelectionChanged: selected.addAll,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return tester.state<QvpPageViewState>(view);
+    }
+
+    Future<void> fling(WidgetTester tester, Offset by) async {
+      await tester.fling(view, by, 1000);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> step(WidgetTester tester, TestGesture g, Offset by) async {
+      for (var i = 0; i < 6; i++) {
+        await g.moveBy(by);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+    }
+
+    /// Two fingers spread, and the first lifts. Gives the one still down.
+    Future<TestGesture> pinchOneLeft(WidgetTester tester) async {
+      final a = await tester.startGesture(const Offset(150, 300), pointer: 7);
+      final b = await tester.startGesture(const Offset(250, 300), pointer: 8);
+      for (var i = 0; i < 6; i++) {
+        await step(tester, b, const Offset(4, 0));
+      }
+      await a.up();
+      await tester.pump();
+      return b;
+    }
+
+    testWidgets('a right flick is the next page, a left flick the one before', (
+      tester,
+    ) async {
+      await show(tester);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+      await fling(tester, const Offset(-200, 0));
+      expect(turns, [1, -1]);
+    });
+
+    testWidgets('a vertical or a mostly vertical drag turns nothing', (
+      tester,
+    ) async {
+      await show(tester);
+      await fling(tester, const Offset(0, 200));
+      await fling(tester, const Offset(90, 300));
+      expect(turns, isEmpty);
+    });
+
+    testWidgets('a slow drag counts from where the finger went down', (
+      tester,
+    ) async {
+      await show(tester);
+      await tester.timedDragFrom(
+        const Offset(100, 300),
+        const Offset(60, 0),
+        const Duration(milliseconds: 300),
+      );
+      await tester.pumpAndSettle();
+      expect(turns, [1]);
+    });
+
+    testWidgets('a second finger ends the swipe', (tester) async {
+      await show(tester);
+      final a = await tester.startGesture(const Offset(100, 300), pointer: 7);
+      await step(tester, a, const Offset(20, 0));
+      final b = await tester.startGesture(const Offset(300, 400), pointer: 8);
+      await a.up();
+      await step(tester, b, const Offset(20, 0));
+      await b.up();
+      await tester.pumpAndSettle();
+      expect(turns, isEmpty);
+    });
+
+    testWidgets('the finger left after a pinch does not turn the page', (
+      tester,
+    ) async {
+      final state = await show(tester);
+      state.setZoomMode(QvpZoomMode.stepped);
+      await tester.pumpAndSettle();
+      final b = await pinchOneLeft(tester);
+      await step(tester, b, const Offset(-30, 0));
+      await b.up();
+      await tester.pumpAndSettle();
+      expect(turns, isEmpty);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1], reason: 'the next touch is a swipe again');
+    });
+
+    testWidgets('a selection drag selects and does not turn the page', (
+      tester,
+    ) async {
+      await show(tester);
+      final w = p.hitAreasView().first;
+      final g = await tester.startGesture(
+        Offset((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await step(tester, g, const Offset(-20, 0));
+      await g.up();
+      await tester.pumpAndSettle();
+      expect(selected, isNotEmpty);
+      expect(turns, isEmpty);
+    });
+
+    testWidgets('magnify mode turns the page at rest and pans when magnified', (
+      tester,
+    ) async {
+      final state = await show(tester);
+      state.setZoomMode(QvpZoomMode.magnify);
+      await tester.pumpAndSettle();
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+      await (await pinchOneLeft(tester)).up();
+      await tester.pumpAndSettle();
+      turns.clear();
+      await fling(tester, const Offset(200, 0));
+      expect(turns, isEmpty);
+    });
+
+    testWidgets('a reflowed page turns', (tester) async {
+      final state = await show(tester);
+      state.setZoomMode(QvpZoomMode.stepped);
+      state.zoomToStep(2);
+      await tester.pumpAndSettle();
+      expect(p.currentLayout!.reflowed, isTrue);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+    });
+
+    testWidgets('a trackpad pan does not repeat the swipe before it', (
+      tester,
+    ) async {
+      await show(tester);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+      final g = await tester.createGesture(kind: ui.PointerDeviceKind.trackpad);
+      await g.panZoomStart(const Offset(200, 300));
+      for (var i = 1; i <= 6; i++) {
+        await g.panZoomUpdate(const Offset(200, 300), pan: Offset(0, 20.0 * i));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await g.panZoomEnd();
+      await tester.pumpAndSettle();
+      expect(turns, [1]);
+    });
+
+    testWidgets('it fires with pan and zoom off', (tester) async {
+      await show(tester, panZoom: false);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+    });
+  });
+
   testWidgets('benchmark: 200 frames of a page where nothing moves', (
     tester,
   ) async {

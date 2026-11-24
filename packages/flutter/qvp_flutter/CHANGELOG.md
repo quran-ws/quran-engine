@@ -6,6 +6,8 @@
   included. `QvpPassageSpec.omitAyahMarks` and `QvpPassage.ayahMark(pages, surah, ayah)` lay an
   ayah out with no medallion and give its medallion alone, on both backends.
   `QvpPassageDraw` compares by value.
+- `QvpPageView.onSwipe` gives a sideways swipe in pages: +1 the next page, -1 the page before
+  it. A magnified page pans instead, and a touch with a second finger never turns the page.
 
 ## 0.10.0
 
