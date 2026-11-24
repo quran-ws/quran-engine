@@ -32,7 +32,7 @@ and the first that applies wins:
 3. Otherwise the module depends on `ws.quran:qvp-android` from Maven Central, at the version
    of this package. An app that installs the package from npm needs nothing more. To use a
    different library version, set the Gradle property `qvpVersion`, for example
-   `qvpVersion=0.10.0` in `android/gradle.properties`.
+   `qvpVersion=0.11.0` in `android/gradle.properties`.
 
 The Maven Central library holds the engine. In ways 1 and 2 the engine comes from
 `packages/android/qvp/prebuilt/<abi>/libqvp_ffi.a`. Make it once with
