@@ -1670,6 +1670,23 @@ void main() {
       expect(turns, [1]);
     });
 
+    testWidgets('a trackpad pan does not repeat the swipe before it', (
+      tester,
+    ) async {
+      await show(tester);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+      final g = await tester.createGesture(kind: ui.PointerDeviceKind.trackpad);
+      await g.panZoomStart(const Offset(200, 300));
+      for (var i = 1; i <= 6; i++) {
+        await g.panZoomUpdate(const Offset(200, 300), pan: Offset(0, 20.0 * i));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await g.panZoomEnd();
+      await tester.pumpAndSettle();
+      expect(turns, [1]);
+    });
+
     testWidgets('it fires with pan and zoom off', (tester) async {
       await show(tester, panZoom: false);
       await fling(tester, const Offset(200, 0));

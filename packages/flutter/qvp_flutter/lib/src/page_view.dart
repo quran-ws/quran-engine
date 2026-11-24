@@ -586,6 +586,9 @@ class QvpPageViewState extends State<QvpPageView>
   /// The fingers went down, or their number changed: Flutter starts the scale gesture again
   /// then, with `scale` back at 1, so this is where every pinch is measured from.
   void _onScaleStart(ScaleStartDetails d) {
+    // a trackpad pan puts no finger on the page: it has no travel of its own here, only what
+    // the last touch left
+    if (_fingers.isEmpty) _swipeFrom = _swipeTo;
     _gView = _ctl.view;
     _gFocal = d.localFocalPoint;
     // where the control stood when the fingers went down: the engine measures them against this,
