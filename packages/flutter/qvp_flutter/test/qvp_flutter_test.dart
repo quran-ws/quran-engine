@@ -1510,93 +1510,172 @@ void main() {
     },
   );
 
-  testWidgets(
-    'QvpPageView onSwipe callback reports horizontal drag and obeys invariants',
-    (tester) async {
-      int? swiped;
-      final p = engine.loadPage(File(pagePath).readAsBytesSync());
+  group('QvpPageView.onSwipe', () {
+    late QvpPage p;
+    final turns = <int>[];
+    final selected = <int>[];
+    final view = find.byType(QvpPageView);
+
+    Future<QvpPageViewState> show(
+      WidgetTester tester, {
+      bool panZoom = true,
+    }) async {
+      turns.clear();
+      selected.clear();
+      p = engine.loadPage(File(pagePath).readAsBytesSync());
+      addTearDown(p.dispose);
       await tester.pumpWidget(
         Directionality(
           textDirection: TextDirection.ltr,
-          child: SizedBox(
-            width: 400,
-            height: 640,
-            child: QvpPageView(page: p, onSwipe: (pages) => swiped = pages),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 400,
+              height: 640,
+              child: QvpPageView(
+                page: p,
+                panZoomEnabled: panZoom,
+                onSwipe: turns.add,
+                onSelectionChanged: selected.addAll,
+              ),
+            ),
           ),
         ),
       );
-
-      // 1. Right flick: +1 in mushaf reading order (next page)
-      await tester.fling(find.byType(QvpPageView), const Offset(200, 0), 1000);
       await tester.pumpAndSettle();
-      expect(swiped, 1);
+      return tester.state<QvpPageViewState>(view);
+    }
 
-      // 2. Left flick: -1 in mushaf reading order (previous page)
-      swiped = null;
-      await tester.fling(find.byType(QvpPageView), const Offset(-200, 0), 1000);
+    Future<void> fling(WidgetTester tester, Offset by) async {
+      await tester.fling(view, by, 1000);
       await tester.pumpAndSettle();
-      expect(swiped, -1);
+    }
 
-      // 3. Vertical drag: answers 0 (does not turn page)
-      swiped = null;
-      await tester.fling(find.byType(QvpPageView), const Offset(0, 200), 1000);
-      await tester.pumpAndSettle();
-      expect(swiped, isNull);
+    Future<void> step(WidgetTester tester, TestGesture g, Offset by) async {
+      for (var i = 0; i < 6; i++) {
+        await g.moveBy(by);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+    }
 
-      // 4. Diagonal drag: (90, 300) is mostly vertical, engine answers 0
-      swiped = null;
-      await tester.fling(find.byType(QvpPageView), const Offset(90, 300), 1000);
-      await tester.pumpAndSettle();
-      expect(swiped, isNull);
-
-      // 5. Second finger lands: ends gesture without turning page
-      swiped = null;
-      final gesture1 = await tester.startGesture(
-        tester.getCenter(find.byType(QvpPageView)),
-      );
-      await gesture1.moveBy(const Offset(100, 0));
-      final gesture2 = await tester.startGesture(
-        tester.getCenter(find.byType(QvpPageView)) + const Offset(20, 20),
-      );
+    /// Two fingers spread, and the first lifts. Gives the one still down.
+    Future<TestGesture> pinchOneLeft(WidgetTester tester) async {
+      final a = await tester.startGesture(const Offset(150, 300), pointer: 7);
+      final b = await tester.startGesture(const Offset(250, 300), pointer: 8);
+      for (var i = 0; i < 6; i++) {
+        await step(tester, b, const Offset(4, 0));
+      }
+      await a.up();
       await tester.pump();
-      await gesture1.up();
-      await gesture2.up();
-      await tester.pumpAndSettle();
-      expect(swiped, isNull);
+      return b;
+    }
 
-      // 6. Selection drag: long press on word to start selection, drag horizontally
-      swiped = null;
-      final word = p.hitAreasView().first;
-      final wordPt = Offset((word.x0 + word.x1) / 2, (word.y0 + word.y1) / 2);
-      final selGesture = await tester.startGesture(wordPt);
+    testWidgets('a right flick is the next page, a left flick the one before', (
+      tester,
+    ) async {
+      await show(tester);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+      await fling(tester, const Offset(-200, 0));
+      expect(turns, [1, -1]);
+    });
+
+    testWidgets('a vertical or a mostly vertical drag turns nothing', (
+      tester,
+    ) async {
+      await show(tester);
+      await fling(tester, const Offset(0, 200));
+      await fling(tester, const Offset(90, 300));
+      expect(turns, isEmpty);
+    });
+
+    testWidgets('a slow drag counts from where the finger went down', (
+      tester,
+    ) async {
+      await show(tester);
+      await tester.timedDragFrom(
+        const Offset(100, 300),
+        const Offset(60, 0),
+        const Duration(milliseconds: 300),
+      );
+      await tester.pumpAndSettle();
+      expect(turns, [1]);
+    });
+
+    testWidgets('a second finger ends the swipe', (tester) async {
+      await show(tester);
+      final a = await tester.startGesture(const Offset(100, 300), pointer: 7);
+      await step(tester, a, const Offset(20, 0));
+      final b = await tester.startGesture(const Offset(300, 400), pointer: 8);
+      await a.up();
+      await step(tester, b, const Offset(20, 0));
+      await b.up();
+      await tester.pumpAndSettle();
+      expect(turns, isEmpty);
+    });
+
+    testWidgets('the finger left after a pinch does not turn the page', (
+      tester,
+    ) async {
+      final state = await show(tester);
+      state.setZoomMode(QvpZoomMode.stepped);
+      await tester.pumpAndSettle();
+      final b = await pinchOneLeft(tester);
+      await step(tester, b, const Offset(-30, 0));
+      await b.up();
+      await tester.pumpAndSettle();
+      expect(turns, isEmpty);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1], reason: 'the next touch is a swipe again');
+    });
+
+    testWidgets('a selection drag selects and does not turn the page', (
+      tester,
+    ) async {
+      await show(tester);
+      final w = p.hitAreasView().first;
+      final g = await tester.startGesture(
+        Offset((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2),
+      );
       await tester.pump(const Duration(milliseconds: 600));
-      await selGesture.moveBy(const Offset(200, 0));
-      await selGesture.up();
+      await step(tester, g, const Offset(-20, 0));
+      await g.up();
       await tester.pumpAndSettle();
-      expect(swiped, isNull);
+      expect(selected, isNotEmpty);
+      expect(turns, isEmpty);
+    });
 
-      // 7. Magnify mode at rest: sidewaysDrag answers turnPage so onSwipe fires
-      swiped = null;
-      final state = tester.state<QvpPageViewState>(find.byType(QvpPageView));
+    testWidgets('magnify mode turns the page at rest and pans when magnified', (
+      tester,
+    ) async {
+      final state = await show(tester);
       state.setZoomMode(QvpZoomMode.magnify);
       await tester.pumpAndSettle();
-      await tester.fling(find.byType(QvpPageView), const Offset(200, 0), 1000);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+      await (await pinchOneLeft(tester)).up();
       await tester.pumpAndSettle();
-      expect(swiped, 1);
+      turns.clear();
+      await fling(tester, const Offset(200, 0));
+      expect(turns, isEmpty);
+    });
 
-      // 8. Reflowed page: stepped layout answers turnPage so onSwipe fires
-      swiped = null;
+    testWidgets('a reflowed page turns', (tester) async {
+      final state = await show(tester);
       state.setZoomMode(QvpZoomMode.stepped);
-      state.zoomToStep(1);
+      state.zoomToStep(2);
       await tester.pumpAndSettle();
-      await tester.fling(find.byType(QvpPageView), const Offset(200, 0), 1000);
-      await tester.pumpAndSettle();
-      expect(swiped, 1);
+      expect(p.currentLayout!.reflowed, isTrue);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+    });
 
-      await tester.pumpWidget(const SizedBox());
-      p.dispose();
-    },
-  );
+    testWidgets('it fires with pan and zoom off', (tester) async {
+      await show(tester, panZoom: false);
+      await fling(tester, const Offset(200, 0));
+      expect(turns, [1]);
+    });
+  });
 
   testWidgets('benchmark: 200 frames of a page where nothing moves', (
     tester,

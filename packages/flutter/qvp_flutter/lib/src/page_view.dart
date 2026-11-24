@@ -277,8 +277,9 @@ class QvpPageView extends StatefulWidget {
   /// Whole-word selection changed through long-press-drag (empty list = cleared).
   final void Function(List<int> words)? onSelectionChanged;
 
-  /// A sideways flick, in pages: +1 the page after this one, -1 the page before it. The
-  /// muṣḥaf's own order, so a host adds it to the page it is on.
+  /// A sideways swipe with one finger, in pages: +1 the page after this one, -1 the page
+  /// before it. The muṣḥaf's own order, so a host adds it to the page it is on. A magnified
+  /// page pans instead. It also fires when [panZoomEnabled] is false.
   final void Function(int pages)? onSwipe;
 
   /// Max distance (page units) for the gap-aware tap.
@@ -552,14 +553,39 @@ class QvpPageViewState extends State<QvpPageView>
     }
   }
 
-  double _swipeDx = 0.0;
-  double _swipeDy = 0.0;
+  /// The fingers on the page, where the first of them went down and where it is now. The
+  /// scale gesture cannot give these: it drops the travel before it wins the arena, and it
+  /// starts again each time the number of fingers changes.
+  final Set<int> _fingers = {};
+  Offset _swipeFrom = Offset.zero;
+  Offset _swipeTo = Offset.zero;
+
+  /// True once a second finger joined: the rest of the touch is not a swipe, even after the
+  /// other finger lifts.
+  bool _multiTouch = false;
+
+  void _onPointerDown(PointerDownEvent e) {
+    if (_fingers.isEmpty) {
+      _swipeFrom = _swipeTo = e.localPosition;
+      _multiTouch = false;
+    } else {
+      _multiTouch = true;
+    }
+    _fingers.add(e.pointer);
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (!_multiTouch) _swipeTo = e.localPosition;
+  }
+
+  void _onPointerUp(PointerUpEvent e) {
+    if (!_multiTouch) _swipeTo = e.localPosition;
+    _fingers.remove(e.pointer);
+  }
 
   /// The fingers went down, or their number changed: Flutter starts the scale gesture again
   /// then, with `scale` back at 1, so this is where every pinch is measured from.
   void _onScaleStart(ScaleStartDetails d) {
-    _swipeDx = 0.0;
-    _swipeDy = 0.0;
     _gView = _ctl.view;
     _gFocal = d.localFocalPoint;
     // where the control stood when the fingers went down: the engine measures them against this,
@@ -575,11 +601,8 @@ class QvpPageViewState extends State<QvpPageView>
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
-    if (_size == Size.zero) return;
+    if (!widget.panZoomEnabled || _size == Size.zero) return;
     if (d.pointerCount < 2) {
-      _swipeDx += d.focalPointDelta.dx;
-      _swipeDy += d.focalPointDelta.dy;
-      if (!widget.panZoomEnabled) return;
       // One finger: a drag. A page with no sideways travel to spend scrolls up and down only;
       // the engine says which, and holds the page against the viewport either way.
       final sideways =
@@ -593,7 +616,6 @@ class QvpPageViewState extends State<QvpPageView>
       );
       return;
     }
-    if (!widget.panZoomEnabled) return;
     // the fingers' drift since the pinch began: it pans the page, so two fingers drag it
     final drift = d.localFocalPoint - _gFocal;
     if (_gZoom.mode == QvpZoomMode.magnify) {
@@ -637,23 +659,20 @@ class QvpPageViewState extends State<QvpPageView>
     _hold(page.engine.viewPan(c.view, drift.dx, drift.dy));
   }
 
+  /// The number of fingers changed, or the last one lifted. The engine says whether the drag
+  /// turns the page. A long press that wins the arena keeps the scale gesture from starting,
+  /// so a selection never reaches here.
   void _onScaleEnd(ScaleEndDetails d) {
-    if (widget.onSwipe != null && d.pointerCount == 0 && !_selecting) {
-      final sideways = page.sidewaysDrag(_zoom, _ctl.view, _fitScale);
-      if (sideways == QvpSideways.turnPage) {
-        final pages = page.engine.swipePages(
-          _swipeDx,
-          _swipeDy,
-          d.velocity.pixelsPerSecond.dx,
-          d.velocity.pixelsPerSecond.dy,
-        );
-        if (pages != 0) {
-          widget.onSwipe!(pages);
-        }
-      }
+    final turn = widget.onSwipe;
+    if (turn == null || _multiTouch || d.pointerCount != 0) return;
+    if (page.sidewaysDrag(_zoom, _ctl.view, _fitScale) !=
+        QvpSideways.turnPage) {
+      return;
     }
-    _swipeDx = 0.0;
-    _swipeDy = 0.0;
+    final by = _swipeTo - _swipeFrom;
+    final v = d.velocity.pixelsPerSecond;
+    final pages = page.engine.swipePages(by.dx, by.dy, v.dx, v.dy);
+    if (pages != 0) turn(pages);
   }
 
   /// Move the control to one of the page's steps: 0 is the printed page.
@@ -769,34 +788,42 @@ class QvpPageViewState extends State<QvpPageView>
           child: Semantics(
             label: 'Quran Mushaf page ${page.page}',
             textDirection: TextDirection.rtl,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapUp: _onTapUp,
-              onDoubleTap: widget.panZoomEnabled ? fit : null,
-              onScaleStart: scaleEnabled ? _onScaleStart : null,
-              onScaleUpdate: scaleEnabled ? _onScaleUpdate : null,
-              onScaleEnd: scaleEnabled ? _onScaleEnd : null,
-              onLongPressStart: widget.selectionEnabled
-                  ? _onLongPressStart
-                  : null,
-              onLongPressMoveUpdate: widget.selectionEnabled
-                  ? _onLongPressMove
-                  : null,
-              onLongPressEnd: widget.selectionEnabled ? _onLongPressEnd : null,
-              child: RepaintBoundary(
-                child: CustomPaint(
-                  size: size,
-                  isComplex: true,
-                  willChange: false,
-                  painter: _QvpPainter(
-                    page: page,
-                    view: _ctl,
-                    frame: _frame,
-                    cache: _cache,
-                    dpr: dpr,
-                    paper: widget.paper,
-                    paperShadow: widget.paperShadow,
-                    surahFrames: widget.layout.surahFrames,
+            child: Listener(
+              onPointerDown: _onPointerDown,
+              onPointerMove: _onPointerMove,
+              onPointerUp: _onPointerUp,
+              onPointerCancel: (e) => _fingers.remove(e.pointer),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: _onTapUp,
+                onDoubleTap: widget.panZoomEnabled ? fit : null,
+                onScaleStart: scaleEnabled ? _onScaleStart : null,
+                onScaleUpdate: scaleEnabled ? _onScaleUpdate : null,
+                onScaleEnd: scaleEnabled ? _onScaleEnd : null,
+                onLongPressStart: widget.selectionEnabled
+                    ? _onLongPressStart
+                    : null,
+                onLongPressMoveUpdate: widget.selectionEnabled
+                    ? _onLongPressMove
+                    : null,
+                onLongPressEnd: widget.selectionEnabled
+                    ? _onLongPressEnd
+                    : null,
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    size: size,
+                    isComplex: true,
+                    willChange: false,
+                    painter: _QvpPainter(
+                      page: page,
+                      view: _ctl,
+                      frame: _frame,
+                      cache: _cache,
+                      dpr: dpr,
+                      paper: widget.paper,
+                      paperShadow: widget.paperShadow,
+                      surahFrames: widget.layout.surahFrames,
+                    ),
                   ),
                 ),
               ),

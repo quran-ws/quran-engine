@@ -127,8 +127,8 @@ layout changes) → styled paths → mask boxes. Each frame calls
 `page.tick()` first and keeps a `Ticker` running while it returns true. Tap →
 `hitTestView` (gap-aware); long-press-drag → whole-word selection via
 `page.select` with a band highlight in `QvpLayer.selection`; pinch / pan on
-top of the engine layout; sideways flick flips pages through `onSwipe` (+1 next
-page, -1 previous in mushaf reading order); double-tap fits.
+top of the engine layout; a sideways swipe calls `onSwipe` with +1
+(next page) or -1 (page before); double-tap fits.
 
 ## Letters
 
