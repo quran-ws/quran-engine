@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.11.0
+
 ### Added
 - Flutter: `QvpPassage.styledDrawList(pages)`, and `draws:` and `pageColors:` on
   `paintPassage`, to fill a passage in its pages' colours, a letter coloured on its own

@@ -4,6 +4,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-24
+
 ### Added
 - Android: `QvpPassage.styledDrawList(pages)`, and `draws` and `pageColors` on
   `QvpPassageLayout.draw`, to fill a passage in its pages' colours, a letter coloured on its

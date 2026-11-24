@@ -4,6 +4,8 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-24
+
 ### Added
 - React Native: `<QvpPassageView />` takes `omitAyahMarks`, which lays the words out with no
   ayah medallions, and `ayahMark`, which draws the medallion of ayah `from` alone.
