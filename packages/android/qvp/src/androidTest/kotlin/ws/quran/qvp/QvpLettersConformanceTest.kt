@@ -321,6 +321,11 @@ internal class LettersReplay(private val read: (String) -> ByteArray) {
                                           p.styledPaths().toList().chunked(2))
             "drawRevision" -> assertEquals(what, int("value"), p.layoutDrawRevision())
             "drawList" -> assertEquals(what, s.getJSONArray("value").pairs(), drawList(p))
+            "passageDrawList" -> QvpPassage.load(listOf(p), int("surah"), int("from"), int("to")).use { passage ->
+                passage.layout(QvpPassageSpec(width = 0f))
+                val want = s.getJSONArray("value").let { a -> List(a.length()) { a.getJSONArray(it).ints() } }
+                assertEquals(what, want, passage.styledDrawList(listOf(p)).map { listOf(it.page, it.path, it.placement) })
+            }
             "letterCount" -> assertEquals(what, int("value"), p.letterCount(int("word")))
             "letterInfo" -> sameLetter(p.letter(int("word"), int("letter")), s.optJSONObject("value"), what)
             "letterMembers" -> sameMembers(p.letterMembers(int("word"), int("letter")), s.getJSONArray("value"), what)

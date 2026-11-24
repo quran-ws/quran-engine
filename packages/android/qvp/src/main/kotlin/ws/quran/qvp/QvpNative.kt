@@ -183,10 +183,11 @@ internal object QvpNative {
     @JvmStatic external fun atlasPagesOfJuz(h: Long, n: Int): IntArray?
     @JvmStatic external fun atlasSearchSurahs(h: Long, text: String): IntArray
     // passage: pages are page handles; spec FloatArray {width, scale, lineSpacing, padding, align, keepAyahMark,
-    // maxRows, ellipsisWidth, maxStretch}; a layout answers {width, height, scale, lineSpacing, nRows, nWords,
+    // maxRows, ellipsisWidth, maxStretch, omitAyahMarks}; a layout answers {width, height, scale, lineSpacing, nRows, nWords,
     // nAyahs, nDraws, isTruncated, ellipsisX0, ellipsisY0, ellipsisX1, ellipsisY1}, or null when the spec is out of range
     @JvmStatic external fun passageLoad(pages: LongArray, surah: Int, from: Int, to: Int): Long
     @JvmStatic external fun passageLoadBasmalah(pages: LongArray, surah: Int): Long
+    @JvmStatic external fun passageLoadAyahMark(pages: LongArray, surah: Int, ayah: Int): Long
     @JvmStatic external fun passageFree(h: Long)
     @JvmStatic external fun passageAyahCount(h: Long): Int
     @JvmStatic external fun passageAyahText(h: Long, i: Int): String
@@ -199,6 +200,8 @@ internal object QvpNative {
     @JvmStatic external fun passageWords(h: Long): FloatArray
     @JvmStatic external fun passageAyahs(h: Long): FloatArray
     @JvmStatic external fun passageDrawList(h: Long): IntArray
+    // the draw list as the pages style it now, 3 per draw {page, path, placement}
+    @JvmStatic external fun passageStyledDrawList(h: Long, pages: LongArray): IntArray
     @JvmStatic external fun passagePlacements(h: Long): FloatArray
     // dress: an ornament set is its own handle. An ornament reads as numbers {kind, lineage, nParts, hasSlices,
     // redistributable} and strings {style, riwayah, licenseId, licenseStatus, attribution}; a part as {colour, stroke}

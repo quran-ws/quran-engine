@@ -414,6 +414,9 @@ export interface QvpPassageViewProps extends ViewProps {
   from?: number; to?: number;
   /** The basmalah printed above `surah`, one row and no words. Surahs 1 and 9 have none. */
   basmalah?: boolean;
+  /** The medallion that closes ayah `from` of `surah`, alone on one row, with no words: show an
+   * ayah's number apart from its words. It is the page's printed medallion. */
+  ayahMark?: boolean;
   /** dp per page unit (1), or `lineHeight`: dp per printed line, which wins when both are given. */
   scale?: number; lineHeight?: number;
   /** Leading as a multiple of the printed line (1), and the padding around the rows in dp (2). */
@@ -422,6 +425,8 @@ export interface QvpPassageViewProps extends ViewProps {
   /** Cut the passage after this many rows (0 = no cut), with room for an ellipsis this wide in dp.
    * `keepAyahMark` puts the medallion of the last ayah after the ellipsis. */
   maxRows?: number; ellipsisWidth?: number; keepAyahMark?: boolean;
+  /** Lay the words out with no ayah medallions and no room kept for them; `ayahMark` draws one alone. */
+  omitAyahMarks?: boolean;
   /** How far a justified row's gaps may open, as a multiple of the usual air (0 = the engine's default). */
   maxStretch?: number;
   ink?: Color; paperColor?: Color;

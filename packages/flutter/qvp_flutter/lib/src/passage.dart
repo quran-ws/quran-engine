@@ -40,6 +40,25 @@ class QvpPassage {
     return QvpPassage._(engine, engine.backend, handle, ayahs, lineSpacing);
   }
 
+  /// Loads the medallion that closes ayah [ayah] of [surah], from whichever of the pages
+  /// prints it. It lays out as one piece on one row and has no ayahs and no words. It sits on
+  /// the baseline of the line its ayah ends on, so at the scale of the ayah's own layout it has
+  /// the size it has after the ayah's last word. Lay the ayah out with
+  /// [QvpPassageSpec.omitAyahMarks] to show it apart. It is the page's printed medallion, not a
+  /// dress's marker. Throws when no page given prints it.
+  factory QvpPassage.ayahMark(List<QvpPage> pages, int surah, int ayah) {
+    _checkU16(surah, 'surah');
+    _checkU16(ayah, 'ayah');
+    final engine = _engineOf(pages);
+    final handles = [for (final p in pages) p.handle];
+    final (handle, ayahs, lineSpacing) = engine.backend.passageLoadAyahMark(
+      handles,
+      surah,
+      ayah,
+    );
+    return QvpPassage._(engine, engine.backend, handle, ayahs, lineSpacing);
+  }
+
   static void _checkU16(int v, String name) {
     if (v < 1 || v > 0xffff) throw RangeError.range(v, 1, 0xffff, name);
   }
@@ -96,5 +115,20 @@ class QvpPassage {
     final l = _backend.passageLayout(handle, spec);
     if (l != null) currentLayout = l;
     return l;
+  }
+
+  /// The draw list of the last layout as its pages style it now. With a letter layer, a cut
+  /// path whose pieces differ in colour on its page is listed as its pieces, in its place and
+  /// under its placement. Draw each path in its page's colour ([QvpPage.colors]) to show a
+  /// letter coloured on its own: [paintPassage] with `draws:` and `pageColors: true` does.
+  /// [pages] are the open pages the passage was loaded from; a draw whose page is not given is
+  /// listed as the layout has it. Empty with no layout.
+  List<QvpPassageDraw> styledDrawList(List<QvpPage> pages) {
+    for (final p in pages) {
+      if (p.isDisposed) throw StateError('QvpPassage: a page was disposed');
+    }
+    return _backend.passageStyledDrawList(handle, [
+      for (final p in pages) p.handle,
+    ]);
   }
 }

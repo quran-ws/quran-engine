@@ -2,7 +2,7 @@
 import UIKit
 import React
 
-/// The React Native host of a passage: a range of complete ayahs, or a surah's basmalah, laid out
+/// The React Native host of a passage: a range of complete ayahs, a surah's basmalah or an ayah's medallion, laid out
 /// on rows of this view's width and drawn here. The engine loads, measures and places every word.
 /// This class reads the pages the props name, hands the engine a spec in points, draws the layout
 /// and reports it to JS. Nothing is decided here, as in android/.../QvpRnPassageView.kt.
@@ -14,6 +14,7 @@ final class QvpRnPassageView: UIView {
     @objc var from = 0 { didSet { changed() } }
     @objc var to = 0 { didSet { changed() } }
     @objc var basmalah = false { didSet { changed() } }
+    @objc var ayahMark = false { didSet { changed() } }
     /// Points per page unit; `lineHeight` wins when it is set.
     @objc var scale: CGFloat = 1 { didSet { changed() } }
     /// Points per printed line: the scale is this over the passage's printed line spacing.
@@ -23,6 +24,7 @@ final class QvpRnPassageView: UIView {
     @objc var align: String? { didSet { changed() } }
     @objc var maxRows = 0 { didSet { changed() } }
     @objc var keepAyahMark = false { didSet { changed() } }
+    @objc var omitAyahMarks = false { didSet { changed() } }
     @objc var ellipsisWidth: CGFloat = 0 { didSet { changed() } }
     @objc var maxStretch: CGFloat = 0 { didSet { changed() } }
     @objc var ink: String? { didSet { setNeedsDisplay() } }
@@ -91,7 +93,7 @@ final class QvpRnPassageView: UIView {
     }
 
     private func ensurePassage() throws {
-        let key = "\(pageUris.joined(separator: "|"))#\(surah):\(from)-\(to):\(basmalah)"
+        let key = "\(pageUris.joined(separator: "|"))#\(surah):\(from)-\(to):\(basmalah):\(ayahMark)"
         if key == loadedKey { return }
         destroy()
         loadedKey = key
@@ -108,9 +110,13 @@ final class QvpRnPassageView: UIView {
         pagesByNumber = Dictionary(pages.map { ($0.pageNo, $0) }) { a, _ in a }
         do {
             passage = basmalah ? try QvpPassage(basmalahOf: surah, pages: pages)
-                               : try QvpPassage(pages: pages, surah: surah, from: from, to: to > 0 ? to : from)
+                : ayahMark ? try QvpPassage(ayahMarkOf: from, surah: surah, pages: pages)
+                : try QvpPassage(pages: pages, surah: surah, from: from, to: to > 0 ? to : from)
         } catch {
-            throw QvpRnError((basmalah ? "no basmalah of surah \(surah) on the pages given" : "the pages given do not hold \(surah):\(from)-\(to > 0 ? to : from)") + " (QvpError.\(error))")
+            let what = basmalah ? "no basmalah of surah \(surah) on the pages given"
+                : ayahMark ? "no medallion of \(surah):\(from) on the pages given"
+                : "the pages given do not hold \(surah):\(from)-\(to > 0 ? to : from)"
+            throw QvpRnError(what + " (QvpError.\(error))")
         }
     }
 
@@ -125,7 +131,8 @@ final class QvpRnPassageView: UIView {
         let ew: Float = ellipsisWidth > 0 || rows == 0 ? Float(ellipsisWidth)
             : Float((Self.ellipsis as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: CGFloat(s * p.lineSpacing))]).width)
         let spec = QvpPassageSpec(width: Float(bounds.width), scale: s, lineSpacing: Float(lineSpacing), padding: Float(padding),
-                                  align: a, maxRows: rows, keepAyahMark: keepAyahMark, ellipsisWidth: ew, maxStretch: Float(maxStretch))
+                                  align: a, maxRows: rows, keepAyahMark: keepAyahMark, ellipsisWidth: ew, maxStretch: Float(maxStretch),
+                                  omitAyahMarks: omitAyahMarks)
         let key = "\(spec)"
         if key == layoutKey { return }
         let l = p.layout(spec)

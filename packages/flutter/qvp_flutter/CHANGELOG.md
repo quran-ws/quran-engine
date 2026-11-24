@@ -1,5 +1,12 @@
 ## Unreleased
 
+### Added
+- Flutter: `QvpPassage.styledDrawList(pages)`, and `draws:` and `pageColors:` on
+  `paintPassage`, to fill a passage in its pages' colours, a letter coloured on its own
+  included. `QvpPassageSpec.omitAyahMarks` and `QvpPassage.ayahMark(pages, surah, ayah)` lay an
+  ayah out with no medallion and give its medallion alone, on both backends.
+  `QvpPassageDraw` compares by value.
+
 ## 0.10.0
 
 ### Added

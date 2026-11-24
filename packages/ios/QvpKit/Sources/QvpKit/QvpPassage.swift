@@ -39,14 +39,17 @@ public struct QvpPassageSpec: Equatable, Sendable {
     /// How far a justified row's gaps may open, as a multiple of the passage's usual air between
     /// two words. A negative value lifts the cap.
     public var maxStretch: Float
+    /// Lay the words out with no ayah medallions, and no room kept for them. A division mark and a
+    /// sajdah sign stay. `QvpPassage(ayahMarkOf:surah:pages:)` gives the medallion of an ayah alone.
+    public var omitAyahMarks: Bool
 
     /// Make a spec; the defaults put the passage on one row at the printed size.
     public init(width: Float = 0, scale: Float = 1, lineSpacing: Float = 1, padding: Float = 2, align: QvpPassageAlign = .right,
                 maxRows: Int = 0, keepAyahMark: Bool = false, ellipsisWidth: Float = 0,
-                maxStretch: Float = QvpDefaults.REFLOW_MAX_STRETCH) {
+                maxStretch: Float = QvpDefaults.REFLOW_MAX_STRETCH, omitAyahMarks: Bool = false) {
         self.width = width; self.scale = scale; self.lineSpacing = lineSpacing; self.padding = padding; self.align = align
         self.maxRows = maxRows; self.keepAyahMark = keepAyahMark; self.ellipsisWidth = ellipsisWidth
-        self.maxStretch = maxStretch
+        self.maxStretch = maxStretch; self.omitAyahMarks = omitAyahMarks
     }
 }
 
@@ -114,11 +117,18 @@ public struct QvpPassageLayout: Equatable {
     /// colour. `pages` maps a page number to the open page the passage was loaded from, which
     /// holds the outlines. A draw whose page is not in the map, or is closed, is skipped. The
     /// ellipsis after a cut is the host's to draw, at `ellipsis`.
-    public func draw(in ctx: CGContext, pages: [Int: QvpPage], x: CGFloat = 0, y: CGFloat = 0) {
+    ///
+    /// `draws` replaces the layout's own list: pass `QvpPassage.styledDrawList(pages:)` with
+    /// `pageColors` true to fill each path in its page's colour (`QvpPage.colors()`), so the
+    /// letters the pages colour show in the passage. Without `pageColors` every path takes the
+    /// context's fill colour.
+    public func draw(in ctx: CGContext, pages: [Int: QvpPage], x: CGFloat = 0, y: CGFloat = 0,
+                     draws: [QvpPassageDraw]? = nil, pageColors: Bool = false) {
         let s = CGFloat(scale)
         var cur = -1
+        var colors: [Int: [UInt32]] = [:]
         ctx.saveGState()
-        for d in draws {
+        for d in draws ?? self.draws {
             guard let page = pages[d.page], page.isOpen else { continue }
             if d.placement != cur {
                 // A point p of a path lands at scale · (k · p + d): the placement first, then the scale.
@@ -130,6 +140,11 @@ public struct QvpPassageLayout: Equatable {
             }
             let paths = page.buildPaths()
             guard d.path < paths.count else { continue }
+            if pageColors {
+                let c = colors[d.page] ?? page.colors()
+                colors[d.page] = c
+                if d.path < c.count { ctx.setFillColor(QvpColor.cgColor(c[d.path])) }
+            }
             ctx.addPath(paths[d.path])
             ctx.fillPath(using: page.pathEvenOdd(d.path) ? .evenOdd : .winding)
         }
@@ -186,6 +201,24 @@ public final class QvpPassage {
         self.init(h, surah: surah, from: 1)
     }
 
+    /// Load the medallion that closes ayah `ayah` of `surah` from whichever of the pages prints it.
+    /// It lays out as one piece on one row and has no ayahs and no words. It sits on the baseline
+    /// of the line its ayah ends on, so at the scale of the ayah's own layout it has the size it has
+    /// after the ayah's last word. Lay the ayah out with `QvpPassageSpec.omitAyahMarks` to show it
+    /// apart. It is the page's printed medallion, not a dress's marker. Throws when no page given
+    /// prints it.
+    public convenience init(ayahMarkOf ayah: Int, surah: Int, pages: [QvpPage]) throws {
+        guard pages.allSatisfy(\.isOpen), (1...Int(UInt16.max)).contains(surah), (1...Int(UInt16.max)).contains(ayah)
+        else { throw QvpError.badPassage }
+        let handles: [OpaquePointer?] = pages.map { $0.p }
+        let h = handles.withUnsafeBufferPointer {
+            qvp_passage_load_ayah_mark($0.baseAddress, UInt32(truncatingIfNeeded: $0.count), UInt16(truncatingIfNeeded: surah),
+                                       UInt16(truncatingIfNeeded: ayah))
+        }
+        guard let h else { throw QvpError.badPassage }
+        self.init(h, surah: surah, from: ayah)
+    }
+
     private init(_ h: OpaquePointer, surah: Int, from: Int) {
         self.h = h
         ayahs = (0..<Int(qvp_passage_ayah_count(h))).map { i in
@@ -209,7 +242,8 @@ public final class QvpPassage {
         let p = self.p
         guard spec.maxRows >= 0 else { return nil }
         var s = QvpFFI.QvpPassageSpec(width: spec.width, scale: spec.scale, line_spacing: spec.lineSpacing, padding: spec.padding,
-                                       align: spec.align.rawValue, keep_ayah_mark: spec.keepAyahMark ? 1 : 0, _pad: (0, 0),
+                                       align: spec.align.rawValue, keep_ayah_mark: spec.keepAyahMark ? 1 : 0,
+                                       omit_ayah_marks: spec.omitAyahMarks ? 1 : 0, _pad: (0),
                                        max_rows: UInt32(truncatingIfNeeded: spec.maxRows), ellipsis_width: spec.ellipsisWidth, max_stretch: spec.maxStretch)
         var out = QvpFFI.QvpPassageLayout()
         guard qvp_passage_layout(p, &s, &out) != 0 else { return nil }
@@ -236,5 +270,24 @@ public final class QvpPassage {
                 : nil)
         currentLayout = layout
         return layout
+    }
+
+    /// The draw list of the last layout as its pages style it now. With a letter layer, a cut path
+    /// whose pieces differ in colour on its page is listed as its pieces, in its place and under its
+    /// placement. Draw each path in its page's colour to show a letter coloured on its own:
+    /// `QvpPassageLayout.draw(in:pages:x:y:draws:pageColors:)` with `pageColors` true does.
+    /// `pages` are the open pages the passage was loaded from; a draw whose page is not given is
+    /// listed as the layout has it. Empty with no layout.
+    public func styledDrawList(pages: [QvpPage]) -> [QvpPassageDraw] {
+        let p = self.p
+        let handles: [OpaquePointer?] = pages.filter(\.isOpen).map { $0.p }
+        let flat: [UInt32] = handles.withUnsafeBufferPointer { hs in
+            let n = UInt32(truncatingIfNeeded: hs.count)
+            let total = Int(qvp_passage_styled_draw_list(p, hs.baseAddress, n, nil, 0))
+            return collect(max(3, total * 3)) { o, c in qvp_passage_styled_draw_list(p, hs.baseAddress, n, o, c / 3) * 3 }
+        }
+        return stride(from: 0, to: flat.count - flat.count % 3, by: 3).map {
+            QvpPassageDraw(page: Int(flat[$0]), path: Int(flat[$0 + 1]), placement: Int(flat[$0 + 2]))
+        }
     }
 }

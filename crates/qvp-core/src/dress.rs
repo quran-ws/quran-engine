@@ -1837,6 +1837,34 @@ mod tests {
     }
 
     #[test]
+    fn a_letter_hit_on_a_bordered_cropped_filled_page_names_the_word_a_tap_does() {
+        // The setup of a reader that scrolls a bordered page: the frame, a crop, the height
+        // filled, and the view at rest. A canvas point goes through the same view call for both
+        // hits, and on ink the letter's word is the word a tap finds.
+        let mut p = crate::fixtures::letters_page();
+        p.dress(&set(), &frame_only()).unwrap();
+        let spec = LayoutSpec { viewport_h: 600.0, crop_left: 5.0, crop_right: 5.0, ..tall(true) };
+        p.layout(&spec);
+        let (v, w, h) = p.dress_view(0.0, spec.viewport_w);
+        let opt = crate::HitOptions::default();
+        let (mut exact, mut lam) = (0, 0);
+        for gy in 0..(h / 2.0) as u32 {
+            for gx in 0..(w / 2.0) as u32 {
+                let (cx, cy) = (gx as f32 * 2.0 + 1.0, gy as f32 * 2.0 + 1.0);
+                let (lx, ly) = p.view_to_layout(v, cx, cy);
+                let Some(letter) = p.hit_test_letter_view(lx, ly, &opt) else { continue };
+                if !letter.is_exact {
+                    continue;
+                }
+                exact += 1;
+                lam += (letter.word == 0 && letter.letter == 1) as u32;
+                assert_eq!(p.hit_test_view(lx, ly, &opt).map(|t| t.word), Some(letter.word), "at ({cx}, {cy})");
+            }
+        }
+        assert!(exact > 0 && lam > 0, "{exact} points on letters, {lam} on the lam");
+    }
+
+    #[test]
     fn a_bordered_page_too_tall_for_the_box_keeps_the_printed_pitch() {
         let (mut p, _, _) = page();
         p.dress(&tiled_set(false), &frame_only()).unwrap();

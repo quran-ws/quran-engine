@@ -85,6 +85,14 @@ pub enum PassageError {
         /// The surah asked for.
         surah: u16,
     },
+    /// None of the pages prints the medallion of the ayah, or no word of the ayah is on its
+    /// page.
+    NoAyahMark {
+        /// The surah asked for.
+        surah: u16,
+        /// The ayah asked for.
+        ayah: u16,
+    },
 }
 
 impl std::fmt::Display for PassageError {
@@ -97,6 +105,7 @@ impl std::fmt::Display for PassageError {
             Self::MeasureLimit => write!(f, "QVP passage measurement limit exceeded"),
             Self::UnattachedSign => write!(f, "a passage sign has no word"),
             Self::NoBasmalah { surah } => write!(f, "no basmalah of surah {surah} on the pages"),
+            Self::NoAyahMark { surah, ayah } => write!(f, "no medallion of ayah {surah}:{ayah} on the pages"),
         }
     }
 }
@@ -139,6 +148,12 @@ pub struct PassageSpec {
     /// After a cut, place the medallion of the passage's last ayah after the ellipsis, so that
     /// the reader still sees which ayah it is.
     pub keep_ayah_mark: bool,
+    /// Lay the words out with no ayah medallions: a word that closes an ayah takes no room
+    /// for its medallion, and no medallion is drawn. A division mark and a sajdah sign stay
+    /// with their words. [`Passage::load_ayah_mark`] gives the medallion of an ayah alone, for
+    /// a host that shows it apart from the words. With this set, `keep_ayah_mark` has no
+    /// medallion to keep.
+    pub omit_ayah_marks: bool,
     /// The width that the host needs for its ellipsis after a cut.
     pub ellipsis_width: f32,
     /// How far a justified row's gaps may open, as a multiple of the passage's usual air
@@ -156,6 +171,7 @@ impl Default for PassageSpec {
             align: Align::Right,
             max_rows: 0,
             keep_ayah_mark: false,
+            omit_ayah_marks: false,
             ellipsis_width: 0.0,
             max_stretch: defaults::REFLOW_MAX_STRETCH,
         }
@@ -271,6 +287,19 @@ pub struct PassageLayout {
 /// A contiguous range of complete ayahs, ready to lay out at any width, or a surah's basmalah. It
 /// copies what it needs from its pages, so the pages can be freed after it is loaded.
 pub struct Passage {
+    /// The words with every sign that goes with them.
+    shapes: Shapes,
+    /// The words with no ayah medallions, made at the first layout that asks for them.
+    unmarked: Option<Shapes>,
+    /// The sajdah lines of every page given, with the page number.
+    strokes: Vec<(u16, Stroke)>,
+    ayahs: Vec<(u16, u16, String)>,
+    line_spacing: f64,
+    layout: Option<PassageLayout>,
+}
+
+/// The words of a passage as a layout measures them.
+struct Shapes {
     atoms: Vec<PassageAtom>,
     /// The gap before each word, page units. The first is zero.
     gaps: Vec<f64>,
@@ -278,11 +307,28 @@ pub struct Passage {
     /// draws as one piece of calligraphy keep their printed distance, and the first word has no
     /// gap.
     open: Vec<bool>,
-    /// The sajdah lines of every page given, with the page number.
-    strokes: Vec<(u16, Stroke)>,
-    ayahs: Vec<(u16, u16, String)>,
-    line_spacing: f64,
-    layout: Option<PassageLayout>,
+}
+
+impl Shapes {
+    fn new(atoms: Vec<PassageAtom>) -> Shapes {
+        let (gaps, open) = spacing(&atoms);
+        Shapes { atoms, gaps, open }
+    }
+
+    /// The same words with no ayah medallions. A word with no medallion keeps its shape, and
+    /// the gaps are measured again on the new shapes.
+    fn without_ayah_marks(&self) -> Shapes {
+        Shapes::new(
+            self.atoms
+                .iter()
+                .map(|a| PassageAtom {
+                    page: a.page,
+                    size: a.size,
+                    atom: a.atom.without_ayah_marks().unwrap_or_else(|| a.atom.clone()),
+                })
+                .collect(),
+        )
+    }
 }
 
 /// The word an atom names when it is a decoration standing alone, such as a basmalah.
@@ -418,39 +464,12 @@ impl Passage {
         // so that every word of the passage is drawn at one size, and the passage's line spacing
         // is the line spacing of that size.
         let line_spacing = print_sizes(&mut atoms);
-
-        // Two words the print draws as one piece of calligraphy keep their printed distance, and
-        // a justified row never opens it; any other two are set the usual gap apart, measured on
-        // their ink.
-        let (gaps, open) = (0..atoms.len())
-            .map(|i| {
-                if i == 0 {
-                    return (0.0, false);
-                }
-                let (previous, atom) = (&atoms[i - 1], &atoms[i]);
-                let (a, b) = (&previous.atom, &atom.atom);
-                let natural = a.rect[0] - b.rect[2];
-                let joined = previous.page == atom.page
-                    && a.line == b.line
-                    && a.word + 1 == b.word
-                    && clearance(&a.word_bands, &b.word_bands)
-                        .is_some_and(|air| -air >= b.pitch * defaults::INTERLOCK_DEPTH as f64);
-                if joined {
-                    return (natural, false);
-                }
-                let wanted = (a.gap + b.gap) / 2.0;
-                match clearance(&a.bands, &b.bands) {
-                    Some(air) => (natural + wanted - air, true),
-                    None => (wanted, true),
-                }
-            })
-            .unzip();
         let strokes = pages
             .iter()
             .zip(&prepared)
             .flat_map(|(p, prep)| prep.strokes.iter().map(|s| (p.page_number(), s.clone())))
             .collect();
-        Ok(Passage { atoms, gaps, open, strokes, ayahs, line_spacing, layout: None })
+        Ok(Passage { shapes: Shapes::new(atoms), unmarked: None, strokes, ayahs, line_spacing, layout: None })
     }
 
     /// Load the basmalah printed above `surah`, from whichever of the pages prints it.
@@ -518,15 +537,85 @@ impl Passage {
             // It stands alone, so no gap is ever measured against it.
             gap: pitch / 4.0,
         };
-        Ok(Passage {
-            atoms: vec![PassageAtom { page: page.page_number(), atom, size: 1.0 }],
-            gaps: vec![0.0],
-            open: vec![false],
+        Ok(Passage::alone(page, atom))
+    }
+
+    /// Load the medallion that closes ayah `ayah` of `surah`, from whichever of the pages prints
+    /// it.
+    ///
+    /// It lays out like any passage, as one piece on one row, and has no ayahs and no words. It
+    /// sits on the baseline of the line that its ayah ends on, as it does after the words, and
+    /// its line spacing is its page's. So at the scale of the ayah's own layout it has the size
+    /// it has after the ayah's last word. A host that lays the ayah out with
+    /// [`PassageSpec::omit_ayah_marks`] shows the medallion apart with this. It is the
+    /// medallion the page prints: a dressed page's marker is drawn by the dress, not here.
+    pub fn load_ayah_mark(pages: &[&Page], surah: u16, ayah: u16) -> Result<Passage, PassageError> {
+        if !(1..=MAX_SURAH).contains(&surah) || !(1..=MAX_AYAH).contains(&ayah) {
+            return Err(PassageError::Range);
+        }
+        distinct_pages(pages)?;
+        let missing = PassageError::NoAyahMark { surah, ayah };
+        let (page, deco) = pages
+            .iter()
+            .find_map(|p| {
+                p.data()
+                    .decorations
+                    .iter()
+                    .find(|d| d.kind == DecoKind::AyahMark && d.surah == surah && d.ayah == ayah)
+                    .map(|d| (*p, *d))
+            })
+            .ok_or(missing)?;
+        let data = page.data();
+        let q = page.quant();
+        // The paths a passage draws for the medallion after the words: a sajdah line in the
+        // decoration goes with the words under it, not with the medallion.
+        let paths: Vec<u32> = (deco.first_path..deco.first_path + deco.n_paths as u32)
+            .filter(|&pi| data.paths[pi as usize].mark != Mark::SajdahLine)
+            .collect();
+        let rect = bounds(paths.iter().map(|&pi| {
+            let b = &data.paths[pi as usize].bbox;
+            [b.x0 as f32 / q, b.y0 as f32 / q, b.x1 as f32 / q, b.y1 as f32 / q].map(f64::from)
+        }))
+        .ok_or(missing)?;
+        // The baseline that the passage measures the medallion against: the line of the last
+        // word of its ayah, the word it goes with.
+        let owner = data.words.iter().rposition(|w| w.surah == surah && w.ayah == ayah).ok_or(missing)?;
+        let line = data.words[owner].line_index;
+        let baseline = page.line_baseline(line as usize) as f64;
+        let mut budget = Budget { points: MAX_POINTS, bands: MAX_BANDS };
+        let bands = trace(page.geometry(), paths.iter().copied(), baseline, &mut budget)?;
+        let pitch = page.line_spacing() as f64;
+        let atom = Atom {
+            word: NO_WORD,
+            line,
+            surah,
+            ayah,
+            number: 0,
+            paths,
+            signs: Vec::new(),
+            rect,
+            word_rect: rect,
+            bands: bands.clone(),
+            word_bands: bands,
+            baseline,
+            pitch,
+            // It stands alone, so no gap is ever measured against it.
+            gap: pitch / 4.0,
+        };
+        Ok(Passage::alone(page, atom))
+    }
+
+    /// A passage of one decoration standing alone on `page`.
+    fn alone(page: &Page, atom: Atom) -> Passage {
+        let line_spacing = atom.pitch;
+        Passage {
+            shapes: Shapes::new(vec![PassageAtom { page: page.page_number(), atom, size: 1.0 }]),
+            unmarked: None,
             strokes: Vec::new(),
             ayahs: Vec::new(),
-            line_spacing: pitch,
+            line_spacing,
             layout: None,
-        })
+        }
     }
 
     /// Get the ayahs of the passage in reading order, with the page's own word texts.
@@ -536,7 +625,7 @@ impl Passage {
 
     /// Get how many words the passage has. A basmalah has none.
     pub fn word_count(&self) -> usize {
-        self.atoms.iter().filter(|a| a.atom.word != NO_WORD).count()
+        self.shapes.atoms.iter().filter(|a| a.atom.word != NO_WORD).count()
     }
 
     /// Get the printed line spacing of the passage, in page units: the median over the words
@@ -553,12 +642,45 @@ impl Passage {
 
     /// Lay the passage out and keep the layout. `None` when the spec is out of range.
     pub fn layout(&mut self, spec: &PassageSpec) -> Option<&PassageLayout> {
-        let layout = self.compute(spec)?;
+        if spec.omit_ayah_marks && self.unmarked.is_none() {
+            self.unmarked = Some(self.shapes.without_ayah_marks());
+        }
+        let shapes = match &self.unmarked {
+            Some(unmarked) if spec.omit_ayah_marks => unmarked,
+            _ => &self.shapes,
+        };
+        let layout = self.compute(spec, shapes)?;
         self.layout = Some(layout);
         self.layout.as_ref()
     }
 
-    fn compute(&self, spec: &PassageSpec) -> Option<PassageLayout> {
+    /// The draw list of the last layout as its pages style it now. A path that its page draws
+    /// as its pieces, a cut path whose pieces differ in colour ([`Page::attach_letters`]), is
+    /// listed as those pieces, in its place and under its placement, as the page's own draw
+    /// list lists them. Every other draw is listed as the layout has it, and so is every draw
+    /// whose page is not in `pages`. Empty with no layout.
+    ///
+    /// Draw each path in its page's colour ([`Page::colors`]) to show the passage as its pages
+    /// show it, a letter coloured on its own included. Pass the pages the passage was loaded
+    /// from: a draw names a path by its index on its page. The list holds each page's rules as
+    /// of its last refresh ([`Page::refresh_display`]), and changes when a page's
+    /// [`Page::draw_revision`] does.
+    pub fn styled_draw_list(&self, pages: &[&Page]) -> Vec<PassageDraw> {
+        let Some(layout) = &self.layout else { return Vec::new() };
+        let mut out = Vec::with_capacity(layout.draws.len());
+        for d in &layout.draws {
+            let pieces = pages.iter().find(|p| p.page_number() == d.page).and_then(|p| p.drawn_pieces(d.path));
+            match pieces {
+                Some(pieces) => {
+                    out.extend(pieces.map(|path| PassageDraw { page: d.page, path, placement: d.placement }))
+                }
+                None => out.push(*d),
+            }
+        }
+        out
+    }
+
+    fn compute(&self, spec: &PassageSpec, shapes: &Shapes) -> Option<PassageLayout> {
         let valid = spec.width.is_finite()
             && spec.width <= MAX_WIDTH
             && spec.scale.is_finite()
@@ -573,13 +695,13 @@ impl Passage {
             && spec.ellipsis_width >= 0.0
             && (spec.width <= 0.0 || spec.max_rows == 0 || spec.ellipsis_width < spec.width - 2.0 * spec.padding)
             && spec.max_stretch.is_finite();
-        if !valid || self.atoms.is_empty() {
+        if !valid || shapes.atoms.is_empty() {
             return None;
         }
-        let atoms: Vec<&Atom> = self.atoms.iter().map(|a| &a.atom).collect();
+        let atoms: Vec<&Atom> = shapes.atoms.iter().map(|a| &a.atom).collect();
         let width_of = |i: usize| atoms[i].rect[2] - atoms[i].rect[0];
         let used = |row: &[usize]| -> f64 {
-            row.iter().enumerate().map(|(k, &i)| width_of(i) + if k > 0 { self.gaps[i] } else { 0.0 }).sum()
+            row.iter().enumerate().map(|(k, &i)| width_of(i) + if k > 0 { shapes.gaps[i] } else { 0.0 }).sum()
         };
         let padding = spec.padding as f64;
         let one_row = spec.width <= 0.0;
@@ -617,9 +739,9 @@ impl Passage {
         let mut passes = 0;
         let (row_width, rows, is_truncated, ellipsis_width) = loop {
             let row_width = if one_row { used(&all) } else { (spec.width as f64 - 2.0 * padding) / scale };
-            let mut rows = if one_row { vec![all.clone()] } else { break_rows(&atoms, &self.gaps, row_width) };
+            let mut rows = if one_row { vec![all.clone()] } else { break_rows(&atoms, &shapes.gaps, row_width) };
             if max_rows > 0 && rows.len() > max_rows {
-                rows = fill_rows(&atoms, &self.gaps, row_width);
+                rows = fill_rows(&atoms, &shapes.gaps, row_width);
             }
             let is_truncated = max_rows > 0 && rows.len() > max_rows;
             let ellipsis_width = spec.ellipsis_width as f64 / scale;
@@ -679,7 +801,7 @@ impl Passage {
             // last row is short because the text ran out, or holds the cut, and keeps its gaps.
             let mut share = 0.0;
             if spec.align == Align::Justified && r + 1 < rows.len() {
-                let opening = row.iter().skip(1).filter(|&&i| self.open[i]).count();
+                let opening = row.iter().skip(1).filter(|&&i| shapes.open[i]).count();
                 let slack = row_width - row_used;
                 if opening > 0 && slack > 0.0 {
                     let cap = if spec.max_stretch > 0.0 {
@@ -701,13 +823,13 @@ impl Passage {
             for (k, &i) in row.iter().enumerate() {
                 let atom = atoms[i];
                 if k > 0 {
-                    cursor -= self.gaps[i] + if self.open[i] { share } else { 0.0 };
+                    cursor -= shapes.gaps[i] + if shapes.open[i] { share } else { 0.0 };
                 }
                 let (dx, dy) = (cursor - atom.rect[2], baseline - atom.baseline);
                 let placement = placements.len() as u32;
-                let size = self.atoms[i].size;
+                let size = shapes.atoms[i].size;
                 placements.push((dx, dy, size, size, r as u32));
-                let page = self.atoms[i].page;
+                let page = shapes.atoms[i].page;
                 draws.extend(atom.paths.iter().map(|&p| (page, p, placement)));
                 let rect = moved(atom.rect, dx, dy);
                 boxes.push(rect);
@@ -727,9 +849,9 @@ impl Passage {
                     cursor -= atoms[owner].gap;
                     let (dx, dy) = (cursor - sign.rect[2], baseline - atoms[owner].baseline);
                     let placement = placements.len() as u32;
-                    let size = self.atoms[owner].size;
+                    let size = shapes.atoms[owner].size;
                     placements.push((dx, dy, size, size, r as u32));
-                    let page = self.atoms[owner].page;
+                    let page = shapes.atoms[owner].page;
                     draws.extend(sign.paths.iter().map(|&p| (page, p, placement)));
                     boxes.push(moved(sign.rect, dx, dy));
                 }
@@ -743,7 +865,7 @@ impl Passage {
         // sign. When those words wrap, the stroke is drawn on each row that holds them, and only
         // the stroke is stretched. It has the size of its words.
         for (page, stroke) in &self.strokes {
-            let Some(size) = self.atoms.iter().find(|a| a.page == *page).map(|a| a.size) else { continue };
+            let Some(size) = shapes.atoms.iter().find(|a| a.page == *page).map(|a| a.size) else { continue };
             let mut spans: Vec<(u32, Rect, f64)> = Vec::new();
             for &w in &stroke.words {
                 let Some(&(row, dx, dy, word_rect)) = placed.get(&(*page, w)) else { continue };
@@ -808,7 +930,7 @@ impl Passage {
         let words: Vec<PassageWord> = words
             .into_iter()
             .map(|(i, row, rect, word_rect)| {
-                let (a, [x0, y0, x1, y1]) = (&self.atoms[i], pixels(rect));
+                let (a, [x0, y0, x1, y1]) = (&shapes.atoms[i], pixels(rect));
                 let [word_x0, word_y0, word_x1, word_y1] = pixels(word_rect);
                 PassageWord {
                     surah: a.atom.surah,
@@ -1180,7 +1302,58 @@ fn same_print_size(a: f64, b: f64) -> bool {
     a.max(b) < SAME_PRINT_SIZE * a.min(b)
 }
 
+/// The gap before each word, and whether a justified row may open it. Two words the print
+/// draws as one piece of calligraphy keep their printed distance, and a justified row never
+/// opens it; any other two are set the usual gap apart, measured on their ink. The first word
+/// has no gap.
+fn spacing(atoms: &[PassageAtom]) -> (Vec<f64>, Vec<bool>) {
+    (0..atoms.len())
+        .map(|i| {
+            if i == 0 {
+                return (0.0, false);
+            }
+            let (previous, atom) = (&atoms[i - 1], &atoms[i]);
+            let (a, b) = (&previous.atom, &atom.atom);
+            let natural = a.rect[0] - b.rect[2];
+            let joined = previous.page == atom.page
+                && a.line == b.line
+                && a.word + 1 == b.word
+                && clearance(&a.word_bands, &b.word_bands)
+                    .is_some_and(|air| -air >= b.pitch * defaults::INTERLOCK_DEPTH as f64);
+            if joined {
+                return (natural, false);
+            }
+            let wanted = (a.gap + b.gap) / 2.0;
+            match clearance(&a.bands, &b.bands) {
+                Some(air) => (natural + wanted - air, true),
+                None => (wanted, true),
+            }
+        })
+        .unzip()
+}
+
 impl Atom {
+    /// The atom with no ayah medallion: its paths, its box and its bands are the word's and
+    /// its other signs'. `None` when it has no medallion.
+    fn without_ayah_marks(&self) -> Option<Atom> {
+        if !self.signs.iter().any(|s| s.kind == DecoKind::AyahMark) {
+            return None;
+        }
+        let (dropped, signs): (Vec<Sign>, Vec<Sign>) =
+            self.signs.iter().cloned().partition(|s| s.kind == DecoKind::AyahMark);
+        let mut bands = self.word_bands.clone();
+        for sign in &signs {
+            merge(&mut bands, &sign.bands);
+        }
+        Some(Atom {
+            paths: self.paths.iter().copied().filter(|p| !dropped.iter().any(|s| s.paths.contains(p))).collect(),
+            rect: signs.iter().fold(self.word_rect, |r, s| union(r, s.rect)),
+            bands,
+            signs,
+            ..self.clone()
+        })
+    }
+
     /// The atom resized by `k` from the page's origin: its boxes, its bands, its baseline, its
     /// page's line spacing and its gap. Its paths stay as printed; their placement resizes them.
     fn resized(&self, k: f64) -> Atom {
@@ -1473,6 +1646,98 @@ mod tests {
             assert!(l.ellipsis.is_none());
         }
         assert_eq!(passage.layout(&spec(70.0)).unwrap(), &narrow);
+    }
+
+    #[test]
+    fn with_no_medallions_a_word_keeps_no_room_for_one() {
+        let pages = [synthetic(1, 1), synthetic(2, 2)];
+        let mut passage = Passage::load(&[&pages[0], &pages[1]], 1, 1, 2).unwrap();
+        let full = passage.layout(&spec(0.0)).unwrap().clone();
+        let bare = passage.layout(&PassageSpec { omit_ayah_marks: true, ..spec(0.0) }).unwrap().clone();
+        bounded(&bare);
+        // Every path but the two medallions (path 3 of each page) is still drawn, once.
+        assert_eq!(bare.draws.len(), full.draws.len() - 2);
+        assert!(bare.draws.iter().all(|d| d.path != 3));
+        // Each closing word's box is the word alone, and the row is shorter by both medallions
+        // and their air.
+        for w in bare.words.iter().filter(|w| w.word == 3) {
+            assert!((w.x0 - w.word_x0).abs() < 0.001, "{} {}", w.x0, w.word_x0);
+        }
+        assert!(bare.width < full.width - 2.0 * 8.0, "{} {}", bare.width, full.width);
+        // The sajdah line still goes over its word.
+        assert_eq!(bare.draws.iter().filter(|d| d.path == 4).count(), 2);
+        // The layout that keeps them is the one it was.
+        assert_eq!(passage.layout(&spec(0.0)).unwrap(), &full);
+    }
+
+    #[test]
+    fn with_no_medallions_a_cut_keeps_none() {
+        let page = synthetic(1, 1);
+        let mut passage = Passage::load(&[&page], 1, 1, 1).unwrap();
+        let cut = PassageSpec { max_rows: 1, keep_ayah_mark: true, ellipsis_width: 5.0, ..spec(40.0) };
+        let kept = passage.layout(&cut).unwrap().clone();
+        assert!(kept.is_truncated && kept.draws.iter().any(|d| d.path == 3));
+        let bare = passage.layout(&PassageSpec { omit_ayah_marks: true, ..cut }).unwrap().clone();
+        assert!(bare.is_truncated && bare.draws.iter().all(|d| d.path != 3));
+        bounded(&bare);
+    }
+
+    #[test]
+    fn an_ayah_mark_lays_out_alone() {
+        let page = synthetic(1, 1);
+        let mut mark = Passage::load_ayah_mark(&[&page], 1, 1).unwrap();
+        assert_eq!((mark.word_count(), mark.ayahs().count()), (0, 0));
+        assert_eq!(mark.line_spacing(), page.line_spacing());
+        let l = mark.layout(&PassageSpec { padding: 0.0, ..spec(0.0) }).unwrap().clone();
+        assert_eq!(l.draws, vec![PassageDraw { page: 1, path: 3, placement: 0 }]);
+        assert!(l.words.is_empty() && l.ayahs.is_empty() && l.rows.len() == 1);
+        // The medallion's box is 8 by 14 page units.
+        assert!((l.width - 8.0).abs() < 0.001 && (l.height - 14.0).abs() < 0.001, "{} {}", l.width, l.height);
+        // It sits on the row's baseline as it does after the words: the same distance above it.
+        let mut passage = Passage::load(&[&page], 1, 1, 1).unwrap();
+        let full = passage.layout(&PassageSpec { padding: 0.0, ..spec(0.0) }).unwrap().clone();
+        let p = full.placements[full.draws.iter().find(|d| d.path == 3).unwrap().placement as usize];
+        let q = l.placements[0];
+        let above = |p: Placement, baseline: f32| baseline - (p.ky * 6.0 + p.dy) * full.scale;
+        assert!((above(p, full.rows[0].baseline) - above(q, l.rows[0].baseline)).abs() < 0.001);
+        // An ayah with no medallion on the pages, and one out of range, load nothing.
+        assert_eq!(Passage::load_ayah_mark(&[&page], 1, 2).err(), Some(PassageError::NoAyahMark { surah: 1, ayah: 2 }));
+        assert_eq!(Passage::load_ayah_mark(&[&page], 1, 0).err(), Some(PassageError::Range));
+        assert_eq!(Passage::load_ayah_mark(&[&page, &page], 1, 1).err(), Some(PassageError::RepeatedPage));
+        // With no medallions asked for, a lone medallion is still drawn: it is no sign of a word.
+        assert_eq!(mark.layout(&PassageSpec { omit_ayah_marks: true, ..spec(0.0) }).unwrap().draws.len(), 1);
+    }
+
+    #[test]
+    fn a_passage_draws_the_pieces_its_page_draws() {
+        use crate::fixtures::letters_page;
+        use crate::{LetterPart, Paint, Selector};
+        let mut page = letters_page();
+        let mut passage = Passage::load(&[&page], 1, 1, 2).unwrap();
+        let draws = passage.layout(&spec(0.0)).unwrap().draws.clone();
+        assert!(draws.iter().any(|d| d.path == 0), "the cut path is drawn whole");
+        // No rule: the page draws path 0 whole, and so does the passage.
+        assert_eq!(passage.styled_draw_list(&[&page]), draws);
+        // A colour on the lam alone: the page draws path 0 as its pieces 8 and 9, and the passage
+        // lists them in its place, under its placement.
+        let lam = page.style(Selector::Letter(0, 1, LetterPart::All), Paint::new(0xff0000ff));
+        page.refresh_display();
+        let swapped: Vec<PassageDraw> = draws
+            .iter()
+            .flat_map(|d| match d.path {
+                0 => vec![PassageDraw { path: 8, ..*d }, PassageDraw { path: 9, ..*d }],
+                _ => vec![*d],
+            })
+            .collect();
+        assert_eq!(passage.styled_draw_list(&[&page]), swapped);
+        assert_eq!(page.colors()[9], 0xff0000ff);
+        // A page that is not given draws as the layout has it.
+        assert_eq!(passage.styled_draw_list(&[]), draws);
+        // A word colour draws the path whole again.
+        page.remove_style(lam);
+        page.style(Selector::Word(0), Paint::new(0xff0000ff));
+        page.refresh_display();
+        assert_eq!(passage.styled_draw_list(&[&page]), draws);
     }
 
     #[test]

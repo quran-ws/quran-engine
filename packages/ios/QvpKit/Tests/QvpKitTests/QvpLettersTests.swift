@@ -244,6 +244,11 @@ final class QvpLettersTests: XCTestCase {
             XCTAssertEqual(p.styledPaths().map { [Int64($0.path), Int64($0.color)] }, (value as! [[NSNumber]]).map { $0.map(\.int64Value) }, tag)
         case "drawRevision": XCTAssertEqual(p.layoutDrawRevision(), int(value), tag)
         case "drawList": XCTAssertEqual(drawList(p), pairs(value), tag)
+        case "passageDrawList":
+            let passage = try QvpPassage(pages: [p], surah: int(s["surah"]), from: int(s["from"]), to: int(s["to"]))
+            defer { passage.close() }
+            passage.layout(QvpPassageSpec(width: 0))
+            XCTAssertEqual(passage.styledDrawList(pages: [p]).map { [$0.page, $0.path, $0.placement] }, pairs(value), tag)
         case "letterCount": XCTAssertEqual(p.letterCount(int(s["word"])), int(value), tag)
         case "letterInfo": sameLetter(p.letter(int(s["word"]), int(s["letter"])), value, tolerance, tag)
         case "letterMembers": sameMembers(p.letterMembers(int(s["word"]), int(s["letter"])), value, tag)
@@ -320,5 +325,79 @@ final class QvpLettersTests: XCTestCase {
         let after = try drawn()
         XCTAssertTrue(after.contains(8) && after.contains(9), "the swap gives a new list for the same band")
         XCTAssertFalse(after.contains(0))
+    }
+
+    /// A passage cut from the page draws the letters the page colours, in their colours: the lam
+    /// red, and the ba that one outline joins it to on the page in the page's ink.
+    func testPassageDrawsTheLettersThePageColours() throws {
+        let j = try scenario(), red = u32(j["red"])
+        let fx = fixture(j, "letters")
+        let p = try QvpPage(bytes: fixtureBytes(fx["page"] as! String)); defer { p.close() }
+        XCTAssertTrue(p.attachLetters(try fixtureBytes(fx["letters"] as! String)))
+        p.style(.letter(0, 1), red)
+        let passage = try QvpPassage(pages: [p], surah: 1, from: 1, to: 2); defer { passage.close() }
+        let l = try XCTUnwrap(passage.layout(QvpPassageSpec(scale: 2, padding: 0)))
+        let draws = passage.styledDrawList(pages: [p])
+        XCTAssertTrue(draws.contains { $0.path == 9 } && !draws.contains { $0.path == 0 }, "the joined outline draws as its pieces")
+        let w = Int(l.width.rounded(.up)), h = Int(l.height.rounded(.up))
+        let ctx = try XCTUnwrap(CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                          space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let px = UnsafeBufferPointer(start: ctx.data!.assumingMemoryBound(to: UInt8.self), count: ctx.bytesPerRow * h)
+        // The colour at a page point of a path, through the path's placement. A bitmap's rows run
+        // up, and the layout's run down.
+        func color(path: Int, _ x: Float, _ y: Float) -> [Int] {
+            let q = l.placements[draws.first { $0.path == path }!.placement]
+            let (lx, ly) = (Int(l.scale * (q.kx * x + q.dx)), Int(l.scale * (q.ky * y + q.dy)))
+            let o = (h - 1 - ly) * ctx.bytesPerRow + lx * 4
+            return (0..<3).map { Int(px[o + $0]) }
+        }
+        func channels(_ rgba: UInt32) -> [Int] { [24, 16, 8].map { Int(rgba >> UInt32($0) & 0xff) } }
+        func near(_ a: [Int], _ b: [Int]) -> Bool { zip(a, b).allSatisfy { abs($0 - $1) <= 2 } }
+        let paper = { ctx.setFillColor(red: 1, green: 1, blue: 1, alpha: 1); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h)) }
+        // in the page colours: the lam red, the ba in the page's ink, whatever the host's ink
+        paper()
+        ctx.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
+        l.draw(in: ctx, pages: [p.pageNo: p], draws: draws, pageColors: true)
+        XCTAssertTrue(near(color(path: 9, 44.5, 15), channels(red)), "\(color(path: 9, 44.5, 15))")
+        XCTAssertTrue(near(color(path: 8, 52, 15), channels(QvpDefaults.INK)), "\(color(path: 8, 52, 15))")
+        // without pageColors, every path takes the host's ink
+        paper()
+        ctx.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
+        l.draw(in: ctx, pages: [p.pageNo: p], draws: draws)
+        XCTAssertTrue(near(color(path: 9, 44.5, 15), [0, 0, 255]), "\(color(path: 9, 44.5, 15))")
+    }
+
+    /// A long-press hands the host the point it landed on, with the hit `onLongPress` gets, so
+    /// the host can name the letter under the finger: here the lam, coloured on its own.
+    @MainActor func testLongPressGivesThePointOfTheLetter() throws {
+        guard #available(macOS 14.0, iOS 17.0, *) else { throw XCTSkip("QvpCanvasController needs macOS 14 / iOS 17") }
+        let j = try scenario(), rgba = u32(j["red"])
+        let fx = fixture(j, "letters")
+        let p = try QvpPage(bytes: fixtureBytes(fx["page"] as! String)); defer { p.close() }
+        XCTAssertTrue(p.attachLetters(try fixtureBytes(fx["letters"] as! String)))
+        p.style(.letter(0, 1), rgba)
+        let c = QvpCanvasController()
+        c.page = p; c.setBounds(CGSize(width: 200, height: 200), fromCanvas: 1)
+        // a point of the canvas on the lam's ink
+        let grid = stride(from: 1, to: 200, by: 2).flatMap { y in stride(from: 1, to: 200, by: 2).map { CGPoint(x: $0, y: y) } }
+        let onLam = try XCTUnwrap(grid.first { pt in
+            c.letterAt(pt).map { $0.word == 0 && $0.letter == 1 && $0.isExact } ?? false
+        }, "the lam is under some point of the canvas")
+        var hits: [QvpHit?] = [], presses: [(CGPoint, QvpHit?)] = []
+        c.onLongPress = { hits.append($0) }
+        c.onLongPressAt = { presses.append(($0, $1)) }
+        c.longPress(onLam)
+        XCTAssertEqual(hits.count, 1)
+        XCTAssertEqual(presses.count, 1)
+        XCTAssertEqual(presses.first?.0, onLam)
+        XCTAssertEqual(presses.first?.1, hits.first ?? nil)
+        XCTAssertEqual(presses.first?.1?.word, 0, "the word under the finger")
+        let letter = try XCTUnwrap(c.letterAt(presses[0].0))
+        XCTAssertEqual([letter.word, letter.letter, letter.path], [0, 1, 9], "the lam's piece")
+        // without onLongPress, the point still arrives
+        c.onLongPress = nil
+        c.longPress(onLam)
+        XCTAssertEqual(presses.count, 2)
     }
 }

@@ -48,7 +48,7 @@ fn layer_bytes(page: &PageData, layer: &LetterData) -> Vec<u8> {
 // ── the symbols the scenario exercises ──
 
 /// Every C symbol the letter scenario must exercise. The generator fails when one is missing.
-const SYMBOLS: [&str; 19] = [
+const SYMBOLS: [&str; 20] = [
     "qvp_attach_letters",
     "qvp_has_letters",
     "qvp_letter_count",
@@ -60,6 +60,7 @@ const SYMBOLS: [&str; 19] = [
     "qvp_hit_test_letter",
     "qvp_hit_test_letter_view",
     "qvp_layout_draw_revision",
+    "qvp_passage_styled_draw_list",
     "qvp_style_add_letters",
     "QVP_SELECTOR_LETTER",
     "QVP_SELECTOR_LETTER_MARK",
@@ -814,6 +815,9 @@ enum Step {
     StyledPaths,
     DrawRevision,
     DrawList,
+    /// `qvp_passage_styled_draw_list` of the ayahs `from` to `to` of `surah`, loaded from the
+    /// page and laid out on one row at the default spec
+    PassageDrawList(u16, u16, u16),
     LetterCount(u32),
     LetterInfo(u32, u32),
     LetterMembers(u32, u32),
@@ -942,6 +946,25 @@ fn run_step(h: &mut Host<'_>, step: &Step) -> J {
         DrawList => {
             let d = h.c_draws();
             call("drawList", vec![("value", pairs(&d))])
+        }
+        PassageDrawList(surah, from, to) => {
+            cover("qvp_passage_styled_draw_list");
+            // the C call applies the page's pending rule changes first
+            if h.p.has_letters() {
+                h.p.refresh_display();
+            }
+            let mut passage = Passage::load(&[&h.p], *surah, *from, *to).expect("the fixture's ayahs load");
+            passage.layout(&PassageSpec { width: 0.0, ..Default::default() }).expect("the default spec lays out");
+            let list = passage.styled_draw_list(&[&h.p]);
+            call(
+                "passageDrawList",
+                vec![
+                    ("surah", num(surah)),
+                    ("from", num(from)),
+                    ("to", num(to)),
+                    ("value", J::Arr(list.iter().map(|d| nums(&[d.page as u32, d.path, d.placement])).collect())),
+                ],
+            )
         }
         LetterCount(w) => {
             cover("qvp_letter_count");
@@ -1321,13 +1344,14 @@ fn main() {
     sequences.push(j);
     let (j, _) = sequence(
         &all,
-        "a letter colour draws the pieces, a word colour draws the path whole",
+        "a letter colour draws the pieces, a word colour draws the path whole, on the page and in a passage",
         "letters",
         &[
             Attach("letters"),
             Layout("printed"),
             Tick(0.0),
             DrawList,
+            PassageDrawList(1, 1, 2),
             DrawRevision,
             Style(sel(sel_l, 0, 1, 0), RED, 0, "lam"),
             Tick(0.0),
@@ -1335,16 +1359,19 @@ fn main() {
             StyledPaths,
             DrawRevision,
             DrawList,
+            PassageDrawList(1, 1, 2),
             Remove("lam"),
             Tick(0.0),
             DrawRevision,
             DrawList,
+            PassageDrawList(1, 1, 2),
             Style(sel(SEL_WORD, 0, 0, 0), RED, 0, "word"),
             Tick(0.0),
             Colors,
             StyledPaths,
             DrawRevision,
             DrawList,
+            PassageDrawList(1, 1, 2),
         ],
     );
     sequences.push(j);

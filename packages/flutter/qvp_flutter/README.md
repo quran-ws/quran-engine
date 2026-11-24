@@ -169,7 +169,10 @@ final passage = QvpPassage.load([page], 2, 255);          // the pages can be di
 final layout = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing,
                                              maxRows: 2, keepAyahMark: true, ellipsisWidth: 12));
 paintPassage(canvas, layout!, {42: page}, ink);           // every path under its placement
+// the letters the page colours, in their colours: the last layout's draws as the page styles them
+paintPassage(canvas, layout, {42: page}, ink, draws: passage.styledDrawList([page]), pageColors: true);
 final basmalah = QvpPassage.basmalah([page], 2);          // one row, no words; throws for surahs 1 and 9
+final mark = QvpPassage.ayahMark([page], 2, 255);         // the medallion alone, for omitAyahMarks: true
 passage.close();
 ```
 

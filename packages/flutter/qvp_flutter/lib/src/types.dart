@@ -2117,6 +2117,7 @@ final class QvpPassageSpec {
     this.keepAyahMark = false,
     this.ellipsisWidth = 0,
     this.maxStretch = QvpDefaults.reflowMaxStretch,
+    this.omitAyahMarks = false,
   });
 
   /// The width of the rows. 0 or less puts the passage on one row, as wide as it is.
@@ -2151,6 +2152,10 @@ final class QvpPassageSpec {
   /// words. 0 is the engine default, and a negative value lifts the cap.
   final double maxStretch;
 
+  /// Lay the words out with no ayah medallions, and no room kept for them. A division mark and
+  /// a sajdah sign stay. [QvpPassage.ayahMark] gives the medallion of an ayah alone.
+  final bool omitAyahMarks;
+
   /// [align] as the engine's `QVP_ALIGN_*` code.
   int get alignCode => align.index;
 
@@ -2165,7 +2170,8 @@ final class QvpPassageSpec {
       other.maxRows == maxRows &&
       other.keepAyahMark == keepAyahMark &&
       other.ellipsisWidth == ellipsisWidth &&
-      other.maxStretch == maxStretch;
+      other.maxStretch == maxStretch &&
+      other.omitAyahMarks == omitAyahMarks;
 
   @override
   int get hashCode => Object.hash(
@@ -2178,6 +2184,7 @@ final class QvpPassageSpec {
     keepAyahMark,
     ellipsisWidth,
     maxStretch,
+    omitAyahMarks,
   );
 }
 
@@ -2274,12 +2281,22 @@ final class QvpPassageAyah {
 /// [QvpPassageLayout.placements] it goes under.
 @immutable
 final class QvpPassageDraw {
-  /// The backend fills one from `qvp_passage_draw_list`.
+  /// The backend fills one from `qvp_passage_draw_list` or `qvp_passage_styled_draw_list`.
   const QvpPassageDraw(this.page, this.path, this.placement);
 
   /// The page number, the path index on that page, and the index into
   /// [QvpPassageLayout.placements].
   final int page, path, placement;
+
+  @override
+  bool operator ==(Object other) =>
+      other is QvpPassageDraw &&
+      other.page == page &&
+      other.path == path &&
+      other.placement == placement;
+
+  @override
+  int get hashCode => Object.hash(page, path, placement);
 }
 
 /// A laid-out passage.

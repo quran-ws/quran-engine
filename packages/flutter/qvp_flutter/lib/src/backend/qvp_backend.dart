@@ -442,8 +442,14 @@ abstract interface class QvpBackend {
   );
   (PassageHandle, List<QvpPassageText> ayahs, double lineSpacing)
   passageLoadBasmalah(List<PageHandle> pages, int surah);
+  (PassageHandle, List<QvpPassageText> ayahs, double lineSpacing)
+  passageLoadAyahMark(List<PageHandle> pages, int surah, int ayah);
   void passageFree(PassageHandle handle);
   QvpPassageLayout? passageLayout(PassageHandle handle, QvpPassageSpec spec);
+  List<QvpPassageDraw> passageStyledDrawList(
+    PassageHandle handle,
+    List<PageHandle> pages,
+  );
 
   // ── Ornaments ──
   (OrnamentsHandle, List<QvpOrnament>) ornamentsLoad(Uint8List bytes);

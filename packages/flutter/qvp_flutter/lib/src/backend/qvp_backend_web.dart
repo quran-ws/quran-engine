@@ -377,6 +377,7 @@ class QvpWebBackend implements QvpBackend {
     ..['align'] = s.align.name.toJS
     ..['maxRows'] = s.maxRows.toJS
     ..['keepAyahMark'] = s.keepAyahMark.toJS
+    ..['omitAyahMarks'] = s.omitAyahMarks.toJS
     ..['ellipsisWidth'] = s.ellipsisWidth.toJS
     ..['maxStretch'] = s.maxStretch.toJS;
 
@@ -2297,8 +2298,39 @@ class QvpWebBackend implements QvpBackend {
   );
 
   @override
+  (PassageHandle, List<QvpPassageText> ayahs, double lineSpacing)
+  passageLoadAyahMark(List<PageHandle> pages, int surah, int ayah) =>
+      _readPassage(
+        js.callMethod<JSObject>(
+          'loadAyahMark'.toJS,
+          [for (final p in pages) _page(p)].toJS,
+          surah.toJS,
+          ayah.toJS,
+        ),
+      );
+
+  @override
   void passageFree(PassageHandle handle) =>
       _passage(handle).callMethod('free'.toJS);
+
+  @override
+  List<QvpPassageDraw> passageStyledDrawList(
+    PassageHandle handle,
+    List<PageHandle> pages,
+  ) {
+    final res = _passage(handle).callMethod<JSArray>(
+      'styledDrawList'.toJS,
+      [for (final p in pages) _page(p)].toJS,
+    );
+    return List<QvpPassageDraw>.generate(res.length, (i) {
+      final d = res[i] as JSObject;
+      return QvpPassageDraw(
+        (d['page'] as JSNumber).toDartInt,
+        (d['path'] as JSNumber).toDartInt,
+        (d['placement'] as JSNumber).toDartInt,
+      );
+    }, growable: false);
+  }
 
   @override
   QvpPassageLayout? passageLayout(PassageHandle handle, QvpPassageSpec spec) {

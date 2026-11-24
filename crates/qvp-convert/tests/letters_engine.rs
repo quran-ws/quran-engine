@@ -20,7 +20,8 @@
 use qvp_convert::letter_page::{letter_page, LetterPage};
 use qvp_convert::{convert, merge_words_index, words_json};
 use qvp_core::{
-    Draw, HitOptions, LayoutSpec, LetterHit, LetterMember, LetterPart, Page, Paint, ReflowSpec, Selector, NONE,
+    Draw, HitOptions, LayoutSpec, LetterHit, LetterMember, LetterPart, Page, Paint, Passage, PassageDraw, PassageSpec,
+    ReflowSpec, Selector, NONE,
 };
 use qvp_format::letters::{encode_letters, NO_AT};
 use rayon::prelude::*;
@@ -63,6 +64,10 @@ const ALL_REFLOW_LOST: usize = 696;
 /// point inside them, and those with no point clear of all ink at the scan's resolution.
 const ALL_COUNTERS: usize = 104_835;
 const ALL_COUNTER_SKIPS: usize = 0;
+/// Ayahs whole on their page, each laid out as a passage, and the cut paths those passages
+/// draw as their pieces when one letter of each word takes a colour.
+const ALL_PASSAGE_AYAHS: usize = 1781;
+const ALL_PASSAGE_SWAPS: usize = 8447;
 
 /// The grid step of the ink tests, in page units.
 const INK_STEP: f32 = 0.5;
@@ -787,6 +792,86 @@ fn one_letter_colour_swaps_one_path_and_back() {
         assert_eq!(one_by_one, ALL_SWAPPED_ONE_BY_ONE, "cut paths swapped one at a time over all pages");
         assert_eq!(whole, ALL_TAKEN_WHOLE, "cut paths taken whole by a rule on their one letter over all pages");
         assert_eq!(together, ALL_SWAPPED, "cut paths swapped together over all pages");
+    }
+}
+
+/// A passage of each ayah that is whole on the page draws what the page draws: with one
+/// letter of each word coloured, the styled list holds each cut path the page swaps as its
+/// pieces, in its place and under its placement, and every other draw as the layout has it.
+#[test]
+fn a_passage_draws_the_pieces_its_page_draws() {
+    if !have_letters() {
+        return;
+    }
+    let ([ayahs, swapped_draws], _) = run("a_passage_draws_the_pieces_its_page_draws", |b, f| {
+        let mut p = load(b, true)?;
+        let ix = index(&p, b);
+        // the first letter of each word that has a piece of a cut path of two letters or more
+        let mut coloured = HashSet::new();
+        for w in 0..p.data().words.len() as u32 {
+            let first = (0..p.letter_count(w)).find(|&l| {
+                p.letter_members(w, l).iter().any(|m| {
+                    m.is_cut && {
+                        let s = ix.source[(m.path - ix.n) as usize];
+                        let letters: HashSet<_> =
+                            ix.pieces_of[&s].iter().map(|q| ix.piece_letter[(q - ix.n) as usize]).collect();
+                        letters.len() > 1
+                    }
+                })
+            });
+            if let Some(l) = first {
+                coloured.insert((w, l));
+            }
+        }
+        for &(w, l) in &coloured {
+            p.style(Selector::Letter(w, l as u16, LetterPart::All), Paint::new(RED));
+        }
+        p.refresh_display();
+        let swapped = expected_swaps(&coloured, &ix);
+        let whole: Vec<(u16, u16)> =
+            p.data().ayahs.iter().filter(|a| a.fragments == 1).map(|a| (a.surah, a.ayah)).collect();
+        let (mut ayahs, mut swapped_draws) = (0, 0);
+        for (surah, ayah) in whole {
+            let Ok(mut passage) = Passage::load(&[&p], surah, ayah, ayah) else {
+                f.push(format!("{surah}:{ayah}: the passage does not load"));
+                continue;
+            };
+            let Some(layout) = passage.layout(&PassageSpec { width: 0.0, ..Default::default() }) else {
+                f.push(format!("{surah}:{ayah}: no layout"));
+                continue;
+            };
+            let mut expected = Vec::with_capacity(layout.draws.len());
+            for d in &layout.draws {
+                match ix.pieces_of.get(&d.path) {
+                    Some(pieces) if swapped.contains(&d.path) => {
+                        swapped_draws += 1;
+                        expected.extend(pieces.iter().map(|&path| PassageDraw { path, ..*d }));
+                    }
+                    _ => expected.push(*d),
+                }
+            }
+            let got = passage.styled_draw_list(&[&p]);
+            if got != expected {
+                let i = got.iter().zip(&expected).position(|(x, y)| x != y).unwrap_or(got.len().min(expected.len()));
+                f.push(format!(
+                    "{surah}:{ayah}: lengths {} and {}; first difference at entry {i}: {:?} and {:?}",
+                    got.len(),
+                    expected.len(),
+                    got.get(i),
+                    expected.get(i)
+                ));
+            }
+            ayahs += 1;
+        }
+        Ok([ayahs, swapped_draws])
+    });
+    println!(
+        "totals: {ayahs} whole ayahs laid out as passages, {swapped_draws} cut paths drawn as their pieces in them"
+    );
+    assert!(ayahs > 0 && swapped_draws > 0, "{ayahs} ayahs, {swapped_draws} swaps");
+    if all_pages() {
+        assert_eq!(ayahs, ALL_PASSAGE_AYAHS, "whole ayahs laid out as passages over all pages");
+        assert_eq!(swapped_draws, ALL_PASSAGE_SWAPS, "cut paths drawn as their pieces in passages over all pages");
     }
 }
 

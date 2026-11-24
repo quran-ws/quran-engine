@@ -8,6 +8,7 @@
 // to the engine's hit test / selection.
 import 'dart:collection';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -1251,24 +1252,33 @@ class _InkCache {
 /// path of [layout], from its page in [pages] (by page number), in [ink]. Translate the canvas
 /// to where the passage goes first. [paths] optionally caches or provides pre-built paths.
 /// Without it, paths are lazily resolved via [page.path] without building whole-page lists.
+/// [draws] replaces the layout's own list: pass [QvpPassage.styledDrawList] with [pageColors]
+/// true to fill each path in its page's colour, so the letters the pages colour show here too.
 void paintPassage(
   ui.Canvas canvas,
   QvpPassageLayout layout,
   Map<int, QvpPage> pages,
   Color ink, {
   Map<int, List<ui.Path>>? paths,
+  List<QvpPassageDraw>? draws,
+  bool pageColors = false,
 }) {
   final places = layout.placements;
   final s = layout.scale;
   final paint = ui.Paint()
     ..color = ink
     ..isAntiAlias = true;
+  final colors = <int, Uint32List>{};
   // The same placement loop as the page painter: a point (x, y) draws at
   // scale · (kx · x + dx), scale · (ky · y + dy), and runs under one placement share a save.
   var cur = -1, open = false;
-  for (final d in layout.draws) {
+  for (final d in draws ?? layout.draws) {
     final page = pages[d.page];
     if (page == null) continue;
+    if (pageColors) {
+      final c = colors.putIfAbsent(d.page, page.colors);
+      paint.color = d.path < c.length ? QvpColor.toColor(c[d.path]) : ink;
+    }
     final path = (paths != null && paths[d.page] != null)
         ? paths[d.page]![d.path]
         : page.path(d.path);

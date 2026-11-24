@@ -683,16 +683,22 @@ jlong FN(passageLoadBasmalah)(JNIEnv* env, jclass c, jlongArray pages, jint sura
     QvpPassage* ps = qvp_passage_load_basmalah(p, n, (uint16_t)surah);
     free(p); return (jlong)(intptr_t)ps;
 }
+jlong FN(passageLoadAyahMark)(JNIEnv* env, jclass c, jlongArray pages, jint surah, jint ayah) {
+    uint32_t n; const QvpPage** p = page_handles(env, pages, &n);
+    QvpPassage* ps = qvp_passage_load_ayah_mark(p, n, (uint16_t)surah, (uint16_t)ayah);
+    free(p); return (jlong)(intptr_t)ps;
+}
 void FN(passageFree)(JNIEnv* env, jclass c, jlong h) { qvp_passage_free(PS(h)); }
 jint FN(passageAyahCount)(JNIEnv* env, jclass c, jlong h) { return (jint)qvp_passage_ayah_count(PS(h)); }
 jstring FN(passageAyahText)(JNIEnv* env, jclass c, jlong h, jint i) { QvpStr s; qvp_passage_ayah_text(PS(h), (uint32_t)i, &s); return qstr(env, s); }
 jfloat FN(passageLineSpacing)(JNIEnv* env, jclass c, jlong h) { return qvp_passage_line_spacing(PS(h)); }
-/* spec {width, scale, lineSpacing, padding, align, keepAyahMark, maxRows, ellipsisWidth, maxStretch} →
+/* spec {width, scale, lineSpacing, padding, align, keepAyahMark, maxRows, ellipsisWidth, maxStretch, omitAyahMarks} →
    {width, height, scale, lineSpacing, nRows, nWords, nAyahs, nDraws, isTruncated, ellipsisX0, ellipsisY0,
    ellipsisX1, ellipsisY1}; null when the spec is out of range */
 jfloatArray FN(passageLayout)(JNIEnv* env, jclass c, jlong h, jfloatArray spec) {
-    jfloat f[9]; (*env)->GetFloatArrayRegion(env, spec, 0, 9, f);
-    QvpPassageSpec s = { f[0], f[1], f[2], f[3], (uint8_t)f[4], f[5] > 0.5f ? 1u : 0u, { 0, 0 }, (uint32_t)f[6], f[7], f[8] };
+    jfloat f[10]; (*env)->GetFloatArrayRegion(env, spec, 0, 10, f);
+    QvpPassageSpec s = { f[0], f[1], f[2], f[3], (uint8_t)f[4], f[5] > 0.5f ? 1u : 0u, f[9] > 0.5f ? 1u : 0u, { 0 },
+                         (uint32_t)f[6], f[7], f[8] };
     QvpPassageLayout l;
     if (!qvp_passage_layout(PS(h), &s, &l)) return NULL;
     float v[13] = { l.width, l.height, l.scale, l.line_spacing, (float)l.n_rows, (float)l.n_words, (float)l.n_ayahs, (float)l.n_draws,
@@ -742,6 +748,16 @@ jintArray FN(passageDrawList)(JNIEnv* env, jclass c, jlong h) {
     uint32_t* v = (uint32_t*)malloc(n * 3 * sizeof(uint32_t));
     qvp_passage_draw_list(PS(h), v, n);
     jintArray a = ints(env, (const jint*)v, (jsize)(n * 3)); free(v); return a;
+}
+/* the draw list as the pages style it now: {page, path, placement} triples, a cut path whose pieces differ in colour
+   listed as its pieces */
+jintArray FN(passageStyledDrawList)(JNIEnv* env, jclass c, jlong h, jlongArray pages) {
+    uint32_t k; const QvpPage** p = page_handles(env, pages, &k);
+    uint32_t n = qvp_passage_styled_draw_list(PS(h), p, k, NULL, 0);
+    if (!n) { free(p); return ints(env, NULL, 0); }
+    uint32_t* v = (uint32_t*)malloc(n * 3 * sizeof(uint32_t));
+    n = qvp_passage_styled_draw_list(PS(h), p, k, v, n);
+    jintArray a = ints(env, (const jint*)v, (jsize)(n * 3)); free(v); free(p); return a;
 }
 /* what a passage draw list's placement indexes: {dx, dy, kx, ky} each */
 jfloatArray FN(passagePlacements)(JNIEnv* env, jclass c, jlong h) {

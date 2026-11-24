@@ -2,6 +2,7 @@
 
 use crate::abi::{fill_with, guard, out_str, QvpStr};
 use crate::convert::placement;
+use crate::layout::refreshed;
 use qvp_core::*;
 
 #[repr(C)]
@@ -13,7 +14,8 @@ pub struct QvpPassageSpec {
     pub padding: f32,
     pub align: u8,
     pub keep_ayah_mark: u8,
-    pub _pad: [u8; 2],
+    pub omit_ayah_marks: u8,
+    pub _pad: [u8; 1],
     pub max_rows: u32,
     pub ellipsis_width: f32,
     pub max_stretch: f32,
@@ -107,6 +109,21 @@ pub unsafe extern "C" fn qvp_passage_load_basmalah(
         }
     })
 }
+#[no_mangle]
+pub unsafe extern "C" fn qvp_passage_load_ayah_mark(
+    pages: *const *const Page,
+    n_pages: u32,
+    surah: u16,
+    ayah: u16,
+) -> *mut Passage {
+    guard(|| {
+        let Some(refs) = passage_pages(pages, n_pages) else { return std::ptr::null_mut() };
+        match Passage::load_ayah_mark(&refs, surah, ayah) {
+            Ok(passage) => Box::into_raw(Box::new(passage)),
+            Err(_) => std::ptr::null_mut(),
+        }
+    })
+}
 /// The pages a passage loads from; `None` when the list is empty or holds a null page.
 unsafe fn passage_pages<'a>(pages: *const *const Page, n_pages: u32) -> Option<Vec<&'a Page>> {
     if pages.is_null() || n_pages == 0 {
@@ -167,6 +184,7 @@ pub unsafe extern "C" fn qvp_passage_layout(
             align,
             max_rows: s.max_rows,
             keep_ayah_mark: s.keep_ayah_mark != 0,
+            omit_ayah_marks: s.omit_ayah_marks != 0,
             ellipsis_width: s.ellipsis_width,
             // 0 is the default, as for the page's reflow; a negative value reaches the core as it
             // is, which reads any value at or below 0 as no cap.
@@ -254,6 +272,32 @@ pub unsafe extern "C" fn qvp_passage_draw_list(passage: *const Passage, out: *mu
     guard(|| {
         let Some(l) = (*passage).current_layout() else { return 0 };
         fill_with(out.cast(), cap, l.draws.iter().map(|d| [d.page as u32, d.path, d.placement]))
+    })
+}
+/// The draw list of the last layout as its pages style it now: a cut path that its page draws
+/// as its pieces is listed as those pieces. Each page with a letter layer applies its pending
+/// rule changes first, as `qvp_layout_draw_list` does. A null page in the list is skipped, and
+/// a draw whose page is not in the list is listed as the layout has it.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_passage_styled_draw_list(
+    passage: *const Passage,
+    pages: *const *const Page,
+    n_pages: u32,
+    out: *mut u32,
+    cap: u32,
+) -> u32 {
+    guard(|| {
+        let mut refs: Vec<&Page> = Vec::new();
+        if !pages.is_null() {
+            for i in 0..n_pages as usize {
+                let page = *pages.add(i);
+                if !page.is_null() {
+                    refs.push(refreshed(page));
+                }
+            }
+        }
+        let list = (*passage).styled_draw_list(&refs);
+        fill_with(out.cast(), cap, list.iter().map(|d| [d.page as u32, d.path, d.placement]))
     })
 }
 #[no_mangle]

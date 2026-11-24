@@ -2084,6 +2084,47 @@ class QvpNativeBackend implements QvpBackend {
   }
 
   @override
+  (PassageHandle, List<QvpPassageText>, double) passageLoadAyahMark(
+    List<PageHandle> pages,
+    int surah,
+    int ayah,
+  ) {
+    final pList = pffi.malloc<ffi.Pointer<QvpPageC>>(pages.length);
+    for (var i = 0; i < pages.length; i++) {
+      pList[i] = _page(pages[i]);
+    }
+    final p = b.passageLoadAyahMark(pList, pages.length, surah, ayah);
+    pffi.malloc.free(pList);
+    if (p == ffi.nullptr) {
+      throw const FormatException('qvp_passage_load_ayah_mark failed');
+    }
+    return (NativePassageHandle(p), const [], b.passageLineSpacing(p));
+  }
+
+  @override
+  List<QvpPassageDraw> passageStyledDrawList(
+    PassageHandle handle,
+    List<PageHandle> pages,
+  ) {
+    final p = _passage(handle);
+    final pList = pffi.malloc<ffi.Pointer<QvpPageC>>(
+      pages.isEmpty ? 1 : pages.length,
+    );
+    try {
+      for (var i = 0; i < pages.length; i++) {
+        pList[i] = _page(pages[i]);
+      }
+      return _readU32Records(
+        3,
+        (out, cap) => b.passageStyledDrawList(p, pList, pages.length, out, cap),
+        (q, i) => QvpPassageDraw(q[i * 3], q[i * 3 + 1], q[i * 3 + 2]),
+      );
+    } finally {
+      pffi.malloc.free(pList);
+    }
+  }
+
+  @override
   void passageFree(PassageHandle handle) {
     // the raw pointer, not _passage(): a second free finds null and does nothing
     final h = handle as NativePassageHandle;
@@ -2451,6 +2492,7 @@ class QvpNativeBackend implements QvpBackend {
     r.align = s.alignCode;
     r.maxRows = s.maxRows;
     r.keepAyahMark = s.keepAyahMark ? 1 : 0;
+    r.omitAyahMarks = s.omitAyahMarks ? 1 : 0;
     r.ellipsisWidth = s.ellipsisWidth;
     r.maxStretch = s.maxStretch;
   }

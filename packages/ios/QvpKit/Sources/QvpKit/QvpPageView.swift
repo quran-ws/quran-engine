@@ -54,6 +54,10 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     /// Long-press, with the gap-aware hit under the finger. Fires once, on recognition,
     /// only while `selectionEnabled` is false — selection owns the long-press otherwise.
     public var onLongPress: ((QvpHit?) -> Void)?
+    /// The same long-press, with where the finger is in this view's points as well. Pass the
+    /// point to `letterAt(_:)` for the letter or the mark under the finger, or place a popover
+    /// at it. It fires with `onLongPress`, after it, when both are set.
+    public var onLongPressAt: ((CGPoint, QvpHit?) -> Void)?
     public var longPressDuration: Double = 0.35 { didSet { longPressRecognizer?.minimumPressDuration = longPressDuration } }
     private weak var longPressRecognizer: UILongPressGestureRecognizer?
     public var zoomEnabled = true
@@ -293,7 +297,12 @@ public final class QvpPageView: UIView, UIGestureRecognizerDelegate, UIScrollVie
     }
     @objc private func handleLongPress(_ g: UILongPressGestureRecognizer) {
         if !selectionEnabled {
-            if g.state == .began { onLongPress?(hitAt(g.location(in: self))) }
+            if g.state == .began {
+                let pt = g.location(in: self)
+                let hit = hitAt(pt)
+                onLongPress?(hit)
+                onLongPressAt?(pt, hit)
+            }
             return
         }
         guard let p = page else { return }
