@@ -39,11 +39,15 @@ On iOS and macOS the plugin builds with Swift Package Manager or with CocoaPods.
 picks Swift Package Manager when `flutter config --enable-swift-package-manager` is on and
 CocoaPods when it is off. `ios/qvp_flutter/Package.swift` and `ios/qvp_flutter.podspec`
 (and the two `macos` twins) build the same C source and link the same
-`QvpEngine.xcframework` from the Swift package directory. The Swift package needs a Flutter
-version whose Swift Package Manager support provides the `FlutterFramework` package. The
-CocoaPods build has no such limit. Git does not track the framework. In a clone without it,
-Swift Package Manager fails at package resolution, before the build starts, until
-`scripts/build-engine-ios.sh` runs.
+`QvpEngine.xcframework`. The pub.dev package does not carry the framework (39 MB): either
+tool downloads it from the GitHub release on the first build and checks its checksum. The
+Swift package needs a Flutter version whose Swift Package Manager support provides the
+`FlutterFramework` package. The CocoaPods build has no such limit. Git does not track the
+framework. In a clone without it, both tools stop until `scripts/build-engine-ios.sh`
+runs.
+
+The pub.dev package carries the Windows (x64) and Linux (x64, arm64) libraries. The Linux
+ones are built on Ubuntu 22.04.
 
 Run the web step before `flutter test` or `flutter build web`. The pubspec declares the
 two asset directories, and the repository does not track the files. The release workflow

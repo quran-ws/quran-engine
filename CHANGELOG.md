@@ -39,6 +39,11 @@ All notable changes to the engine and its packages. The format follows
   layers are byte-identical to `data-v0.6.0`.
 
 ### Fixed
+- Flutter: the iOS, macOS, Windows and Linux builds of an app that takes `qvp_flutter` from pub.dev find
+  the engine. The package carries the Windows (x64) and Linux (x64, arm64) libraries. On iOS and
+  macOS, Swift Package Manager or CocoaPods downloads the XCFramework from the GitHub release
+  and checks its checksum. Through 0.10.0 the package had the engine for Android and the web
+  only (#211).
 - The comparison of the showcase uses one timer for its five methods. Before, SVG and the
   fonts could be charged up to one frame of waiting per page, and the engine and the images
   were not.

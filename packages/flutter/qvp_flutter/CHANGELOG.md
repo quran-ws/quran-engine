@@ -9,6 +9,13 @@
 - `QvpPageView.onSwipe` gives a sideways swipe in pages: +1 the next page, -1 the page before
   it. A magnified page pans instead, and a touch with a second finger never turns the page.
 
+### Fixed
+- The iOS, macOS, Windows and Linux builds of an app that takes `qvp_flutter` from pub.dev find
+  the engine. The package carries the Windows (x64) and Linux (x64, arm64) libraries. On iOS and
+  macOS, Swift Package Manager or CocoaPods downloads the XCFramework from the GitHub release
+  and checks its checksum. Through 0.10.0 the package had the engine for Android and the web
+  only (#211).
+
 ## 0.10.0
 
 ### Added

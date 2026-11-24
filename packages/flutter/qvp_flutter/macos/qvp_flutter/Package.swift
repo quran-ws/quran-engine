@@ -2,6 +2,7 @@
 // The Swift Package Manager build of the plugin. ../qvp_flutter.podspec is the CocoaPods
 // build, and both read the same sources and the same QvpEngine.xcframework.
 // scripts/build-engine-ios.sh puts the framework next to this file. Git does not track it.
+// For pub.dev, scripts/stage-flutter-apple.sh replaces the path with the release's URL.
 
 import PackageDescription
 
