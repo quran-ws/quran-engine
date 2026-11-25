@@ -28,6 +28,8 @@ final class QvpRnPassageView: UIView {
     @objc var ellipsisWidth: CGFloat = 0 { didSet { changed() } }
     @objc var maxStretch: CGFloat = 0 { didSet { changed() } }
     @objc var ink: String? { didSet { setNeedsDisplay() } }
+    /// {ornaments: set id, ...spec}: the medallion of another mushaf, as the page view's prop.
+    @objc var dress: NSDictionary? { didSet { changed() } }
     @objc var paperColor: String? { didSet { setNeedsDisplay() } }
     @objc var onPassageLayout: RCTDirectEventBlock?
     @objc var onError: RCTDirectEventBlock?
@@ -39,6 +41,7 @@ final class QvpRnPassageView: UIView {
     private var passage: QvpPassage?
     private var layoutKey: String?
     private var passageLayout: QvpPassageLayout?
+    private var appliedDress: NSDictionary?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -60,7 +63,7 @@ final class QvpRnPassageView: UIView {
     private func destroy() {
         passage?.close(); passage = nil
         pages.forEach { $0.close() }; pages = []; pagesByNumber = [:]
-        loadedKey = nil; layoutKey = nil; passageLayout = nil
+        loadedKey = nil; layoutKey = nil; passageLayout = nil; appliedDress = nil
     }
 
     private var commitQueued = false
@@ -78,6 +81,7 @@ final class QvpRnPassageView: UIView {
     func commit() {
         do {
             try ensurePassage()
+            applyDress()
             relayout()
             setNeedsDisplay()
         } catch {
@@ -118,6 +122,26 @@ final class QvpRnPassageView: UIView {
                 : "the pages given do not hold \(surah):\(from)-\(to > 0 ? to : from)"
             throw QvpRnError(what + " (QvpError.\(error))")
         }
+    }
+
+    /// The `dress` prop: {ornaments: set id, ...spec}, the spec a page view takes, of which the
+    /// passage uses the medallion. A new object dresses the passage again and null undresses it.
+    /// A spec with no medallion leaves the passage undressed. A change drops the layout, so the
+    /// next relayout lays it out again.
+    private func applyDress() {
+        guard let p = passage, !same(dress, appliedDress) else { return }
+        appliedDress = dress
+        if let d = dress {
+            if let set = QvpOrnamentSets.get(QvpRnMarshal.num(d["ornaments"])) {
+                p.dress(set, QvpRnMarshal.dressSpec(d as? [String: Any]))
+            } else {
+                p.undress()
+                emit(onError, ["message": "dress: no ornament set \(QvpRnMarshal.some(d["ornaments"]).map { "\($0)" } ?? "null")"])
+            }
+        } else {
+            p.undress()
+        }
+        layoutKey = nil; passageLayout = nil
     }
 
     private func relayout() {

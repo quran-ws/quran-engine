@@ -1,6 +1,7 @@
 package ws.quran.qvp.rn
 
 import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.uimanager.SimpleViewManager
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.annotations.ReactProp
@@ -32,6 +33,7 @@ class QvpPassageViewManager : SimpleViewManager<QvpRnPassageView>() {
     @ReactProp(name = "ellipsisWidth", defaultFloat = 0f) fun setEllipsisWidth(v: QvpRnPassageView, f: Float) { v.ellipsisWidthProp = f }
     @ReactProp(name = "maxStretch", defaultFloat = 0f) fun setMaxStretch(v: QvpRnPassageView, f: Float) { v.maxStretchProp = f }
     @ReactProp(name = "ink") fun setInk(v: QvpRnPassageView, s: String?) { v.inkProp = s }
+    @ReactProp(name = "dress") fun setDress(v: QvpRnPassageView, m: ReadableMap?) { v.dressProp = Marshal.plain(m) }
     @ReactProp(name = "paperColor") fun setPaperColor(v: QvpRnPassageView, s: String?) { v.paperColor = Marshal.color(s, 0).let { if (it == 0) 0 else QvpColor.argb(it) } }
 
     companion object {

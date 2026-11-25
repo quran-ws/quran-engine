@@ -810,16 +810,22 @@ jstring FN(ornamentPartName)(JNIEnv* env, jclass c, jlong h, jint i, jint part) 
     return qstr(env, p.name);
 }
 /* QvpDressSpec by value: an ornament index of -1 is QVP_NONE; colours are (ornament, part, rgba)
-   triples, or null for the designs' own */
-jboolean FN(dress)(JNIEnv* env, jclass c, jlong h, jlong set, jint ayahMark, jint surahHeader, jint pageFrame,
-                   jfloat gap, jfloat bandGap, jfloat ayahMarkScale, jfloat pageFrameScale, jint lineArt, jintArray colors) {
+   triples, or null for the designs' own. The colours stay pinned in *col until the caller releases them. */
+static QvpDressSpec dress_spec(JNIEnv* env, jint ayahMark, jint surahHeader, jint pageFrame, jfloat gap, jfloat bandGap,
+                               jfloat ayahMarkScale, jfloat pageFrameScale, jint lineArt, jintArray colors, jint** col) {
     jsize n = colors ? (*env)->GetArrayLength(env, colors) : 0;
-    jint* col = n ? (*env)->GetIntArrayElements(env, colors, NULL) : NULL;
+    *col = n ? (*env)->GetIntArrayElements(env, colors, NULL) : NULL;
     QvpDressSpec s;
     memset(&s, 0, sizeof s);
     s.ayah_mark = (uint32_t)ayahMark; s.surah_header = (uint32_t)surahHeader; s.page_frame = (uint32_t)pageFrame;
     s.gap = gap; s.band_gap = bandGap; s.ayah_mark_scale = ayahMarkScale; s.page_frame_scale = pageFrameScale;
-    s.line_art = (uint32_t)lineArt; s.colors = (const uint32_t*)col; s.n_colors = (uint32_t)(n / 3);
+    s.line_art = (uint32_t)lineArt; s.colors = (const uint32_t*)*col; s.n_colors = (uint32_t)(n / 3);
+    return s;
+}
+jboolean FN(dress)(JNIEnv* env, jclass c, jlong h, jlong set, jint ayahMark, jint surahHeader, jint pageFrame,
+                   jfloat gap, jfloat bandGap, jfloat ayahMarkScale, jfloat pageFrameScale, jint lineArt, jintArray colors) {
+    jint* col;
+    QvpDressSpec s = dress_spec(env, ayahMark, surahHeader, pageFrame, gap, bandGap, ayahMarkScale, pageFrameScale, lineArt, colors, &col);
     int r = qvp_dress(PG(h), OR(set), &s);
     if (col) (*env)->ReleaseIntArrayElements(env, colors, col, JNI_ABORT);
     return r ? JNI_TRUE : JNI_FALSE;
@@ -839,6 +845,20 @@ jintArray FN(dressInfo)(JNIEnv* env, jclass c, jlong h) {
 jbyteArray FN(dressGeomOps)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g = {0}; qvp_dress_geometry(PG(h), &g); return bytes_out(env, g.ops, g.ops_len); }
 jfloatArray FN(dressGeomPts)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g = {0}; qvp_dress_geometry(PG(h), &g); return floats(env, g.pts, (jsize)g.pts_len); }
 jintArray FN(dressGeomTable)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g = {0}; qvp_dress_geometry(PG(h), &g); return ints(env, (const jint*)g.table, (jsize)(g.n_draws * 9)); }
+/* a passage in another mushaf's medallion: the spec a page takes, of which only the medallion counts. The geometry
+   comes as the page's does; each placement indexes passagePlacements */
+jboolean FN(passageDress)(JNIEnv* env, jclass c, jlong h, jlong set, jint ayahMark, jint surahHeader, jint pageFrame,
+                          jfloat gap, jfloat bandGap, jfloat ayahMarkScale, jfloat pageFrameScale, jint lineArt, jintArray colors) {
+    jint* col;
+    QvpDressSpec s = dress_spec(env, ayahMark, surahHeader, pageFrame, gap, bandGap, ayahMarkScale, pageFrameScale, lineArt, colors, &col);
+    int r = qvp_passage_dress(PS(h), OR(set), &s);
+    if (col) (*env)->ReleaseIntArrayElements(env, colors, col, JNI_ABORT);
+    return r ? JNI_TRUE : JNI_FALSE;
+}
+void FN(passageUndress)(JNIEnv* env, jclass c, jlong h) { qvp_passage_undress(PS(h)); }
+jbyteArray FN(passageDressGeomOps)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g = {0}; qvp_passage_dress_geometry(PS(h), &g); return bytes_out(env, g.ops, g.ops_len); }
+jfloatArray FN(passageDressGeomPts)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g = {0}; qvp_passage_dress_geometry(PS(h), &g); return floats(env, g.pts, (jsize)g.pts_len); }
+jintArray FN(passageDressGeomTable)(JNIEnv* env, jclass c, jlong h) { QvpDressGeometry g = {0}; qvp_passage_dress_geometry(PS(h), &g); return ints(env, (const jint*)g.table, (jsize)(g.n_draws * 9)); }
 
 /* ───────── names ───────── */
 jstring FN(markName)(JNIEnv* env, jclass c, jint m) { QvpStr s; qvp_mark_name((uint8_t)m, &s); return qstr(env, s); }

@@ -1,9 +1,9 @@
-// Replay conformance/scenarios/layout.json, dress.json, zoom.json, hit.json and ink-band.json through the
+// Replay conformance/scenarios/layout.json, dress.json (its pages and passages), zoom.json, hit.json and ink-band.json through the
 // reference wrapper and compare every number with the engine's recorded answer. Needs
 // web/qvp_ffi.wasm and dist/pages/042.qvp.
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { QvpEngine, CanvasRenderer, wasmUrl } from './index.mjs'
+import { QvpEngine, CanvasRenderer, css, wasmUrl } from './index.mjs'
 
 const root = new URL('..', import.meta.url)
 const pagePath = new URL('dist/pages/042.qvp', root)
@@ -73,8 +73,76 @@ for (const c of dressed.cases) {
   m++
 }
 page.undress()
+
+// The passages of dress.json: ayahs of the page in its medallion. The layout makes room for the
+// design, and each outline is drawn under the placement of its word. Path2D has no bounds, so
+// the box of each outline's points is read from the engine's geometry here.
+let q = 0
+for (const c of dressed.passages) {
+  const tag = `dressed passage ${c.surah}:${c.from}-${c.to}${c.ayahMark ? ' medallion' : ''} at ${c.spec.width}`
+  const passage = c.ayahMark ? engine.loadAyahMark([page], c.surah, c.from) : engine.loadPassage([page], c.surah, c.from, c.to)
+  passage.layout(c.spec)
+  assert.ok(passage.dress(set, c.dress), `${tag}: the engine refused the dress`)
+  assert.equal(passage.currentLayout, null, `${tag}: the dress drops the layout`)
+  const L = passage.layout(c.spec)
+  for (const k of ['width', 'height', 'scale']) near(L[k], c.layout[k], `${tag} ${k}`)
+  assert.equal(L.draws.length, c.layout.draws, `${tag} draws`)
+  assert.equal(L.words.length, c.layout.words, `${tag} words`)
+  assert.equal(L.placements.length, c.layout.placements, `${tag} placements`)
+  assert.equal(L.ornaments.length, c.ornaments.length, `${tag} ornaments`)
+  const boxes = engine._withInputs(() => {
+    const s = engine.scratch
+    engine.ex.qvp_passage_dress_geometry(passage.h, s)
+    const d = engine.dv(), ptsPtr = d.getUint32(s + 8, true), ptsLen = d.getUint32(s + 12, true), tabPtr = d.getUint32(s + 16, true)
+    const pts = new Float32Array(engine.mem.buffer, ptsPtr, ptsLen), t = new Uint32Array(engine.mem.buffer, tabPtr, L.ornaments.length * 9)
+    return L.ornaments.map((_, i) => {
+      const b = [Infinity, Infinity, -Infinity, -Infinity]
+      for (let k = t[i * 9 + 2]; k < t[i * 9 + 2] + t[i * 9 + 3]; k += 2) {
+        b[0] = Math.min(b[0], pts[k]); b[1] = Math.min(b[1], pts[k + 1]); b[2] = Math.max(b[2], pts[k]); b[3] = Math.max(b[3], pts[k + 1])
+      }
+      return b
+    })
+  })
+  L.ornaments.forEach((o, i) => {
+    const [placement, color, flags, strokeWidth, ...box] = c.ornaments[i]
+    assert.equal(o.placement, placement, `${tag} ornament ${i} placement`)
+    assert.equal(o.color, color, `${tag} ornament ${i} colour`)
+    assert.equal(o.kind, 'ayah_mark', `${tag} ornament ${i} kind`)
+    assert.equal(o.stroke, !!(flags & 0x200), `${tag} ornament ${i} stroke`)
+    assert.equal(o.evenOdd, !!(flags & 0x100), `${tag} ornament ${i} even-odd`)
+    near(o.strokeWidth, strokeWidth, `${tag} ornament ${i} stroke width`)
+    box.forEach((v, j) => near(boxes[i][j], v, `${tag} ornament ${i} box[${j}]`))
+    assert.ok(o.placement < L.placements.length, `${tag} ornament ${i} placement in range`)
+  })
+  // drawPassage paints the medallions first, behind the ink, each in its colour under its placement
+  if (!c.ayahMark) {
+    const had = globalThis.Path2D
+    globalThis.Path2D = class { moveTo() {} lineTo() {} quadraticCurveTo() {} bezierCurveTo() {} closePath() {} }
+    page.paths = null
+    const calls = []
+    let at = null
+    const ctx = { setTransform: (...m) => { at = m }, fill: () => calls.push(['fill', ctx.fillStyle, at]), stroke: () => calls.push(['stroke', ctx.strokeStyle, at]) }
+    CanvasRenderer.drawPassage(ctx, L, { 42: page }, { x: 3, y: 4 })
+    globalThis.Path2D = had
+    page.paths = null
+    assert.equal(calls.length, L.ornaments.length + L.draws.length, `${tag} drawPassage calls`)
+    L.ornaments.forEach((o, i) => {
+      const [what, style, m] = calls[i]
+      assert.equal(what, o.stroke ? 'stroke' : 'fill', `${tag} drawPassage ornament ${i}`)
+      assert.equal(style, css(o.color), `${tag} drawPassage ornament ${i} colour`)
+      const p = L.placements[o.placement]
+      near(m[0], L.scale * p.kx, `${tag} drawPassage ornament ${i} scale`)
+      near(m[4], 3 + L.scale * p.dx, `${tag} drawPassage ornament ${i} x`)
+    })
+  }
+  // undressed, the printed passage comes back with no medallion outlines
+  passage.undress()
+  assert.equal(passage.layout(c.spec).ornaments.length, 0, `${tag} undressed`)
+  passage.free()
+  q++
+}
 set.free()
-console.log(`ok  ${m} dress scenarios match the engine`)
+console.log(`ok  ${m} dress scenarios and ${q} dressed passages match the engine`)
 
 // conformance/scenarios/zoom.json: the reader's pan and zoom, from the fit through a pinch
 // under each reflowing control, and the spec each pinch asks for.

@@ -37,6 +37,8 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
     var ellipsisWidthProp = 0f
     var maxStretchProp = 0f
     var inkProp: String? = null
+    /** {ornaments: set id, ...spec}: the medallion of another mushaf, as the page view's prop. */
+    var dressProp: Map<String, Any?>? = null
     var paperColor = 0
 
     // ── applied state ──
@@ -46,17 +48,19 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
     private var passage: QvpPassage? = null
     private var layoutKey: String? = null
     private var layout: QvpPassageLayout? = null
+    private var appliedDress: Map<String, Any?>? = null
 
     fun destroy() {
         passage?.close(); passage = null
         pages.forEach { it.close() }; pages = emptyList(); pagesByNumber = emptyMap()
-        loadedKey = null; layoutKey = null; layout = null
+        loadedKey = null; layoutKey = null; layout = null; appliedDress = null
     }
 
     /** Called by the manager after every prop batch. */
     fun commit() {
         try {
             ensurePassage()
+            applyDress()
             relayout()
             invalidate()
         } catch (e: Exception) {
@@ -88,6 +92,26 @@ class QvpRnPassageView(private val ctx: ThemedReactContext) : View(ctx) {
             ayahMarkProp -> QvpPassage.ayahMark(loaded, surahProp, fromProp)
             else -> QvpPassage.load(loaded, surahProp, fromProp, if (toProp > 0) toProp else fromProp)
         }
+    }
+
+    /**
+     * The `dress` prop: {ornaments: set id, ...spec}, the spec a page view takes, of which the
+     * passage uses the medallion. A new object dresses the passage again and null undresses it. A
+     * spec with no medallion leaves the passage undressed. A change drops the layout, so the next
+     * relayout lays it out again.
+     */
+    private fun applyDress() {
+        val p = passage ?: return
+        if (dressProp == appliedDress) return
+        appliedDress = dressProp
+        val d = dressProp
+        val set = d?.let { QvpOrnamentSets.get((it["ornaments"] as? Number)?.toInt()) }
+        when {
+            d == null -> p.undress()
+            set == null -> { p.undress(); emit("onError", mapOf("message" to "dress: no ornament set ${d["ornaments"]}")) }
+            else -> p.dress(set, Marshal.dressSpec(d))
+        }
+        layoutKey = null; layout = null
     }
 
     private fun relayout() {

@@ -446,6 +446,12 @@ abstract interface class QvpBackend {
   passageLoadAyahMark(List<PageHandle> pages, int surah, int ayah);
   void passageFree(PassageHandle handle);
   QvpPassageLayout? passageLayout(PassageHandle handle, QvpPassageSpec spec);
+  bool passageDress(
+    PassageHandle handle,
+    OrnamentsHandle set,
+    QvpDressSpec spec,
+  );
+  void passageUndress(PassageHandle handle);
   List<QvpPassageDraw> passageStyledDrawList(
     PassageHandle handle,
     List<PageHandle> pages,

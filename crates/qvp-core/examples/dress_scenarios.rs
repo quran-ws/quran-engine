@@ -6,8 +6,13 @@
 //! (fit to the width) across the viewport's width, and the printed height, which holds the
 //! border. A reflowed case keeps the border inside the viewport's width. One case is a reader
 //! that scrolls the page itself: no padding, the printed margins cropped to the ink and
-//! fill-height on, so the border fitted to the width fills the viewport's height. Every
-//! wrapper's test suite replays them and compares.
+//! fill-height on, so the border fitted to the width fills the viewport's height.
+//!
+//! The passages are ayahs of the page in its medallion: on one row, on wrapped rows, cut to
+//! one row with the medallion kept, with no medallions, and a medallion alone. For each one it
+//! records the layout and every medallion outline: its placement, colour, flags, stroke width
+//! and the box of its points in page units. Every wrapper's test suite replays them and
+//! compares.
 //!
 //! The set is written next to the scenarios as hex, so a wrapper loads the same bytes. It is
 //! one filled and one stroked rectangle per kind, the shape of the ABI test's set: no
@@ -166,16 +171,118 @@ fn main() {
             views.join(",\n       ")
         ));
     }
+    page.undress();
+    let passages = passage_cases(&page, &set);
     let json = format!(
         concat!(
             "{{\n  \"page\": \"042.qvp\",\n  \"ornaments\": \"qvo1-dress.hex\",\n  \"tolerance\": 0.001,\n",
             "  \"dress\": {{\"ayahMark\": 0, \"surahHeader\": 1, \"pageFrame\": 2, \"gap\": 5, \"bandGap\": 5, \"ayahMarkScale\": 1, \"pageFrameScale\": 1}},\n",
-            "  \"cases\": [\n{}\n  ]\n}}\n"
+            "  \"cases\": [\n{}\n  ],\n",
+            "  \"passages\": [\n{}\n  ]\n}}\n"
         ),
-        cases.join(",\n")
+        cases.join(",\n"),
+        passages.join(",\n")
     );
     std::fs::create_dir_all(std::path::Path::new(out_path).parent().unwrap()).expect("mkdir");
     std::fs::write(out_path, json).expect("write scenarios");
     std::fs::write(hex_path, hex + "\n").expect("write the set");
-    println!("{out_path}: {} cases; {hex_path}: {} bytes", cases.len(), qvo.len());
+    println!("{out_path}: {} cases, {} passages; {hex_path}: {} bytes", cases.len(), passages.len(), qvo.len());
+}
+
+/// The dressed passages of 2:253-256 and the medallion of 2:255, each as a JSON case.
+fn passage_cases(page: &Page, set: &OrnamentSet) -> Vec<String> {
+    let (surah, from, to) = (2, 253, 256);
+    let whole = DressSpec { ayah_mark: 0, surah_header: 1, page_frame: 2, ayah_mark_scale: 1.0, ..Default::default() };
+    let lines = DressSpec {
+        ayah_mark: 0,
+        ayah_mark_scale: 1.5,
+        line_art: LINE_ART_AYAH_MARK,
+        colors: vec![(0, 1, 0xff0000ff)],
+        ..Default::default()
+    };
+    let own = DressSpec { ayah_mark: 0, ..Default::default() };
+    let whole_json =
+        r#"{"ayahMark": 0, "surahHeader": 1, "pageFrame": 2, "ayahMarkScale": 1, "lineArt": [], "colors": []}"#;
+    let lines_json =
+        r#"{"ayahMark": 0, "ayahMarkScale": 1.5, "lineArt": ["ayah_mark"], "colors": [[0, 1, 4278190335]]}"#;
+    let own_json = r#"{"ayahMark": 0, "lineArt": [], "colors": []}"#;
+    let row = PassageSpec { scale: 0.9, ..Default::default() };
+    let wrapped = PassageSpec { width: 300.0, scale: 0.9, align: Align::Justified, ..Default::default() };
+    let cut = PassageSpec {
+        width: 300.0,
+        scale: 0.9,
+        max_rows: 1,
+        keep_ayah_mark: true,
+        ellipsis_width: 9.0,
+        ..Default::default()
+    };
+    let omit = PassageSpec { width: 300.0, scale: 0.9, omit_ayah_marks: true, ..Default::default() };
+    let runs = [
+        (false, &whole, whole_json, row),
+        (false, &lines, lines_json, wrapped),
+        (false, &own, own_json, cut),
+        (false, &own, own_json, omit),
+        (true, &lines, lines_json, row),
+    ];
+    let mut out = Vec::new();
+    for (alone, dress, dress_json, spec) in runs {
+        let mut passage = if alone {
+            Passage::load_ayah_mark(&[page], surah, 255).expect("the medallion of 2:255 is on page 042")
+        } else {
+            Passage::load(&[page], surah, from, to).expect("2:253-256 is on page 042")
+        };
+        assert!(passage.dress(set, dress), "the fixture dresses the passage");
+        let l = passage.layout(&spec).expect("the spec is in range").clone();
+        let d = passage.dress_of().expect("a dressed layout").clone();
+        let ornaments: Vec<String> = d
+            .table
+            .iter()
+            .map(|t| {
+                let pts = &d.pts[t.pt_start as usize..(t.pt_start + t.pt_count) as usize];
+                let (mut x0, mut y0, mut x1, mut y1) =
+                    (f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+                for p in pts.chunks(2) {
+                    (x0, y0, x1, y1) = (x0.min(p[0]), y0.min(p[1]), x1.max(p[0]), y1.max(p[1]));
+                }
+                format!(
+                    "[{}, {}, {}, {}, {}, {}, {}, {}]",
+                    t.placement, t.color, t.flags, t.stroke_width, x0, y0, x1, y1
+                )
+            })
+            .collect();
+        let (first, last) = if alone { (255, 255) } else { (from, to) };
+        out.push(format!(
+            concat!(
+                "    {{\"surah\": {}, \"from\": {}, \"to\": {}, \"ayahMark\": {},\n",
+                "     \"dress\": {},\n",
+                "     \"spec\": {{\"width\": {}, \"scale\": {}, \"align\": \"{}\", \"maxRows\": {}, \"keepAyahMark\": {}, \"omitAyahMarks\": {}, \"ellipsisWidth\": {}}},\n",
+                "     \"layout\": {{\"width\": {}, \"height\": {}, \"scale\": {}, \"draws\": {}, \"words\": {}, \"placements\": {}}},\n",
+                "     \"ornaments\": [{}]}}"
+            ),
+            surah,
+            first,
+            last,
+            alone,
+            dress_json,
+            spec.width,
+            spec.scale,
+            match spec.align {
+                Align::Right => "right",
+                Align::Center => "center",
+                Align::Justified => "justified",
+            },
+            spec.max_rows,
+            spec.keep_ayah_mark,
+            spec.omit_ayah_marks,
+            spec.ellipsis_width,
+            l.width,
+            l.height,
+            l.scale,
+            l.draws.len(),
+            l.words.len(),
+            l.placements.len(),
+            if ornaments.is_empty() { String::new() } else { format!("\n       {}\n     ", ornaments.join(",\n       ")) }
+        ));
+    }
+    out
 }

@@ -87,6 +87,7 @@ layout?.draw(canvas, mapOf(42 to page), paint)       // every path under its pla
 layout?.draw(canvas, mapOf(42 to page), paint, draws = passage.styledDrawList(listOf(page)), pageColors = true)
 val basmalah = QvpPassage.basmalah(listOf(page), surah = 2)   // one row, no words; throws for surahs 1 and 9
 val mark = QvpPassage.ayahMark(listOf(page), surah = 2, ayah = 255)   // the medallion alone, for omitAyahMarks = true
+passage.dress(set, spec)   // the page's QvpDressSpec: its medallion on every ring; lay out again, and draw paints layout.ornaments behind the ink
 passage.close()
 ```
 

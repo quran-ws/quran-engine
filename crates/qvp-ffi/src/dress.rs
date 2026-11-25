@@ -171,32 +171,58 @@ pub unsafe extern "C" fn qvp_dress(page: *mut Page, set: *const Ornaments, spec:
         if page.is_null() || set.is_null() || spec.is_null() {
             return 0;
         }
-        let s = &*spec;
-        // A triple whose part does not fit in a u16 names no part, so it is skipped.
-        let colors = if s.colors.is_null() {
-            vec![]
-        } else {
-            let Some(n) = (s.n_colors as usize).checked_mul(3) else { return 0 };
-            std::slice::from_raw_parts(s.colors, n)
-                .as_chunks::<3>()
-                .0
-                .iter()
-                .filter_map(|&[o, part, rgba]| Some((o, u16::try_from(part).ok()?, rgba)))
-                .collect()
-        };
-        let spec = DressSpec {
-            ayah_mark: s.ayah_mark,
-            surah_header: s.surah_header,
-            page_frame: s.page_frame,
-            gap: s.gap,
-            band_gap: s.band_gap,
-            ayah_mark_scale: s.ayah_mark_scale,
-            page_frame_scale: s.page_frame_scale,
-            line_art: s.line_art & LINE_ART_ALL,
-            colors,
-        };
+        let Some(spec) = dress_spec(&*spec) else { return 0 };
         (*page).dress(&*set, &spec).is_some() as i32
     })
+}
+
+/// The engine's spec from the C one. `None` when the colour count overflows.
+pub(crate) unsafe fn dress_spec(s: &QvpDressSpec) -> Option<DressSpec> {
+    // A triple whose part does not fit in a u16 names no part, so it is skipped.
+    let colors = if s.colors.is_null() {
+        vec![]
+    } else {
+        let n = (s.n_colors as usize).checked_mul(3)?;
+        std::slice::from_raw_parts(s.colors, n)
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .filter_map(|&[o, part, rgba]| Some((o, u16::try_from(part).ok()?, rgba)))
+            .collect()
+    };
+    Some(DressSpec {
+        ayah_mark: s.ayah_mark,
+        surah_header: s.surah_header,
+        page_frame: s.page_frame,
+        gap: s.gap,
+        band_gap: s.band_gap,
+        ayah_mark_scale: s.ayah_mark_scale,
+        page_frame_scale: s.page_frame_scale,
+        line_art: s.line_art & LINE_ART_ALL,
+        colors,
+    })
+}
+
+/// The C view of an ornament display list. Empty for `None`.
+pub(crate) fn geometry(d: Option<(&[u8], &[f32], &[OrnamentDraw])>) -> QvpDressGeometry {
+    match d {
+        Some((ops, pts, table)) => QvpDressGeometry {
+            ops: ops.as_ptr(),
+            ops_len: ops.len() as u32,
+            pts: pts.as_ptr(),
+            pts_len: pts.len() as u32,
+            table: table.as_ptr() as *const u32,
+            n_draws: table.len() as u32,
+        },
+        None => QvpDressGeometry {
+            ops: std::ptr::null(),
+            ops_len: 0,
+            pts: std::ptr::null(),
+            pts_len: 0,
+            table: std::ptr::null(),
+            n_draws: 0,
+        },
+    }
 }
 #[no_mangle]
 pub unsafe extern "C" fn qvp_undress(page: *mut Page) {
@@ -279,23 +305,7 @@ pub unsafe extern "C" fn qvp_dress_geometry(page: *const Page, out: *mut QvpDres
             return;
         }
         // A null page is not dressed: it gets the empty geometry.
-        *out = match if page.is_null() { None } else { (*page).dress_of() } {
-            Some(d) => QvpDressGeometry {
-                ops: d.ops.as_ptr(),
-                ops_len: d.ops.len() as u32,
-                pts: d.pts.as_ptr(),
-                pts_len: d.pts.len() as u32,
-                table: d.table.as_ptr() as *const u32,
-                n_draws: d.table.len() as u32,
-            },
-            None => QvpDressGeometry {
-                ops: std::ptr::null(),
-                ops_len: 0,
-                pts: std::ptr::null(),
-                pts_len: 0,
-                table: std::ptr::null(),
-                n_draws: 0,
-            },
-        }
+        let d = if page.is_null() { None } else { (*page).dress_of() };
+        *out = geometry(d.map(|d| (&d.ops[..], &d.pts[..], &d.table[..])))
     })
 }

@@ -173,7 +173,7 @@ public struct DressInfo: Equatable {
 }
 
 /// One draw of the ornament display list, in page units. Paint it behind the page ink.
-public struct OrnamentDraw {
+public struct OrnamentDraw: Equatable {
     /// The outline, in page units.
     public let path: CGPath
     /// The colour, 0xRRGGBBAA.
@@ -201,27 +201,8 @@ extension QvpPage {
     @discardableResult
     public func dress(_ set: QvpOrnaments, _ spec: DressSpec = DressSpec()) -> DressInfo? {
         let ornaments = set.p
-        // Resolve every name before the C spec is filled.
-        func index(_ c: OrnamentChoice?, _ kind: OrnamentKind) -> UInt32 {
-            let choice = c ?? spec.style.map { OrnamentChoice.style($0) } ?? .absent
-            switch choice {
-            case .ornament(let o): return UInt32(truncatingIfNeeded: o.index)
-            case .index(let i): return i < 0 ? QVP_NONE : UInt32(truncatingIfNeeded: i)
-            case .style(let s): return set.find(kind, s).map { UInt32(truncatingIfNeeded: $0.index) } ?? QVP_NONE
-            case .absent: return QVP_NONE
-            }
-        }
-        let ayah = index(spec.ayahMark, .ayahMark), header = index(spec.surahHeader, .surahHeader), frame = index(spec.pageFrame, .pageFrame)
-        let lineArt = spec.lineArt.reduce(UInt32(0)) { $0 | $1.lineArtBit }
-        let triples: [UInt32] = spec.colors.flatMap { [UInt32(truncatingIfNeeded: $0.ornament), UInt32(truncatingIfNeeded: $0.part), $0.color] }
         dressDraws = nil
-        // the triples stay alive across the call
-        let ok = triples.withUnsafeBufferPointer { tp in
-            var s = QvpDressSpec(ayah_mark: ayah, surah_header: header, page_frame: frame, gap: spec.gap, band_gap: spec.bandGap,
-                                 ayah_mark_scale: spec.ayahMarkScale, page_frame_scale: spec.pageFrameScale, line_art: lineArt,
-                                 colors: triples.isEmpty ? nil : tp.baseAddress, n_colors: UInt32(truncatingIfNeeded: triples.count / 3))
-            return qvp_dress(p, ornaments, &s)
-        }
+        let ok = spec.withC(set) { s in qvp_dress(p, ornaments, s) }
         // the dress changed the layout's fit: read it again
         readLayout()
         return ok != 0 ? dressInfo() : nil
@@ -247,35 +228,66 @@ extension QvpPage {
         if let c = dressDraws, c.revision == rev { return c.draws }
         var g = QvpDressGeometry()
         qvp_dress_geometry(p, &g)
-        let n = Int(g.n_draws)
-        guard n > 0, let ops = g.ops, let pts = g.pts, let table = g.table else { dressDraws = (rev, []); return [] }
         // the engine's buffers last until the next dress, undress or layout: read them now
-        let t = UnsafeBufferPointer(start: table, count: n * 9)
-        var out: [OrnamentDraw] = []; out.reserveCapacity(n)
-        for i in 0..<n {
-            let m = CGMutablePath()
-            var o = Int(t[i * 9]); let oe = o + Int(t[i * 9 + 1]); var k = Int(t[i * 9 + 2])
-            func pt(_ j: Int) -> CGPoint { CGPoint(x: CGFloat(pts[k + j]), y: CGFloat(pts[k + j + 1])) }
-            while o < oe {
-                switch ops[o] {
-                case 0: m.move(to: pt(0)); k += 2
-                case 1: m.addLine(to: pt(0)); k += 2
-                case 2: m.addQuadCurve(to: pt(2), control: pt(0)); k += 4
-                case 3: m.addCurve(to: pt(4), control1: pt(0), control2: pt(2)); k += 6
-                case 4: m.closeSubpath()
-                default: break
-                }
-                o += 1
-            }
-            let flags = t[i * 9 + 5], placement = t[i * 9 + 8]
-            out.append(OrnamentDraw(path: m, color: t[i * 9 + 4], kind: OrnamentKind(rawValue: Int(flags & 0xff)) ?? .ayahMark,
-                                    evenOdd: flags & UInt32(truncatingIfNeeded: QVP_DRAW_EVENODD) != 0, stroke: flags & UInt32(truncatingIfNeeded: QVP_DRAW_STROKE) != 0,
-                                    strokeWidth: Float(bitPattern: t[i * 9 + 6]), part: Int(t[i * 9 + 7]),
-                                    placement: placement == QVP_NONE ? nil : Int(placement)))
-        }
+        let out = ornamentDraws(g)
         dressDraws = (rev, out)
         return out
     }
+}
+
+extension DressSpec {
+    /// The spec as the engine takes it, alive across `body`. Every style name is resolved first.
+    func withC<T>(_ set: QvpOrnaments, _ body: (UnsafeMutablePointer<QvpFFI.QvpDressSpec>) -> T) -> T {
+        func index(_ c: OrnamentChoice?, _ kind: OrnamentKind) -> UInt32 {
+            let choice = c ?? style.map { OrnamentChoice.style($0) } ?? .absent
+            switch choice {
+            case .ornament(let o): return UInt32(truncatingIfNeeded: o.index)
+            case .index(let i): return i < 0 ? QVP_NONE : UInt32(truncatingIfNeeded: i)
+            case .style(let s): return set.find(kind, s).map { UInt32(truncatingIfNeeded: $0.index) } ?? QVP_NONE
+            case .absent: return QVP_NONE
+            }
+        }
+        let ayah = index(ayahMark, .ayahMark), header = index(surahHeader, .surahHeader), frame = index(pageFrame, .pageFrame)
+        let bits = lineArt.reduce(UInt32(0)) { $0 | $1.lineArtBit }
+        let triples: [UInt32] = colors.flatMap { [UInt32(truncatingIfNeeded: $0.ornament), UInt32(truncatingIfNeeded: $0.part), $0.color] }
+        // the triples stay alive across the call
+        return triples.withUnsafeBufferPointer { tp in
+            var s = QvpFFI.QvpDressSpec(ayah_mark: ayah, surah_header: header, page_frame: frame, gap: gap, band_gap: bandGap,
+                                        ayah_mark_scale: ayahMarkScale, page_frame_scale: pageFrameScale, line_art: bits,
+                                        colors: triples.isEmpty ? nil : tp.baseAddress, n_colors: UInt32(truncatingIfNeeded: triples.count / 3))
+            return body(&s)
+        }
+    }
+}
+
+/// The draws of an ornament display list, read before the engine's buffers move.
+func ornamentDraws(_ g: QvpDressGeometry) -> [OrnamentDraw] {
+    let n = Int(g.n_draws)
+    guard n > 0, let ops = g.ops, let pts = g.pts, let table = g.table else { return [] }
+    let t = UnsafeBufferPointer(start: table, count: n * 9)
+    var out: [OrnamentDraw] = []; out.reserveCapacity(n)
+    for i in 0..<n {
+        let m = CGMutablePath()
+        var o = Int(t[i * 9]); let oe = o + Int(t[i * 9 + 1]); var k = Int(t[i * 9 + 2])
+        func pt(_ j: Int) -> CGPoint { CGPoint(x: CGFloat(pts[k + j]), y: CGFloat(pts[k + j + 1])) }
+        while o < oe {
+            switch ops[o] {
+            case 0: m.move(to: pt(0)); k += 2
+            case 1: m.addLine(to: pt(0)); k += 2
+            case 2: m.addQuadCurve(to: pt(2), control: pt(0)); k += 4
+            case 3: m.addCurve(to: pt(4), control1: pt(0), control2: pt(2)); k += 6
+            case 4: m.closeSubpath()
+            default: break
+            }
+            o += 1
+        }
+        let flags = t[i * 9 + 5], placement = t[i * 9 + 8]
+        out.append(OrnamentDraw(path: m, color: t[i * 9 + 4], kind: OrnamentKind(rawValue: Int(flags & 0xff)) ?? .ayahMark,
+                                evenOdd: flags & UInt32(truncatingIfNeeded: QVP_DRAW_EVENODD) != 0, stroke: flags & UInt32(truncatingIfNeeded: QVP_DRAW_STROKE) != 0,
+                                strokeWidth: Float(bitPattern: t[i * 9 + 6]), part: Int(t[i * 9 + 7]),
+                                placement: placement == QVP_NONE ? nil : Int(placement)))
+    }
+    return out
 }
 
 /// `QvpPage.dressView`: the view for a host that scrolls the page, and the dressed box's size

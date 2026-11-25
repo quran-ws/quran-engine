@@ -1837,7 +1837,11 @@ class QvpNativeBackend implements QvpBackend {
   List<QvpDressDraw> dressGeometry(PageHandle page) {
     final dgPtr = _scratch.cast<QvpDressGeometryC>();
     b.dressGeometry(_page(page), dgPtr);
-    final dg = dgPtr.ref;
+    return _dressDraws(dgPtr.ref);
+  }
+
+  /// The draws of an ornament display list, read before the engine's buffers move.
+  List<QvpDressDraw> _dressDraws(QvpDressGeometryC dg) {
     final n = dg.nDraws;
     if (n == 0) return const [];
     final ops = dg.ops.asTypedList(dg.opsLen);
@@ -2222,8 +2226,29 @@ class QvpNativeBackend implements QvpBackend {
       ayahs: ayahs,
       draws: draws,
       placements: places,
+      ornaments: _passageDressDraws(p),
     );
   }
+
+  List<QvpDressDraw> _passageDressDraws(ffi.Pointer<QvpPassageC> p) {
+    final dgPtr = _scratch.cast<QvpDressGeometryC>();
+    b.passageDressGeometry(p, dgPtr);
+    return _dressDraws(dgPtr.ref);
+  }
+
+  @override
+  bool passageDress(
+    PassageHandle handle,
+    OrnamentsHandle set,
+    QvpDressSpec spec,
+  ) {
+    _writeDressSpec(_dressSpec, spec, set);
+    return b.passageDress(_passage(handle), _ornaments(set), _dressSpec) != 0;
+  }
+
+  @override
+  void passageUndress(PassageHandle handle) =>
+      b.passageUndress(_passage(handle));
 
   // ── Ornaments ──
 

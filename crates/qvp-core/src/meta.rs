@@ -228,42 +228,58 @@ impl Page {
     /// Real ayah medallions (with an ayah id). Decorative rosettes without an id are excluded.
     pub fn ayah_marks(&self) -> Vec<MarkerInfo> {
         let d = self.data();
-        let q = self.quant();
         d.decorations
             .iter()
             .enumerate()
             .filter(|(_, x)| x.kind == DecoKind::AyahMark && x.ayah != 0)
             .map(|(i, x)| {
-                let mut orn = NONE;
-                let mut num = NONE;
-                let mut ob = IBox::EMPTY;
-                for p in x.first_path..x.first_path + x.n_paths as u32 {
-                    let pr = &d.paths[p as usize];
-                    match pr.kind {
-                        PathKind::AyahMarkOrnament => {
-                            if orn == NONE {
-                                orn = p;
-                            }
-                            ob.union(&pr.bbox);
-                        }
-                        PathKind::AyahNumber => num = p,
-                        _ => {}
-                    }
-                }
-                let b = if ob.is_empty() { x.bbox } else { ob };
+                let (cx, cy, r, ornament_path, numeral_path) = self.ring_of(x);
                 MarkerInfo {
                     decoration: i as u32,
                     surah: x.surah,
                     ayah: x.ayah,
                     line: self.geometry().table[x.first_path as usize].line,
-                    cx: (b.x0 + b.x1) as f32 / 2.0 / q,
-                    cy: (b.y0 + b.y1) as f32 / 2.0 / q,
-                    r: ((b.x1 - b.x0).max(b.y1 - b.y0)) as f32 / 2.0 / q,
-                    ornament_path: orn,
-                    numeral_path: num,
+                    cx,
+                    cy,
+                    r,
+                    ornament_path,
+                    numeral_path,
                 }
             })
             .collect()
+    }
+
+    /// The printed ring of the medallion `x`: its centre and radius in page units, then its
+    /// first ring path and its numeral path, or `NONE`. The ring is measured on the box of its
+    /// own paths, or on the decoration's box when it has none. A page's dress and a passage's
+    /// put a medallion on this ring.
+    pub(crate) fn ring_of(&self, x: &DecoRec) -> (f32, f32, f32, u32, u32) {
+        let d = self.data();
+        let q = self.quant();
+        let mut orn = NONE;
+        let mut num = NONE;
+        let mut ob = IBox::EMPTY;
+        for p in x.first_path..x.first_path + x.n_paths as u32 {
+            let pr = &d.paths[p as usize];
+            match pr.kind {
+                PathKind::AyahMarkOrnament => {
+                    if orn == NONE {
+                        orn = p;
+                    }
+                    ob.union(&pr.bbox);
+                }
+                PathKind::AyahNumber => num = p,
+                _ => {}
+            }
+        }
+        let b = if ob.is_empty() { x.bbox } else { ob };
+        (
+            (b.x0 + b.x1) as f32 / 2.0 / q,
+            (b.y0 + b.y1) as f32 / 2.0 / q,
+            ((b.x1 - b.x0).max(b.y1 - b.y0)) as f32 / 2.0 / q,
+            orn,
+            num,
+        )
     }
 
     /// The surah headings drawn on this page, in page units.

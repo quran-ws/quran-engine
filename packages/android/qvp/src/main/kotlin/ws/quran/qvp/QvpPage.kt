@@ -117,16 +117,9 @@ class QvpPage(bytes: ByteArray) : AutoCloseable {
      */
     fun dress(set: QvpOrnaments, spec: QvpDressSpec = QvpDressSpec()): QvpDressInfo? {
         // Resolve every style name before the spec goes to the engine.
-        fun index(ref: QvpOrnamentRef?, kind: QvpOrnamentKind): Int =
-            when (val r = ref ?: spec.style?.let { QvpOrnamentRef.Style(it) }) {
-                null, QvpOrnamentRef.None -> NONE
-                is QvpOrnament -> r.index
-                is QvpOrnamentRef.Index -> r.index
-                is QvpOrnamentRef.Style -> set.find(kind, r.style)?.index ?: NONE
-            }
-        val ayahMark = index(spec.ayahMark, QvpOrnamentKind.AYAH_MARK)
-        val surahHeader = index(spec.surahHeader, QvpOrnamentKind.SURAH_HEADER)
-        val pageFrame = index(spec.pageFrame, QvpOrnamentKind.PAGE_FRAME)
+        val ayahMark = spec.indexOf(set, QvpOrnamentKind.AYAH_MARK)
+        val surahHeader = spec.indexOf(set, QvpOrnamentKind.SURAH_HEADER)
+        val pageFrame = spec.indexOf(set, QvpOrnamentKind.PAGE_FRAME)
         dressDraws = null
         val ok = QvpNative.dress(h, set.handle, ayahMark, surahHeader, pageFrame, spec.gap, spec.bandGap,
                                  spec.ayahMarkScale, spec.pageFrameScale, spec.lineArtBits(), spec.colorTriples())

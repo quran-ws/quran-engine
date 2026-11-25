@@ -109,6 +109,7 @@ l?.draw(in: ctx, pages: [page.pageNo: page])            // or let the layout fil
 l?.draw(in: ctx, pages: [page.pageNo: page], draws: passage.styledDrawList(pages: [page]), pageColors: true)
 let bare = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing, omitAyahMarks: true))  // no medallions, no room for them
 let mark = try QvpPassage(ayahMarkOf: 255, surah: 2, pages: [page])   // 2:255's medallion alone; lay it out at bare!.scale
+passage.dress(set, spec)   // the page's DressSpec: its medallion on every ring; lay out again, and draw paints layout.ornaments behind the ink
 
 let atlas = try QvpAtlas(bytes: atlasData)
 atlas.pageOf(2, 255); atlas.pageRange(42); atlas.surah(36); atlas.surahs(); atlas.pageOfSurah(36)

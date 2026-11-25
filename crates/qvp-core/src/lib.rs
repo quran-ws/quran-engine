@@ -37,7 +37,8 @@ pub use letters::{LetterHit, LetterInfo, LetterMember, LetterPart, LetterQuery, 
 pub use memorize::{MaskMode, MaskState, Reveal};
 pub use meta::{Division, MarkerInfo, Rosette, SurahHeader, SurahInfo};
 pub use passage::{
-    Align, Passage, PassageAyah, PassageDraw, PassageError, PassageLayout, PassageRow, PassageSpec, PassageWord,
+    Align, Passage, PassageAyah, PassageDraw, PassageDress, PassageError, PassageLayout, PassageRow, PassageSpec,
+    PassageWord,
 };
 pub use qvp_format;
 pub use qvp_format::atlas::Atlas;

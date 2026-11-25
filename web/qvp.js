@@ -230,6 +230,68 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
     }
     /** Run `fn`, an engine call with inputs that may outgrow their regions, then free the
      * blocks it took. Nests: an inner call frees its own blocks only. */
+    /** Resolve a dress spec ({style, ayahMark, surahHeader, pageFrame, gap, bandGap,
+     * ayahMarkScale, pageFrameScale, lineArt, colors}), write it as a QvpDressSpec and give its
+     * address to `call`, with the colour triples alive across the call. */
+    _withDressSpec(set, { style = null, ayahMark = style, surahHeader = style, pageFrame = style, gap = 5, bandGap = 5, ayahMarkScale = 0, pageFrameScale = 1, lineArt = false, colors = [] } = {}, call) {
+      // An ornament is a non-negative integer index or an object with one, such as an entry
+      // of `set.list`. Anything else (an entry of `set.styles()`, NaN) is a caller's mistake.
+      const ornamentIndex = (v, key) => {
+        const i = typeof v === 'number' ? v : v !== null && typeof v === 'object' ? v.index : undefined;
+        if (!Number.isInteger(i) || i < 0) throw new TypeError(`dress: ${key} must be an ornament, its index or a style name`);
+        return i;
+      };
+      const index = (v, kind, key) => {
+        if (v === null || v === undefined) return NONE;
+        if (typeof v === 'string') { const o = set.find(kind, v); return o ? o.index : NONE; }
+        return ornamentIndex(v, key);
+      };
+      const ayah = index(ayahMark, 'ayah_mark', 'ayahMark'), header = index(surahHeader, 'surah_header', 'surahHeader'), frame = index(pageFrame, 'page_frame', 'pageFrame');
+      const triples = [];
+      colors.forEach(([o, part, colour], k) => triples.push(ornamentIndex(o, `colors[${k}]`), part, rgba(colour)));
+      const lineMask = lineArt === true ? 7 : Array.isArray(lineArt) ? lineArt.reduce((m, k) => m | (1 << ORNAMENT_KIND.indexOf(k)), 0) : 0;
+      return this._withInputs(() => {
+        // the colour triples first: a long list takes a new block, which can move the memory
+        const cp = triples.length ? this.putU32(Uint32Array.from(triples), IN.TRIPLES) : 0;
+        const s = this.scratch2 + 36864, d = this.dv();   // the dress spec (QvpDressSpec, 40 bytes)
+        d.setUint32(s, ayah, true); d.setUint32(s + 4, header, true); d.setUint32(s + 8, frame, true);
+        d.setFloat32(s + 12, gap, true); d.setFloat32(s + 16, bandGap, true); d.setFloat32(s + 20, ayahMarkScale, true); d.setFloat32(s + 24, pageFrameScale, true); d.setUint32(s + 28, lineMask, true);
+        d.setUint32(s + 32, cp, true); d.setUint32(s + 36, triples.length / 3, true);
+        return call(s);
+      });
+    }
+    /** An ornament display list as Path2D plus paint, in page units: [{path, color, kind,
+     * evenOdd, stroke, strokeWidth, part, placement}]. `fill` writes a QvpDressGeometry at the
+     * address it gets. A `placement` of QVP_NONE is null. */
+    _readOrnaments(fill) {
+      const P = typeof Path2D === 'function' ? Path2D : class { moveTo() {} lineTo() {} quadraticCurveTo() {} bezierCurveTo() {} closePath() {} };
+      const s = this.scratch;
+      fill(s);
+      const d = this.dv(), n = d.getUint32(s + 20, true);
+      if (!n) return [];
+      const opsPtr = d.getUint32(s, true), opsLen = d.getUint32(s + 4, true), ptsPtr = d.getUint32(s + 8, true), ptsLen = d.getUint32(s + 12, true), tabPtr = d.getUint32(s + 16, true);
+      const ops = new Uint8Array(this.mem.buffer, opsPtr, opsLen);
+      const pts = new Float32Array(this.mem.buffer, ptsPtr, ptsLen);
+      const t = new Uint32Array(this.mem.buffer.slice(tabPtr, tabPtr + n * 36));
+      const tf = new Float32Array(t.buffer);
+      const out = new Array(n);
+      for (let i = 0; i < n; i++) {
+        const p = new P();
+        let o = t[i * 9], oe = o + t[i * 9 + 1], k = t[i * 9 + 2];
+        for (; o < oe; o++) {
+          switch (ops[o]) {
+            case 0: p.moveTo(pts[k], pts[k + 1]); k += 2; break;
+            case 1: p.lineTo(pts[k], pts[k + 1]); k += 2; break;
+            case 2: p.quadraticCurveTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3]); k += 4; break;
+            case 3: p.bezierCurveTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3], pts[k + 4], pts[k + 5]); k += 6; break;
+            case 4: p.closePath(); break;
+          }
+        }
+        const flags = t[i * 9 + 5], placement = t[i * 9 + 8];
+        out[i] = { path: p, color: t[i * 9 + 4], kind: ORNAMENT_KIND[flags & 0xff], evenOdd: !!(flags & 0x100), stroke: !!(flags & 0x200), strokeWidth: tf[i * 9 + 6], part: t[i * 9 + 7], placement: placement === NONE ? null : placement };
+      }
+      return out;
+    }
     _withInputs(fn) {
       const from = this._spill.length;
       try { return fn(); } finally { while (this._spill.length > from) { const b = this._spill.pop(); this.ex.qvp_dealloc(b.p, b.len); } }
@@ -464,33 +526,9 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * dress). Replaces any previous
      * dress.
      */
-    dress(set, { style = null, ayahMark = style, surahHeader = style, pageFrame = style, gap = 5, bandGap = 5, ayahMarkScale = 0, pageFrameScale = 1, lineArt = false, colors = [] } = {}) {
-      // An ornament is a non-negative integer index or an object with one, such as an entry
-      // of `set.list`. Anything else (an entry of `set.styles()`, NaN) is a caller's mistake.
-      const ornamentIndex = (v, key) => {
-        const i = typeof v === 'number' ? v : v !== null && typeof v === 'object' ? v.index : undefined;
-        if (!Number.isInteger(i) || i < 0) throw new TypeError(`dress: ${key} must be an ornament, its index or a style name`);
-        return i;
-      };
-      const index = (v, kind, key) => {
-        if (v === null || v === undefined) return NONE;
-        if (typeof v === 'string') { const o = set.find(kind, v); return o ? o.index : NONE; }
-        return ornamentIndex(v, key);
-      };
-      const ayah = index(ayahMark, 'ayah_mark', 'ayahMark'), header = index(surahHeader, 'surah_header', 'surahHeader'), frame = index(pageFrame, 'page_frame', 'pageFrame');
-      const triples = [];
-      colors.forEach(([o, part, colour], k) => triples.push(ornamentIndex(o, `colors[${k}]`), part, rgba(colour)));
-      const lineMask = lineArt === true ? 7 : Array.isArray(lineArt) ? lineArt.reduce((m, k) => m | (1 << ORNAMENT_KIND.indexOf(k)), 0) : 0;
+    dress(set, spec = {}) {
       this.ornaments = null;
-      const ok = this.e._withInputs(() => {
-        // the colour triples first: a long list takes a new block, which can move the memory
-        const cp = triples.length ? this.e.putU32(Uint32Array.from(triples), IN.TRIPLES) : 0;
-        const s = this.e.scratch2 + 36864, d = this.e.dv();   // the dress spec (QvpDressSpec, 40 bytes)
-        d.setUint32(s, ayah, true); d.setUint32(s + 4, header, true); d.setUint32(s + 8, frame, true);
-        d.setFloat32(s + 12, gap, true); d.setFloat32(s + 16, bandGap, true); d.setFloat32(s + 20, ayahMarkScale, true); d.setFloat32(s + 24, pageFrameScale, true); d.setUint32(s + 28, lineMask, true);
-        d.setUint32(s + 32, cp, true); d.setUint32(s + 36, triples.length / 3, true);
-        return this.e.ex.qvp_dress(this.h, set.h, s);
-      });
+      const ok = this.e._withDressSpec(set, spec, s => this.e.ex.qvp_dress(this.h, set.h, s));
       // the engine refits the current layout to the border (or back without it)
       if (this.currentLayout) this.layoutCurrent();
       return ok ? this.dressInfo() : null;
@@ -539,36 +577,10 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * the border, which is drawn with no group transform.
      */
     dressGeometry() {
-      const P = typeof Path2D === 'function' ? Path2D : class { moveTo() {} lineTo() {} quadraticCurveTo() {} bezierCurveTo() {} closePath() {} };
       const rev = this.dressRevision();
       if (this.ornaments && this.ornamentsRevision === rev) return this.ornaments;
       this.ornamentsRevision = rev;
-      const s = this.e.scratch;
-      this.e.ex.qvp_dress_geometry(this.h, s);
-      const d = this.e.dv(), n = d.getUint32(s + 20, true);
-      if (!n) return (this.ornaments = []);
-      const opsPtr = d.getUint32(s, true), opsLen = d.getUint32(s + 4, true), ptsPtr = d.getUint32(s + 8, true), ptsLen = d.getUint32(s + 12, true), tabPtr = d.getUint32(s + 16, true);
-      const ops = new Uint8Array(this.e.mem.buffer, opsPtr, opsLen);
-      const pts = new Float32Array(this.e.mem.buffer, ptsPtr, ptsLen);
-      const t = new Uint32Array(this.e.mem.buffer.slice(tabPtr, tabPtr + n * 36));
-      const tf = new Float32Array(t.buffer);
-      const out = new Array(n);
-      for (let i = 0; i < n; i++) {
-        const p = new P();
-        let o = t[i * 9], oe = o + t[i * 9 + 1], k = t[i * 9 + 2];
-        for (; o < oe; o++) {
-          switch (ops[o]) {
-            case 0: p.moveTo(pts[k], pts[k + 1]); k += 2; break;
-            case 1: p.lineTo(pts[k], pts[k + 1]); k += 2; break;
-            case 2: p.quadraticCurveTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3]); k += 4; break;
-            case 3: p.bezierCurveTo(pts[k], pts[k + 1], pts[k + 2], pts[k + 3], pts[k + 4], pts[k + 5]); k += 6; break;
-            case 4: p.closePath(); break;
-          }
-        }
-        const flags = t[i * 9 + 5], placement = t[i * 9 + 8];
-        out[i] = { path: p, color: t[i * 9 + 4], kind: ORNAMENT_KIND[flags & 0xff], evenOdd: !!(flags & 0x100), stroke: !!(flags & 0x200), strokeWidth: tf[i * 9 + 6], part: t[i * 9 + 7], placement: placement === NONE ? null : placement };
-      }
-      return (this.ornaments = out);
+      return (this.ornaments = this.e._readOrnaments(s => this.e.ex.qvp_dress_geometry(this.h, s)));
     }
 
     // ── geometry ──
@@ -1247,7 +1259,8 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       return Array.from({ length: got }, (_, i) => record(d, p + i * size));
     }
     /** Lay the passage out at `spec` and keep the layout: {width, height, scale, lineSpacing,
-     * isTruncated, ellipsis, rows, words, ayahs, draws, placements}. Null when the spec is out
+     * isTruncated, ellipsis, rows, words, ayahs, draws, placements, ornaments}. `ornaments` are a
+     * dressed passage's medallions (`dress`), each under one of `placements`. Null when the spec is out
      * of range, and the last layout then stays. Spec: {width, scale, lineSpacing, padding, align:
      * 'right'|'center'|'justified', maxRows, keepAyahMark, omitAyahMarks, ellipsisWidth,
      * maxStretch}. `omitAyahMarks` lays the words out with no medallions and no room for them;
@@ -1272,8 +1285,24 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
       L.draws = this._collect(ex.qvp_passage_draw_list, nDraws, 12, (v, o) => ({ page: v.getUint32(o, true), path: v.getUint32(o + 4, true), placement: v.getUint32(o + 8, true) }));
       const nPlacements = ex.qvp_passage_placements(this.h, 0, 0);
       L.placements = this._collect(ex.qvp_passage_placements, nPlacements, 16, (v, o) => ({ dx: v.getFloat32(o, true), dy: v.getFloat32(o + 4, true), kx: v.getFloat32(o + 8, true), ky: v.getFloat32(o + 12, true) }));
+      // a dressed passage's medallions, as `page.dressGeometry()` lists a page's; empty when undressed
+      L.ornaments = this.e._readOrnaments(g => ex.qvp_passage_dress_geometry(this.h, g));
       return (this.currentLayout = L);
     }
+    /** Put the ayah medallion of another mushaf on the passage, as `page.dress` puts it on a
+     * page: takes the same set and spec, and uses only the medallion of it (`ayahMark`, or the
+     * `style`'s medallion, with `ayahMarkScale`, `lineArt` and `colors`). Each design goes on its
+     * printed ring as on the page; the ring leaves the draw list and the numeral stays. The
+     * layout makes room for the design, the same in colour and as line art. Returns false, and
+     * leaves the passage undressed, when the spec names no medallion. A change of dress drops
+     * the layout: call `layout` again, whose `ornaments` are the medallions to draw. */
+    dress(set, spec = {}) {
+      const ok = this.e._withDressSpec(set, spec, s => this.e.ex.qvp_passage_dress(this.h, set.h, s));
+      this.currentLayout = null;
+      return !!ok;
+    }
+    /** Take the dress off: the printed medallions come back. Lay the passage out again. */
+    undress() { this.e.ex.qvp_passage_undress(this.h); this.currentLayout = null; }
     /** The draw list of the last layout as its pages style it now: [{page, path, placement}].
      * With a letter layer, a cut path whose pieces differ in colour on its page is listed as its
      * pieces, in its place and under its placement. Draw each path in its page's colour
@@ -1424,16 +1453,31 @@ const ZOOM_MODE_NAME = ['stepped', 'continuous', 'magnify'];
      * its QvpPage (a Map or an object). `ink` is one colour, `(page, path) => colour` to pick
      * an ink per path, from its page's `pathKind` for instance, or `'page'` for each path's
      * colour on its page (`page.colors()`). `draws` replaces `layout.draws`: pass
-     * `passage.styledDrawList(pages)` with `ink: 'page'` to show the letters the pages colour. */
+     * `passage.styledDrawList(pages)` with `ink: 'page'` to show the letters the pages colour.
+     * A dressed passage's medallions (`layout.ornaments`) are painted first, behind the ink, in
+     * their own colours. */
     static drawPassage(c, layout, pages, { x = 0, y = 0, dpr = 1, ink = DEFAULTS.INK, draws = layout.draws } = {}) {
       const pageOf = n => { const p = pages instanceof Map ? pages.get(n) : pages[n]; if (!p) throw new Error('the passage draws page ' + n + ', which was not given'); return p; };
+      const k = dpr * layout.scale;
+      // a dressed passage's medallions go behind the ink, each under its word's placement
+      let cur = -1;
+      for (const o of layout.ornaments || []) {
+        if (o.placement !== cur) {
+          const p = layout.placements[o.placement];
+          c.setTransform(k * p.kx, 0, 0, k * p.ky, dpr * (x + layout.scale * p.dx), dpr * (y + layout.scale * p.dy));
+          cur = o.placement;
+        }
+        if (o.stroke) { c.strokeStyle = css(o.color); c.lineWidth = o.strokeWidth; c.lineCap = 'round'; c.lineJoin = 'round'; c.stroke(o.path); }
+        else { c.fillStyle = css(o.color); c.fill(o.path, o.evenOdd ? 'evenodd' : 'nonzero'); }
+      }
       const colors = new Map();
       const colorOf = ink === 'page'
         ? (page, path) => { let c = colors.get(page.page); if (!c) colors.set(page.page, (c = page.colors())); return c[path] }
         : ink;
-      const k = dpr * layout.scale, perPath = typeof colorOf === 'function';
+      const perPath = typeof colorOf === 'function';
       if (!perPath) c.fillStyle = css(rgba(ink));
-      let page = null, paths = null, cur = -1;
+      let page = null, paths = null;
+      cur = -1;
       for (const dr of draws) {
         if (!page || page.page !== dr.page) { page = pageOf(dr.page); paths = page.buildPaths(); }
         if (dr.placement !== cur) {

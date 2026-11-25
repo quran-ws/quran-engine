@@ -60,8 +60,8 @@ class QvpPassage private constructor(handle: Long, surah: Int, from: Int) : Auto
          * it. It lays out as one piece on one row and has no ayahs and no words. It sits on the
          * baseline of the line its ayah ends on, so at the scale of the ayah's own layout it has the
          * size it has after the ayah's last word. Lay the ayah out with
-         * [QvpPassageSpec.omitAyahMarks] to show it apart. It is the page's printed medallion, not
-         * a dress's marker. Throws when no page given prints it. */
+         * [QvpPassageSpec.omitAyahMarks] to show it apart. It is the page's printed medallion, or
+         * the design [dress] puts on it. Throws when no page given prints it. */
         fun ayahMark(pages: List<QvpPage>, surah: Int, ayah: Int): QvpPassage {
             require(pages.all { it.isOpen }) { "every page of a passage must be open" }
             require(surah in 1..MAX_U16 && ayah in 1..MAX_U16) { "bad ayah $surah:$ayah" }
@@ -99,8 +99,30 @@ class QvpPassage private constructor(handle: Long, surah: Int, from: Int) : Auto
             List(places.size / 4) { k -> QvpPlacement(places[k * 4], places[k * 4 + 1], places[k * 4 + 2], places[k * 4 + 3]) },
             isTruncated,
             if (isTruncated) RectF(v[9], v[10], v[11], v[12]) else null,
+            ornamentDraws(QvpNative.passageDressGeomOps(h), QvpNative.passageDressGeomPts(h), QvpNative.passageDressGeomTable(h)),
         ).also { currentLayout = it }
     }
+
+    /**
+     * Put the ayah medallion of another mushaf on the passage, as [QvpPage.dress] puts it on a page.
+     * It takes the same set and spec and uses only the medallion: [QvpDressSpec.ayahMark] (or the
+     * style's medallion), [QvpDressSpec.ayahMarkScale], line art for [QvpOrnamentKind.AYAH_MARK] and
+     * the colours. Each design goes on its printed ring as on the page. The ring leaves the draw list
+     * and the numeral stays. The layout makes room for the design, the same in colour and as line
+     * art, so dark mode moves no row break. Returns false, and leaves the passage undressed, when the
+     * spec names no medallion. A change of dress drops the layout: call [layout] again, whose
+     * [QvpPassageLayout.ornaments] are the medallions to draw.
+     */
+    fun dress(set: QvpOrnaments, spec: QvpDressSpec = QvpDressSpec()): Boolean {
+        val ok = QvpNative.passageDress(h, set.handle, spec.indexOf(set, QvpOrnamentKind.AYAH_MARK),
+                                        spec.indexOf(set, QvpOrnamentKind.SURAH_HEADER), spec.indexOf(set, QvpOrnamentKind.PAGE_FRAME),
+                                        spec.gap, spec.bandGap, spec.ayahMarkScale, spec.pageFrameScale, spec.lineArtBits(), spec.colorTriples())
+        currentLayout = null
+        return ok
+    }
+
+    /** Take the dress off: the printed medallions come back. Lay the passage out again. */
+    fun undress() { QvpNative.passageUndress(h); currentLayout = null }
 
     /** The draw list of the last layout as its pages style it now. With a letter layer, a cut path
      * whose pieces differ in colour on its page is listed as its pieces, in its place and under its
@@ -123,7 +145,8 @@ class QvpPassage private constructor(handle: Long, surah: Int, from: Int) : Auto
  * draw whose page is not in the map. The ellipsis after a cut is the host's to draw, at
  * [QvpPassageLayout.ellipsis]. [draws] replaces the layout's own list: pass
  * [QvpPassage.styledDrawList] with [pageColors] true to fill each path in its page's colour, so the
- * letters the pages colour show in the passage. [paint] keeps its other settings.
+ * letters the pages colour show in the passage. [paint] keeps its other settings. A dressed passage's
+ * medallions ([QvpPassageLayout.ornaments]) are painted first, behind the ink, in their own colours.
  */
 fun QvpPassageLayout.draw(canvas: Canvas, pages: Map<Int, QvpPage>, paint: Paint, x: Float = 0f, y: Float = 0f,
                           draws: List<QvpPassageDraw> = this.draws, pageColors: Boolean = false) {
@@ -132,6 +155,23 @@ fun QvpPassageLayout.draw(canvas: Canvas, pages: Map<Int, QvpPage>, paint: Paint
     val colors = HashMap<Int, IntArray>()
     val ink = paint.color
     canvas.save()
+    if (ornaments.isNotEmpty()) {
+        val op = Paint(paint).apply { strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+        for (o in ornaments) {
+            val place = o.placement ?: continue
+            if (place != cur) {
+                val q = placements.getOrElse(place) { QvpPlacement.IDENTITY }
+                m.setScale(scale * q.kx, scale * q.ky)
+                m.postTranslate(x + scale * q.dx, y + scale * q.dy)
+                canvas.restore(); canvas.save(); canvas.concat(m); cur = place
+            }
+            op.color = QvpColor.argb(o.color)
+            op.style = if (o.stroke) Paint.Style.STROKE else Paint.Style.FILL
+            op.strokeWidth = o.strokeWidth
+            canvas.drawPath(o.path, op)
+        }
+        canvas.restore(); canvas.save(); cur = -1
+    }
     for (d in draws) {
         val page = pages[d.page] ?: continue
         if (pageColors) {

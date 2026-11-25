@@ -1903,6 +1903,13 @@ class QvpWebBackend implements QvpBackend {
 
   @override
   bool dress(PageHandle page, OrnamentsHandle set, QvpDressSpec spec) {
+    final p = _page(page);
+    final opt = _dressSpecToJs(spec);
+    return p.callMethod<JSObject?>('dress'.toJS, _ornaments(set), opt) != null;
+  }
+
+  /// A dress spec as qvp.js takes it.
+  JSObject _dressSpecToJs(QvpDressSpec spec) {
     final lineArtJs = [
       for (final k in spec.lineArt)
         (switch (k) {
@@ -1930,9 +1937,7 @@ class QvpWebBackend implements QvpBackend {
           [_ornamentSpecToJs(o) ?? 0.toJS, part.toJS, rgba(col).toJS].toJS,
       ].toJS;
     }
-    return _page(page)
-            .callMethod<JSObject?>('dress'.toJS, _ornaments(set), opt) !=
-        null;
+    return opt;
   }
 
   @override
@@ -1996,13 +2001,17 @@ class QvpWebBackend implements QvpBackend {
   }
 
   @override
-  List<QvpDressDraw> dressGeometry(PageHandle page) {
-    final p = _page(page);
-    final engine = p['e'] as JSObject;
+  List<QvpDressDraw> dressGeometry(PageHandle page) =>
+      _dressDraws(_page(page), 'qvp_dress_geometry');
+
+  /// The draws of an ornament display list that [call] writes for [owner], a
+  /// page or a passage of qvp.js, read from the engine's memory before it moves.
+  List<QvpDressDraw> _dressDraws(JSObject owner, String call) {
+    final engine = owner['e'] as JSObject;
     final ex = engine['ex'] as JSObject;
     final scratch = (engine['scratch'] as JSNumber).toDartInt;
-    final h = (p['h'] as JSNumber).toDartInt;
-    ex.callMethod('qvp_dress_geometry'.toJS, h.toJS, scratch.toJS);
+    final h = (owner['h'] as JSNumber).toDartInt;
+    ex.callMethod(call.toJS, h.toJS, scratch.toJS);
 
     final dv = engine.callMethod<JSObject>('dv'.toJS);
     final n = (dv.callMethod<JSNumber>(
@@ -2426,7 +2435,24 @@ class QvpWebBackend implements QvpBackend {
       placements: placements,
       isTruncated: isTruncated,
       ellipsis: ellipsis,
+      ornaments: _dressDraws(_passage(handle), 'qvp_passage_dress_geometry'),
     );
+  }
+
+  @override
+  bool passageDress(
+    PassageHandle handle,
+    OrnamentsHandle set,
+    QvpDressSpec spec,
+  ) {
+    final p = _passage(handle);
+    final opt = _dressSpecToJs(spec);
+    return p.callMethod<JSBoolean>('dress'.toJS, _ornaments(set), opt).toDart;
+  }
+
+  @override
+  void passageUndress(PassageHandle handle) {
+    _passage(handle).callMethod('undress'.toJS);
   }
 
   // ── Ornaments ──

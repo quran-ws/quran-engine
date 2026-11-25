@@ -415,7 +415,7 @@ export interface QvpPassageViewProps extends ViewProps {
   /** The basmalah printed above `surah`, one row and no words. Surahs 1 and 9 have none. */
   basmalah?: boolean;
   /** The medallion that closes ayah `from` of `surah`, alone on one row, with no words: show an
-   * ayah's number apart from its words. It is the page's printed medallion. */
+   * ayah's number apart from its words. It is the page's printed medallion, or the `dress` design. */
   ayahMark?: boolean;
   /** dp per page unit (1), or `lineHeight`: dp per printed line, which wins when both are given. */
   scale?: number; lineHeight?: number;
@@ -429,13 +429,18 @@ export interface QvpPassageViewProps extends ViewProps {
   omitAyahMarks?: boolean;
   /** How far a justified row's gaps may open, as a multiple of the usual air (0 = the engine's default). */
   maxStretch?: number;
+  /** The ayah medallion of another mushaf: the page view's `dress` prop, of which the passage takes the
+   * medallion (`ayahMark` or the style's, `ayahMarkScale`, line art and colours). Each design sits on
+   * its printed ring, the layout makes room for it, and the view paints it behind the ink. A spec with
+   * no medallion, or null, shows the printed medallions. */
+  dress?: Dress | null;
   ink?: Color; paperColor?: Color;
   /** The layout the engine made for this width. The view takes its height from it unless the style gives one. */
   onPassageLayout?: (e: PassageLayout) => void;
   onError?: (e: { message: string }) => void;
 }
-type NativePassageProps = ViewProps & Omit<QvpPassageViewProps, 'onPassageLayout' | 'onError' | 'ink' | 'paperColor'> & {
-  ink?: string; paperColor?: string;
+type NativePassageProps = ViewProps & Omit<QvpPassageViewProps, 'onPassageLayout' | 'onError' | 'ink' | 'paperColor' | 'dress'> & {
+  ink?: string; paperColor?: string; dress?: object | null;
   onPassageLayout?: (e: NativeSyntheticEvent<PassageLayout>) => void;
   onError?: (e: NativeSyntheticEvent<{ message: string }>) => void;
 };
@@ -444,12 +449,14 @@ const NativeQvpPassageView = requireNativeComponent<NativePassageProps>('QvpPass
 /** A range of complete ayahs, or a surah's basmalah, laid out on rows of this view's width and drawn
  * natively. The engine lays it out; JS sees the layout through `onPassageLayout`. */
 export function QvpPassageView(props: QvpPassageViewProps) {
-  const { ink, paperColor, onPassageLayout, onError, style, ...rest } = props;
+  const { ink, paperColor, dress, onPassageLayout, onError, style, ...rest } = props;
   // The height is the engine's answer for the width, so it arrives with the first layout.
   const [height, setHeight] = useState<number | undefined>(undefined);
+  const nDress = useMemo(() => (dress ? { ...dressSpec(dress), ornaments: ornamentsId(dress.ornaments) } : null), [dress]);
   return (
     <NativeQvpPassageView
       {...rest}
+      dress={nDress}
       style={[{ height }, style]}
       ink={css(ink)}
       paperColor={css(paperColor)}

@@ -122,6 +122,9 @@ is owed.
 | `qvp_passage_load_basmalah` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 | `qvp_passage_load_ayah_mark` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 | `qvp_passage_styled_draw_list` | react-native | not applicable: `QvpRnPassageView` opens its own pages, with no letter layer and no rules, so the styled list is its draw list |
+| `qvp_passage_dress` | react-native | native: `QvpRnPassageView` takes the `dress` prop, the page view's spec, and draws the medallions behind the ink |
+| `qvp_passage_undress` | react-native | native: `QvpRnPassageView` takes the `dress` prop, the page view's spec, and draws the medallions behind the ink |
+| `qvp_passage_dress_geometry` | react-native | native: `QvpRnPassageView` takes the `dress` prop, the page view's spec, and draws the medallions behind the ink |
 | `qvp_passage_free` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 | `qvp_passage_ayah_count` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
 | `qvp_passage_ayah_text` | react-native | native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout` |
@@ -280,7 +283,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 ## Matrix
 
 <!-- parity:begin -->
-188 symbols in the header, 188 Rust exports. web: 187 bound, android: 185 bound, flutter: 179 bound, ios: 182 bound, react-native: 104 bound.
+191 symbols in the header, 191 Rust exports. web: 190 bound, android: 188 bound, flutter: 182 bound, ios: 185 bound, react-native: 104 bound.
 
 | symbol | web | android | flutter | ios | react-native |
 |---|---|---|---|---|---|
@@ -398,6 +401,8 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_passage_ayah_text` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_ayahs` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_draw_list` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
+| `qvp_passage_dress` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` takes the `dress` prop, the page view's spec, and draws the medallions behind the ink) |
+| `qvp_passage_dress_geometry` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` takes the `dress` prop, the page view's spec, and draws the medallions behind the ink) |
 | `qvp_passage_free` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_layout` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_line_spacing` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
@@ -407,6 +412,7 @@ makes a decision the engine could make (`docs/standards/API-DESIGN.md`, the thre
 | `qvp_passage_placements` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_rows` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_passage_styled_draw_list` | yes | yes | yes | yes | gap (not applicable: `QvpRnPassageView` opens its own pages, with no letter layer and no rules, so the styled list is its draw list) |
+| `qvp_passage_undress` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` takes the `dress` prop, the page view's spec, and draws the medallions behind the ink) |
 | `qvp_passage_words` | yes | yes | yes | yes | gap (native: `QvpRnPassageView` loads, lays out and draws the passage; JS sees the layout through `onPassageLayout`) |
 | `qvp_path_letter` | yes | yes | yes | yes | yes |
 | `qvp_recite_map` | yes | yes | yes | yes | yes |

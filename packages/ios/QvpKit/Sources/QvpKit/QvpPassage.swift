@@ -112,6 +112,10 @@ public struct QvpPassageLayout: Equatable {
     public let isTruncated: Bool
     /// Where the host draws its ellipsis after a cut: from the last row's top to its baseline.
     public let ellipsis: CGRect?
+    /// A dressed passage's medallions (`QvpPassage.dress`), in page units: paint them behind
+    /// the ink, each under the placement its `OrnamentDraw.placement` indexes. Empty when the
+    /// passage is not dressed.
+    public let ornaments: [OrnamentDraw]
 
     /// Fill the layout into `ctx` with its top-left corner at (`x`, `y`), in the context's fill
     /// colour. `pages` maps a page number to the open page the passage was loaded from, which
@@ -122,20 +126,42 @@ public struct QvpPassageLayout: Equatable {
     /// `pageColors` true to fill each path in its page's colour (`QvpPage.colors()`), so the
     /// letters the pages colour show in the passage. Without `pageColors` every path takes the
     /// context's fill colour.
+    ///
+    /// A dressed passage's medallions (`ornaments`) are painted first, behind the ink, in their
+    /// own colours. The context's fill colour is kept for the ink.
     public func draw(in ctx: CGContext, pages: [Int: QvpPage], x: CGFloat = 0, y: CGFloat = 0,
                      draws: [QvpPassageDraw]? = nil, pageColors: Bool = false) {
         let s = CGFloat(scale)
+        // A point p of a path lands at scale · (k · p + d): the placement first, then the scale.
+        func transform(_ placement: Int) -> CGAffineTransform {
+            let q = placement < placements.count ? placements[placement] : .identity
+            return CGAffineTransform(a: s * CGFloat(q.kx), b: 0, c: 0, d: s * CGFloat(q.ky),
+                                     tx: x + s * CGFloat(q.dx), ty: y + s * CGFloat(q.dy))
+        }
+        for o in ornaments {
+            guard let placement = o.placement else { continue }
+            ctx.saveGState()
+            ctx.concatenate(transform(placement))
+            ctx.addPath(o.path)
+            if o.stroke {
+                ctx.setLineCap(.round); ctx.setLineJoin(.round)
+                ctx.setLineWidth(CGFloat(o.strokeWidth))
+                ctx.setStrokeColor(QvpColor.cgColor(o.color))
+                ctx.strokePath()
+            } else {
+                ctx.setFillColor(QvpColor.cgColor(o.color))
+                ctx.fillPath(using: o.evenOdd ? .evenOdd : .winding)
+            }
+            ctx.restoreGState()
+        }
         var cur = -1
         var colors: [Int: [UInt32]] = [:]
         ctx.saveGState()
         for d in draws ?? self.draws {
             guard let page = pages[d.page], page.isOpen else { continue }
             if d.placement != cur {
-                // A point p of a path lands at scale · (k · p + d): the placement first, then the scale.
-                let q = d.placement < placements.count ? placements[d.placement] : .identity
                 ctx.restoreGState(); ctx.saveGState()
-                ctx.concatenate(CGAffineTransform(a: s * CGFloat(q.kx), b: 0, c: 0, d: s * CGFloat(q.ky),
-                                                  tx: x + s * CGFloat(q.dx), ty: y + s * CGFloat(q.dy)))
+                ctx.concatenate(transform(d.placement))
                 cur = d.placement
             }
             let paths = page.buildPaths()
@@ -205,8 +231,8 @@ public final class QvpPassage {
     /// It lays out as one piece on one row and has no ayahs and no words. It sits on the baseline
     /// of the line its ayah ends on, so at the scale of the ayah's own layout it has the size it has
     /// after the ayah's last word. Lay the ayah out with `QvpPassageSpec.omitAyahMarks` to show it
-    /// apart. It is the page's printed medallion, not a dress's marker. Throws when no page given
-    /// prints it.
+    /// apart. It is the page's printed medallion, or the design `dress(_:_:)` puts on it. Throws
+    /// when no page given prints it.
     public convenience init(ayahMarkOf ayah: Int, surah: Int, pages: [QvpPage]) throws {
         guard pages.allSatisfy(\.isOpen), (1...Int(UInt16.max)).contains(surah), (1...Int(UInt16.max)).contains(ayah)
         else { throw QvpError.badPassage }
@@ -267,9 +293,40 @@ public final class QvpPassage {
             ellipsis: out.is_truncated != 0
                 ? CGRect(x: CGFloat(out.ellipsis_x0), y: CGFloat(out.ellipsis_y0),
                          width: CGFloat(out.ellipsis_x1 - out.ellipsis_x0), height: CGFloat(out.ellipsis_y1 - out.ellipsis_y0))
-                : nil)
+                : nil,
+            ornaments: dressGeometry())
         currentLayout = layout
         return layout
+    }
+
+    /// The medallions of a dressed passage's last layout, read before the engine's buffers move.
+    private func dressGeometry() -> [OrnamentDraw] {
+        var g = QvpDressGeometry()
+        qvp_passage_dress_geometry(p, &g)
+        return ornamentDraws(g)
+    }
+
+    /// Put the ayah medallion of another mushaf on the passage, as `QvpPage.dress(_:_:)` puts it
+    /// on a page. It takes the same set and spec and uses only the medallion: `ayahMark` (or the
+    /// style's medallion), `ayahMarkScale`, line art for `.ayahMark` and the colours. Each design
+    /// goes on its printed ring as on the page. The ring leaves the draw list and the numeral
+    /// stays. The layout makes room for the design, the same in colour and as line art, so dark
+    /// mode moves no row break. Returns false, and leaves the passage undressed, when the spec
+    /// names no medallion. A change of dress drops the layout: call `layout(_:)` again, whose
+    /// `ornaments` are the medallions to draw. A closed set is a fatal error,
+    /// `QvpOrnaments is closed`.
+    @discardableResult
+    public func dress(_ set: QvpOrnaments, _ spec: DressSpec = DressSpec()) -> Bool {
+        let p = self.p, ornaments = set.p
+        let ok = spec.withC(set) { s in qvp_passage_dress(p, ornaments, s) }
+        currentLayout = nil
+        return ok != 0
+    }
+
+    /// Take the dress off: the printed medallions come back. Lay the passage out again.
+    public func undress() {
+        qvp_passage_undress(p)
+        currentLayout = nil
     }
 
     /// The draw list of the last layout as its pages style it now. With a letter layer, a cut path

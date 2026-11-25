@@ -225,6 +225,14 @@ internal object QvpNative {
     @JvmStatic external fun dressGeomOps(h: Long): ByteArray
     @JvmStatic external fun dressGeomPts(h: Long): FloatArray
     @JvmStatic external fun dressGeomTable(h: Long): IntArray
+    // a passage in another mushaf's medallion: the page's spec, of which only the medallion counts; the geometry as
+    // the page's, each placement an index into passagePlacements
+    @JvmStatic external fun passageDress(h: Long, set: Long, ayahMark: Int, surahHeader: Int, pageFrame: Int, gap: Float, bandGap: Float,
+                                         ayahMarkScale: Float, pageFrameScale: Float, lineArt: Int, colors: IntArray?): Boolean
+    @JvmStatic external fun passageUndress(h: Long)
+    @JvmStatic external fun passageDressGeomOps(h: Long): ByteArray
+    @JvmStatic external fun passageDressGeomPts(h: Long): FloatArray
+    @JvmStatic external fun passageDressGeomTable(h: Long): IntArray
     // names
     @JvmStatic external fun markName(m: Int): String
     @JvmStatic external fun familyName(f: Int): String

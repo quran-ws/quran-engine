@@ -4,6 +4,10 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+### Added
+- React Native: `<QvpPassageView />` takes a `dress` prop, the page view's, and draws the
+  medallion it names on every ring of the passage, behind the ink.
+
 ## [0.11.0] - 2026-11-24
 
 ### Added

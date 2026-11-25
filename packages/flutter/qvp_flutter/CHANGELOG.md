@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Added
+- Flutter: `QvpPassage.dress(set, [spec])` and `undress()` put the ayah medallion of another
+  mushaf on a passage, from the `QvpDressSpec` a page takes, on both backends.
+  `QvpPassageLayout.ornaments` are the medallions of the layout, and `paintPassage` paints them
+  behind the ink.
+
 ## 0.11.0
 
 ### Added
