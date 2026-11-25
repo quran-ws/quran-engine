@@ -15,6 +15,8 @@ class ApiFixture {
     required this.engine,
     required this.page,
     required this.layoutScenarios,
+    required this.dressScenarios,
+    required this.dressOrnaments,
     this.words042,
     this.atlas,
   });
@@ -26,6 +28,12 @@ class ApiFixture {
 
   /// conformance/scenarios/layout.json
   final String layoutScenarios;
+
+  /// conformance/scenarios/dress.json
+  final String dressScenarios;
+
+  /// The ornament set that dress.json names, conformance/qvo1-dress.hex, as text.
+  final String dressOrnaments;
 
   /// 042.words.json, when the data has it.
   final String? words042;
@@ -364,6 +372,94 @@ void apiCases(FutureOr<ApiFixture> Function() load) {
     expect(atlas.juzOf(2, 255), 3);
     expect(atlas.pageRange(42)!.first.$1, 2);
     atlas.dispose();
+  });
+
+  test('dressed passages match the engine (conformance/scenarios/dress.json passages)', () {
+    final json = jsonDecode(fixture.dressScenarios) as Map<String, dynamic>;
+    final tolerance = (json['tolerance'] as num).toDouble();
+    void close(double a, num b, String what) => expect(
+      (a - b).abs() <= tolerance * (b.abs() > 1 ? b.abs() : 1),
+      isTrue,
+      reason: '$what: got $a, engine says $b',
+    );
+    final hex = fixture.dressOrnaments.replaceAll(RegExp(r'\s'), '');
+    final bytes = Uint8List(hex.length ~/ 2);
+    for (var i = 0; i < bytes.length; i++) {
+      bytes[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    final set = engine.loadOrnaments(bytes);
+    const kinds = {
+      'ayah_mark': QvpOrnamentKind.ayahMark,
+      'surah_header': QvpOrnamentKind.surahHeader,
+      'page_frame': QvpOrnamentKind.pageFrame,
+    };
+    (int, int, int) triple(List<dynamic> t) =>
+        (t[0] as int, t[1] as int, t[2] as int);
+    final passages = json['passages'] as List<dynamic>;
+    for (final c in passages.cast<Map<String, dynamic>>()) {
+      final surah = c['surah'] as int, from = c['from'] as int;
+      final alone = c['ayahMark'] as bool;
+      final kind = alone ? ' medallion' : '';
+      final tag = 'dressed passage $surah:$from-${c['to']}$kind';
+      final d = c['dress'] as Map<String, dynamic>;
+      final lineArt = (d['lineArt'] as List<dynamic>).cast<String>();
+      final colors = (d['colors'] as List<dynamic>).cast<List<dynamic>>();
+      final dress = QvpDressSpec(
+        ayahMark: d['ayahMark'] as int,
+        surahHeader: d['surahHeader'] as int?,
+        pageFrame: d['pageFrame'] as int?,
+        ayahMarkScale: (d['ayahMarkScale'] as num? ?? 0).toDouble(),
+        lineArt: lineArt.map((k) => kinds[k]!).toSet(),
+        colors: colors.map(triple).toList(),
+      );
+      final s = c['spec'] as Map<String, dynamic>;
+      final spec = QvpPassageSpec(
+        width: (s['width'] as num).toDouble(),
+        scale: (s['scale'] as num).toDouble(),
+        align: QvpPassageAlign.values.byName(s['align'] as String),
+        maxRows: s['maxRows'] as int,
+        keepAyahMark: s['keepAyahMark'] as bool,
+        omitAyahMarks: s['omitAyahMarks'] as bool,
+        ellipsisWidth: (s['ellipsisWidth'] as num).toDouble(),
+      );
+      final passage = alone
+          ? QvpPassage.ayahMark([page], surah, from)
+          : QvpPassage.load([page], surah, from, to: c['to'] as int);
+      passage.layout(spec);
+      expect(passage.dress(set, dress), isTrue, reason: tag);
+      // the dress drops the layout
+      expect(passage.currentLayout, isNull, reason: tag);
+      final l = passage.layout(spec)!;
+      final want = c['layout'] as Map<String, dynamic>;
+      close(l.width, want['width'] as num, '$tag width');
+      close(l.height, want['height'] as num, '$tag height');
+      close(l.scale, want['scale'] as num, '$tag scale');
+      expect(l.draws.length, want['draws'] as int, reason: tag);
+      expect(l.words.length, want['words'] as int, reason: tag);
+      expect(l.placements.length, want['placements'] as int, reason: tag);
+      final ornaments = (c['ornaments'] as List<dynamic>).cast<List<dynamic>>();
+      expect(l.ornaments.length, ornaments.length, reason: tag);
+      for (var i = 0; i < ornaments.length; i++) {
+        final o = ornaments[i], got = l.ornaments[i];
+        final at = '$tag ornament $i';
+        expect(got.placement, o[0] as int, reason: at);
+        expect(got.color, o[1] as int, reason: at);
+        expect(got.kind, QvpOrnamentKind.ayahMark, reason: at);
+        expect(got.stroke, (o[2] as int) & 0x200 != 0, reason: at);
+        close(got.strokeWidth, o[3] as num, '$at stroke width');
+        // the synthetic set's outlines are straight lines: the path's box is the points'
+        final b = got.path.getBounds();
+        close(b.left, o[4] as num, '$at x0');
+        close(b.top, o[5] as num, '$at y0');
+        close(b.right, o[6] as num, '$at x1');
+        close(b.bottom, o[7] as num, '$at y1');
+      }
+      passage.undress();
+      expect(passage.layout(spec)!.ornaments, isEmpty, reason: tag);
+      passage.close();
+    }
+    expect(passages.length, 5);
+    set.dispose();
   });
 
   test('layout scenarios match the engine (conformance/scenarios/layout.json)', () {

@@ -2315,6 +2315,7 @@ final class QvpPassageLayout {
     required this.placements,
     required this.isTruncated,
     required this.ellipsis,
+    this.ornaments = const [],
   });
 
   /// The passage's size in layout px. [scale] is the layout px per page unit it was laid out
@@ -2343,6 +2344,10 @@ final class QvpPassageLayout {
   /// Where the host draws its ellipsis after a cut, from the last row's top to its baseline;
   /// null when the passage was not cut.
   final Rect? ellipsis;
+
+  /// A dressed passage's medallions ([QvpPassage.dress]), in page units: paint them behind the
+  /// ink, each under the placement its [QvpDressDraw.placement] indexes. Empty when undressed.
+  final List<QvpDressDraw> ornaments;
 }
 
 /// Decodes QVP curve opcodes into [path]. Shared by page path caching and dress geometry.

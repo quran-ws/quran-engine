@@ -2397,6 +2397,54 @@ class QvpBindings {
         int Function(ffi.Pointer<QvpPassageC>, ffi.Pointer<ffi.Uint32>, int)
       >();
 
+  int passageDress(
+    ffi.Pointer<QvpPassageC> arg0,
+    ffi.Pointer<QvpOrnamentsC> arg1,
+    ffi.Pointer<QvpDressSpecC> arg2,
+  ) {
+    return _passageDress(arg0, arg1, arg2);
+  }
+
+  late final _passageDressPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<QvpPassageC>,
+            ffi.Pointer<QvpOrnamentsC>,
+            ffi.Pointer<QvpDressSpecC>,
+          )
+        >
+      >('qvp_passage_dress');
+  late final _passageDress = _passageDressPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<QvpPassageC>,
+          ffi.Pointer<QvpOrnamentsC>,
+          ffi.Pointer<QvpDressSpecC>,
+        )
+      >();
+
+  void passageDressGeometry(
+    ffi.Pointer<QvpPassageC> arg0,
+    ffi.Pointer<QvpDressGeometryC> out,
+  ) {
+    return _passageDressGeometry(arg0, out);
+  }
+
+  late final _passageDressGeometryPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(
+            ffi.Pointer<QvpPassageC>,
+            ffi.Pointer<QvpDressGeometryC>,
+          )
+        >
+      >('qvp_passage_dress_geometry');
+  late final _passageDressGeometry = _passageDressGeometryPtr
+      .asFunction<
+        void Function(ffi.Pointer<QvpPassageC>, ffi.Pointer<QvpDressGeometryC>)
+      >();
+
   void passageFree(ffi.Pointer<QvpPassageC> arg0) {
     return _passageFree(arg0);
   }
@@ -2614,6 +2662,17 @@ class QvpBindings {
           int,
         )
       >();
+
+  void passageUndress(ffi.Pointer<QvpPassageC> arg0) {
+    return _passageUndress(arg0);
+  }
+
+  late final _passageUndressPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<QvpPassageC>)>>(
+        'qvp_passage_undress',
+      );
+  late final _passageUndress = _passageUndressPtr
+      .asFunction<void Function(ffi.Pointer<QvpPassageC>)>();
 
   int passageWords(
     ffi.Pointer<QvpPassageC> arg0,

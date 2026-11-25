@@ -1198,6 +1198,9 @@ let basmalah = try QvpPassage(basmalahOf: 2, pages: [page])          // a surah'
 let bare = passage.layout(QvpPassageSpec(width: 366, scale: 22 / passage.lineSpacing, omitAyahMarks: true))
 let mark = try QvpPassage(ayahMarkOf: 255, surah: 2, pages: [page])  // 2:255's medallion alone
 mark.layout(QvpPassageSpec(scale: bare!.scale))                      // the size it has after the words
+passage.dress(ornaments, DressSpec(style: "font-003-regular"))       // the reader's medallion, as on the page
+let dressed = passage.layout(spec)!                                  // lay out again: it makes room for the design
+dressed.draw(in: ctx, pages: [42: page])                             // the designs behind the ink
 ```
 
 ```js
@@ -1208,6 +1211,8 @@ CanvasRenderer.drawPassage(ctx, layout, { 42: page }, { dpr })   // every draw u
 CanvasRenderer.drawPassage(ctx, layout, { 42: page }, { dpr, draws: passage.styledDrawList([page]), ink: 'page' })
 const basmalah = engine.loadBasmalah([page], 2)
 const mark = engine.loadAyahMark([page], 2, 255)   // with passage.layout({ ..., omitAyahMarks: true })
+passage.dress(ornaments, { ayahMark: 'font-003-regular', lineArt: ['ayah_mark'] })   // the page's spec works
+CanvasRenderer.drawPassage(ctx, passage.layout(spec), { 42: page }, { dpr })   // layout.ornaments go behind the ink
 ```
 
 - `width` ≤ 0 puts the passage on one row, as wide as it is.
@@ -1242,7 +1247,21 @@ const mark = engine.loadAyahMark([page], 2, 255)   // with passage.layout({ ...,
   for a host that shows the ayah's number apart from its words. It lays out like a basmalah, on
   one row, with no ayahs and no words. It sits on the baseline of the line its ayah ends on, so
   at the scale of the ayah's own layout (`layout.scale`) it has the size it has after the words.
-  It is the medallion the page prints: a dressed page's marker comes from the dress.
+  It is the medallion the page prints, or the design a dress puts on it.
+- `passage.dress(set, spec)` (`qvp_passage_dress`) puts the medallion of another mushaf on the
+  passage. It takes the set and the spec of `page.dress` (the dress section above). It uses only
+  the medallion: `ayahMark` or the style's medallion, `ayahMarkScale`, its line art and its
+  colours. Each design goes on its printed ring by the page's rule. The ring leaves the draw list
+  and the numeral stays on top.
+- The layout makes room for every outline that the design can draw, in colour and as line art.
+  So line art in dark mode moves no row break. One row, wrapped rows, the medallion after a cut
+  and a medallion alone all take the design.
+- `layout.ornaments` (`qvp_passage_dress_geometry`) holds the medallions of a dressed layout. It
+  is the table of `page.dressGeometry()`, with each draw under one of `layout.placements`. Paint
+  it behind the ink, as the draw helpers do.
+- A spec with no medallion is refused, and the passage stays undressed. `passage.undress()`
+  brings the printed medallions back. A change of dress drops the layout, so lay the passage out
+  again.
 - To show the letters that the pages colour (a tajweed colouring with `styleLetters` or the
   letter selectors, "Letters" above), draw the passage with the pages it was loaded from, each
   with its letter layer and its rules. `passage.styledDrawList(pages)` (`qvp_passage_styled_draw_list`)
@@ -1450,6 +1469,9 @@ function in the header has no row here, or a row names a function the header lac
 | passage | `qvp_passage_draw_list` | `layout.draws` | Return every path that the last layout draws, as page, path and placement. |
 | passage | `qvp_passage_styled_draw_list` | `passage.styledDrawList(pages)` | Return the same list as the given pages style it now: a cut path whose pieces differ in colour on its page is listed as its pieces. |
 | passage | `qvp_passage_placements` | `layout.placements` | Return what a passage draw list's placement indexes. |
+| passage | `qvp_passage_dress` | `passage.dress(set, spec)` | Put the ayah medallion of another mushaf on the passage, from the spec a page takes; 0 when the spec names no medallion, which leaves the passage undressed. A change of dress drops the layout. |
+| passage | `qvp_passage_undress` | `passage.undress()` | Take the dress off: the printed medallions come back. |
+| passage | `qvp_passage_dress_geometry` | `layout.ornaments` | Return the medallions of a dressed passage's last layout, as `qvp_dress_geometry` lists a page's, each under a placement of the layout. |
 | names | `qvp_name_count` | `engine.nameCount(table)` | Return how many ids a name table has. |
 | names | `qvp_name` | `engine.name(table, id)` | Return the name of an id in a table; empty outside the table. |
 | names | `qvp_name_id` | `engine.nameId(table, name)` | Return the id of a name in a table; 255 when the table has no such name. |

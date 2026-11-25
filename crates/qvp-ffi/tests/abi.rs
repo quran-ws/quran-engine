@@ -935,6 +935,117 @@ fn dress_over_the_abi() {
     }
 }
 
+/// A passage in another mushaf's medallion over the ABI: the page's whole spec works, the ring
+/// leaves the draw list, the design is listed under a placement of the layout, and a refusal or
+/// an undress gives the printed passage back.
+#[test]
+fn passage_dress_over_the_abi() {
+    let Some(bytes) = page_bytes("042.qvp") else {
+        if std::env::var("QVP_REQUIRE_DATA").is_ok() {
+            panic!("dist/pages/042.qvp is missing and QVP_REQUIRE_DATA is set; run scripts/sync-test-data.sh");
+        }
+        eprintln!("skip: dist/pages/042.qvp is missing; run scripts/sync-test-data.sh to enable this test");
+        return;
+    };
+    let orn = ornament_bytes();
+    unsafe {
+        let page = qvp_page_load(bytes.as_ptr(), bytes.len());
+        let set = qvp_ornaments_load(orn.as_ptr(), orn.len());
+        let pages = [page as *const _];
+        let passage = qvp_passage_load(pages.as_ptr(), 1, 2, 255, 255);
+        assert!(!passage.is_null());
+        let spec = QvpPassageSpec {
+            width: 0.0,
+            scale: 0.9,
+            line_spacing: 1.0,
+            padding: 2.0,
+            align: 0,
+            keep_ayah_mark: 0,
+            omit_ayah_marks: 0,
+            _pad: [0; 1],
+            max_rows: 0,
+            ellipsis_width: 0.0,
+            max_stretch: 0.0,
+        };
+        let draws = |passage| {
+            let mut layout = QvpPassageLayout::default();
+            assert_eq!(qvp_passage_layout(passage, &spec, &mut layout), 1);
+            let mut out = vec![0u32; layout.n_draws as usize * 3];
+            assert_eq!(qvp_passage_draw_list(passage, out.as_mut_ptr(), layout.n_draws), layout.n_draws);
+            (layout, out.chunks(3).map(|d| d[1]).collect::<Vec<u32>>())
+        };
+        let geometry = |passage| {
+            let mut g = std::mem::zeroed::<QvpDressGeometry>();
+            g.n_draws = 7;
+            qvp_passage_dress_geometry(passage, &mut g);
+            g
+        };
+        let (printed, printed_paths) = draws(passage);
+        let rings: Vec<u32> = printed_paths.iter().copied().filter(|&p| path_kind(page, p) == 3).collect();
+        assert!(!rings.is_empty(), "2:255 closes on a printed ring");
+        assert_eq!(geometry(passage).n_draws, 0, "undressed");
+
+        // the page's whole spec: the band and the border are ignored
+        let colors: [u32; 3] = [0, 0, 0xff0000ff];
+        let page_spec = QvpDressSpec {
+            ayah_mark: 0,
+            surah_header: 1,
+            page_frame: 2,
+            gap: 5.0,
+            band_gap: 5.0,
+            ayah_mark_scale: 1.0,
+            page_frame_scale: 1.0,
+            line_art: 0,
+            colors: colors.as_ptr(),
+            n_colors: 1,
+        };
+        assert_eq!(qvp_passage_dress(passage, set, &page_spec), 1);
+        assert_eq!(qvp_passage_rows(passage, std::ptr::null_mut(), 0), 0, "the dress drops the layout");
+        assert_eq!(geometry(passage).n_draws, 0, "no layout, no medallions");
+        let (dressed, dressed_paths) = draws(passage);
+        assert!(rings.iter().all(|r| !dressed_paths.contains(r)), "the ring leaves the draw list");
+        assert_eq!(dressed_paths.len(), printed_paths.len() - rings.len());
+        let g = geometry(passage);
+        // one medallion: the design's fill and its line
+        assert_eq!(g.n_draws, 2);
+        let table = std::slice::from_raw_parts(g.table, g.n_draws as usize * 9);
+        assert_eq!(table[4], 0xff0000ff, "the colour override");
+        assert_eq!(table[5] & 0xff, 0, "a medallion");
+        let mut placements = vec![0f32; 4 * 64];
+        let n = qvp_passage_placements(passage, placements.as_mut_ptr(), 64);
+        assert!(table[8] < n, "under a placement of the layout");
+        assert!(table[17] == table[8]);
+        assert!(dressed.width >= printed.width - 0.01);
+
+        // refused: a band is not a medallion. The passage is undressed
+        assert_eq!(qvp_passage_dress(passage, set, &QvpDressSpec { ayah_mark: 1, ..page_spec }), 0);
+        assert_eq!(qvp_passage_rows(passage, std::ptr::null_mut(), 0), 0);
+        let (again, again_paths) = draws(passage);
+        assert_eq!((again.width, again_paths), (printed.width, printed_paths.clone()));
+        assert_eq!(geometry(passage).n_draws, 0);
+        // a null set or spec is refused too
+        assert_eq!(qvp_passage_dress(passage, set, &page_spec), 1);
+        assert_eq!(qvp_passage_dress(passage, std::ptr::null(), &page_spec), 0);
+        assert_eq!(draws(passage).1, printed_paths);
+        assert_eq!(qvp_passage_dress(passage, set, std::ptr::null()), 0);
+        // and undress gives the printed passage back
+        assert_eq!(qvp_passage_dress(passage, set, &page_spec), 1);
+        qvp_passage_undress(passage);
+        assert_eq!(draws(passage).1, printed_paths);
+        assert_eq!(geometry(passage).n_draws, 0);
+
+        // null handles
+        assert_eq!(qvp_passage_dress(std::ptr::null_mut(), set, &page_spec), 0);
+        qvp_passage_undress(std::ptr::null_mut());
+        assert_eq!(geometry(std::ptr::null()).n_draws, 0);
+        qvp_passage_dress_geometry(passage, std::ptr::null_mut());
+
+        qvp_passage_free(passage);
+        qvp_ornaments_free(set);
+        qvp_page_free(page);
+    }
+}
+
 /// `flags` byte 0 of the page geometry table.
 unsafe fn path_kind(page: *mut qvp_core::Page, i: u32) -> u32 {
     let mut g = std::mem::zeroed::<QvpGeometry>();

@@ -143,6 +143,7 @@ through `onPassageLayout`, and the view takes its height from it.
   align="justified" maxStretch={2}                     // right (the default), center or justified
   maxRows={2} ellipsisWidth={12} keepAyahMark          // cut after two rows, ellipsis, then the medallion
                                                        // omitAyahMarks: no medallions; ayahMark: ayah `from`'s medallion alone
+  dress={{ ornaments: set, ayahMark: medallion }}      // the page view's dress: its medallion on every ring
   ink="#231f20" paperColor="#fffdf7"
   onPassageLayout={l => console.log(l.rows.length, l.words.length, l.isTruncated)}
 />

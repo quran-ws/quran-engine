@@ -4,6 +4,12 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+### Added
+- QvpKit: `QvpPassage.dress(_:_:)` and `undress()` put the ayah medallion of another mushaf on a
+  passage, from the `DressSpec` a page takes. `QvpPassageLayout.ornaments` are the medallions of
+  the layout, and `QvpPassageLayout.draw(in:pages:x:y:)` paints them behind the ink.
+  `OrnamentDraw` is `Equatable`.
+
 ## [0.11.0] - 2026-11-24
 
 ### Added

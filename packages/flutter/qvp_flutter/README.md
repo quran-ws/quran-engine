@@ -179,6 +179,7 @@ paintPassage(canvas, layout!, {42: page}, ink);           // every path under it
 paintPassage(canvas, layout, {42: page}, ink, draws: passage.styledDrawList([page]), pageColors: true);
 final basmalah = QvpPassage.basmalah([page], 2);          // one row, no words; throws for surahs 1 and 9
 final mark = QvpPassage.ayahMark([page], 2, 255);         // the medallion alone, for omitAyahMarks: true
+passage.dress(set, spec);  // the page's QvpDressSpec: its medallion on every ring; lay out again, and paintPassage paints layout.ornaments behind the ink
 passage.close();
 ```
 

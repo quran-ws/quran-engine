@@ -44,8 +44,8 @@ class QvpPassage {
   /// prints it. It lays out as one piece on one row and has no ayahs and no words. It sits on
   /// the baseline of the line its ayah ends on, so at the scale of the ayah's own layout it has
   /// the size it has after the ayah's last word. Lay the ayah out with
-  /// [QvpPassageSpec.omitAyahMarks] to show it apart. It is the page's printed medallion, not a
-  /// dress's marker. Throws when no page given prints it.
+  /// [QvpPassageSpec.omitAyahMarks] to show it apart. It is the page's printed medallion, or
+  /// the design [dress] puts on it. Throws when no page given prints it.
   factory QvpPassage.ayahMark(List<QvpPage> pages, int surah, int ayah) {
     _checkU16(surah, 'surah');
     _checkU16(ayah, 'ayah');
@@ -115,6 +115,27 @@ class QvpPassage {
     final l = _backend.passageLayout(handle, spec);
     if (l != null) currentLayout = l;
     return l;
+  }
+
+  /// Puts the ayah medallion of another mushaf on the passage, as [QvpPage.dress] puts it on a
+  /// page. It takes the same set and spec and uses only the medallion: [QvpDressSpec.ayahMark]
+  /// (or the style's medallion), [QvpDressSpec.ayahMarkScale], line art for
+  /// [QvpOrnamentKind.ayahMark] and the colours. Each design goes on its printed ring as on the
+  /// page. The ring leaves the draw list and the numeral stays. The layout makes room for the
+  /// design, the same in colour and as line art, so dark mode moves no row break. Returns false,
+  /// and leaves the passage undressed, when the spec names no medallion. A change of dress drops
+  /// the layout: call [layout] again, whose [QvpPassageLayout.ornaments] are the medallions to
+  /// draw.
+  bool dress(QvpOrnaments set, [QvpDressSpec spec = const QvpDressSpec()]) {
+    final ok = _backend.passageDress(handle, set.handle, spec);
+    currentLayout = null;
+    return ok;
+  }
+
+  /// Takes the dress off: the printed medallions come back. Lay the passage out again.
+  void undress() {
+    _backend.passageUndress(handle);
+    currentLayout = null;
   }
 
   /// The draw list of the last layout as its pages style it now. With a letter layer, a cut

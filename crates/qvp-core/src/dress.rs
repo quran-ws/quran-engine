@@ -189,7 +189,7 @@ impl Tf {
 }
 
 /// One ornament's colours after the spec's overrides, and its two special parts.
-struct Palette {
+pub(crate) struct Palette {
     colors: Vec<Rgba>,
     line: Option<u16>,
     slot: Option<u16>,
@@ -368,7 +368,7 @@ const BAND_FILL: f32 = 0.9;
 /// the catalogue's own linework has on a design 100 units tall.
 const LINE_ART_WIDTH: f32 = 1.25;
 
-fn palette(o: &Ornament, index: u32, spec: &DressSpec) -> Palette {
+pub(crate) fn palette(o: &Ornament, index: u32, spec: &DressSpec) -> Palette {
     let mut colors: Vec<Rgba> = o.parts.iter().map(|p| p.color).collect();
     for &(oi, part, rgba) in &spec.colors {
         if oi == index {
@@ -381,10 +381,10 @@ fn palette(o: &Ornament, index: u32, spec: &DressSpec) -> Palette {
     Palette { colors, line: o.part_index("line"), slot: o.part_index("slot"), ink }
 }
 
-struct Builder<'a> {
-    set: &'a OrnamentSet,
-    line_art: u32,
-    out: Dress,
+pub(crate) struct Builder<'a> {
+    pub(crate) set: &'a OrnamentSet,
+    pub(crate) line_art: u32,
+    pub(crate) out: Dress,
 }
 
 impl<'a> Builder<'a> {
@@ -408,7 +408,15 @@ impl<'a> Builder<'a> {
 
     /// Emit one asset's outlines through `tf`. `drop_slot` leaves out the transparent
     /// window, which a tiled frame must not keep.
-    fn place(&mut self, asset: &Asset, pal: &Palette, kind: OrnamentKind, tf: &Tf, drop_slot: bool, placement: u32) {
+    pub(crate) fn place(
+        &mut self,
+        asset: &Asset,
+        pal: &Palette,
+        kind: OrnamentKind,
+        tf: &Tf,
+        drop_slot: bool,
+        placement: u32,
+    ) {
         let q = self.set.quant as f32;
         let ss = tf.stroke_scale();
         for i in asset.first_path..asset.first_path + asset.n_paths {
@@ -548,6 +556,38 @@ impl<'a> Builder<'a> {
         }
         self.out.n_frame_repeats = (nh + nv) * 2;
     }
+}
+
+/// Where a medallion goes on a printed ring with centre `(cx, cy)` and radius `r`: as tall as
+/// the ring times the spec's size, its aspect kept, and its slot centre on the ring's centre, so
+/// the numeral sits where the design leaves room for it. A page's dress and a passage's place
+/// their medallions with this.
+pub(crate) fn ayah_mark_tf(o: &Ornament, spec: &DressSpec, cx: f32, cy: f32, r: f32) -> Tf {
+    let size = if spec.ayah_mark_scale > 0.0 {
+        spec.ayah_mark_scale
+    } else if o.lineage == Lineage::Scan {
+        crate::defaults::AYAH_MARK_SCALE_SCAN
+    } else {
+        1.0
+    };
+    let (scx, scy) = o.asset.slot_centre();
+    let s = 2.0 * r * size / o.asset.height().max(f32::EPSILON);
+    Tf { a: s, b: 0.0, c: 0.0, d: s, e: cx - s * scx, f: cy - s * scy }
+}
+
+/// Every outline a medallion can draw through `tf`, whatever its colours and line art: each path
+/// but the slot, as the colour drawing has it. With them, the widest half stroke that the colour
+/// drawing or the line art puts down. A passage measures the room a medallion takes from this, so
+/// a host that turns line art on, as in dark mode, does not move a row break.
+pub(crate) fn ayah_mark_reach(set: &OrnamentSet, o: &Ornament, tf: &Tf) -> (Dress, f32) {
+    let mut pal = palette(o, NONE, &DressSpec::default());
+    pal.colors.fill(0x0000_00ff);
+    let mut b = Builder { set, line_art: 0, out: Dress::default() };
+    b.place(&o.asset, &pal, OrnamentKind::AyahMark, tf, true, NONE);
+    let stroked = b.out.table.iter().filter(|t| t.flags & ODF_STROKE != 0).map(|t| t.stroke_width).fold(0.0, f32::max);
+    // a design with no linework is drawn as line art from its fills, at this width
+    let outlined = if pal.line.is_none() { LINE_ART_WIDTH * tf.stroke_scale() } else { 0.0 };
+    (b.out, stroked.max(outlined) / 2.0)
 }
 
 impl Page {
@@ -944,20 +984,11 @@ impl Page {
         if let Some((oi, o)) = mark {
             let first = b.out.table.len();
             let pal = palette(o, oi, spec);
-            let (scx, scy) = o.asset.slot_centre();
             for m in self.ayah_marks() {
                 if m.r <= 0.0 {
                     continue;
                 }
-                let size = if spec.ayah_mark_scale > 0.0 {
-                    spec.ayah_mark_scale
-                } else if o.lineage == Lineage::Scan {
-                    crate::defaults::AYAH_MARK_SCALE_SCAN
-                } else {
-                    1.0
-                };
-                let s = 2.0 * m.r * size / o.asset.height().max(f32::EPSILON);
-                let tf = Tf { a: s, b: 0.0, c: 0.0, d: s, e: m.cx - s * scx, f: m.cy - s * scy };
+                let tf = ayah_mark_tf(o, spec, m.cx, m.cy, m.r);
                 let path = if m.ornament_path != NONE {
                     m.ornament_path
                 } else {

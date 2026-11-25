@@ -6,6 +6,20 @@ All notable changes to the engine and its packages. The format follows
 
 ## [Unreleased]
 
+### Added
+- A passage can show the ayah medallion of another mushaf, as a dressed page does.
+  `qvp_passage_dress` takes the ornament set and the spec a page takes, and uses its medallion.
+  `qvp_passage_undress` takes it off, and `qvp_passage_dress_geometry` gives the medallions of
+  the last layout, in the table `qvp_dress_geometry` gives a page's. Each design goes on its
+  printed ring by the page's rule. The ring leaves the draw list and the numeral stays. The
+  layout makes room for the design, the same in colour and as line art, so dark mode moves no
+  row break. This holds on one row, on wrapped rows, after a cut and for a medallion alone. A
+  change of dress drops the layout. Bound in every wrapper as `passage.dress`,
+  `passage.undress` and `layout.ornaments`, and the passage drawers paint the medallions
+  behind the ink. React Native's `<QvpPassageView />` takes a `dress` prop. In Rust,
+  `Passage::dress`, `Passage::undress` and `Passage::dress_of` return a `PassageDress`.
+- `conformance/scenarios/dress.json` has five dressed passages, which every wrapper replays.
+
 ## [0.11.0] - 2026-11-24
 
 ### Added

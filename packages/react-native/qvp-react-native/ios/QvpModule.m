@@ -173,6 +173,7 @@ RCT_EXPORT_VIEW_PROPERTY(ellipsisWidth, CGFloat)
 RCT_EXPORT_VIEW_PROPERTY(maxStretch, CGFloat)
 RCT_EXPORT_VIEW_PROPERTY(ink, NSString)
 RCT_EXPORT_VIEW_PROPERTY(paperColor, NSString)
+RCT_EXPORT_VIEW_PROPERTY(dress, NSDictionary)
 RCT_EXPORT_VIEW_PROPERTY(onPassageLayout, RCTDirectEventBlock)
 RCT_EXPORT_VIEW_PROPERTY(onError, RCTDirectEventBlock)
 @end

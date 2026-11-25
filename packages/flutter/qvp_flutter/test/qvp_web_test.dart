@@ -6,8 +6,8 @@
 // Engine: assets/js/qvp.js and assets/wasm/qvp_ffi.wasm, the two files the package bundles
 // (build them with scripts/sync-flutter-web-engine.sh).
 // Data: <repo>/dist/pages/042.qvp, 042.words.json, atlas.qva,
-// <repo>/conformance/scenarios/layout.json and letters.json, and the hex fixtures that
-// letters.json names in <repo>/conformance/.
+// <repo>/conformance/scenarios/layout.json, dress.json and letters.json, the ornament set
+// dress.json names and the hex fixtures that letters.json names, in <repo>/conformance/.
 //
 // The browser test server serves no package assets, and a browser cannot read the disk. So
 // a hybrid isolate on the Dart VM reads the files and sends them over a channel. The test
@@ -46,6 +46,8 @@ void hybridMain(StreamChannel<Object?> channel) {
     '042.words.json': '$repo/dist/pages/042.words.json',
     'atlas.qva': '$repo/dist/pages/atlas.qva',
     'layout.json': '$repo/conformance/scenarios/layout.json',
+    'dress.json': '$repo/conformance/scenarios/dress.json',
+    'qvo1-dress.hex': '$repo/conformance/qvo1-dress.hex',
     'letters.json': '$repo/conformance/scenarios/letters.json',
   };
   // the hex fixtures letters.json names, as text
@@ -121,6 +123,8 @@ void main() {
           : utf8.decode(files['042.words.json']!),
       atlas: files['atlas.qva'],
       layoutScenarios: utf8.decode(need('layout.json')),
+      dressScenarios: utf8.decode(need('dress.json')),
+      dressOrnaments: utf8.decode(need('qvo1-dress.hex')),
     ),
   );
 

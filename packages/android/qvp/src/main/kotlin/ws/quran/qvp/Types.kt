@@ -503,6 +503,9 @@ class QvpPassageLayout(
     /** Where the host draws its ellipsis after a cut, from the last row's top to its baseline. Null
      * when nothing was cut. */
     val ellipsis: RectF?,
+    /** A dressed passage's medallions ([QvpPassage.dress]), in page units: paint them behind the ink,
+     * each under the placement its [QvpOrnamentDraw.placement] indexes. Empty when undressed. */
+    val ornaments: List<QvpOrnamentDraw> = emptyList(),
 )
 
 // ── dress: another mushaf's ornaments ──
@@ -563,6 +566,21 @@ data class QvpDressSpec(
     internal fun lineArtBits(): Int = lineArt.fold(0) { m, k -> m or (1 shl k.id) }
     internal fun colorTriples(): IntArray? =
         if (colors.isEmpty()) null else IntArray(colors.size * 3) { k -> colors[k / 3].let { c -> when (k % 3) { 0 -> c.ornament; 1 -> c.part; else -> c.color } } }
+    /** The index of the ornament of [kind] this spec takes from [set], or -1, QVP_NONE as the bridge
+     * passes it: a style name is resolved here, before the spec goes to the engine. */
+    internal fun indexOf(set: QvpOrnaments, kind: QvpOrnamentKind): Int {
+        val ref = when (kind) {
+            QvpOrnamentKind.AYAH_MARK -> ayahMark
+            QvpOrnamentKind.SURAH_HEADER -> surahHeader
+            QvpOrnamentKind.PAGE_FRAME -> pageFrame
+        }
+        return when (val r = ref ?: style?.let { QvpOrnamentRef.Style(it) }) {
+            null, QvpOrnamentRef.None -> -1
+            is QvpOrnament -> r.index
+            is QvpOrnamentRef.Index -> r.index
+            is QvpOrnamentRef.Style -> set.find(kind, r.style)?.index ?: -1
+        }
+    }
     companion object {
         /** Every kind as line art. */
         val ALL_LINE_ART: Set<QvpOrnamentKind> = QvpOrnamentKind.entries.toSet()

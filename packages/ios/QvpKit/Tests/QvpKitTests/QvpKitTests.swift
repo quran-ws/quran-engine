@@ -1452,6 +1452,97 @@ final class QvpKitTests: XCTestCase {
         }
     }
 
+    /// Every wrapper replays the passages of conformance/scenarios/dress.json: ayahs of page 042
+    /// in the synthetic medallion, on one row, on wrapped rows, cut with the medallion kept, with
+    /// no medallions, and a medallion alone. The layout makes room for each design, each outline
+    /// is listed under the placement of its word, and `draw` paints the designs behind the ink.
+    func testDressedPassagesMatchTheEngine() throws {
+        let url = Self.repo.appendingPathComponent("conformance/scenarios/dress.json")
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let tolerance = json["tolerance"] as! Double
+        func near(_ got: CGFloat, _ want: Any, _ what: String) {
+            let w = (want as! NSNumber).doubleValue
+            XCTAssertLessThanOrEqual(abs(Double(got) - w), tolerance * max(1, abs(w)), "\(what): got \(got), engine says \(w)")
+        }
+        let hex = try String(contentsOf: Self.repo.appendingPathComponent("conformance/\(json["ornaments"] as! String)"), encoding: .utf8)
+            .filter { !$0.isWhitespace }
+        let chars = Array(hex)
+        let bytes = Data(stride(from: 0, to: chars.count, by: 2).map { UInt8(String(chars[$0...$0 + 1]), radix: 16)! })
+        let set = try QvpOrnaments(bytes: bytes); defer { set.close() }
+        let page = try Self.loadPage(); defer { page.close() }
+        let kinds: [String: OrnamentKind] = ["ayah_mark": .ayahMark, "surah_header": .surahHeader, "page_frame": .pageFrame]
+        let passages = json["passages"] as! [[String: Any]]
+        XCTAssertEqual(passages.count, 5)
+        for c in passages {
+            let int: (String) -> Int = { (c[$0] as! NSNumber).intValue }
+            let (surah, from, to) = (int("surah"), int("from"), int("to"))
+            let alone = c["ayahMark"] as! Bool
+            let tag = "dressed passage \(surah):\(from)-\(to)\(alone ? " medallion" : "")"
+            let d = c["dress"] as! [String: Any]
+            let index: (String) -> OrnamentChoice? = { k in (d[k] as? NSNumber).map { .index($0.intValue) } }
+            let dress = DressSpec(ayahMark: index("ayahMark"), surahHeader: index("surahHeader"), pageFrame: index("pageFrame"),
+                                  ayahMarkScale: Float((d["ayahMarkScale"] as? NSNumber)?.doubleValue ?? 0),
+                                  lineArt: Set((d["lineArt"] as! [String]).map { kinds[$0]! }),
+                                  colors: (d["colors"] as! [[NSNumber]]).map {
+                                      OrnamentColor(ornament: $0[0].intValue, part: $0[1].intValue, color: $0[2].uint32Value)
+                                  })
+            let s = c["spec"] as! [String: Any]
+            let f: (String) -> Float = { Float((s[$0] as! NSNumber).doubleValue) }
+            let align: [String: QvpPassageAlign] = ["right": .right, "center": .center, "justified": .justified]
+            let spec = QvpPassageSpec(width: f("width"), scale: f("scale"), align: align[s["align"] as! String]!,
+                                      maxRows: (s["maxRows"] as! NSNumber).intValue, keepAyahMark: s["keepAyahMark"] as! Bool,
+                                      ellipsisWidth: f("ellipsisWidth"), omitAyahMarks: s["omitAyahMarks"] as! Bool)
+            let passage = alone ? try QvpPassage(ayahMarkOf: from, surah: surah, pages: [page])
+                : try QvpPassage(pages: [page], surah: surah, from: from, to: to)
+            defer { passage.close() }
+            passage.layout(spec)
+            XCTAssertTrue(passage.dress(set, dress), "\(tag): the engine refused the dress")
+            XCTAssertNil(passage.currentLayout, "\(tag): the dress drops the layout")
+            let l = try XCTUnwrap(passage.layout(spec), tag)
+            let want = c["layout"] as! [String: Any]
+            near(CGFloat(l.width), want["width"]!, "\(tag) width")
+            near(CGFloat(l.height), want["height"]!, "\(tag) height")
+            near(CGFloat(l.scale), want["scale"]!, "\(tag) scale")
+            XCTAssertEqual(l.draws.count, (want["draws"] as! NSNumber).intValue, "\(tag) draws")
+            XCTAssertEqual(l.words.count, (want["words"] as! NSNumber).intValue, "\(tag) words")
+            XCTAssertEqual(l.placements.count, (want["placements"] as! NSNumber).intValue, "\(tag) placements")
+            let ornaments = c["ornaments"] as! [[NSNumber]]
+            XCTAssertEqual(l.ornaments.count, ornaments.count, "\(tag) ornaments")
+            for (i, (o, got)) in zip(ornaments, l.ornaments).enumerated() {
+                let at = "\(tag) ornament \(i)"
+                XCTAssertEqual(got.placement, o[0].intValue, at)
+                XCTAssertEqual(got.color, o[1].uint32Value, at)
+                XCTAssertEqual(got.kind, .ayahMark, at)
+                XCTAssertEqual(got.stroke, o[2].intValue & 0x200 != 0, at)
+                near(CGFloat(got.strokeWidth), o[3], "\(at) stroke width")
+                // the synthetic set's outlines are straight lines: the path's box is the points'
+                let b = got.path.boundingBoxOfPath
+                near(b.minX, o[4], "\(at) x0"); near(b.minY, o[5], "\(at) y0")
+                near(b.maxX, o[6], "\(at) x1"); near(b.maxY, o[7], "\(at) y1")
+            }
+            // draw paints the designs behind the ink, in their own colour: a pixel inside the
+            // first filled design, where no ink is, shows it. Line art is only an outline
+            if let first = l.ornaments.first(where: { !$0.stroke }), !alone {
+                let w = Int(ceil(l.width)), h = Int(ceil(l.height))
+                let ctx = try XCTUnwrap(CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+                l.draw(in: ctx, pages: [page.pageNo: page])
+                let q = l.placements[first.placement!], k = CGFloat(l.scale)
+                let box = first.path.boundingBoxOfPath
+                // a point just inside the design's left edge, in the bitmap's rows from the bottom
+                let px = Int(k * (CGFloat(q.kx) * (box.minX + box.width * 0.08) + CGFloat(q.dx)))
+                let py = Int(k * (CGFloat(q.ky) * box.midY + CGFloat(q.dy)))
+                let data = try XCTUnwrap(ctx.data).assumingMemoryBound(to: UInt8.self)
+                let o = ((h - 1 - py) * w + px) * 4
+                let rgba = (UInt32(data[o]) << 24) | (UInt32(data[o + 1]) << 16) | (UInt32(data[o + 2]) << 8) | UInt32(data[o + 3])
+                XCTAssertNotEqual(rgba & 0xff, 0, "\(tag): nothing painted at the design")
+            }
+            passage.undress()
+            XCTAssertTrue(try XCTUnwrap(passage.layout(spec)).ornaments.isEmpty, "\(tag) undressed")
+        }
+    }
+
     func testPassageScenariosMatchTheEngine() throws {
         let url = Self.repo.appendingPathComponent("conformance/scenarios/passage.json")
         let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]

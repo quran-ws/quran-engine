@@ -84,5 +84,51 @@
        {"scale": 1, "viewportW": 780, "view": {"scale": 1, "offsetX": 194.99998, "offsetY": 47.96639}, "width": 468.76205, "height": 841.36755},
        {"scale": 0, "viewportW": 390, "view": {"scale": 0.8319786, "offsetX": 32.76416, "offsetY": 39.90701}, "width": 390, "height": 699.9998}
      ]}
+  ],
+  "passages": [
+    {"surah": 2, "from": 253, "to": 256, "ayahMark": false,
+     "dress": {"ayahMark": 0, "surahHeader": 1, "pageFrame": 2, "ayahMarkScale": 1, "lineArt": [], "colors": []},
+     "spec": {"width": 0, "scale": 0.9, "align": "right", "maxRows": 0, "keepAyahMark": false, "omitAyahMarks": false, "ellipsisWidth": 0},
+     "layout": {"width": 4435.799, "height": 45.15701, "scale": 0.9, "draws": 1057, "words": 147, "placements": 147},
+     "ornaments": [
+       [51, 6593535, 0, 0, 171.31, 196.37999, 188.98999, 218.48],
+       [51, 808862207, 512, 0.0221, 171.31, 196.37999, 188.98999, 218.48],
+       [72, 6593535, 0, 0, 113.740005, 267.59003, 131.42001, 289.69003],
+       [72, 808862207, 512, 0.0221, 113.740005, 267.59003, 131.42001, 289.69003],
+       [122, 6593535, 0, 0, 207.55, 446.65002, 225.23001, 468.75003],
+       [122, 808862207, 512, 0.0221, 207.55, 446.65002, 225.23001, 468.75003],
+       [146, 6593535, 0, 0, 6.74, 518.28, 24.42, 540.38],
+       [146, 808862207, 512, 0.0221, 6.74, 518.28, 24.42, 540.38]
+     ]},
+    {"surah": 2, "from": 253, "to": 256, "ayahMark": false,
+     "dress": {"ayahMark": 0, "ayahMarkScale": 1.5, "lineArt": ["ayah_mark"], "colors": [[0, 1, 4278190335]]},
+     "spec": {"width": 300, "scale": 0.9, "align": "justified", "maxRows": 0, "keepAyahMark": false, "omitAyahMarks": false, "ellipsisWidth": 0},
+     "layout": {"width": 300, "height": 559.9267, "scale": 0.9, "draws": 1057, "words": 147, "placements": 147},
+     "ornaments": [
+       [51, 4278190335, 512, 0.033150002, 166.89, 190.855, 193.41, 224.005],
+       [72, 4278190335, 512, 0.033150002, 109.32, 262.065, 135.84, 295.215],
+       [122, 4278190335, 512, 0.033150002, 203.13, 441.125, 229.65001, 474.275],
+       [146, 4278190335, 512, 0.033150002, 2.3199987, 512.755, 28.84, 545.905]
+     ]},
+    {"surah": 2, "from": 253, "to": 256, "ayahMark": false,
+     "dress": {"ayahMark": 0, "lineArt": [], "colors": []},
+     "spec": {"width": 300, "scale": 0.9, "align": "right", "maxRows": 1, "keepAyahMark": true, "omitAyahMarks": false, "ellipsisWidth": 9},
+     "layout": {"width": 300, "height": 32.071, "scale": 0.9, "draws": 54, "words": 8, "placements": 9},
+     "ornaments": [
+       [8, 6593535, 0, 0, 6.74, 518.28, 24.42, 540.38],
+       [8, 808862207, 512, 0.0221, 6.74, 518.28, 24.42, 540.38]
+     ]},
+    {"surah": 2, "from": 253, "to": 256, "ayahMark": false,
+     "dress": {"ayahMark": 0, "lineArt": [], "colors": []},
+     "spec": {"width": 300, "scale": 0.9, "align": "right", "maxRows": 0, "keepAyahMark": false, "omitAyahMarks": true, "ellipsisWidth": 0},
+     "layout": {"width": 300, "height": 554.58405, "scale": 0.9, "draws": 1053, "words": 147, "placements": 147},
+     "ornaments": []},
+    {"surah": 2, "from": 255, "to": 255, "ayahMark": true,
+     "dress": {"ayahMark": 0, "ayahMarkScale": 1.5, "lineArt": ["ayah_mark"], "colors": [[0, 1, 4278190335]]},
+     "spec": {"width": 0, "scale": 0.9, "align": "right", "maxRows": 0, "keepAyahMark": false, "omitAyahMarks": false, "ellipsisWidth": 0},
+     "layout": {"width": 27.897839, "height": 33.86483, "scale": 0.9, "draws": 1, "words": 0, "placements": 1},
+     "ornaments": [
+       [0, 4278190335, 512, 0.033150002, 203.13, 441.125, 229.65001, 474.275]
+     ]}
   ]
 }

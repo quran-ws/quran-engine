@@ -1319,6 +1319,8 @@ class _InkCache {
 /// Without it, paths are lazily resolved via [page.path] without building whole-page lists.
 /// [draws] replaces the layout's own list: pass [QvpPassage.styledDrawList] with [pageColors]
 /// true to fill each path in its page's colour, so the letters the pages colour show here too.
+/// A dressed passage's medallions ([QvpPassageLayout.ornaments]) are painted first, behind the
+/// ink, in their own colours.
 void paintPassage(
   ui.Canvas canvas,
   QvpPassageLayout layout,
@@ -1337,6 +1339,33 @@ void paintPassage(
   // The same placement loop as the page painter: a point (x, y) draws at
   // scale · (kx · x + dx), scale · (ky · y + dy), and runs under one placement share a save.
   var cur = -1, open = false;
+  void place(int placement) {
+    if (placement == cur) return;
+    if (open) canvas.restore();
+    canvas.save();
+    final q = placement < places.length
+        ? places[placement]
+        : QvpPlacement.identity;
+    canvas.translate(s * q.dx, s * q.dy);
+    canvas.scale(s * q.kx, s * q.ky);
+    open = true;
+    cur = placement;
+  }
+
+  final ornament = ui.Paint()
+    ..isAntiAlias = true
+    ..strokeCap = ui.StrokeCap.round
+    ..strokeJoin = ui.StrokeJoin.round;
+  for (final o in layout.ornaments) {
+    final placement = o.placement;
+    if (placement == null) continue;
+    place(placement);
+    ornament
+      ..color = QvpColor.toColor(o.color)
+      ..style = o.stroke ? ui.PaintingStyle.stroke : ui.PaintingStyle.fill
+      ..strokeWidth = o.strokeWidth;
+    canvas.drawPath(o.path, ornament);
+  }
   for (final d in draws ?? layout.draws) {
     final page = pages[d.page];
     if (page == null) continue;
@@ -1347,17 +1376,7 @@ void paintPassage(
     final path = (paths != null && paths[d.page] != null)
         ? paths[d.page]![d.path]
         : page.path(d.path);
-    if (d.placement != cur) {
-      if (open) canvas.restore();
-      canvas.save();
-      final q = d.placement < places.length
-          ? places[d.placement]
-          : QvpPlacement.identity;
-      canvas.translate(s * q.dx, s * q.dy);
-      canvas.scale(s * q.kx, s * q.ky);
-      open = true;
-      cur = d.placement;
-    }
+    place(d.placement);
     canvas.drawPath(path, paint);
   }
   if (open) canvas.restore();

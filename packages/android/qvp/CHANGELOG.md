@@ -4,6 +4,11 @@ This package shares the engine version. Entries are copied from the root `CHANGE
 
 ## [Unreleased]
 
+### Added
+- Android: `QvpPassage.dress(set, spec)` and `undress()` put the ayah medallion of another
+  mushaf on a passage, from the `QvpDressSpec` a page takes. `QvpPassageLayout.ornaments` are the
+  medallions of the layout, and `QvpPassageLayout.draw` paints them behind the ink.
+
 ## [0.11.0] - 2026-11-24
 
 ### Added

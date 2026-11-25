@@ -513,8 +513,8 @@ QvpPassage* qvp_passage_load(const QvpPage* const* pages, uint32_t n_pages, uint
 QvpPassage* qvp_passage_load_basmalah(const QvpPage* const* pages, uint32_t n_pages, uint16_t surah);   /* the basmalah printed above a surah, on one row; no ayahs, no words. NULL: surah 1 or 9, not on the pages, a page repeated */
 QvpPassage* qvp_passage_load_ayah_mark(const QvpPage* const* pages, uint32_t n_pages, uint16_t surah, uint16_t ayah);   /* the medallion that closes an ayah, on one row; no ayahs, no words */
 /* It sits on the baseline of the line its ayah ends on and has its page's line spacing, so at the scale of the ayah's layout
-   it has the size it has after the ayah's last word. It is the page's printed medallion, not a dress's marker. NULL: the
-   medallion is not on the pages, a page repeated. */
+   it has the size it has after the ayah's last word. It is the page's printed medallion, or the design qvp_passage_dress puts
+   on it. NULL: the medallion is not on the pages, a page repeated. */
 void     qvp_passage_free(QvpPassage*);
 uint32_t qvp_passage_ayah_count(const QvpPassage*);
 void     qvp_passage_ayah_text(const QvpPassage*, uint32_t index, QvpStr* out);         /* the page's own word texts; empty outside the range */
@@ -531,6 +531,16 @@ uint32_t qvp_passage_styled_draw_list(const QvpPassage*, const QvpPage* const* p
    its pending rule changes first. A draw whose page is not given is listed as qvp_passage_draw_list has it; a NULL page is
    skipped. A host that keeps the list keys it on the layout and on each page's qvp_layout_draw_revision. */
 uint32_t qvp_passage_placements(const QvpPassage*, float* out /* n × {dx, dy, kx, ky} */, uint32_t cap);
+int      qvp_passage_dress(QvpPassage*, const QvpOrnaments*, const QvpDressSpec*);   /* 0 = refused: ayah_mark QVP_NONE, out of range or of another kind, a design over the measuring budget, or a NULL set or spec; the passage is then undressed */
+void     qvp_passage_undress(QvpPassage*);
+void     qvp_passage_dress_geometry(const QvpPassage*, QvpDressGeometry* out);   /* the last layout's medallions; paint them BEHIND the ink; valid until the next layout, dress, undress or free */
+/* The ayah medallion of another mushaf, as qvp_dress puts it on a page. Only the medallion of the spec is used: ayah_mark,
+   ayah_mark_scale, the QVP_LINE_ART_AYAH_MARK bit and the colours; the band, the border and the gaps are ignored, so the spec
+   a page takes works. Each design goes on its printed ring as on the page. The ring leaves the draw lists and the numeral
+   stays, on top. The layout makes room for every outline the design can draw, in colour or as line art, so line art moves
+   no row break. The medallion after a cut and qvp_passage_load_ayah_mark's medallion are dressed too. A change of dress
+   drops the layout: call qvp_passage_layout again. The geometry has qvp_dress_geometry's table; each draw's placement
+   indexes qvp_passage_placements, and its ops and points are in the page units of its medallion's page. */
 
 /* names --------------------------------------------------------------------------------- */
 /* The name tables the engine owns; ids run from 0, 255 is "unknown". A wrapper reads names from

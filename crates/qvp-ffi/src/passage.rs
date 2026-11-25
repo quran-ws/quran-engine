@@ -2,6 +2,7 @@
 
 use crate::abi::{fill_with, guard, out_str, QvpStr};
 use crate::convert::placement;
+use crate::dress::{dress_spec, geometry, Ornaments, QvpDressGeometry, QvpDressSpec};
 use crate::layout::refreshed;
 use qvp_core::*;
 
@@ -305,5 +306,48 @@ pub unsafe extern "C" fn qvp_passage_placements(passage: *const Passage, out: *m
     guard(|| {
         let Some(l) = (*passage).current_layout() else { return 0 };
         fill_with(out.cast(), cap, l.placements.iter().map(placement))
+    })
+}
+/// Put the ayah medallion of another mushaf on the passage: the medallion of `spec`, the rest
+/// ignored. 0 when it is refused, which leaves the passage undressed. A change of dress drops
+/// the layout.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_passage_dress(
+    passage: *mut Passage,
+    set: *const Ornaments,
+    spec: *const QvpDressSpec,
+) -> i32 {
+    guard(|| {
+        if passage.is_null() {
+            return 0;
+        }
+        let spec = if set.is_null() || spec.is_null() { None } else { dress_spec(&*spec) };
+        match spec {
+            Some(spec) => (*passage).dress(&*set, &spec) as i32,
+            None => {
+                (*passage).undress();
+                0
+            }
+        }
+    })
+}
+#[no_mangle]
+pub unsafe extern "C" fn qvp_passage_undress(passage: *mut Passage) {
+    guard(|| {
+        if !passage.is_null() {
+            (*passage).undress()
+        }
+    })
+}
+/// The medallions of a dressed passage's last layout. Empty when it is not dressed or has no
+/// layout.
+#[no_mangle]
+pub unsafe extern "C" fn qvp_passage_dress_geometry(passage: *const Passage, out: *mut QvpDressGeometry) {
+    guard(|| {
+        if out.is_null() {
+            return;
+        }
+        let d = if passage.is_null() { None } else { (*passage).dress_of() };
+        *out = geometry(d.map(|d| (&d.ops[..], &d.pts[..], &d.table[..])))
     })
 }

@@ -9,14 +9,21 @@
 //! print their words smaller than the other pages; a passage draws every word at the size of its
 //! first word.
 //!
+//! A passage can wear the ayah medallion of another mushaf, as a page does ([`Passage::dress`]).
+//! Each design goes on its printed ring by the page's own rule, and the layout makes room for
+//! it.
+//!
 //! This is the reference for `web/lite-passage.mjs`. The two measure ink the same way: in bands
 //! of one fixed height, so that one row can hold words from two pages, and in `f64`, so that the
 //! two agree to the last digit on the same page data.
 
+use crate::dress::{self, Builder, Dress, DressSpec, OrnamentDraw, Palette};
 use crate::reflow::Placement;
-use crate::{defaults, Geometry, Page};
-use qvp_format::{DecoKind, IBox, Mark, NONE_U16, OP_CLOSE, OP_CUBIC, OP_LINE, OP_MOVE, OP_QUAD};
+use crate::{defaults, Geometry, Page, NONE};
+use qvp_format::ornaments::{Ornament, OrnamentKind, OrnamentSet};
+use qvp_format::{DecoKind, DecoRec, IBox, Mark, PathKind, NONE_U16, OP_CLOSE, OP_CUBIC, OP_LINE, OP_MOVE, OP_QUAD};
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 // ───────────────────────────── constants ─────────────────────────────
 
@@ -284,6 +291,39 @@ pub struct PassageLayout {
     pub ellipsis: Option<[f32; 4]>,
 }
 
+/// The medallions a dressed passage's last layout draws ([`Passage::dress`]), as a page's own
+/// ornament list is ([`Dress`]): outlines in the page units of each medallion's page. Paint them
+/// behind the ink. Only the printed ring gives way to a design; the numeral is the print's own ink
+/// and stays in the draw list, on top.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PassageDress {
+    pub ops: Vec<u8>,
+    pub pts: Vec<f32>,
+    /// The outlines in drawing order. Each one's `placement` indexes
+    /// [`PassageLayout::placements`]: draw it as a path of the layout is drawn.
+    pub table: Vec<OrnamentDraw>,
+    /// The ornament the medallions are drawn in: an index into the set's ornaments.
+    pub ayah_mark: u32,
+    /// How many medallions the layout draws.
+    pub n_ayah_marks: u32,
+}
+
+impl PassageDress {
+    /// Add one medallion's outlines under a placement.
+    fn put(&mut self, o: &Outlines, placement: u32) {
+        let (op0, pt0) = (self.ops.len() as u32, self.pts.len() as u32);
+        self.ops.extend_from_slice(&o.ops);
+        self.pts.extend_from_slice(&o.pts);
+        self.table.extend(o.table.iter().map(|t| OrnamentDraw {
+            op_start: t.op_start + op0,
+            pt_start: t.pt_start + pt0,
+            placement,
+            ..*t
+        }));
+        self.n_ayah_marks += 1;
+    }
+}
+
 /// A contiguous range of complete ayahs, ready to lay out at any width, or a surah's basmalah. It
 /// copies what it needs from its pages, so the pages can be freed after it is loaded.
 pub struct Passage {
@@ -296,6 +336,51 @@ pub struct Passage {
     ayahs: Vec<(u16, u16, String)>,
     line_spacing: f64,
     layout: Option<PassageLayout>,
+    /// The words in the medallion design that [`Passage::dress`] took.
+    dressing: Option<Dressing>,
+    /// The medallions of the last layout, when the passage is dressed.
+    dress: Option<PassageDress>,
+}
+
+/// A dressed passage's words: each printed ring has given way to the design.
+struct Dressing {
+    /// The ornament the medallions are drawn in.
+    ayah_mark: u32,
+    shapes: Shapes,
+    /// The same words with no ayah medallions. A medallion standing alone stays dressed.
+    unmarked: Shapes,
+}
+
+/// A printed medallion's ring, which a dress replaces with a design.
+#[derive(Clone, Debug)]
+struct Ring {
+    /// The ring's centre and radius in the page units of its page, never resized: the design is
+    /// drawn in the page's units, under the placement of its word.
+    cx: f32,
+    cy: f32,
+    r: f32,
+    /// The ring's paths: the paths a dress hides.
+    paths: Vec<u32>,
+    /// The box and bands of the medallion's other paths, the numeral, in the units of its atom.
+    /// `None` when the medallion is only its ring.
+    rest: Option<(Rect, Vec<Band>)>,
+}
+
+/// A design's outlines placed on one ring, in the page units of the ring's page. Each draw's
+/// placement is [`NONE`] until a layout puts it under a placement.
+#[derive(Debug)]
+struct Outlines {
+    ops: Vec<u8>,
+    pts: Vec<f32>,
+    table: Vec<OrnamentDraw>,
+}
+
+/// A design placed on one ring: what it draws, and the box and bands of what it can draw in the
+/// units of its atom.
+struct Design {
+    outlines: Arc<Outlines>,
+    rect: Rect,
+    bands: Vec<Band>,
 }
 
 /// The words of a passage as a layout measures them.
@@ -358,6 +443,10 @@ struct Atom {
     /// The page's printed line spacing and its usual gap between words.
     pitch: f64,
     gap: f64,
+    /// The printed ring of an atom that is a medallion standing alone ([`Passage::load_ayah_mark`]).
+    ring: Option<Ring>,
+    /// The design on that ring, in a dressed passage.
+    design: Option<Arc<Outlines>>,
 }
 
 /// A sign that goes with a word: an ayah medallion, a division mark or a sajdah sign.
@@ -367,6 +456,10 @@ struct Sign {
     paths: Vec<u32>,
     rect: Rect,
     bands: Vec<Band>,
+    /// The printed ring of an ayah medallion that a dress can replace.
+    ring: Option<Ring>,
+    /// The design on that ring, in a dressed passage.
+    design: Option<Arc<Outlines>>,
 }
 
 /// A sajdah line, and the words it is over.
@@ -469,7 +562,16 @@ impl Passage {
             .zip(&prepared)
             .flat_map(|(p, prep)| prep.strokes.iter().map(|s| (p.page_number(), s.clone())))
             .collect();
-        Ok(Passage { shapes: Shapes::new(atoms), unmarked: None, strokes, ayahs, line_spacing, layout: None })
+        Ok(Passage {
+            shapes: Shapes::new(atoms),
+            unmarked: None,
+            strokes,
+            ayahs,
+            line_spacing,
+            layout: None,
+            dressing: None,
+            dress: None,
+        })
     }
 
     /// Load the basmalah printed above `surah`, from whichever of the pages prints it.
@@ -536,6 +638,8 @@ impl Passage {
             pitch,
             // It stands alone, so no gap is ever measured against it.
             gap: pitch / 4.0,
+            ring: None,
+            design: None,
         };
         Ok(Passage::alone(page, atom))
     }
@@ -548,7 +652,8 @@ impl Passage {
     /// its line spacing is its page's. So at the scale of the ayah's own layout it has the size
     /// it has after the ayah's last word. A host that lays the ayah out with
     /// [`PassageSpec::omit_ayah_marks`] shows the medallion apart with this. It is the
-    /// medallion the page prints: a dressed page's marker is drawn by the dress, not here.
+    /// medallion the page prints, or the design of another mushaf when the passage is dressed
+    /// ([`Passage::dress`]).
     pub fn load_ayah_mark(pages: &[&Page], surah: u16, ayah: u16) -> Result<Passage, PassageError> {
         if !(1..=MAX_SURAH).contains(&surah) || !(1..=MAX_AYAH).contains(&ayah) {
             return Err(PassageError::Range);
@@ -584,6 +689,7 @@ impl Passage {
         let baseline = page.line_baseline(line as usize) as f64;
         let mut budget = Budget { points: MAX_POINTS, bands: MAX_BANDS };
         let bands = trace(page.geometry(), paths.iter().copied(), baseline, &mut budget)?;
+        let ring = ring(page, &deco, &paths, baseline, &mut budget)?;
         let pitch = page.line_spacing() as f64;
         let atom = Atom {
             word: NO_WORD,
@@ -601,6 +707,8 @@ impl Passage {
             pitch,
             // It stands alone, so no gap is ever measured against it.
             gap: pitch / 4.0,
+            ring,
+            design: None,
         };
         Ok(Passage::alone(page, atom))
     }
@@ -615,6 +723,8 @@ impl Passage {
             ayahs: Vec::new(),
             line_spacing,
             layout: None,
+            dressing: None,
+            dress: None,
         }
     }
 
@@ -642,16 +752,78 @@ impl Passage {
 
     /// Lay the passage out and keep the layout. `None` when the spec is out of range.
     pub fn layout(&mut self, spec: &PassageSpec) -> Option<&PassageLayout> {
-        if spec.omit_ayah_marks && self.unmarked.is_none() {
+        if spec.omit_ayah_marks && self.dressing.is_none() && self.unmarked.is_none() {
             self.unmarked = Some(self.shapes.without_ayah_marks());
         }
-        let shapes = match &self.unmarked {
-            Some(unmarked) if spec.omit_ayah_marks => unmarked,
-            _ => &self.shapes,
+        let shapes = match (&self.dressing, &self.unmarked) {
+            (Some(d), _) if spec.omit_ayah_marks => &d.unmarked,
+            (Some(d), _) => &d.shapes,
+            (None, Some(unmarked)) if spec.omit_ayah_marks => unmarked,
+            (None, _) => &self.shapes,
         };
-        let layout = self.compute(spec, shapes)?;
+        let (layout, mut dress) = self.compute(spec, shapes)?;
+        self.dress = self.dressing.as_ref().map(|d| {
+            dress.ayah_mark = d.ayah_mark;
+            dress
+        });
         self.layout = Some(layout);
         self.layout.as_ref()
+    }
+
+    /// Put the ayah medallion of another mushaf on the passage, as [`Page::dress`] puts it on a
+    /// page. Only the medallion of `spec` is used: its `ayah_mark`, its `ayah_mark_scale`, the
+    /// [`dress::LINE_ART_AYAH_MARK`] bit of its `line_art` and its `colors`. The rest is ignored,
+    /// so the spec a page takes works here.
+    ///
+    /// Each design goes on its printed ring as on the page: as tall as the ring times the size,
+    /// with its slot centre on the ring's centre. The printed ring leaves the draw list and the
+    /// numeral stays. The layout measures the room every outline of the design can take, in
+    /// colour or as line art, so a row breaks in the same place either way. The medallion after a
+    /// cut and a medallion standing alone ([`Passage::load_ayah_mark`]) are dressed too.
+    ///
+    /// Returns false, and leaves the passage undressed, when `ayah_mark` is [`NONE`], out of
+    /// range or of another kind, or a design needs more measuring than the budget allows. The
+    /// last layout is dropped when the dress changes: lay the passage out again.
+    pub fn dress(&mut self, set: &OrnamentSet, spec: &DressSpec) -> bool {
+        let was_dressed = self.dressing.take().is_some();
+        self.dressing = self.dressing_for(set, spec);
+        if self.dressing.is_some() || was_dressed {
+            self.layout = None;
+            self.dress = None;
+        }
+        self.dressing.is_some()
+    }
+
+    /// Take the dress off: the printed medallions come back. The last layout is dropped when
+    /// the passage was dressed: lay it out again.
+    pub fn undress(&mut self) {
+        if self.dressing.take().is_some() {
+            self.layout = None;
+            self.dress = None;
+        }
+    }
+
+    /// Get the medallions the last layout draws, when the passage is dressed. `None` when it is
+    /// not dressed or has no layout.
+    pub fn dress_of(&self) -> Option<&PassageDress> {
+        self.dress.as_ref()
+    }
+
+    /// The words of the passage in the design `spec` names. `None` when the spec names no
+    /// medallion, or a design needs more measuring than the budget allows.
+    fn dressing_for(&self, set: &OrnamentSet, spec: &DressSpec) -> Option<Dressing> {
+        let index = spec.ayah_mark;
+        let o = set.ornaments.get(index as usize).filter(|o| o.kind == OrnamentKind::AyahMark)?;
+        let pal = dress::palette(o, index, spec);
+        let mut atoms = Vec::with_capacity(self.shapes.atoms.len());
+        for a in &self.shapes.atoms {
+            let mut place = |ring: &Ring, baseline: f64| design(set, o, &pal, spec, ring, a.size, baseline);
+            let atom = a.atom.dressed(&mut place).ok()?.unwrap_or_else(|| a.atom.clone());
+            atoms.push(PassageAtom { page: a.page, atom, size: a.size });
+        }
+        let shapes = Shapes::new(atoms);
+        let unmarked = shapes.without_ayah_marks();
+        Some(Dressing { ayah_mark: index, shapes, unmarked })
     }
 
     /// The draw list of the last layout as its pages style it now. A path that its page draws
@@ -680,7 +852,7 @@ impl Passage {
         out
     }
 
-    fn compute(&self, spec: &PassageSpec, shapes: &Shapes) -> Option<PassageLayout> {
+    fn compute(&self, spec: &PassageSpec, shapes: &Shapes) -> Option<(PassageLayout, PassageDress)> {
         let valid = spec.width.is_finite()
             && spec.width <= MAX_WIDTH
             && spec.scale.is_finite()
@@ -779,6 +951,8 @@ impl Passage {
         // Each placement: dx, dy, kx, ky, and its row.
         let mut placements: Vec<(f64, f64, f64, f64, u32)> = Vec::new();
         let mut placed: HashMap<(u16, u32), (u32, f64, f64, Rect)> = HashMap::new();
+        // The designs of a dressed passage's medallions, each under its word's placement.
+        let mut ornaments = PassageDress::default();
         let mut ellipsis: Option<Rect> = None;
         let (mut last_baseline, mut last_bottom) = (0.0, 0.0);
         for (r, row) in rows.iter().enumerate() {
@@ -831,6 +1005,9 @@ impl Passage {
                 placements.push((dx, dy, size, size, r as u32));
                 let page = shapes.atoms[i].page;
                 draws.extend(atom.paths.iter().map(|&p| (page, p, placement)));
+                for design in atom.design.iter().chain(atom.signs.iter().filter_map(|s| s.design.as_ref())) {
+                    ornaments.put(design, placement);
+                }
                 let rect = moved(atom.rect, dx, dy);
                 boxes.push(rect);
                 // A decoration standing alone, such as a basmalah, is drawn but is no word.
@@ -853,6 +1030,9 @@ impl Passage {
                     placements.push((dx, dy, size, size, r as u32));
                     let page = shapes.atoms[owner].page;
                     draws.extend(sign.paths.iter().map(|&p| (page, p, placement)));
+                    if let Some(design) = &sign.design {
+                        ornaments.put(design, placement);
+                    }
                     boxes.push(moved(sign.rect, dx, dy));
                 }
             }
@@ -962,7 +1142,7 @@ impl Passage {
             }
         }
         let width = if one_row { row_width * scale + 2.0 * padding } else { spec.width as f64 };
-        Some(PassageLayout {
+        let layout = PassageLayout {
             width: width as f32,
             height: ((ink[3] - ink[1]) * scale + 2.0 * padding) as f32,
             scale: scale as f32,
@@ -988,7 +1168,8 @@ impl Passage {
                 .collect(),
             is_truncated,
             ellipsis: ellipsis.map(pixels),
-        })
+        };
+        Some((layout, ornaments))
     }
 }
 
@@ -1106,7 +1287,12 @@ pub(crate) fn prepare(page: &Page) -> Result<Prepared, PassageError> {
         let owner = owner.ok_or(PassageError::UnattachedSign)?;
         let baseline = baselines[data.words[owner as usize].line_index as usize];
         let bands = trace(geometry, paths.iter().copied(), baseline, &mut budget)?;
-        signs[owner as usize].push(Sign { kind: deco.kind, paths, rect: sign_rect, bands });
+        let ring = if deco.kind == DecoKind::AyahMark && deco.ayah != 0 {
+            ring(page, deco, &paths, baseline, &mut budget)?
+        } else {
+            None
+        };
+        signs[owner as usize].push(Sign { kind: deco.kind, paths, rect: sign_rect, bands, ring, design: None });
     }
 
     let atoms = data
@@ -1139,6 +1325,8 @@ pub(crate) fn prepare(page: &Page) -> Result<Prepared, PassageError> {
                 baseline: baselines[w.line_index as usize],
                 pitch,
                 gap,
+                ring: None,
+                design: None,
             }
         })
         .collect();
@@ -1154,62 +1342,150 @@ fn trace(
     baseline: f64,
     budget: &mut Budget,
 ) -> Result<Vec<Band>, PassageError> {
-    let mut bands = Silhouette { rows: BTreeMap::new(), baseline, budget };
+    let mut bands = Silhouette::new(baseline, budget);
     let (ops, pts) = (&geometry.ops, &geometry.pts);
-    let steps = defaults::CURVE_STEPS;
     for pi in paths {
         let g = &geometry.table[pi as usize];
-        let at = |k: usize| (pts[k] as f64, pts[k + 1] as f64);
-        let (mut k, mut here, mut start) = (g.pt_start as usize, (0.0, 0.0), (0.0, 0.0));
-        for oi in g.op_start..g.op_start + g.op_count {
-            match ops[oi as usize] {
-                OP_MOVE => {
-                    here = at(k);
-                    start = here;
-                    k += 2;
-                    bands.mark(here.0, here.1)?;
-                }
-                OP_LINE => {
-                    let to = at(k);
-                    k += 2;
-                    bands.segment(here, to)?;
-                    here = to;
-                }
-                OP_CLOSE => {
-                    bands.segment(here, start)?;
-                    here = start;
-                }
-                op @ (OP_QUAD | OP_CUBIC) => {
-                    let (c1, c2) = (at(k), at(k + 2));
-                    let to = if op == OP_QUAD { c2 } else { at(k + 4) };
-                    k += if op == OP_QUAD { 4 } else { 6 };
-                    // A curve is walked as a run of short straight pieces: close enough to its
-                    // outline for a band to know where the ink is.
-                    let mut previous = here;
-                    for i in 1..=steps {
-                        let t = i as f64 / steps as f64;
-                        let u = 1.0 - t;
-                        let next = if op == OP_QUAD {
-                            (
-                                u * u * here.0 + 2.0 * u * t * c1.0 + t * t * to.0,
-                                u * u * here.1 + 2.0 * u * t * c1.1 + t * t * to.1,
-                            )
-                        } else {
-                            (
-                                u.powi(3) * here.0 + 3.0 * u * u * t * c1.0 + 3.0 * u * t * t * c2.0 + t.powi(3) * to.0,
-                                u.powi(3) * here.1 + 3.0 * u * u * t * c1.1 + 3.0 * u * t * t * c2.1 + t.powi(3) * to.1,
-                            )
-                        };
-                        bands.segment(previous, next)?;
-                        previous = next;
-                    }
-                    here = to;
-                }
-                _ => {}
-            }
-        }
+        let ops = &ops[g.op_start as usize..(g.op_start + g.op_count) as usize];
+        walk(ops, &pts[g.pt_start as usize..], 1.0, &mut bands)?;
     }
     Ok(bands.rows.into_iter().map(|(band, (x0, x1))| (band, x0, x1)).collect())
+}
+
+/// Walk one outline into a silhouette, its points times `k`: `ops` are its ops and `pts` start
+/// at its first point.
+fn walk(ops: &[u8], pts: &[f32], k: f64, bands: &mut Silhouette) -> Result<(), PassageError> {
+    let steps = defaults::CURVE_STEPS;
+    let at = |i: usize| (pts[i] as f64 * k, pts[i + 1] as f64 * k);
+    let (mut i, mut here, mut start) = (0usize, (0.0, 0.0), (0.0, 0.0));
+    for &op in ops {
+        match op {
+            OP_MOVE => {
+                here = at(i);
+                start = here;
+                i += 2;
+                bands.mark(here.0, here.1)?;
+            }
+            OP_LINE => {
+                let to = at(i);
+                i += 2;
+                bands.segment(here, to)?;
+                here = to;
+            }
+            OP_CLOSE => {
+                bands.segment(here, start)?;
+                here = start;
+            }
+            op @ (OP_QUAD | OP_CUBIC) => {
+                let (c1, c2) = (at(i), at(i + 2));
+                let to = if op == OP_QUAD { c2 } else { at(i + 4) };
+                i += if op == OP_QUAD { 4 } else { 6 };
+                // A curve is walked as a run of short straight pieces: close enough to its
+                // outline for a band to know where the ink is.
+                let mut previous = here;
+                for s in 1..=steps {
+                    let t = s as f64 / steps as f64;
+                    let u = 1.0 - t;
+                    let next = if op == OP_QUAD {
+                        (
+                            u * u * here.0 + 2.0 * u * t * c1.0 + t * t * to.0,
+                            u * u * here.1 + 2.0 * u * t * c1.1 + t * t * to.1,
+                        )
+                    } else {
+                        (
+                            u.powi(3) * here.0 + 3.0 * u * u * t * c1.0 + 3.0 * u * t * t * c2.0 + t.powi(3) * to.0,
+                            u.powi(3) * here.1 + 3.0 * u * u * t * c1.1 + 3.0 * u * t * t * c2.1 + t.powi(3) * to.1,
+                        )
+                    };
+                    bands.segment(previous, next)?;
+                    previous = next;
+                }
+                here = to;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// The printed ring of the medallion `deco` on `page`, for a dress to replace: the page's own
+/// measure of it, as [`Page::ayah_marks`] gives it, its paths among `paths`, and the box and bands of the
+/// other paths, measured against `baseline`. `None` when the ring has no size: a page's dress
+/// leaves such a medallion as it is printed.
+fn ring(
+    page: &Page,
+    deco: &DecoRec,
+    paths: &[u32],
+    baseline: f64,
+    budget: &mut Budget,
+) -> Result<Option<Ring>, PassageError> {
+    let (cx, cy, r, _, _) = page.ring_of(deco);
+    if r.is_nan() || r <= 0.0 {
+        return Ok(None);
+    }
+    let data = page.data();
+    let q = page.quant();
+    let (ring, rest): (Vec<u32>, Vec<u32>) =
+        paths.iter().partition(|&&pi| data.paths[pi as usize].kind == PathKind::AyahMarkOrnament);
+    let rest = match bounds(rest.iter().map(|&pi| {
+        let b = &data.paths[pi as usize].bbox;
+        [b.x0 as f32 / q, b.y0 as f32 / q, b.x1 as f32 / q, b.y1 as f32 / q].map(f64::from)
+    })) {
+        Some(rect) => Some((rect, trace(page.geometry(), rest.iter().copied(), baseline, budget)?)),
+        None => None,
+    };
+    Ok(Some(Ring { cx, cy, r, paths: ring, rest }))
+}
+
+/// The design `o` placed on a printed ring, for an atom resized by `k` from its page whose
+/// baseline is `baseline`. Its outlines are drawn in `pal`, in the page units of the ring's page.
+/// Its box and bands, in the atom's units, hold every outline the design can draw
+/// and the widest half stroke.
+fn design(
+    set: &OrnamentSet,
+    o: &Ornament,
+    pal: &Palette,
+    spec: &DressSpec,
+    ring: &Ring,
+    k: f64,
+    baseline: f64,
+) -> Result<Design, PassageError> {
+    let tf = dress::ayah_mark_tf(o, spec, ring.cx, ring.cy, ring.r);
+    let mut b = Builder { set, line_art: spec.line_art, out: Dress::default() };
+    b.place(&o.asset, pal, OrnamentKind::AyahMark, &tf, false, NONE);
+    let outlines = Arc::new(Outlines { ops: b.out.ops, pts: b.out.pts, table: b.out.table });
+    let (reach, half) = dress::ayah_mark_reach(set, o, &tf);
+    let mut budget = Budget { points: MAX_POINTS, bands: MAX_BANDS };
+    let mut ink = Silhouette::new(baseline, &mut budget);
+    for t in &reach.table {
+        let ops = &reach.ops[t.op_start as usize..(t.op_start + t.op_count) as usize];
+        walk(ops, &reach.pts[t.pt_start as usize..], k, &mut ink)?;
+    }
+    let pad = half as f64 * k;
+    let e = ink.extent;
+    let rect = if e[0] <= e[2] {
+        [e[0] - pad, e[1] - pad, e[2] + pad, e[3] + pad]
+    } else {
+        // a design with no outline takes no room: it is the ring's centre
+        let (x, y) = (ring.cx as f64 * k, ring.cy as f64 * k);
+        [x, y, x, y]
+    };
+    let bands = widened(ink.rows.into_iter().map(|(band, (x0, x1))| (band, x0, x1)).collect(), pad);
+    Ok(Design { outlines, rect, bands })
+}
+
+/// Bands grown by `pad` on every side: the room a stroke of half width `pad` takes around them.
+fn widened(bands: Vec<Band>, pad: f64) -> Vec<Band> {
+    if pad.is_nan() || pad <= 0.0 {
+        return bands;
+    }
+    let reach = (pad / BAND).ceil() as i32;
+    let mut out: Vec<Band> = Vec::new();
+    for &(band, x0, x1) in &bands {
+        let spans: Vec<Band> = (band - reach..=band + reach).map(|b| (b, x0 - pad, x1 + pad)).collect();
+        merge(&mut out, &spans);
+    }
+    out
 }
 
 /// A silhouette being traced, and the page budget it spends.
@@ -1217,15 +1493,23 @@ struct Silhouette<'a> {
     rows: BTreeMap<i32, (f64, f64)>,
     baseline: f64,
     budget: &'a mut Budget,
+    /// The box of every point marked, or an empty box with none.
+    extent: Rect,
 }
 
-impl Silhouette<'_> {
+impl<'a> Silhouette<'a> {
+    fn new(baseline: f64, budget: &'a mut Budget) -> Self {
+        let inf = f64::INFINITY;
+        Silhouette { rows: BTreeMap::new(), baseline, budget, extent: [inf, inf, -inf, -inf] }
+    }
+
     /// Mark one point of ink into its band.
     fn mark(&mut self, x: f64, y: f64) -> Result<(), PassageError> {
         self.budget.points -= 1;
         if self.budget.points < 0 {
             return Err(PassageError::MeasureLimit);
         }
+        self.extent = [self.extent[0].min(x), self.extent[1].min(y), self.extent[2].max(x), self.extent[3].max(y)];
         let band = ((y - self.baseline) / BAND).floor().clamp(i32::MIN as f64, i32::MAX as f64) as i32;
         match self.rows.get_mut(&band) {
             Some(span) => {
@@ -1354,10 +1638,81 @@ impl Atom {
         })
     }
 
+    /// The atom in a dressed passage: each printed ring it carries gives way to the design that
+    /// `design` places on it, given the ring and the atom's baseline. The ring's paths leave the
+    /// atom, and its box and bands take the design's room in place of the ring's. `None` when the
+    /// atom carries no ring.
+    fn dressed(
+        &self,
+        design: &mut dyn FnMut(&Ring, f64) -> Result<Design, PassageError>,
+    ) -> Result<Option<Atom>, PassageError> {
+        if self.ring.is_none() && self.signs.iter().all(|s| s.ring.is_none()) {
+            return Ok(None);
+        }
+        // a ring's box and bands become the design's, with the medallion's other paths
+        let with_rest = |ring: &Ring, d: &Design| -> (Rect, Vec<Band>) {
+            match &ring.rest {
+                Some((rect, bands)) => {
+                    let mut all = bands.clone();
+                    merge(&mut all, &d.bands);
+                    (union(*rect, d.rect), all)
+                }
+                None => (d.rect, d.bands.clone()),
+            }
+        };
+        let mut hidden: Vec<u32> = Vec::new();
+        let mut signs = Vec::with_capacity(self.signs.len());
+        for s in &self.signs {
+            let Some(ring) = &s.ring else {
+                signs.push(s.clone());
+                continue;
+            };
+            let d = design(ring, self.baseline)?;
+            let (rect, bands) = with_rest(ring, &d);
+            hidden.extend(&ring.paths);
+            signs.push(Sign {
+                kind: s.kind,
+                paths: s.paths.iter().copied().filter(|p| !ring.paths.contains(p)).collect(),
+                rect,
+                bands,
+                ring: Some(ring.clone()),
+                design: Some(d.outlines),
+            });
+        }
+        let mut atom = Atom { signs, ..self.clone() };
+        if let Some(ring) = &self.ring {
+            // a medallion standing alone: the atom is the medallion
+            let d = design(ring, self.baseline)?;
+            let (rect, bands) = with_rest(ring, &d);
+            hidden.extend(&ring.paths);
+            atom.rect = rect;
+            atom.word_rect = rect;
+            atom.bands = bands.clone();
+            atom.word_bands = bands;
+            atom.design = Some(d.outlines);
+        } else {
+            atom.rect = atom.signs.iter().fold(self.word_rect, |r, s| union(r, s.rect));
+            let mut bands = self.word_bands.clone();
+            for sign in &atom.signs {
+                merge(&mut bands, &sign.bands);
+            }
+            atom.bands = bands;
+        }
+        atom.paths.retain(|p| !hidden.contains(p));
+        Ok(Some(atom))
+    }
+
     /// The atom resized by `k` from the page's origin: its boxes, its bands, its baseline, its
-    /// page's line spacing and its gap. Its paths stay as printed; their placement resizes them.
+    /// page's line spacing and its gap. Its paths stay as printed; their placement resizes them,
+    /// and a ring keeps its page units.
     fn resized(&self, k: f64) -> Atom {
         let rect = |r: Rect| r.map(|v| v * k);
+        let ring = |r: &Option<Ring>| {
+            r.as_ref().map(|r| Ring {
+                rest: r.rest.as_ref().map(|(rr, bands)| (rect(*rr), resized_bands(bands, k))),
+                ..r.clone()
+            })
+        };
         Atom {
             word: self.word,
             line: self.line,
@@ -1373,6 +1728,8 @@ impl Atom {
                     paths: s.paths.clone(),
                     rect: rect(s.rect),
                     bands: resized_bands(&s.bands, k),
+                    ring: ring(&s.ring),
+                    design: s.design.clone(),
                 })
                 .collect(),
             rect: rect(self.rect),
@@ -1382,6 +1739,8 @@ impl Atom {
             baseline: self.baseline * k,
             pitch: self.pitch * k,
             gap: self.gap * k,
+            ring: ring(&self.ring),
+            design: self.design.clone(),
         }
     }
 }

@@ -100,6 +100,10 @@ void main() {
           : null,
       layoutScenarios: File('$repo/conformance/scenarios/layout.json')
           .readAsStringSync(),
+      dressScenarios: File('$repo/conformance/scenarios/dress.json')
+          .readAsStringSync(),
+      dressOrnaments: File('$repo/conformance/qvo1-dress.hex')
+          .readAsStringSync(),
     ),
   );
 
